@@ -1,10 +1,10 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Game.Blueprints;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
-using Game.Blueprints;
 
 namespace Game.Modules.Health;
 
@@ -63,10 +63,6 @@ public static class MaximumHealthShift
         }
 
         var bodyParts = BodyPartsOf(componentManager, creatures);
-        if (bodyParts is null)
-        {
-            return;
-        }
 
         foreach (var part in bodyParts.Parts(entityId))
         {
@@ -99,10 +95,9 @@ public static class MaximumHealthShift
     private static float Shifted(float current, float shift) =>
         shift >= 0f ? current + shift : System.Math.Max(1f, current + shift);
 
-    /// <summary>Null when this entity set has no body parts at all (a Simple-health-only module set).</summary>
-    private static EntityBodyParts? BodyPartsOf(ComponentManager componentManager, BlueprintRegistry creatures) =>
-        componentManager.IsRegistered<BodyPartStateComponent>() ? EntityBodyParts.For(componentManager, creatures) : null;
+    private static EntityBodyParts BodyPartsOf(ComponentManager componentManager, BlueprintRegistry creatures) =>
+        EntityBodyParts.For(componentManager, creatures);
 
-    private static MultiComponentPool<StatModifierComponent>? StatModifiers(ComponentManager componentManager) =>
-        componentManager.IsRegistered<StatModifierComponent>() ? componentManager.GetMultiPool<StatModifierComponent>() : null;
+    private static MultiComponentPool<StatModifierComponent> StatModifiers(ComponentManager componentManager) =>
+        componentManager.GetMultiPool<StatModifierComponent>();
 }

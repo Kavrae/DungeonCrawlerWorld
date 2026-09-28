@@ -18,17 +18,15 @@ namespace Game.Spawning;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class SpawnMoves(FrameEventBuffer<EntityMovedEvent> movedEntities, EntityKeys entityKeys) : ISystem
 {
-    private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities = movedEntities ?? throw new ArgumentNullException(nameof(movedEntities));
-    private readonly EntityKeys _entityKeys = entityKeys ?? throw new ArgumentNullException(nameof(entityKeys));
     private readonly List<(EntityKey Key, EntityMovedEvent Spawn)> _pending = [];
 
     public byte StripeCount => 1;
 
     public void Record(EntityMovedEvent spawn)
     {
-        if (!_movedEntities.TryRecord(spawn))
+        if (!movedEntities.TryRecord(spawn))
         {
-            _pending.Add((_entityKeys.GetKey(spawn.EntityId), spawn));
+            _pending.Add((entityKeys.GetKey(spawn.EntityId), spawn));
         }
     }
 
@@ -36,9 +34,9 @@ public sealed class SpawnMoves(FrameEventBuffer<EntityMovedEvent> movedEntities,
     {
         foreach (var (key, spawn) in _pending)
         {
-            if (_entityKeys.TryGetEntityId(key, out var entityId) && entityId == spawn.EntityId)
+            if (entityKeys.TryGetEntityId(key, out var entityId) && entityId == spawn.EntityId)
             {
-                _movedEntities.Record(spawn);
+                movedEntities.Record(spawn);
             }
         }
 

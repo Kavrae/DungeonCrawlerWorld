@@ -14,7 +14,7 @@ namespace Game.Modules.StatusEffects.Systems;
 /// this system used to be, along with its whole class of "the coarser the tier, the longer the
 /// immunity outlasted its authored duration" defects.
 /// </summary>
-public sealed class StatusEffectImmunityExpirySystem : ISystem
+public sealed class StatusEffectImmunityExpirySystem(MultiComponentPool<StatusEffectImmunityComponent> immunities, SimulationScope simulationScope) : ISystem
 {
     /// <summary>Every frame; the wheel only touches immunities actually due.</summary>
     public byte StripeCount => 1;
@@ -22,10 +22,7 @@ public sealed class StatusEffectImmunityExpirySystem : ISystem
     /// <summary>Nothing to unwind -- the immunity's whole meaning is its presence, so expiry is removal. Cached once rather than allocated per Update.</summary>
     private static readonly TimerFired<StatusEffectImmunityComponent> Expire = static (entityId, immunity, now) => true;
 
-    private readonly MultiTimerWheel<StatusEffectImmunityComponent> _wheel;
-
-    public StatusEffectImmunityExpirySystem(MultiComponentPool<StatusEffectImmunityComponent> immunities, SimulationScope? simulationScope = null) =>
-        _wheel = new MultiTimerWheel<StatusEffectImmunityComponent>(immunities, simulationScope);
+    private readonly MultiTimerWheel<StatusEffectImmunityComponent> _wheel = new(immunities, simulationScope);
 
     public void Update(EngineTime time, byte stripeIndex) => _wheel.Tick(time.FrameCount, Expire);
 }

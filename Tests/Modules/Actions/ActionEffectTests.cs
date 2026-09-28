@@ -39,8 +39,7 @@ public sealed class ActionEffectTests
 
     private static (ComponentManager ComponentManager, PackedComponentPool<SimpleHealthComponent> Health, EventBus EventBus) Build()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
         return (componentManager, componentManager.GetPackedPool<SimpleHealthComponent>(), new EventBus());
     }
 
@@ -50,7 +49,7 @@ public sealed class ActionEffectTests
         EventBus eventBus,
         MathUtility mathUtility,
         MultiComponentPool<StatModifierComponent>? statModifiers = null) =>
-        new(SourceEntityId, TargetEntityId, health, eventBus, mathUtility, componentManager, new EntityKeys(), "Test Action", ActivatorTags: [], Now: 0, StatModifiers: statModifiers);
+        TestActionEffects.Context(SourceEntityId, TargetEntityId, health, eventBus, mathUtility, componentManager, new EntityKeys(), "Test Action", ActivatorTags: [], Now: 0, StatModifiers: statModifiers);
 
     [TestMethod]
     public void DirectDamage_RollsWithinMinMaxRange_WhenNoOverride()
@@ -144,7 +143,6 @@ public sealed class ActionEffectTests
     public void StatModifierGrant_LandsOnTargetEntityNotSourceEntity()
     {
         var (componentManager, health, eventBus) = Build();
-        componentManager.RegisterMultiPool<StatModifierComponent>();
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
         var mathUtility = new MathUtility();
         var entry = new StatModifierGrant(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 5f, DurationFrames: 60);
@@ -160,7 +158,6 @@ public sealed class ActionEffectTests
     public void StatModifierGrant_SourceAndTargetAreSameEntity_LandsOnThatEntity()
     {
         var (componentManager, health, eventBus) = Build();
-        componentManager.RegisterMultiPool<StatModifierComponent>();
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
         var mathUtility = new MathUtility();
         var entry = new StatModifierGrant(StatModifierTarget.CritChance, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 0.5f, DurationFrames: 60);

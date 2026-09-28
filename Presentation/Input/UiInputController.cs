@@ -183,17 +183,17 @@ public sealed class UiInputController
     /// <summary>Owns the Armed Hotkey Summary window's arm/preview/hover state machine -- see its own doc comment. Null in test setups that don't build one (e.g. UiInputControllerTests' own harness), in which case hotbar-slot press/release/hover handling is simply skipped.</summary>
     private readonly HotbarController? _hotbarController;
 
-    /// <summary>Needed only to build a DragDropContext for _dragDropResolvers -- null in test setups that don't wire one, in which case a content-drag can still resolve against a hotbar slot as before, since the entity-resolution branch never runs without it.</summary>
-    private readonly ComponentManager? _componentManager;
+    /// <summary>Builds the DragDropContext handed to _dragDropResolvers.</summary>
+    private readonly ComponentManager _componentManager;
 
     /// <summary>See _componentManager -- passed to PlainInventoryDragDropResolver/ShopDragDropResolver/TradeDragDropResolver, which pass it straight through to InventoryActions' capacity check for a non-player transfer destination.</summary>
-    private readonly IPlayerQuery? _playerQuery;
+    private readonly IPlayerQuery _playerQuery;
 
     /// <summary>Needed only by ShopDragDropResolver/TradeDragDropResolver for the actual buy/sell step (ShopActions.TryBuyFromShop/TrySellToShop) -- null in test setups that don't wire one, in which case ShopDragDropResolver declines a shop-touching drag entirely (falling through to the plain, non-priced InventoryActions.TryTransferStack), while TradeDragDropResolver still claims a trade-touching one but skips its direct-sell/direct-buy branches specifically.</summary>
     private readonly ItemCatalog? _itemCatalog;
 
-    /// <summary>Derived from _componentManager, not a separate constructor parameter -- same conditional-registration convention as every other optional pool in this codebase. Null whenever ShopComponent isn't registered at all (e.g. most test setups), in which case no drag ever reads as touching a shop.</summary>
-    private readonly PackedComponentPool<ShopComponent>? _shopPool;
+    /// <summary>Derived from _componentManager, not a separate constructor parameter.</summary>
+    private readonly PackedComponentPool<ShopComponent> _shopPool;
 
     /// <summary>
     /// Every feature's own drag-drop resolution strategy, tried in this fixed priority order by
@@ -210,8 +210,8 @@ public sealed class UiInputController
     /// <summary>Needed only to check MapViewState.OpenShopEntityId -- while a shop is open, TryStartContentDrag refuses to pick up a cell InventoryGridContent has already marked CellCompareState.Ineligible (see InventoryGridContent.UpdateShopEligibilityState), the same "can't drag what you can't trade" gate BuildItemContextMenu applies to Give/Take. Null in test setups that don't wire one, in which case a content-drag never reads as shop-gated.</summary>
     private readonly MapViewState? _mapViewState;
 
-    /// <summary>Needed only so PlainInventoryDragDropResolver's direct currency drag dropped onto a shop can publish GoldGivenToShopEvent through ShopActions.TryGiveCurrencyToShop -- the same "Angel Investor" trigger CurrencyRowContent's own Give/Give All already routes through. Null in test setups that don't wire one, in which case such a drag still transfers the currency, it just never publishes.</summary>
-    private readonly EventBus? _eventBus;
+    /// <summary>Needed only so PlainInventoryDragDropResolver's direct currency drag dropped onto a shop can publish GoldGivenToShopEvent through ShopActions.TryGiveCurrencyToShop -- the same "Angel Investor" trigger CurrencyRowContent's own Give/Give All already routes through.</summary>
+    private readonly EventBus _eventBus;
 
     /// <summary>Owns the single shared ContextMenu popup -- null in test setups that don't build one, in which case right-click context menus simply never open and an already-open one (there can't be, without this) never needs dismissing.</summary>
     private readonly ContextMenuController? _contextMenuController;
@@ -288,7 +288,7 @@ public sealed class UiInputController
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public UiInputController(UiLayerStack layers, Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null, ItemCatalog? itemCatalog = null, MapViewState? mapViewState = null, EventBus? eventBus = null, HealthWindowController? healthWindowController = null, InventoryWindowController? inventoryWindowController = null, AbilityScoreWindowController? abilityScoreWindowController = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, ComponentManager componentManager, IPlayerQuery playerQuery, EventBus eventBus, HotbarController? hotbarController = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null, ItemCatalog? itemCatalog = null, MapViewState? mapViewState = null, HealthWindowController? healthWindowController = null, InventoryWindowController? inventoryWindowController = null, AbilityScoreWindowController? abilityScoreWindowController = null)
     {
         _layers = layers;
         _screenSize = screenSize;
@@ -304,7 +304,7 @@ public sealed class UiInputController
         _healthWindowController = healthWindowController;
         _inventoryWindowController = inventoryWindowController;
         _abilityScoreWindowController = abilityScoreWindowController;
-        _shopPool = componentManager?.IsRegistered<ShopComponent>() == true ? componentManager.GetPackedPool<ShopComponent>() : null;
+        _shopPool = componentManager.GetPackedPool<ShopComponent>();
         _dragDropResolvers = BuildDragDropResolvers();
 
         // Subscribing is safe to do unconditionally and permanently -- SDL simply never raises
@@ -315,11 +315,8 @@ public sealed class UiInputController
 
     /// <summary>
     /// Registers TradeDragDropResolver only when MapViewState was wired (it needs
-    /// MapViewState.ReservedEntityIds/OpenShopEntityId to mean anything) and ShopDragDropResolver
-    /// only when _shopPool was wired (mirrors _shopPool's own conditional-registration convention) --
-    /// a test setup that doesn't wire one simply never registers the resolver for it, same as today's
-    /// null-tolerant _shopPool?.Has()/_mapViewState? checks. PlainInventoryDragDropResolver is always
-    /// present as the unconditional fallback.
+    /// MapViewState.ReservedEntityIds/OpenShopEntityId to mean anything). ShopDragDropResolver and
+    /// PlainInventoryDragDropResolver (the unconditional fallback) are always present.
     /// </summary>
     private List<IDragDropResolver> BuildDragDropResolvers()
     {
@@ -330,12 +327,9 @@ public sealed class UiInputController
             resolvers.Add(new TradeDragDropResolver(_mapViewState, _shopPool, _itemCatalog, _playerQuery));
         }
 
-        if (_shopPool is not null)
-        {
-            resolvers.Add(new ShopDragDropResolver(_shopPool, _itemCatalog, _playerQuery));
-        }
+        resolvers.Add(new ShopDragDropResolver(_shopPool, _itemCatalog, _playerQuery));
 
-        resolvers.Add(new PlainInventoryDragDropResolver(_playerQuery, _shopPool, _eventBus));
+        resolvers.Add(new PlainInventoryDragDropResolver(_playerQuery, _eventBus));
 
         return resolvers;
     }
@@ -448,7 +442,7 @@ public sealed class UiInputController
     /// <summary>Current mouse screen position, refreshed at the top of every Update call -- paired with ContentDragItemStackInstanceId for the same ghost-sprite use, and with CursorTextContent.GetCursorPosition. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
     public Point CurrentMousePosition { get; private set; }
 
-    public void Update(GameTime gameTime) => Update(Keyboard.GetState(), Mouse.GetState());
+    public void Update() => Update(Keyboard.GetState(), Mouse.GetState());
 
     /// <summary>
     /// Takes explicit states rather than reading Keyboard.GetState()/Mouse.GetState() itself,
@@ -957,7 +951,7 @@ public sealed class UiInputController
         // (Give) is unaffected either way, since that's the drop TARGET, not the drag's own origin
         // element.
         else if (_activeInteraction.Element is CurrencyElement currencyElement &&
-            (_shopPool?.Has(currencyElement.EntityId) != true || currencyElement.EntityId == _mapViewState?.OpenShopEntityId))
+            (!_shopPool.Has(currencyElement.EntityId) || currencyElement.EntityId == _mapViewState?.OpenShopEntityId))
         {
             _contentDragCurrencyType = currencyElement.Type;
             _contentDragOriginEntityId = currencyElement.EntityId;
@@ -1227,7 +1221,7 @@ public sealed class UiInputController
             // InventoryActions/CurrencyActions themselves (defense in depth) -- dropping back onto
             // the origin entity's own grid/row is a safe no-op either way, so it isn't
             // special-cased here too.
-            if (_componentManager is { } componentManager && _contentDragOriginEntityId is { } originEntityId &&
+            if (_contentDragOriginEntityId is { } originEntityId &&
                 FindDropTargetEntityId(dropInteraction.Element, releasePosition, isCurrencyDrag: _contentDragCurrencyType is not null) is { } destinationEntityId)
             {
                 // What the drop means depends on who the two entities are (a shop, a trade-offer
@@ -1236,7 +1230,7 @@ public sealed class UiInputController
                 // UiInputController accumulating every feature's rules inline. This method's own job
                 // stays gesture recognition + hit-testing + dispatch, the same shape it already uses
                 // for hotbar binding just below.
-                var context = new DragDropContext(componentManager, originEntityId, destinationEntityId, _contentDragItemStackInstanceId, _contentDragMergedItemDefinitionId, _contentDragCurrencyType);
+                var context = new DragDropContext(_componentManager, originEntityId, destinationEntityId, _contentDragItemStackInstanceId, _contentDragMergedItemDefinitionId, _contentDragCurrencyType);
                 foreach (var resolver in _dragDropResolvers)
                 {
                     if (resolver.TryResolve(context))
@@ -2124,7 +2118,7 @@ public sealed class UiInputController
     /// outright just because there's nothing to compare against.
     /// </summary>
     private bool IsDragFromNonPlayerInventory =>
-        _playerQuery is not null && _contentDragOriginEntityId is { } originEntityId && originEntityId != _playerQuery.PlayerEntityId;
+        _contentDragOriginEntityId is { } originEntityId && originEntityId != _playerQuery.PlayerEntityId;
 
     /// <summary>True while dragging something that can never bind to a hotbar slot -- a Merged Stack cell (see _contentDragMergedItemDefinitionId's own doc comment), Currency (see _contentDragCurrencyType's own doc comment -- no hotbar concept for it at all), or an item from another entity's own inventory (see IsDragFromNonPlayerInventory) -- and position is currently over one. Checked ahead of the position == previousPosition shortcut so the cursor reads correctly for every frame of a stationary hover, not just the one it first arrived on.</summary>
     private bool IsContentDragBlockedAt(Point position)

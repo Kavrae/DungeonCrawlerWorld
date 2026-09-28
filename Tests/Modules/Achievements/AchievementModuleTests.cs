@@ -55,26 +55,6 @@ public sealed class AchievementModuleTests
     private static readonly Guid AngelInvestorAchievementId = new AngelInvestorAchievement().Id;
 
     [TestMethod]
-    public void EnteredDungeon_WithoutPlayerQuery_NeverSubscribesSoNothingUnlocks()
-    {
-        var eventBus = new EventBus();
-
-        var module = new AchievementModule();
-        module.Configure(new GameModuleContext(new Game.World.World(new Map(new Vector3Int(5, 5, 1))), new MathUtility(), eventBus)); // PlayerQuery left null
-
-        IReadOnlyList<IModule> modules = [module];
-        Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus);
-
-        var notificationCount = 0;
-        eventBus.Subscribe<NotificationRequestedEvent>(_ => notificationCount++);
-
-        eventBus.Publish(new EnteredDungeonEvent());
-        eventBus.DispatchBuffered<NotificationRequestedEvent>();
-
-        Assert.AreEqual(0, notificationCount);
-    }
-
-    [TestMethod]
     public void EnteredDungeon_UnlocksLonerAndPublishesMinimizedNotification()
     {
         var (ecsContext, eventBus, world) = Build();
@@ -333,7 +313,7 @@ public sealed class AchievementModuleTests
         NotificationRequestedEvent? published = null;
         eventBus.Subscribe<NotificationRequestedEvent>(requested => published = requested);
 
-        eventBus.Publish(new EntityDamagedEvent(npcEntityId, 5, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, playerEntityId), 15, 20, "Default Attack"));
+        eventBus.Publish(new EntityDamagedEvent(npcEntityId, 5, TestSources.Entity(playerEntityId), 15, 20, "Default Attack"));
         eventBus.DispatchBuffered<NotificationRequestedEvent>();
 
         Assert.IsTrue(AchievementQueries.HasEarned(
@@ -354,7 +334,7 @@ public sealed class AchievementModuleTests
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityDamagedEvent(playerEntityId, 5, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, npcEntityId), 15, 20, "Contact"));
+        eventBus.Publish(new EntityDamagedEvent(playerEntityId, 5, TestSources.Entity(npcEntityId), 15, 20, "Contact"));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),

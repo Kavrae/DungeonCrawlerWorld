@@ -26,7 +26,7 @@ public sealed class AuraSourceExpirySystem : ISystem
         PackedComponentPool<AuraSourceExpiryComponent> expiries,
         MultiComponentPool<StatusEffectAuraSourceComponent> sources,
         EventBus eventBus,
-        SimulationScope? simulationScope = null)
+        SimulationScope simulationScope)
     {
         _sources = sources;
         _eventBus = eventBus;

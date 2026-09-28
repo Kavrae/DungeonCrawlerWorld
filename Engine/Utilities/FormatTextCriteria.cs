@@ -39,8 +39,6 @@ public readonly struct FormatTextCriteria
     /// <param name="formatTextMode">How the text should be formatted to fit within the maximum pixel width.</param>
     public FormatTextCriteria(ITextMeasurer textMeasurer, float maximumPixelWidth, string originalText, FormatTextMode formatTextMode)
     {
-        ArgumentNullException.ThrowIfNull(textMeasurer);
-
         TextMeasurer = textMeasurer;
         MaximumPixelWidth = maximumPixelWidth;
         OriginalText = originalText;

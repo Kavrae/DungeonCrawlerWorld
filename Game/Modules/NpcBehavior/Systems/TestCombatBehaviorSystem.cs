@@ -26,10 +26,9 @@ namespace Game.Modules.NpcBehavior.Systems;
 /// race -> melee (randomly QuickAttack or PowerAttack, see TryDecideMeleeAttack); otherwise ->
 /// wander, the same coin-flip-idle-or-move logic MovementSystem's own Random-mode branch used to
 /// own before this system replaced it (see MovementSystem's own doc comment on why it's purely
-/// reactive now). Runs before MovementSystem every frame (see GameBootstrapper's module order) so
-/// a heal/attack decision this tick actually prevents MovementSystem from also moving the same
-/// entity the same frame -- MovementSystem checks for a queued Pending*ActivationComponent before
-/// it executes anything.
+/// reactive now). Queuing a heal or an attack clears the entity's step (NextMapPosition), and this
+/// runs before MovementSystem every frame (NpcBehaviorModule runs before MovementModule), so the
+/// entity doesn't also move that frame -- the same rule PlayerInputBuffer follows for the player.
 ///
 /// Not goblin-specific by name or by filter, despite currently only being exercised by Goblins
 /// (the only race with both QuickAttack/PowerAttack and, per Goblin's starting-kit change,
@@ -77,7 +76,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     private readonly PackedComponentPool<PendingConsumableActivationComponent> _pendingConsumableActivations;
     private readonly IMapQuery _mapQuery;
     private readonly MathUtility _mathUtility;
-    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
+    private readonly PackedComponentPool<DeadComponent> _deadEntities;
     private readonly ProcessingTierQuery _tierQuery;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
@@ -98,7 +97,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         MathUtility mathUtility,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
-        PackedComponentPool<DeadComponent>? deadEntities = null)
+        PackedComponentPool<DeadComponent> deadEntities)
     {
         _movementPool = movementPool;
         _transformPool = transformPool;
@@ -148,7 +147,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     /// <summary>One due entity's decision step. Takes no frames-per-visit: this system owns no countdown -- FramesToWait belongs to MovementSystem and is only read here, as a gate. `now` is for the shared action lock, which is a deadline (see ActionLockGate).</summary>
     private void DecideForEntity(int entityId, long now)
     {
-        if (_deadEntities?.Has(entityId) == true)
+        if (_deadEntities.Has(entityId))
         {
             return;
         }
@@ -205,6 +204,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         }
 
         _pendingConsumableActivations.Merge(entityId, new PendingConsumableActivationComponent(potionStack.StackInstanceId, [transform.Position]));
+        ClearStep(entityId);
         return true;
     }
 
@@ -243,6 +243,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
 
         var actionId = _mathUtility.Next(0, 2) == 0 ? QuickAttackAction.Id : PowerAttackAction.Id;
         _pendingActivations.Merge(entityId, new PendingActionActivationComponent(actionId, _adjacentTilesBuffer.ToArray()));
+        ClearStep(entityId);
         return true;
     }
 
@@ -279,7 +280,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     /// </summary>
     private bool IsAttackable(int candidateEntityId, ushort attackerRaceId) =>
         _tierQuery.IsSimulated(candidateEntityId) &&
-        _deadEntities?.Has(candidateEntityId) != true &&
+        !_deadEntities.Has(candidateEntityId) &&
         TryGetRaceId(candidateEntityId, out var candidateRaceId) &&
         candidateRaceId != attackerRaceId;
 
@@ -308,6 +309,9 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
 
         SetIdle(entityId, now);
     }
+
+    private void ClearStep(int entityId) =>
+        _movementPool.TryUpdate(entityId, static (ref MovementComponent m) => m.NextMapPosition = null);
 
     private void SetIdle(int entityId, long now) =>
         _movementPool.TryUpdate(entityId, FrameDeadline.After(now, MovementCandidates.FramesToWaitIfNoOptions),

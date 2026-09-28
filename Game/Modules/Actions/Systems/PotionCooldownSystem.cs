@@ -17,7 +17,7 @@ public sealed class PotionCooldownSystem(PackedComponentPool<PotionCooldownCompo
     /// <summary>The one firing is the expiry -- always remove.</summary>
     private static readonly TimerFired<PotionCooldownComponent> RemoveOnExpiry = static (_, _, _) => true;
 
-    private readonly PackedTimerWheel<PotionCooldownComponent> _wheel = new(cooldowns);
+    private readonly PackedTimerWheel<PotionCooldownComponent> _wheel = new(cooldowns, SimulationScope.Unscoped);
 
     /// <summary>Every frame; the wheel only touches cooldowns actually ending.</summary>
     public byte StripeCount => 1;

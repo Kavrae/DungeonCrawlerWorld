@@ -35,46 +35,9 @@ public sealed class BlueprintCompositionTests
     private static EcsContext BuildEcsContext()
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-        var context = new GameModuleContext(world, new MathUtility(), new EventBus()) { EntityMoveSync = new WorldEventSync(world) };
+        var context = new GameModuleContext(world, new MathUtility(), new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
 
-        var movementModule = new MovementModule();
-        movementModule.Configure(context);
-
-        var actionsModule = new ActionsModule();
-        actionsModule.Configure(context);
-
-        var processingTierModule = new ProcessingTierModule();
-        processingTierModule.Configure(context);
-
-        var coreModule = new CoreModule();
-        coreModule.Configure(context);
-
-        var healthModule = new HealthModule();
-        healthModule.Configure(context);
-
-        var statModifiersModule = new StatModifiersModule();
-        statModifiersModule.Configure(context);
-
-        var abilityScoresModule = new AbilityScoresModule();
-        abilityScoresModule.Configure(context);
-
-        IReadOnlyList<IModule> modules =
-        [
-            coreModule,
-            healthModule,
-            statModifiersModule,
-            abilityScoresModule,
-            movementModule,
-            new RaceModule(),
-            new ClassModule(),
-            new BlueprintsModule(),
-            actionsModule,
-            processingTierModule,
-            new InventoryModule(),
-            new CurrencyModule(),
-        ];
-
-        return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50, entityKeys: context.EntityKeys);
+        return BuiltInTestModules.Build(context, 100, 50);
     }
 
     /// <summary>A build step that appends marker to the entity's name, so the name spells out the order the parts built in.</summary>

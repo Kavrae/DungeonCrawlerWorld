@@ -100,11 +100,11 @@ public sealed class LabelRenderer
         Draw(spriteBatch, font, text, GetRightAlignedPosition(font, text, footprintTopLeft, footprintSize), color);
 
     /// <summary>Where text must be drawn so it's flush against footprintSize's left edge and vertically centered within it -- the left-aligned counterpart to GetRightAlignedPosition (see its own doc comment for the LineHeight-vs-MeasureString fix this shares), for a row that needs both (e.g. a context-menu option's label on the left, its hotkey on the right).</summary>
-    public Vector2 GetLeftAlignedPosition(SpriteFontBase font, string text, Vector2 footprintTopLeft, Vector2 footprintSize) =>
+    public Vector2 GetLeftAlignedPosition(SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize) =>
         footprintTopLeft + new Vector2(0, (footprintSize.Y - font.LineHeight) / 2f);
 
     public void DrawLeftAligned(SpriteBatch spriteBatch, SpriteFontBase font, string text, Vector2 footprintTopLeft, Vector2 footprintSize, Color color) =>
-        Draw(spriteBatch, font, text, GetLeftAlignedPosition(font, text, footprintTopLeft, footprintSize), color);
+        Draw(spriteBatch, font, text, GetLeftAlignedPosition(font, footprintTopLeft, footprintSize), color);
 
     /// <summary>The center of glyph's tight ink bounding box if drawn at (0,0) -- TextBounds translates linearly with position, so this alone is enough to center at any footprint.</summary>
     private Vector2 GetInkCenterAtOrigin(SpriteFontBase font, string glyph)

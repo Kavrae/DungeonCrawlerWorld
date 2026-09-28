@@ -54,7 +54,7 @@ public sealed class BodyPartEffectsSystemTests
     {
         var world = BodyPartTestWorld.WithParts(0, ("Left Leg", BodyPartType.Leg, 50, 100, false));
         var statModifiers = CreateStatModifiersPool();
-        var system = new BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
+        var system = TestSystems.BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
 
         system.Update(default, 0);
 
@@ -68,7 +68,7 @@ public sealed class BodyPartEffectsSystemTests
     {
         var world = BodyPartTestWorld.WithParts(0, ("Left Leg", BodyPartType.Leg, 50, 100, false), ("Right Leg", BodyPartType.Leg, 50, 100, false));
         var statModifiers = CreateStatModifiersPool();
-        var system = new BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
+        var system = TestSystems.BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
 
         system.Update(default, 0);
 
@@ -81,7 +81,7 @@ public sealed class BodyPartEffectsSystemTests
     {
         var world = BodyPartTestWorld.WithParts(0, ("Left Leg", BodyPartType.Leg, 100, 100, false));
         var statModifiers = CreateStatModifiersPool();
-        var system = new BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
+        var system = TestSystems.BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
 
         system.Update(default, 0);
 
@@ -94,7 +94,7 @@ public sealed class BodyPartEffectsSystemTests
         var world = BodyPartTestWorld.WithParts(0, ("Left Leg", BodyPartType.Leg, 0, 100, false), ("Right Leg", BodyPartType.Leg, 100, 100, false));
         var statModifiers = CreateStatModifiersPool();
         var movementDisabled = CreateMovementDisabledPool();
-        var system = new BodyPartEffectsSystem(world.BodyParts, world.States, movementDisabled, CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
+        var system = TestSystems.BodyPartEffectsSystem(world.BodyParts, world.States, movementDisabled, CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
 
         system.Update(default, 0);
 
@@ -108,7 +108,7 @@ public sealed class BodyPartEffectsSystemTests
         var world = BodyPartTestWorld.WithParts(0, ("Left Leg", BodyPartType.Leg, 0, 100, false), ("Right Foot", BodyPartType.Foot, 0, 50, false));
         var statModifiers = CreateStatModifiersPool();
         var movementDisabled = CreateMovementDisabledPool();
-        var system = new BodyPartEffectsSystem(world.BodyParts, world.States, movementDisabled, CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
+        var system = TestSystems.BodyPartEffectsSystem(world.BodyParts, world.States, movementDisabled, CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
 
         system.Update(default, 0);
 
@@ -122,7 +122,7 @@ public sealed class BodyPartEffectsSystemTests
         var world = BodyPartTestWorld.WithParts(0, ("Left Leg", BodyPartType.Leg, 0, 100, false), ("Right Leg", BodyPartType.Leg, 0, 100, false), ("Wing", BodyPartType.Wing, 20, 20, false));
         var statModifiers = CreateStatModifiersPool();
         var movementDisabled = CreateMovementDisabledPool();
-        var system = new BodyPartEffectsSystem(world.BodyParts, world.States, movementDisabled, CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
+        var system = TestSystems.BodyPartEffectsSystem(world.BodyParts, world.States, movementDisabled, CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
 
         system.Update(default, 0);
 
@@ -136,7 +136,7 @@ public sealed class BodyPartEffectsSystemTests
         var world = BodyPartTestWorld.WithParts(0, ("Left Leg", BodyPartType.Leg, 0, 100, false), ("Wing", BodyPartType.Wing, 0, 20, false));
         var statModifiers = CreateStatModifiersPool();
         var movementDisabled = CreateMovementDisabledPool();
-        var system = new BodyPartEffectsSystem(world.BodyParts, world.States, movementDisabled, CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
+        var system = TestSystems.BodyPartEffectsSystem(world.BodyParts, world.States, movementDisabled, CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
 
         system.Update(default, 0);
 
@@ -148,7 +148,7 @@ public sealed class BodyPartEffectsSystemTests
     {
         var world = BodyPartTestWorld.WithParts(0, ("Left Arm", BodyPartType.Arm, 50, 100, false));
         var statModifiers = CreateStatModifiersPool();
-        var system = new BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
+        var system = TestSystems.BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
 
         system.Update(default, 0);
 
@@ -161,7 +161,7 @@ public sealed class BodyPartEffectsSystemTests
     {
         var world = BodyPartTestWorld.WithParts(0, ("Left Arm", BodyPartType.Arm, 50, 100, false), ("Right Arm", BodyPartType.Arm, 50, 100, false));
         var statModifiers = CreateStatModifiersPool();
-        var system = new BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
+        var system = TestSystems.BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
 
         system.Update(default, 0);
 
@@ -174,7 +174,7 @@ public sealed class BodyPartEffectsSystemTests
         var world = BodyPartTestWorld.WithParts(0, ("Left Arm", BodyPartType.Arm, 0, 100, false), ("Right Hand", BodyPartType.Hand, 0, 30, false));
         var statModifiers = CreateStatModifiersPool();
         var meleeDisabled = CreateMeleeDisabledPool();
-        var system = new BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), meleeDisabled, CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
+        var system = TestSystems.BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), meleeDisabled, CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
 
         system.Update(default, 0);
 
@@ -188,7 +188,7 @@ public sealed class BodyPartEffectsSystemTests
         var world = BodyPartTestWorld.WithParts(0, ("Torso", BodyPartType.Torso, 1, 100, true));
         var statModifiers = CreateStatModifiersPool();
         var movementDisabled = CreateMovementDisabledPool();
-        var system = new BodyPartEffectsSystem(world.BodyParts, world.States, movementDisabled, CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
+        var system = TestSystems.BodyPartEffectsSystem(world.BodyParts, world.States, movementDisabled, CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
 
         system.Update(default, 0);
 
@@ -196,12 +196,4 @@ public sealed class BodyPartEffectsSystemTests
         Assert.IsFalse(TryGetModifier(statModifiers, 0, StatModifierTarget.MovementLockFrames, out _));
     }
 
-    [TestMethod]
-    public void Update_NoStatModifierPoolRegistered_DoesNotThrow()
-    {
-        var world = BodyPartTestWorld.WithParts(0, ("Left Leg", BodyPartType.Leg, 50, 100, false));
-        var system = new BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents());
-
-        system.Update(default, 0);
-    }
 }

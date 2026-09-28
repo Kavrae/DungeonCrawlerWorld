@@ -36,7 +36,7 @@ public static class ParalysisEffects
     /// PoisonEffects.ApplyStack uses for its own duration).
     /// </summary>
     /// <param name="now">The simulation frame Paralysis is applied on.</param>
-    public static void Apply(ComponentManager componentManager, int entityId, ActionSource source, long now, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
+    public static void Apply(ComponentManager componentManager, int entityId, ActionSource source, long now, EventBus eventBus, IPlayerQuery playerQuery)
     {
         if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Paralysis, source, eventBus, playerQuery))
         {

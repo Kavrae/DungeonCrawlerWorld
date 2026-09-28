@@ -44,7 +44,7 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
         Source = line.Source;
         ModifierText = line.ModifierText;
         RemainingDurationFrames = line.RemainingDurationFrames;
-        _font = fontService.GetFont((int)(rowHeight * FontChrome.AbilityScoreModifierRowFontFraction));
+        _font = FontService.GetFont((int)(rowHeight * FontChrome.AbilityScoreModifierRowFontFraction));
     }
 
     public override void DrawContent(GameTime gameTime)

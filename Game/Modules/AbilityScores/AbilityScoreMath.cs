@@ -75,7 +75,7 @@ public static class AbilityScoreMath
     /// <param name="type">The ability score type.</param>
     /// <param name="baseValue">The base value for the ability score.</param>
     /// <returns>The computed total value.</returns>
-    public static ushort ComputeTotal(MultiComponentPool<StatModifierComponent>? statModifiers, int entityId, AbilityScoreType type, ushort baseValue)
+    public static ushort ComputeTotal(MultiComponentPool<StatModifierComponent> statModifiers, int entityId, AbilityScoreType type, ushort baseValue)
     {
         var effectiveValue = StatModifierMath.GetEffectiveValue(statModifiers, entityId, ToStatModifierTarget(type), baseValue);
         return MathUtility.ClampUShort(effectiveValue, 0, ushort.MaxValue);

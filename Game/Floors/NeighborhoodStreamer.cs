@@ -98,7 +98,7 @@ public sealed class NeighborhoodStreamer : ISystem
     private readonly ProcessingTierResolver _resolver;
     private readonly NeighborhoodRecords _records;
     private readonly TestMapBuilder _builder;
-    private readonly CreatureSkeletons? _skeletons;
+    private readonly CreatureSkeletons _skeletons;
 
     private readonly List<Job> _jobs = [];
 
@@ -115,8 +115,8 @@ public sealed class NeighborhoodStreamer : ISystem
     /// <summary>How many times Update has run: the clock EarliestStartUpdateCount is measured on.</summary>
     private long _updateCount;
 
-    /// <param name="skeletons">When supplied, an eviction destroys its neighborhood's built creatures first and ahead of other work (see IsEvictingBuiltCreatures); otherwise every unload destroys in index order.</param>
-    public NeighborhoodStreamer(World.World world, EntityManager entityManager, Engine.ECS.Components.Stores.DirectComponentPool<Modules.Core.Components.TransformComponent> transforms, EventBus eventBus, ProcessingTierResolver resolver, NeighborhoodRecords records, TestMapBuilder builder, CreatureSkeletons? skeletons = null)
+    /// <param name="skeletons">Lets an eviction destroy its neighborhood's built creatures first and ahead of other work (see IsEvictingBuiltCreatures).</param>
+    public NeighborhoodStreamer(World.World world, EntityManager entityManager, Engine.ECS.Components.Stores.DirectComponentPool<Modules.Core.Components.TransformComponent> transforms, EventBus eventBus, ProcessingTierResolver resolver, NeighborhoodRecords records, TestMapBuilder builder, CreatureSkeletons skeletons)
     {
         _world = world;
         _entityManager = entityManager;
@@ -332,12 +332,9 @@ public sealed class NeighborhoodStreamer : ISystem
     {
         if (eviction is not null)
         {
-            if (_skeletons is not null)
+            foreach (var cost in DestroyEntitiesIn(cellX, cellY, entityId => !_skeletons.IsSkeleton(entityId)))
             {
-                foreach (var cost in DestroyEntitiesIn(cellX, cellY, entityId => !_skeletons.IsSkeleton(entityId)))
-                {
-                    yield return cost;
-                }
+                yield return cost;
             }
 
             eviction.BuiltCreaturesDestroyed = true;

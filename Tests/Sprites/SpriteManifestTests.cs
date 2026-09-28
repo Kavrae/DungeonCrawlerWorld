@@ -91,7 +91,7 @@ public sealed class SpriteManifestTests
     public void TryGetRandom_SameSeed_ResolvesToTheSameCellEveryTime()
     {
         var multiCellNames = LoadRawEntries().Where(entry => entry.Cells.Count > 1).Select(entry => entry.Name).ToList();
-        Assert.IsTrue(multiCellNames.Count > 0, "Sanity check: the manifest must hold at least one multi-cell entry for this to prove anything.");
+        Assert.IsNotEmpty(multiCellNames, "Sanity check: the manifest must hold at least one multi-cell entry for this to prove anything.");
 
         foreach (var name in multiCellNames)
         {
@@ -111,7 +111,7 @@ public sealed class SpriteManifestTests
     public void TryGetRandom_DifferentSeeds_CanResolveToDifferentCells()
     {
         var multiCellNames = LoadRawEntries().Where(entry => entry.Cells.Count > 1).Select(entry => entry.Name).ToList();
-        Assert.IsTrue(multiCellNames.Count > 0, "Sanity check: the manifest must hold at least one multi-cell entry for this to prove anything.");
+        Assert.IsNotEmpty(multiCellNames, "Sanity check: the manifest must hold at least one multi-cell entry for this to prove anything.");
 
         var anyDiffered = false;
         foreach (var name in multiCellNames)

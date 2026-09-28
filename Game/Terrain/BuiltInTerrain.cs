@@ -38,8 +38,6 @@ public static class BuiltInTerrain
 
     public static void RegisterAll(TerrainRegistry registry)
     {
-        ArgumentNullException.ThrowIfNull(registry);
-
         registry.Register(StoneFloor);
         registry.Register(Dirt);
         registry.Register(Grass);

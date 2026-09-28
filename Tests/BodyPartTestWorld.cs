@@ -25,25 +25,9 @@ internal sealed class BodyPartTestWorld
     public static BlueprintRegistry CreaturesOf(ComponentManager componentManager) =>
         CreaturesByComponentManager.GetOrAdd(componentManager, static _ => new BlueprintRegistry());
 
-    /// <summary>An EntityBodyParts over componentManager, registering the pools it reads if the test never did.</summary>
-    public static EntityBodyParts PartsOf(ComponentManager componentManager)
-    {
-        RegisterPools(componentManager);
-        return EntityBodyParts.For(componentManager, CreaturesOf(componentManager));
-    }
-
-    private static void RegisterPools(ComponentManager components)
-    {
-        if (!components.IsRegistered<BodyPartStateComponent>())
-        {
-            components.RegisterPackedPool<BodyPartStateComponent>(static (ref existing, incoming) => existing = incoming);
-        }
-
-        if (!components.IsRegistered<RaceSlotsComponent>())
-        {
-            components.RegisterPackedPool<RaceSlotsComponent>(static (ref existing, incoming) => existing.Add(incoming.Race1));
-        }
-    }
+    /// <summary>An EntityBodyParts over componentManager, which must already hold the built-in pools.</summary>
+    public static EntityBodyParts PartsOf(ComponentManager componentManager) =>
+        EntityBodyParts.For(componentManager, CreaturesOf(componentManager));
 
     public ComponentManager Components { get; }
 
@@ -56,7 +40,7 @@ internal sealed class BodyPartTestWorld
     private readonly ushort _raceId;
 
     public BodyPartTestWorld(params BodyPartTemplate[] templates)
-        : this(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10), templates)
+        : this(BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10)), templates)
     {
     }
 
@@ -64,7 +48,6 @@ internal sealed class BodyPartTestWorld
     {
         Components = components;
         Definitions = CreaturesOf(components);
-        RegisterPools(components);
 
         _raceId = Definitions.Register(new BlueprintDefinition(TestRaceId, "Test Race")
         {
@@ -77,7 +60,7 @@ internal sealed class BodyPartTestWorld
 
     /// <inheritdoc cref="WithParts(ComponentManager, int, ValueTuple{string, BodyPartType, float, ushort, bool}[])"/>
     public static BodyPartTestWorld WithParts(int entityId, params (string Name, BodyPartType Type, float Current, ushort Max, bool Vital)[] parts) =>
-        WithParts(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10), entityId, parts);
+        WithParts(BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10)), entityId, parts);
 
     /// <summary>A world whose race has these parts, given to entityId, each already at the health named.</summary>
     public static BodyPartTestWorld WithParts(ComponentManager components, int entityId, params (string Name, BodyPartType Type, float Current, ushort Max, bool Vital)[] parts)

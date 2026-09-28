@@ -29,21 +29,9 @@ public sealed class ShopActionsTests
     private static readonly ShopComponent PotionOnlyShop = new(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f);
     private static readonly ShopComponent GeneralShop = new(allowedTags: null, buyMultiplier: 1.20f, sellMultiplier: 0.80f);
 
-    private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
-    {
-        public int PlayerEntityId { get; } = playerEntityId;
-        public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
-    }
-
-    private static readonly FakePlayerQuery NoEntityIsThePlayer = new(playerEntityId: -1);
-
     private static (ComponentManager Manager, ItemCatalog Catalog) BuildManager()
     {
-        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8);
-        new CurrencyModule().RegisterComponents(manager);
-        new ShopModule().RegisterComponents(manager);
-        manager.RegisterMultiPool<InventoryItemStackComponent>();
-        manager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
+        var manager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8));
 
         var catalog = new ItemCatalog();
         catalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue));
@@ -114,7 +102,7 @@ public sealed class ShopActionsTests
         // itself; this test only cares that the trade charges exactly what that pricing says).
         var expectedTotalPrice = ShopStockPricing.ComputeBulkBuyPrice(manager, ShopEntityId, PotionOnlyShop, potion, quantity: 3);
 
-        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, TestPlayerQuery.NoPlayer);
 
         Assert.IsTrue(result);
         var currencies = manager.GetPackedPool<CurrencyComponent>();
@@ -136,7 +124,7 @@ public sealed class ShopActionsTests
         manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 100, credits: 0));
         var stackId = InventoryActions.AddItem(manager, ShopEntityId, ToolItemId, quantity: 1);
 
-        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, TestPlayerQuery.NoPlayer);
 
         Assert.IsFalse(result);
         Assert.AreEqual(100, manager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold);
@@ -152,7 +140,7 @@ public sealed class ShopActionsTests
         manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 5, credits: 0));
         var stackId = InventoryActions.AddItem(manager, ShopEntityId, PotionItemId, quantity: 3);
 
-        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, TestPlayerQuery.NoPlayer);
 
         Assert.IsFalse(result);
         Assert.AreEqual(5, manager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold);
@@ -168,7 +156,7 @@ public sealed class ShopActionsTests
         manager.Merge(ShopEntityId, new CurrencyComponent(gold: 0, credits: 0));
         manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 100, credits: 0));
 
-        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackInstanceId: 9999, NoEntityIsThePlayer);
+        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackInstanceId: 9999, TestPlayerQuery.NoPlayer);
 
         Assert.IsFalse(result);
     }
@@ -180,7 +168,7 @@ public sealed class ShopActionsTests
         manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 100, credits: 0));
         var stackId = InventoryActions.AddItem(manager, ShopEntityId, PotionItemId, quantity: 1);
 
-        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, TestPlayerQuery.NoPlayer);
 
         Assert.IsFalse(result);
     }
@@ -199,7 +187,7 @@ public sealed class ShopActionsTests
         // Understocked and pays a premium; see ShopStockPricingTests for the pricing math itself).
         var expectedTotalPrice = ShopStockPricing.ComputeBulkSellPrice(manager, ShopEntityId, PotionOnlyShop, potion, quantity: 4);
 
-        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, TestPlayerQuery.NoPlayer);
 
         Assert.IsTrue(result);
         var currencies = manager.GetPackedPool<CurrencyComponent>();
@@ -221,7 +209,7 @@ public sealed class ShopActionsTests
         manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 0, credits: 0));
         var stackId = InventoryActions.AddItem(manager, PlayerEntityId, PotionItemId, quantity: 4);
 
-        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, TestPlayerQuery.NoPlayer);
 
         Assert.IsFalse(result);
         Assert.AreEqual(0, manager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold);
@@ -238,7 +226,7 @@ public sealed class ShopActionsTests
         manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 0, credits: 0));
         var stackId = InventoryActions.AddItem(manager, PlayerEntityId, ToolItemId, quantity: 1);
 
-        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, TestPlayerQuery.NoPlayer);
 
         Assert.IsFalse(result);
         Assert.AreEqual(0, manager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold);
@@ -255,7 +243,7 @@ public sealed class ShopActionsTests
         InventoryActions.AddItem(manager, ShopEntityId, CappedItemId, quantity: 5); // CappedItemId's own MaximumShopStock is 5 -- already full
         var stackId = InventoryActions.AddItem(manager, PlayerEntityId, CappedItemId, quantity: 1);
 
-        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, TestPlayerQuery.NoPlayer);
 
         Assert.IsFalse(result);
         Assert.AreEqual(0, manager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold);
@@ -273,7 +261,7 @@ public sealed class ShopActionsTests
         InventoryActions.AddItem(manager, ShopEntityId, CappedItemId, quantity: 4); // one short of CappedItemId's MaximumShopStock of 5
         var stackId = InventoryActions.AddItem(manager, PlayerEntityId, CappedItemId, quantity: 1);
 
-        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, TestPlayerQuery.NoPlayer);
 
         Assert.IsTrue(result);
     }
@@ -282,7 +270,6 @@ public sealed class ShopActionsTests
     public void TryBuyFromShop_HighCharismaPlayer_ChargesTheMarginReducedPrice()
     {
         var (manager, catalog) = BuildManager();
-        AbilityScoreTestPools.Register(manager);
         manager.GetPackedPool<AbilityScoresComponent>().Add(PlayerEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Charisma, baseValue: 300, total: 300));
         manager.Merge(ShopEntityId, GeneralShop);
         manager.Merge(ShopEntityId, new CurrencyComponent(gold: 0, credits: 0));
@@ -293,7 +280,7 @@ public sealed class ShopActionsTests
         manager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(ToolItemId, preferredStockLevel: 1));
         var stackId = InventoryActions.AddItem(manager, ShopEntityId, ToolItemId, quantity: 1);
 
-        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+        var result = ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, TestPlayerQuery.NoPlayer);
 
         Assert.IsTrue(result);
         // Charisma 300 halves the margin: BuyMultiplier 1.20's own (1.20 - 1) margin becomes 0.10,
@@ -305,7 +292,6 @@ public sealed class ShopActionsTests
     public void TrySellToShop_HighCharismaPlayer_PaysTheMarginReducedPrice()
     {
         var (manager, catalog) = BuildManager();
-        AbilityScoreTestPools.Register(manager);
         manager.GetPackedPool<AbilityScoresComponent>().Add(PlayerEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Charisma, baseValue: 300, total: 300));
         manager.Merge(ShopEntityId, GeneralShop);
         manager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
@@ -315,7 +301,7 @@ public sealed class ShopActionsTests
         manager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(ToolItemId, preferredStockLevel: 1));
         var stackId = InventoryActions.AddItem(manager, PlayerEntityId, ToolItemId, quantity: 1);
 
-        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, NoEntityIsThePlayer);
+        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, TestPlayerQuery.NoPlayer);
 
         Assert.IsTrue(result);
         // Charisma 300 halves the margin: SellMultiplier 0.80's own (1 - 0.80) margin becomes 0.10,

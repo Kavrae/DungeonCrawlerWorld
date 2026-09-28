@@ -143,7 +143,7 @@ None of these go on `EntityFactory.SkeletonComponentTypes`: a skeleton can't be 
 ### Loot badge counts currency
 
 - `MapViewQuery.GetStatus`: a corpse/container "has loot" when it holds any inventory stack **or**
-  any Gold/Credits (`CurrencyComponent`, read as an optional pool). A Gold-only corpse now shows the
+  any Gold/Credits (`CurrencyComponent`, fetched like every other built-in pool). A Gold-only corpse now shows the
   bag.
 - An NPC takes currency along with items, so a corpse it fully emptied still shows no badge at all.
   The grey badge appears when something was left behind (items that didn't fit, or a player who

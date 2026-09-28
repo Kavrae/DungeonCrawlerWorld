@@ -23,11 +23,6 @@ public static class AbilityScoreModifierFormatter
     {
         var lines = new List<ModifierDisplayLine> { new($"Base : {GetBaseValue(componentManager, entityId, type)}", Source: null, RemainingDurationFrames: null) };
 
-        if (!componentManager.IsRegistered<StatModifierComponent>())
-        {
-            return lines;
-        }
-
         var target = AbilityScoreMath.ToStatModifierTarget(type);
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
 
@@ -49,7 +44,7 @@ public static class AbilityScoreModifierFormatter
 
         foreach (var modifier in ordered)
         {
-            lines.Add(FormatModifierLine(componentManager, modifier, now));
+            lines.Add(FormatModifierLine(modifier, now));
         }
 
         return lines;
@@ -60,7 +55,7 @@ public static class AbilityScoreModifierFormatter
             ? component.BaseValue
             : throw new InvalidOperationException($"No {type} ability score for entity {entityId}.");
 
-    private static ModifierDisplayLine FormatModifierLine(ComponentManager componentManager, StatModifierComponent modifier, long now)
+    private static ModifierDisplayLine FormatModifierLine(StatModifierComponent modifier, long now)
     {
         var sourceName = ModifierDisplayFormatting.DescribeSource(modifier.Source);
         var modifierText = modifier.Operation == StatModifierOperation.Additive

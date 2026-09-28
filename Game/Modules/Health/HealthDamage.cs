@@ -33,20 +33,20 @@ public static class HealthDamage
         int entityId,
         ushort amount,
         ActionSource source,
-        IPlayerQuery? playerQuery,
+        IPlayerQuery playerQuery,
         string damageType,
         long now,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        EntityBodyParts? bodyParts = null,
-        MathUtility? mathUtility = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null,
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        EntityBodyParts bodyParts,
+        MathUtility? mathUtility,
+        PackedComponentPool<DeadComponent> deadEntities,
         BodyPartTargetRule? targetRule = null,
         IReadOnlyList<Tag>? damageTags = null,
         BodyPartTargetMode targetMode = BodyPartTargetMode.SingleTarget)
     {
         if (!health.TryGetReadonly(entityId, out var beforeHealth))
         {
-            if (bodyParts?.Has(entityId) == true)
+            if (bodyParts.Has(entityId))
             {
                 if (mathUtility is null)
                 {
@@ -81,7 +81,7 @@ public static class HealthDamage
         // permanent +max-HP buff actually raises the ceiling damage is clamped against -- see
         // StatModifierMath's own doc comment for why this is recomputed here rather than baked
         // into SimpleHealthComponent.MaximumHealth itself.
-        health.TryUpdate(entityId, (statModifiers, entityId, effectiveAmount), static (ref SimpleHealthComponent healthComponent, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, ushort Amount) state) =>
+        health.TryUpdate(entityId, (statModifiers, entityId, effectiveAmount), static (ref SimpleHealthComponent healthComponent, (MultiComponentPool<StatModifierComponent> StatModifiers, int EntityId, ushort Amount) state) =>
         {
             var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, healthComponent.MaximumHealth);
             healthComponent.CurrentHealth = MathHelper.Clamp(healthComponent.CurrentHealth - state.Amount, 0f, effectiveMaximumHealth);
@@ -95,14 +95,9 @@ public static class HealthDamage
         // over screen, doesn't exist yet). Published unconditionally otherwise (unlike
         // EntityDamagedEvent below, which only fires when the player is involved) since death needs
         // to be knowable for any entity, not just player-involved damage.
-        if (wasAlive && updatedHealth.CurrentHealth == 0 && entityId != playerQuery?.PlayerEntityId)
+        if (wasAlive && updatedHealth.CurrentHealth == 0 && entityId != playerQuery.PlayerEntityId)
         {
             eventBus.Publish(new EntityDiedEvent(entityId, source));
-        }
-
-        if (playerQuery is null)
-        {
-            return;
         }
 
         var playerInvolved = entityId == playerQuery.PlayerEntityId

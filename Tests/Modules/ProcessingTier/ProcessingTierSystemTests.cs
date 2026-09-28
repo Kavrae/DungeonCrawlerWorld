@@ -22,12 +22,6 @@ public sealed class ProcessingTierSystemTests
     private const int OtherEntityId = 0;
     private const int SecondEntityId = 2;
 
-    private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
-    {
-        public int PlayerEntityId { get; } = playerEntityId;
-        public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
-    }
-
     /// <summary>A position index shaped like World's -- one Blocking occupant per tile -- over a map large enough for Borough/Beyond geometry, reaching into negative coordinates. Nothing here allocates per tile, so the size is free.</summary>
     private sealed class FakeMapQuery : IMapQuery
     {
@@ -65,7 +59,7 @@ public sealed class ProcessingTierSystemTests
         public Fixture(IPlayerQuery? playerQuery = null, int transitionsPerFrame = ProcessingTierSystem.DefaultTransitionsPerFrame)
         {
             Resolver.Wire(Tiers, Transforms, Events);
-            System = new ProcessingTierSystem(Transforms, Map, MovedEntities, Resolver, playerQuery ?? new FakePlayerQuery(PlayerEntityId), transitionsPerFrame);
+            System = new ProcessingTierSystem(Transforms, Map, MovedEntities, Resolver, playerQuery ?? new TestPlayerQuery(PlayerEntityId), transitionsPerFrame);
         }
 
         /// <summary>Places a Blocking entity in the transform pool and the fake index, with no tier -- as if created before any reference existed. One Blocking entity per tile, as on the real map -- two on one tile would have the second silently evict the first from the index.</summary>
@@ -107,7 +101,7 @@ public sealed class ProcessingTierSystemTests
     }
 
     [TestMethod]
-    public void Update_NoPlayerQuery_LeavesEntityUntiered()
+    public void Update_NoPlayer_LeavesEntityUntiered()
     {
         var transforms = new DirectComponentPool<TransformComponent>(10, static (ref existing, incoming) => existing = incoming);
         var tiers = new DirectComponentPool<ProcessingTierComponent>(10, static (ref existing, incoming) => existing = incoming);
@@ -115,7 +109,7 @@ public sealed class ProcessingTierSystemTests
         resolver.Wire(tiers, transforms, new ProcessingTierEvents());
         transforms.Add(OtherEntityId, new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1)));
 
-        var system = new ProcessingTierSystem(transforms, new FakeMapQuery(), new FrameEventBuffer<EntityMovedEvent>(), resolver, playerQuery: null);
+        var system = new ProcessingTierSystem(transforms, new FakeMapQuery(), new FrameEventBuffer<EntityMovedEvent>(), resolver, playerQuery: TestPlayerQuery.NoPlayer);
         system.Update(default, 0);
 
         Assert.IsFalse(tiers.Has(OtherEntityId));
@@ -425,7 +419,7 @@ public sealed class ProcessingTierSystemTests
     /// <summary>A fixture whose reference is preset and whose player is the first spawned entity (id 0), so every entity is tiered and indexed at creation and no full scan ever runs.</summary>
     private static Fixture PresetFixture(Vector3Int playerPosition, out int playerEntityId)
     {
-        var fixture = new Fixture(new FakePlayerQuery(0));
+        var fixture = new Fixture(new TestPlayerQuery(0));
         fixture.Resolver.SetReferencePosition(playerPosition);
         playerEntityId = fixture.Spawn(playerPosition);
         Assert.AreEqual(0, playerEntityId, "Precondition: the player is the first entity created.");
@@ -631,7 +625,7 @@ public sealed class ProcessingTierSystemTests
     [TestMethod]
     public void PresetReference_Crossing_RetiersOnlyTheBudgetPerFrame()
     {
-        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        var fixture = new Fixture(new TestPlayerQuery(0), transitionsPerFrame: 1);
         fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
         var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
         var first = fixture.Spawn(new Vector3Int(1500, 500, 0));
@@ -659,7 +653,7 @@ public sealed class ProcessingTierSystemTests
     public void PresetReference_Crossing_WhilePromotionsHeld_ThawsNothingUntilReleased()
     {
         var held = true;
-        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        var fixture = new Fixture(new TestPlayerQuery(0), transitionsPerFrame: 1);
         fixture.Resolver.PromotionsHeld = () => held;
         fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
         var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
@@ -690,7 +684,7 @@ public sealed class ProcessingTierSystemTests
     [TestMethod]
     public void PresetReference_Crossing_ThawsBeforeItFreezes()
     {
-        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        var fixture = new Fixture(new TestPlayerQuery(0), transitionsPerFrame: 1);
         fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
         var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
         var freezing = fixture.Spawn(new Vector3Int(500, 500, 0));
@@ -715,7 +709,7 @@ public sealed class ProcessingTierSystemTests
     [TestMethod]
     public void PresetReference_Crossing_FreezesBeforeItMovesBetweenUnsimulatedTiers()
     {
-        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        var fixture = new Fixture(new TestPlayerQuery(0), transitionsPerFrame: 1);
         fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
         var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
         var falling = fixture.Spawn(new Vector3Int(-500, 500, 0));
@@ -744,7 +738,7 @@ public sealed class ProcessingTierSystemTests
     [TestMethod]
     public void PresetReference_Crossing_SkipsNeighborhoodsThatAreNotLoaded()
     {
-        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        var fixture = new Fixture(new TestPlayerQuery(0), transitionsPerFrame: 1);
         fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
         var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
         var inUnloadedNeighborhood = fixture.Spawn(new Vector3Int(-500, 500, 0));
@@ -767,7 +761,7 @@ public sealed class ProcessingTierSystemTests
     [TestMethod]
     public void PresetReference_CrossesBackBeforeDraining_LeavesEveryTierCorrect()
     {
-        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        var fixture = new Fixture(new TestPlayerQuery(0), transitionsPerFrame: 1);
         fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
         var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
         var home = fixture.Spawn(new Vector3Int(500, 500, 0));
@@ -792,7 +786,7 @@ public sealed class ProcessingTierSystemTests
     [TestMethod]
     public void PresetReference_CrossingPromotesNearbyEntityToLocalImmediately()
     {
-        var fixture = new Fixture(new FakePlayerQuery(0), transitionsPerFrame: 1);
+        var fixture = new Fixture(new TestPlayerQuery(0), transitionsPerFrame: 1);
         fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
         var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
         var nearby = fixture.Spawn(new Vector3Int(1100, 500, 0));
@@ -838,7 +832,7 @@ public sealed class ProcessingTierSystemTests
     /// <summary>A fixture like PresetFixture with a window centred on neighborhood (0, 0), recording every shift.</summary>
     private static Fixture WindowFixture(Vector3Int playerPosition, out int playerEntityId, List<((int, int) Previous, (int, int) Center)> shifts)
     {
-        var fixture = new Fixture(new FakePlayerQuery(0));
+        var fixture = new Fixture(new TestPlayerQuery(0));
         fixture.Resolver.SetReferencePosition(playerPosition);
         fixture.Resolver.SetWindowCenter(0, 0);
         fixture.Resolver.WindowShifted += (previous, center) => shifts.Add((previous, center));

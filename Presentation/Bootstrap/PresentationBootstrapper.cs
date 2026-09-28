@@ -16,7 +16,6 @@ public static class PresentationBootstrapper
 {
     public static PresentationContext Build(GraphicsDevice graphicsDevice, string fontsDirectory, string spritesheetsDirectory)
     {
-        ArgumentNullException.ThrowIfNull(graphicsDevice);
         ArgumentException.ThrowIfNullOrWhiteSpace(fontsDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(spritesheetsDirectory);
 

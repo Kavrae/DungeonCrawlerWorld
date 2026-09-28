@@ -27,27 +27,30 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
     private const float MaxHealthRegenPerSecond = 6f;
 
     private readonly PackedComponentPool<SimpleHealthComponent> _healthComponents;
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
-    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly PackedComponentPool<AbilityScoresComponent>? _abilityScores;
-    private readonly EventBus? _eventBus;
-    private readonly IPlayerQuery? _playerQuery;
+    private readonly EntityBodyParts _bodyParts;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
+    private readonly PackedComponentPool<DeadComponent> _deadEntities;
+    private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores;
+    private readonly EventBus _eventBus;
+    private readonly IPlayerQuery _playerQuery;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public SimpleHealthRegenSystem(
         PackedComponentPool<SimpleHealthComponent> healthComponents,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null,
-        PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
-        EventBus? eventBus = null,
-        IPlayerQuery? playerQuery = null)
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        PackedComponentPool<DeadComponent> deadEntities,
+        PackedComponentPool<AbilityScoresComponent> abilityScores,
+        EntityBodyParts bodyParts,
+        EventBus eventBus,
+        IPlayerQuery playerQuery)
     {
         _healthComponents = healthComponents;
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
         _abilityScores = abilityScores;
+        _bodyParts = bodyParts;
         _eventBus = eventBus;
         _playerQuery = playerQuery;
 
@@ -75,15 +78,14 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
     private void Regenerate(int entityId, float seconds, long now)
     {
         // A corpse shouldn't regenerate back above 0.
-        if (_deadEntities?.Has(entityId) == true)
+        if (_deadEntities.Has(entityId))
         {
             return;
         }
 
-        // No AbilityScoresModule loaded, or this entity never got a Constitution score
-        // (e.g. a non-creature SimpleHealthComponent holder) -- 0 regen, same as today's
-        // effectiveRegen == 0 skip below, just resolved a step earlier.
-        if (_abilityScores is null || !AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Constitution, out var constitution))
+        // This entity never got a Constitution score (e.g. a non-creature SimpleHealthComponent
+        // holder) -- 0 regen, same as the effectiveRegen == 0 skip below, just resolved a step earlier.
+        if (!AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Constitution, out var constitution))
         {
             return;
         }
@@ -97,6 +99,6 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
             return;
         }
 
-        HealthHeal.Apply(_healthComponents, entityId, percentOfMaxHealth: 0f, now, _statModifiers, flatAmount: effectiveRegen, sourceEntityId: entityId, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
+        HealthHeal.Apply(_healthComponents, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
     }
 }

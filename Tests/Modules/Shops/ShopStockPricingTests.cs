@@ -17,9 +17,7 @@ public sealed class ShopStockPricingTests
 
     private static ComponentManager BuildManager()
     {
-        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8);
-        manager.RegisterMultiPool<InventoryItemStackComponent>();
-        manager.RegisterMultiPool<ShopStockPreferenceComponent>();
+        var manager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8));
         return manager;
     }
 
@@ -174,7 +172,7 @@ public sealed class ShopStockPricingTests
         // physically left it (reads 0), the walk clamps down to a single stock level regardless of
         // quantity -- pricing far less than what buying 5 real units actually costs.
         var buggedTotal = ShopStockPricing.ComputeBulkBuyPrice(currentStock: 0, preferredStockLevel: 50, shop, item, quantity: 5);
-        Assert.IsTrue(buggedTotal < fixedTotal, $"The bugged reading ({buggedTotal}G) must undercount relative to the correct 5-unit total ({fixedTotal}G), or this test wouldn't catch a regression.");
+        Assert.IsLessThan(fixedTotal, buggedTotal, $"The bugged reading ({buggedTotal}G) must undercount relative to the correct 5-unit total ({fixedTotal}G), or this test wouldn't catch a regression.");
     }
 
     [TestMethod]
@@ -256,7 +254,7 @@ public sealed class ShopStockPricingTests
         var sellPrice = ShopStockPricing.GetBandPricePerUnit(item, fullyCollapsedShop, band, isBuyPrice: false);
 
         Assert.AreNotEqual(buyPrice, sellPrice);
-        Assert.IsTrue(buyPrice > sellPrice);
+        Assert.IsGreaterThan(sellPrice, buyPrice);
     }
 
     [TestMethod]
@@ -273,7 +271,7 @@ public sealed class ShopStockPricingTests
 
         var breakdown = ShopStockPricing.ComputeBulkBuyBreakdown(manager, ShopEntityId, shop, item, quantity: 3);
 
-        Assert.AreEqual(2, breakdown.Count);
+        Assert.HasCount(2, breakdown);
         Assert.AreEqual(new ShopStockPricing.BulkPriceBand(StockStatus.Overstocked, 2, 8, 16), breakdown[0]);
         Assert.AreEqual(new ShopStockPricing.BulkPriceBand(StockStatus.Normal, 1, 11, 11), breakdown[1]);
     }
@@ -292,7 +290,7 @@ public sealed class ShopStockPricingTests
 
         var breakdown = ShopStockPricing.ComputeBulkSellBreakdown(manager, ShopEntityId, shop, item, quantity: 5);
 
-        Assert.AreEqual(2, breakdown.Count);
+        Assert.HasCount(2, breakdown);
         Assert.AreEqual(new ShopStockPricing.BulkPriceBand(StockStatus.Normal, 3, 9, 27), breakdown[0]);
         Assert.AreEqual(new ShopStockPricing.BulkPriceBand(StockStatus.Overstocked, 2, 7, 14), breakdown[1]);
     }
@@ -310,7 +308,7 @@ public sealed class ShopStockPricingTests
         var breakdown = ShopStockPricing.ComputeBulkBuyBreakdown(manager, ShopEntityId, shop, item, quantity: 999);
         var total = ShopStockPricing.ComputeBulkBuyPrice(manager, ShopEntityId, shop, item, quantity: 999);
 
-        Assert.AreEqual(5, breakdown.Count); // spans all 5 bands starting fully Flooded down to Desperate
+        Assert.HasCount(5, breakdown); // spans all 5 bands starting fully Flooded down to Desperate
         var summedSubtotals = 0;
         foreach (var band in breakdown)
         {

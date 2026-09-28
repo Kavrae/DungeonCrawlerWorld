@@ -79,8 +79,8 @@ public sealed class UniqueNumberAllocatorTests
         }
 
         Assert.IsTrue(numbers.Zip(numbers.Skip(1)).Any(static pair => pair.First > pair.Second));
-        Assert.IsTrue(numbers.Min() < 16_777_216 / 4);
-        Assert.IsTrue(numbers.Max() > 16_777_216 / 4 * 3);
+        Assert.IsLessThan(16_777_216 / 4, numbers.Min());
+        Assert.IsGreaterThan(16_777_216 / 4 * 3, numbers.Max());
     }
 
     [TestMethod]

@@ -85,7 +85,7 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
     private readonly ItemCatalog _itemCatalog;
     private readonly ActionCatalog _actionCatalog;
     private readonly IMapQuery _mapQuery;
@@ -93,17 +93,17 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly MathUtility _mathUtility;
     private readonly ComponentManager _componentManager;
     private readonly EntityKeys _entityKeys;
-    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly PackedComponentPool<ManaComponent>? _mana;
-    private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
-    private readonly PackedComponentPool<AbilityScoresComponent>? _abilityScores;
-    private readonly StatusEffectAuraApplierRegistry? _statusEffectAppliers;
-    private readonly IPlayerQuery? _playerQuery;
-    private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
-    private readonly MultiComponentPool<ItemHotkeyBindingComponent>? _itemHotkeyBindings;
-    private readonly EntityBodyParts? _bodyParts;
-    private readonly BlueprintRegistry? _creatures;
-    private readonly ProcessingTierQuery? _processingTiers;
+    private readonly PackedComponentPool<DeadComponent> _deadEntities;
+    private readonly PackedComponentPool<ManaComponent> _mana;
+    private readonly PackedComponentPool<HotkeyExpansionUnlockComponent> _hotkeyExpansionUnlocks;
+    private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores;
+    private readonly StatusEffectAuraApplierRegistry _statusEffectAppliers;
+    private readonly IPlayerQuery _playerQuery;
+    private readonly MultiComponentPool<StatusEffectAuraSourceComponent> _auraSources;
+    private readonly MultiComponentPool<ItemHotkeyBindingComponent> _itemHotkeyBindings;
+    private readonly EntityBodyParts _bodyParts;
+    private readonly BlueprintRegistry _creatures;
+    private readonly ProcessingTierQuery _processingTiers;
     private readonly EntityStripeSet _stripeSet;
 
     /// <summary>The simulation frame of the Update in progress -- see Update.</summary>
@@ -121,18 +121,18 @@ public sealed class ConsumableActivationSystem : ISystem
         MathUtility mathUtility,
         ComponentManager componentManager,
         EntityKeys entityKeys,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null,
-        PackedComponentPool<ManaComponent>? mana = null,
-        PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
-        PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
-        StatusEffectAuraApplierRegistry? statusEffectAppliers = null,
-        IPlayerQuery? playerQuery = null,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
-        MultiComponentPool<ItemHotkeyBindingComponent>? itemHotkeyBindings = null,
-        EntityBodyParts? bodyParts = null,
-        BlueprintRegistry? creatures = null,
-        ProcessingTierQuery? processingTiers = null)
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        PackedComponentPool<DeadComponent> deadEntities,
+        PackedComponentPool<ManaComponent> mana,
+        PackedComponentPool<HotkeyExpansionUnlockComponent> hotkeyExpansionUnlocks,
+        PackedComponentPool<AbilityScoresComponent> abilityScores,
+        MultiComponentPool<StatusEffectAuraSourceComponent> auraSources,
+        MultiComponentPool<ItemHotkeyBindingComponent> itemHotkeyBindings,
+        EntityBodyParts bodyParts,
+        ProcessingTierQuery processingTiers,
+        IPlayerQuery playerQuery,
+        StatusEffectAuraApplierRegistry statusEffectAppliers,
+        BlueprintRegistry creatures)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -169,7 +169,7 @@ public sealed class ConsumableActivationSystem : ISystem
 
         foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
         {
-            if (_deadEntities?.Has(entityId) == true)
+            if (_deadEntities.Has(entityId))
             {
                 continue;
             }
@@ -197,7 +197,7 @@ public sealed class ConsumableActivationSystem : ISystem
                         continue;
                     }
 
-                    ActivatePotion(item, potionActivator, entityId, request.TargetTiles);
+                    ActivatePotion(item, entityId, request.TargetTiles);
                     ActionLockGate.Lock(_actionLocks, entityId, _now, potionActivator.Timing.ActionLockFrames);
                     break;
 
@@ -247,9 +247,9 @@ public sealed class ConsumableActivationSystem : ISystem
         charges > 0 && !ActionLockGate.IsBlocked(_actionLocks, entityId, _now);
 
     /// <summary>Whether a consumable landing on targetEntityId's tile reaches it: not while it is frozen, the same seam ActionEffectResolver keeps -- nothing targets across the simulated/frozen boundary.</summary>
-    private bool IsTargetable(int targetEntityId) => _processingTiers?.IsSimulated(targetEntityId) != false;
+    private bool IsTargetable(int targetEntityId) => _processingTiers.IsSimulated(targetEntityId);
 
-    private void ActivatePotion(ItemDefinition item, PotionActivator potionActivator, int sourceEntityId, Vector3Int[] targetTiles)
+    private void ActivatePotion(ItemDefinition item, int sourceEntityId, Vector3Int[] targetTiles)
     {
         foreach (var tile in targetTiles)
         {
@@ -282,12 +282,12 @@ public sealed class ConsumableActivationSystem : ISystem
     /// </summary>
     private void ApplyPotionToTarget(ItemDefinition item, int sourceEntityId, int targetEntityId)
     {
-        if (_deadEntities?.Has(targetEntityId) == true || (!_health.Has(targetEntityId) && _bodyParts?.Has(targetEntityId) != true))
+        if (_deadEntities.Has(targetEntityId) || (!_health.Has(targetEntityId) && !_bodyParts.Has(targetEntityId)))
         {
             return;
         }
 
-        var durationFrames = _abilityScores is not null && AbilityScoreQueries.TryGetComponent(_abilityScores, targetEntityId, AbilityScoreType.Constitution, out var constitution)
+        var durationFrames = AbilityScoreQueries.TryGetComponent(_abilityScores, targetEntityId, AbilityScoreType.Constitution, out var constitution)
             ? PotionCooldownEffects.ComputeDurationFrames(constitution.Total)
             : PotionCooldownEffects.DurationFrames;
 
@@ -323,7 +323,7 @@ public sealed class ConsumableActivationSystem : ISystem
     }
 
     private float ComputeScrollScaleMultiplier(int sourceEntityId) =>
-        _abilityScores is not null && AbilityScoreQueries.TryGetComponent(_abilityScores, sourceEntityId, AbilityScoreType.Intelligence, out var intelligence)
+        AbilityScoreQueries.TryGetComponent(_abilityScores, sourceEntityId, AbilityScoreType.Intelligence, out var intelligence)
             ? ScrollScalingEffects.ComputeScaleMultiplier(intelligence.Total)
             : 1.0f;
 
@@ -335,7 +335,7 @@ public sealed class ConsumableActivationSystem : ISystem
     /// </summary>
     private void ApplyScrollToTarget(ItemDefinition item, int sourceEntityId, int targetEntityId, float durationScaleMultiplier)
     {
-        if (_deadEntities?.Has(targetEntityId) == true)
+        if (_deadEntities.Has(targetEntityId))
         {
             return;
         }
@@ -362,7 +362,7 @@ public sealed class ConsumableActivationSystem : ISystem
     /// <summary>Same "immortal but affectable" treatment as ApplyScrollToTarget -- no hard SimpleHealthComponent requirement, each effect entry no-ops gracefully on its own missing pool. Skipped only for a dead target.</summary>
     private void ApplyWandToTarget(ItemDefinition item, int sourceEntityId, int targetEntityId)
     {
-        if (_deadEntities?.Has(targetEntityId) == true)
+        if (_deadEntities.Has(targetEntityId))
         {
             return;
         }
@@ -401,12 +401,10 @@ public sealed class ConsumableActivationSystem : ISystem
     /// <summary>
     /// Repoints whichever hotkey slot referenced oldStackInstanceId (if any -- the wand may have
     /// been activated some other way, though today the hotbar is the only path) to
-    /// newStackInstanceId instead. A no-op if _itemHotkeyBindings wasn't wired in (a test harness
-    /// exercising activation without the full hotbar module) or nothing was actually bound to the
-    /// old id.
+    /// newStackInstanceId instead. A no-op if nothing was bound to the old id.
     /// </summary>
     private void RepointItemHotkeyBinding(int entityId, uint oldStackInstanceId, uint newStackInstanceId) =>
-        _itemHotkeyBindings?.TryUpdateFirst(
+        _itemHotkeyBindings.TryUpdateFirst(
             entityId,
             (oldStackInstanceId, newStackInstanceId),
             static (ref readonly ItemHotkeyBindingComponent binding, (uint Old, uint New) state) => binding.StackInstanceId == state.Old,
@@ -434,5 +432,6 @@ public sealed class ConsumableActivationSystem : ISystem
             AuraSources: _auraSources,
             BodyParts: _bodyParts,
             PlayerQuery: _playerQuery,
+            Definitions: _creatures,
             DurationScaleMultiplier: durationScaleMultiplier);
 }

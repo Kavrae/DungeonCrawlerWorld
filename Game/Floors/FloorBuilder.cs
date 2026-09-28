@@ -149,9 +149,6 @@ public static class FloorBuilder
     /// <param name="factory">The one spawn path (see EntityFactory) -- the player is a blueprint and a seed like every other entity, so it too carries a spawn record.</param>
     public static void CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, EntityFactory factory, BlueprintRegistry definitions, int entityId, ProcessingTierResolver? tierResolver = null)
     {
-        ArgumentNullException.ThrowIfNull(factory);
-        ArgumentNullException.ThrowIfNull(definitions);
-
         tierResolver?.PinLocalAndNotify(entityId);
 
         var spawnPosition = FindFreeGroundCellNear(world, PlayerSpawnOrigin());

@@ -14,9 +14,7 @@ public sealed class AbilityScoreEffectsTests
 {
     private static ComponentManager CreateRegisteredManager()
     {
-        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8);
-        new StatModifiersModule().RegisterComponents(manager);
-        new AbilityScoresModule().RegisterComponents(manager);
+        var manager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8));
         return manager;
     }
 
@@ -98,15 +96,6 @@ public sealed class AbilityScoreEffectsTests
         var effectiveIncomingDamage = StatModifierMath.GetEffectiveValue(manager.GetMultiPool<StatModifierComponent>(), 0, StatModifierTarget.IncomingDamage, 10f);
         Assert.AreEqual(9f, effectiveIncomingDamage);
         Assert.AreEqual((ushort)5, GetAbilityScore(manager, 0, AbilityScoreType.Strength).Total);
-    }
-
-    [TestMethod]
-    public void RecomputeIfAbilityScore_NoAbilityScoresModuleRegistered_DoesNotThrow()
-    {
-        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8);
-        new StatModifiersModule().RegisterComponents(manager);
-
-        AbilityScoreEffects.RecomputeIfAbilityScore(manager, 0, StatModifierTarget.Strength);
     }
 
     [TestMethod]

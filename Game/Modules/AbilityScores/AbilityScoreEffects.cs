@@ -115,16 +115,9 @@ public static class AbilityScoreEffects
     /// Recomputes and stores Total for one ability score, if the entity was granted it -- shared
     /// by GrantModifier (called inline, right after adding the modifier, with a type it already
     /// knows) and by RecomputeIfAbilityScore above (called once StatModifiersModule's expiry
-    /// event resolves to a type). No-ops if AbilityScoresModule isn't registered at all (e.g. a
-    /// StatModifiers-only test).
-    /// </summary>
+    /// event resolves to a type).    /// </summary>
     private static void RecomputeAbilityScore(ComponentManager componentManager, int entityId, AbilityScoreType type)
     {
-        if (!componentManager.IsRegistered<AbilityScoresComponent>())
-        {
-            return;
-        }
-
         var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
         var denseIndex = abilityScores.GetDenseIndex(entityId);
         if (denseIndex < 0 || !abilityScores.GetReadonlyByDenseIndex(denseIndex).TryGet(type, out var score))
@@ -137,8 +130,8 @@ public static class AbilityScoreEffects
             scores.SetTotal(values.Type, values.Total));
     }
 
-    private static MultiComponentPool<StatModifierComponent>? StatModifiersOf(ComponentManager componentManager) =>
-        componentManager.IsRegistered<StatModifierComponent>() ? componentManager.GetMultiPool<StatModifierComponent>() : null;
+    private static MultiComponentPool<StatModifierComponent> StatModifiersOf(ComponentManager componentManager) =>
+        componentManager.GetMultiPool<StatModifierComponent>();
 
     private static void Write<TState>(PackedComponentPool<AbilityScoresComponent> abilityScores, int entityId, TState state, PackedComponentPool<AbilityScoresComponent>.ComponentUpdater<TState> updater)
     {

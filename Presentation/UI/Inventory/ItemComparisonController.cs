@@ -1,6 +1,5 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
-using Game.Modules.Actions;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Microsoft.Xna.Framework;
@@ -23,7 +22,6 @@ public sealed class ItemComparisonController(
     ElementPoolService elementPoolService,
     ComponentManager componentManager,
     ItemCatalog itemCatalog,
-    ActionCatalog actionCatalog,
     InventoryWindowController inventoryWindowController,
     ContextMenuController contextMenuController,
     MapWindow mapWindow,

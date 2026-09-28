@@ -41,7 +41,7 @@ public sealed class StatusEffectImmunityExpirySystemTests
     {
         var immunities = CreatePool();
         StatusEffectImmunityEffects.Grant(immunities, EntityId, StatusEffectType.Burning, expiresAtFrame: 100);
-        var system = new StatusEffectImmunityExpirySystem(immunities);
+        var system = new StatusEffectImmunityExpirySystem(immunities, new SimulationScope());
 
         Run(system, 0, 99);
 
@@ -53,7 +53,7 @@ public sealed class StatusEffectImmunityExpirySystemTests
     {
         var immunities = CreatePool();
         StatusEffectImmunityEffects.Grant(immunities, EntityId, StatusEffectType.Burning, expiresAtFrame: 100);
-        var system = new StatusEffectImmunityExpirySystem(immunities);
+        var system = new StatusEffectImmunityExpirySystem(immunities, new SimulationScope());
 
         Run(system, 0, 100);
 
@@ -65,7 +65,7 @@ public sealed class StatusEffectImmunityExpirySystemTests
     {
         var immunities = CreatePool();
         StatusEffectImmunityEffects.GrantPermanent(immunities, EntityId, StatusEffectType.Paralysis);
-        var system = new StatusEffectImmunityExpirySystem(immunities);
+        var system = new StatusEffectImmunityExpirySystem(immunities, new SimulationScope());
 
         Run(system, 0, 500);
 
@@ -79,7 +79,7 @@ public sealed class StatusEffectImmunityExpirySystemTests
         var immunities = CreatePool();
         StatusEffectImmunityEffects.Grant(immunities, EntityId, StatusEffectType.Burning, expiresAtFrame: 30);
         StatusEffectImmunityEffects.Grant(immunities, EntityId, StatusEffectType.Poison, expiresAtFrame: 90);
-        var system = new StatusEffectImmunityExpirySystem(immunities);
+        var system = new StatusEffectImmunityExpirySystem(immunities, new SimulationScope());
 
         Run(system, 0, 30);
         Assert.IsFalse(HasImmunity(immunities, StatusEffectType.Burning));
@@ -95,7 +95,7 @@ public sealed class StatusEffectImmunityExpirySystemTests
     {
         var immunities = CreatePool();
         StatusEffectImmunityEffects.Grant(immunities, EntityId, StatusEffectType.Burning, expiresAtFrame: 50);
-        var system = new StatusEffectImmunityExpirySystem(immunities);
+        var system = new StatusEffectImmunityExpirySystem(immunities, new SimulationScope());
 
         StatusEffectImmunityEffects.Grant(immunities, EntityId, StatusEffectType.Burning, expiresAtFrame: 200);
         Assert.AreEqual(1, immunities.CountForEntity(EntityId));
@@ -113,7 +113,7 @@ public sealed class StatusEffectImmunityExpirySystemTests
     {
         var immunities = CreatePool();
         StatusEffectImmunityEffects.GrantPermanent(immunities, EntityId, StatusEffectType.Poison);
-        var system = new StatusEffectImmunityExpirySystem(immunities);
+        var system = new StatusEffectImmunityExpirySystem(immunities, new SimulationScope());
 
         StatusEffectImmunityEffects.Grant(immunities, EntityId, StatusEffectType.Poison, expiresAtFrame: 10);
 
@@ -125,7 +125,7 @@ public sealed class StatusEffectImmunityExpirySystemTests
     [TestMethod]
     public void NoImmunities_DoesNotThrow()
     {
-        var system = new StatusEffectImmunityExpirySystem(CreatePool());
+        var system = new StatusEffectImmunityExpirySystem(CreatePool(), new SimulationScope());
 
         system.Update(Frame(1), 0);
     }

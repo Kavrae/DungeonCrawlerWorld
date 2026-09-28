@@ -40,15 +40,11 @@ public sealed class TradeWindow(
     LabelRenderer labelRenderer,
     ComponentManager componentManager,
     ItemCatalog itemCatalog,
-    SpriteSheetService spriteSheetService,
-    SpriteRenderer spriteRenderer,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    // Null in test setups that don't wire one -- CompleteTrade's own player-to-shop Gold transfer
-    // simply never publishes GoldGivenToShopEvent in that case (see CompleteTrade's own doc comment).
-    EventBus? eventBus = null,
-    Engine.ECS.Systems.SimulationClock? simulationClock = null)
+    EventBus eventBus,
+    Engine.ECS.Systems.SimulationClock simulationClock)
     : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
 {
     /// <summary>2x10 -- the confirmed 20-stacks-per-side cap, arranged so every slot is visible with no scrolling required (see InventoryCapacity.MaxNonPlayerStackCount, which already enforces this same 20 for free).</summary>
@@ -97,8 +93,8 @@ public sealed class TradeWindow(
     /// </summary>
     private int _shopEntityId;
 
-    private readonly PackedComponentPool<ShopComponent>? _shopPool = componentManager.IsRegistered<ShopComponent>() ? componentManager.GetPackedPool<ShopComponent>() : null;
-    private readonly PackedComponentPool<CurrencyComponent>? _currencyPool = componentManager.IsRegistered<CurrencyComponent>() ? componentManager.GetPackedPool<CurrencyComponent>() : null;
+    private readonly PackedComponentPool<ShopComponent> _shopPool = componentManager.GetPackedPool<ShopComponent>();
+    private readonly PackedComponentPool<CurrencyComponent> _currencyPool = componentManager.GetPackedPool<CurrencyComponent>();
     private readonly MultiComponentPool<InventoryItemStackComponent> _stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
 
     /// <summary>The one shared TooltipController every hover-popup consumer in the app shows/hides through -- see its own doc comment. Both columns' own InventoryGridContent instances are given the same instance; each is already a distinct owner (see TooltipController.Show/Hide's own doc comment), so whichever column's Update happens to run second in a frame can never stomp the other's tooltip.</summary>
@@ -223,7 +219,7 @@ public sealed class TradeWindow(
             return false;
         }
 
-        return _currencyPool is null || !_currencyPool.TryGetReadonly(tradeEntityId, out var currency) || (currency.Gold == 0 && currency.Credits == 0);
+        return !_currencyPool.TryGetReadonly(tradeEntityId, out var currency) || (currency.Gold == 0 && currency.Credits == 0);
     }
 
     /// <summary>
@@ -247,7 +243,7 @@ public sealed class TradeWindow(
     /// </summary>
     private int ComputeColumnValue(int tradeEntityId, bool isShopSide)
     {
-        if (_shopPool is null || !_shopPool.TryGetReadonly(_shopEntityId, out var shop))
+        if (!_shopPool.TryGetReadonly(_shopEntityId, out var shop))
         {
             return 0;
         }
@@ -278,7 +274,7 @@ public sealed class TradeWindow(
                 : ShopStockPricing.ComputeBulkSellPrice(effectiveStock, preferredStockLevel, shop, definition, (ushort)quantity);
         }
 
-        if (_currencyPool?.TryGetReadonly(tradeEntityId, out var currency) == true)
+        if (_currencyPool.TryGetReadonly(tradeEntityId, out var currency))
         {
             total += currency.Gold;
         }
@@ -339,7 +335,7 @@ public sealed class TradeWindow(
     {
         TransferAllStacksTo(_playerSideEntityId, _shopEntityId);
         TransferAllStacksTo(_shopSideEntityId, world.PlayerEntityId);
-        ShopActions.TryGiveCurrencyToShop(componentManager, _shopPool, eventBus, _playerSideEntityId, _shopEntityId, CurrencyType.Gold, eventPlayerEntityId: world.PlayerEntityId);
+        ShopActions.TryGiveCurrencyToShop(componentManager, eventBus, _playerSideEntityId, _shopEntityId, CurrencyType.Gold, eventPlayerEntityId: world.PlayerEntityId);
         CurrencyActions.TryTransfer(componentManager, _shopSideEntityId, world.PlayerEntityId, CurrencyType.Gold);
     }
 
@@ -360,11 +356,6 @@ public sealed class TradeWindow(
     /// </summary>
     private void BalanceOffer()
     {
-        if (_currencyPool is null)
-        {
-            return;
-        }
-
         CurrencyActions.TryTransfer(componentManager, _playerSideEntityId, world.PlayerEntityId, CurrencyType.Gold);
         CurrencyActions.TryTransfer(componentManager, _shopSideEntityId, _shopEntityId, CurrencyType.Gold);
 
@@ -451,7 +442,7 @@ public sealed class TradeWindow(
         // picks TradeItemStackCell and the correct buy/sell pricing direction for this column -- see
         // InventoryGridContent's own doc comment on that parameter. Both columns are given the same
         // _tooltipController -- see its own doc comment for why that's safe now.
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, _tooltipController, static () => null, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, isShopSide, simulationClock: simulationClock));
+        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, contextMenuController, entityId, filterTag: null, _tooltipController, static () => null, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, simulationClock, isShopSide));
         AddChild(gridWindow);
 
         var footerWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions
@@ -465,7 +456,7 @@ public sealed class TradeWindow(
         // showLabels: false -- "10 [sprite]", not "Gold : 10 [sprite]"; this column is too narrow
         // to spare the label (per the ask). textColor: white -- confirmed live look, matching the
         // trade grid's own transparent background just above.
-        footerWindow.SetContent(new CurrencyRowContent(entityId, componentManager, world, contextMenuController, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, static () => null, eventBus: null, showLabels: false, textColor: Color.White));
+        footerWindow.SetContent(new CurrencyRowContent(entityId, componentManager, world, contextMenuController, ElementPoolService, static () => null, eventBus, showLabels: false, textColor: Color.White));
         AddChild(footerWindow);
     }
 

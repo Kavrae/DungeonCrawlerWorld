@@ -116,9 +116,6 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     /// </remarks>
     public void Populate(World.World world, NeighborhoodRecords records)
     {
-        ArgumentNullException.ThrowIfNull(world);
-        ArgumentNullException.ThrowIfNull(records);
-
         var mapBounds = world.Map.Bounds;
         var neighborhoodsToGenerate = new List<(NeighborhoodRecord Record, int PopulationSeed)>();
         for (var cellY = Neighborhoods.CellOf(mapBounds.MinY); cellY <= Neighborhoods.CellOf(mapBounds.MaxY - 1); cellY++)
@@ -149,9 +146,6 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     /// <remarks>Yields 0 once the layout is loaded, then what Spawn yields.</remarks>
     public IEnumerable<int> GenerateNeighborhood(World.World world, NeighborhoodRecord record)
     {
-        ArgumentNullException.ThrowIfNull(world);
-        ArgumentNullException.ThrowIfNull(record);
-
         var neighborhoodPlan = Plan(world.Map, record, record.NextPopulationSeed());
         world.Map.LoadNeighborhood(neighborhoodPlan.Layout);
         yield return 0;
@@ -172,9 +166,6 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     /// <param name="planningCancellation">Checked once a row: a plan no longer wanted stops early and throws OperationCanceledException.</param>
     public NeighborhoodPlan Plan(Map map, NeighborhoodRecord record, int populationSeed, CancellationToken planningCancellation = default)
     {
-        ArgumentNullException.ThrowIfNull(map);
-        ArgumentNullException.ThrowIfNull(record);
-
         var neighborhoodLayout = map.CreateLayout(record.CellX, record.CellY);
         var layoutRolls = new MathUtility(new Random(record.Seed));
         for (var row = neighborhoodLayout.MinY; row < neighborhoodLayout.MaxY; row++)
@@ -212,8 +203,6 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     /// <remarks>Yields after each row with the number of entities it created, so a caller can spread it over frames. A creature that can't be placed is destroyed rather than left off the map.</remarks>
     public IEnumerable<int> Spawn(NeighborhoodPlan neighborhoodPlan)
     {
-        ArgumentNullException.ThrowIfNull(neighborhoodPlan);
-
         var nextSpawnIndex = 0;
         foreach (var spawnRowEnd in neighborhoodPlan.SpawnRowEnds)
         {

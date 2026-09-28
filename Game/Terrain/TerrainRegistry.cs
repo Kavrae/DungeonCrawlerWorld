@@ -90,8 +90,6 @@ public sealed class TerrainRegistry
     /// <summary>A cell of typeId with its sprite variant rolled, the way SpriteManifest.TryGetRandom rolls a blueprint's sprite: a single-variant or glyph-only terrain doesn't draw from mathUtility at all, so seeded maps don't shift.</summary>
     public TerrainCell CreateCell(ushort typeId, Engine.Math.MathUtility mathUtility)
     {
-        ArgumentNullException.ThrowIfNull(mathUtility);
-
         var variantCount = GetVariantCount(typeId);
         return new TerrainCell(typeId, variantCount > 1 ? (byte)mathUtility.Next(0, System.Math.Min(variantCount, byte.MaxValue + 1)) : (byte)0);
     }

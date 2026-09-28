@@ -12,7 +12,7 @@ namespace Tests.World;
 public sealed class WorldTests
 {
     private static Game.World.World CreateWorld(int sizeX = 10, int sizeY = 10, int sizeZ = 2) =>
-        new(new Map(new Vector3Int(sizeX, sizeY, sizeZ)));
+        TestWorlds.Create(new Map(new Vector3Int(sizeX, sizeY, sizeZ)));
 
     private static MultiComponentPool<NonBlockingComponent> CreateNonBlockingPool(int capacity = 10) =>
         new(capacity, capacity);
@@ -668,7 +668,7 @@ public sealed class WorldTests
     [TestMethod]
     public void MultiTileFootprint_StraddlingTheOrigin_PlacesAndMovesAcrossFourNeighborhoods()
     {
-        var world = new Game.World.World(new Map(new MapBounds(-1024, -1024, 1024, 1024, 2)));
+        var world = TestWorlds.Create(new Map(new MapBounds(-1024, -1024, 1024, 1024, 2)));
         var transform = new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(2, 2));
 
         world.PlaceEntityOnMap(3, new Vector3Int(-1, -1, 1), ref transform);
@@ -687,7 +687,7 @@ public sealed class WorldTests
     [TestMethod]
     public void IsOnMap_UnplacedPosition_IsFalseEvenOnAMapCoveringNegativeCoordinates()
     {
-        var world = new Game.World.World(new Map(new MapBounds(-1024, -1024, 1024, 1024, 2)));
+        var world = TestWorlds.Create(new Map(new MapBounds(-1024, -1024, 1024, 1024, 2)));
 
         Assert.IsTrue(world.IsOnMap(new Vector3Int(-1, -1, 1)));
         Assert.IsFalse(world.IsOnMap(TransformComponent.UnplacedOn(MapLayer.Ground)));

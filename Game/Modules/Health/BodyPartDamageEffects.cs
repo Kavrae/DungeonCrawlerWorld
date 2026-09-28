@@ -1,5 +1,4 @@
 using Engine.ECS.Components.Stores;
-using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Engine.Utilities;
@@ -8,7 +7,6 @@ using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
-using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Health;
 
@@ -20,7 +18,7 @@ public static class BodyPartDamageEffects
 
     /// <summary>Clamps the part's current health down by amount against its modifier-effective MaximumHealth, disabling the part (and locking it out of regen for a fresh 10 seconds from now) the instant it lands at 0 -- re-armed on every hit that leaves it at 0, not only the first transition into 0.</summary>
     /// <param name="now">The simulation frame this hit lands on -- the lockout is a deadline measured from it (see BodyPartStateComponent).</param>
-    public static void ApplyToPart(EntityBodyParts bodyParts, int entityId, int partId, MultiComponentPool<StatModifierComponent>? statModifiers, ushort amount, long now)
+    public static void ApplyToPart(EntityBodyParts bodyParts, int entityId, int partId, MultiComponentPool<StatModifierComponent> statModifiers, ushort amount, long now)
     {
         ArgumentNullException.ThrowIfNull(bodyParts);
 
@@ -59,21 +57,16 @@ public static class BodyPartDamageEffects
         int partId,
         ushort effectiveAmount,
         ActionSource source,
-        IPlayerQuery? playerQuery,
+        IPlayerQuery playerQuery,
         string damageType,
-        MultiComponentPool<StatModifierComponent>? statModifiers,
-        PackedComponentPool<DeadComponent>? deadEntities)
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        PackedComponentPool<DeadComponent> deadEntities)
     {
         bodyParts.TryGet(entityId, partId, out var updatedPart);
 
-        if (updatedPart.IsVital && updatedPart.CurrentHealth == 0 && deadEntities?.Has(entityId) != true && entityId != playerQuery?.PlayerEntityId)
+        if (updatedPart.IsVital && updatedPart.CurrentHealth == 0 && !deadEntities.Has(entityId) && entityId != playerQuery.PlayerEntityId)
         {
             eventBus.Publish(new EntityDiedEvent(entityId, source));
-        }
-
-        if (playerQuery is null)
-        {
-            return;
         }
 
         var playerInvolved = entityId == playerQuery.PlayerEntityId
@@ -102,10 +95,10 @@ public static class BodyPartDamageEffects
         int entityId,
         ushort effectiveAmount,
         ActionSource source,
-        IPlayerQuery? playerQuery,
+        IPlayerQuery playerQuery,
         string damageType,
-        MultiComponentPool<StatModifierComponent>? statModifiers,
-        PackedComponentPool<DeadComponent>? deadEntities)
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        PackedComponentPool<DeadComponent> deadEntities)
     {
         var anyVitalPartAtZero = false;
         foreach (var part in bodyParts.Parts(entityId))
@@ -117,14 +110,9 @@ public static class BodyPartDamageEffects
             }
         }
 
-        if (anyVitalPartAtZero && deadEntities?.Has(entityId) != true && entityId != playerQuery?.PlayerEntityId)
+        if (anyVitalPartAtZero && !deadEntities.Has(entityId) && entityId != playerQuery.PlayerEntityId)
         {
             eventBus.Publish(new EntityDiedEvent(entityId, source));
-        }
-
-        if (playerQuery is null)
-        {
-            return;
         }
 
         var playerInvolved = entityId == playerQuery.PlayerEntityId

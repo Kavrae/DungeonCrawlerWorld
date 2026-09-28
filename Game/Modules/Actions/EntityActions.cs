@@ -24,20 +24,14 @@ namespace Game.Modules.Actions;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class EntityActions(
     ActionCatalog actionCatalog,
-    BlueprintRegistry? creatures,
+    BlueprintRegistry creatures,
     MultiComponentPool<ActionInstanceComponent> instances,
     MultiComponentPool<ActionCooldownComponent> cooldowns,
-    DirectComponentPool<SpawnRecordComponent>? spawnRecords = null,
-    MultiComponentPool<AppliedBlueprintComponent>? appliedParts = null)
+    DirectComponentPool<SpawnRecordComponent> spawnRecords,
+    MultiComponentPool<AppliedBlueprintComponent> appliedParts)
 {
-    private readonly ActionCatalog _actionCatalog = actionCatalog ?? throw new ArgumentNullException(nameof(actionCatalog));
-    /// <inheritdoc cref="EntityBodyParts"/>
-    private readonly BlueprintRegistry _creatures = creatures ?? new BlueprintRegistry();
-    private readonly MultiComponentPool<ActionInstanceComponent> _instances = instances ?? throw new ArgumentNullException(nameof(instances));
-    private readonly MultiComponentPool<ActionCooldownComponent> _cooldowns = cooldowns ?? throw new ArgumentNullException(nameof(cooldowns));
-
     /// <summary>Builds one from a ComponentManager, for callers that hold the manager rather than the pools (bootstrappers, Presentation).</summary>
-    public static EntityActions For(ComponentManager componentManager, ActionCatalog actionCatalog, BlueprintRegistry? creatures)
+    public static EntityActions For(ComponentManager componentManager, ActionCatalog actionCatalog, BlueprintRegistry creatures)
     {
         ArgumentNullException.ThrowIfNull(componentManager);
 
@@ -46,8 +40,8 @@ public sealed class EntityActions(
             creatures,
             componentManager.GetMultiPool<ActionInstanceComponent>(),
             componentManager.GetMultiPool<ActionCooldownComponent>(),
-            componentManager.IsRegistered<SpawnRecordComponent>() ? componentManager.GetDirectPool<SpawnRecordComponent>() : null,
-            componentManager.IsRegistered<AppliedBlueprintComponent>() ? componentManager.GetMultiPool<AppliedBlueprintComponent>() : null);
+            componentManager.GetDirectPool<SpawnRecordComponent>(),
+            componentManager.GetMultiPool<AppliedBlueprintComponent>());
     }
 
     /// <summary>True when the entity can use actionId at all, whoever granted it.</summary>
@@ -68,7 +62,7 @@ public sealed class EntityActions(
             return true;
         }
 
-        return _actionCatalog.TryGet(actionId, out definition!);
+        return actionCatalog.TryGet(actionId, out definition!);
     }
 
     /// <summary>True while the entity's cooldown on actionId is still running at frame now.</summary>
@@ -84,7 +78,7 @@ public sealed class EntityActions(
     {
         var readyAtFrame = FrameDeadline.After(now, cooldownFrames);
 
-        if (_cooldowns.TryUpdateFirst(
+        if (cooldowns.TryUpdateFirst(
             entityId,
             (ActionId: actionId, ReadyAt: readyAtFrame),
             static (ref readonly ActionCooldownComponent cooldown, (Guid ActionId, uint ReadyAt) state) => cooldown.ActionId == state.ActionId,
@@ -93,13 +87,13 @@ public sealed class EntityActions(
             return;
         }
 
-        _cooldowns.Add(entityId, new ActionCooldownComponent(actionId, readyAtFrame));
+        cooldowns.Add(entityId, new ActionCooldownComponent(actionId, readyAtFrame));
     }
 
     /// <summary>Whether the entity has actionId, and the override that comes with it (null when there is none).</summary>
     private bool TryGetGrant(int entityId, Guid actionId, out ActionDefinition? overrideDefinition)
     {
-        if (_instances.TryGetFirst(entityId, actionId, static (ref readonly ActionInstanceComponent candidate, Guid id) => candidate.ActionId == id, out var instance))
+        if (instances.TryGetFirst(entityId, actionId, static (ref readonly ActionInstanceComponent candidate, Guid id) => candidate.ActionId == id, out var instance))
         {
             overrideDefinition = instance.Override;
             return true;
@@ -110,8 +104,8 @@ public sealed class EntityActions(
             return true;
         }
 
-        if (spawnRecords is not null && spawnRecords.TryGetReadonly(entityId, out var record)
-            && _creatures.TryResolve(record.BlueprintId, out var blueprint)
+        if (spawnRecords.TryGetReadonly(entityId, out var record)
+            && creatures.TryResolve(record.BlueprintId, out var blueprint)
             && blueprint.TryGetAction(actionId, out var grant))
         {
             overrideDefinition = grant.Override;
@@ -135,7 +129,7 @@ public sealed class EntityActions(
         for (var denseIndex = appliedParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = appliedParts.GetNextDenseIndex(denseIndex))
         {
             var applied = appliedParts.GetReadonlyByDenseIndex(denseIndex);
-            if (applied.Order <= latestOrder || !_creatures.TryGet(applied.BlueprintId, out var part))
+            if (applied.Order <= latestOrder || !creatures.TryGet(applied.BlueprintId, out var part))
             {
                 continue;
             }
@@ -156,7 +150,7 @@ public sealed class EntityActions(
 
     private bool TryGetCooldownDeadline(int entityId, Guid actionId, out uint readyAtFrame)
     {
-        if (_cooldowns.TryGetFirst(entityId, actionId, static (ref readonly ActionCooldownComponent candidate, Guid id) => candidate.ActionId == id, out var cooldown))
+        if (cooldowns.TryGetFirst(entityId, actionId, static (ref readonly ActionCooldownComponent candidate, Guid id) => candidate.ActionId == id, out var cooldown))
         {
             readyAtFrame = cooldown.ReadyAtFrame;
             return true;

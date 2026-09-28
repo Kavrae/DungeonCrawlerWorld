@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
@@ -59,16 +60,7 @@ public sealed class HotbarContentTests
 
     private static (HotbarContent Hotbar, ComponentManager ComponentManager) Build()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
-        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<ActionInstanceComponent>();
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = PlayerEntityId };
         var fontService = TestFonts.Shared;
@@ -76,7 +68,7 @@ public sealed class HotbarContentTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), componentManager, new EventBus(), new ActionCatalog(), new ItemCatalog(),
-            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), ScreenSize);
+            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), ScreenSize, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

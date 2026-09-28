@@ -20,9 +20,6 @@ namespace Game.Spawning;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class CreatureSkeletons(EntityFactory builder, ComponentManager componentManager, SimulationClock clock)
 {
-    private readonly EntityFactory _builder = builder ?? throw new ArgumentNullException(nameof(builder));
-    private readonly ComponentManager _componentManager = componentManager ?? throw new ArgumentNullException(nameof(componentManager));
-    private readonly SimulationClock _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     private readonly SpawnMoves _spawnMoves = builder.SpawnMoves ?? throw new ArgumentException("Skeletons need a factory that spawns, not one that only builds.", nameof(builder));
     private readonly DirectComponentPool<TransformComponent> _transforms = componentManager.GetDirectPool<TransformComponent>();
     private readonly DirectComponentPool<SpawnRecordComponent> _spawnRecords = componentManager.GetDirectPool<SpawnRecordComponent>();
@@ -41,7 +38,7 @@ public sealed class CreatureSkeletons(EntityFactory builder, ComponentManager co
     /// <summary>Gives entityId -- already created and carrying its TransformComponent -- a creature skeleton of blueprintId and seed.</summary>
     public void Spawn(int entityId, ushort blueprintId, uint seed, SpawnFlags flags = SpawnFlags.None)
     {
-        _builder.BuildSkeleton(_componentManager, entityId, blueprintId, seed, flags);
+        builder.BuildSkeleton(componentManager, entityId, blueprintId, seed, flags);
         Mark(entityId);
     }
 
@@ -65,7 +62,7 @@ public sealed class CreatureSkeletons(EntityFactory builder, ComponentManager co
         var record = _spawnRecords.GetReadonly(entityId);
         var transform = _transforms.GetReadonly(entityId);
 
-        _builder.BuildComplete(_componentManager, entityId, record.BlueprintId, record.Seed, _clock.CurrentFrame);
+        builder.BuildComplete(componentManager, entityId, record.BlueprintId, record.Seed, clock.CurrentFrame);
 
         _spawnMoves.Record(new EntityMovedEvent(entityId, transform.Position, transform.Position, transform.Size));
         return true;

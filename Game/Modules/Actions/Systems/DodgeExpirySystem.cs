@@ -19,7 +19,7 @@ public sealed class DodgeExpirySystem(PackedComponentPool<DodgingComponent> dodg
     /// <summary>The window's one and only firing is its expiry -- always remove.</summary>
     private static readonly TimerFired<DodgingComponent> RemoveOnExpiry = static (_, _, _) => true;
 
-    private readonly PackedTimerWheel<DodgingComponent> _expiries = new(dodgingEntities);
+    private readonly PackedTimerWheel<DodgingComponent> _expiries = new(dodgingEntities, SimulationScope.Unscoped);
 
     /// <summary>Every frame; the wheel only touches dodges actually expiring.</summary>
     public byte StripeCount => 1;

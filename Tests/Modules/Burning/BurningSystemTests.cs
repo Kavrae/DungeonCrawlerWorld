@@ -11,18 +11,14 @@ using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
+using Game.Modules.Death.Components;
+using Game.Modules.Health;
 
 namespace Tests.Modules.Burning;
 
 [TestClass]
 public sealed class BurningSystemTests
 {
-    private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
-    {
-        public int PlayerEntityId { get; } = playerEntityId;
-        public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
-    }
-
     private static EngineTime Frame(long frame) => new(default, default, false, frame);
 
     private static PackedComponentPool<BurningTimerComponent> CreateTimerPool() =>
@@ -32,7 +28,7 @@ public sealed class BurningSystemTests
         new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     private static BurningSystem CreateSystem(PackedComponentPool<BurningTimerComponent> timers, PackedComponentPool<SimpleHealthComponent> health, EventBus? eventBus = null, MultiComponentPool<StatModifierComponent>? statModifiers = null, int playerEntityId = 0) =>
-        new(timers, health, eventBus ?? new EventBus(), new FakePlayerQuery(playerEntityId), new MathUtility(), statModifiers);
+        TestSystems.BurningSystem(timers, health, eventBus ?? new EventBus(), new TestPlayerQuery(playerEntityId), new MathUtility(), statModifiers);
 
     private static void Run(BurningSystem system, long from, long to)
     {
@@ -94,15 +90,13 @@ public sealed class BurningSystemTests
     [TestMethod]
     public void BurnStartedMidRun_FirstTicksOnItsStaggeredDeadline()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
         var health = componentManager.GetPackedPool<SimpleHealthComponent>();
         health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         var system = CreateSystem(componentManager.GetPackedPool<BurningTimerComponent>(), health);
         Run(system, 0, 100);
 
-        BurningEffects.ApplyStack(componentManager, 0, ActionSource.Admin, now: 100);
+        BurningEffects.ApplyStack(componentManager, 0, ActionSource.Admin, now: 100, new EventBus(), TestPlayerQuery.NoPlayer);
         var firstTick = FrameDeadline.AfterStaggered(100, BurningEffects.TickIntervalFrames, 0);
 
         Run(system, 101, firstTick - 1);
@@ -224,5 +218,25 @@ public sealed class BurningSystemTests
 
         Assert.AreEqual(99, health.GetReadonly(1).CurrentHealth, "It did tick.");
         Assert.IsFalse(published);
+    }
+
+    [TestMethod]
+    public void DeadComplexEntityStillBurning_DoesNotPublishEntityDiedAgain()
+    {
+        const int entityId = 1;
+        var world = BodyPartTestWorld.WithParts(entityId, ("Head", BodyPartType.Head, 0, 30, true));
+        var deadEntities = world.Components.GetPackedPool<DeadComponent>();
+        deadEntities.Add(entityId, new DeadComponent(ActionSource.Admin, DiedAtFrame: 0));
+        var timers = world.Components.GetPackedPool<BurningTimerComponent>();
+        timers.Add(entityId, new BurningTimerComponent(nextTickFrame: 1, stackCount: 2, ActionSource.Admin));
+        var eventBus = new EventBus();
+        var deathsPublished = 0;
+        eventBus.Subscribe<EntityDiedEvent>(_ => deathsPublished++);
+        var system = TestSystems.BurningSystem(timers, world.Components.GetPackedPool<SimpleHealthComponent>(), eventBus, new TestPlayerQuery(0), new MathUtility(), bodyParts: world.BodyParts, deadEntities: deadEntities);
+
+        Run(system, 1, BurningEffects.TickIntervalFrames + 1);
+        eventBus.DispatchBuffered<EntityDiedEvent>();
+
+        Assert.AreEqual(0, deathsPublished);
     }
 }

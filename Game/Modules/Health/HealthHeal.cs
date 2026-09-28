@@ -24,10 +24,8 @@ namespace Game.Modules.Health;
 /// StatModifierMath's own doc comment for why). A BodyPartComponent-owning entity with no
 /// SimpleHealthComponent delegates to ComplexHealthHeal (targetMode All vs a single part -- see
 /// its own doc comment). Neither pool having entityId is a no-op, same as HealthDamage.Apply.
-/// Publishes EntityHealedEvent (mirroring HealthDamage.Apply's EntityDamagedEvent) only when both
-/// eventBus and playerQuery are supplied and the player is involved as either source or target --
-/// both are optional here (unlike HealthDamage.Apply's required eventBus) since most existing
-/// low-level callers/tests have no need to observe a heal landing.
+/// Publishes EntityHealedEvent (mirroring HealthDamage.Apply's EntityDamagedEvent) only when the
+/// player is involved as either source or target.
 ///
 /// `now` is the simulation frame this heal lands on. Only the Complex single-part path consults it,
 /// to skip a body part still inside its regen lockout (BodyPartComponent.RegenLockedUntilFrame);
@@ -40,30 +38,29 @@ public static class HealthHeal
         int entityId,
         float percentOfMaxHealth,
         long now,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        EntityBodyParts? bodyParts = null,
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        EntityBodyParts bodyParts,
+        EventBus eventBus,
+        IPlayerQuery playerQuery,
         float flatAmount = 0f,
         int? sourceEntityId = null,
         IReadOnlyList<Tag>? activatorTags = null,
         BodyPartTargetMode targetMode = BodyPartTargetMode.All,
         BodyPartTargetRule? targetRule = null,
         MathUtility? mathUtility = null,
-        MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers = null,
-        EventBus? eventBus = null,
-        IPlayerQuery? playerQuery = null,
         string healType = "Heal")
     {
         if (!health.Has(entityId))
         {
-            if (bodyParts?.Has(entityId) == true)
+            if (bodyParts.Has(entityId))
             {
                 if (targetMode == BodyPartTargetMode.All)
                 {
-                    ComplexHealthHeal.ApplyToAllParts(bodyParts, health, entityId, percentOfMaxHealth, flatAmount, statModifiers, sourceEntityId, activatorTags, eventBus, playerQuery, healType);
+                    ComplexHealthHeal.ApplyToAllParts(bodyParts, health, entityId, percentOfMaxHealth, flatAmount, statModifiers, eventBus, playerQuery, sourceEntityId, activatorTags, healType);
                 }
                 else
                 {
-                    ComplexHealthHeal.ApplyToSinglePart(bodyParts, health, entityId, percentOfMaxHealth, flatAmount, statModifiers, sourceEntityId, activatorTags, targetRule, targetMode, mathUtility, now, bodyPartBurningTimers, eventBus, playerQuery, healType);
+                    ComplexHealthHeal.ApplyToSinglePart(bodyParts, health, entityId, percentOfMaxHealth, flatAmount, statModifiers, sourceEntityId, activatorTags, targetRule, targetMode, mathUtility, now, eventBus, playerQuery, healType);
                 }
             }
 
@@ -86,7 +83,7 @@ public static class HealthHeal
     }
 
     /// <summary>flat + percent*effectiveMaxHealth, then OutgoingHealing (sourceEntityId, if known) then IncomingHealing (targetEntityId) -- shared by the Simple path above and every ComplexHealthHeal path, so a body-parts entity gets the exact same modifier chain as a Simple one.</summary>
-    internal static float ComputeAmount(MultiComponentPool<StatModifierComponent>? statModifiers, int? sourceEntityId, int targetEntityId, IReadOnlyList<Tag>? activatorTags, float percentOfMaxHealth, float flatAmount, float effectiveMaxHealth)
+    internal static float ComputeAmount(MultiComponentPool<StatModifierComponent> statModifiers, int? sourceEntityId, int targetEntityId, IReadOnlyList<Tag>? activatorTags, float percentOfMaxHealth, float flatAmount, float effectiveMaxHealth)
     {
         var amount = flatAmount + percentOfMaxHealth * effectiveMaxHealth;
 
@@ -98,14 +95,9 @@ public static class HealthHeal
         return StatModifierMath.GetEffectiveValue(statModifiers, targetEntityId, StatModifierTarget.IncomingHealing, amount, activatorTags);
     }
 
-    /// <summary>Shared by the Simple path here and every ComplexHealthHeal path -- publishes EntityHealedEvent only when both eventBus and playerQuery are wired in and the player is involved as either entityId or sourceEntityId, mirroring HealthDamage.Apply's identical playerInvolved gate.</summary>
-    internal static void PublishHealEvent(EventBus? eventBus, IPlayerQuery? playerQuery, int entityId, int? sourceEntityId, float amount, string healType, float currentHealth, float maximumHealth)
+    /// <summary>Shared by the Simple path here and every ComplexHealthHeal path -- publishes EntityHealedEvent only when the player is involved as either entityId or sourceEntityId, mirroring HealthDamage.Apply's identical playerInvolved gate.</summary>
+    internal static void PublishHealEvent(EventBus eventBus, IPlayerQuery playerQuery, int entityId, int? sourceEntityId, float amount, string healType, float currentHealth, float maximumHealth)
     {
-        if (eventBus is null || playerQuery is null)
-        {
-            return;
-        }
-
         var playerInvolved = entityId == playerQuery.PlayerEntityId || sourceEntityId == playerQuery.PlayerEntityId;
         if (!playerInvolved)
         {

@@ -1,3 +1,4 @@
+using Engine.Events;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
@@ -82,15 +83,13 @@ public sealed class ParalysisSystemTests
     [TestMethod]
     public void ReappliedMidway_ExpiresAtTheLaterFrame()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<ParalysisTimerComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
         var timers = componentManager.GetPackedPool<ParalysisTimerComponent>();
         var system = new ParalysisSystem(timers);
 
-        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
         Run(system, 0, 100);
-        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 100);
+        ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 100, new EventBus(), TestPlayerQuery.NoPlayer);
 
         Run(system, 101, 100 + ParalysisEffects.DurationFrames - 1);
         Assert.IsTrue(timers.Has(0), "Still paralyzed until DurationFrames after the second application, not the first.");

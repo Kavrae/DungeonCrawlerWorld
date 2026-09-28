@@ -34,8 +34,8 @@ public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoo
         Type = type;
         _name = type.ToString();
         _totalText = total.ToString();
-        _nameFont = fontService.GetFont((int)(headerSize.Y * FontChrome.AbilityScoreColumnNameFontFraction));
-        _totalFont = fontService.GetFont((int)(headerSize.Y * FontChrome.AbilityScoreColumnTotalFontFraction));
+        _nameFont = FontService.GetFont((int)(headerSize.Y * FontChrome.AbilityScoreColumnNameFontFraction));
+        _totalFont = FontService.GetFont((int)(headerSize.Y * FontChrome.AbilityScoreColumnTotalFontFraction));
     }
 
     public override void DrawContent(GameTime gameTime)

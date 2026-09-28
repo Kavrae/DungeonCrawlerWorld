@@ -190,7 +190,6 @@ public sealed class ProcessingTierResolver
     /// <returns>The new entity's id.</returns>
     public int CreateEntityAt(Engine.ECS.Entities.EntityManager entityManager, Vector3Int plannedPosition)
     {
-        ArgumentNullException.ThrowIfNull(entityManager);
         var tiers = RequireWired();
 
         var entityId = entityManager.CreateEntity();
@@ -220,29 +219,21 @@ public sealed class ProcessingTierResolver
     /// </summary>
     public void Retier(int entityId)
     {
-        if (_transforms is not null && _transforms.TryGetReadonly(entityId, out var transform))
+        RequireWired();
+        if (_transforms!.TryGetReadonly(entityId, out var transform))
         {
             RetierAt(entityId, transform.Position);
         }
     }
 
     /// <summary>
-    /// The shared core of Retier and EnsureTiered. No-op for pinned entities, before a reference
-    /// position exists, and before the resolver is wired.
+    /// The shared core of Retier and EnsureTiered. No-op for pinned entities and before a reference
+    /// position exists.
     /// </summary>
-    /// <remarks>
-    /// Tolerates being unwired rather than throwing like CreateEntityAt does, because EnsureTiered
-    /// is hooked into World.EntityPlaced and so runs on every placement in the game -- if a mod ever
-    /// replaced ProcessingTierModule without wiring this, a throw here would take down population.
-    /// CreateEntityAt still throws: calling it is an explicit request for a tier, not a side effect.
-    /// </remarks>
+    /// <exception cref="InvalidOperationException">The resolver hasn't been wired.</exception>
     private void RetierAt(int entityId, Vector3Int position)
     {
-        if (_tiers is not { } tiers)
-        {
-            return;
-        }
-
+        var tiers = RequireWired();
         Membership.Set(entityId, position);
 
         if (ReferencePosition is not { } reference || _pinnedLocal.Contains(entityId))

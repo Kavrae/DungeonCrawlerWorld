@@ -1,7 +1,4 @@
-using Engine.ECS.Components;
 using Game.World;
-using Presentation.Fonts;
-using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
@@ -16,10 +13,7 @@ namespace Presentation.UI;
 /// </summary>
 public sealed class HealthWindowController(
     ElementPoolService elementPoolService,
-    World world,
-    ComponentManager componentManager,
-    FontService fontService,
-    LabelRenderer labelRenderer)
+    World world)
 {
     /// <summary>♥ (U+2665, "black heart suit") -- renders via the default DroidSans font with no Symbola-Emoji fallback needed, unlike Burning/Poison/Paralysis's own emoji glyphs (see FontService).</summary>
     private const string HeartGlyph = "♥";

@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
@@ -14,6 +15,7 @@ using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Game.Modules.AbilityScores.Components;
 
 namespace Tests.Presentation;
 
@@ -38,23 +40,9 @@ public sealed class HotbarControllerTests
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(20, 20, 1))) { PlayerEntityId = PlayerEntityId };
         var mapViewState = new MapViewState();
 
-        var componentManager = new ComponentManager(20, 10);
-        componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ActionInstanceComponent>();
-        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PendingActionActivationComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
 
-        componentManager.Merge(PlayerEntityId, new TransformComponent(PlayerPosition, new Vector2Byte(1, 1)));
+        TestTransforms.Set(componentManager, PlayerEntityId, new TransformComponent(PlayerPosition, new Vector2Byte(1, 1)));
         componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
@@ -94,10 +82,12 @@ public sealed class HotbarControllerTests
                 componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
                 new Engine.ECS.Systems.SimulationClock(),
                 new EventBus()),
-            componentManager.GetPackedPool<ManaComponent>());
+            componentManager.GetPackedPool<ManaComponent>(),
+            componentManager.GetPackedPool<AbilityScoresComponent>(),
+            simulationClock: new SimulationClock());
 
         var fontService = TestFonts.Shared;
-        var hotbarContent = new HotbarContent(world, mapViewState, componentManager, new EventBus(), actionCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
+        var hotbarContent = new HotbarContent(world, mapViewState, componentManager, new EventBus(), actionCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting, new TooltipController());
 
         return (hotbarController, mapViewState, componentManager);

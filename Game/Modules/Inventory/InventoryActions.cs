@@ -63,9 +63,9 @@ public static class InventoryActions
         return lastStackInstanceId;
     }
 
-    /// <summary>entityId's own MaxStackSizeComponent if it has one (today only ever the player, post-ObsessiveCollectorAchievement), else DefaultMaxStackSize -- every stack-growing method below reads this instead of any per-item cap, so the same entity's cap applies uniformly to every item it holds. Uses GetOptionalPackedPool, not GetPackedPool -- MaxStackSizeComponent is rare enough that plenty of minimal test harnesses (and any future caller) never register its pool at all, and "not registered" should read exactly like "not set," not throw.</summary>
+    /// <summary>entityId's own MaxStackSizeComponent if it has one (today only ever the player, post-ObsessiveCollectorAchievement), else DefaultMaxStackSize -- every stack-growing method below reads this instead of any per-item cap, so the same entity's cap applies uniformly to every item it holds.</summary>
     public static ushort GetEffectiveMaxStackSize(ComponentManager componentManager, int entityId) =>
-        componentManager.GetOptionalPackedPool<MaxStackSizeComponent>() is { } pool && pool.TryGetReadonly(entityId, out var overrideComponent) ? overrideComponent.Value : DefaultMaxStackSize;
+        componentManager.GetPackedPool<MaxStackSizeComponent>().TryGetReadonly(entityId, out var overrideComponent) ? overrideComponent.Value : DefaultMaxStackSize;
 
     /// <summary>
     /// Ticks the matching stack's Quantity down by 1, removing the stack entirely once it hits
@@ -306,7 +306,7 @@ public static class InventoryActions
     /// came from. A transfer to any other entity (e.g. "Give" from the player, or between two
     /// non-player entities) leaves it untouched.
     /// </summary>
-    public static bool TryTransferStack(ComponentManager componentManager, int sourceEntityId, int destinationEntityId, uint stackInstanceId, IPlayerQuery? playerQuery)
+    public static bool TryTransferStack(ComponentManager componentManager, int sourceEntityId, int destinationEntityId, uint stackInstanceId, IPlayerQuery playerQuery)
     {
         if (sourceEntityId == destinationEntityId)
         {
@@ -324,7 +324,7 @@ public static class InventoryActions
         var snapshot = stacks.GetReadonlyByDenseIndex(sourceDenseIndex);
         stacks.RemoveByDenseIndex(sourceDenseIndex);
 
-        if (destinationEntityId == playerQuery?.PlayerEntityId)
+        if (destinationEntityId == playerQuery.PlayerEntityId)
         {
             snapshot.AcquiredSequence = InventoryItemStackComponent.NextAcquiredSequence();
         }
@@ -341,7 +341,7 @@ public static class InventoryActions
     /// doesn't have room for every one of them, rather than transferring some and leaving the rest
     /// behind.
     /// </summary>
-    public static bool TryTransferAllStacksOfItem(ComponentManager componentManager, int sourceEntityId, int destinationEntityId, Guid itemDefinitionId, IPlayerQuery? playerQuery)
+    public static bool TryTransferAllStacksOfItem(ComponentManager componentManager, int sourceEntityId, int destinationEntityId, Guid itemDefinitionId, IPlayerQuery playerQuery)
     {
         if (sourceEntityId == destinationEntityId)
         {

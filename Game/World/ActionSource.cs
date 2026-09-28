@@ -69,16 +69,16 @@ public readonly record struct ActionSource
     public EntityIdentity Identity => EntityIdentities.Get(Kind == ActionSourceKind.Entity ? Detail : EntityIdentities.UnknownHandle);
 
     /// <summary>A source for entityId, recording its key and its current name and crawler number.</summary>
-    /// <param name="creatures">The session's races and classes, so a creature that is named by its race rather than by a component of its own (see EntityNaming) is still named here. Null names only entities that carry a DisplayTextComponent.</param>
-    public static ActionSource FromEntity(ComponentManager componentManager, EntityKeys entityKeys, int entityId, BlueprintRegistry? creatures = null)
+    /// <param name="creatures">The session's races and classes, so a creature that is named by its race rather than by a component of its own (see EntityNaming) is still named here.</param>
+    public static ActionSource FromEntity(ComponentManager componentManager, EntityKeys entityKeys, int entityId, BlueprintRegistry creatures)
     {
         ArgumentNullException.ThrowIfNull(componentManager);
         ArgumentNullException.ThrowIfNull(entityKeys);
 
-        var name = componentManager.IsRegistered<DisplayTextComponent>() && EntityNaming.TryResolveName(componentManager, creatures, entityId, out var resolved)
+        var name = EntityNaming.TryResolveName(componentManager, creatures, entityId, out var resolved)
             ? resolved
             : null;
-        int? crawlerNumber = componentManager.IsRegistered<CrawlerComponent>() && componentManager.GetPackedPool<CrawlerComponent>().TryGetReadonly(entityId, out var crawler)
+        int? crawlerNumber = componentManager.GetPackedPool<CrawlerComponent>().TryGetReadonly(entityId, out var crawler)
             ? crawler.CrawlerNumber
             : null;
 

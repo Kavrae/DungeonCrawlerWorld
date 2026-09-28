@@ -181,8 +181,6 @@ public sealed class Map
     /// </remarks>
     public void LoadNeighborhood(NeighborhoodLayout layout)
     {
-        ArgumentNullException.ThrowIfNull(layout);
-
         var neighborhoodCoordinate = (layout.CellX, layout.CellY);
         var layoutCellStores = layout.NeighborhoodCellStores;
         if (_loadedNeighborhoods.TryGetValue(neighborhoodCoordinate, out var loadedCellStores))

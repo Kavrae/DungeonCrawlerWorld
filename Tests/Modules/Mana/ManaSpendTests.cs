@@ -1,6 +1,7 @@
 using Engine.ECS.Components.Stores;
 using Game.Modules.Mana;
 using Game.Modules.Mana.Components;
+using Game.Modules.StatModifiers.Components;
 
 namespace Tests.Modules.Mana;
 
@@ -16,7 +17,7 @@ public sealed class ManaSpendTests
         var pool = CreatePool();
         pool.Add(0, new ManaComponent(currentMana: 50, maximumMana: 100));
 
-        ManaSpend.Apply(pool, 0, 10);
+        ManaSpend.Apply(pool, 0, 10, EmptyPools.Multi<StatModifierComponent>());
 
         Assert.AreEqual(40, pool.GetReadonly(0).CurrentMana);
     }
@@ -27,7 +28,7 @@ public sealed class ManaSpendTests
         var pool = CreatePool();
         pool.Add(0, new ManaComponent(currentMana: 5, maximumMana: 100));
 
-        ManaSpend.Apply(pool, 0, 10);
+        ManaSpend.Apply(pool, 0, 10, EmptyPools.Multi<StatModifierComponent>());
 
         Assert.AreEqual(0, pool.GetReadonly(0).CurrentMana);
     }
@@ -37,6 +38,6 @@ public sealed class ManaSpendTests
     {
         var pool = CreatePool();
 
-        ManaSpend.Apply(pool, 0, 10);
+        ManaSpend.Apply(pool, 0, 10, EmptyPools.Multi<StatModifierComponent>());
     }
 }

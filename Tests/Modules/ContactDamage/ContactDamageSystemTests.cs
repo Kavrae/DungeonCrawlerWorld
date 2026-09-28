@@ -19,12 +19,6 @@ public sealed class ContactDamageSystemTests
     private const int TickIntervalFrames = 60;
     private static readonly int FirstTickDelay = (int)FrameDeadline.AfterStaggered(0, TickIntervalFrames, MoverEntityId);
 
-    private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
-    {
-        public int PlayerEntityId { get; } = playerEntityId;
-        public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
-    }
-
     /// <summary>Minimal IMapQuery test double -- only GetTerrainAt is exercised by ContactDamageSystem, everything else is a fixed/empty answer.</summary>
     private sealed class FakeMapQuery : IMapQuery
     {
@@ -103,7 +97,7 @@ public sealed class ContactDamageSystemTests
 
         mapQuery.SetTerrain(OnHazard, terrain.Register(HazardTerrain("test:hazard", preferredTargetType)));
 
-        var system = new ContactDamageSystem(terrain, CreateExposurePool(), CreateHealthPool(), new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities, new MathUtility(), new SimulationClock(), statModifiers: null, deadEntities: null, bodyParts: bodyParts);
+        var system = TestSystems.ContactDamageSystem(terrain, CreateExposurePool(), CreateHealthPool(), new EventBus(), mapQuery, new TestPlayerQuery(MoverEntityId), movedEntities, new MathUtility(), new SimulationClock(), statModifiers: null, deadEntities: null, bodyParts: bodyParts);
 
         return (new Harness(system, movedEntities), bodyParts);
     }
@@ -126,7 +120,7 @@ public sealed class ContactDamageSystemTests
         health.Add(MoverEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         mapQuery.SetTerrain(OnHazard, terrain.Register(HazardTerrain("test:hazard")));
 
-        var system = new ContactDamageSystem(terrain, exposures, health, new EventBus(), mapQuery, new FakePlayerQuery(MoverEntityId), movedEntities, new MathUtility(), new SimulationClock(), statModifiers: null, deadEntities: deadEntities);
+        var system = TestSystems.ContactDamageSystem(terrain, exposures, health, new EventBus(), mapQuery, new TestPlayerQuery(MoverEntityId), movedEntities, new MathUtility(), new SimulationClock(), statModifiers: null, deadEntities: deadEntities);
 
         return (new Harness(system, movedEntities), terrain, exposures, health, mapQuery, deadEntities);
     }
@@ -290,7 +284,7 @@ public sealed class ContactDamageSystemTests
         clock.Advance(630);
         var scope = new SimulationScope();
         scope.SetPolicy(static _ => false);
-        _ = new ContactDamageSystem(terrain, exposures, health, new EventBus(), new FakeMapQuery(), new FakePlayerQuery(-1), new FrameEventBuffer<EntityMovedEvent>(), new MathUtility(), clock, simulationScope: scope);
+        _ = TestSystems.ContactDamageSystem(terrain, exposures, health, new EventBus(), new FakeMapQuery(), new TestPlayerQuery(-1), new FrameEventBuffer<EntityMovedEvent>(), new MathUtility(), clock, simulationScope: scope);
 
         scope.RaiseResumed(MoverEntityId);
 

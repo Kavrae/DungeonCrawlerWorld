@@ -34,14 +34,6 @@ public sealed class AbilityScoreMathTests
     }
 
     [TestMethod]
-    public void ComputeTotal_NoPool_ReturnsBaseValueUnchanged()
-    {
-        var total = AbilityScoreMath.ComputeTotal(null, 0, AbilityScoreType.Strength, 5);
-
-        Assert.AreEqual((ushort)5, total);
-    }
-
-    [TestMethod]
     public void ComputeTotal_AdditiveModifier_AddsToBase()
     {
         var pool = CreatePool();

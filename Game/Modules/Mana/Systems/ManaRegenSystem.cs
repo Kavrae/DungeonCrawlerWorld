@@ -24,18 +24,18 @@ public sealed class ManaRegenSystem : ITieredSystem
     private const float MaxManaRegenPerSecond = 0.3f;
 
     private readonly PackedComponentPool<ManaComponent> _manaComponents;
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
-    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly PackedComponentPool<AbilityScoresComponent>? _abilityScores;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
+    private readonly PackedComponentPool<DeadComponent> _deadEntities;
+    private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public ManaRegenSystem(
         PackedComponentPool<ManaComponent> manaComponents,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null,
-        PackedComponentPool<AbilityScoresComponent>? abilityScores = null)
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        PackedComponentPool<DeadComponent> deadEntities,
+        PackedComponentPool<AbilityScoresComponent> abilityScores)
     {
         _manaComponents = manaComponents;
         _statModifiers = statModifiers;
@@ -65,12 +65,12 @@ public sealed class ManaRegenSystem : ITieredSystem
                 continue;
             }
 
-            if (_deadEntities?.Has(entityId) == true)
+            if (_deadEntities.Has(entityId))
             {
                 continue;
             }
 
-            if (_abilityScores is null || !AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Intelligence, out var intelligence))
+            if (!AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Intelligence, out var intelligence))
             {
                 continue;
             }

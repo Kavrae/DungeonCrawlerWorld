@@ -36,8 +36,6 @@ public static class WorldSessionBootstrapper
         int randomSeed,
         int? mapSizeOverride = null)
     {
-        ArgumentNullException.ThrowIfNull(diagnostics);
-
         var mathUtility = new MathUtility(new Random(randomSeed));
         // Its own permutation, not the session's sequence: numbers are drawn whenever a crawler is first
         // simulated, and drawing from the shared sequence would shift everything else that uses it

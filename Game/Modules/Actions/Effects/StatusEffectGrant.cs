@@ -16,7 +16,7 @@ public sealed record StatusEffectGrant(StatusEffectType Type, int StackCount = 1
 {
     public void Apply(ActionEffectContext context)
     {
-        if (StackCount <= 0 || context.DeadEntities?.Has(context.TargetEntityId) == true || context.StatusEffectAppliers is null)
+        if (StackCount <= 0 || context.DeadEntities.Has(context.TargetEntityId))
         {
             return;
         }

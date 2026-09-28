@@ -149,21 +149,9 @@ public sealed class AbilityScorePerformanceTests
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
-        var context = new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) };
+        var context = new GameModuleContext(world, mathUtility, new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
 
-        var coreModule = new CoreModule();
-        coreModule.Configure(context);
-        var movementModule = new MovementModule();
-        movementModule.Configure(context);
-        var processingTierModule = new ProcessingTierModule();
-        processingTierModule.Configure(context);
-        var statModifiersModule = new StatModifiersModule();
-        statModifiersModule.Configure(context);
-        var abilityScoresModule = new AbilityScoresModule();
-        abilityScoresModule.Configure(context);
-
-        IReadOnlyList<IModule> modules = [coreModule, movementModule, processingTierModule, statModifiersModule, abilityScoresModule];
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: entityCount, initialComponentCapacity: entityCount * 8, entityKeys: context.EntityKeys);
+        var ecsContext = BuiltInTestModules.Build(context, initialEntityCapacity: entityCount, initialComponentCapacity: 64);
         var processingTiers = ecsContext.ComponentManager.GetDirectPool<ProcessingTierComponent>();
 
         var entityIds = new int[entityCount];

@@ -23,7 +23,7 @@ public sealed class PlayerActivityLog : IDisposable
     private int _currentFrameCount;
     private DateTime _currentTimestamp;
 
-    public PlayerActivityLog(Game.World.World world, ComponentManager componentManager, EventBus eventBus, string logFilePath, BlueprintRegistry? creatures = null)
+    public PlayerActivityLog(Game.World.World world, ComponentManager componentManager, EventBus eventBus, string logFilePath, BlueprintRegistry creatures)
     {
         _world = world;
         _naming = EntityNaming.For(componentManager, creatures);

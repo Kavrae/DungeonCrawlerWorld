@@ -16,9 +16,11 @@ namespace Game.Modules.AbilityScores;
 /// </summary>
 public sealed class AbilityScoresModule : IGameModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000013");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000013");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [typeof(StatModifiersModule)];
+    public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [StatModifiersModule.ModuleId];
 
     private EventBus _eventBus = null!;
 

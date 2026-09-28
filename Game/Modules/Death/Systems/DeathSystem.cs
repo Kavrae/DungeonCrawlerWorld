@@ -26,7 +26,7 @@ public sealed class DeathSystem : ISystem
     private readonly IEntityMoveSync _entityMoveSync;
     private readonly IMapQuery _mapQuery;
     private readonly EventBus _eventBus;
-    private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
+    private readonly MultiComponentPool<StatusEffectAuraSourceComponent> _auraSources;
 
     public DeathSystem(
         PackedComponentPool<DeadComponent> deadEntities,
@@ -35,7 +35,7 @@ public sealed class DeathSystem : ISystem
         IEntityMoveSync entityMoveSync,
         IMapQuery mapQuery,
         EventBus eventBus,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null)
+        MultiComponentPool<StatusEffectAuraSourceComponent> auraSources)
     {
         _deadEntities = deadEntities;
         _nonBlockingEntities = nonBlockingEntities;
@@ -80,9 +80,6 @@ public sealed class DeathSystem : ISystem
 
         _deadEntities.Add(died.EntityId, new DeadComponent(died.Source, _currentFrame));
 
-        if (_auraSources is not null)
-        {
-            AuraSourceEffects.RemoveAll(_auraSources, _eventBus, died.EntityId);
-        }
+        AuraSourceEffects.RemoveAll(_auraSources, _eventBus, died.EntityId);
     }
 }

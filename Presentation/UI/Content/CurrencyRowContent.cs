@@ -8,8 +8,6 @@ using Game.Modules.Shops.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
-using Presentation.Fonts;
-using Presentation.Rendering;
 
 namespace Presentation.UI.Content;
 
@@ -28,12 +26,8 @@ public sealed class CurrencyRowContent(
     World world,
     ContextMenuController contextMenuController,
     ElementPoolService elementPoolService,
-    FontService fontService,
-    LabelRenderer labelRenderer,
-    SpriteSheetService spriteSheetService,
-    SpriteRenderer spriteRenderer,
     Func<int?> getSecondaryTargetEntityId,
-    EventBus? eventBus = null,
+    EventBus eventBus,
     // False for the trade window's own two currency footers -- "10 [sprite]"
     // instead of "Gold : 10 [sprite]", the column being too narrow to spare the label.
     bool showLabels = true,
@@ -44,13 +38,9 @@ public sealed class CurrencyRowContent(
 {
     public const float Height = 24f;
 
-    private readonly PackedComponentPool<CurrencyComponent>? _currencyPool = componentManager.IsRegistered<CurrencyComponent>()
-        ? componentManager.GetPackedPool<CurrencyComponent>()
-        : null;
+    private readonly PackedComponentPool<CurrencyComponent> _currencyPool = componentManager.GetPackedPool<CurrencyComponent>();
 
-    private readonly PackedComponentPool<ShopComponent>? _shopPool = componentManager.IsRegistered<ShopComponent>()
-        ? componentManager.GetPackedPool<ShopComponent>()
-        : null;
+    private readonly PackedComponentPool<ShopComponent> _shopPool = componentManager.GetPackedPool<ShopComponent>();
 
     private Window _hostWindow = null!;
     private CurrencyElement? _goldElement;
@@ -129,7 +119,7 @@ public sealed class CurrencyRowContent(
     {
         var gold = 0;
         var credits = 0;
-        if (_currencyPool?.TryGetReadonly(EntityId, out var currency) == true)
+        if (_currencyPool.TryGetReadonly(EntityId, out var currency))
         {
             gold = currency.Gold;
             credits = currency.Credits;
@@ -149,7 +139,7 @@ public sealed class CurrencyRowContent(
             return options;
         }
 
-        var secondaryIsShop = _shopPool?.Has(secondaryTargetEntityId) == true;
+        var secondaryIsShop = _shopPool.Has(secondaryTargetEntityId);
 
         if (element.EntityId == world.PlayerEntityId && secondaryTargetEntityId != world.PlayerEntityId)
         {
@@ -171,14 +161,14 @@ public sealed class CurrencyRowContent(
 
     /// <summary>Moves one currency type's whole balance through ShopActions.TryGiveCurrencyToShop -- the shared chokepoint every "give currency to a shop" gesture (this context menu, a direct currency drag, or completing a trade) routes through, so GoldGivenToShopEvent (the "Angel Investor" achievement's own trigger) fires the same way regardless of which gesture the player used. Take never reaches the shop branch: destinationEntityId is always world.PlayerEntityId on that path, which never carries ShopComponent.</summary>
     private void TransferOne(CurrencyElement element, int sourceEntityId, int destinationEntityId) =>
-        ShopActions.TryGiveCurrencyToShop(componentManager, _shopPool, eventBus, sourceEntityId, destinationEntityId, element.Type);
+        ShopActions.TryGiveCurrencyToShop(componentManager, eventBus, sourceEntityId, destinationEntityId, element.Type);
 
     /// <summary>"Give All" -- same chokepoint as TransferOne, once per CurrencyType (mirrors CurrencyActions.TryTransferAll's own "iterate every type" shape) so Credits still move even when there's no Gold to trigger the achievement.</summary>
     private void TransferAll(int sourceEntityId, int destinationEntityId)
     {
         foreach (var type in Enum.GetValues<CurrencyType>())
         {
-            ShopActions.TryGiveCurrencyToShop(componentManager, _shopPool, eventBus, sourceEntityId, destinationEntityId, type);
+            ShopActions.TryGiveCurrencyToShop(componentManager, eventBus, sourceEntityId, destinationEntityId, type);
         }
     }
 }

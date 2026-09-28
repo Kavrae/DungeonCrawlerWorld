@@ -217,8 +217,6 @@ public sealed class ComponentManager
     /// <summary>ReserveHeadroom with a factor per component type, for pools whose populations grow by different amounts.</summary>
     public void ReserveHeadroom(Func<Type, double> factorFor)
     {
-        ArgumentNullException.ThrowIfNull(factorFor);
-
         foreach (var componentPool in _componentPools.Values)
         {
             if (componentPool is IMemoryReportingComponentPool { Count: > 0 } counted)

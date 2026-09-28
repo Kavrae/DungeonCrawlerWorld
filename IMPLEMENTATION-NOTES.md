@@ -1464,3 +1464,48 @@ Investigated 2026-09-26. The leak detector reported `StatusEffectAuraExposureCom
   it does -- the event-marker false-positive shape `LeakDetector`'s remarks already describe. The
   markers on a corpse are inert (`MovementSystem`/`ActionActivationSystem` already refuse a dead
   entity).
+
+### Module dependencies: Requires / RunsAfter / RunsBefore, and no optional built-in pools
+
+Landed 2026-09-27. `IModule.Dependencies` (a list of `Type`s that meant both "requires" and "runs
+after") became three Id-keyed lists; see CLAUDE.md's Modding section for the rules.
+
+- **Why by Id.** `ModuleSet.Combine` replaces a built-in by `Id`, so a `typeof` dependency on a
+  replaced module stopped resolving. That is why modules had avoided real dependencies and read
+  each other's pools through `IsRegistered`/`GetOptional*Pool` instead (about 110 places).
+- **Why requiring doesn't imply order.** Every component is registered before any system, so pool
+  availability never depends on order. Keeping them separate removed the Movement <->
+  StatusEffectAura "cycle", which was only an ordering constraint dressed up as a requirement.
+- **Bugs found on the way.** Six pairs of built-in modules shared an `Id` (a mod replacing
+  Inventory would have replaced Achievements). The mod dry run tried a replacement *alongside* the
+  module it replaced, so a real replacement always failed with "already registered".
+- **The audit's outcome: every check was hard.** Mods can only add modules or replace them, and a
+  replacement must register every component the built-in did (checked in the dry run), so in a game
+  every built-in pool always exists. The only ways one was ever missing were tests with hand-picked
+  module sets or bare `ComponentManager`s, and per "tests don't drive design" those tests now build
+  the full set (`BuiltInTestComponents`, `BuiltInTestModules`) instead. Nullable pools that remain
+  are null for a real reason: resolved lazily (`BurningAuraApplier`, `TimerBasedAuraApplier`,
+  `TimerBasedStatusEffectDisplay`), wired after construction (`World`, `ProcessingTierResolver`),
+  `EntityFactory`'s build-only mode, or no component manager at all (`UiInputController`'s shop pool
+  in UI tests).
+- **Health never reads a status effect.** Health's regen used to skip a part holding a
+  `BodyPartBurningTimerComponent`, a pool Burning registers. That check was already redundant apart
+  from the ~1 s before a burn's first tick, since every tick resets the part's regen lockout for
+  10 s. Burning now resets the lockout at ignition too, and Health's check is gone.
+- **A queued activation clears the step.** Whatever queues an action or consumable activation also
+  clears the entity's `NextMapPosition` in the same write (`PlayerInputBuffer`,
+  `TestCombatBehaviorSystem.ClearStep`), so `MovementSystem` no longer reads either activation pool.
+  NpcBehavior still runs before Movement, or the step would be taken before it is cleared.
+- **Latent bugs the stricter signatures exposed.** `BurningSystem`/`PoisonSystem` passed no dead
+  pool to `HealthDamage`, so a dead complex entity that kept burning republished `EntityDiedEvent`
+  on each tick that hit a zeroed vital part. Actions resolved through `ActionEffectResolver` had no
+  mana pool, so a mana-restoring ability would have done nothing (only the Mana Potion restores
+  mana today, through `ConsumableActivationSystem`).
+- **Checking behavior stayed the same.** `--headless --seed=1 --benchmark-frames=60-120` prints a
+  world fingerprint; a `git archive HEAD` copy in the scratchpad gives the baseline. The fingerprint
+  hashes pool type *full names*, so moving a component to another namespace changes it without any
+  behavior change -- compare with short names when that happens.
+- **Performance: neutral.** Headless Debug A/B against `e85de88` (seed 1, frames 600-3600, map
+  3072, 5 runs a side interleaved): `EcsContext.Update` 3.98 -> 3.93 ms/frame (-1.3%, within the
+  baseline's own spread), no system outside its run-to-run range, worst frames overlapping.
+  Same world over the whole range (short-name fingerprint `4185967D5DB33537` on both).

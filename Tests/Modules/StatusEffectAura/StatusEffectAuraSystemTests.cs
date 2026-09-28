@@ -132,14 +132,7 @@ public sealed class StatusEffectAuraSystemTests
     /// <summary>Mirrors real game wiring (both BurningModule.Configure and PoisonModule.Configure registering their own applier into the same shared registry) -- the registry a caller can override via applierRegistry to exercise unsupported-effect-type behavior instead.</summary>
     private (StatusEffectAuraSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, FrameEventBuffer<EntityMovedEvent> MovedEntities, EventBus EventBus) Build(StatusEffectAuraApplierRegistry? applierRegistry = null, TerrainRegistry? terrain = null, FakeMapQuery? mapQuery = null, SimulationScope? simulationScope = null)
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 200, initialComponentCapacity: 50);
-        componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<StatusEffectAuraSourceComponent>();
-        componentManager.RegisterMultiPool<StatusEffectAuraExposureComponent>();
-        componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterDirectPool<ProcessingTierComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 200, initialComponentCapacity: 50));
 
         mapQuery ??= new FakeMapQuery();
         var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
@@ -159,7 +152,7 @@ public sealed class StatusEffectAuraSystemTests
             _clock,
             terrain ?? new TerrainRegistry(),
             componentManager.GetPackedPool<DeadComponent>(),
-            simulationScope: simulationScope);
+            simulationScope: simulationScope ?? new SimulationScope());
 
         return (system, componentManager, mapQuery, movedEntities, eventBus);
     }
@@ -167,8 +160,8 @@ public sealed class StatusEffectAuraSystemTests
     private static StatusEffectAuraApplierRegistry DefaultApplierRegistry()
     {
         var registry = new StatusEffectAuraApplierRegistry();
-        registry.Register(new TimerBasedAuraApplier<BurningTimerComponent>(StatusEffectType.Burning, (cm, id, source, now) => BurningEffects.ApplyStack(cm, id, source, now)));
-        registry.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(StatusEffectType.Poison, (cm, id, source, now) => PoisonEffects.ApplyStack(cm, new EntityKeys(), id, source, durationInTicks: 1, now)));
+        registry.Register(new TimerBasedAuraApplier<BurningTimerComponent>(StatusEffectType.Burning, (cm, id, source, now) => BurningEffects.ApplyStack(cm, id, source, now, new EventBus(), TestPlayerQuery.NoPlayer)));
+        registry.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(StatusEffectType.Poison, (cm, id, source, now) => PoisonEffects.ApplyStack(cm, new EntityKeys(), id, source, durationInTicks: 1, now, new EventBus(), TestPlayerQuery.NoPlayer)));
         return registry;
     }
 
@@ -176,7 +169,7 @@ public sealed class StatusEffectAuraSystemTests
     private static void AddSource(ComponentManager componentManager, int entityId, Vector3Int position, StatusEffectType effectType, byte strength)
     {
         componentManager.GetMultiPool<StatusEffectAuraSourceComponent>().Add(entityId, new StatusEffectAuraSourceComponent(effectType, strength, Color.Orange));
-        componentManager.Merge(entityId, new TransformComponent(position, UnitSize));
+        TestTransforms.Set(componentManager, entityId, new TransformComponent(position, UnitSize));
     }
 
     /// <summary>
@@ -299,7 +292,7 @@ public sealed class StatusEffectAuraSystemTests
         AddSource(componentManager, SourceEntityId, new Vector3Int(30, 30, 0), StatusEffectType.Burning, strength: 1);
         var observerPosition = new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z);
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), observerPosition);
-        componentManager.Merge(ObserverEntityId, new TransformComponent(observerPosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(observerPosition, UnitSize));
         mapQuery.SetOccupant(observerPosition, ObserverEntityId);
 
         mapQuery.SetTerrain(SourcePosition, glowingTypeId);
@@ -318,7 +311,7 @@ public sealed class StatusEffectAuraSystemTests
         var (system, componentManager, _, movedEntities, eventBus) = Build(terrain: terrain, mapQuery: mapQuery);
         var observerPosition = new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z);
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), observerPosition);
-        componentManager.Merge(ObserverEntityId, new TransformComponent(observerPosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(observerPosition, UnitSize));
         mapQuery.SetOccupant(observerPosition, ObserverEntityId);
 
         mapQuery.SetTerrain(SourcePosition, 0);
@@ -372,7 +365,7 @@ public sealed class StatusEffectAuraSystemTests
     {
         var (system, componentManager, _, movedEntities, _) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
-        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
 
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
@@ -389,7 +382,7 @@ public sealed class StatusEffectAuraSystemTests
     {
         var (system, componentManager, _, movedEntities, _) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
-        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
 
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
@@ -436,7 +429,7 @@ public sealed class StatusEffectAuraSystemTests
         MoveObserverTo(system, movedEntities, SourcePosition, farAwayPosition);
         // Update reads the observer's *current* Transform.Position, independent of the
         // EntityMovedEvent itself -- must reflect where it actually ended up.
-        componentManager.Merge(ObserverEntityId, new TransformComponent(farAwayPosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(farAwayPosition, UnitSize));
 
         RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
 
@@ -467,7 +460,7 @@ public sealed class StatusEffectAuraSystemTests
         var oneTileAway = new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z);
         MoveObserverTo(system, movedEntities, SourcePosition, oneTileAway);
         MoveObserverTo(system, movedEntities, oneTileAway, SourcePosition);
-        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "Stepping out and back in before the timer ticks must not grant again.");
         Assert.AreEqual(firstTickFrame, NextTickFrameOf(componentManager, ObserverEntityId, StatusEffectType.Burning), "...nor reset the timer.");
@@ -522,7 +515,7 @@ public sealed class StatusEffectAuraSystemTests
         var observerPosition = new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z);
         mapQuery.SetOccupant(observerPosition, ObserverEntityId);
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), observerPosition);
-        componentManager.Merge(ObserverEntityId, new TransformComponent(observerPosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(observerPosition, UnitSize));
         Assert.IsTrue(HasExposure(componentManager, ObserverEntityId, StatusEffectType.Burning));
 
         // The source itself moves far away -- the observer never moves again. Transform is
@@ -531,7 +524,7 @@ public sealed class StatusEffectAuraSystemTests
         mapQuery.ClearOccupant(SourcePosition);
         var farAwayPosition = new Vector3Int(SourcePosition.X + 50, SourcePosition.Y, SourcePosition.Z);
         mapQuery.SetOccupant(farAwayPosition, SourceEntityId);
-        componentManager.Merge(SourceEntityId, new TransformComponent(farAwayPosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(farAwayPosition, UnitSize));
         MoveObserverTo(system, movedEntities, SourcePosition, farAwayPosition, SourceEntityId);
 
         Assert.IsFalse(HasExposure(componentManager, ObserverEntityId, StatusEffectType.Burning));
@@ -617,7 +610,7 @@ public sealed class StatusEffectAuraSystemTests
     {
         var (system, componentManager, _, movedEntities, _) = Build();
         AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
-        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
         componentManager.GetDirectPool<ProcessingTierComponent>().Add(ObserverEntityId, new ProcessingTierComponent(tier));
         componentManager.GetMultiPool<StatusEffectAuraExposureComponent>().Add(ObserverEntityId, new StatusEffectAuraExposureComponent(StatusEffectType.Burning, nextTickFrame: 7));
 
@@ -644,7 +637,7 @@ public sealed class StatusEffectAuraSystemTests
         // by the time the toggle below happens.
         RunFrames(system, movedEntities, 1);
 
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
 
@@ -701,7 +694,7 @@ public sealed class StatusEffectAuraSystemTests
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         sourcePool.Add(SourceEntityId, new StatusEffectAuraSourceComponent(StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange));
         sourcePool.Add(SourceEntityId, new StatusEffectAuraSourceComponent(StatusEffectType.Poison, auraAndGlowStrength: 8, Color.DarkGreen));
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
 
         // Establishes the observer's exposure (via the weak anchor Poison source) -- EnsureGrid's
         // bulk scatter, triggered by this same call, also picks up the dual-typed source's own
@@ -712,14 +705,14 @@ public sealed class StatusEffectAuraSystemTests
         // present (see Tick's own doc comment: no Transform reads as "gone," removing the
         // exposure entirely) -- MoveObserverTo only records the move event, it doesn't also
         // write the mover's own Transform.
-        componentManager.Merge(ObserverEntityId, new TransformComponent(observerPosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(observerPosition, UnitSize));
         // Registered as a real map occupant -- GrantToOccupantsNear's box scan (triggered by the
         // SOURCE's own move below) needs to actually find it, the same way every other
         // "stationary occupant gets granted immediately" test already registers its own occupant.
         mapQuery.SetOccupant(observerPosition, ObserverEntityId);
         Assert.AreEqual(1, PoisonStackCountOf(componentManager, ObserverEntityId));
 
-        componentManager.Merge(SourceEntityId, new TransformComponent(observerPosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(observerPosition, UnitSize));
         MoveObserverTo(system, movedEntities, SourcePosition, observerPosition, SourceEntityId);
 
         RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
@@ -738,7 +731,7 @@ public sealed class StatusEffectAuraSystemTests
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         sourcePool.Add(SourceEntityId, new StatusEffectAuraSourceComponent(StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange));
         sourcePool.Add(SourceEntityId, new StatusEffectAuraSourceComponent(StatusEffectType.Burning, auraAndGlowStrength: 4, Color.Orange));
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         mapQuery.SetOccupant(SourcePosition, SourceEntityId);
 
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition, SourceEntityId);
@@ -756,10 +749,10 @@ public sealed class StatusEffectAuraSystemTests
         // Forces EnsureGrid to run once with no sources present -- the grid is "already built" by the time the toggle below happens, same setup as the sync-bug regression tests above.
         RunFrames(system, movedEntities, 1);
 
-        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
         mapQuery.SetOccupant(SourcePosition, ObserverEntityId);
 
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
 
@@ -784,10 +777,10 @@ public sealed class StatusEffectAuraSystemTests
         // Forces EnsureGrid to run once with no sources present -- the grid is "already built" by the time the toggle below happens, same setup as the sync-bug regression tests above.
         RunFrames(system, movedEntities, 1);
 
-        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
         mapQuery.SetNonBlockingOccupant(SourcePosition, ObserverEntityId);
 
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
 
@@ -805,7 +798,7 @@ public sealed class StatusEffectAuraSystemTests
 
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
         // ReEvaluateExposuresNear needs a real Transform to find the occupant at all (MoveObserverTo only records the move event, it doesn't also write the mover's own Transform).
-        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
         Assert.IsTrue(HasExposure(componentManager, ObserverEntityId, StatusEffectType.Burning));
 
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
@@ -832,16 +825,16 @@ public sealed class StatusEffectAuraSystemTests
 
         // Toggle the aura on far away from the eventual target, forcing EnsureGrid to run first.
         var farAwayStart = new Vector3Int(SourcePosition.X - 50, SourcePosition.Y, SourcePosition.Z);
-        componentManager.Merge(SourceEntityId, new TransformComponent(farAwayStart, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(farAwayStart, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         RunFrames(system, movedEntities, 1);
         AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
 
         // A stationary occupant standing where the source is about to walk to -- never itself moves.
-        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
         mapQuery.SetOccupant(SourcePosition, ObserverEntityId);
 
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         MoveObserverTo(system, movedEntities, farAwayStart, SourcePosition, SourceEntityId);
 
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId), "A stationary occupant the source walks up to must be granted immediately, not wait for it to move itself.");
@@ -863,15 +856,15 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.GetDirectPool<ProcessingTierComponent>().Add(SourceEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
 
         var farAwayStart = new Vector3Int(SourcePosition.X - 50, SourcePosition.Y, SourcePosition.Z);
-        componentManager.Merge(SourceEntityId, new TransformComponent(farAwayStart, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(farAwayStart, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         RunFrames(system, movedEntities, 1);
         AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
 
-        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
         mapQuery.SetOccupant(SourcePosition, ObserverEntityId);
 
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         MoveObserverTo(system, movedEntities, farAwayStart, SourcePosition, SourceEntityId);
 
         Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId), "A non-Local source's grid resync must not happen synchronously on the move itself.");
@@ -885,15 +878,15 @@ public sealed class StatusEffectAuraSystemTests
         componentManager.GetDirectPool<ProcessingTierComponent>().Add(SourceEntityId, new ProcessingTierComponent(ProcessingTierLevel.Neighborhood));
 
         var farAwayStart = new Vector3Int(SourcePosition.X - 50, SourcePosition.Y, SourcePosition.Z);
-        componentManager.Merge(SourceEntityId, new TransformComponent(farAwayStart, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(farAwayStart, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         RunFrames(system, movedEntities, 1);
         AuraSourceEffects.Toggle(sourcePool, eventBus, SourceEntityId, StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
 
-        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
         mapQuery.SetOccupant(SourcePosition, ObserverEntityId);
 
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         MoveObserverTo(system, movedEntities, farAwayStart, SourcePosition, SourceEntityId);
         Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId), "Sanity check: still not resynced immediately after the move itself.");
 
@@ -921,12 +914,12 @@ public sealed class StatusEffectAuraSystemTests
         mapQuery.SetOccupant(SourcePosition, ObserverEntityId);
 
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
-        componentManager.Merge(ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, ObserverEntityId, new TransformComponent(SourcePosition, UnitSize));
         Assert.AreEqual(8, StackCountOf(componentManager, ObserverEntityId));
         Assert.AreEqual(0, PoisonStackCountOf(componentManager, ObserverEntityId));
 
         const int secondSourceEntityId = 150;
-        componentManager.Merge(secondSourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, secondSourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         AuraSourceEffects.Toggle(sourcePool, eventBus, secondSourceEntityId, StatusEffectType.Poison, auraAndGlowStrength: 8, Color.DarkGreen);
 

@@ -1,6 +1,8 @@
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Bootstrap;
 using Game.Modules.Core.Components;
+using Game.Modules.Currency.Components;
 using Game.Modules.Health.Components;
 using Game.World;
 using GameWorldModel = Game.World.World;
@@ -12,12 +14,11 @@ namespace Tests.Bootstrap;
 /// assemblies (Mods.ExampleMod.dll, Mods.TestFixtures.dll), both built alongside Tests (see
 /// Tests.csproj's build-order-only references) but never directly referenced -- these tests
 /// only ever reach mod types through ModuleLoader's reflection path, the same way a real mod
-/// dropped in Mods/ would be found. The two adversarial fixtures (a throwing module, a
-/// built-in-replacing module) live in the separate Mods.TestFixtures project rather than
+/// dropped in Mods/ would be found. The adversarial fixtures (a throwing module, a complete and an
+/// incomplete built-in replacement) live in the separate Mods.TestFixtures project rather than
 /// inside Mods.ExampleMod itself -- Mods.ExampleMod is the plan's shippable "one trivial
-/// IModule" verification fixture, and dropping a module that intentionally breaks
-/// SimpleHealthComponent into the same DLL as that would make the real game crash if someone
-/// actually copied Mods.ExampleMod.dll into Mods/ per the plan's own verification steps.
+/// IModule" verification fixture, and copying it into a real game's Mods/ must not also switch
+/// off health regeneration.
 /// </summary>
 [TestClass]
 public sealed class GameBootstrapperTests
@@ -133,12 +134,7 @@ public sealed class GameBootstrapperTests
 
             var result = GameBootstrapper.Build(world, mathUtility, directory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
 
-            // Mods.TestFixtures.dll also defines ReplacementHealthModule, which survives
-            // dry-run and legitimately replaces HealthModule -- so SimpleHealthComponent itself
-            // isn't a valid "rest of world still builds" signal here (see that module's doc
-            // comment). ActionLockComponent is untouched by either fixture module.
-            Assert.HasCount(1, result.Failures);
-            Assert.Contains("ThrowingModule", result.Failures[0].Source);
+            Assert.AreEqual(1, result.Failures.Count(failure => failure.Source.Contains("ThrowingModule")));
             Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<ActionLockComponent>());
             var entityId = result.EcsContext.EntityManager.CreateEntity();
             Assert.AreEqual(0, entityId);
@@ -159,14 +155,36 @@ public sealed class GameBootstrapperTests
             var (world, mathUtility) = BuildWorldAndMathUtility();
 
             var result = GameBootstrapper.Build(world, mathUtility, directory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
+            var recorder = new SystemOrderRecorder();
+            result.EcsContext.SystemManager.Profiler = recorder;
+            result.EcsContext.SystemManager.Update(new EngineTime(TimeSpan.Zero, TimeSpan.FromSeconds(1d / 60), false, 1));
 
-            // ReplacementHealthModule shares the real HealthModule's Id and registers
-            // nothing -- SimpleHealthComponent ending up unregistered is only possible if the mod
-            // actually replaced the built-in HealthModule rather than coexisting with it.
-            // ActionLockComponent registering normally confirms this replacement is
-            // selective, not a side effect of the whole world failing to build.
-            Assert.IsFalse(result.EcsContext.ComponentManager.IsRegistered<SimpleHealthComponent>());
-            Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<ActionLockComponent>());
+            Assert.IsFalse(result.Failures.Any(failure => failure.Source.Contains("ReplacementHealthModule")));
+            Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<SimpleHealthComponent>());
+            Assert.DoesNotContain("SimpleHealthRegenSystem", recorder.SystemNames);
+            Assert.DoesNotContain("ComplexHealthRegenSystem", recorder.SystemNames);
+            Assert.Contains("MovementSystem", recorder.SystemNames);
+        }
+        finally
+        {
+            TryDeleteDirectory(directory.FullName);
+        }
+    }
+
+    [TestMethod]
+    public void Build_ReplacementMissingTheBuiltInsComponents_IsExcludedNamingThem_AndTheBuiltInStays()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            CopyModTo(directory.FullName, "Mods.TestFixtures");
+            var (world, mathUtility) = BuildWorldAndMathUtility();
+
+            var result = GameBootstrapper.Build(world, mathUtility, directory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
+
+            var failure = result.Failures.Single(failure => failure.Source.Contains("IncompleteReplacementCurrencyModule"));
+            Assert.Contains("CurrencyComponent", failure.Exception.Message);
+            Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<CurrencyComponent>());
         }
         finally
         {

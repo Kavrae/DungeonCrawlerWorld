@@ -30,14 +30,13 @@ public sealed class ShopWindow(
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
     ComponentManager componentManager,
-    SpriteSheetService spriteSheetService,
-    SpriteRenderer spriteRenderer,
     ItemCatalog itemCatalog,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    Engine.ECS.Systems.SimulationClock? simulationClock = null,
-    BlueprintRegistry? creatures = null)
+    Engine.Events.EventBus eventBus,
+    Engine.ECS.Systems.SimulationClock simulationClock,
+    BlueprintRegistry creatures)
     : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
 {
     private static readonly Vector2 IconSize = new(48, 48);
@@ -74,7 +73,7 @@ public sealed class ShopWindow(
         // OpenShop, which never has more than one open at once), so its own currency row's
         // context menu only ever offers "Take"/"Take All" -- both suppressed for a shop (see
         // CurrencyRowContent.BuildCurrencyContextMenu's own ShopComponent check).
-        _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, () => _entityId);
+        _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, ElementPoolService, () => _entityId, eventBus);
         SetFooterContent(_currencyRowContent, CurrencyRowContent.Height);
     }
 
@@ -175,7 +174,7 @@ public sealed class ShopWindow(
         // See SecondaryInventoryWindow.BuildGrid's own doc comment -- same flush-content fix for the same clipped-bottom-row bug.
         gridWindow.ContentPadding = Vector2.Zero;
 
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag: null, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, simulationClock: simulationClock)); // Activate is player-inventory-only (see InventoryGridContent.CanActivate) -- never reached for a shop's own grid.
+        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, contextMenuController, _entityId, filterTag: null, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, simulationClock: simulationClock)); // Activate is player-inventory-only (see InventoryGridContent.CanActivate) -- never reached for a shop's own grid.
         AddChild(gridWindow);
     }
 

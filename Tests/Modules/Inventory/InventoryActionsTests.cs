@@ -9,15 +9,6 @@ namespace Tests.Modules.Inventory;
 [TestClass]
 public sealed class InventoryActionsTests
 {
-    /// <summary>A fixed player id well outside the small entity ids these tests use for source/destination, so "is this entity the player" reads as false for every entity under test unless a test explicitly aliases one to it.</summary>
-    private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
-    {
-        public int PlayerEntityId { get; } = playerEntityId;
-        public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
-    }
-
-    private static readonly FakePlayerQuery NoEntityIsThePlayer = new(playerEntityId: -1);
-
     private static ComponentManager CreateRegisteredManager()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
@@ -353,7 +344,7 @@ public sealed class InventoryActionsTests
         var itemId = Guid.NewGuid();
         var stackInstanceId = InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 1);
 
-        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 0, stackInstanceId, NoEntityIsThePlayer);
+        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 0, stackInstanceId, TestPlayerQuery.NoPlayer);
 
         Assert.IsFalse(result);
         Assert.AreEqual(1, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
@@ -364,7 +355,7 @@ public sealed class InventoryActionsTests
     {
         var manager = CreateRegisteredManager();
 
-        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, stackInstanceId: 9999, NoEntityIsThePlayer);
+        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, stackInstanceId: 9999, TestPlayerQuery.NoPlayer);
 
         Assert.IsFalse(result);
     }
@@ -385,7 +376,7 @@ public sealed class InventoryActionsTests
         var sourceStack = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0));
         InventoryActions.SetStackDisabled(manager, entityId: 0, itemId, disabled: true);
 
-        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, sourceStack.StackInstanceId, NoEntityIsThePlayer);
+        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, sourceStack.StackInstanceId, TestPlayerQuery.NoPlayer);
 
         Assert.IsTrue(result);
         Assert.AreEqual(0, pool.CountForEntity(0));
@@ -409,7 +400,7 @@ public sealed class InventoryActionsTests
         var sourceItemId = Guid.NewGuid();
         var stackInstanceId = InventoryActions.AddItem(manager, entityId: 0, sourceItemId, quantity: 1);
 
-        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, stackInstanceId, NoEntityIsThePlayer);
+        var result = InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, stackInstanceId, TestPlayerQuery.NoPlayer);
 
         Assert.IsFalse(result);
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
@@ -421,7 +412,7 @@ public sealed class InventoryActionsTests
     public void TryTransferStack_DestinationIsThePlayerAtWhatWouldOtherwiseBeTheCap_StillSucceeds()
     {
         var manager = CreateRegisteredManager();
-        var playerQuery = new FakePlayerQuery(playerEntityId: 1);
+        var playerQuery = new TestPlayerQuery(playerEntityId: 1);
         for (var i = 0; i < InventoryCapacity.MaxNonPlayerStackCount; i++)
         {
             InventoryActions.AddItem(manager, entityId: 1, Guid.NewGuid(), quantity: 1);
@@ -442,7 +433,7 @@ public sealed class InventoryActionsTests
         var itemId = Guid.NewGuid();
         InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 5));
 
-        var result = InventoryActions.TryTransferAllStacksOfItem(manager, sourceEntityId: 0, destinationEntityId: 0, itemId, NoEntityIsThePlayer);
+        var result = InventoryActions.TryTransferAllStacksOfItem(manager, sourceEntityId: 0, destinationEntityId: 0, itemId, TestPlayerQuery.NoPlayer);
 
         Assert.IsFalse(result);
         Assert.AreEqual(1, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
@@ -457,7 +448,7 @@ public sealed class InventoryActionsTests
         InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 4));
         InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 3));
 
-        var result = InventoryActions.TryTransferAllStacksOfItem(manager, sourceEntityId: 0, destinationEntityId: 1, itemId, NoEntityIsThePlayer);
+        var result = InventoryActions.TryTransferAllStacksOfItem(manager, sourceEntityId: 0, destinationEntityId: 1, itemId, TestPlayerQuery.NoPlayer);
 
         Assert.IsTrue(result);
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
@@ -478,7 +469,7 @@ public sealed class InventoryActionsTests
         InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 5));
         InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 4));
 
-        var result = InventoryActions.TryTransferAllStacksOfItem(manager, sourceEntityId: 0, destinationEntityId: 1, itemId, NoEntityIsThePlayer);
+        var result = InventoryActions.TryTransferAllStacksOfItem(manager, sourceEntityId: 0, destinationEntityId: 1, itemId, TestPlayerQuery.NoPlayer);
 
         Assert.IsFalse(result);
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
@@ -553,7 +544,7 @@ public sealed class InventoryActionsTests
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
         var originalFirstAcquired = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).AcquiredSequence;
 
-        InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, stackInstanceId, NoEntityIsThePlayer);
+        InventoryActions.TryTransferStack(manager, sourceEntityId: 0, destinationEntityId: 1, stackInstanceId, TestPlayerQuery.NoPlayer);
 
         Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 1, stackInstanceId, out var movedStack));
         Assert.AreEqual(originalFirstAcquired, movedStack.AcquiredSequence);
@@ -566,7 +557,7 @@ public sealed class InventoryActionsTests
         // may have sat in the source's inventory for a long time, but landing in the player's own
         // inventory should read as freshly acquired.
         var manager = CreateRegisteredManager();
-        var playerQuery = new FakePlayerQuery(playerEntityId: 1);
+        var playerQuery = new TestPlayerQuery(playerEntityId: 1);
         var stackInstanceId = InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 1);
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
         var originalFirstAcquired = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).AcquiredSequence;
@@ -585,7 +576,7 @@ public sealed class InventoryActionsTests
     public void TryTransferAllStacksOfItem_DestinationIsThePlayer_ResetsFirstAcquiredOnEveryMovedStack()
     {
         var manager = CreateRegisteredManager();
-        var playerQuery = new FakePlayerQuery(playerEntityId: 1);
+        var playerQuery = new TestPlayerQuery(playerEntityId: 1);
         var itemId = Guid.NewGuid();
         InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 5));
         InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 4));

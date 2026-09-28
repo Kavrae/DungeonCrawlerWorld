@@ -18,7 +18,7 @@ namespace Tests.Modules.AbilityScores;
 /// <summary>
 /// End-to-end coverage through the real Bootstrapper -- AbilityScoreEffectsTests already covers
 /// AbilityScoreEffects/AbilityScoreMath directly against a hand-built ComponentManager; this
-/// class instead proves the module wiring itself (Dependencies enforcement, and the
+/// class instead proves the module wiring itself (Requires enforcement, and the
 /// StatModifierExpiredEvent subscription actually firing end-to-end through real systems).
 /// </summary>
 [TestClass]
@@ -28,26 +28,9 @@ public sealed class AbilityScoresModuleTests
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
-        var context = new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) };
+        var context = new GameModuleContext(world, mathUtility, new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
 
-        var coreModule = new CoreModule();
-        coreModule.Configure(context);
-
-        var movementModule = new MovementModule();
-        movementModule.Configure(context);
-
-        var processingTierModule = new ProcessingTierModule();
-        processingTierModule.Configure(context);
-
-        var statModifiersModule = new StatModifiersModule();
-        statModifiersModule.Configure(context);
-
-        var abilityScoresModule = new AbilityScoresModule();
-        abilityScoresModule.Configure(context);
-
-        IReadOnlyList<IModule> modules = [coreModule, movementModule, processingTierModule, statModifiersModule, abilityScoresModule];
-
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, entityKeys: context.EntityKeys);
+        var ecsContext = BuiltInTestModules.Build(context, 10, 10);
 
         var entityId = ecsContext.EntityManager.CreateEntity();
         AbilityScoreEffects.Grant(ecsContext.ComponentManager, entityId, AbilityScoreType.Strength, baseValue);
@@ -65,7 +48,7 @@ public sealed class AbilityScoresModuleTests
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
-        var context = new GameModuleContext(world, mathUtility, new EventBus());
+        var context = new GameModuleContext(world, mathUtility, new EventBus()) { PlayerQuery = world };
 
         var processingTierModule = new ProcessingTierModule();
         processingTierModule.Configure(context);
@@ -75,7 +58,7 @@ public sealed class AbilityScoresModuleTests
 
         IReadOnlyList<IModule> modules = [processingTierModule, abilityScoresModule];
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10));
+        Assert.ThrowsExactly<InvalidOperationException>(() => Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, new EventBus()));
     }
 
     [TestMethod]

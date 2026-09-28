@@ -6,9 +6,9 @@ namespace Game.Modules.Currency;
 
 public sealed class CurrencyModule : IGameModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000016");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000016");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [];
+    public Guid Id => ModuleId;
 
     public void Configure(GameModuleContext context)
     {

@@ -12,10 +12,9 @@ using Presentation.UI.Chrome;
 
 namespace Presentation.UI.Content;
 
-public sealed class ActionLockContent(World world, ComponentManager componentManager, IMapViewQuery mapView, FontService fontService, SimulationClock? simulationClock = null) : IElementContent
+/// <param name="simulationClock">"CurrentFrame" for the lock's remaining frames -- the lock is a deadline (see ActionLockGate).</param>
+public sealed class ActionLockContent(World world, ComponentManager componentManager, IMapViewQuery mapView, FontService fontService, SimulationClock simulationClock) : IElementContent
 {
-    /// <summary>"Now" for the lock's remaining frames -- the lock is a deadline (see ActionLockGate). Optional only so a test needn't build one; the shell always passes the simulation's real clock.</summary>
-    private readonly SimulationClock _simulationClock = simulationClock ?? new SimulationClock();
 
     public static readonly Vector2 Size = new(HudChrome.EntrySize.Y * 1.5f, HudChrome.EntrySize.Y * 1.5f);
 
@@ -52,7 +51,7 @@ public sealed class ActionLockContent(World world, ComponentManager componentMan
         _glyph = visual.Glyph;
         _glyphColor = visual.GlyphColor;
         _fillPercentage = actionLock.CurrentLockTotalFrames > 0
-            ? (float)ActionLockGate.FramesRemaining(actionLock, _simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames
+            ? (float)ActionLockGate.FramesRemaining(actionLock, simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames
             : 0f;
     }
 

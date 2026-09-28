@@ -13,16 +13,14 @@ using Game.Blueprints;
 namespace Game.Modules;
 
 /// <summary>
-/// A record, not positional Configure parameters, so a future fourth piece of context is a
-/// new property rather than a signature break for every module already written against
-/// IGameModule.Configure -- PlayerQuery below is exactly that: an optional init property, not
-/// a fourth positional parameter, so existing test call sites didn't need to change.
+/// Everything a module's Configure step can reach, shared across every module in one build.
 /// </summary>
 public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtility, EventBus EventBus)
 {
-    public IPlayerQuery? PlayerQuery { get; init; }
+    /// <summary>Who the player is, for everything that treats the player differently.</summary>
+    public required IPlayerQuery PlayerQuery { get; init; }
 
-    /// <summary>Mandatory map-occupancy sync MovementModule wires into MovementSystem -- nullable like PlayerQuery, but MovementModule.RegisterSystems throws if this is still null when it actually tries to construct MovementSystem, since (unlike PlayerQuery) movement genuinely can't work without it.</summary>
+    /// <summary>Mandatory map-occupancy sync MovementModule wires into MovementSystem; MovementModule.RegisterSystems throws if this is still null when it constructs MovementSystem.</summary>
     public IEntityMoveSync? EntityMoveSync { get; init; }
 
     /// <summary>

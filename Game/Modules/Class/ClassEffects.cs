@@ -17,8 +17,6 @@ public static class ClassEffects
     /// <param name="expiresAfterFloor">The floor after which the class is removed, or ClassMembershipComponent.Permanent.</param>
     public static void Grant(ComponentManager componentManager, int entityId, ushort classId, ClassGrantKind grantedBy, ushort expiresAfterFloor = ClassMembershipComponent.Permanent)
     {
-        ArgumentNullException.ThrowIfNull(componentManager);
-
         if (classId == ClassSlotsComponent.Empty)
         {
             return;
@@ -46,8 +44,6 @@ public static class ClassEffects
     /// <returns>True if it held it.</returns>
     public static bool Remove(ComponentManager componentManager, int entityId, ushort classId)
     {
-        ArgumentNullException.ThrowIfNull(componentManager);
-
         var removed = componentManager.GetMultiPool<ClassMembershipComponent>()
             .RemoveFirst(entityId, classId, static (ref readonly ClassMembershipComponent membership, ushort id) => membership.ClassId == id);
 
@@ -76,8 +72,6 @@ public static class ClassEffects
     /// <returns>How many were removed.</returns>
     public static int ExpireForFloor(ComponentManager componentManager, int entityId, ushort floor)
     {
-        ArgumentNullException.ThrowIfNull(componentManager);
-
         var memberships = componentManager.GetMultiPool<ClassMembershipComponent>();
         var removed = 0;
         while (memberships.RemoveFirst(entityId, floor, static (ref readonly ClassMembershipComponent membership, ushort completedFloor) =>

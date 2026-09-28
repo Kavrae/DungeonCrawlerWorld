@@ -99,45 +99,12 @@ visibility for 1-frame latency (check this is OK for `MovementSystem`'s `Contact
 `SubscribeOnce`/`DispatchBuffered` (`Engine/Events/`) for consistency -- a different mechanism (deferred
 re-entrant handler vs. high-frequency batching), never compared side by side.
 
-#### Fix module dependencies
-
-`IModule.Dependencies` is a list of `Type`s, but `ModuleSet.Combine` replaces a built-in by `Guid Id`.
-A mod that replaces a module (e.g. `Mods.TestFixtures.ReplacementHealthModule`) makes any hard
-`typeof(...)` dependency on it fail `Bootstrapper`'s topo-sort, even though the replacement provides the
-same components. Because of that, most modules skip real dependencies and use soft `IsRegistered`-guarded
-pools instead, each explained in its own comment (`BodyPartEffectsModule`, `HealthModule`, `DeathModule`,
-`ActionsModule`, `MovementModule`). `Dependencies` also decides system run order as well as what a module
-requires. `ProcessingTierModule` → `MovementModule` exists only so `ProcessingTierSystem` runs after
-`MovementSystem`, and the `MovementModule` ↔ `StatusEffectAuraModule` pair can't declare both directions
-without a cycle. Fix: resolve dependencies by `Id` (or by provided capability/component) so replacements
-satisfy them, and separate "requires" from "runs after" so ordering constraints don't have to be
-expressed as module requirements. Then turn the soft dependencies that are really hard back into
-declared ones.
-
-#### Investigate moving runtime pool checks to hard dependencies
-
-Follows "Fix module dependencies" above. Game code checks for another module's pool at runtime in about
-80 places: `componentManager.IsRegistered<T>()` (~49, across 20 files in `Game/Modules`,
-`Game/Bootstrap/GameBootstrapper.cs` and `Game/World/ActionSource.cs`) and
-`GetOptionalDirectPool/PackedPool/MultiPool` (~32, `ComponentManagerOptionalPoolExtensions`). Every
-optional pool leaves a null path in the code that uses it. Go through each check and sort it:
-- **Actually optional:** the module works correctly without the other one (e.g. `HealthModule`
-  treating missing `StatModifierComponent` as no modifiers). Keep the check.
-- **Only avoiding the replacement or cycle problem:** once dependencies resolve by `Id` or capability,
-  declare it in `Dependencies`, fetch the pool normally, and delete the null handling.
-- **Only there so minimal test module sets build:** decide whether those tests should include the
-  dependency instead. Per the rule that tests don't drive design, a check that exists only for tests
-  should become a hard dependency.
-Write down the result for each check before changing anything. Some soft checks exist on purpose to
-break cycles (`MovementModule`/`DeathModule` → `StatusEffectAuraSourceComponent`) and may have to stay
-soft even after the fix.
-
 ### Low Priority
 
 #### Partial module replacement
 
 A mod that replaces a built-in module by `Id` currently replaces all of it and must register every
-component the built-in did (the replacement contract, see `PLAN-module-dependencies.md`). Let a mod
+component the built-in did (the replacement contract, see CLAUDE.md's Modding section). Let a mod
 replace only the systems, only the components, or both. Whatever it doesn't replace comes from the
 original module. For example, a mod could swap `SimpleHealthRegenSystem` for its own regen rule and
 keep `HealthModule`'s pools and every other system. Open questions: how finely systems can be
@@ -152,6 +119,21 @@ primitive. Companion to the Game/Presentation equipment items below.
 ## Game
 
 ### High Priority
+
+#### Paralysis V2 -- body-part-scoped status effects
+
+Paralysis can be applied to an entire entity or to individual body parts. A paralyzed body part
+behaves exactly as if that part were disabled (`BodyPartStateComponent.IsDisabled`), so every existing
+consequence -- `BodyPartEffectsSystem`'s movement and melee penalties included -- applies with no
+paralysis-specific rules.
+
+Burning is the only body-part-scoped effect today, and its per-part path is Burning-specific end to
+end (`BodyPartBurningTimerComponent`, `BodyPartBurningSystem`, `BurningAuraApplier`'s part path,
+`HealthWindow.BuildBurningPartIds`). Refactor it into a generic body-part-scoped status effect that
+any effect plugs into, with Paralysis as the second concrete implementation.
+
+Poison follows as the third, restricted to the `Internal` body part -- or, for an entity
+with simple health, the entire entity.
 
 #### Merging body plans when an entity gains a second race
 
@@ -1482,7 +1464,23 @@ No icon/symbol-only button explains itself on hover. Needs the existing `Tooltip
 `Window` title button, the Inventory/Ability Score folder tiles, the Notification/Inventory folder
 icons. Mechanical -- reusing an existing pattern in a few more places.
 
+#### Ability score buffs name where they come from
+
+Each modifier line in the Ability Score window (`AbilityScoreModifierFormatter`) shows its source as
+an entity, e.g. "#1234". A modifier granted by a blueprint part should name that part and its kind
+instead, e.g. "Race(Human)" or "Class(Tank)". When a line has a part to name, that replaces the
+entity-number source entirely.
+
 ### Low Priority
+
+#### Health Window: status effects in a third column
+
+The Health Window has two columns today (see IMPLEMENTATION-NOTES.md, "HealthWindow"). Move status
+effects into a third column of their own.
+
+#### Health bar hover popup text in white
+
+The player health bar's hover popup (`PlayerHealthHoverContent`) should draw its text in white.
 
 #### Split Presentation into Presentation + UIEngine projects
 
@@ -1688,6 +1686,14 @@ window's edge.
 #### Window open/close/minimize animation
 
 Everything snaps instantly. Pure polish, lowest priority UI item.
+
+#### Show module load failures on the start menu
+
+Depends on a start menu, which doesn't exist yet. A mod that fails to load (it throws, is missing a
+built-in's components, or has an unmet `Requires`) is dropped and reported only through
+`Console.Error` (`WorldSessionBootstrapper`). The game is a WinExe, so a normal launch shows nothing.
+List `GameBootstrapResult.Failures` on the start menu: each mod's type name and the exception's
+message, with the full exception available on demand.
 
 #### Options menu
 

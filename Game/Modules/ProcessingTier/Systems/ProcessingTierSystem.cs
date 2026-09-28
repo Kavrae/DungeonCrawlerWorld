@@ -74,7 +74,7 @@ public sealed class ProcessingTierSystem : ISystem
     private readonly IMapQuery _mapQuery;
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
     private readonly ProcessingTierResolver _resolver;
-    private readonly IPlayerQuery? _playerQuery;
+    private readonly IPlayerQuery _playerQuery;
     private readonly int _transitionsPerFrame;
 
     /// <summary>Set the first time the player is observed on the map. The player is normally already pinned by the spawn sequence (FloorBuilder.CreatePlayer); this is the fallback for any path that did not, and it runs once, never per frame.</summary>
@@ -85,7 +85,7 @@ public sealed class ProcessingTierSystem : ISystem
         IMapQuery mapQuery,
         FrameEventBuffer<EntityMovedEvent> movedEntities,
         ProcessingTierResolver resolver,
-        IPlayerQuery? playerQuery,
+        IPlayerQuery playerQuery,
         int transitionsPerFrame = DefaultTransitionsPerFrame)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(transitionsPerFrame);
@@ -100,11 +100,6 @@ public sealed class ProcessingTierSystem : ISystem
 
     public void Update(EngineTime time, byte stripeIndex)
     {
-        if (_playerQuery is null)
-        {
-            return;
-        }
-
         var playerEntityId = _playerQuery.PlayerEntityId;
 
         if (_transforms.TryGetReadonly(playerEntityId, out var playerTransform))

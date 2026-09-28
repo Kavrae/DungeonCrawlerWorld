@@ -15,13 +15,13 @@ public sealed class PresentationContext(
     SpriteRenderer spriteRenderer,
     ElementPoolService elementPoolService)
 {
-    public FontService FontService { get; } = fontService ?? throw new ArgumentNullException(nameof(fontService));
-    public SpriteBatchRenderer SpriteBatchRenderer { get; } = spriteBatchRenderer ?? throw new ArgumentNullException(nameof(spriteBatchRenderer));
-    public LabelRenderer LabelRenderer { get; } = labelRenderer ?? throw new ArgumentNullException(nameof(labelRenderer));
-    public TileRenderer TileRenderer { get; } = tileRenderer ?? throw new ArgumentNullException(nameof(tileRenderer));
-    public SpriteSheetService SpriteSheetService { get; } = spriteSheetService ?? throw new ArgumentNullException(nameof(spriteSheetService));
-    public SpriteRenderer SpriteRenderer { get; } = spriteRenderer ?? throw new ArgumentNullException(nameof(spriteRenderer));
-    public ElementPoolService ElementPoolService { get; } = elementPoolService ?? throw new ArgumentNullException(nameof(elementPoolService));
+    public FontService FontService { get; } = fontService;
+    public SpriteBatchRenderer SpriteBatchRenderer { get; } = spriteBatchRenderer;
+    public LabelRenderer LabelRenderer { get; } = labelRenderer;
+    public TileRenderer TileRenderer { get; } = tileRenderer;
+    public SpriteSheetService SpriteSheetService { get; } = spriteSheetService;
+    public SpriteRenderer SpriteRenderer { get; } = spriteRenderer;
+    public ElementPoolService ElementPoolService { get; } = elementPoolService;
 
     /// <summary>
     /// Captures the render services ElementPoolService needs for every Element's Draw/DrawContent/

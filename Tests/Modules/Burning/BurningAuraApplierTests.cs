@@ -1,3 +1,4 @@
+using Engine.Events;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Math;
@@ -34,10 +35,7 @@ public sealed class BurningAuraApplierTests
 
     private static ComponentManager CreateComponentManager()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8);
-        componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterMultiPool<BodyPartBurningTimerComponent>();
-        componentManager.RegisterPackedPool<ContactDamageExposureComponent>(static (ref existing, incoming) => { });
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8));
         return componentManager;
     }
 
@@ -55,7 +53,7 @@ public sealed class BurningAuraApplierTests
         var world = AddComplexBodyParts(componentManager);
         var (terrain, hazard, _) = CreateTerrain();
         componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
-        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions);
+        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions, new EventBus(), TestPlayerQuery.NoPlayer);
 
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
@@ -66,11 +64,26 @@ public sealed class BurningAuraApplierTests
     }
 
     [TestMethod]
+    public void ApplyStack_IgnitingAPart_LocksItOutOfRegenBeforeItsFirstTick()
+    {
+        var componentManager = CreateComponentManager();
+        var world = AddComplexBodyParts(componentManager);
+        world.SetHealth(EntityId, 1, 5);
+        var (terrain, hazard, _) = CreateTerrain();
+        componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
+        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions, new EventBus(), TestPlayerQuery.NoPlayer);
+
+        applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
+
+        Assert.AreEqual(-1, TestHealth.PickLowestPercentage(world.BodyParts, EntityId, now: 1));
+    }
+
+    [TestMethod]
     public void ApplyStack_NoHazardExposure_GrantsEntityScopedBurnUnchanged()
     {
         var componentManager = CreateComponentManager();
         var world = AddComplexBodyParts(componentManager);
-        var applier = new BurningAuraApplier(new MathUtility(), CreateTerrain().Terrain, world.Definitions);
+        var applier = new BurningAuraApplier(new MathUtility(), CreateTerrain().Terrain, world.Definitions, new EventBus(), TestPlayerQuery.NoPlayer);
 
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
@@ -86,7 +99,7 @@ public sealed class BurningAuraApplierTests
         var world = new BodyPartTestWorld(componentManager);
         var (terrain, hazard, _) = CreateTerrain();
         componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
-        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions);
+        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions, new EventBus(), TestPlayerQuery.NoPlayer);
 
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
@@ -101,7 +114,7 @@ public sealed class BurningAuraApplierTests
         var world = AddComplexBodyParts(componentManager);
         var (terrain, hazard, _) = CreateTerrain();
         componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
-        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions);
+        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions, new EventBus(), TestPlayerQuery.NoPlayer);
 
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
@@ -127,7 +140,7 @@ public sealed class BurningAuraApplierTests
         var bodyParts = world.BodyParts;
         var (terrain, hazard, _) = CreateTerrain();
         componentManager.GetPackedPool<ContactDamageExposureComponent>().Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
-        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions);
+        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions, new EventBus(), TestPlayerQuery.NoPlayer);
 
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 
@@ -160,7 +173,7 @@ public sealed class BurningAuraApplierTests
         var exposures = componentManager.GetPackedPool<ContactDamageExposureComponent>();
         var (terrain, hazard, headHazard) = CreateTerrain();
         exposures.Add(EntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardTerrainTypeId: hazard));
-        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions);
+        var applier = new BurningAuraApplier(new MathUtility(), terrain, world.Definitions, new EventBus(), TestPlayerQuery.NoPlayer);
 
         applier.ApplyStack(componentManager, EntityId, ActionSource.Admin, now: 0);
 

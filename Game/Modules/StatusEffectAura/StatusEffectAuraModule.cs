@@ -10,6 +10,8 @@ using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffectAura.Systems;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Modules.Core;
+using Game.Modules.Death;
 
 namespace Game.Modules.StatusEffectAura;
 
@@ -20,8 +22,8 @@ namespace Game.Modules.StatusEffectAura;
 /// stack-granting -- StatusEffectAuraSystem.GrantStacks dispatches through the shared
 /// StatusEffectAuraApplierRegistry (see IStatusEffectAuraApplier), populated by each concrete
 /// effect module's own Configure call (BurningModule/PoisonModule each register a
-/// TimerBasedAuraApplier&lt;T&gt; for their own timer component). This module's own Dependencies
-/// list StatusEffectsModule (shared stack storage) and, now, MovementModule -- the latter so
+/// TimerBasedAuraApplier&lt;T&gt; for their own timer component). This module requires
+/// StatusEffectsModule (shared stack storage) and runs after MovementModule, so
 /// StatusEffectAuraSystem's own Update always runs after MovementSystem's within the same
 /// SystemManager.Update() cycle, required for it to see this frame's moves via the shared
 /// FrameEventBuffer&lt;EntityMovedEvent&gt; (see that class's own doc comment on why
@@ -31,9 +33,13 @@ namespace Game.Modules.StatusEffectAura;
 /// </summary>
 public sealed class StatusEffectAuraModule : IGameModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000000b");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000000b");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [typeof(StatusEffectsModule), typeof(MovementModule)];
+    public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [StatusEffectsModule.ModuleId, CoreModule.ModuleId, DeathModule.ModuleId, ProcessingTierModule.ModuleId];
+
+    public IReadOnlyList<Guid> RunsAfter { get; } = [MovementModule.ModuleId];
 
     private IMapQuery _mapQuery = null!;
     private EventBus _eventBus = null!;
@@ -65,9 +71,7 @@ public sealed class StatusEffectAuraModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        var deadEntities = componentManager.IsRegistered<DeadComponent>()
-            ? componentManager.GetPackedPool<DeadComponent>()
-            : null;
+        var deadEntities = componentManager.GetPackedPool<DeadComponent>();
 
         systemManager.Register(new StatusEffectAuraSystem(
             componentManager,

@@ -68,7 +68,7 @@ public sealed class DeathSystemTests
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
 
-        var system = new DeathSystem(deadEntities, nonBlockingEntities, transforms, entityMoveSync, mapQuery, eventBus);
+        var system = TestSystems.DeathSystem(deadEntities, nonBlockingEntities, transforms, entityMoveSync, mapQuery, eventBus);
 
         return (system, deadEntities, nonBlockingEntities, entityMoveSync, mapQuery, eventBus);
     }
@@ -188,7 +188,7 @@ public sealed class DeathSystemTests
         var source = new StatusEffectAuraSourceComponent(StatusEffectType.Poison, auraAndGlowStrength: 5, Color.Purple);
         auraSources.Add(0, source);
 
-        var system = new DeathSystem(deadEntities, nonBlockingEntities, transforms, entityMoveSync, mapQuery, eventBus, auraSources);
+        var system = TestSystems.DeathSystem(deadEntities, nonBlockingEntities, transforms, entityMoveSync, mapQuery, eventBus, auraSources);
 
         AuraSourceRemovedEvent? published = null;
         eventBus.Subscribe<AuraSourceRemovedEvent>(e => published = e);
@@ -202,13 +202,4 @@ public sealed class DeathSystemTests
         Assert.AreEqual(source, published.Value.Source);
     }
 
-    [TestMethod]
-    public void EntityDied_NoAuraSourcesPoolWired_DoesNotThrow()
-    {
-        var (_, _, _, _, mapQuery, eventBus) = Build();
-        mapQuery.SetBlocking(0);
-
-        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
-        eventBus.DispatchBuffered<EntityDiedEvent>();
-    }
 }

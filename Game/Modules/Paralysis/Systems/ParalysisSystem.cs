@@ -20,7 +20,7 @@ public sealed class ParalysisSystem(PackedComponentPool<ParalysisTimerComponent>
     /// <summary>The one firing is the expiry -- always remove. There's no repeating action to re-arm for, unlike Burning/Poison.</summary>
     private static readonly TimerFired<ParalysisTimerComponent> RemoveOnExpiry = static (_, _, _) => true;
 
-    private readonly PackedTimerWheel<ParalysisTimerComponent> _wheel = new(timers);
+    private readonly PackedTimerWheel<ParalysisTimerComponent> _wheel = new(timers, SimulationScope.Unscoped);
 
     /// <summary>Every frame; the wheel only touches paralyses actually expiring.</summary>
     public byte StripeCount => 1;

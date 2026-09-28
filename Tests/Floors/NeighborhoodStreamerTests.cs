@@ -28,7 +28,7 @@ public sealed class NeighborhoodStreamerTests
     [ClassCleanup]
     public static void DeleteEmptyModsDirectory() => EmptyModsDirectory.Delete(recursive: true);
 
-    private sealed record Session(Game.World.World World, EcsContext Ecs, ProcessingTierResolver Resolver, NeighborhoodStreamer Streamer, FrameEventBuffer<EntityMovedEvent> MovedEntities, BlueprintRegistry Definitions, CreatureSkeletons? Skeletons = null);
+    private sealed record Session(Game.World.World World, EcsContext Ecs, ProcessingTierResolver Resolver, NeighborhoodStreamer Streamer, FrameEventBuffer<EntityMovedEvent> MovedEntities, BlueprintRegistry Definitions, CreatureSkeletons Skeletons);
 
     private static Session Build(int budgetPerFrame = NeighborhoodStreamer.DefaultBudgetPerFrame)
     {
@@ -40,13 +40,13 @@ public sealed class NeighborhoodStreamerTests
         result.ProcessingTierResolver.SetReferencePosition(Reference);
 
         var records = new NeighborhoodRecords(mathUtility);
-        var factory = new EntityFactory(result.Definitions, world, ecs.EntityManager, ecs.ComponentManager, result.MovedEntities, result.ProcessingTierResolver, ecs.SystemManager.Clock, crawlerNumbers);
+        var factory = result.Factory;
         FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Terrain, result.Definitions);
         result.MovedEntities.ClearFrame();
 
         var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Terrain, result.Definitions);
-        var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, result.ProcessingTierResolver, records, builder) { BudgetPerFrame = budgetPerFrame };
-        return new Session(world, ecs, result.ProcessingTierResolver, streamer, result.MovedEntities, result.Definitions);
+        var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, result.ProcessingTierResolver, records, builder, result.Skeletons) { BudgetPerFrame = budgetPerFrame };
+        return new Session(world, ecs, result.ProcessingTierResolver, streamer, result.MovedEntities, result.Definitions, result.Skeletons);
     }
 
     /// <summary>Pumps the streamer until it has nothing left to do, returning how many entities each frame created or destroyed.</summary>
@@ -259,7 +259,7 @@ public sealed class NeighborhoodStreamerTests
     }
 
     /// <summary>A strip eleven neighborhoods wide (-5 to 5) and a few rows tall, with only the window around neighborhood 0 loaded and populated, and the window centred there.</summary>
-    private static Session BuildWindow(bool withSkeletons = false)
+    private static Session BuildWindow()
     {
         var world = new Game.World.World(new Map(new MapBounds(-5 * Neighborhoods.SizeTiles, 0, 6 * Neighborhoods.SizeTiles, Rows, 3)));
         foreach (var cellX in new[] { -5, -4, -3, -2, 2, 3, 4, 5 })
@@ -275,8 +275,8 @@ public sealed class NeighborhoodStreamerTests
         result.ProcessingTierResolver.SetWindowCenter(0, 0);
 
         var records = new NeighborhoodRecords(mathUtility);
-        var skeletons = withSkeletons ? result.Skeletons : null;
-        var factory = withSkeletons ? result.Factory : new EntityFactory(result.Definitions, world, ecs.EntityManager, ecs.ComponentManager, result.MovedEntities, result.ProcessingTierResolver, ecs.SystemManager.Clock, crawlerNumbers);
+        var skeletons = result.Skeletons;
+        var factory = result.Factory;
         FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Terrain, result.Definitions);
         result.MovedEntities.ClearFrame();
 
@@ -359,8 +359,8 @@ public sealed class NeighborhoodStreamerTests
     [TestMethod]
     public void Eviction_DestroysBuiltCreaturesFirst_AndStopsHoldingPromotionsBeforeTheRestUnloads()
     {
-        var session = BuildWindow(withSkeletons: true);
-        var skeletons = session.Skeletons!;
+        var session = BuildWindow();
+        var skeletons = session.Skeletons;
         var evicted = EntitiesIn(session, -1, 0);
         Assert.IsTrue(evicted.Any(entityId => !skeletons.IsSkeleton(entityId)), "Creatures born within Local reach of the spawn are built.");
         Assert.IsTrue(evicted.Any(skeletons.IsSkeleton));

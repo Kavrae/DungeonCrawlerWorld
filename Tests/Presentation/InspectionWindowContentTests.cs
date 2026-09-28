@@ -69,7 +69,7 @@ public sealed class InspectionWindowContentTests
         var bodyParts = new BodyPartTestWorld().BodyParts;
         List<InspectedComponentEntry> entries = [];
 
-        InspectionWindowContent.ReplaceHealthEntriesWithEffectiveMaximum(entries, EntityId, healthPool, bodyParts, statModifiers: null);
+        InspectionWindowContent.ReplaceHealthEntriesWithEffectiveMaximum(entries, EntityId, healthPool, bodyParts, statModifiers: EmptyPools.Multi<StatModifierComponent>());
 
         Assert.HasCount(1, entries);
         Assert.Contains("80/100", entries[0].Value);
@@ -87,7 +87,7 @@ public sealed class InspectionWindowContentTests
             new InspectedComponentEntry(typeof(RaceComponentPlaceholder), "unrelated, left alone", 0),
         ];
 
-        InspectionWindowContent.ReplaceHealthEntriesWithEffectiveMaximum(entries, EntityId, healthPool, bodyParts, statModifiers: null);
+        InspectionWindowContent.ReplaceHealthEntriesWithEffectiveMaximum(entries, EntityId, healthPool, bodyParts, statModifiers: EmptyPools.Multi<StatModifierComponent>());
 
         Assert.HasCount(1, entries);
         Assert.AreEqual(typeof(RaceComponentPlaceholder), entries[0].ComponentType);

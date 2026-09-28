@@ -15,40 +15,29 @@ namespace Presentation.UI.Shops;
 /// never itself shop-registered, but a trade column's real shop-side counterpart is -- Trade gets
 /// first refusal on anything touching its own reserved entities).
 /// </summary>
-internal sealed class ShopDragDropResolver : IDragDropResolver
+internal sealed class ShopDragDropResolver(PackedComponentPool<ShopComponent> shopPool, ItemCatalog? itemCatalog, IPlayerQuery playerQuery) : IDragDropResolver
 {
-    private readonly PackedComponentPool<ShopComponent> _shopPool;
-    private readonly ItemCatalog? _itemCatalog;
-    private readonly IPlayerQuery? _playerQuery;
-
-    public ShopDragDropResolver(PackedComponentPool<ShopComponent> shopPool, ItemCatalog? itemCatalog, IPlayerQuery? playerQuery)
-    {
-        _shopPool = shopPool;
-        _itemCatalog = itemCatalog;
-        _playerQuery = playerQuery;
-    }
-
     public bool TryResolve(in DragDropContext context)
     {
-        var originIsShop = _shopPool.Has(context.OriginEntityId);
-        var destinationIsShop = _shopPool.Has(context.DestinationEntityId);
+        var originIsShop = shopPool.Has(context.OriginEntityId);
+        var destinationIsShop = shopPool.Has(context.DestinationEntityId);
 
         if (context.ItemStackInstanceId is { } stackInstanceId)
         {
             // If a shop is involved but ItemCatalog was never wired, neither branch below matches --
             // this resolver returns false and the drag falls through to a plain transfer via
             // PlainInventoryDragDropResolver, same as today's degrade path.
-            if (originIsShop && _itemCatalog is { } buyCatalog)
+            if (originIsShop && itemCatalog is { } buyCatalog)
             {
                 // Dragged out of the shop's own grid, into the player's -- a purchase.
-                ShopActions.TryBuyFromShop(context.ComponentManager, buyCatalog, context.DestinationEntityId, context.OriginEntityId, stackInstanceId, _playerQuery);
+                ShopActions.TryBuyFromShop(context.ComponentManager, buyCatalog, context.DestinationEntityId, context.OriginEntityId, stackInstanceId, playerQuery);
                 return true;
             }
 
-            if (destinationIsShop && _itemCatalog is { } sellCatalog)
+            if (destinationIsShop && itemCatalog is { } sellCatalog)
             {
                 // Dragged out of the player's own grid, into the shop's -- a sale.
-                ShopActions.TrySellToShop(context.ComponentManager, sellCatalog, context.OriginEntityId, context.DestinationEntityId, stackInstanceId, _playerQuery);
+                ShopActions.TrySellToShop(context.ComponentManager, sellCatalog, context.OriginEntityId, context.DestinationEntityId, stackInstanceId, playerQuery);
                 return true;
             }
 

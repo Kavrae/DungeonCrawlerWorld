@@ -1,20 +1,21 @@
-using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Game.Blueprints;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions.Components;
 using Game.Modules.Death.Components;
-using Game.Modules.ProcessingTier;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.Mana.Components;
+using Game.Modules.ProcessingTier;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
-using Game.Blueprints;
 
 namespace Game.Modules.Actions.Systems;
 
@@ -56,23 +57,24 @@ public sealed class DelayedActionSystem : ISystem
     private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingActions;
     private readonly EntityActions _actions;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
     private readonly ActionCatalog _actionCatalog;
     private readonly IMapQuery _mapQuery;
     private readonly EventBus _eventBus;
-    private readonly IPlayerQuery? _playerQuery;
+    private readonly IPlayerQuery _playerQuery;
     private readonly StatusEffectAuraApplierRegistry _statusEffectAppliers;
     private readonly ComponentManager _componentManager;
     private readonly EntityKeys _entityKeys;
-    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly PackedComponentPool<AbilityScoresComponent>? _abilityScores;
+    private readonly PackedComponentPool<DeadComponent> _deadEntities;
+    private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores;
+    private readonly PackedComponentPool<ManaComponent> _mana;
     private readonly MathUtility _mathUtility;
-    private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
-    private readonly PackedComponentPool<HotkeyExpansionUnlockComponent>? _hotkeyExpansionUnlocks;
-    private readonly EntityBodyParts? _bodyParts;
-    private readonly PackedComponentPool<DodgingComponent>? _dodgingEntities;
-    private readonly ProcessingTierQuery? _processingTiers;
-    private readonly BlueprintRegistry? _creatures;
+    private readonly MultiComponentPool<StatusEffectAuraSourceComponent> _auraSources;
+    private readonly PackedComponentPool<HotkeyExpansionUnlockComponent> _hotkeyExpansionUnlocks;
+    private readonly EntityBodyParts _bodyParts;
+    private readonly PackedComponentPool<DodgingComponent> _dodgingEntities;
+    private readonly ProcessingTierQuery _processingTiers;
+    private readonly BlueprintRegistry _creatures;
     private readonly PackedTimerWheel<PendingDelayedActionComponent> _wheel;
 
     // Cached once instead of passing the method group every Update -- an instance method group
@@ -87,21 +89,22 @@ public sealed class DelayedActionSystem : ISystem
         IMapQuery mapQuery,
         EventBus eventBus,
         MathUtility mathUtility,
-        IPlayerQuery? playerQuery,
+        IPlayerQuery playerQuery,
         StatusEffectAuraApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
         EntityKeys entityKeys,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null,
-        PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
-        PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
-        EntityBodyParts? bodyParts = null,
-        PackedComponentPool<DodgingComponent>? dodgingEntities = null,
-        SimulationScope? simulationScope = null,
-        ProcessingTierQuery? processingTiers = null,
-        ProcessingTierEvents? processingTierEvents = null,
-        BlueprintRegistry? creatures = null)
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        PackedComponentPool<DeadComponent> deadEntities,
+        PackedComponentPool<AbilityScoresComponent> abilityScores,
+        PackedComponentPool<ManaComponent> mana,
+        MultiComponentPool<StatusEffectAuraSourceComponent> auraSources,
+        PackedComponentPool<HotkeyExpansionUnlockComponent> hotkeyExpansionUnlocks,
+        EntityBodyParts bodyParts,
+        PackedComponentPool<DodgingComponent> dodgingEntities,
+        ProcessingTierQuery processingTiers,
+        SimulationScope simulationScope,
+        ProcessingTierEvents processingTierEvents,
+        BlueprintRegistry creatures)
     {
         _pendingActions = pendingActions;
         _actions = actions;
@@ -117,6 +120,7 @@ public sealed class DelayedActionSystem : ISystem
         _entityKeys = entityKeys;
         _deadEntities = deadEntities;
         _abilityScores = abilityScores;
+        _mana = mana;
         _auraSources = auraSources;
         _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
         _bodyParts = bodyParts;
@@ -126,10 +130,7 @@ public sealed class DelayedActionSystem : ISystem
         _resolve = Resolve;
         _wheel = new PackedTimerWheel<PendingDelayedActionComponent>(pendingActions, simulationScope);
 
-        if (processingTierEvents is not null)
-        {
-            processingTierEvents.TierChanged += CancelWindupOnFreeze;
-        }
+        processingTierEvents.TierChanged += CancelWindupOnFreeze;
     }
 
     public void Update(EngineTime time, byte stripeIndex) => _wheel.Tick(time.FrameCount, _resolve);
@@ -139,14 +140,14 @@ public sealed class DelayedActionSystem : ISystem
     {
         // A corpse can't finish a windup. Removing it (rather than just skipping) is what keeps a
         // dead entity from carrying a stale pending action forever -- nothing else clears it.
-        if (_deadEntities?.Has(entityId) == true)
+        if (_deadEntities.Has(entityId))
         {
             return true;
         }
 
         if (_actions.TryGetEffectiveAction(entityId, pending.ActionId, out var action))
         {
-            ActionEffectResolver.Apply(action, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures);
+            ActionEffectResolver.Apply(action, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _mana, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures);
         }
 
         return true;

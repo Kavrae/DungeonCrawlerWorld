@@ -41,15 +41,13 @@ public sealed class InventoryManagementWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
-    SpriteSheetService spriteSheetService,
-    SpriteRenderer spriteRenderer,
     ComponentManager componentManager,
     ItemCatalog itemCatalog,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    EventBus? eventBus = null,
-    Engine.ECS.Systems.SimulationClock? simulationClock = null) : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
+    EventBus eventBus,
+    Engine.ECS.Systems.SimulationClock simulationClock) : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
 {
     private TabbedContent _tabbedContent = null!;
     private CurrencyRowContent _currencyRowContent = null!;
@@ -75,8 +73,8 @@ public sealed class InventoryManagementWindow(
 
         var tagCounts = InventoryTagQueries.GetTagCounts(componentManager, itemCatalog, entityId);
         _currentTags = ToTagSet(tagCounts);
-        _tabbedContent = new TabbedContent(BuildTabDefinitions(tagCounts), elementPoolService, fontService, labelRenderer, WindowPalette.PanelBackgroundColor);
-        _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, elementPoolService, fontService, labelRenderer, spriteSheetService, spriteRenderer, _getSecondaryTargetEntityId, eventBus);
+        _tabbedContent = new TabbedContent(BuildTabDefinitions(tagCounts), ElementPoolService, FontService, WindowPalette.PanelBackgroundColor);
+        _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, ElementPoolService, _getSecondaryTargetEntityId, eventBus);
         SetContent(_tabbedContent);
         SetFooterContent(_currencyRowContent, CurrencyRowContent.Height);
 
@@ -139,7 +137,7 @@ public sealed class InventoryManagementWindow(
 
     private InventoryTabContent CreateTabContent(Tag? filterTag)
     {
-        var gridContent = new InventoryGridContent(world, componentManager, itemCatalog, elementPoolService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag, _tooltipController, _getSecondaryTargetEntityId, mapViewState, _onItemSelected, _onCompareRequested, _onActivateRequested, simulationClock: simulationClock);
-        return new InventoryTabContent(elementPoolService, fontService, labelRenderer, gridContent);
+        var gridContent = new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, contextMenuController, _entityId, filterTag, _tooltipController, _getSecondaryTargetEntityId, mapViewState, _onItemSelected, _onCompareRequested, _onActivateRequested, simulationClock: simulationClock);
+        return new InventoryTabContent(ElementPoolService, gridContent);
     }
 }

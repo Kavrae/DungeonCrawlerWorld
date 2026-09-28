@@ -15,6 +15,7 @@ using Game.Spawning;
 using Game.World;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
+using Game.Modules.AbilityScores.Components;
 
 namespace Tests.Presentation;
 
@@ -110,6 +111,7 @@ public sealed class DodgeDuringActionLockTests
             components.GetPackedPool<ActionLockComponent>(),
             inputBuffer,
             components.GetPackedPool<ManaComponent>(),
+            components.GetPackedPool<AbilityScoresComponent>(),
             simulationClock: clock);
 
         return new Harness

@@ -34,9 +34,6 @@ public sealed class Folder : Element
     public Folder(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
         : base(fontService, elementPoolService, labelRenderer)
     {
-        ArgumentNullException.ThrowIfNull(spriteSheetService);
-        ArgumentNullException.ThrowIfNull(spriteRenderer);
-
         _spriteSheetService = spriteSheetService;
         _spriteRenderer = spriteRenderer;
     }

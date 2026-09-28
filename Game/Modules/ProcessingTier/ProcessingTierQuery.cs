@@ -22,11 +22,10 @@ namespace Game.Modules.ProcessingTier;
 /// </remarks>
 public sealed class ProcessingTierQuery(DirectComponentPool<ProcessingTierComponent> tiers)
 {
-    private readonly DirectComponentPool<ProcessingTierComponent> _tiers = tiers ?? throw new ArgumentNullException(nameof(tiers));
 
     /// <summary>Whether entityId is simulated at all -- Local or Neighborhood today. True for an untiered entity.</summary>
     public bool IsSimulated(int entityId) =>
-        !_tiers.TryGetReadonly(entityId, out var tier) || IsSimulatedTier(tier.Tier);
+        !tiers.TryGetReadonly(entityId, out var tier) || IsSimulatedTier(tier.Tier);
 
     /// <summary>Whether tier is simulated at all, by SystemManager and by every timer wheel.</summary>
     public static bool IsSimulatedTier(ProcessingTierLevel tier) => (int)tier < ProcessingTierDivisors.SimulatedTierCount;

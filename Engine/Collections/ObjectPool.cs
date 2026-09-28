@@ -7,7 +7,6 @@ namespace Engine.Collections;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class ObjectPool<T>(Func<T> factory, Action<T>? reset = null) where T : class
 {
-    private readonly Func<T> _factory = factory ?? throw new ArgumentNullException(nameof(factory));
     private readonly Action<T>? _reset = reset;
     private readonly Stack<T> _items = new();
 
@@ -17,14 +16,12 @@ public sealed class ObjectPool<T>(Func<T> factory, Action<T>? reset = null) wher
     /// <summary>Returns an instance from the pool if available, otherwise creates a new one.</summary>
     public T Rent() => _items.Count > 0
         ? _items.Pop()
-        : _factory();
+        : factory();
 
     /// <summary>Returns an instance to the pool.</summary>
     /// <param name="item">The instance to return.</param>
     public void Return(T item)
     {
-        ArgumentNullException.ThrowIfNull(item);
-
         _reset?.Invoke(item);
         _items.Push(item);
     }

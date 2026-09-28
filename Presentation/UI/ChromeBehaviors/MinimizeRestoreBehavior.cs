@@ -14,8 +14,6 @@ public sealed class MinimizeRestoreBehavior : IChromeBehavior
 {
     public void Attach(Window window)
     {
-        ArgumentNullException.ThrowIfNull(window);
-
         var button = Window.BuildTitleButton(window);
         UpdateButtonLabel(window, button);
 

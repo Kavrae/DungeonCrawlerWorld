@@ -10,18 +10,11 @@ public static class StatusEffectImmunity
 {
     /// <summary>
     /// source/eventBus/playerQuery are only needed to publish StatusEffectImmunityBlockedEvent
-    /// when this call actually blocks something -- both eventBus and playerQuery are optional
-    /// (most low-level callers/tests have no need to observe a block), and the publish itself is
-    /// further gated on the player being involved as either entityId or source, mirroring
+    /// when this call actually blocks something, and only when the player is involved as either entityId or source, mirroring
     /// HealthHeal.PublishHealEvent's identical shape.
     /// </summary>
-    public static bool IsImmune(ComponentManager componentManager, int entityId, StatusEffectType effectType, ActionSource source = default, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
+    public static bool IsImmune(ComponentManager componentManager, int entityId, StatusEffectType effectType, ActionSource source, EventBus eventBus, IPlayerQuery playerQuery)
     {
-        if (!componentManager.IsRegistered<StatusEffectImmunityComponent>())
-        {
-            return false;
-        }
-
         var immunities = componentManager.GetMultiPool<StatusEffectImmunityComponent>();
         var immune = false;
         for (var denseIndex = immunities.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = immunities.GetNextDenseIndex(denseIndex))
@@ -41,13 +34,8 @@ public static class StatusEffectImmunity
         return immune;
     }
 
-    private static void PublishBlockedEvent(EventBus? eventBus, IPlayerQuery? playerQuery, int entityId, StatusEffectType effectType, ActionSource source)
+    private static void PublishBlockedEvent(EventBus eventBus, IPlayerQuery playerQuery, int entityId, StatusEffectType effectType, ActionSource source)
     {
-        if (eventBus is null || playerQuery is null)
-        {
-            return;
-        }
-
         var playerInvolved = entityId == playerQuery.PlayerEntityId || source.IsEntity(playerQuery.PlayerEntityKey);
         if (!playerInvolved)
         {

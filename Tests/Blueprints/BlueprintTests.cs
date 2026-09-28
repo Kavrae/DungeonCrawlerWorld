@@ -61,74 +61,9 @@ public sealed class BlueprintTests
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
-        var context = new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) };
+        var context = new GameModuleContext(world, mathUtility, new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
 
-        var movementModule = new MovementModule();
-        movementModule.Configure(context);
-
-        var actionsModule = new ActionsModule();
-        actionsModule.Configure(context);
-
-        var coreActionsModule = new CoreActionsModule();
-        coreActionsModule.Configure(context);
-
-        var processingTierModule = new ProcessingTierModule();
-        processingTierModule.Configure(context);
-
-        var coreModule = new CoreModule();
-        coreModule.Configure(context);
-
-        var healthModule = new HealthModule();
-        healthModule.Configure(context);
-
-        var manaModule = new ManaModule();
-        manaModule.Configure(context);
-
-        var statModifiersModule = new StatModifiersModule();
-        statModifiersModule.Configure(context);
-
-        var abilityScoresModule = new AbilityScoresModule();
-        abilityScoresModule.Configure(context);
-
-        var coreItemsModule = new CoreItemsModule();
-        coreItemsModule.Configure(context);
-
-        var statusEffectsModule = new StatusEffectsModule();
-
-        var containersModule = new ContainersModule();
-        containersModule.Configure(context);
-
-        var shopModule = new ShopModule();
-        shopModule.Configure(context);
-
-        // Registers SpawnRecordComponent, which every build through EntityFactory writes.
-        var entityPartsModule = new BlueprintsModule();
-        entityPartsModule.Configure(context);
-
-        IReadOnlyList<IModule> modules =
-        [
-            coreModule,
-            healthModule,
-            manaModule,
-            statModifiersModule,
-            abilityScoresModule,
-            movementModule,
-            new RaceModule(),
-            new ClassModule(),
-            actionsModule,
-            coreActionsModule,
-            new CrawlerModule(),
-            processingTierModule,
-            new InventoryModule(),
-            coreItemsModule,
-            new CurrencyModule(),
-            statusEffectsModule,
-            containersModule,
-            shopModule,
-            entityPartsModule,
-        ];
-
-        return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50, entityKeys: context.EntityKeys);
+        return BuiltInTestModules.Build(context);
     }
 
     [TestMethod]
@@ -166,7 +101,7 @@ public sealed class BlueprintTests
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
         var totalItemCount = stacks.Sum(stack => (int)stack.Quantity);
-        Assert.IsTrue(stacks.Count >= 1, "Expected at least one starting item stack.");
+        Assert.IsNotEmpty(stacks, "Expected at least one starting item stack.");
         Assert.IsTrue(totalItemCount >= 1 && totalItemCount <= 50, $"Expected 1-10 items of quantity 1-5 each (max 50 total), was {totalItemCount}.");
 
         var currency = ecsContext.ComponentManager.GetPackedPool<CurrencyComponent>().GetReadonly(entityId);
@@ -204,7 +139,7 @@ public sealed class BlueprintTests
 
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-        Assert.AreEqual(0, stacks.Count, "Shop by itself grants no stock -- that's each concrete shop type's own composed-in stock part.");
+        Assert.IsEmpty(stacks, "Shop by itself grants no stock -- that's each concrete shop type's own composed-in stock part.");
 
         var immunities = ecsContext.ComponentManager.GetMultiPool<StatusEffectImmunityComponent>();
         var immuneTypes = new List<StatusEffectType>();
@@ -244,7 +179,7 @@ public sealed class BlueprintTests
         };
         foreach (var stack in stacks)
         {
-            Assert.IsTrue(potionItemIds.Contains(stack.ItemDefinitionId), "Every PotionShop stack must be one of the catalog's Potion-tagged items.");
+            Assert.Contains(stack.ItemDefinitionId, potionItemIds, "Every PotionShop stack must be one of the catalog's Potion-tagged items.");
         }
     }
 
@@ -370,7 +305,7 @@ public sealed class BlueprintTests
             // At or above the stored maximum: the player's MaximumHealth modifiers raise the cap above
             // it, and the entity is built full against that raised cap. The exact value is
             // PlayerRecipe_Build_StartsEveryBodyPartAtItsEffectiveMaximum's business.
-            Assert.IsTrue(part.CurrentHealth >= expected.MaximumHealth);
+            Assert.IsGreaterThanOrEqualTo(expected.MaximumHealth, part.CurrentHealth);
             actualMaximumSum += part.MaximumHealth;
             actualCount++;
         }
@@ -747,11 +682,11 @@ public sealed class BlueprintTests
             var effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
 
             Assert.AreEqual(effectiveMaximum, part.CurrentHealth, 0.001f, $"{part.Name} did not start at its effective maximum.");
-            Assert.IsTrue(effectiveMaximum > part.MaximumHealth, $"{part.Name}'s effective maximum should exceed its stored one -- otherwise this test proves nothing.");
+            Assert.IsGreaterThan(part.MaximumHealth, effectiveMaximum, $"{part.Name}'s effective maximum should exceed its stored one -- otherwise this test proves nothing.");
             partCount++;
         }
 
-        Assert.IsTrue(partCount > 0, "Expected the player to have body parts.");
+        Assert.IsGreaterThan(0, partCount, "Expected the player to have body parts.");
     }
 
     /// <summary>The Complex branch of Tank's own bonus, without the player's extra modifier on top.</summary>

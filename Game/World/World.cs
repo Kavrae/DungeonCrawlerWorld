@@ -12,7 +12,7 @@ namespace Game.World;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class World(Map map) : IMapQuery, IPlayerQuery
 {
-    public Map Map { get; set; } = map ?? throw new ArgumentNullException(nameof(map));
+    public Map Map { get; set; } = map;
 
     /// <summary>The player character's entity id</summary>
     /// <remarks>Defaults to -1 as the standard sentinel</remarks>
@@ -37,17 +37,20 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
     private static readonly Vector2Byte TransformSize1 = new(1, 1);
 
     /// <summary>Tracks the components that temporarily change a blocking entity to non-blocking</summary>
-    public MultiComponentPool<NonBlockingComponent>? NonBlockingComponents { get; set; }
+    /// <remarks>Wired post-construction by GameBootstrapper.Build, which produces the pool after World exists; must be set before anything is placed.</remarks>
+    public MultiComponentPool<NonBlockingComponent> NonBlockingComponents { get; set; } = null!;
 
     /// <summary>Tracks the components that temporarily change a non-blocking entity to blocking</summary>
-    public MultiComponentPool<ForceBlockingComponent>? ForceBlockingComponents { get; set; }
+    /// <remarks>Wired post-construction alongside NonBlockingComponents.</remarks>
+    public MultiComponentPool<ForceBlockingComponent> ForceBlockingComponents { get; set; } = null!;
 
     /// <summary>The session's entity lifecycle, for anything placement needs to create or destroy.</summary>
-    /// <remarks>World is constructed before Bootstrapper.Build produces an EntityManager (see NonBlockingComponents/ForceBlockingComponents above for why), so this can't be a constructor dependency either -- wired up the same way, post-construction.</remarks>
+    /// <remarks>World is constructed before Bootstrapper.Build produces an EntityManager (see NonBlockingComponents above), so this can't be a constructor dependency either -- wired up the same way, post-construction.</remarks>
     public EntityManager? EntityManager { get; set; }
 
-    /// <summary>Used by SetTerrain to publish TerrainChangedEvent. Optional and post-construction for exactly the same reason as EntityManager above -- and null-tolerant for the same reason too: a World built directly (tests, TestMapBuilder before Bootstrapper.Build has run) simply publishes nothing, which is correct, since nothing has subscribed at that point either.</summary>
-    public EventBus? EventBus { get; set; }
+    /// <summary>Used by SetTerrain and SetStructure to publish their change events.</summary>
+    /// <remarks>Wired post-construction for the same reason as NonBlockingComponents; must be set before terrain or structures change.</remarks>
+    public EventBus EventBus { get; set; } = null!;
 
     /// <summary>The session's terrain and structure definitions, which decide whether a cell blocks movement.</summary>
     /// <remarks>Post-construction for the same reason as EventBus: modules register definitions during GameBootstrapper's configure step, after World exists. Until it's wired, no cell blocks.</remarks>
@@ -157,38 +160,27 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
     /// otherwise the default is Blocking. Both are Multi pools -- Has() means "at least one
     /// source is still active" -- so overlapping sources (two independent effects granting
     /// the same exemption) are handled correctly: one expiring doesn't affect the other.
-    /// Absence of a pool (not wired up yet) is treated as "no sources," i.e. Blocking,
-    /// matching every pre-Occupancy test and blueprint unchanged.
     /// </summary>
     public bool IsBlocking(int entityId)
     {
-        if (ForceBlockingComponents is { } forceBlocking && forceBlocking.Has(entityId))
+        if (ForceBlockingComponents.Has(entityId))
         {
             return true;
         }
 
-        if (NonBlockingComponents is { } nonBlocking && nonBlocking.Has(entityId))
-        {
-            return false;
-        }
-
-        return true;
+        return !NonBlockingComponents.Has(entityId);
     }
 
     /// <inheritdoc cref="IMapQuery"/>
     /// <remarks>ForceBlockingComponent wins here too: a force-solid entity is not Phasing, whatever NonBlockingComponent kinds it also carries.</remarks>
     public bool IsPhasing(int entityId)
     {
-        if (ForceBlockingComponents is { } forceBlocking && forceBlocking.Has(entityId))
+        if (ForceBlockingComponents.Has(entityId))
         {
             return false;
         }
 
-        if (NonBlockingComponents is not { } nonBlocking)
-        {
-            return false;
-        }
-
+        var nonBlocking = NonBlockingComponents;
         for (var denseIndex = nonBlocking.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = nonBlocking.GetNextDenseIndex(denseIndex))
         {
             if ((nonBlocking.GetReadonlyByDenseIndex(denseIndex).Kind & NonBlockingKind.Phasing) != 0)
@@ -386,7 +378,7 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
         }
 
         Map.SetTerrain(x, y, terrainLayer, cell);
-        EventBus?.Publish(new TerrainChangedEvent(x, y, terrainLayer, previous.TypeId, cell.TypeId));
+        EventBus.Publish(new TerrainChangedEvent(x, y, terrainLayer, previous.TypeId, cell.TypeId));
     }
 
     /// <summary>Writes terrain during population, before anything derived from terrain exists, without publishing.</summary>
@@ -420,7 +412,7 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
         }
 
         Map.SetStructure(position, cell);
-        EventBus?.Publish(new StructureChangedEvent(position, previous.TypeId, cell.TypeId));
+        EventBus.Publish(new StructureChangedEvent(position, previous.TypeId, cell.TypeId));
     }
 
     /// <summary>Writes a structure during population without publishing -- see PopulateTerrain for why.</summary>

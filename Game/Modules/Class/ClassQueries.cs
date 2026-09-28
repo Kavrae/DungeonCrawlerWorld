@@ -16,10 +16,8 @@ namespace Game.Modules.Class;
 public static class ClassQueries
 {
     /// <summary>True when the entity holds classId, in a slot or a membership.</summary>
-    public static bool Has(PackedComponentPool<ClassSlotsComponent> slots, MultiComponentPool<ClassMembershipComponent>? memberships, int entityId, ushort classId)
+    public static bool Has(PackedComponentPool<ClassSlotsComponent> slots, MultiComponentPool<ClassMembershipComponent> memberships, int entityId, ushort classId)
     {
-        ArgumentNullException.ThrowIfNull(slots);
-
         if (classId == ClassSlotsComponent.Empty)
         {
             return false;
@@ -28,11 +26,6 @@ public static class ClassQueries
         if (slots.TryGetReadonly(entityId, out var entitySlots) && entitySlots.Has(classId))
         {
             return true;
-        }
-
-        if (memberships is null)
-        {
-            return false;
         }
 
         for (var denseIndex = memberships.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = memberships.GetNextDenseIndex(denseIndex))
@@ -47,10 +40,8 @@ public static class ClassQueries
     }
 
     /// <summary>The class an entity counts as when only one can be meant -- its first slot, or its earliest membership if it has no slots.</summary>
-    public static bool TryGetPrimary(PackedComponentPool<ClassSlotsComponent> slots, MultiComponentPool<ClassMembershipComponent>? memberships, int entityId, out ushort classId)
+    public static bool TryGetPrimary(PackedComponentPool<ClassSlotsComponent> slots, MultiComponentPool<ClassMembershipComponent> memberships, int entityId, out ushort classId)
     {
-        ArgumentNullException.ThrowIfNull(slots);
-
         if (slots.TryGetReadonly(entityId, out var entitySlots) && entitySlots.Primary != ClassSlotsComponent.Empty)
         {
             classId = entitySlots.Primary;
@@ -58,16 +49,13 @@ public static class ClassQueries
         }
 
         classId = ClassSlotsComponent.Empty;
-        return memberships is not null && TryGetNextInAcquisitionOrder(memberships, entityId, after: -1, out classId, out _);
+        return TryGetNextInAcquisitionOrder(memberships, entityId, after: -1, out classId, out _);
     }
 
     /// <summary>Copies every class the entity holds into destination -- slots in slot order, then memberships in acquisition order.</summary>
     /// <returns>How many were copied.</returns>
-    public static int CopyTo(PackedComponentPool<ClassSlotsComponent> slots, MultiComponentPool<ClassMembershipComponent>? memberships, int entityId, List<ushort> destination)
+    public static int CopyTo(PackedComponentPool<ClassSlotsComponent> slots, MultiComponentPool<ClassMembershipComponent> memberships, int entityId, List<ushort> destination)
     {
-        ArgumentNullException.ThrowIfNull(slots);
-        ArgumentNullException.ThrowIfNull(destination);
-
         var before = destination.Count;
 
         if (slots.TryGetReadonly(entityId, out var entitySlots))
@@ -76,13 +64,10 @@ public static class ClassQueries
             AddIfHeld(destination, entitySlots.Class2);
         }
 
-        if (memberships is not null)
+        var after = -1;
+        while (TryGetNextInAcquisitionOrder(memberships, entityId, after, out var classId, out after))
         {
-            var after = -1;
-            while (TryGetNextInAcquisitionOrder(memberships, entityId, after, out var classId, out after))
-            {
-                AddIfHeld(destination, classId);
-            }
+            AddIfHeld(destination, classId);
         }
 
         return destination.Count - before;

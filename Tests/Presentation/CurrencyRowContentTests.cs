@@ -5,9 +5,7 @@ using Game.Modules.Currency;
 using Game.Modules.Currency.Components;
 using Game.Modules.Shops;
 using Game.Modules.Shops.Components;
-using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
@@ -28,7 +26,7 @@ public sealed class CurrencyRowContentTests
 
     private static (CurrencyRowContent Content, Window HostWindow) Build(float hostWidth = 100f)
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
@@ -40,7 +38,7 @@ public sealed class CurrencyRowContentTests
         var contextMenuController = new ContextMenuController(windowService);
         contextMenuController.Initialize(new UiLayerStack());
 
-        var content = new CurrencyRowContent(EntityId, componentManager, world, contextMenuController, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, static () => null);
+        var content = new CurrencyRowContent(EntityId, componentManager, world, contextMenuController, windowService, static () => null, new EventBus());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -105,9 +103,7 @@ public sealed class CurrencyRowContentTests
     /// </summary>
     private static (CurrencyElement GoldElement, ComponentManager ComponentManager, ContextMenuController ContextMenuController) BuildForGiveTake(int rowEntityId, int secondaryTargetEntityId, EventBus? eventBus = null)
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
@@ -118,7 +114,7 @@ public sealed class CurrencyRowContentTests
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = PlayerEntityId };
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
 
-        var content = new CurrencyRowContent(rowEntityId, componentManager, world, contextMenuController, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, () => secondaryTargetEntityId, eventBus);
+        var content = new CurrencyRowContent(rowEntityId, componentManager, world, contextMenuController, windowService, () => secondaryTargetEntityId, eventBus ?? new EventBus());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

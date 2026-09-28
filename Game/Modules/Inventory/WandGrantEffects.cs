@@ -18,9 +18,9 @@ public static class WandGrantEffects
 {
     private const ushort FallbackIntelligenceTotal = 1;
 
-    public static void Grant(ComponentManager componentManager, PackedComponentPool<AbilityScoresComponent>? abilityScores, int entityId, ItemDefinition baseDefinition, ushort quantity)
+    public static void Grant(ComponentManager componentManager, PackedComponentPool<AbilityScoresComponent> abilityScores, int entityId, ItemDefinition baseDefinition, ushort quantity)
     {
-        var intelligenceTotal = abilityScores is not null && AbilityScoreQueries.TryGetComponent(abilityScores, entityId, AbilityScoreType.Intelligence, out var intelligence)
+        var intelligenceTotal = AbilityScoreQueries.TryGetComponent(abilityScores, entityId, AbilityScoreType.Intelligence, out var intelligence)
             ? intelligence.Total
             : FallbackIntelligenceTotal;
 

@@ -1,3 +1,4 @@
+using Game.Blueprints;
 using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules.Actions;
@@ -29,35 +30,20 @@ public sealed class MapViewQueryTests
     private sealed class Fixture
     {
         public Game.World.World World { get; } = new(new Map(new Vector3Int(10, 10, 3)));
-        public ComponentManager Components { get; } = new(32, 16);
+        public ComponentManager Components { get; } = BuiltInTestComponents.RegisterAll(new ComponentManager(32, 16));
         public ActionCatalog Actions { get; } = new();
         public TerrainRegistry Terrain { get; } = new();
         public MapViewQuery Query { get; }
 
         public Fixture()
         {
-            Components.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterPackedPool<GlyphComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterPackedPool<SpriteComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterPackedPool<BackgroundComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterPackedPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterMultiPool<NonBlockingComponent>();
-            Components.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterMultiPool<InventoryItemStackComponent>();
-            Components.RegisterPackedPool<LootedComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterPackedPool<ContainerComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
-            Components.RegisterPackedPool<DodgingComponent>(static (ref existing, incoming) => existing = incoming);
-
-            Query = new MapViewQuery(World, Components, Actions, Terrain);
+            TestWorlds.WireOccupancy(World, Components);
+            Query = new MapViewQuery(World, Components, Actions, Terrain, creatures: new BlueprintRegistry());
         }
 
         public void Place(int entityId, Vector3Int position)
         {
-            Components.Merge(entityId, new TransformComponent(position, new Vector2Byte(1, 1)));
+            TestTransforms.Set(Components, entityId, new TransformComponent(position, new Vector2Byte(1, 1)));
             World.PlaceEntityOnMap(entityId, position, ref Components.GetDirectPool<TransformComponent>().Get(entityId));
         }
 
@@ -211,7 +197,7 @@ public sealed class MapViewQueryTests
     public void TryGetOccupant_CombinesNonBlockingKinds()
     {
         var fixture = new Fixture();
-        fixture.Components.Merge(5, new TransformComponent(new Vector3Int(1, 2, Ground), new Vector2Byte(2, 2)));
+        TestTransforms.Set(fixture.Components, 5, new TransformComponent(new Vector3Int(1, 2, Ground), new Vector2Byte(2, 2)));
         fixture.Components.GetMultiPool<NonBlockingComponent>().Add(5, new NonBlockingComponent(NonBlockingKind.Tiny));
         fixture.Components.GetMultiPool<NonBlockingComponent>().Add(5, new NonBlockingComponent(NonBlockingKind.Phasing));
 

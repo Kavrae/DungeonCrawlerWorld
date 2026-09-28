@@ -11,9 +11,9 @@ namespace Game.Modules.Inventory;
 /// </summary>
 public sealed class CoreItemsModule : IGameModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000011");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000001a");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [];
+    public Guid Id => ModuleId;
 
     private static readonly IReadOnlyList<Func<ItemDefinition>> Definitions = [
         HealthPotion.Build,

@@ -56,12 +56,7 @@ public sealed class DelayedActionSystemTests
     /// </summary>
     private static (DelayedActionSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, ActionCatalog ActionCatalog, ProcessingTierEvents TierEvents) Build()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ActionInstanceComponent>();
-        componentManager.RegisterMultiPool<ActionCooldownComponent>();
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
         var mapQuery = new FakeMapQuery();
 
@@ -72,7 +67,7 @@ public sealed class DelayedActionSystemTests
             Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 30, CooldownFrames: null))));
 
         var tierEvents = new ProcessingTierEvents();
-        var system = new DelayedActionSystem(
+        var system = TestSystems.DelayedActionSystem(
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             EntityActions.For(componentManager, actionCatalog, new BlueprintRegistry()),
             componentManager.GetPackedPool<SimpleHealthComponent>(),

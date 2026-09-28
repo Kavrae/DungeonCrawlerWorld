@@ -96,8 +96,6 @@ public sealed class NeighborhoodMembershipIndex
     /// <remarks>A copy rather than a span: walking a cell retiers its entities, and a retier can move an entity out of the very list being walked.</remarks>
     public void CopyCell(int cellX, int cellY, int z, List<int> destination)
     {
-        ArgumentNullException.ThrowIfNull(destination);
-
         if (_listSlotByKey.TryGetValue(KeyFor(cellX, cellY, z), out var listSlot))
         {
             destination.AddRange(_lists[listSlot]);

@@ -41,11 +41,6 @@ public sealed record AuraSourceGrant(
 {
     public void Apply(ActionEffectContext context)
     {
-        if (context.AuraSources is null)
-        {
-            return;
-        }
-
         if (DurationFrames is not { } durationFrames)
         {
             AuraSourceEffects.Toggle(context.AuraSources, context.EventBus, context.TargetEntityId, StatusEffectType, AuraAndGlowStrength, GlowColor);

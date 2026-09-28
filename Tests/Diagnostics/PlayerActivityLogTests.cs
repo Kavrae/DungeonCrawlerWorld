@@ -1,3 +1,4 @@
+using Game.Blueprints;
 ﻿using Engine.ECS.Components;
 using Engine.ECS.Entities;
 using Engine.Events;
@@ -30,8 +31,7 @@ public sealed class PlayerActivityLogTests
 
     private static ComponentManager CreateComponentManager()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
         return componentManager;
     }
 
@@ -43,7 +43,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath, creatures: new BlueprintRegistry());
             log.BeginFrame(5, new DateTime(2026, 1, 1));
 
             eventBus.Publish(new EntityMovedEvent(0, new Vector3Int(1, 1, 0), new Vector3Int(2, 1, 0), new Vector2Byte(1, 1)));
@@ -67,7 +67,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath, creatures: new BlueprintRegistry());
             log.BeginFrame(1, DateTime.Now);
 
             eventBus.Publish(new EntityMovedEvent(1, new Vector3Int(1, 1, 0), new Vector3Int(2, 1, 0), new Vector2Byte(1, 1)));
@@ -88,7 +88,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath, creatures: new BlueprintRegistry());
             log.BeginFrame(9, DateTime.Now);
 
             eventBus.Publish(new EntityDamagedEvent(0, 7, ActionSource.Admin, 93, 100, "Status Effect (Burning)"));
@@ -114,7 +114,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath, creatures: new BlueprintRegistry());
             log.BeginFrame(1, DateTime.Now);
 
             eventBus.Publish(new EntityDamagedEvent(1, 7, ActionSource.Admin, 93, 100, "Status Effect (Burning)"));
@@ -136,10 +136,10 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath, creatures: new BlueprintRegistry());
             log.BeginFrame(3, DateTime.Now);
 
-            eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0), 88, 100, "Default Attack"));
+            eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0, creatures: new BlueprintRegistry()), 88, 100, "Default Attack"));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -163,10 +163,10 @@ public sealed class PlayerActivityLogTests
         componentManager.Merge(5, new DisplayTextComponent("Goblin1", "A goblin."));
         try
         {
-            var log = new PlayerActivityLog(world, componentManager, eventBus, logPath);
+            var log = new PlayerActivityLog(world, componentManager, eventBus, logPath, creatures: new BlueprintRegistry());
             log.BeginFrame(4, DateTime.Now);
 
-            eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0), 88, 100, "Default Attack"));
+            eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0, creatures: new BlueprintRegistry()), 88, 100, "Default Attack"));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -188,10 +188,10 @@ public sealed class PlayerActivityLogTests
         componentManager.Merge(0, new DisplayTextComponent("PlayerOne", "The player."));
         try
         {
-            var log = new PlayerActivityLog(world, componentManager, eventBus, logPath);
+            var log = new PlayerActivityLog(world, componentManager, eventBus, logPath, creatures: new BlueprintRegistry());
             log.BeginFrame(4, DateTime.Now);
 
-            eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(componentManager, IssueKeys(new EntityKeys()), 0), 88, 100, "Default Attack"));
+            eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(componentManager, IssueKeys(new EntityKeys()), 0, creatures: new BlueprintRegistry()), 88, 100, "Default Attack"));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -211,7 +211,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath, creatures: new BlueprintRegistry());
             log.BeginFrame(9, DateTime.Now);
 
             eventBus.Publish(new EntityHealedEvent(0, 12f, null, 93f, 100f, "Regeneration"));
@@ -237,7 +237,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath, creatures: new BlueprintRegistry());
             log.BeginFrame(1, DateTime.Now);
 
             eventBus.Publish(new EntityHealedEvent(1, 12f, null, 93f, 100f, "Regeneration"));
@@ -259,7 +259,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath, creatures: new BlueprintRegistry());
             log.BeginFrame(3, DateTime.Now);
 
             eventBus.Publish(new EntityHealedEvent(5, 20f, 0, 88f, 100f, "Heal"));
@@ -284,10 +284,10 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath, creatures: new BlueprintRegistry());
             log.BeginFrame(9, DateTime.Now);
 
-            eventBus.Publish(new StatusEffectImmunityBlockedEvent(0, StatusEffectType.Burning, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 7)));
+            eventBus.Publish(new StatusEffectImmunityBlockedEvent(0, StatusEffectType.Burning, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 7, creatures: new BlueprintRegistry())));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);
@@ -309,7 +309,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath, creatures: new BlueprintRegistry());
             log.BeginFrame(1, DateTime.Now);
 
             eventBus.Publish(new StatusEffectImmunityBlockedEvent(1, StatusEffectType.Poison, ActionSource.Admin));
@@ -331,10 +331,10 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath);
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, logPath, creatures: new BlueprintRegistry());
             log.BeginFrame(3, DateTime.Now);
 
-            eventBus.Publish(new StatusEffectImmunityBlockedEvent(5, StatusEffectType.Poison, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0)));
+            eventBus.Publish(new StatusEffectImmunityBlockedEvent(5, StatusEffectType.Poison, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0, creatures: new BlueprintRegistry())));
             log.Dispose();
 
             var contents = File.ReadAllText(logPath);

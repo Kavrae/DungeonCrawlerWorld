@@ -41,7 +41,7 @@ public static class ShopActions
     /// given the capacity check above), the currency is rolled back rather than leaving Gold moved
     /// with no item to show for it.
     /// </summary>
-    public static bool TryBuyFromShop(ComponentManager componentManager, ItemCatalog itemCatalog, int playerEntityId, int shopEntityId, uint stackInstanceId, IPlayerQuery? playerQuery)
+    public static bool TryBuyFromShop(ComponentManager componentManager, ItemCatalog itemCatalog, int playerEntityId, int shopEntityId, uint stackInstanceId, IPlayerQuery playerQuery)
     {
         if (!componentManager.GetPackedPool<ShopComponent>().TryGetReadonly(shopEntityId, out var shop))
         {
@@ -90,7 +90,7 @@ public static class ShopActions
     /// no room for a new stack, or the shop can't afford it. Same commit-then-verify-then-rollback-
     /// on-failure shape as TryBuyFromShop, roles reversed.
     /// </summary>
-    public static bool TrySellToShop(ComponentManager componentManager, ItemCatalog itemCatalog, int playerEntityId, int shopEntityId, uint stackInstanceId, IPlayerQuery? playerQuery)
+    public static bool TrySellToShop(ComponentManager componentManager, ItemCatalog itemCatalog, int playerEntityId, int shopEntityId, uint stackInstanceId, IPlayerQuery playerQuery)
     {
         if (!componentManager.GetPackedPool<ShopComponent>().TryGetReadonly(shopEntityId, out var shop))
         {
@@ -140,9 +140,7 @@ public static class ShopActions
     /// the shop, and Complete swapping a trade's player-side Gold to the real shop -- should route
     /// through, so the "Angel Investor" achievement's own trigger never depends on which specific
     /// UI gesture the player used to give it (confirmed live gap: only the context menu published
-    /// this before). shopPool/eventBus null are both tolerated (transfers normally either way, just
-    /// never publishes) for callers that don't wire one -- shopPool is passed in rather than
-    /// resolved here since every caller already has it cached as its own field.
+    /// this before).
     ///
     /// eventPlayerEntityId defaults to sourceEntityId -- true for the context-menu and direct-drag
     /// callers, where the real player's own Gold is what's moving. TradeWindow.CompleteTrade is the
@@ -151,7 +149,7 @@ public static class ShopActions
     /// _playerSideEntityId), so GoldGivenToShopEvent.PlayerEntityId would otherwise report that
     /// placeholder instead of the real player.
     /// </summary>
-    public static bool TryGiveCurrencyToShop(ComponentManager componentManager, PackedComponentPool<ShopComponent>? shopPool, EventBus? eventBus, int sourceEntityId, int destinationEntityId, CurrencyType currencyType, int? eventPlayerEntityId = null)
+    public static bool TryGiveCurrencyToShop(ComponentManager componentManager, EventBus eventBus, int sourceEntityId, int destinationEntityId, CurrencyType currencyType, int? eventPlayerEntityId = null)
     {
         componentManager.GetPackedPool<CurrencyComponent>().TryGetReadonly(sourceEntityId, out var sourceCurrencyBefore);
         var amountBefore = currencyType == CurrencyType.Gold ? sourceCurrencyBefore.Gold : sourceCurrencyBefore.Credits;
@@ -161,7 +159,7 @@ public static class ShopActions
             return false;
         }
 
-        if (currencyType == CurrencyType.Gold && amountBefore > 0 && eventBus is not null && shopPool?.Has(destinationEntityId) == true)
+        if (currencyType == CurrencyType.Gold && amountBefore > 0 && componentManager.GetPackedPool<ShopComponent>().Has(destinationEntityId))
         {
             eventBus.Publish(new GoldGivenToShopEvent(eventPlayerEntityId ?? sourceEntityId, destinationEntityId, amountBefore));
         }

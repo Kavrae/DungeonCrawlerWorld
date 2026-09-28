@@ -67,9 +67,6 @@ public sealed class MapTintGrid
     /// <param name="map">Scanned once here for terrain that glows (lava), since terrain cells aren't entities in the aura-source pool.</param>
     public MapTintGrid(ComponentManager componentManager, IMapQuery map, TerrainRegistry terrain, EventBus eventBus)
     {
-        ArgumentNullException.ThrowIfNull(map);
-        ArgumentNullException.ThrowIfNull(terrain);
-
         _map = map;
         _terrain = terrain;
         _transforms = componentManager.GetDirectPool<TransformComponent>();

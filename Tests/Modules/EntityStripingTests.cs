@@ -61,7 +61,7 @@ public sealed class EntityStripingTests
             processingTiers.Add(entityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         }
 
-        var system = new SimpleHealthRegenSystem(pool, processingTiers, new ProcessingTierEvents(), abilityScores: abilityScores);
+        var system = TestSystems.SimpleHealthRegenSystem(pool, processingTiers, new ProcessingTierEvents(), abilityScores: abilityScores);
         var touchCountByEntityId = new int[entityCount];
         var previousHealth = new float[entityCount];
 
@@ -121,7 +121,7 @@ public sealed class EntityStripingTests
         abilityScores.Add(69, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 300, total: 300));
         processingTiers.Add(69, new ProcessingTierComponent(ProcessingTierLevel.Local));
 
-        var system = new SimpleHealthRegenSystem(pool, processingTiers, new ProcessingTierEvents(), abilityScores: abilityScores);
+        var system = TestSystems.SimpleHealthRegenSystem(pool, processingTiers, new ProcessingTierEvents(), abilityScores: abilityScores);
         var touchCountByEntityId = new Dictionary<int, int>();
         var previousHealth = new Dictionary<int, float> { [69] = 0 };
         for (var entityId = 0; entityId < 10; entityId++)
@@ -180,37 +180,9 @@ public sealed class EntityStripingTests
         var world = new Game.World.World(new Map(new Vector3Int(20, 20, 1)));
         var mathUtility = new MathUtility();
 
-        var context = new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) };
+        var context = new GameModuleContext(world, mathUtility, new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
 
-        var movementModule = new MovementModule();
-        movementModule.Configure(context);
-
-        var processingTierModule = new ProcessingTierModule();
-        processingTierModule.Configure(context);
-
-        var coreModule = new CoreModule();
-        coreModule.Configure(context);
-
-        var healthModule = new HealthModule();
-        healthModule.Configure(context);
-
-        var statModifiersModule = new StatModifiersModule();
-        statModifiersModule.Configure(context);
-
-        var abilityScoresModule = new AbilityScoresModule();
-        abilityScoresModule.Configure(context);
-
-        IReadOnlyList<IModule> modules =
-        [
-            coreModule,
-            healthModule,
-            statModifiersModule,
-            abilityScoresModule,
-            movementModule,
-            processingTierModule,
-        ];
-
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 500, initialComponentCapacity: 500, entityKeys: context.EntityKeys);
+        var ecsContext = BuiltInTestModules.Build(context, 500, 500);
         var healthPool = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>();
 
         const int entityCount = 200;

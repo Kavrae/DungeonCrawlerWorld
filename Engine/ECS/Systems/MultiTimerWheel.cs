@@ -8,14 +8,14 @@ namespace Engine.ECS.Systems;
 /// Same contract as <see cref="PackedTimerWheel{T}"/> -- see its remarks. The differences are all
 /// about instance identity: an entry names its timer by (entityId, TimerKey) because dense indices
 /// move on removal; validation walks the entity's chain to find that instance; and removal takes
-/// out that instance only. The pool's ComponentChanged fires per instance, so a second timer added
+/// out that instance only. The componentPool's ComponentChanged fires per instance, so a second timer added
 /// to an entity that already has one is scheduled like any other -- the case EntityAdded can't see.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class MultiTimerWheel<T> where T : struct, IKeyedScheduledTimer
 {
     private readonly MultiComponentPool<T> _pool;
-    private readonly SimulationScope? _scope;
+    private readonly SimulationScope _scope;
     private readonly TimerWheel _wheel = new();
     private readonly List<TimerEntry> _due = [];
     private readonly List<TimerEntry> _pendingRemovals = [];
@@ -26,26 +26,24 @@ public sealed class MultiTimerWheel<T> where T : struct, IKeyedScheduledTimer
     /// <summary>True for the firing pass only -- see PackedTimerWheel's remarks.</summary>
     private bool _draining;
 
-    /// <inheritdoc cref="PackedTimerWheel{T}(PackedComponentPool{T}, SimulationScope?)"/>
-    public MultiTimerWheel(MultiComponentPool<T> pool, SimulationScope? scope = null)
+    /// <inheritdoc cref="PackedTimerWheel{T}(PackedComponentPool{T}, SimulationScope)"/>
+    public MultiTimerWheel(MultiComponentPool<T> componentPool, SimulationScope simulationScope)
     {
-        ArgumentNullException.ThrowIfNull(pool);
-        pool.ClaimForTimerWheel();
+        ArgumentNullException.ThrowIfNull(componentPool);
+        ArgumentNullException.ThrowIfNull(simulationScope);
 
-        _pool = pool;
-        _scope = scope;
+        componentPool.ClaimForTimerWheel();
 
-        for (var denseIndex = 0; denseIndex < pool.Count; denseIndex++)
+        _pool = componentPool;
+        _scope = simulationScope;
+
+        for (var denseIndex = 0; denseIndex < componentPool.Count; denseIndex++)
         {
-            Observe(pool.GetEntityIdByDenseIndex(denseIndex), denseIndex);
+            Observe(componentPool.GetEntityIdByDenseIndex(denseIndex), denseIndex);
         }
 
-        pool.ComponentChanged += Observe;
-
-        if (scope is not null)
-        {
-            scope.EntityResumed += OnEntityResumed;
-        }
+        componentPool.ComponentChanged += Observe;
+        simulationScope.EntityResumed += OnEntityResumed;
     }
 
     /// <inheritdoc cref="PackedTimerWheel{T}.PendingCount"/>
@@ -75,7 +73,7 @@ public sealed class MultiTimerWheel<T> where T : struct, IKeyedScheduledTimer
                 ref var timer = ref _pool.GetByDenseIndex(denseIndex);
                 ScheduledTimerMark.Release(ref timer);
 
-                if (_scope is not null && !_scope.IsSimulated(entry.EntityId))
+                if (!_scope.IsSimulated(entry.EntityId))
                 {
                     continue;
                 }
@@ -132,7 +130,7 @@ public sealed class MultiTimerWheel<T> where T : struct, IKeyedScheduledTimer
         }
     }
 
-    /// <summary>The dense index of entityId's instance carrying <paramref name="key"/>, or -1. Valid only until the next removal from the pool.</summary>
+    /// <summary>The dense index of entityId's instance carrying <paramref name="key"/>, or -1. Valid only until the next removal from the componentPool.</summary>
     private int FindInstance(int entityId, int key)
     {
         for (var denseIndex = _pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _pool.GetNextDenseIndex(denseIndex))

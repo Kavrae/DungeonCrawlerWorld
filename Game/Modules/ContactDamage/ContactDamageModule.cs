@@ -11,6 +11,9 @@ using Game.Modules.Movement;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
 using Game.Blueprints;
+using Game.Modules.StatModifiers;
+using Game.Modules.Death;
+using Game.Modules.Race;
 
 namespace Game.Modules.ContactDamage;
 
@@ -18,7 +21,7 @@ namespace Game.Modules.ContactDamage;
 /// Generic "damage whatever stands on me" hazard support for terrain with a ContactHazard -- Lava
 /// is the first (see BuiltInTerrain), but nothing here is lava-specific.
 /// Parameterless, with runtime dependencies (EventBus, IMapQuery, IPlayerQuery) supplied via
-/// IGameModule.Configure. Depends on MovementModule so ContactDamageSystem's own Update
+/// IGameModule.Configure. Runs after MovementModule so ContactDamageSystem's own Update
 /// always runs after MovementSystem's within the same SystemManager.Update() cycle -- required
 /// for it to see this frame's moves via the shared FrameEventBuffer&lt;EntityMovedEvent&gt; (see
 /// that class's own doc comment on why producer-before-consumer ordering matters).
@@ -27,13 +30,17 @@ public sealed class ContactDamageModule : IGameModule
 {
     private BlueprintRegistry _creatures = null!;
 
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000000a");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000000a");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [typeof(MovementModule)];
+    public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [MovementModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, RaceModule.ModuleId];
+
+    public IReadOnlyList<Guid> RunsAfter { get; } = [MovementModule.ModuleId];
 
     private EventBus _eventBus = null!;
     private IMapQuery _mapQuery = null!;
-    private IPlayerQuery? _playerQuery;
+    private IPlayerQuery _playerQuery = null!;
     private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
     private MathUtility _mathUtility = null!;
     private SimulationClock _simulationClock = null!;
@@ -60,20 +67,9 @@ public sealed class ContactDamageModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (!componentManager.IsRegistered<SimpleHealthComponent>())
-        {
-            return;
-        }
-
-        var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
-            ? componentManager.GetMultiPool<StatModifierComponent>()
-            : null;
-        var deadEntities = componentManager.IsRegistered<DeadComponent>()
-            ? componentManager.GetPackedPool<DeadComponent>()
-            : null;
-        var bodyParts = componentManager.IsRegistered<BodyPartStateComponent>()
-            ? EntityBodyParts.For(componentManager, _creatures)
-            : null;
+        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
+        var deadEntities = componentManager.GetPackedPool<DeadComponent>();
+        var bodyParts = EntityBodyParts.For(componentManager, _creatures);
 
         systemManager.Register(new ContactDamageSystem(
             _terrain,

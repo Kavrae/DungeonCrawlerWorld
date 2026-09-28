@@ -15,11 +15,11 @@ namespace Game.Modules.Achievements;
 /// <param name="unlock">The unlock callback.</param>
 /// <param name="polledConditions">Shared list SubscribePolled appends to -- owned and drained each frame by AchievementModule's own AchievementPollingSystem.</param>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? playerQuery, ComponentManager componentManager, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Action<int> unlock, List<Func<bool>> polledConditions)
+public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery playerQuery, ComponentManager componentManager, ActionCatalog actionCatalog, ItemCatalog itemCatalog, Action<int> unlock, List<Func<bool>> polledConditions)
 {
     public EventBus EventBus { get; } = eventBus;
 
-    public IPlayerQuery? PlayerQuery { get; } = playerQuery;
+    public IPlayerQuery PlayerQuery { get; } = playerQuery;
 
     public ComponentManager ComponentManager { get; } = componentManager;
 
@@ -33,12 +33,7 @@ public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? p
     /// <param name="condition">The optional condition to check before unlocking the achievement.</param>
     public void SubscribeUntilUnlocked<TEvent>(Func<TEvent, bool>? condition = null)
     {
-        if (PlayerQuery is not { } playerQuery)
-        {
-            return;
-        }
-
-        EventBus.SubscribeOnce<TEvent>(_ => unlock(playerQuery.PlayerEntityId), condition);
+        EventBus.SubscribeOnce<TEvent>(_ => unlock(PlayerQuery.PlayerEntityId), condition);
     }
 
     /// <summary>Subscribes to unlock the achievement for the player the first time condition (if given) matches TEvent. Always unsubscribes on the first trigger.</summary>
@@ -46,11 +41,6 @@ public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? p
     /// <param name="condition">The optional condition to check when the event fires.</param>
     public void SubscribeUntilTriggered<TEvent>(Func<TEvent, bool>? condition = null)
     {
-        if (PlayerQuery is not { } playerQuery)
-        {
-            return;
-        }
-
         Action<TEvent>? handler = null;
         handler = eventData =>
         {
@@ -58,7 +48,7 @@ public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? p
 
             if (condition is null || condition(eventData))
             {
-                unlock(playerQuery.PlayerEntityId);
+                unlock(PlayerQuery.PlayerEntityId);
             }
         };
 
@@ -75,11 +65,6 @@ public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? p
     /// <param name="condition">Re-evaluated every frame; returning true unlocks the achievement.</param>
     public void SubscribePolled(Func<bool> condition)
     {
-        if (PlayerQuery is not { } playerQuery)
-        {
-            return;
-        }
-
         polledConditions.Add(() =>
         {
             if (!condition())
@@ -87,7 +72,7 @@ public sealed class AchievementTriggerContext(EventBus eventBus, IPlayerQuery? p
                 return false;
             }
 
-            unlock(playerQuery.PlayerEntityId);
+            unlock(PlayerQuery.PlayerEntityId);
             return true;
         });
     }

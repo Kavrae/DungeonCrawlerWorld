@@ -49,7 +49,7 @@ public sealed class PackedTimerWheelTests
     public void AddedTimer_IsScheduledWithoutAnyoneTellingTheWheel()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
 
         pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 1 });
 
@@ -61,7 +61,7 @@ public sealed class PackedTimerWheelTests
     public void ReArmedInsideTheCallback_FiresEveryPeriodUntilRemoved()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 3 });
 
         CollectionAssert.AreEqual(new[] { (5L, 3), (15L, 3), (25L, 3) }, Run(wheel, pool, 0, 60));
@@ -72,7 +72,7 @@ public sealed class PackedTimerWheelTests
     public void WriteThatKeepsTheDeadline_DoesNotDoubleFire()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 1 });
 
         pool.TryUpdate(3, static (ref Burn b) => b.Stacks = 2);
@@ -87,7 +87,7 @@ public sealed class PackedTimerWheelTests
     public void MergeReplacingWithTheSameDeadline_FiresOnce()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 1 });
 
         pool.Merge(3, new Burn { NextTickFrame = 5, Stacks = 1 });
@@ -100,7 +100,7 @@ public sealed class PackedTimerWheelTests
     public void DeadlineMovedEarlier_FiresAtTheNewFrameOnly()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 20, Stacks = 1 });
 
         pool.TryUpdate(3, static (ref Burn b) => b.NextTickFrame = 8);
@@ -112,7 +112,7 @@ public sealed class PackedTimerWheelTests
     public void DeadlineMovedLater_FiresAtTheNewFrameOnly()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 8, Stacks = 1 });
 
         pool.TryUpdate(3, static (ref Burn b) => b.NextTickFrame = 20);
@@ -124,7 +124,7 @@ public sealed class PackedTimerWheelTests
     public void RemovedBeforeItsDeadline_NeverFires()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 8, Stacks = 1 });
 
         pool.Remove(3);
@@ -137,7 +137,7 @@ public sealed class PackedTimerWheelTests
     public void RecycledEntityId_OnlyTheNewTimerFires()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 8, Stacks = 1 });
         pool.Remove(3);
 
@@ -153,7 +153,7 @@ public sealed class PackedTimerWheelTests
         pool.Add(1, new Burn { NextTickFrame = 4, Stacks = 1 });
         pool.Add(2, new Burn { NextTickFrame = 6, Stacks = 1 });
 
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
 
         CollectionAssert.AreEqual(new[] { (4L, 1), (6L, 2) }, Run(wheel, pool, 0, 20));
     }
@@ -163,7 +163,7 @@ public sealed class PackedTimerWheelTests
     public void NotReArmedNorRemoved_RestsUntilANewDeadlineIsWritten()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 5 });
         var fires = new List<long>();
 
@@ -189,7 +189,7 @@ public sealed class PackedTimerWheelTests
     public void RestingTimer_RewrittenWithItsOldDeadline_FiresAgain()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 5 });
         var fires = new List<long>();
 
@@ -210,7 +210,7 @@ public sealed class PackedTimerWheelTests
     public void NeverDeadline_IsParked()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
 
         pool.Add(3, new Burn { NextTickFrame = FrameDeadline.Never, Stacks = 1 });
 
@@ -223,7 +223,7 @@ public sealed class PackedTimerWheelTests
     public void RawRefWrite_IsScheduledOnceItsVersionIsIncremented()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 50, Stacks = 1 });
         var denseIndex = pool.GetDenseIndex(3);
 
@@ -238,7 +238,7 @@ public sealed class PackedTimerWheelTests
     public void SeveralDueOnOneFrame_AllFire_ThenRemovalsApply()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         for (var entityId = 1; entityId <= 4; entityId++)
         {
             pool.Add(entityId, new Burn { NextTickFrame = 6, Stacks = 1 });
@@ -261,7 +261,7 @@ public sealed class PackedTimerWheelTests
     public void ReArmedToTheDeadlineThatJustFired_IsSweptAgainNextFrame()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 3 });
         var fires = new List<long>();
 
@@ -298,7 +298,7 @@ public sealed class PackedTimerWheelTests
     public void DuplicateEntriesForOneDeadline_FireOnce_EvenWhenTheCallbackReArmsToIt()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 1 });
         pool.Merge(3, new Burn { NextTickFrame = 5, Stacks = 1 });
         Assert.AreEqual(2, wheel.PendingCount, "The whole-struct merge cleared the mark: two entries for frame 5.");
@@ -329,7 +329,7 @@ public sealed class PackedTimerWheelTests
     public void ReArmedByAnotherTimerLaterInTheSameDrain_SurvivesThatFramesRemoval()
     {
         var pool = CreatePool();
-        var wheel = new PackedTimerWheel<Burn>(pool);
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(2, new Burn { NextTickFrame = 6, Stacks = 1 });
         pool.Add(1, new Burn { NextTickFrame = 6, Stacks = 1 });
         var fires = new List<(long, int)>();
@@ -359,9 +359,9 @@ public sealed class PackedTimerWheelTests
     public void SecondWheelOverTheSamePool_Throws()
     {
         var pool = CreatePool();
-        _ = new PackedTimerWheel<Burn>(pool);
+        _ = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => new PackedTimerWheel<Burn>(pool));
+        Assert.ThrowsExactly<InvalidOperationException>(() => new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped));
     }
 
     /// <summary>An unsimulated entity's due timer is not fired, and is not removed either -- it rests on its deadline.</summary>

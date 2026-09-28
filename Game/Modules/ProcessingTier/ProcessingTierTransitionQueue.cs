@@ -67,8 +67,6 @@ public sealed class ProcessingTierTransitionQueue
     /// <param name="thawingHeld">Starts no thaw-band neighborhood; one already being drained finishes.</param>
     public bool TryDequeue(NeighborhoodMembershipIndex membership, out int entityId, bool thawingHeld = false)
     {
-        ArgumentNullException.ThrowIfNull(membership);
-
         while (_cursor >= _currentEntityIds.Count)
         {
             var cell = default((int CellX, int CellY, int Z));

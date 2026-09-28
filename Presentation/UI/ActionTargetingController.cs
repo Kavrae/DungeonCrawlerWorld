@@ -12,7 +12,6 @@ using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
-using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -27,6 +26,7 @@ namespace Presentation.UI;
 /// Player movement is a separate concern handled by the sibling PlayerMovementController.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
+/// <param name="simulationClock">"CurrentFrame" for clearing the shared action lock on cancellation -- the lock is a deadline (see ActionLockGate).</param>
 public sealed class ActionTargetingController(
     World world,
     MapViewState mapViewState,
@@ -42,13 +42,11 @@ public sealed class ActionTargetingController(
     PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
     PackedComponentPool<ActionLockComponent> actionLocks,
     PlayerInputBuffer inputBuffer,
-    PackedComponentPool<ManaComponent>? manaPool = null,
-    PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
-    LocalTierRoster? localTierRoster = null,
-    SimulationClock? simulationClock = null)
+    PackedComponentPool<ManaComponent> manaPool,
+    PackedComponentPool<AbilityScoresComponent> abilityScores,
+    SimulationClock simulationClock,
+    LocalTierRoster? localTierRoster = null)
 {
-    /// <summary>"Now" for clearing the shared action lock on cancellation -- the lock is a deadline (see ActionLockGate). Optional only so a test needn't build one; the shell always passes the simulation's real clock.</summary>
-    private readonly SimulationClock _simulationClock = simulationClock ?? new SimulationClock();
 
     /// <summary>A second press of the same slot within this many frames of the first is a double-tap (auto-target the closest candidate, see HandleHotkeySlotPress), as opposed to a slower second press (confirm against the cursor, same as a click). Reads UiInputController's own shared click/double-click window rather than an independently tuned value, so mouse double-click and keyboard double-tap always agree.</summary>
     private static readonly int DoubleTapWindowFrames = UiInputController.DoubleClickWindowFrames;
@@ -330,7 +328,7 @@ public sealed class ActionTargetingController(
             return true;
         }
 
-        return WindupCancel.TryCancel(pendingDelayedActions, actionLocks, world.PlayerEntityId, _simulationClock.CurrentFrame, releaseLock: true);
+        return WindupCancel.TryCancel(pendingDelayedActions, actionLocks, world.PlayerEntityId, simulationClock.CurrentFrame, releaseLock: true);
     }
 
     /// <summary>
@@ -627,7 +625,7 @@ public sealed class ActionTargetingController(
             return true;
         }
 
-        return manaPool is not null && manaPool.TryGetReadonly(entityId, out var mana) && mana.CurrentMana >= manaCost;
+        return manaPool.TryGetReadonly(entityId, out var mana) && mana.CurrentMana >= manaCost;
     }
 
     /// <summary>
@@ -663,10 +661,10 @@ public sealed class ActionTargetingController(
         return false;
     }
 
-    /// <summary>Scales baseTargeting's Range/AreaSize by the player's own Intelligence -- see ScrollScalingEffects's own doc comment. No-op (returns baseTargeting unchanged) when abilityScores isn't wired or the player has no Intelligence score, the same "1.0 multiplier" fallback ScrollScalingEffects.ComputeScaleMultiplier itself defaults to.</summary>
+    /// <summary>Scales baseTargeting's Range/AreaSize by the player's own Intelligence -- see ScrollScalingEffects's own doc comment. No-op (returns baseTargeting unchanged) when the player has no Intelligence score, the same "1.0 multiplier" fallback ScrollScalingEffects.ComputeScaleMultiplier itself defaults to.</summary>
     private TargetingSpec ScaleScrollTargeting(TargetingSpec baseTargeting)
     {
-        if (abilityScores is null || !AbilityScoreQueries.TryGetComponent(abilityScores, world.PlayerEntityId, AbilityScoreType.Intelligence, out var intelligence))
+        if (!AbilityScoreQueries.TryGetComponent(abilityScores, world.PlayerEntityId, AbilityScoreType.Intelligence, out var intelligence))
         {
             return baseTargeting;
         }
@@ -822,7 +820,7 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        QueueConsumableActivation(entityId, stackInstanceId, [transform.Position]);
+        QueueConsumableActivation(stackInstanceId, [transform.Position]);
     }
 
     /// <summary>Presentation only ever queues an activation request -- ActionActivationSystem is the only thing that applies gameplay effects. Mirrors PlayerInputBuffer's own queue-and-let-a-system-consume pattern for movement. Closes every closable window here too (not just in ArmAction) -- this is also reachable straight from a double-tap auto-target (TryActivateWithAutoTarget), which skips arming entirely, so it's the only chokepoint that catches that path. Placed after the early-return above so a no-op (no valid target) never spuriously closes anything.</summary>
@@ -867,7 +865,7 @@ public sealed class ActionTargetingController(
         targetTiles.Count == 1 && targetTiles[0] != casterPosition ? targetTiles[0] : null;
 
     /// <summary>Item counterpart to QueueActionActivation -- ConsumableActivationSystem is the only thing that applies its gameplay effects. See QueueActionActivation's own doc comment for why it also closes every closable window here (catches TryActivateItemOnSelf's double-tap self-cast, which skips arming).</summary>
-    private void QueueConsumableActivation(int entityId, uint stackInstanceId, List<Vector3Int> targetTiles)
+    private void QueueConsumableActivation(uint stackInstanceId, List<Vector3Int> targetTiles)
     {
         if (targetTiles.Count == 0)
         {
@@ -888,7 +886,7 @@ public sealed class ActionTargetingController(
         }
         else if (mapViewState.ArmedItemStackInstanceId is { } stackInstanceId)
         {
-            QueueConsumableActivation(entityId, stackInstanceId, targetTiles);
+            QueueConsumableActivation(stackInstanceId, targetTiles);
         }
     }
 

@@ -37,7 +37,7 @@ public sealed class MultiTimerWheelTests
     public void SecondInstanceOnTheSameEntity_IsScheduled()
     {
         var pool = CreatePool();
-        var wheel = new MultiTimerWheel<Exposure>(pool);
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
         var entityAdded = 0;
         pool.EntityAdded += _ => entityAdded++;
 
@@ -53,7 +53,7 @@ public sealed class MultiTimerWheelTests
     public void RemovingOneInstance_LeavesItsSiblingScheduled()
     {
         var pool = CreatePool();
-        var wheel = new MultiTimerWheel<Exposure>(pool);
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
         pool.Add(2, new Exposure(1, 5));
         pool.Add(2, new Exposure(7, 9));
         pool.Add(3, new Exposure(1, 6));
@@ -68,7 +68,7 @@ public sealed class MultiTimerWheelTests
     public void ReArmViaTryUpdateFirst_FiresAgainAtTheNewFrame()
     {
         var pool = CreatePool();
-        var wheel = new MultiTimerWheel<Exposure>(pool);
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
         pool.Add(2, new Exposure(1, 5));
         var fires = new List<long>();
 
@@ -91,7 +91,7 @@ public sealed class MultiTimerWheelTests
     public void InstanceRemovedBeforeItsDeadline_NeverFires_SiblingStillDoes()
     {
         var pool = CreatePool();
-        var wheel = new MultiTimerWheel<Exposure>(pool);
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
         pool.Add(2, new Exposure(1, 5));
         pool.Add(2, new Exposure(7, 9));
 
@@ -107,7 +107,7 @@ public sealed class MultiTimerWheelTests
         pool.Add(2, new Exposure(1, 5));
         pool.Add(2, new Exposure(7, 3));
 
-        var wheel = new MultiTimerWheel<Exposure>(pool);
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
 
         CollectionAssert.AreEqual(new[] { (3L, 2, 7), (5L, 2, 1) }, Run(wheel, 0, 20));
     }
@@ -116,7 +116,7 @@ public sealed class MultiTimerWheelTests
     public void NeverDeadline_IsParked()
     {
         var pool = CreatePool();
-        var wheel = new MultiTimerWheel<Exposure>(pool);
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
 
         pool.Add(2, new Exposure(effect: 1, nextTickFrame: FrameDeadline.Never));
 
@@ -129,7 +129,7 @@ public sealed class MultiTimerWheelTests
     public void NotReArmedNorRemoved_RestsUntilANewDeadlineIsWritten()
     {
         var pool = CreatePool();
-        var wheel = new MultiTimerWheel<Exposure>(pool);
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
         pool.Add(2, new Exposure(1, 5));
         var fires = new List<long>();
 
@@ -154,7 +154,7 @@ public sealed class MultiTimerWheelTests
     public void RestingInstance_RewrittenWithItsOldDeadline_FiresAgain()
     {
         var pool = CreatePool();
-        var wheel = new MultiTimerWheel<Exposure>(pool);
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
         pool.Add(2, new Exposure(1, 5));
         var fires = new List<long>();
 
@@ -178,7 +178,7 @@ public sealed class MultiTimerWheelTests
     public void ReArmedToTheDeadlineThatJustFired_IsSweptAgainNextFrame()
     {
         var pool = CreatePool();
-        var wheel = new MultiTimerWheel<Exposure>(pool);
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
         pool.Add(2, new Exposure(1, 5));
         var fires = new List<long>();
 
@@ -208,7 +208,7 @@ public sealed class MultiTimerWheelTests
     public void SeveralInstancesDueOnOneFrame_AllFire_ThenRemovalsApply()
     {
         var pool = CreatePool();
-        var wheel = new MultiTimerWheel<Exposure>(pool);
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
         pool.Add(2, new Exposure(1, 6));
         pool.Add(2, new Exposure(7, 6));
         pool.Add(3, new Exposure(1, 6));
@@ -224,7 +224,7 @@ public sealed class MultiTimerWheelTests
     public void RecycledInstance_OnlyTheNewTimerFires()
     {
         var pool = CreatePool();
-        var wheel = new MultiTimerWheel<Exposure>(pool);
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
         pool.Add(2, new Exposure(1, 5));
 
         pool.RemoveFirst(2, static (ref readonly Exposure e) => e.Effect == 1);
@@ -242,7 +242,7 @@ public sealed class MultiTimerWheelTests
     public void InstanceReCreatedLaterInTheSameDrain_SurvivesThatFramesRemoval()
     {
         var pool = CreatePool();
-        var wheel = new MultiTimerWheel<Exposure>(pool);
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
         pool.Add(2, new Exposure(1, 6));
         pool.Add(3, new Exposure(1, 6));
         var fires = new List<(long, int)>();
@@ -272,7 +272,7 @@ public sealed class MultiTimerWheelTests
     public void RawRefWrite_IsScheduledOnceItsVersionIsIncremented()
     {
         var pool = CreatePool();
-        var wheel = new MultiTimerWheel<Exposure>(pool);
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
         pool.Add(2, new Exposure(1, 50));
         var denseIndex = pool.GetFirstDenseIndex(2);
 
@@ -287,9 +287,9 @@ public sealed class MultiTimerWheelTests
     public void SecondWheelOverTheSamePool_Throws()
     {
         var pool = CreatePool();
-        _ = new MultiTimerWheel<Exposure>(pool);
+        _ = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => new MultiTimerWheel<Exposure>(pool));
+        Assert.ThrowsExactly<InvalidOperationException>(() => new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped));
     }
 
     /// <summary>Unsimulated instances rest rather than fire; resuming the entity schedules every one of its instances again.</summary>

@@ -1,3 +1,5 @@
+using Engine.ECS.Systems;
+using Engine.Events;
 using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules;
@@ -28,9 +30,7 @@ public sealed class InventoryManagementWindowTests
 
     private static (InventoryManagementWindow Window, ComponentManager ComponentManager, Guid FirstItemId, Guid SecondItemId, Guid ScrollItemId) Build()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
         var firstItemId = Guid.NewGuid();
         var secondItemId = Guid.NewGuid();
@@ -58,7 +58,7 @@ public sealed class InventoryManagementWindowTests
         var mapViewState = new MapViewState();
 
         windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState));
+            fontService, windowService, labelRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState, new EventBus(), simulationClock: new SimulationClock()));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());

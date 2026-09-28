@@ -13,14 +13,14 @@ public static class ManaSpend
         PackedComponentPool<ManaComponent> mana,
         int entityId,
         ushort amount,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null)
+        MultiComponentPool<StatModifierComponent> statModifiers)
     {
         if (!mana.Has(entityId))
         {
             return;
         }
 
-        mana.TryUpdate(entityId, (statModifiers, entityId, amount), static (ref ManaComponent manaComponent, (MultiComponentPool<StatModifierComponent>? StatModifiers, int EntityId, ushort Amount) state) =>
+        mana.TryUpdate(entityId, (statModifiers, entityId, amount), static (ref ManaComponent manaComponent, (MultiComponentPool<StatModifierComponent> StatModifiers, int EntityId, ushort Amount) state) =>
         {
             var effectiveMaximumMana = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumMana, manaComponent.MaximumMana);
             manaComponent.CurrentMana = MathHelper.Clamp(manaComponent.CurrentMana - state.Amount, 0f, effectiveMaximumMana);

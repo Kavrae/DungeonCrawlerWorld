@@ -34,11 +34,9 @@ public sealed class DodgeActivationTests
 
     private static (ComponentManager ComponentManager, ActionEffectContext Context) Build(PackedComponentPool<AbilityScoresComponent>? abilityScores = null)
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<DodgingComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
 
-        var context = new ActionEffectContext(
+        var context = TestActionEffects.Context(
             SourceEntityId: SourceEntityId,
             TargetEntityId: TargetEntityId,
             Health: componentManager.GetPackedPool<SimpleHealthComponent>(),
@@ -68,17 +66,14 @@ public sealed class DodgeActivationTests
     [TestMethod]
     public void Apply_ReadsDexterityFromSourceEntityId_NotTargetEntityId()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<DodgingComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        AbilityScoreTestPools.Register(componentManager);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
 
         var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
         abilityScores.Add(SourceEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Dexterity, baseValue: 300, total: 300));
         // TargetEntityId deliberately has no Dexterity at all -- if Apply read the wrong entity it
         // would silently fall back to WindowFrames (Dexterity 1's own value) instead of the boosted one.
 
-        var context = new ActionEffectContext(
+        var context = TestActionEffects.Context(
             SourceEntityId: SourceEntityId,
             TargetEntityId: TargetEntityId,
             Health: componentManager.GetPackedPool<SimpleHealthComponent>(),

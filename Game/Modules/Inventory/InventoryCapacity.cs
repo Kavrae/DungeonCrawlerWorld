@@ -18,11 +18,11 @@ public static class InventoryCapacity
 {
     public const int MaxNonPlayerStackCount = 20;
 
-    public static bool HasRoomForNewStack(ComponentManager componentManager, int entityId, IPlayerQuery? playerQuery) =>
-        entityId == playerQuery?.PlayerEntityId ||
+    public static bool HasRoomForNewStack(ComponentManager componentManager, int entityId, IPlayerQuery playerQuery) =>
+        entityId == playerQuery.PlayerEntityId ||
         componentManager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(entityId) < MaxNonPlayerStackCount;
 
-    public static bool HasRoomForNewStacks(ComponentManager componentManager, int entityId, IPlayerQuery? playerQuery, int additionalStackCount) =>
-        entityId == playerQuery?.PlayerEntityId ||
+    public static bool HasRoomForNewStacks(ComponentManager componentManager, int entityId, IPlayerQuery playerQuery, int additionalStackCount) =>
+        entityId == playerQuery.PlayerEntityId ||
         componentManager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(entityId) + additionalStackCount <= MaxNonPlayerStackCount;
 }

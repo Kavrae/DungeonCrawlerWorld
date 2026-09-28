@@ -45,7 +45,7 @@ public sealed class TradeItemStackCell(FontService fontService, ElementPoolServi
         // _quantityFont -- confirmed live that _quantityFont's own size, correct for the plain
         // inventory cell's lone quantity badge, is too large once this cell's own small square
         // needs to fit a 3-digit-or-more quantity legibly.
-        var quantityFont = fontService.GetFont((int)(ContentSize.Y * CompactStatFontSizeFraction));
+        var quantityFont = FontService.GetFont((int)(ContentSize.Y * CompactStatFontSizeFraction));
         ItemIconRenderer.DrawBottomAligned(spriteBatch, quantityFont, _quantity.ToString(), ContentAbsolutePosition, ContentSize, alignRight: false, Color.White);
     }
 }

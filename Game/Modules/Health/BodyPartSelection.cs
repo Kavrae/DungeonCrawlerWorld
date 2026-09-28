@@ -22,8 +22,6 @@ public static class BodyPartSelection
     /// <remarks>The "attacks hit a random body part (for now)" placeholder TODO.md's Body parts item names, until the Targeted body part damage follow-up adds real selection rules.</remarks>
     public static int PickRandom(EntityBodyParts bodyParts, int entityId, MathUtility mathUtility)
     {
-        ArgumentNullException.ThrowIfNull(bodyParts);
-
         var alivePartId = PickRandomFiltered(bodyParts, entityId, mathUtility, aliveOnly: true);
         return alivePartId != -1
             ? alivePartId
@@ -72,7 +70,7 @@ public static class BodyPartSelection
         return -1; // Unreachable given count > 0, guarded for completeness.
     }
 
-    /// <summary>Picks entityId's body part with the lowest CurrentHealth/effective-MaximumHealth fraction, skipping any part still inside its post-disable lockout window or currently burning (bodyPartBurningTimers).</summary>
+    /// <summary>Picks entityId's body part with the lowest CurrentHealth/effective-MaximumHealth fraction, skipping any part still inside its regen lockout.</summary>
     /// <remarks>
     /// The yo-yo-prevention case the regen lockout exists for -- a deadline compared against
     /// `now` here, which is the only place in the game that consults it. Its only caller is
@@ -85,32 +83,21 @@ public static class BodyPartSelection
     /// part sitting at 100% of its raw max with an active MaximumHealth buff still has real
     /// headroom up to the effective one, and treating it as "already full" here would leave it
     /// permanently unselectable, stuck below the true cap regen should still be closing.
-    /// bodyPartBurningTimers is a second, independent exclusion from the lockout timer -- a part
-    /// actively on fire must never regen even once its numeric lockout has counted down to 0, since
-    /// "on fire" is its own condition, not just a longer lockout.
     /// Returns -1 if entityId has no body parts, or every part is either at its effective
-    /// maximum, locked out, or currently burning.
+    /// maximum or locked out.
     /// </remarks>
     public static int PickLowestPercentage(
         EntityBodyParts bodyParts,
         int entityId,
         long now,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers = null)
+        MultiComponentPool<StatModifierComponent> statModifiers)
     {
-        ArgumentNullException.ThrowIfNull(bodyParts);
-
         var bestPartId = -1;
         var bestFraction = float.MaxValue;
 
         foreach (var part in bodyParts.Parts(entityId))
         {
             if (part.IsRegenLockedOut(now))
-            {
-                continue;
-            }
-
-            if (IsCurrentlyBurning(bodyPartBurningTimers, entityId, (byte)part.PartId))
             {
                 continue;
             }
@@ -130,25 +117,6 @@ public static class BodyPartSelection
         }
 
         return bestPartId;
-    }
-
-    /// <summary>True if entityId has an active BodyPartBurningTimerComponent entry for partId -- a short linear walk of the entity's own, typically very small, burning-parts chain.</summary>
-    private static bool IsCurrentlyBurning(MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers, int entityId, byte partId)
-    {
-        if (bodyPartBurningTimers is null)
-        {
-            return false;
-        }
-
-        for (var denseIndex = bodyPartBurningTimers.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyPartBurningTimers.GetNextDenseIndex(denseIndex))
-        {
-            if (bodyPartBurningTimers.GetReadonlyByDenseIndex(denseIndex).PartId == partId)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /// <summary>Picks entityId's highest-VerticalPosition non-disabled body part (e.g. the Head), falling back to the highest overall if every part is disabled. preferAlive: false skips straight to the disabled-inclusive pass, for a caller that needs a deterministic, disabled-status-independent pick instead (see BurningAuraApplier's own doc comment for why).</summary>
@@ -184,8 +152,6 @@ public static class BodyPartSelection
     /// <summary>Shared linear walk behind PickTopmost/PickBottommost, parameterized by comparison direction and by whether disabled parts are excluded from consideration.</summary>
     private static int PickExtreme(EntityBodyParts bodyParts, int entityId, bool preferHigher, bool aliveOnly)
     {
-        ArgumentNullException.ThrowIfNull(bodyParts);
-
         var bestPartId = -1;
         var bestPosition = preferHigher ? -1 : byte.MaxValue + 1;
 
@@ -210,8 +176,6 @@ public static class BodyPartSelection
     /// <remarks>Returns -1 if entityId has no body part of that type at all -- the expected "no Foot on this race" outcome, not an error case.</remarks>
     public static int PickByType(EntityBodyParts bodyParts, int entityId, BodyPartType type, bool preferAlive = true)
     {
-        ArgumentNullException.ThrowIfNull(bodyParts);
-
         var disabledMatchPartId = -1;
 
         foreach (var part in bodyParts.Parts(entityId))

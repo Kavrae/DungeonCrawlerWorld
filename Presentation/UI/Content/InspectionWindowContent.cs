@@ -61,9 +61,9 @@ public sealed class InspectionWindowContent(
     ComponentManager componentManager,
     EntityManager entityManager,
     ElementPoolService elementPoolService,
-    SpawnRecordRebuilder? spawnRecordRebuilder = null,
-    CreatureSkeletons? skeletons = null,
-    BlueprintRegistry? creatures = null) : IElementContent
+    BlueprintRegistry creatures,
+    SpawnRecordRebuilder spawnRecordRebuilder,
+    CreatureSkeletons skeletons) : IElementContent
 {
     private const string UnsimulatedLabel = "Unsimulated -- spawn defaults";
 
@@ -81,9 +81,7 @@ public sealed class InspectionWindowContent(
     /// <summary>A generous, effectively-unlimited per-row height cap -- see SelectionWindowContent.UnboundedChildHeight's own doc comment for why this is needed: without it, a row tiled past the host window's own one-screen-tall content size gets silently clamped to nothing.</summary>
     private const float UnboundedChildHeight = 10000f;
 
-    private readonly DirectComponentPool<SpawnRecordComponent>? _spawnRecords = componentManager.IsRegistered<SpawnRecordComponent>()
-        ? componentManager.GetDirectPool<SpawnRecordComponent>()
-        : null;
+    private readonly DirectComponentPool<SpawnRecordComponent> _spawnRecords = componentManager.GetDirectPool<SpawnRecordComponent>();
 
     private readonly List<int> _lastSubjectIds = [];
     private int _lastSkeletonCount;
@@ -262,7 +260,7 @@ public sealed class InspectionWindowContent(
     /// <summary>What a subject block shows for an entity: the entity itself, or for a skeleton, what its spawn record rebuilds to.</summary>
     private readonly record struct SubjectView(string Name, string? RaceName, string? ClassName, float? HealthFraction, string Description, bool IsUnsimulatedDefaults);
 
-    private bool IsSkeleton(int entityId) => skeletons?.IsSkeleton(entityId) == true && spawnRecordRebuilder is not null && _spawnRecords is not null;
+    private bool IsSkeleton(int entityId) => skeletons.IsSkeleton(entityId);
 
     private SubjectView ReadSubject(int entityId)
     {
@@ -272,22 +270,20 @@ public sealed class InspectionWindowContent(
         }
 
         var subject = default(SubjectView);
-        spawnRecordRebuilder!.Rebuild(_spawnRecords!.GetReadonly(entityId), (stagingComponents, stagingEntityId) => subject = ReadSubject(stagingComponents, stagingEntityId, isUnsimulatedDefaults: true));
+        spawnRecordRebuilder.Rebuild(_spawnRecords.GetReadonly(entityId), (stagingComponents, stagingEntityId) => subject = ReadSubject(stagingComponents, stagingEntityId, isUnsimulatedDefaults: true));
         return subject;
     }
 
-    /// <summary>The name of the entity's first race, or null when it has none or the definitions aren't available (a test shell).</summary>
+    /// <summary>The name of the entity's first race, or null when it has none.</summary>
     private string? RaceNameOf(ComponentManager source, int entityId) =>
-        creatures is not null
-            && source.GetPackedPool<RaceSlotsComponent>().TryGetReadonly(entityId, out var slots)
+        source.GetPackedPool<RaceSlotsComponent>().TryGetReadonly(entityId, out var slots)
             && creatures.Races.TryGet(slots.Primary, out var race)
                 ? race.Name
                 : null;
 
     /// <inheritdoc cref="RaceNameOf"/>
     private string? ClassNameOf(ComponentManager source, int entityId) =>
-        creatures is not null
-            && source.GetPackedPool<ClassSlotsComponent>().TryGetReadonly(entityId, out var slots)
+        source.GetPackedPool<ClassSlotsComponent>().TryGetReadonly(entityId, out var slots)
             && creatures.Classes.TryGet(slots.Primary, out var definition)
                 ? definition.Name
                 : null;
@@ -317,11 +313,10 @@ public sealed class InspectionWindowContent(
     }
 
     /// <summary>The body parts of whatever world source belongs to -- the live one, or SpawnRecordRebuilder' staging world for an unsimulated creature's defaults.</summary>
-    private EntityBodyParts BodyPartsOf(ComponentManager source) => EntityBodyParts.For(source, creatures ?? new BlueprintRegistry());
+    private EntityBodyParts BodyPartsOf(ComponentManager source) => EntityBodyParts.For(source, creatures);
 
-    /// <remarks>Optional -- see StatModifierMath.GetEffectiveValue's own doc comment for why a null pool (StatModifiersModule not registered) is treated the same as "no active modifiers."</remarks>
-    private static MultiComponentPool<StatModifierComponent>? StatModifiersOf(ComponentManager source) =>
-        source.IsRegistered<StatModifierComponent>() ? source.GetMultiPool<StatModifierComponent>() : null;
+    private static MultiComponentPool<StatModifierComponent> StatModifiersOf(ComponentManager source) =>
+        source.GetMultiPool<StatModifierComponent>();
 
     /// <summary>The tile's structure or terrain, after its occupants: icon and name, then its description -- the same shape as an entity's block, minus what a cell doesn't have (race, class, health).</summary>
     private void BuildTerrainBlock(TerrainView terrain, float blockWidth)
@@ -509,7 +504,7 @@ public sealed class InspectionWindowContent(
         if (IsSkeleton(entityId))
         {
             AddDescriptionRow(UnsimulatedLabel, blockWidth);
-            spawnRecordRebuilder!.Rebuild(_spawnRecords!.GetReadonly(entityId), (stagingComponents, stagingEntityId) => CopySortedEntries(stagingComponents, stagingEntityId, _reusableInspectionList));
+            spawnRecordRebuilder.Rebuild(_spawnRecords.GetReadonly(entityId), (stagingComponents, stagingEntityId) => CopySortedEntries(stagingComponents, stagingEntityId, _reusableInspectionList));
             AddDumpWindows(blockWidth);
         }
     }
@@ -567,7 +562,7 @@ public sealed class InspectionWindowContent(
         int entityId,
         PackedComponentPool<SimpleHealthComponent> healthPool,
         EntityBodyParts bodyParts,
-        MultiComponentPool<StatModifierComponent>? statModifiers)
+        MultiComponentPool<StatModifierComponent> statModifiers)
     {
         destination.RemoveAll(static entry => entry.ComponentType == typeof(SimpleHealthComponent) || entry.ComponentType == typeof(BodyPartStateComponent));
 

@@ -4,6 +4,7 @@ using Engine.Events;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Systems;
 using Game.Modules.Health;
+using Game.Modules.Burning.Components;
 using Game.Modules.Health.Components;
 using Game.World;
 
@@ -12,12 +13,6 @@ namespace Tests.Modules.Burning;
 [TestClass]
 public sealed class BodyPartBurningSystemTests
 {
-    private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
-    {
-        public int PlayerEntityId { get; } = playerEntityId;
-        public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
-    }
-
     private static MultiComponentPool<BodyPartBurningTimerComponent> CreateTimerPool() => new(entityCapacity: 10, initialCapacity: 8);
 
     private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
@@ -31,7 +26,7 @@ public sealed class BodyPartBurningSystemTests
         var timers = CreateTimerPool();
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 30, 30, true), ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 1, stackCount: 4, nextTickFrame: 1, ActionSource.Admin));
-        var system = new BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new FakePlayerQuery(0));
+        var system = TestSystems.BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new TestPlayerQuery(0));
 
         system.Update(Frame(1), 0);
 
@@ -46,7 +41,7 @@ public sealed class BodyPartBurningSystemTests
         var timers = CreateTimerPool();
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 1, nextTickFrame: 1, ActionSource.Admin));
-        var system = new BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new FakePlayerQuery(0));
+        var system = TestSystems.BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new TestPlayerQuery(0));
 
         system.Update(Frame(1), 0);
 
@@ -62,7 +57,7 @@ public sealed class BodyPartBurningSystemTests
 
         // Constructed before either Add below -- both instances reach the wheel through the pool's
         // own change notification, each keyed by its PartId, not by a scan at construction.
-        var system = new BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new FakePlayerQuery(0));
+        var system = TestSystems.BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new TestPlayerQuery(0));
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 2, nextTickFrame: 1, ActionSource.Admin));
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 1, stackCount: 1, nextTickFrame: 1, ActionSource.Admin));
 
@@ -85,7 +80,7 @@ public sealed class BodyPartBurningSystemTests
         var timers = CreateTimerPool();
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Left Foot", BodyPartType.Foot, 10, 10, false)).BodyParts;
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 1, nextTickFrame: 1, ActionSource.Admin));
-        var system = new BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new FakePlayerQuery(0));
+        var system = TestSystems.BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new TestPlayerQuery(0));
 
         system.Update(Frame(1), 0);
 
@@ -101,7 +96,7 @@ public sealed class BodyPartBurningSystemTests
         var timers = CreateTimerPool();
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Left Foot", BodyPartType.Foot, 2, 10, false)).BodyParts;
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 2, nextTickFrame: 1, ActionSource.Admin));
-        var system = new BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new FakePlayerQuery(0));
+        var system = TestSystems.BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new TestPlayerQuery(0));
 
         system.Update(Frame(1), 0);
 
@@ -118,7 +113,7 @@ public sealed class BodyPartBurningSystemTests
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Left Foot", BodyPartType.Foot, 10, 10, false), ("Right Foot", BodyPartType.Foot, 10, 10, false)).BodyParts;
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 0, stackCount: 3, nextTickFrame: 5, ActionSource.Admin));
         timers.Add(0, new BodyPartBurningTimerComponent(partId: 1, stackCount: 3, nextTickFrame: 20, ActionSource.Admin));
-        var system = new BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new FakePlayerQuery(0));
+        var system = TestSystems.BodyPartBurningSystem(timers, bodyParts, CreateHealthPool(), new EventBus(), new TestPlayerQuery(0));
 
         for (var frame = 0; frame <= 5; frame++)
         {

@@ -18,46 +18,41 @@ namespace Game.Spawning;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class EntityNaming(
     PackedComponentPool<DisplayTextComponent> displayTexts,
-    DirectComponentPool<SpawnRecordComponent>? spawnRecords,
-    BlueprintRegistry? creatures,
-    MultiComponentPool<AppliedBlueprintComponent>? appliedParts = null)
+    DirectComponentPool<SpawnRecordComponent> spawnRecords,
+    BlueprintRegistry creatures,
+    MultiComponentPool<AppliedBlueprintComponent> appliedParts)
 {
     /// <summary>What an entity is called when neither it nor its blueprint names it.</summary>
     public const string UnknownName = "Unknown";
 
-    private readonly PackedComponentPool<DisplayTextComponent> _displayTexts = displayTexts ?? throw new ArgumentNullException(nameof(displayTexts));
 
     /// <summary>Builds one from a ComponentManager, for callers that hold the manager rather than the pools.</summary>
-    public static EntityNaming For(ComponentManager componentManager, BlueprintRegistry? creatures)
+    public static EntityNaming For(ComponentManager componentManager, BlueprintRegistry creatures)
     {
         ArgumentNullException.ThrowIfNull(componentManager);
 
         return new EntityNaming(
             componentManager.GetPackedPool<DisplayTextComponent>(),
-            componentManager.IsRegistered<SpawnRecordComponent>() ? componentManager.GetDirectPool<SpawnRecordComponent>() : null,
+            componentManager.GetDirectPool<SpawnRecordComponent>(),
             creatures,
-            componentManager.IsRegistered<AppliedBlueprintComponent>() ? componentManager.GetMultiPool<AppliedBlueprintComponent>() : null);
+            componentManager.GetMultiPool<AppliedBlueprintComponent>());
     }
 
     /// <summary>The entity's name without building a resolver, for a caller on a hot path that holds only the manager (ActionSource.FromEntity, once per hit).</summary>
-    public static bool TryResolveName(ComponentManager componentManager, BlueprintRegistry? creatures, int entityId, out string name)
+    public static bool TryResolveName(ComponentManager componentManager, BlueprintRegistry creatures, int entityId, out string name)
     {
-        ArgumentNullException.ThrowIfNull(componentManager);
-
         if (componentManager.GetPackedPool<DisplayTextComponent>().TryGetReadonly(entityId, out var displayText) && !string.IsNullOrEmpty(displayText.Name))
         {
             name = displayText.Name;
             return true;
         }
 
-        if (creatures is not null
-            && componentManager.IsRegistered<SpawnRecordComponent>()
-            && componentManager.GetDirectPool<SpawnRecordComponent>().TryGetReadonly(entityId, out var record)
+        if (componentManager.GetDirectPool<SpawnRecordComponent>().TryGetReadonly(entityId, out var record)
             && BlueprintName(
                 creatures,
                 record,
                 entityId,
-                componentManager.IsRegistered<AppliedBlueprintComponent>() ? componentManager.GetMultiPool<AppliedBlueprintComponent>() : null) is { Length: > 0 } creatureName)
+                componentManager.GetMultiPool<AppliedBlueprintComponent>()) is { Length: > 0 } creatureName)
         {
             name = creatureName;
             return true;
@@ -74,13 +69,13 @@ public sealed class EntityNaming(
     /// <summary>The entity's name, or false when nothing names it.</summary>
     public bool TryGetName(int entityId, out string name)
     {
-        if (_displayTexts.TryGetReadonly(entityId, out var displayText) && !string.IsNullOrEmpty(displayText.Name))
+        if (displayTexts.TryGetReadonly(entityId, out var displayText) && !string.IsNullOrEmpty(displayText.Name))
         {
             name = displayText.Name;
             return true;
         }
 
-        if (creatures is not null && spawnRecords?.TryGetReadonly(entityId, out var record) == true && BlueprintName(creatures, record, entityId, appliedParts) is { Length: > 0 } creatureName)
+        if (spawnRecords.TryGetReadonly(entityId, out var record) && BlueprintName(creatures, record, entityId, appliedParts) is { Length: > 0 } creatureName)
         {
             name = creatureName;
             return true;
@@ -93,13 +88,12 @@ public sealed class EntityNaming(
     /// <summary>The entity's description, or empty when it has none.</summary>
     public string DescriptionOf(int entityId)
     {
-        if (_displayTexts.TryGetReadonly(entityId, out var displayText) && !string.IsNullOrEmpty(displayText.Description))
+        if (displayTexts.TryGetReadonly(entityId, out var displayText) && !string.IsNullOrEmpty(displayText.Description))
         {
             return displayText.Description;
         }
 
-        return creatures is not null
-            && spawnRecords?.TryGetReadonly(entityId, out var record) == true
+        return spawnRecords.TryGetReadonly(entityId, out var record)
             && creatures.TryGetAppearance(record.BlueprintId, out var appearance)
                 ? appearance.Description
                 : string.Empty;
@@ -110,7 +104,7 @@ public sealed class EntityNaming(
         BlueprintRegistry creatures,
         SpawnRecordComponent record,
         int entityId,
-        MultiComponentPool<AppliedBlueprintComponent>? appliedParts)
+        MultiComponentPool<AppliedBlueprintComponent> appliedParts)
     {
         if (!creatures.TryResolve(record.BlueprintId, out var blueprint))
         {
@@ -118,7 +112,7 @@ public sealed class EntityNaming(
         }
 
         var name = blueprint.NameFor(record.Seed);
-        if (blueprint.Appearance.HasExplicitName || appliedParts is null || appliedParts.GetFirstDenseIndex(entityId) == -1)
+        if (blueprint.Appearance.HasExplicitName || appliedParts.GetFirstDenseIndex(entityId) == -1)
         {
             return name;
         }

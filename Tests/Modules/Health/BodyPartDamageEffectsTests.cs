@@ -1,6 +1,9 @@
 using Engine.Utilities;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.StatModifiers.Components;
+using Game.Modules.Death.Components;
+using Game.Modules.AbilityScores.Components;
 
 namespace Tests.Modules.Health;
 
@@ -27,7 +30,7 @@ public sealed class BodyPartDamageEffectsTests
     {
         var world = CreateWorld("Arm", BodyPartType.Arm, maximumHealth: 20, isVital: false, currentHealth: 5);
 
-        BodyPartDamageEffects.ApplyToPart(world.BodyParts, EntityId, partId: 0, statModifiers: null, amount: 10, now: 0);
+        BodyPartDamageEffects.ApplyToPart(world.BodyParts, EntityId, partId: 0, statModifiers: EmptyPools.Multi<StatModifierComponent>(), amount: 10, now: 0);
 
         var part = PartOf(world);
         Assert.AreEqual(0f, part.CurrentHealth);
@@ -41,10 +44,10 @@ public sealed class BodyPartDamageEffectsTests
     {
         var world = CreateWorld("Arm", BodyPartType.Arm, maximumHealth: 20, isVital: false, currentHealth: 5);
 
-        BodyPartDamageEffects.ApplyToPart(world.BodyParts, EntityId, partId: 0, statModifiers: null, amount: 10, now: 0);
+        BodyPartDamageEffects.ApplyToPart(world.BodyParts, EntityId, partId: 0, statModifiers: EmptyPools.Multi<StatModifierComponent>(), amount: 10, now: 0);
 
         // Time passes -- the second hit lands 100 frames later, and its lockout runs from then.
-        BodyPartDamageEffects.ApplyToPart(world.BodyParts, EntityId, partId: 0, statModifiers: null, amount: 1, now: 100);
+        BodyPartDamageEffects.ApplyToPart(world.BodyParts, EntityId, partId: 0, statModifiers: EmptyPools.Multi<StatModifierComponent>(), amount: 1, now: 100);
 
         var part = PartOf(world);
         Assert.AreEqual(0f, part.CurrentHealth);
@@ -57,7 +60,7 @@ public sealed class BodyPartDamageEffectsTests
     {
         var world = CreateWorld("Torso", BodyPartType.Torso, maximumHealth: 60, isVital: true, currentHealth: 60);
 
-        BodyPartDamageEffects.ApplyToPart(world.BodyParts, EntityId, partId: 0, statModifiers: null, amount: 10, now: 0);
+        BodyPartDamageEffects.ApplyToPart(world.BodyParts, EntityId, partId: 0, statModifiers: EmptyPools.Multi<StatModifierComponent>(), amount: 10, now: 0);
 
         var part = PartOf(world);
         Assert.AreEqual(50f, part.CurrentHealth);
@@ -70,7 +73,7 @@ public sealed class BodyPartDamageEffectsTests
     {
         var world = CreateWorld("Arm", BodyPartType.Arm, maximumHealth: 20, isVital: false, currentHealth: 3);
 
-        BodyPartDamageEffects.ApplyToPart(world.BodyParts, EntityId, partId: 0, statModifiers: null, amount: 100, now: 0);
+        BodyPartDamageEffects.ApplyToPart(world.BodyParts, EntityId, partId: 0, statModifiers: EmptyPools.Multi<StatModifierComponent>(), amount: 100, now: 0);
 
         Assert.AreEqual(0f, PartOf(world).CurrentHealth);
     }
@@ -85,7 +88,7 @@ public sealed class BodyPartDamageEffectsTests
         world.Give(EntityId);
         Assert.IsFalse(world.States.Has(EntityId));
 
-        BodyPartDamageEffects.ApplyToPart(world.BodyParts, EntityId, partId: 1, statModifiers: null, amount: 5, now: 0);
+        BodyPartDamageEffects.ApplyToPart(world.BodyParts, EntityId, partId: 1, statModifiers: EmptyPools.Multi<StatModifierComponent>(), amount: 5, now: 0);
 
         Assert.IsTrue(world.States.Has(EntityId));
         Assert.IsTrue(world.BodyParts.TryGet(EntityId, 0, out var head));

@@ -11,9 +11,6 @@ internal static class AbilityScoreTestPools
     internal static PackedComponentPool<AbilityScoresComponent> CreatePool(int entityCapacity, int initialCapacity) =>
         new(entityCapacity, initialCapacity, Merge);
 
-    internal static void Register(ComponentManager componentManager) =>
-        componentManager.RegisterPackedPool<AbilityScoresComponent>(Merge);
-
     internal static AbilityScoresComponent Score(AbilityScoreType type, ushort baseValue, ushort total)
     {
         var scores = default(AbilityScoresComponent);

@@ -16,7 +16,6 @@ public sealed class EntityManager
     /// <param name="keys">The key table to issue into, when something needs it before this manager exists; a new one otherwise.</param>
     public EntityManager(ComponentManager componentManager, int initialCapacity, EntityKeys? keys = null)
     {
-        ArgumentNullException.ThrowIfNull(componentManager);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(initialCapacity);
 
         _componentManager = componentManager;

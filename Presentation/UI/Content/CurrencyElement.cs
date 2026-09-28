@@ -60,8 +60,8 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
         Type = type;
         _showLabel = showLabel;
         _textColorOverride = textColor;
-        _textFont = fontService.GetFont(FontChrome.DefaultFontSize);
-        _glyphFont = fontService.GetFont((int)(elementSize.Y * FontChrome.IconGlyphFontFraction));
+        _textFont = FontService.GetFont(FontChrome.DefaultFontSize);
+        _glyphFont = FontService.GetFont((int)(elementSize.Y * FontChrome.IconGlyphFontFraction));
     }
 
     /// <summary>Called every frame by the owning CurrencyRowContent -- Currency has no version watcher, so an unconditional re-read is the simplest correct option (same cost the old CurrencyRow.Format paid every Update).</summary>

@@ -68,7 +68,7 @@ public sealed class BodyPartSelectionTests
         world.SetHealth(EntityId, 1, 5); // 25%
         world.SetHealth(EntityId, 2, 10); // ~67%
 
-        var partId = BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0);
+        var partId = TestHealth.PickLowestPercentage(world.BodyParts, EntityId, now: 0);
 
         Assert.AreEqual("Torso", NameOf(world, partId));
     }
@@ -85,7 +85,7 @@ public sealed class BodyPartSelectionTests
         world.SetHealth(EntityId, 2, 5); // 25%, locked out below.
         world.BodyParts.LockOutOfRegen(EntityId, 2, now: 0, lockoutFrames: 100);
 
-        var partId = BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0);
+        var partId = TestHealth.PickLowestPercentage(world.BodyParts, EntityId, now: 0);
 
         Assert.AreEqual("Arm", NameOf(world, partId));
     }
@@ -99,7 +99,7 @@ public sealed class BodyPartSelectionTests
         world.SetHealth(EntityId, 1, 5);
         world.BodyParts.LockOutOfRegen(EntityId, 1, now: 0, lockoutFrames: 50);
 
-        Assert.AreEqual(-1, BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0));
+        Assert.AreEqual(-1, TestHealth.PickLowestPercentage(world.BodyParts, EntityId, now: 0));
     }
 
     [TestMethod]
@@ -107,7 +107,7 @@ public sealed class BodyPartSelectionTests
     {
         var world = new BodyPartTestWorld();
 
-        Assert.AreEqual(-1, BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0));
+        Assert.AreEqual(-1, TestHealth.PickLowestPercentage(world.BodyParts, EntityId, now: 0));
     }
 
     [TestMethod]
@@ -118,7 +118,7 @@ public sealed class BodyPartSelectionTests
         var world = CreateWorld(Part("Head", BodyPartType.Head, maximumHealth: 40, isVital: true));
         var statModifiers = BuffedMaximumHealth();
 
-        var partId = BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0, statModifiers);
+        var partId = TestHealth.PickLowestPercentage(world.BodyParts, EntityId, now: 0, statModifiers);
 
         Assert.AreEqual("Head", NameOf(world, partId));
     }
@@ -131,7 +131,7 @@ public sealed class BodyPartSelectionTests
         world.BodyParts.SetCurrentHealth(EntityId, 0, 60);
         var statModifiers = BuffedMaximumHealth();
 
-        Assert.AreEqual(-1, BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0, statModifiers));
+        Assert.AreEqual(-1, TestHealth.PickLowestPercentage(world.BodyParts, EntityId, now: 0, statModifiers));
     }
 
     private static MultiComponentPool<StatModifierComponent> BuffedMaximumHealth()
@@ -264,31 +264,6 @@ public sealed class BodyPartSelectionTests
         Assert.IsTrue(world.BodyParts.TryGet(EntityId, 1, out var torso));
         Assert.AreEqual("Torso", torso.Name);
         Assert.IsFalse(world.BodyParts.TryGet(EntityId, 5, out _));
-    }
-
-    [TestMethod]
-    public void PickLowestPercentage_PartCurrentlyBurning_SkippedEvenWithZeroLockout()
-    {
-        var world = CreateWorld(
-            Part("Left Foot", BodyPartType.Foot),
-            Part("Right Foot", BodyPartType.Foot));
-        world.SetHealth(EntityId, 0, 1); // 10%, but burning.
-        world.SetHealth(EntityId, 1, 5); // 50%, not burning.
-        var burningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(entityCapacity: 10, initialCapacity: 4);
-        burningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 0, stackCount: 1, nextTickFrame: 30, ActionSource.Admin));
-
-        var partId = BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0, statModifiers: null, burningTimers);
-
-        Assert.AreEqual("Right Foot", NameOf(world, partId), "Left Foot has the lowest fraction but is on fire -- it must be skipped even though its own lockout has expired.");
-    }
-
-    [TestMethod]
-    public void PickLowestPercentage_NoBurningTimersPoolSupplied_BehavesAsBefore()
-    {
-        var world = CreateWorld(Part("Torso", BodyPartType.Torso, maximumHealth: 20, isVital: true));
-        world.SetHealth(EntityId, 0, 5);
-
-        Assert.AreEqual("Torso", NameOf(world, BodyPartSelection.PickLowestPercentage(world.BodyParts, EntityId, now: 0)));
     }
 
     [TestMethod]

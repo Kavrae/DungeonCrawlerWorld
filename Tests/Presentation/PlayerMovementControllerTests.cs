@@ -45,16 +45,12 @@ public sealed class PlayerMovementControllerTests
 
     private static Harness Build(Vector3Int? playerPosition = null, bool locked = true)
     {
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(20, 20, 1))) { PlayerEntityId = PlayerEntityId };
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)));
+        world.PlayerEntityId = PlayerEntityId;
 
-        var componentManager = new ComponentManager(20, 10);
-        componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PendingActionActivationComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
 
-        componentManager.Merge(PlayerEntityId, new TransformComponent(playerPosition ?? PlayerPosition, new Vector2Byte(1, 1)));
+        TestTransforms.Set(componentManager, PlayerEntityId, new TransformComponent(playerPosition ?? PlayerPosition, new Vector2Byte(1, 1)));
         componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: locked ? LockEndsAtFrame : 0u));
 

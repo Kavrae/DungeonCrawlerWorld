@@ -47,21 +47,9 @@ public sealed class ShopMarginPricingTests
     }
 
     [TestMethod]
-    public void ResolveEffectiveShop_NoAbilityScorePoolRegistered_ReturnsShopUnchanged()
-    {
-        var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
-
-        var effectiveShop = ShopMarginPricing.ResolveEffectiveShop(manager, GeneralShop, PlayerEntityId);
-
-        Assert.AreEqual(GeneralShop.BuyMultiplier, effectiveShop.BuyMultiplier);
-        Assert.AreEqual(GeneralShop.SellMultiplier, effectiveShop.SellMultiplier);
-    }
-
-    [TestMethod]
     public void ResolveEffectiveShop_PlayerHasNoCharismaComponent_ReturnsShopUnchanged()
     {
-        var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
-        AbilityScoreTestPools.Register(manager);
+        var manager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4));
 
         var effectiveShop = ShopMarginPricing.ResolveEffectiveShop(manager, GeneralShop, PlayerEntityId);
 
@@ -72,8 +60,7 @@ public sealed class ShopMarginPricingTests
     [TestMethod]
     public void ResolveEffectiveShop_Charisma1_ReturnsShopUnchanged()
     {
-        var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
-        AbilityScoreTestPools.Register(manager);
+        var manager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4));
         manager.GetPackedPool<AbilityScoresComponent>().Add(PlayerEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Charisma, baseValue: 1, total: 1));
 
         var effectiveShop = ShopMarginPricing.ResolveEffectiveShop(manager, GeneralShop, PlayerEntityId);
@@ -85,8 +72,7 @@ public sealed class ShopMarginPricingTests
     [TestMethod]
     public void ResolveEffectiveShop_Charisma300_HalvesTheMarginAndPreservesAllowedTags()
     {
-        var manager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
-        AbilityScoreTestPools.Register(manager);
+        var manager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4));
         manager.GetPackedPool<AbilityScoresComponent>().Add(PlayerEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Charisma, baseValue: 300, total: 300));
 
         var potionShop = new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.20f, sellMultiplier: 0.80f);

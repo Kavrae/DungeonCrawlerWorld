@@ -9,10 +9,10 @@ namespace Engine.ECS.Context;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class EcsContext(EntityManager entityManager, ComponentManager componentManager, SystemManager systemManager, EventBus eventBus)
 {
-    public EntityManager EntityManager { get; } = entityManager ?? throw new ArgumentNullException(nameof(entityManager));
-    public ComponentManager ComponentManager { get; } = componentManager ?? throw new ArgumentNullException(nameof(componentManager));
-    public SystemManager SystemManager { get; } = systemManager ?? throw new ArgumentNullException(nameof(systemManager));
-    public EventBus EventBus { get; } = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+    public EntityManager EntityManager { get; } = entityManager;
+    public ComponentManager ComponentManager { get; } = componentManager;
+    public SystemManager SystemManager { get; } = systemManager;
+    public EventBus EventBus { get; } = eventBus;
 
     /// <summary>Updates the ECS context via the system manager.</summary>
     /// <param name="time">The current engine time.</param>

@@ -42,7 +42,7 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
     private readonly EntityBodyParts _bodyParts;
     private readonly PackedComponentPool<MovementDisabledComponent> _movementDisabled;
     private readonly PackedComponentPool<MeleeDisabledComponent> _meleeDisabled;
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public BodyPartEffectsSystem(
@@ -52,7 +52,7 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
         PackedComponentPool<MeleeDisabledComponent> meleeDisabled,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null)
+        MultiComponentPool<StatModifierComponent> statModifiers)
     {
         _bodyParts = bodyParts;
         _movementDisabled = movementDisabled;
@@ -173,11 +173,6 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
     /// <summary>Grants/updates/removes this system's own permanent multiplicative StatModifierComponent for target, so its effective value equals baseValue * combinedMultiplier (see StatModifierMath's own additive-then-multiplicative formula) -- StatModifierComponent's fields are get-only, so an actual change always means remove-then-re-add rather than an in-place magnitude edit.</summary>
     private void SyncModifier(int entityId, StatModifierTarget target, float combinedMultiplier, Tag? conditionTag = null)
     {
-        if (_statModifiers is null)
-        {
-            return;
-        }
-
         var desiredMagnitude = combinedMultiplier - 1f;
         var existingDenseIndex = FindModifierDenseIndex(entityId, target, conditionTag, out var existingMagnitude);
 
@@ -207,11 +202,6 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
 
     private void RemoveModifier(int entityId, StatModifierTarget target, Tag? conditionTag = null)
     {
-        if (_statModifiers is null)
-        {
-            return;
-        }
-
         var denseIndex = FindModifierDenseIndex(entityId, target, conditionTag, out _);
         if (denseIndex != -1)
         {

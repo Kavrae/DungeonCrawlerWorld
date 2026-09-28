@@ -30,7 +30,7 @@ public sealed class ItemIconElement(FontService fontService, ElementPoolService 
         _spriteName = spriteName;
         _glyph = glyph;
         _glyphColor = glyphColor;
-        _glyphFont = fontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction));
+        _glyphFont = FontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction));
     }
 
     public override void DrawContent(GameTime gameTime)

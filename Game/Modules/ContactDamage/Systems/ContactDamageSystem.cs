@@ -39,13 +39,13 @@ public sealed class ContactDamageSystem : ISystem
     private readonly TerrainRegistry _terrain;
     private readonly PackedComponentPool<ContactDamageExposureComponent> _exposures;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
     private readonly EventBus _eventBus;
     private readonly IMapQuery _mapQuery;
-    private readonly IPlayerQuery? _playerQuery;
+    private readonly IPlayerQuery _playerQuery;
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
-    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly EntityBodyParts? _bodyParts;
+    private readonly PackedComponentPool<DeadComponent> _deadEntities;
+    private readonly EntityBodyParts _bodyParts;
     private readonly MathUtility _mathUtility;
     private readonly PackedTimerWheel<ContactDamageExposureComponent> _wheel;
 
@@ -62,14 +62,14 @@ public sealed class ContactDamageSystem : ISystem
         PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         IMapQuery mapQuery,
-        IPlayerQuery? playerQuery,
+        IPlayerQuery playerQuery,
         FrameEventBuffer<EntityMovedEvent> movedEntities,
         MathUtility mathUtility,
         SimulationClock simulationClock,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null,
-        EntityBodyParts? bodyParts = null,
-        SimulationScope? simulationScope = null)
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        PackedComponentPool<DeadComponent> deadEntities,
+        EntityBodyParts bodyParts,
+        SimulationScope simulationScope)
     {
         _terrain = terrain;
         _exposures = exposures;
@@ -85,10 +85,7 @@ public sealed class ContactDamageSystem : ISystem
         _clock = simulationClock;
         _tick = Tick;
         _wheel = new PackedTimerWheel<ContactDamageExposureComponent>(exposures, simulationScope);
-        if (simulationScope is not null)
-        {
-            simulationScope.EntityResumed += OnEntityResumed;
-        }
+        simulationScope.EntityResumed += OnEntityResumed;
     }
 
     /// <summary>Moves the entity's exposure past every tick owed while it froze -- see SkipOwedTicks.</summary>
@@ -97,7 +94,7 @@ public sealed class ContactDamageSystem : ISystem
 
     private void OnEntityMoved(EntityMovedEvent moved, long now)
     {
-        if (_deadEntities?.Has(moved.EntityId) == true)
+        if (_deadEntities.Has(moved.EntityId))
         {
             return;
         }
@@ -161,7 +158,7 @@ public sealed class ContactDamageSystem : ISystem
         // lava would keep re-triggering HealthDamage.Apply/EntityDamagedEvent forever. Not
         // re-armed, so the exposure rests inert (TimerFired: neither removed nor re-armed) rather
         // than being cleared.
-        if (_deadEntities?.Has(entityId) == true)
+        if (_deadEntities.Has(entityId))
         {
             return false;
         }

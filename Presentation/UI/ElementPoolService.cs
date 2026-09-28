@@ -131,8 +131,6 @@ public sealed class ElementPoolService
     public void RegisterFactory<TElement>(Func<TElement> factory)
         where TElement : Element
     {
-        ArgumentNullException.ThrowIfNull(factory);
-
         _elementPoolsByType[typeof(TElement)] = new ObjectPool<Element>(() => factory(), static element => element.IsVisible = false);
     }
 
@@ -175,8 +173,6 @@ public sealed class ElementPoolService
     /// <param name="element">The parent to close.</param>
     public void CloseElement(Element element)
     {
-        ArgumentNullException.ThrowIfNull(element);
-
         if (!_pooledElements.Add(element))
         {
             return;
@@ -285,8 +281,6 @@ public sealed class ElementPoolService
     /// <param name="parent">The parent parent.</param>
     public void CloseAllChildren(Element parent)
     {
-        ArgumentNullException.ThrowIfNull(parent);
-
         foreach (var child in parent.ChildElements.ToArray())
         {
             CloseElement(child);

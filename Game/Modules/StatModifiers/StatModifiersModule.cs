@@ -15,9 +15,9 @@ namespace Game.Modules.StatModifiers;
 /// </summary>
 public sealed class StatModifiersModule : IGameModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000012");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000001b");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [];
+    public Guid Id => ModuleId;
 
     private EventBus _eventBus = null!;
 

@@ -28,29 +28,9 @@ public sealed class DebugWindowContentTests
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
         var mathUtility = new MathUtility();
 
-        var context = new GameModuleContext(world, mathUtility, new EventBus()) { EntityMoveSync = new WorldEventSync(world) };
+        var context = new GameModuleContext(world, mathUtility, new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
 
-        var movementModule = new MovementModule();
-        movementModule.Configure(context);
-
-        var processingTierModule = new ProcessingTierModule();
-        processingTierModule.Configure(context);
-
-        var coreModule = new CoreModule();
-        coreModule.Configure(context);
-
-        var healthModule = new HealthModule();
-        healthModule.Configure(context);
-
-        IReadOnlyList<IModule> modules =
-        [
-            coreModule,
-            healthModule,
-            movementModule,
-            processingTierModule,
-        ];
-
-        return Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50, entityKeys: context.EntityKeys);
+        return BuiltInTestModules.Build(context, 100, 50);
     }
 
     [TestMethod]

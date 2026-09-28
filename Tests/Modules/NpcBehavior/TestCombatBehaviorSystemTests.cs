@@ -21,6 +21,7 @@ using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race.Components;
 using Game.World;
 using Game.Blueprints;
+using Game.Spawning;
 
 namespace Tests.Modules.NpcBehavior;
 
@@ -106,7 +107,7 @@ public sealed class TestCombatBehaviorSystemTests
         var bodyParts = bodyPartWorld.BodyParts;
         var inventoryStacks = new MultiComponentPool<InventoryItemStackComponent>(10, 10);
         var actionInstances = new MultiComponentPool<ActionInstanceComponent>(10, 10);
-        var actions = new EntityActions(new ActionCatalog(), new BlueprintRegistry(), actionInstances, new MultiComponentPool<ActionCooldownComponent>(10, 10));
+        var actions = new EntityActions(new ActionCatalog(), new BlueprintRegistry(), actionInstances, new MultiComponentPool<ActionCooldownComponent>(10, 10), EmptyPools.Direct<SpawnRecordComponent>(), EmptyPools.Multi<AppliedBlueprintComponent>());
         var raceSlots = new PackedComponentPool<RaceSlotsComponent>(10, 10, static (ref existing, incoming) =>
         {
             existing.Add(incoming.Race1);
@@ -130,7 +131,7 @@ public sealed class TestCombatBehaviorSystemTests
             processingTiers.Add(entityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         }
 
-        var system = new TestCombatBehaviorSystem(
+        var system = TestSystems.TestCombatBehaviorSystem(
             movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actions, raceSlots,
             pendingActivations, pendingConsumableActivations, mapQuery, math, processingTiers, new ProcessingTierEvents(), deadEntities);
 
@@ -353,15 +354,44 @@ public sealed class TestCombatBehaviorSystemTests
         Assert.IsTrue(fixture.PendingActivations.Has(GoblinEntityId), "Sanity check: the goblin decided to attack this tick.");
 
         var eventBus = new Engine.Events.EventBus();
-        var movementSystem = new MovementSystem(
+        var movementSystem = TestSystems.MovementSystem(
             fixture.TransformPool, fixture.ActionLockPool, fixture.MovementPool, fixture.MapQuery, eventBus,
             new RecordingEntityMoveSync(), new Engine.ECS.Systems.FrameEventBuffer<EntityMovedEvent>(), null,
             new DirectComponentPool<ProcessingTierComponent>(10, static (ref existing, incoming) => existing = incoming),
-            new ProcessingTierEvents(), pendingActionActivations: fixture.PendingActivations, pendingConsumableActivations: fixture.PendingConsumableActivations);
+            new ProcessingTierEvents());
 
         movementSystem.Update(default, 0);
 
-        Assert.AreEqual(GoblinPosition, fixture.TransformPool.GetReadonly(GoblinEntityId).Position, "MovementSystem must see this tick's queued attack and skip moving the goblin entirely.");
+        Assert.AreEqual(GoblinPosition, fixture.TransformPool.GetReadonly(GoblinEntityId).Position, "A goblin that queued an attack this tick must not also move.");
+    }
+
+    [TestMethod]
+    public void Update_QueuingAnAttack_ClearsAnArrivedStep()
+    {
+        var fixture = Build();
+        PlaceGoblin(fixture, GoblinEntityId);
+        fixture.MovementPool.TryUpdate(GoblinEntityId, static (ref MovementComponent m) => m.NextMapPosition = GoblinPosition);
+        fixture.RaceSlots.Add(PlayerEntityId, new RaceSlotsComponent(HumanRace));
+        fixture.MapQuery.SetBlockingOccupant(AdjacentTile, PlayerEntityId);
+
+        fixture.System.Update(default, 0);
+
+        Assert.IsTrue(fixture.PendingActivations.Has(GoblinEntityId));
+        Assert.IsNull(fixture.MovementPool.GetReadonly(GoblinEntityId).NextMapPosition);
+    }
+
+    [TestMethod]
+    public void Update_QueuingASelfHeal_ClearsAnArrivedStep()
+    {
+        var fixture = Build();
+        PlaceGoblin(fixture, GoblinEntityId, currentHealth: 50, maximumHealth: 200);
+        fixture.MovementPool.TryUpdate(GoblinEntityId, static (ref MovementComponent m) => m.NextMapPosition = GoblinPosition);
+        fixture.InventoryStacks.Add(GoblinEntityId, new InventoryItemStackComponent(HealthPotion.Id, quantity: 1));
+
+        fixture.System.Update(default, 0);
+
+        Assert.IsTrue(fixture.PendingConsumableActivations.Has(GoblinEntityId));
+        Assert.IsNull(fixture.MovementPool.GetReadonly(GoblinEntityId).NextMapPosition);
     }
 
     private sealed class RecordingEntityMoveSync : IEntityMoveSync

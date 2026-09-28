@@ -45,11 +45,7 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
     private readonly PackedComponentPool<SimpleHealthComponent> _healthPool = componentManager.GetPackedPool<SimpleHealthComponent>();
     private readonly EntityBodyParts _bodyParts = bodyParts;
 
-    // Optional -- see StatModifierMath.GetEffectiveValue's own doc comment for why a null pool
-    // (StatModifiersModule not registered) is treated the same as "no active modifiers."
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers = componentManager.IsRegistered<StatModifierComponent>()
-        ? componentManager.GetMultiPool<StatModifierComponent>()
-        : null;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
 
     private Window _hostWindow = null!;
     private Window _hoverPopup = null!;
@@ -83,7 +79,7 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
     }
 
     /// <summary>Whether the player currently has a SimpleHealthComponent and what fraction of effective max health remains is decided here -- Draw only reads the cached fraction and maps it to a fill color/width.</summary>
-    public void Update(GameTime gameTime) => Update(gameTime, Mouse.GetState(), _hostWindow.ElementPoolService.GraphicsDevice.Viewport.Bounds);
+    public void Update(GameTime gameTime) => Update(Mouse.GetState(), _hostWindow.ElementPoolService.GraphicsDevice.Viewport.Bounds);
 
     /// <summary>
     /// Takes explicit MouseState/screenBounds rather than reading Mouse.GetState()/
@@ -94,7 +90,7 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
     /// GraphicsDevice (unavailable headlessly -- see WindowGlowTests/FolderTests/
     /// HotbarContentTests' own doc comments for the same constraint elsewhere in this codebase).
     /// </summary>
-    internal void Update(GameTime gameTime, MouseState mouseState, Rectangle screenBounds)
+    internal void Update(MouseState mouseState, Rectangle screenBounds)
     {
         var playerEntityId = world.PlayerEntityId;
         if (playerEntityId < 0 || !HealthQueries.TryGetTotals(_healthPool, _bodyParts, playerEntityId, out var currentHealth, out var maximumHealth) || maximumHealth <= 0)

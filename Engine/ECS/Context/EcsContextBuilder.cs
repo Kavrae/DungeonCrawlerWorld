@@ -16,11 +16,11 @@ public sealed class EcsContextBuilder
 
     private readonly EntityManager _entityManager;
 
-    public EcsContextBuilder(int initialEntityCapacity, int initialComponentCapacity, EventBus? eventBus = null, EntityKeys? entityKeys = null)
+    public EcsContextBuilder(int initialEntityCapacity, int initialComponentCapacity, EventBus eventBus, EntityKeys? entityKeys = null)
     {
         ComponentManager = new ComponentManager(initialEntityCapacity, initialComponentCapacity);
         _entityManager = new EntityManager(ComponentManager, initialEntityCapacity, entityKeys);
-        EventBus = eventBus ?? new EventBus();
+        EventBus = eventBus;
     }
 
     public EcsContext Build() => new(_entityManager, ComponentManager, SystemManager, EventBus);

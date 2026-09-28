@@ -61,7 +61,7 @@ public sealed class AbilityScoreWindowController(
     }
 
     /// <summary>Mirrors InventoryWindowController.Update's own reasoning -- Enabled false both grays the icon and excludes it from hit-testing.</summary>
-    public void Update(GameTime gameTime) =>
+    public void Update() =>
         _button.Enabled = !IsInventoryDisabled();
 
     private bool IsInventoryDisabled() => InventoryQueries.IsInventoryDisabled(_disabledPool, world.PlayerEntityId);

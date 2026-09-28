@@ -1,12 +1,10 @@
 ﻿using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
-using Game.Modules.Actions.Components;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
-using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Movement.Systems;
 using Game.Modules.ProcessingTier;
@@ -14,6 +12,10 @@ using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.World;
+using Game.Modules.Death;
+using Game.Modules.StatusEffectAura;
+using Game.Modules.StatModifiers;
+using Game.Modules.BodyPartEffects;
 
 namespace Game.Modules.Movement;
 
@@ -21,15 +23,17 @@ namespace Game.Modules.Movement;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class MovementModule : IGameModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000004");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000004");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [typeof(CoreModule)];
+    public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, DeathModule.ModuleId, StatusEffectAuraModule.ModuleId, StatModifiersModule.ModuleId, BodyPartEffectsModule.ModuleId, ProcessingTierModule.ModuleId];
 
     private IMapQuery _mapQuery = null!;
     private EventBus _eventBus = null!;
     private IEntityMoveSync? _entityMoveSync;
     private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
-    private IPlayerQuery? _playerQuery;
+    private IPlayerQuery _playerQuery = null!;
     private ProcessingTierEvents _processingTierEvents = null!;
 
     public void Configure(GameModuleContext context)
@@ -62,29 +66,12 @@ public sealed class MovementModule : IGameModule
             throw new InvalidOperationException($"{nameof(MovementModule)} requires {nameof(GameModuleContext)}.{nameof(GameModuleContext.EntityMoveSync)} to be set.");
         }
 
-        var deadEntities = componentManager.IsRegistered<DeadComponent>()
-            ? componentManager.GetPackedPool<DeadComponent>()
-            : null;
-        var pendingActionActivations = componentManager.IsRegistered<PendingActionActivationComponent>()
-            ? componentManager.GetPackedPool<PendingActionActivationComponent>()
-            : null;
-        var pendingConsumableActivations = componentManager.IsRegistered<PendingConsumableActivationComponent>()
-            ? componentManager.GetPackedPool<PendingConsumableActivationComponent>()
-            : null;
-        // Soft, IsRegistered-guarded dependency on StatusEffectAuraModule's own component --
-        // MovementModule can't take a hard Dependencies entry on it, since StatusEffectAuraModule
-        // itself already depends on MovementModule (see that module's own doc comment), so a
-        // hard dependency the other way would be circular. Mirrors DeathModule's identical soft
-        // dependency on the same component. Only used to widen MovementSystem's EventBus.Publish
-        // gate to an aura-carrying mover (see MovementSystem's own doc comment) -- MovementModule
-        // doesn't otherwise need anything from that module.
-        var auraSources = componentManager.IsRegistered<StatusEffectAuraSourceComponent>()
-            ? componentManager.GetMultiPool<StatusEffectAuraSourceComponent>()
-            : null;
-        var statModifiers = componentManager.GetOptionalMultiPool<StatModifierComponent>();
-        // Soft dependency on BodyPartEffectsModule, mirroring auraSources above -- absent means
-        // no entity's movement can ever be hard-blocked, which is correct if that module isn't loaded.
-        var movementDisabled = componentManager.GetOptionalPackedPool<MovementDisabledComponent>();
+        var deadEntities = componentManager.GetPackedPool<DeadComponent>();
+        // Only used to widen MovementSystem's EventBus.Publish gate to an aura-carrying mover (see
+        // MovementSystem's own doc comment).
+        var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
+        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
+        var movementDisabled = componentManager.GetPackedPool<MovementDisabledComponent>();
 
         systemManager.Register(new MovementSystem(
             componentManager.GetDirectPool<TransformComponent>(),
@@ -98,8 +85,6 @@ public sealed class MovementModule : IGameModule
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             _processingTierEvents,
             deadEntities,
-            pendingActionActivations,
-            pendingConsumableActivations,
             auraSources,
             statModifiers,
             movementDisabled));

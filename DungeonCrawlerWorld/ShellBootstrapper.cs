@@ -42,9 +42,6 @@ public static class ShellBootstrapper
     /// <returns></returns>
     public static ShellContext Build(PresentationContext presentation, WorldSessionContext worldSession, Vector2 screenSize, DiagnosticsEngine? diagnostics = null)
     {
-        ArgumentNullException.ThrowIfNull(presentation);
-        ArgumentNullException.ThrowIfNull(worldSession);
-
         HudChrome.ResolveLayout(screenSize);
 
         var world = worldSession.World;
@@ -83,8 +80,8 @@ public static class ShellBootstrapper
             playerInputBuffer,
             componentManager.GetPackedPool<ManaComponent>(),
             componentManager.GetPackedPool<AbilityScoresComponent>(),
-            worldSession.LocalTierRoster,
-            ecsContext.SystemManager.Clock);
+            ecsContext.SystemManager.Clock,
+            worldSession.LocalTierRoster);
         var playerMovementController = new PlayerMovementController(playerInputBuffer);
 
         //TODO look at pulling these contents into a new context if it continues to grow.
@@ -101,9 +98,9 @@ public static class ShellBootstrapper
         var tooltipController = new TooltipController();
         tooltipController.Initialize(presentation.ElementPoolService, uiLayers);
 
-        var mapWindow = BuildBaseWindows(presentation, ecsContext, screenSize, diagnostics, mapViewState, uiLayers);
+        var mapWindow = BuildBaseWindows(presentation, ecsContext, diagnostics, uiLayers);
         var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, mapView, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, screenSize, mapViewState, uiLayers, worldSession);
-        var (notificationCenter, healthController, inventoryController) = BuildDynamicHudWindows(presentation, world, ecsContext, itemCatalog, mapWindow, contextMenuController, uiLayers, tooltipController);
+        var (notificationCenter, healthController, inventoryController) = BuildDynamicHudWindows(presentation, world, ecsContext, mapWindow, contextMenuController, uiLayers, tooltipController);
         var hotbarController = BuildHotbarController(mapViewState, hotbarContent, actionTargetingController, tooltipController);
         BuildUserWindows(presentation, cursorTextContent, dragGhostContent, uiLayers);
 
@@ -182,7 +179,7 @@ public static class ShellBootstrapper
         // comparison's own anchor -- see ItemComparisonController.Arm) -- one-directional
         // reference, no construction cycle, the same shape SecondaryInventoryWindowController
         // already has on InventoryWindowController.
-        var itemComparisonController = new ItemComparisonController(presentation.ElementPoolService, componentManager, itemCatalog, actionCatalog, inventoryController, contextMenuController, mapWindow, mapViewState, itemDetailsController, cursorTextContent);
+        var itemComparisonController = new ItemComparisonController(presentation.ElementPoolService, componentManager, itemCatalog, inventoryController, contextMenuController, mapWindow, mapViewState, itemDetailsController, cursorTextContent);
         itemComparisonController.Initialize(uiLayers);
         itemDetailsController.GetComparisonColumnRectangles = () => itemComparisonController.ColumnRectangles;
         itemDetailsController.OnClosed = itemComparisonController.ClearComparison;
@@ -214,7 +211,7 @@ public static class ShellBootstrapper
 
         inventoryController.OnActivateRequested = (_, stackInstanceId) => actionTargetingController.ArmItemFromStack(stackInstanceId);
 
-        var inputController = new UiInputController(uiLayers, screenSize, hotbarController, componentManager, world, contextMenuController, itemDetailsController, itemComparisonController, itemCatalog, mapViewState, ecsContext.EventBus, healthController, inventoryController, abilityScoreController);
+        var inputController = new UiInputController(uiLayers, screenSize, componentManager, world, ecsContext.EventBus, hotbarController, contextMenuController, itemDetailsController, itemComparisonController, itemCatalog, mapViewState, healthController, inventoryController, abilityScoreController);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 
@@ -255,7 +252,7 @@ public static class ShellBootstrapper
 
     /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see UiInputController's own doc comment for what each of the four tiers means. MapWindow's own factory (and every other pooled type's) is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
     private static MapWindow BuildBaseWindows(
-        PresentationContext presentation, EcsContext ecsContext, Vector2 screenSize, DiagnosticsEngine? diagnostics, MapViewState mapViewState, UiLayerStack layers)
+        PresentationContext presentation, EcsContext ecsContext, DiagnosticsEngine? diagnostics, UiLayerStack layers)
     {
         var mapWindow = presentation.ElementPoolService.CreateElement<MapWindow>(null, new ElementOptions
         {
@@ -381,7 +378,7 @@ public static class ShellBootstrapper
                 CanUserScrollVertical = true,
             },
         });
-        inspectionWindow.SetContent(new InspectionWindowContent(world, mapView, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, presentation.ElementPoolService, worldSession.SpawnRecordRebuilder, worldSession.Skeletons, worldSession.Definitions));
+        inspectionWindow.SetContent(new InspectionWindowContent(world, mapView, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, presentation.ElementPoolService, worldSession.Definitions, worldSession.SpawnRecordRebuilder, worldSession.Skeletons));
         inspectionWindow.Initialize();
         layers.Add(UiLayer.StaticHud, inspectionWindow);
 
@@ -429,7 +426,7 @@ public static class ShellBootstrapper
     }
 
     /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and InventoryWindowController does the same for its own button+window (both add to UiLayer.DynamicHud specifically; hover popups instead show/hide through the one shared TooltipController -- see its own doc comment) -- see UiLayer's own doc comment for what each tier means. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too. Every pooled type either of these creates is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
-    private static (NotificationCenter NotificationCenter, HealthWindowController Health, InventoryWindowController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, ItemCatalog itemCatalog, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers, TooltipController tooltipController)
+    private static (NotificationCenter NotificationCenter, HealthWindowController Health, InventoryWindowController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers, TooltipController tooltipController)
     {
         var notificationCenter = new NotificationCenter(presentation.ElementPoolService, ecsContext.EventBus, layers, contextMenuController);
         notificationCenter.Initialize();
@@ -439,12 +436,11 @@ public static class ShellBootstrapper
         // to sit its own button directly beneath this one -- see InventoryChrome.ButtonPosition's
         // own doc comment. No actual construction-order dependency between the two controllers;
         // built in this order simply because it reads naturally top-to-bottom.
-        var health = new HealthWindowController(presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.LabelRenderer);
+        var health = new HealthWindowController(presentation.ElementPoolService, world);
         health.Initialize(layers);
 
         var inventory = new InventoryWindowController(
-            presentation.ElementPoolService, world, ecsContext.ComponentManager, presentation.FontService, presentation.LabelRenderer,
-            presentation.SpriteSheetService, presentation.SpriteRenderer, itemCatalog, mapWindow, contextMenuController, tooltipController);
+            presentation.ElementPoolService, world, ecsContext.ComponentManager, mapWindow, contextMenuController, tooltipController);
         inventory.Initialize(layers);
 
         return (notificationCenter, health, inventory);
@@ -656,10 +652,10 @@ public sealed record ShellContext(
     /// different frames -- one more full EcsContext.Update tick running after the player pressed
     /// Space, or after a blocking notification fired, before the world actually stops.
     /// </summary>
-    public void PreSimulationUpdate(GameTime gameTime)
+    public void PreSimulationUpdate()
     {
-        InputController.Update(gameTime);
-        NotificationCenter.Update(gameTime);
+        InputController.Update();
+        NotificationCenter.Update();
     }
 
     /// <summary>
@@ -672,8 +668,8 @@ public sealed record ShellContext(
     /// </summary>
     public void Update(GameTime gameTime)
     {
-        Inventory.Update(gameTime);
-        AbilityScore.Update(gameTime);
+        Inventory.Update();
+        AbilityScore.Update();
 
         foreach (var layer in UiLayerStack.LayersAscending())
         {

@@ -34,7 +34,7 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
         // previous consumer doesn't leak into a differently-sized pooled reuse (confirmed live:
         // InspectionWindowContent's rows were rendering at whatever size the pool's TextWindow had
         // last been given elsewhere).
-        ContentFont = fontService.GetFont(FontChrome.DefaultFontSize);
+        ContentFont = FontService.GetFont(FontChrome.DefaultFontSize);
         _canContainChildren = false;
     }
 

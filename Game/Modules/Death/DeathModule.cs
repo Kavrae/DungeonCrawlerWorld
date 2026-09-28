@@ -6,6 +6,8 @@ using Game.Modules.Death.Components;
 using Game.Modules.Death.Systems;
 using Game.Modules.StatusEffectAura.Components;
 using Game.World;
+using Game.Modules.Core;
+using Game.Modules.StatusEffectAura;
 
 namespace Game.Modules.Death;
 
@@ -16,9 +18,11 @@ namespace Game.Modules.Death;
 /// </summary>
 public sealed class DeathModule : IGameModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000015");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000015");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [];
+    public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, StatusEffectAuraModule.ModuleId];
 
     private EventBus _eventBus = null!;
     private IMapQuery _mapQuery = null!;
@@ -46,14 +50,7 @@ public sealed class DeathModule : IGameModule
             throw new InvalidOperationException($"{nameof(DeathModule)} requires {nameof(GameModuleContext)}.{nameof(GameModuleContext.EntityMoveSync)} to be set.");
         }
 
-        // Soft, IsRegistered-guarded dependency on StatusEffectAuraModule's own component --
-        // DeathModule doesn't otherwise need anything from that module, so this stays optional
-        // rather than a declared Dependencies entry (contrast InventoryModule's own hard
-        // dependency on ActionsModule's PotionCooldownComponent, which InventoryModule cannot
-        // function without at all).
-        var auraSources = componentManager.IsRegistered<StatusEffectAuraSourceComponent>()
-            ? componentManager.GetMultiPool<StatusEffectAuraSourceComponent>()
-            : null;
+        var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
 
         systemManager.Register(new DeathSystem(
             componentManager.GetPackedPool<DeadComponent>(),

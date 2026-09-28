@@ -48,8 +48,6 @@ public sealed class LeakDetector(EntityManager entityManager, ComponentManager c
 
     private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(5);
 
-    private readonly EntityManager _entityManager = entityManager ?? throw new ArgumentNullException(nameof(entityManager));
-    private readonly ComponentManager _componentManager = componentManager ?? throw new ArgumentNullException(nameof(componentManager));
     private readonly List<LeakSample> _history = [];
     private readonly List<LeakFinding> _findings = [];
 
@@ -73,7 +71,7 @@ public sealed class LeakDetector(EntityManager entityManager, ComponentManager c
         _lastSampleUtc = now;
 
         var componentCounts = new Dictionary<string, int>();
-        foreach (var pool in _componentManager.AllPools)
+        foreach (var pool in componentManager.AllPools)
         {
             if (pool is IMemoryReportingComponentPool memoryReportingPool)
             {
@@ -87,7 +85,7 @@ public sealed class LeakDetector(EntityManager entityManager, ComponentManager c
             GC.CollectionCount(0),
             GC.CollectionCount(1),
             GC.CollectionCount(2),
-            _entityManager.LivingEntityCount,
+            entityManager.LivingEntityCount,
             componentCounts);
 
         if (_history.Count == MaxHistorySamples)

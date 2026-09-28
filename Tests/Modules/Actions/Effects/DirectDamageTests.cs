@@ -30,14 +30,12 @@ public sealed class DirectDamageTests
 
     private static (ComponentManager ComponentManager, ActionEffectContext Context) Build(IReadOnlyList<Tag> activatorTags)
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<StatModifierComponent>();
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
 
         var health = componentManager.GetPackedPool<SimpleHealthComponent>();
         health.Add(TargetEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
 
-        var context = new ActionEffectContext(
+        var context = TestActionEffects.Context(
             SourceEntityId: SourceEntityId,
             TargetEntityId: TargetEntityId,
             Health: health,
@@ -55,13 +53,11 @@ public sealed class DirectDamageTests
     /// <summary>Complex-health counterpart to Build -- a body-parts pool instead of SimpleHealthComponent, for BodyPartTargetMode.All/LowestPercentage coverage.</summary>
     private static (ComponentManager ComponentManager, ActionEffectContext Context) BuildComplex(IReadOnlyList<Tag> activatorTags, params (string Name, BodyPartType Type, float Current, ushort Max, bool Vital)[] parts)
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<StatModifierComponent>();
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
 
         var bodyParts = BodyPartTestWorld.WithParts(componentManager, TargetEntityId, parts).BodyParts;
 
-        var context = new ActionEffectContext(
+        var context = TestActionEffects.Context(
             SourceEntityId: SourceEntityId,
             TargetEntityId: TargetEntityId,
             Health: componentManager.GetPackedPool<SimpleHealthComponent>(),

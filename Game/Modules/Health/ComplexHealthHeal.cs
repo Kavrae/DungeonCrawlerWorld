@@ -1,11 +1,10 @@
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
+using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
-using Game.Modules.Health.Components;
 using Game.World;
-using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Health;
 
@@ -21,8 +20,8 @@ namespace Game.Modules.Health;
 /// mode exists to avoid (mirrors ComplexHealthDamage.ApplyToAllParts' identical reasoning).
 /// SingleTarget/LowestPercentage (ApplyToSinglePart): the same total lands entirely on one
 /// selected part -- random, a specific BodyPartType with fallback, or the most-damaged part
-/// (BodyPartSelection.PickLowestPercentage, excluding a currently-burning part via
-/// bodyPartBurningTimers the same way ComplexHealthRegenSystem's own tick always has). A
+/// (BodyPartSelection.PickLowestPercentage, excluding a part inside its regen lockout the same way
+/// ComplexHealthRegenSystem's own tick does). A
 /// SingleTarget pick that needs MathUtility (random, or a fallback resolving to random) and finds
 /// none wired in is a no-op, unlike HealthDamage.Apply's hard throw -- heal's default mode is All,
 /// which never needs it, so mathUtility is optional here rather than a real construction bug.
@@ -39,12 +38,12 @@ public static class ComplexHealthHeal
         PackedComponentPool<SimpleHealthComponent> health,
         int entityId,
         float percentOfMaxHealth,
-        float flatAmount = 0f,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
+        float flatAmount,
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        EventBus eventBus,
+        IPlayerQuery playerQuery,
         int? sourceEntityId = null,
         IReadOnlyList<Tag>? activatorTags = null,
-        EventBus? eventBus = null,
-        IPlayerQuery? playerQuery = null,
         string healType = "Heal")
     {
         var partCount = bodyParts.Count(entityId);
@@ -71,19 +70,18 @@ public static class ComplexHealthHeal
         int entityId,
         float percentOfMaxHealth,
         float flatAmount,
-        MultiComponentPool<StatModifierComponent>? statModifiers,
+        MultiComponentPool<StatModifierComponent> statModifiers,
         int? sourceEntityId,
         IReadOnlyList<Tag>? activatorTags,
         BodyPartTargetRule? targetRule,
         BodyPartTargetMode targetMode,
         MathUtility? mathUtility,
         long now,
-        MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers = null,
-        EventBus? eventBus = null,
-        IPlayerQuery? playerQuery = null,
+        EventBus eventBus,
+        IPlayerQuery playerQuery,
         string healType = "Heal")
     {
-        var partId = ResolvePartId(bodyParts, entityId, statModifiers, targetRule, targetMode, mathUtility, now, bodyPartBurningTimers);
+        var partId = ResolvePartId(bodyParts, entityId, statModifiers, targetRule, targetMode, mathUtility, now);
         if (partId == -1 || !HealthQueries.TryGetEffectiveMaximum(health, bodyParts, statModifiers, entityId, out var effectiveMaximumHealth))
         {
             return;
@@ -95,11 +93,11 @@ public static class ComplexHealthHeal
         PublishAggregateHealEvent(bodyParts, health, eventBus, playerQuery, entityId, sourceEntityId, amount, healType, statModifiers);
     }
 
-    private static int ResolvePartId(EntityBodyParts bodyParts, int entityId, MultiComponentPool<StatModifierComponent>? statModifiers, BodyPartTargetRule? targetRule, BodyPartTargetMode targetMode, MathUtility? mathUtility, long now, MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers)
+    private static int ResolvePartId(EntityBodyParts bodyParts, int entityId, MultiComponentPool<StatModifierComponent> statModifiers, BodyPartTargetRule? targetRule, BodyPartTargetMode targetMode, MathUtility? mathUtility, long now)
     {
         if (targetMode == BodyPartTargetMode.LowestPercentage)
         {
-            return BodyPartSelection.PickLowestPercentage(bodyParts, entityId, now, statModifiers, bodyPartBurningTimers);
+            return BodyPartSelection.PickLowestPercentage(bodyParts, entityId, now, statModifiers);
         }
 
         if (mathUtility is null)
@@ -112,7 +110,7 @@ public static class ComplexHealthHeal
             : BodyPartSelection.PickRandom(bodyParts, entityId, mathUtility);
     }
 
-    private static void ApplyToPart(EntityBodyParts bodyParts, int entityId, int partId, MultiComponentPool<StatModifierComponent>? statModifiers, float amount)
+    private static void ApplyToPart(EntityBodyParts bodyParts, int entityId, int partId, MultiComponentPool<StatModifierComponent> statModifiers, float amount)
     {
         if (!bodyParts.TryGet(entityId, partId, out var part))
         {
@@ -123,13 +121,8 @@ public static class ComplexHealthHeal
         bodyParts.Heal(entityId, partId, amount, effectiveMaximumHealth);
     }
 
-    private static void PublishAggregateHealEvent(EntityBodyParts bodyParts, PackedComponentPool<SimpleHealthComponent> health, EventBus? eventBus, IPlayerQuery? playerQuery, int entityId, int? sourceEntityId, float amount, string healType, MultiComponentPool<StatModifierComponent>? statModifiers)
+    private static void PublishAggregateHealEvent(EntityBodyParts bodyParts, PackedComponentPool<SimpleHealthComponent> health, EventBus eventBus, IPlayerQuery playerQuery, int entityId, int? sourceEntityId, float amount, string healType, MultiComponentPool<StatModifierComponent> statModifiers)
     {
-        if (eventBus is null || playerQuery is null)
-        {
-            return;
-        }
-
         HealthQueries.TryGetTotals(health, bodyParts, entityId, out var totalCurrent, out var totalMaximum);
         var effectiveMaximumHealthForEvent = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, totalMaximum);
         HealthHeal.PublishHealEvent(eventBus, playerQuery, entityId, sourceEntityId, amount, healType, totalCurrent, effectiveMaximumHealthForEvent);

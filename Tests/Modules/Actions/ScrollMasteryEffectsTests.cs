@@ -19,9 +19,7 @@ public sealed class ScrollMasteryEffectsTests
 
     private static (ComponentManager ComponentManager, EventBus EventBus, ActionCatalog ActionCatalog, ItemDefinition Scroll) Build()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterMultiPool<ScrollMasteryComponent>();
-        componentManager.RegisterMultiPool<ActionInstanceComponent>();
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
 
         var scroll = new ItemDefinition(
             Guid.NewGuid(), "Test Scroll", "Scroll", "s", Color.White,

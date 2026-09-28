@@ -23,11 +23,7 @@ public sealed class ActionGrantEffectsTests
 
     private static ComponentManager CreateRegisteredManager()
     {
-        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8);
-        manager.RegisterMultiPool<ActionInstanceComponent>();
-        new StatModifiersModule().RegisterComponents(manager);
-        new AbilityScoresModule().RegisterComponents(manager);
-        new ManaModule().RegisterComponents(manager);
+        var manager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8));
         return manager;
     }
 

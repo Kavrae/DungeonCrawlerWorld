@@ -49,13 +49,7 @@ public sealed class EntityActionsTests
     /// <summary>A race and a class, a trait that grants an action of its own, the creature they make, and a champion of it that overrides the racial attack.</summary>
     private static Fixture Build()
     {
-        var components = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8);
-        components.RegisterMultiPool<ActionInstanceComponent>();
-        components.RegisterMultiPool<ActionCooldownComponent>();
-        components.RegisterDirectPool<SpawnRecordComponent>(static (ref existing, incoming) => existing = incoming);
-        components.RegisterPackedPool<ClassSlotsComponent>(static (ref existing, incoming) => existing.Add(incoming.Class1));
-        components.RegisterMultiPool<ClassMembershipComponent>();
-        components.RegisterMultiPool<AppliedBlueprintComponent>();
+        var components = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8));
 
         var catalog = new ActionCatalog();
         catalog.Register(ActionWithDamage(RacialActionId, "Racial Attack", 1, cooldownFrames: 40));

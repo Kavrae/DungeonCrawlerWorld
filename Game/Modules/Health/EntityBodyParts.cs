@@ -8,7 +8,7 @@ using Game.Blueprints;
 namespace Game.Modules.Health;
 
 /// <summary>One body part of one entity, as EntityBodyParts hands it out: its race's template plus whatever has happened to it.</summary>
-/// <param name="PartId">The part's index in its entity's own body plan -- stable for the entity's lifetime, and what BodyPartBurningTimerComponent names.</param>
+/// <param name="PartId">The part's index in its entity's own body plan -- stable for the entity's lifetime, and what anything addressing one part names it by.</param>
 /// <cleanupVersion>1</cleanupVersion>
 public readonly record struct BodyPartView(int PartId, string Name, BodyPartType Type, byte VerticalPosition, float MaximumHealth, bool IsVital, float CurrentHealth, bool IsDisabled, uint RegenLockedUntilFrame)
 {
@@ -34,25 +34,22 @@ public readonly record struct BodyPartView(int PartId, string Name, BodyPartType
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class EntityBodyParts(
-    BlueprintRegistry? creatures,
+    BlueprintRegistry creatures,
     PackedComponentPool<BodyPartStateComponent> states,
-    PackedComponentPool<RaceSlotsComponent>? raceSlots = null)
+    PackedComponentPool<RaceSlotsComponent> raceSlots)
 {
     private static readonly BodyPartTemplate[] NoParts = [];
 
-    /// <summary>Empty when the module that built this was never configured -- a test module set with no races, where nothing has a body plan.</summary>
-    private readonly BlueprintRegistry _creatures = creatures ?? new BlueprintRegistry();
-    private readonly PackedComponentPool<BodyPartStateComponent> _states = states ?? throw new ArgumentNullException(nameof(states));
 
     /// <summary>Builds one from a ComponentManager, for callers that hold the manager rather than the pools.</summary>
-    public static EntityBodyParts For(ComponentManager componentManager, BlueprintRegistry? creatures)
+    public static EntityBodyParts For(ComponentManager componentManager, BlueprintRegistry creatures)
     {
         ArgumentNullException.ThrowIfNull(componentManager);
 
         return new EntityBodyParts(
             creatures,
             componentManager.GetPackedPool<BodyPartStateComponent>(),
-            componentManager.IsRegistered<RaceSlotsComponent>() ? componentManager.GetPackedPool<RaceSlotsComponent>() : null);
+            componentManager.GetPackedPool<RaceSlotsComponent>());
     }
 
     /// <summary>True when the entity has a body plan at all -- what "this entity uses Complex health" means.</summary>
@@ -76,22 +73,22 @@ public sealed class EntityBodyParts(
         }
 
         ref readonly var template = ref partId < first.Length ? ref first[partId] : ref second[partId - first.Length];
-        part = ViewOf(partId, in template, _states.GetDenseIndex(entityId));
+        part = ViewOf(partId, in template, states.GetDenseIndex(entityId));
         return true;
     }
 
     /// <summary>Every disabled part of the entity as a bit per part id, or 0 when nothing has happened to it -- the whole-body read selection needs, without building a view per part.</summary>
     public ushort DisabledMask(int entityId)
     {
-        var stateDenseIndex = _states.GetDenseIndex(entityId);
-        return stateDenseIndex < 0 ? (ushort)0 : _states.GetReadonlyByDenseIndex(stateDenseIndex).DisabledMask;
+        var stateDenseIndex = states.GetDenseIndex(entityId);
+        return stateDenseIndex < 0 ? (ushort)0 : states.GetReadonlyByDenseIndex(stateDenseIndex).DisabledMask;
     }
 
     /// <summary>Walks the entity's parts in body-plan order, allocating nothing.</summary>
     public PartEnumerator Parts(int entityId)
     {
         var (first, second) = TemplatesOf(entityId);
-        return new PartEnumerator(this, first, second, _states.GetDenseIndex(entityId));
+        return new PartEnumerator(this, first, second, states.GetDenseIndex(entityId));
     }
 
     /// <summary>Takes amount off the part, clamped to its effective maximum, disabling it and locking it out of regen for lockoutFrames the moment it lands at 0.</summary>
@@ -156,7 +153,7 @@ public sealed class EntityBodyParts(
     /// <summary>Creates the entity's state component if this is the first thing to happen to it, then applies change to one part.</summary>
     private void Update<TState>(int entityId, int partId, TState change, StateChange<TState> apply)
     {
-        var stateDenseIndex = _states.GetDenseIndex(entityId);
+        var stateDenseIndex = states.GetDenseIndex(entityId);
         if (stateDenseIndex < 0)
         {
             if (partId < 0 || partId >= Count(entityId))
@@ -171,7 +168,7 @@ public sealed class EntityBodyParts(
             return;
         }
 
-        _states.UpdateByDenseIndex(stateDenseIndex, (partId, change, apply), static (ref BodyPartStateComponent state, (int PartId, TState Change, StateChange<TState> Apply) call) =>
+        states.UpdateByDenseIndex(stateDenseIndex, (partId, change, apply), static (ref BodyPartStateComponent state, (int PartId, TState Change, StateChange<TState> Apply) call) =>
             call.Apply(ref state, call.PartId, call.Change));
     }
 
@@ -191,8 +188,8 @@ public sealed class EntityBodyParts(
             state.SetCurrentHealth(partId, partId < first.Length ? first[partId].MaximumHealth : second[partId - first.Length].MaximumHealth);
         }
 
-        _states.Add(entityId, state);
-        return _states.GetDenseIndex(entityId);
+        states.Add(entityId, state);
+        return states.GetDenseIndex(entityId);
     }
 
     /// <summary>One part's view, reading its condition straight from the state component's dense slot -- -1 when the entity has none, which is every part at full health.</summary>
@@ -203,21 +200,21 @@ public sealed class EntityBodyParts(
             return new BodyPartView(partId, template.Name, template.Type, template.VerticalPosition, template.MaximumHealth, template.IsVital, template.MaximumHealth, IsDisabled: false, RegenLockedUntilFrame: 0);
         }
 
-        ref readonly var state = ref _states.GetReadonlyByDenseIndex(stateDenseIndex);
+        ref readonly var state = ref states.GetReadonlyByDenseIndex(stateDenseIndex);
         return new BodyPartView(partId, template.Name, template.Type, template.VerticalPosition, template.MaximumHealth, template.IsVital, state.CurrentHealthOf(partId), state.IsDisabled(partId), state.RegenLockedUntilFrameOf(partId));
     }
 
     /// <summary>The entity's body plan: its first race's templates, then its second's.</summary>
     private (BodyPartTemplate[] First, BodyPartTemplate[] Second) TemplatesOf(int entityId)
     {
-        if (raceSlots is null || !raceSlots.TryGetReadonly(entityId, out var slots))
+        if (!raceSlots.TryGetReadonly(entityId, out var slots))
         {
             return (NoParts, NoParts);
         }
 
         return (
-            _creatures.Races.TryGet(slots.Race1, out var race1) ? race1.Race!.BodyParts : NoParts,
-            _creatures.Races.TryGet(slots.Race2, out var race2) ? race2.Race!.BodyParts : NoParts);
+            creatures.Races.TryGet(slots.Race1, out var race1) ? race1.Race!.BodyParts : NoParts,
+            creatures.Races.TryGet(slots.Race2, out var race2) ? race2.Race!.BodyParts : NoParts);
     }
 
     /// <summary>Walks one entity's parts without allocating -- templates from its races, condition from its state component.</summary>

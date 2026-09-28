@@ -13,8 +13,6 @@ public sealed class NotificationMinimizeBehavior(Action onMinimize) : IChromeBeh
 {
     public void Attach(Window window)
     {
-        ArgumentNullException.ThrowIfNull(window);
-
         var button = Window.BuildTitleButton(window, "_");
 
         button.Clicked += _ => onMinimize();

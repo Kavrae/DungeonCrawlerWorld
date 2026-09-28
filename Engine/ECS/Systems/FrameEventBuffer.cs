@@ -42,7 +42,7 @@ public sealed class FrameEventBuffer<T> : IFrameScoped
     /// will be destroyed by the next ClearFrame, exactly the "silently and permanently lost"
     /// hazard this type's own doc comment warns about. Turns that silent corruption into a loud,
     /// attributable failure at the actual offending call -- a second producer, or a producer/
-    /// consumer Dependencies ordering regression -- instead of a consumer mysteriously never
+    /// consumer RunsAfter ordering regression -- instead of a consumer mysteriously never
     /// seeing an event it should have.
     /// </remarks>
     public void Record(T item)
@@ -52,7 +52,7 @@ public sealed class FrameEventBuffer<T> : IFrameScoped
             throw new InvalidOperationException(
                 $"FrameEventBuffer<{typeof(T).Name}>.Record called after Items was already read this frame -- " +
                 "this entry would be silently lost. Likely a second producer, or a producer/consumer " +
-                "Dependencies ordering regression. See this type's own doc comment.");
+                "RunsAfter ordering regression. See this type's own doc comment.");
         }
 
         _items.Add(item);

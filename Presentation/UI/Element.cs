@@ -27,17 +27,18 @@ namespace Presentation.UI;
 /// single filled+bordered region with centered text, reusing Element's own geometry/border/
 /// content state directly rather than a parallel copy (see Button.cs).
 /// </summary>
-public class Element
+public class Element(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
 {
-    public Guid ElementId { get; } = Guid.NewGuid();
-
     /// <summary>Internal, not protected: chrome behaviors (see IChromeBehavior) live outside the Element/Window hierarchy but still need a host window's FontService/ElementPoolService to build a title Button through the normal pooled ElementPoolService.CreateElement path.</summary>
-    internal FontService FontService { get; }
-
-    private readonly ElementPoolService _elementPoolService;
+    internal FontService FontService { get; } = fontService;
 
     /// <summary>See FontService's doc comment -- same reason this is exposed internally.</summary>
-    internal ElementPoolService ElementPoolService => _elementPoolService;
+    internal ElementPoolService ElementPoolService { get; } = elementPoolService;
+
+    /// <summary>Internal, not protected, for the same reason as WindowService/FontService -- Button uses this to center its label the same way LabelRenderer centers map tile glyphs.</summary>
+    internal LabelRenderer LabelRenderer { get; } = labelRenderer;
+
+    public Guid ElementId { get; } = Guid.NewGuid();
 
     /// <summary>Raised once the element has completed its initial setup.</summary>
     public event Action<Element>? Opened;
@@ -216,9 +217,6 @@ public class Element
     internal void SetIsActiveWindow(bool isActiveWindow) => _isActiveWindow = isActiveWindow;
 
     /*========Header========*/
-    /// <summary>Internal, not protected, for the same reason as WindowService/FontService -- Button uses this to center its label the same way LabelRenderer centers map tile glyphs.</summary>
-    internal LabelRenderer LabelRenderer { get; }
-
     /// <summary>
     /// Generic header-region bookkeeping -- see ElementHeaderState's own doc comment. Window's
     /// title text/buttons/colors and Folder's icon are drawn by their own DrawHeader override;
@@ -399,21 +397,8 @@ public class Element
     /// <summary>How many of this element's own Measure calls are in progress; a scrollbar change found by a child event while measuring is left to Measure's own settle loop.</summary>
     private int _measureDepth;
 
-    public Element(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    {
-        ArgumentNullException.ThrowIfNull(fontService);
-        ArgumentNullException.ThrowIfNull(elementPoolService);
-        ArgumentNullException.ThrowIfNull(labelRenderer);
-
-        FontService = fontService;
-        LabelRenderer = labelRenderer;
-        _elementPoolService = elementPoolService;
-    }
-
     public virtual void Build(Element? parent, ElementOptions options)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
         var hierarchy = options.Hierarchy;
         var layout = options.Layout;
         var chrome = options.Chrome;
@@ -639,8 +624,8 @@ public class Element
             return;
         }
 
-        var spriteBatch = _elementPoolService.SpriteBatch;
-        var unitRectangle = _elementPoolService.UnitRectangle;
+        var spriteBatch = ElementPoolService.SpriteBatch;
+        var unitRectangle = ElementPoolService.UnitRectangle;
 
         if (_border.Show)
         {
@@ -677,11 +662,11 @@ public class Element
                 // SpriteBatch End/Begin, so a scrollable Element nested inside another scrollable
                 // Element hands back the exact ambient state it inherited instead of clobbering
                 // it -- confirmed live bug otherwise (see TextBox.DrawContent's own doc comment).
-                _elementPoolService.PushRenderState(_elementPoolService.CurrentRenderState with { Viewport = Viewport, TransformMatrix = CameraTransform });
+                ElementPoolService.PushRenderState(ElementPoolService.CurrentRenderState with { Viewport = Viewport, TransformMatrix = CameraTransform });
 
                 DrawContent(gameTime);
 
-                _elementPoolService.PopRenderState();
+                ElementPoolService.PopRenderState();
             }
             else
             {
@@ -706,15 +691,15 @@ public class Element
                 //
                 // Skipped when there are no children (e.g. TextWindow) -- avoids an extra
                 // SpriteBatch End/Begin and ScissorRectangle swap for a loop that draws nothing.
-                var clippedScissor = Rectangle.Intersect(_elementPoolService.CurrentRenderState.ScissorRectangle, _contentState.Rectangle);
-                _elementPoolService.PushRenderState(_elementPoolService.CurrentRenderState with { ScissorRectangle = clippedScissor, RasterizerState = ScissorClipRasterizerState });
+                var clippedScissor = Rectangle.Intersect(ElementPoolService.CurrentRenderState.ScissorRectangle, _contentState.Rectangle);
+                ElementPoolService.PushRenderState(ElementPoolService.CurrentRenderState with { ScissorRectangle = clippedScissor, RasterizerState = ScissorClipRasterizerState });
 
                 foreach (var childElement in _children)
                 {
                     childElement.Draw(gameTime);
                 }
 
-                _elementPoolService.PopRenderState();
+                ElementPoolService.PopRenderState();
             }
             else
             {
@@ -1273,8 +1258,6 @@ public class Element
     /// </summary>
     public void AddChild(Element newChild, int? insertIndex = null)
     {
-        ArgumentNullException.ThrowIfNull(newChild);
-
         if (!_canContainChildren)
         {
             return;
@@ -2121,6 +2104,6 @@ public class Element
     public void Close()
     {
         Closed?.Invoke(this);
-        _elementPoolService.CloseElement(this);
+        ElementPoolService.CloseElement(this);
     }
 }

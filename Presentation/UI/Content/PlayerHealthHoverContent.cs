@@ -28,7 +28,7 @@ public sealed class PlayerHealthHoverContent(
     World world,
     EntityBodyParts bodyParts,
     FontService fontService,
-    MultiComponentPool<StatModifierComponent>? statModifiers = null) : IElementContent
+    MultiComponentPool<StatModifierComponent> statModifiers) : IElementContent
 {
     /// <summary>Up to 6 body parts -- the player is always the Human race today (see PlayerHealthBarContent's own doc comment), so this doesn't need to grow/shrink with the entity's actual part count.</summary>
     public const int MaxRowCount = 6;

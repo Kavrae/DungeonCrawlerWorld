@@ -32,8 +32,6 @@ public readonly record struct BenchmarkFrameRange
     /// <summary>Reads the range from args; null when absent or malformed (not "start-end" with 0 &lt;= start &lt; end).</summary>
     public static BenchmarkFrameRange? Parse(IEnumerable<string> args)
     {
-        ArgumentNullException.ThrowIfNull(args);
-
         foreach (var arg in args)
         {
             if (!arg.StartsWith(ArgumentPrefix, StringComparison.OrdinalIgnoreCase))

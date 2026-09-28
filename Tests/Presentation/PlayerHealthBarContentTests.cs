@@ -42,9 +42,7 @@ public sealed class PlayerHealthBarContentTests
         var layers = new UiLayerStack();
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
 
-        var componentManager = new ComponentManager(20, 10);
-        componentManager.RegisterPackedPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
 
         componentManager.Merge(PlayerEntityId, new DisplayTextComponent("Player1", "This is you."));
 
@@ -93,7 +91,7 @@ public sealed class PlayerHealthBarContentTests
 
         for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames - 1; frame++)
         {
-            content.Update(new GameTime(), MouseAt(insidePoint), ScreenBounds);
+            content.Update(MouseAt(insidePoint), ScreenBounds);
             Assert.IsFalse(content.HoverPopup.IsVisible, $"Popup must stay hidden before the delay threshold (frame {frame}).");
         }
     }
@@ -106,7 +104,7 @@ public sealed class PlayerHealthBarContentTests
 
         for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames; frame++)
         {
-            content.Update(new GameTime(), MouseAt(insidePoint), ScreenBounds);
+            content.Update(MouseAt(insidePoint), ScreenBounds);
         }
 
         Assert.IsTrue(content.HoverPopup.IsVisible, "Popup must be visible once the hover delay threshold is reached.");
@@ -120,11 +118,11 @@ public sealed class PlayerHealthBarContentTests
 
         for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames; frame++)
         {
-            content.Update(new GameTime(), MouseAt(insidePoint), ScreenBounds);
+            content.Update(MouseAt(insidePoint), ScreenBounds);
         }
         Assert.IsTrue(content.HoverPopup.IsVisible, "Sanity check: the popup must have shown first.");
 
-        content.Update(new GameTime(), MouseAt(OutsideBar), ScreenBounds);
+        content.Update(MouseAt(OutsideBar), ScreenBounds);
 
         Assert.IsFalse(content.HoverPopup.IsVisible, "Losing hover must hide the popup on the very next frame, with no delay.");
     }
@@ -137,7 +135,7 @@ public sealed class PlayerHealthBarContentTests
 
         for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames; frame++)
         {
-            content.Update(new GameTime(), MouseAt(insidePoint), ScreenBounds);
+            content.Update(MouseAt(insidePoint), ScreenBounds);
         }
 
         var barRectangle = hostWindow.ContentRectangle;

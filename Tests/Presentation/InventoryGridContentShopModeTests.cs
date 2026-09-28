@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.Math;
 using Game.Floors;
@@ -41,12 +42,7 @@ public sealed class InventoryGridContentShopModeTests
 
     private static (InventoryGridContent Grid, Window HostWindow, ComponentManager ComponentManager, MapViewState MapViewState) Build(int gridEntityId)
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ShopStockPreferenceComponent>();
-        componentManager.RegisterPackedPool<CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20));
 
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
@@ -70,7 +66,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, gridEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { });
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, gridEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -144,7 +140,7 @@ public sealed class InventoryGridContentShopModeTests
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 2);
         var shopStacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         InventoryQueries.TryGetStack(shopStacks, ShopEntityId, PotionItemId, out var boughtStack);
-        InventoryActions.TryTransferStack(componentManager, ShopEntityId, PlayerEntityId, boughtStack.StackInstanceId, playerQuery: null);
+        InventoryActions.TryTransferStack(componentManager, ShopEntityId, PlayerEntityId, boughtStack.StackInstanceId, playerQuery: TestPlayerQuery.NoPlayer);
 
         grid.Update(new GameTime());
 
@@ -263,12 +259,7 @@ public sealed class InventoryGridContentShopModeTests
     [TestMethod]
     public void Initialize_ShopModeAlreadyActiveWithAffordableItem_CellIsEligibleWithNoUpdateCall()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ShopStockPreferenceComponent>();
-        componentManager.RegisterPackedPool<CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20));
 
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
@@ -297,7 +288,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { });
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -476,12 +467,7 @@ public sealed class InventoryGridContentShopModeTests
     private static (InventoryGridContent Grid, Window HostWindow, ComponentManager ComponentManager, MapViewState MapViewState, ContextMenuController ContextMenuController, Game.World.World World) BuildForContextMenu(
         int gridEntityId, Func<int?> getSecondaryTargetEntityId, bool? tradeGridIsShopSide = null)
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ShopStockPreferenceComponent>();
-        componentManager.RegisterPackedPool<CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20));
 
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
@@ -507,7 +493,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, gridEntityId, filterTag: null, tooltipController, getSecondaryTargetEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, tradeGridIsShopSide);
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, gridEntityId, filterTag: null, tooltipController, getSecondaryTargetEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, new SimulationClock(), tradeGridIsShopSide);
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -789,12 +775,7 @@ public sealed class InventoryGridContentShopModeTests
     [TestMethod]
     public void ShopGridPrice_MatchesActualChargeFromTryBuyFromShop_EvenWithStockStagedInTradeWindow()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ShopStockPreferenceComponent>();
-        componentManager.RegisterPackedPool<CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20));
 
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
@@ -814,7 +795,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, ShopEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { });
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, ShopEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

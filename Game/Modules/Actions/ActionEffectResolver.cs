@@ -14,6 +14,7 @@ using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
 using Game.Blueprints;
+using Game.Modules.Mana.Components;
 
 namespace Game.Modules.Actions;
 
@@ -46,20 +47,21 @@ public static class ActionEffectResolver
         PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         MathUtility mathUtility,
-        IPlayerQuery? playerQuery,
+        IPlayerQuery playerQuery,
         StatusEffectAuraApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
         EntityKeys entityKeys,
         long now,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null,
-        PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
-        PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
-        EntityBodyParts? bodyParts = null,
-        PackedComponentPool<DodgingComponent>? dodgingEntities = null,
-        ProcessingTierQuery? processingTiers = null,
-        BlueprintRegistry? creatures = null)
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        PackedComponentPool<DeadComponent> deadEntities,
+        PackedComponentPool<AbilityScoresComponent> abilityScores,
+        PackedComponentPool<ManaComponent> mana,
+        MultiComponentPool<StatusEffectAuraSourceComponent> auraSources,
+        PackedComponentPool<HotkeyExpansionUnlockComponent> hotkeyExpansionUnlocks,
+        EntityBodyParts bodyParts,
+        PackedComponentPool<DodgingComponent> dodgingEntities,
+        ProcessingTierQuery processingTiers,
+        BlueprintRegistry creatures)
     {
         eventBus.Publish(new ActionActivatedEvent(sourceEntityId, action.Id));
 
@@ -76,12 +78,14 @@ public static class ActionEffectResolver
             Now: now,
             StatModifiers: statModifiers,
             AbilityScores: abilityScores,
+            Mana: mana,
             HotkeyExpansionUnlocks: hotkeyExpansionUnlocks,
             StatusEffectAppliers: statusEffectAppliers,
             DeadEntities: deadEntities,
             AuraSources: auraSources,
             BodyParts: bodyParts,
-            PlayerQuery: playerQuery);
+            PlayerQuery: playerQuery,
+            Definitions: creatures);
 
         var isDodgeable = action.Tags.Contains(Tag.Dodgeable);
         var isStaggering = action.Tags.Contains(Tag.Staggering);
@@ -90,12 +94,12 @@ public static class ActionEffectResolver
         {
             foreach (var targetEntityId in mapQuery.GetOccupantEntityIdsAt(tile))
             {
-                if (processingTiers?.IsSimulated(targetEntityId) == false)
+                if (!processingTiers.IsSimulated(targetEntityId))
                 {
                     continue;
                 }
 
-                if (isDodgeable && dodgingEntities?.Has(targetEntityId) == true)
+                if (isDodgeable && dodgingEntities.Has(targetEntityId))
                 {
                     continue;
                 }
@@ -104,7 +108,7 @@ public static class ActionEffectResolver
 
                 if (isStaggering && targetEntityId != sourceEntityId)
                 {
-                    eventBus.Publish(new EntityStaggeredEvent(targetEntityId, ActionSource.FromEntity(componentManager, entityKeys, sourceEntityId)));
+                    eventBus.Publish(new EntityStaggeredEvent(targetEntityId, ActionSource.FromEntity(componentManager, entityKeys, sourceEntityId, creatures)));
                 }
             }
         }

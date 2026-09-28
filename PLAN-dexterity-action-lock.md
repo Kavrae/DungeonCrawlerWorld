@@ -75,16 +75,17 @@ depends on StatModifiers).
 - `public static float ComputeFromDexterity(ushort dexterityTotal)`: `AbilityScoreMath.Lerp(total,
   MaximumLockFrames, MinimumLockFrames)`. It returns a float because rounding happens once, after
   modifiers.
-- `public static ushort ResolveForEntity(PackedComponentPool<AbilityScoresComponent>? abilityScores, MultiComponentPool<StatModifierComponent>? statModifiers, int entityId)`:
-  1. Dex total through `AbilityScoreQueries.TryGetComponent`, or `MaximumLockFrames` when the pool or
-     the score is absent.
+- `public static ushort ResolveForEntity(PackedComponentPool<AbilityScoresComponent> abilityScores, MultiComponentPool<StatModifierComponent> statModifiers, int entityId)`:
+  1. Dex total through `AbilityScoreQueries.TryGetComponent`, or `MaximumLockFrames` when the entity has
+     no Dexterity score.
   2. `StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.ActionLockFrames, dexLock)`.
   3. **Rounded to nearest**, clamped to `[1, ushort.MaxValue]`. With truncation, every Dex above 1
      would drop straight to 29, a jump no Dex change caused. With rounding, one frame drops every
      ~20 Dex: Dex 1-10 gives 30, and 300 gives 15. The floor of 1 stops a stack of speed modifiers
      from reaching a zero-frame standard lock.
-  Both pools are nullable, matching today's optional-pool convention; `PLAN-module-dependencies.md`
-  will harden them along with every other lookup.
+  Both pools are required: built-in pools always exist, so callers fetch them with `Get*Pool` and
+  the calling module lists AbilityScores and StatModifiers in `Requires` (see CLAUDE.md's Modding
+  section).
 
 Derived on read, not cached on the component. The result now changes whenever the Dex total or an
 `ActionLockFrames` modifier changes: the five ability-score write paths, modifier grant, modifier
@@ -110,10 +111,10 @@ frame.
     times.
   - `PlayerActionGate` takes both pools as new constructor parameters (`ElementFactoryRegistry` passes
     them) and locks for the resolved frames.
-- `MovementSystem` takes the ability-scores pool as a new optional constructor parameter; it already
-  holds `statModifiers`. `MovementModule` fetches it with `GetOptionalPackedPool`, the same way it
-  fetches `statModifiers`. It does **not** get a hard `Dependencies` entry: adding one would change the
-  topological order that every system registers in, which is out of scope here. The step lock becomes
+- `MovementSystem` takes the ability-scores pool as a new required constructor parameter; it already
+  holds `statModifiers`. `MovementModule` fetches it with `GetPackedPool` and adds
+  `AbilityScoresModule.ModuleId` to its `Requires`. Requiring a module doesn't change system order,
+  so the pinned order in `BuiltInModulesTests` stays as it is. The step lock becomes
   `GetEffectiveValue(MovementLockFrames, ResolveForEntity(...))`, then the diagonal multiplier as
   today.
 - Doc comments updated to point at the resolver: `ActionTiming` ("use the acting entity's own

@@ -15,19 +15,22 @@ namespace Game.Modules.ProcessingTier;
 /// IGameModule.Configure instead of the constructor, same shape as MovementModule.
 /// </summary>
 /// <remarks>
-/// Depends on MovementModule for <b>ordering</b>, not just for MovementComponent: ProcessingTierSystem
+/// Runs after MovementModule, as well as requiring it for MovementComponent: ProcessingTierSystem
 /// drains the shared FrameEventBuffer&lt;EntityMovedEvent&gt; that MovementSystem records into, and the
 /// buffer is cleared at the end of every frame -- so ProcessingTierSystem has to run after
-/// MovementSystem within the frame or it sees nothing. Systems run in module order, and this makes
-/// that order a declared dependency rather than a coincidence of the built-in module list.
+/// MovementSystem within the frame or it sees nothing.
 /// </remarks>
 public sealed class ProcessingTierModule : IGameModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000016");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000001c");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [typeof(MovementModule)];
+    public Guid Id => ModuleId;
 
-    private IPlayerQuery? _playerQuery;
+    public IReadOnlyList<Guid> Requires { get; } = [MovementModule.ModuleId];
+
+    public IReadOnlyList<Guid> RunsAfter { get; } = [MovementModule.ModuleId];
+
+    private IPlayerQuery _playerQuery = null!;
     private IMapQuery _mapQuery = null!;
     private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
     private ProcessingTierEvents _events = null!;

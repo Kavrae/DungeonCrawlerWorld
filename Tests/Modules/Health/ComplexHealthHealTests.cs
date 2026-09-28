@@ -1,3 +1,4 @@
+using Engine.Events;
 using Engine.ECS.Systems;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Health;
@@ -5,6 +6,8 @@ using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
+using Game.Modules.Death.Components;
+using Game.Modules.AbilityScores.Components;
 
 namespace Tests.Modules.Health;
 
@@ -38,7 +41,7 @@ public sealed class ComplexHealthHealTests
     {
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 10, 30, true), ("Leg", BodyPartType.Leg, 20, 40, false)).BodyParts;
 
-        ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.5f);
+        TestHealth.HealAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.5f);
 
         // Total = 50% of the entity's overall max (30+40=70) = 35, split evenly across 2 parts = 17.5 each.
         var parts = PartsByName(bodyParts, 0);
@@ -51,7 +54,7 @@ public sealed class ComplexHealthHealTests
     {
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
 
-        ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.5f);
+        TestHealth.HealAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.5f);
 
         bodyParts.TryGet(0, 0, out var part);
         Assert.AreEqual(60f, part.CurrentHealth);
@@ -64,7 +67,7 @@ public sealed class ComplexHealthHealTests
         // Locked out of passive regen, which an active heal ignores.
         bodyParts.LockOutOfRegen(0, 0, now: 0, lockoutFrames: 600);
 
-        ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.5f);
+        TestHealth.HealAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.5f);
 
         bodyParts.TryGet(0, 0, out var part);
         Assert.AreEqual(10f, part.CurrentHealth);
@@ -76,7 +79,7 @@ public sealed class ComplexHealthHealTests
     {
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Arm", BodyPartType.Arm, 0, 20, false)).BodyParts;
 
-        ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.1f);
+        TestHealth.HealAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.1f);
 
         bodyParts.TryGet(0, 0, out var part);
         Assert.IsFalse(part.IsDisabled);
@@ -94,7 +97,7 @@ public sealed class ComplexHealthHealTests
         // active is 60, not 40 (both for the total's own percent-of-max calculation and for the
         // per-part clamp), matching ComplexHealthDamage/ComplexHealthRegenSystem's own
         // effective-maximum clamp.
-        ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.5f, statModifiers: statModifiers);
+        TestHealth.HealAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.5f, statModifiers: statModifiers);
 
         bodyParts.TryGet(0, 0, out var part);
         Assert.AreEqual(60f, part.CurrentHealth, "50% of the effective max (60) = 30 total; 40 + 30 = 70, clamped to 60.");
@@ -105,7 +108,7 @@ public sealed class ComplexHealthHealTests
     {
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Leg", BodyPartType.Leg, 8, 40, false), ("Torso", BodyPartType.Torso, 54, 60, true)).BodyParts;
 
-        ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.25f);
+        TestHealth.HealAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.25f);
 
         // Total = 25% of the entity's overall max (40+60=100) = 25, split evenly = 12.5 each --
         // both parts gain the same absolute 12.5 (Torso clamped), not the same 25% fraction of
@@ -120,7 +123,7 @@ public sealed class ComplexHealthHealTests
     {
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 0, 100, true), ("Torso", BodyPartType.Torso, 0, 100, true), ("Leg", BodyPartType.Leg, 0, 100, false)).BodyParts;
 
-        ComplexHealthHeal.ApplyToAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0f, flatAmount: 30f);
+        TestHealth.HealAllParts(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0f, flatAmount: 30f);
 
         // A flat 30 heal must total 30 across the whole entity (10 per part across 3 parts), not
         // 30 landing on every one of the 3 parts (which would total 90).
@@ -135,7 +138,7 @@ public sealed class ComplexHealthHealTests
     {
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 90, 100, true), ("Leg", BodyPartType.Leg, 20, 100, false)).BodyParts;
 
-        ComplexHealthHeal.ApplyToSinglePart(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.1f, flatAmount: 0f, statModifiers: null, sourceEntityId: null, activatorTags: null, targetRule: null, targetMode: BodyPartTargetMode.LowestPercentage, mathUtility: null, now: 0);
+        ComplexHealthHeal.ApplyToSinglePart(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.1f, flatAmount: 0f, statModifiers: EmptyPools.Multi<StatModifierComponent>(), sourceEntityId: null, activatorTags: null, targetRule: null, targetMode: BodyPartTargetMode.LowestPercentage, mathUtility: null, now: 0, eventBus: new EventBus(), playerQuery: TestPlayerQuery.NoPlayer);
 
         // Total = 10% of the overall max (100+100=200) = 20, applied entirely to the Leg (lowest percentage).
         var parts = PartsByName(bodyParts, 0);

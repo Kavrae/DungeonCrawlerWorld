@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
@@ -47,12 +48,7 @@ public sealed class TradeWindowTests
     private static (TradeWindow Window, ComponentManager ComponentManager, MapViewState MapViewState) Build(
         EventBus? eventBus = null, Action<int, uint>? onItemSelected = null, Action<int, uint>? onCompareRequested = null)
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ShopStockPreferenceComponent>();
-        componentManager.RegisterPackedPool<CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20));
 
         componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(PotionItemId, PreferredStockLevel));
@@ -81,7 +77,7 @@ public sealed class TradeWindowTests
         itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: 10));
         itemCatalog.Register(new ItemDefinition(GadgetItemId, "Test Gadget", null, "g", Color.White, Tags: [], Effects: [], GoldValue: 10));
 
-        windowService.RegisterFactory<TradeWindow>(() => new TradeWindow(fontService, windowService, labelRenderer, componentManager, itemCatalog, spriteSheetService, spriteRenderer, world, contextMenuController, mapViewState, eventBus));
+        windowService.RegisterFactory<TradeWindow>(() => new TradeWindow(fontService, windowService, labelRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState, eventBus ?? new EventBus(), simulationClock: new SimulationClock()));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
@@ -504,13 +500,13 @@ public sealed class TradeWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 500), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        playerGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }));
+        playerGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock()));
         playerGridWindow.Initialize();
 
         var layers = new UiLayerStack();
         layers.Add(UiLayer.DynamicHud, playerGridWindow);
         layers.Add(UiLayer.DynamicHud, tradeWindow);
-        var controller = new UiInputController(layers, new Vector2(2000, 2000), componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+        var controller = new UiInputController(layers, new Vector2(2000, 2000), componentManager, world, new EventBus(), itemCatalog: itemCatalog, mapViewState: mapViewState);
 
         var cell = playerGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
         var pressPoint = cell.ContentRectangle.Center;
@@ -570,13 +566,13 @@ public sealed class TradeWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 500), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        playerGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }));
+        playerGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock()));
         playerGridWindow.Initialize();
 
         var layers = new UiLayerStack();
         layers.Add(UiLayer.DynamicHud, playerGridWindow);
         layers.Add(UiLayer.DynamicHud, tradeWindow);
-        var controller = new UiInputController(layers, new Vector2(2000, 2000), componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+        var controller = new UiInputController(layers, new Vector2(2000, 2000), componentManager, world, new EventBus(), itemCatalog: itemCatalog, mapViewState: mapViewState);
 
         var cell = playerGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
         var pressPoint = cell.ContentRectangle.Center;

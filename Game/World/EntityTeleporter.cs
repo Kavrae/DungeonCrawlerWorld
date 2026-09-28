@@ -28,19 +28,15 @@ namespace Game.World;
 /// </para>
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class EntityTeleporter(World world, DirectComponentPool<TransformComponent> transforms, SpawnMoves moves, EventBus eventBus, CreatureSkeletons? skeletons, PackedComponentPool<MovementComponent>? movements, PackedComponentPool<PendingDelayedActionComponent>? pendingActions)
+public sealed class EntityTeleporter(World world, DirectComponentPool<TransformComponent> transforms, SpawnMoves moves, EventBus eventBus, CreatureSkeletons skeletons, PackedComponentPool<MovementComponent> movements, PackedComponentPool<PendingDelayedActionComponent> pendingActions)
 {
-    private readonly World _world = world ?? throw new ArgumentNullException(nameof(world));
-    private readonly DirectComponentPool<TransformComponent> _transforms = transforms ?? throw new ArgumentNullException(nameof(transforms));
-    private readonly SpawnMoves _moves = moves ?? throw new ArgumentNullException(nameof(moves));
-    private readonly EventBus _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
 
     /// <summary>Whether TryTeleport would move entityId to destination: entityId is on the map, and destination is another cell it could stand in (on the loaded map, not blocked, not occupied).</summary>
     public bool CanTeleport(int entityId, Vector3Int destination) =>
-        _transforms.TryGetReadonly(entityId, out var transform) &&
-        _world.IsOnMap(transform.Position) &&
+        transforms.TryGetReadonly(entityId, out var transform) &&
+        world.IsOnMap(transform.Position) &&
         transform.Position != destination &&
-        MovementCandidates.CanOccupy(_world, destination, transform.Size, entityId, _world.IsBlocking(entityId));
+        MovementCandidates.CanOccupy(world, destination, transform.Size, entityId, world.IsBlocking(entityId));
 
     /// <summary>Teleports entityId to destination.</summary>
     /// <returns>False, changing nothing, when CanTeleport is false.</returns>
@@ -51,23 +47,23 @@ public sealed class EntityTeleporter(World world, DirectComponentPool<TransformC
             return false;
         }
 
-        skeletons?.EnsureBuilt(entityId);
+        skeletons.EnsureBuilt(entityId);
 
-        ref var liveTransform = ref _transforms.Get(entityId);
+        ref var liveTransform = ref transforms.Get(entityId);
         var originPosition = liveTransform.Position;
-        _world.MoveEntity(entityId, destination, liveTransform);
+        world.MoveEntity(entityId, destination, liveTransform);
         liveTransform.Position = destination;
 
-        movements?.TryUpdate(entityId, static (ref MovementComponent movement) =>
+        movements.TryUpdate(entityId, static (ref MovementComponent movement) =>
         {
             movement.TargetMapPosition = null;
             movement.NextMapPosition = null;
         });
-        pendingActions?.Remove(entityId);
+        pendingActions.Remove(entityId);
 
         var teleportMove = new EntityMovedEvent(entityId, originPosition, destination, liveTransform.Size);
-        _moves.Record(teleportMove);
-        _eventBus.Publish(teleportMove);
+        moves.Record(teleportMove);
+        eventBus.Publish(teleportMove);
         return true;
     }
 }

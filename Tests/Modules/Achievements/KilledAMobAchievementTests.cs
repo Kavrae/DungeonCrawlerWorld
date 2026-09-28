@@ -41,7 +41,7 @@ public sealed class KilledAMobAchievementTests
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityDiedEvent(npcEntityId, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, playerEntityId)));
+        eventBus.Publish(new EntityDiedEvent(npcEntityId, TestSources.Entity(playerEntityId)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsTrue(AchievementQueries.HasEarned(
@@ -59,7 +59,7 @@ public sealed class KilledAMobAchievementTests
         var otherEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new EntityDiedEvent(npcEntityId, ActionSource.FromEntity(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, otherEntityId)));
+        eventBus.Publish(new EntityDiedEvent(npcEntityId, TestSources.Entity(otherEntityId)));
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.IsFalse(AchievementQueries.HasEarned(

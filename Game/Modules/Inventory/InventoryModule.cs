@@ -21,6 +21,13 @@ using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
 using Game.Blueprints;
+using Game.Modules.Core;
+using Game.Modules.StatModifiers;
+using Game.Modules.Death;
+using Game.Modules.Mana;
+using Game.Modules.AbilityScores;
+using Game.Modules.StatusEffectAura;
+using Game.Modules.Race;
 
 namespace Game.Modules.Inventory;
 
@@ -28,9 +35,11 @@ public sealed class InventoryModule : IGameModule
 {
     private BlueprintRegistry _creatures = null!;
 
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000010");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000019");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [typeof(ActionsModule)];
+    public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [ActionsModule.ModuleId, CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, StatusEffectAuraModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId];
 
     private ItemCatalog _itemCatalog = null!;
     private ActionCatalog _actionCatalog = null!;
@@ -38,7 +47,7 @@ public sealed class InventoryModule : IGameModule
     private EventBus _eventBus = null!;
     private MathUtility _mathUtility = null!;
     private StatusEffectAuraApplierRegistry _statusEffectAppliers = null!;
-    private IPlayerQuery? _playerQuery;
+    private IPlayerQuery _playerQuery = null!;
     private EntityKeys _entityKeys = null!;
 
     public void Configure(GameModuleContext context)
@@ -77,19 +86,14 @@ public sealed class InventoryModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (!componentManager.IsRegistered<SimpleHealthComponent>())
-        {
-            return;
-        }
-
-        var statModifiers = componentManager.GetOptionalMultiPool<StatModifierComponent>();
-        var deadEntities = componentManager.GetOptionalPackedPool<DeadComponent>();
-        var mana = componentManager.GetOptionalPackedPool<ManaComponent>();
-        var hotkeyExpansionUnlocks = componentManager.GetOptionalPackedPool<HotkeyExpansionUnlockComponent>();
-        var abilityScores = componentManager.GetOptionalPackedPool<AbilityScoresComponent>();
-        var auraSources = componentManager.GetOptionalMultiPool<StatusEffectAuraSourceComponent>();
-        var itemHotkeyBindings = componentManager.GetOptionalMultiPool<ItemHotkeyBindingComponent>();
-        var bodyParts = componentManager.IsRegistered<BodyPartStateComponent>() ? EntityBodyParts.For(componentManager, _creatures) : null;
+        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
+        var deadEntities = componentManager.GetPackedPool<DeadComponent>();
+        var mana = componentManager.GetPackedPool<ManaComponent>();
+        var hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
+        var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
+        var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
+        var itemHotkeyBindings = componentManager.GetMultiPool<ItemHotkeyBindingComponent>();
+        var bodyParts = EntityBodyParts.For(componentManager, _creatures);
 
         systemManager.Register(new ConsumableActivationSystem(
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
@@ -108,12 +112,12 @@ public sealed class InventoryModule : IGameModule
             mana,
             hotkeyExpansionUnlocks,
             abilityScores,
-            _statusEffectAppliers,
-            _playerQuery,
             auraSources,
             itemHotkeyBindings,
             bodyParts,
-            _creatures,
-            componentManager.GetOptionalDirectPool<ProcessingTierComponent>() is { } tiers ? new ProcessingTierQuery(tiers) : null));
+            new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>()),
+            _playerQuery,
+            _statusEffectAppliers,
+            _creatures));
     }
 }

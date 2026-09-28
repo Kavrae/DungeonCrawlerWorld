@@ -15,8 +15,6 @@ public readonly record struct BlueprintChoice(ushort BlueprintId, string Name);
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class BlueprintAdminCommands(EntityFactory factory, BlueprintRegistry definitions)
 {
-    private readonly EntityFactory _factory = factory ?? throw new ArgumentNullException(nameof(factory));
-    private readonly BlueprintRegistry _definitions = definitions ?? throw new ArgumentNullException(nameof(definitions));
 
     /// <summary>Every blueprint that declares enough to be spawned on its own, by name.</summary>
     public IReadOnlyList<BlueprintChoice> Spawnable() => Choices(static blueprint => blueprint.IsSpawnable);
@@ -26,10 +24,10 @@ public sealed class BlueprintAdminCommands(EntityFactory factory, BlueprintRegis
 
     /// <summary>Spawns blueprintId at position, on position's layer; false when it landed off the map.</summary>
     public bool Spawn(ushort blueprintId, Vector3Int position) =>
-        _factory.Spawn(SpawnRequest.At(blueprintId, position)) != EntityFactory.NoEntity;
+        factory.Spawn(SpawnRequest.At(blueprintId, position)) != EntityFactory.NoEntity;
 
     /// <inheritdoc cref="EntityFactory.Apply"/>
-    public void Apply(int entityId, ushort blueprintId) => _factory.Apply(entityId, blueprintId);
+    public void Apply(int entityId, ushort blueprintId) => factory.Apply(entityId, blueprintId);
 
     /// <summary>Not spawnable, and has something to build: a blueprint, a race or class, actions or occupancy -- a definition that only declares appearance would change nothing on a live entity.</summary>
     private bool IsApplicable(ResolvedBlueprint blueprint)
@@ -41,7 +39,7 @@ public sealed class BlueprintAdminCommands(EntityFactory factory, BlueprintRegis
 
         foreach (var partId in blueprint.BuildOrder)
         {
-            var part = _definitions.Get(partId);
+            var part = definitions.Get(partId);
             if (part.Build is not null || part.Race is not null || part.Class is not null || part.Actions.Count > 0 || part.NonBlocking is not null)
             {
                 return true;
@@ -54,9 +52,9 @@ public sealed class BlueprintAdminCommands(EntityFactory factory, BlueprintRegis
     private List<BlueprintChoice> Choices(Func<ResolvedBlueprint, bool> include)
     {
         var choices = new List<BlueprintChoice>();
-        for (var id = (ushort)1; id <= _definitions.Count; id++)
+        for (var id = (ushort)1; id <= definitions.Count; id++)
         {
-            var blueprint = _definitions.Resolve(id);
+            var blueprint = definitions.Resolve(id);
             if (include(blueprint))
             {
                 choices.Add(new BlueprintChoice(id, blueprint.Definition.Name));

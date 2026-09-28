@@ -21,7 +21,7 @@ public static class StringUtility
     /// line break; Environment.NewLine's extra '\r' on Windows rode along into the drawn text with
     /// no consumer that strips it, rendering as a missing-glyph square (no font has a glyph for a
     /// bare carriage return).</summary>
-    private const string LineBreak = "\n";
+    private const char LineBreak = '\n';
 
     /// <summary>Word boundaries for WordWrapWithHyphenation's own walk -- space (a real word gap) and '\n' (a pre-existing forced break, e.g. StatModifierComponent.ToString()'s multi-line dump). Splitting on both keeps every extracted "word" single-line, so TextMeasurer.MeasureWidth below always measures one line's width -- FontStashSharp's MeasureString collapses a multi-line string down to its widest line's width, which previously desynced remainingLineWidth from the actual cursor position whenever an embedded '\n' rode along inside a word with no adjacent space (confirmed: InspectionWindowContent's StatModifierComponent dump wrapping "CanModify" into "CanMod-\nify" for no width-related reason, and inflating DisplayText.LineCount past the true line count).</summary>
     private static readonly char[] WordBoundaryChars = [' ', '\n'];
@@ -117,8 +117,6 @@ public static class StringUtility
     /// </summary>
     public static string TruncateWithEllipsis(ITextMeasurer textMeasurer, string text, float maximumWidth)
     {
-        ArgumentNullException.ThrowIfNull(textMeasurer);
-
         const string ellipsis = "...";
 
         if (maximumWidth <= 0 || textMeasurer.MeasureWidth(text) <= maximumWidth)
@@ -224,7 +222,7 @@ public static class StringUtility
             return text;
         }
 
-        var outputLength = text.Length + chunkEndIndices.Count * LineBreak.Length;
+        var outputLength = text.Length + chunkEndIndices.Count;
 
         return string.Create(outputLength, (text, chunkEndIndices), static (destination, state) =>
         {
@@ -239,8 +237,7 @@ public static class StringUtility
                 destinationIndex += chunkLength;
                 sourceIndex = chunkEnd;
 
-                LineBreak.AsSpan().CopyTo(destination[destinationIndex..]);
-                destinationIndex += LineBreak.Length;
+                destination[destinationIndex++] = LineBreak;
             }
 
             sourceText.AsSpan(sourceIndex).CopyTo(destination[destinationIndex..]);
@@ -312,8 +309,7 @@ public static class StringUtility
                         MinimumCharactersBeforeLineBreak,
                         remainingWord.Length - MinimumCharactersAfterLineBreak
                     );
-                    var hyphenatedSubstring = string.Concat(remainingWord[..substringLength], "-");
-                    stringBuilder.Append(hyphenatedSubstring);
+                    stringBuilder.Append(remainingWord.AsSpan(0, substringLength)).Append('-');
 
                     // Estimate the hyphenated substring's width proportionally from the
                     // already-measured wordSize instead of calling MeasureWidth again --
@@ -373,8 +369,6 @@ public static class StringUtility
     /// <summary>Widest single line of possibly-multi-line text, measured in pixels -- e.g. TextWindow sizing its scrollable content area to the longest already-wrapped line rather than the whole block.</summary>
     public static float WidestLineWidth(ITextMeasurer textMeasurer, string text)
     {
-        ArgumentNullException.ThrowIfNull(textMeasurer);
-
         if (string.IsNullOrEmpty(text))
         {
             return 0f;

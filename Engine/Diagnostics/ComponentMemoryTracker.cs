@@ -17,7 +17,6 @@ public sealed class ComponentMemoryTracker(ComponentManager componentManager)
 {
     private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(2);
 
-    private readonly ComponentManager _componentManager = componentManager ?? throw new ArgumentNullException(nameof(componentManager));
     private readonly List<ComponentMemoryEntry> _snapshot = [];
 
     private DateTime _lastSampleUtc = DateTime.MinValue;
@@ -36,7 +35,7 @@ public sealed class ComponentMemoryTracker(ComponentManager componentManager)
         }
 
         _snapshot.Clear();
-        foreach (var pool in _componentManager.AllPools)
+        foreach (var pool in componentManager.AllPools)
         {
             if (pool is IMemoryReportingComponentPool memoryReportingPool)
             {

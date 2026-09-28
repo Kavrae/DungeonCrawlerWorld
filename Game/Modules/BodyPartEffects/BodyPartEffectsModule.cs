@@ -8,6 +8,8 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Blueprints;
+using Game.Modules.StatModifiers;
+using Game.Modules.Race;
 
 namespace Game.Modules.BodyPartEffects;
 
@@ -15,24 +17,19 @@ namespace Game.Modules.BodyPartEffects;
 /// Owns the two marker components (MovementDisabledComponent/MeleeDisabledComponent) and the
 /// system that keeps them, plus StatModifierTarget.MovementLockFrames/OutgoingDamage (the latter
 /// scoped to Tag.Melee via StatModifierComponent.ConditionTag), in sync with an entity's own body-part condition -- see
-/// BodyPartEffectsSystem's own doc comment for the full design. Depends on HealthModule for
-/// BodyPartComponent -- registers its own components regardless (an entity set with no Complex-health
-/// race loaded just never populates BodyPartComponent, so BodyPartEffectsSystem's stripe set stays
-/// empty, mirroring ComplexHealthRegenSystem's own "always registered, empty until populated" precedent).
+/// BodyPartEffectsSystem's own doc comment for the full design. Requires HealthModule for
+/// BodyPartStateComponent. An entity set with no Complex-health race never populates it, so
+/// BodyPartEffectsSystem's stripe set stays empty.
 /// </summary>
 public sealed class BodyPartEffectsModule : IGameModule
 {
     private BlueprintRegistry _creatures = null!;
 
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000012");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000012");
 
-    // No hard Dependencies on HealthModule/StatModifiersModule -- neither type is a safe
-    // Dependencies target anywhere in this codebase, since a mod can legitimately replace
-    // HealthModule by Id (see Mods.TestFixtures.ReplacementHealthModule), which would make a
-    // hard typeof(HealthModule) dependency fail topo-sort even though the replacement still
-    // provides BodyPartComponent. Both pools are checked softly below instead, the same
-    // IsRegistered/optional-pool pattern BurningModule/ActionsModule/MovementModule already use.
-    public IReadOnlyList<Type> Dependencies { get; } = [];
+    public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [HealthModule.ModuleId, StatModifiersModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId];
 
     private ProcessingTierEvents _processingTierEvents = null!;
 
@@ -50,12 +47,7 @@ public sealed class BodyPartEffectsModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (!componentManager.IsRegistered<BodyPartStateComponent>())
-        {
-            return;
-        }
-
-        var statModifiers = componentManager.GetOptionalMultiPool<StatModifierComponent>();
+        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
 
         systemManager.Register(new BodyPartEffectsSystem(
             EntityBodyParts.For(componentManager, _creatures),

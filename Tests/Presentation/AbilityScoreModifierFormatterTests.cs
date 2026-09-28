@@ -1,3 +1,4 @@
+using Game.Blueprints;
 using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.ECS.Components;
@@ -15,10 +16,7 @@ public sealed class AbilityScoreModifierFormatterTests
 {
     private static ComponentManager CreateRegisteredManager()
     {
-        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8);
-        new CoreModule().RegisterComponents(manager);
-        new StatModifiersModule().RegisterComponents(manager);
-        new AbilityScoresModule().RegisterComponents(manager);
+        var manager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8));
         return manager;
     }
 
@@ -111,7 +109,7 @@ public sealed class AbilityScoreModifierFormatterTests
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
         manager.Merge(1, new DisplayTextComponent("Iron Ring", "A plain iron ring."));
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, ActionSource.FromEntity(manager, new EntityKeys(), 1));
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, ActionSource.FromEntity(manager, new EntityKeys(), 1, creatures: new BlueprintRegistry()));
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(manager, 0, AbilityScoreType.Strength, now: 0);
 
@@ -123,11 +121,10 @@ public sealed class AbilityScoreModifierFormatterTests
     public void GetOrderedLines_SourceEntityDestroyedAndIdReused_StillShowsTheOriginalNameAndCrawlerNumber()
     {
         var manager = CreateRegisteredManager();
-        manager.RegisterPackedPool<Game.Modules.Crawler.Components.CrawlerComponent>(static (ref existing, incoming) => existing = incoming);
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
         manager.Merge(1, new DisplayTextComponent("Iron Ring", "A plain iron ring."));
         manager.Merge(1, new Game.Modules.Crawler.Components.CrawlerComponent(4242));
-        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, ActionSource.FromEntity(manager, new EntityKeys(), 1));
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, ActionSource.FromEntity(manager, new EntityKeys(), 1, creatures: new BlueprintRegistry()));
 
         manager.RemoveAllComponents(1);
         manager.Merge(1, new DisplayTextComponent("Goblin", "Someone else."));

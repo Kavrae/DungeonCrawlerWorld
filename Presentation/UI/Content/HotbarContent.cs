@@ -3,7 +3,6 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using FontStashSharp;
-using Game.Blueprints;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
@@ -11,6 +10,7 @@ using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
+using Game.Sprites;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -19,7 +19,6 @@ using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
-using Game.Sprites;
 
 namespace Presentation.UI.Content;
 
@@ -43,6 +42,7 @@ namespace Presentation.UI.Content;
 /// the icon itself regardless. Implements TODO.md's "Inventory and spell hotbar" and "Player
 /// attack button or key" items.
 /// </summary>
+/// <param name="simulationClock">"CurrentFrame" for reading an action's cooldown deadline (see ActionInstanceQueries.CooldownFramesRemaining).</param>
 public sealed class HotbarContent(
     World world,
     MapViewState mapViewState,
@@ -54,11 +54,9 @@ public sealed class HotbarContent(
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
     Vector2 screenSize,
-    SimulationClock? simulationClock = null,
+    SimulationClock simulationClock,
     EntityActions? actions = null) : IElementContent
 {
-    /// <summary>"Now" for reading an action's cooldown deadline (see ActionInstanceQueries.CooldownFramesRemaining). Optional only so tests that never show a cooldown needn't build one; the shell always passes the simulation's real clock.</summary>
-    private readonly SimulationClock _simulationClock = simulationClock ?? new SimulationClock();
 
     /// <summary>Optional for the same reason as the clock: a test that never shows an action cooldown needs no action lookups at all.</summary>
     private readonly EntityActions? _actions = actions;
@@ -599,7 +597,7 @@ public sealed class HotbarContent(
         var quantity = stack.Quantity;
 
         var cooldownFramesRemaining = item.Activator is PotionActivator && _potionCooldowns.TryGetReadonly(playerEntityId, out var cooldown)
-            ? PotionCooldownEffects.FramesRemaining(cooldown, _simulationClock.CurrentFrame)
+            ? PotionCooldownEffects.FramesRemaining(cooldown, simulationClock.CurrentFrame)
             : 0;
         var countdownSeconds = cooldownFramesRemaining > 0
             ? PotionCooldownEffects.RemainingSeconds(cooldownFramesRemaining)
@@ -703,7 +701,7 @@ public sealed class HotbarContent(
         var cooldownFraction = 0f;
         if (_actions is not null && action.Activator.Timing.CooldownFrames is { } cooldownFrames && cooldownFrames > 0)
         {
-            cooldownFraction = (float)_actions.CooldownFramesRemaining(playerEntityId, action.Id, _simulationClock.CurrentFrame) / cooldownFrames;
+            cooldownFraction = (float)_actions.CooldownFramesRemaining(playerEntityId, action.Id, simulationClock.CurrentFrame) / cooldownFrames;
         }
 
         if (cooldownFraction > 0f)
@@ -715,7 +713,7 @@ public sealed class HotbarContent(
             _actionLocks.TryGetReadonly(playerEntityId, out var actionLock) &&
             actionLock.CurrentLockTotalFrames > 0)
         {
-            return (float)ActionLockGate.FramesRemaining(actionLock, _simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames;
+            return (float)ActionLockGate.FramesRemaining(actionLock, simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames;
         }
 
         return 0f;
@@ -733,7 +731,7 @@ public sealed class HotbarContent(
     {
         if (_actionLocks.TryGetReadonly(playerEntityId, out var actionLock) && actionLock.CurrentLockTotalFrames > 0)
         {
-            return (float)ActionLockGate.FramesRemaining(actionLock, _simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames;
+            return (float)ActionLockGate.FramesRemaining(actionLock, simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames;
         }
 
         return 0f;

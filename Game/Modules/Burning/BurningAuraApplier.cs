@@ -21,9 +21,9 @@ namespace Game.Modules.Burning;
 /// exactly as before (BurningEffects.ApplyStack, unchanged).
 /// </summary>
 /// <remarks>
-/// Hazard exposure is read from the target's own ContactDamageExposureComponent (if
-/// ContactDamageModule is loaded), not from `source` -- StatusEffectAuraSystem.GrantStacks always
-/// attributes an aura-granted stack to ActionSource.Admin (its own doc comment explains why:
+/// Hazard exposure is read from the target's own ContactDamageExposureComponent, not from
+/// `source` -- StatusEffectAuraSystem.GrantStacks always attributes an aura-granted stack to
+/// ActionSource.Admin (its own doc comment explains why:
 /// a position-aggregated grid can't cheaply recover which specific source contributed), so `source`
 /// alone can never identify "this grant came from standing on lava," which is today's only real
 /// Burning-granting aura source. A Terrain-kind `source` is also checked, for a future direct
@@ -32,21 +32,21 @@ namespace Game.Modules.Burning;
 /// damage already uses is reused here (ContactHazard.PreferredTargetType, from the terrain
 /// definition), so a burning part and a contact-damaged part read as the same "where a hazard hits" rule.
 /// </remarks>
-public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry terrain, BlueprintRegistry creatures, EventBus? eventBus = null, IPlayerQuery? playerQuery = null) : IStatusEffectAuraApplier
+public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry terrain, BlueprintRegistry creatures, EventBus eventBus, IPlayerQuery playerQuery) : IStatusEffectAuraApplier
 {
     public StatusEffectType EffectType => StatusEffectType.Burning;
 
     private PackedComponentPool<BurningTimerComponent>? _entityTimers;
-    private EntityBodyParts? _bodyParts;
+    private EntityBodyParts _bodyParts = null!;
     private MultiComponentPool<BodyPartBurningTimerComponent>? _bodyPartTimers;
-    private PackedComponentPool<ContactDamageExposureComponent>? _contactExposures;
+    private PackedComponentPool<ContactDamageExposureComponent> _contactExposures = null!;
     private bool _poolsResolved;
 
     public int GetCurrentStackCount(ComponentManager componentManager, int entityId)
     {
         EnsurePools(componentManager);
 
-        if (TryResolveHazard(entityId, ActionSource.Admin, out var preferredType) && _bodyParts!.Has(entityId))
+        if (TryResolveHazard(entityId, ActionSource.Admin, out var preferredType) && _bodyParts.Has(entityId))
         {
             var partId = ResolveTargetPartId(entityId, preferredType);
             if (partId is not { } resolvedPartId)
@@ -65,7 +65,7 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry 
     {
         EnsurePools(componentManager);
 
-        if (TryResolveHazard(entityId, source, out var preferredType) && _bodyParts!.Has(entityId))
+        if (TryResolveHazard(entityId, source, out var preferredType) && _bodyParts.Has(entityId))
         {
             var partId = ResolveTargetPartId(entityId, preferredType);
             if (partId is { } resolvedPartId)
@@ -86,9 +86,9 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry 
         }
 
         _entityTimers = componentManager.GetPackedPool<BurningTimerComponent>();
-        _bodyParts = componentManager.IsRegistered<BodyPartStateComponent>() ? EntityBodyParts.For(componentManager, creatures) : null;
+        _bodyParts = EntityBodyParts.For(componentManager, creatures);
         _bodyPartTimers = componentManager.GetMultiPool<BodyPartBurningTimerComponent>();
-        _contactExposures = componentManager.IsRegistered<ContactDamageExposureComponent>() ? componentManager.GetPackedPool<ContactDamageExposureComponent>() : null;
+        _contactExposures = componentManager.GetPackedPool<ContactDamageExposureComponent>();
         _poolsResolved = true;
     }
 
@@ -101,7 +101,7 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry 
             return true;
         }
 
-        if (_contactExposures?.TryGetReadonly(entityId, out var exposure) == true && terrain.TryGetContactHazard(exposure.HazardTerrainTypeId, out var exposureHazard))
+        if (_contactExposures.TryGetReadonly(entityId, out var exposure) && terrain.TryGetContactHazard(exposure.HazardTerrainTypeId, out var exposureHazard))
         {
             preferredType = exposureHazard.PreferredTargetType;
             return true;
@@ -129,7 +129,7 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry 
     private byte? ResolveTargetPartId(int entityId, BodyPartType? preferredType)
     {
         var rule = new BodyPartTargetRule(preferredType, BodyPartFallback.Bottommost);
-        var partId = BodyPartSelection.PickByTypeWithFallback(_bodyParts!, entityId, rule, mathUtility, preferAlive: false);
+        var partId = BodyPartSelection.PickByTypeWithFallback(_bodyParts, entityId, rule, mathUtility, preferAlive: false);
         return partId == -1 ? null : (byte)partId;
     }
 
@@ -154,6 +154,7 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry 
         else
         {
             _bodyPartTimers!.Add(entityId, new BodyPartBurningTimerComponent(partId, stackCount: 1, FrameDeadline.AfterStaggered(now, BurningEffects.TickIntervalFrames, entityId), source));
+            BodyPartDamageEffects.ResetRegenLockout(_bodyParts, entityId, partId, now);
         }
     }
 

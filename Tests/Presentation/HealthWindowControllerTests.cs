@@ -40,12 +40,7 @@ public sealed class HealthWindowControllerTests
         var layers = new UiLayerStack();
         var pool = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
 
-        var componentManager = new ComponentManager(20, 10);
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<BodyPartBurningTimerComponent>();
-        componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterPackedPool<ParalysisTimerComponent>(static (ref existing, incoming) => { });
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
 
         componentManager.Merge(PlayerEntityId, new SimpleHealthComponent(50, 100));
 
@@ -59,11 +54,11 @@ public sealed class HealthWindowControllerTests
 
         var itemCatalog = new ItemCatalog();
 
-        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, labelRenderer, componentManager, BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog));
+        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, labelRenderer, componentManager, BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog, simulationClock: new SimulationClock()));
         pool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, pool, labelRenderer));
         pool.RegisterFactory<FractionBarElement>(() => new FractionBarElement(fontService, pool, labelRenderer));
 
-        var health = new HealthWindowController(pool, world, componentManager, fontService, labelRenderer);
+        var health = new HealthWindowController(pool, world);
         health.Initialize(layers);
 
         return (health, layers);

@@ -21,7 +21,7 @@ public static class BurningEffects
 
     /// <summary>No-ops entirely if entityId is currently immune to Burning (StatusEffectImmunity), or once MaxStacks is reached.</summary>
     /// <param name="now">The simulation frame the stack lands on. A new burn's first tick is TickIntervalFrames after it; a top-off leaves the running tick alone.</param>
-    public static void ApplyStack(ComponentManager componentManager, int entityId, ActionSource source, long now, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
+    public static void ApplyStack(ComponentManager componentManager, int entityId, ActionSource source, long now, EventBus eventBus, IPlayerQuery playerQuery)
     {
         if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Burning, source, eventBus, playerQuery))
         {

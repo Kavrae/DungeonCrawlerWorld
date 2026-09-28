@@ -10,26 +10,11 @@ namespace Tests.Modules.StatusEffects;
 [TestClass]
 public sealed class StatusEffectImmunityTests
 {
-    private sealed class FakePlayerQuery(int playerEntityId) : IPlayerQuery
-    {
-        public int PlayerEntityId { get; } = playerEntityId;
-        public Engine.ECS.Entities.EntityKey PlayerEntityKey { get; init; } = TestSources.KeyOf(playerEntityId);
-    }
-
     private static ComponentManager CreateComponentManagerWithImmunity(int entityId, StatusEffectType effectType)
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
         componentManager.GetMultiPool<StatusEffectImmunityComponent>().Add(entityId, new StatusEffectImmunityComponent(effectType, expiresAtFrame: FrameDeadline.Never));
         return componentManager;
-    }
-
-    [TestMethod]
-    public void IsImmune_NoImmunityPoolRegistered_ReturnsFalse()
-    {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-
-        Assert.IsFalse(StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Poison));
     }
 
     [TestMethod]
@@ -37,7 +22,7 @@ public sealed class StatusEffectImmunityTests
     {
         var componentManager = CreateComponentManagerWithImmunity(0, StatusEffectType.Burning);
 
-        Assert.IsTrue(StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Burning));
+        Assert.IsTrue(StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Burning, default, new EventBus(), TestPlayerQuery.NoPlayer));
     }
 
     [TestMethod]
@@ -45,7 +30,7 @@ public sealed class StatusEffectImmunityTests
     {
         var componentManager = CreateComponentManagerWithImmunity(0, StatusEffectType.Burning);
 
-        Assert.IsFalse(StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Poison));
+        Assert.IsFalse(StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Poison, default, new EventBus(), TestPlayerQuery.NoPlayer));
     }
 
     [TestMethod]
@@ -56,7 +41,7 @@ public sealed class StatusEffectImmunityTests
         StatusEffectImmunityBlockedEvent? published = null;
         eventBus.Subscribe<StatusEffectImmunityBlockedEvent>(e => published = e);
 
-        var immune = StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Burning, ActionSource.Admin, eventBus, new FakePlayerQuery(0));
+        var immune = StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Burning, ActionSource.Admin, eventBus, new TestPlayerQuery(0));
 
         Assert.IsTrue(immune);
         Assert.IsNotNull(published);
@@ -72,7 +57,7 @@ public sealed class StatusEffectImmunityTests
         var published = false;
         eventBus.Subscribe<StatusEffectImmunityBlockedEvent>(_ => published = true);
 
-        StatusEffectImmunity.IsImmune(componentManager, 1, StatusEffectType.Burning, TestSources.Entity(2), eventBus, new FakePlayerQuery(0));
+        StatusEffectImmunity.IsImmune(componentManager, 1, StatusEffectType.Burning, TestSources.Entity(2), eventBus, new TestPlayerQuery(0));
 
         Assert.IsFalse(published);
     }
@@ -85,7 +70,7 @@ public sealed class StatusEffectImmunityTests
         var published = false;
         eventBus.Subscribe<StatusEffectImmunityBlockedEvent>(_ => published = true);
 
-        StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Burning, ActionSource.Admin, eventBus, new FakePlayerQuery(0));
+        StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Burning, ActionSource.Admin, eventBus, new TestPlayerQuery(0));
 
         Assert.IsFalse(published);
     }
@@ -95,6 +80,6 @@ public sealed class StatusEffectImmunityTests
     {
         var componentManager = CreateComponentManagerWithImmunity(0, StatusEffectType.Burning);
 
-        Assert.IsTrue(StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Burning));
+        Assert.IsTrue(StatusEffectImmunity.IsImmune(componentManager, 0, StatusEffectType.Burning, default, new EventBus(), TestPlayerQuery.NoPlayer));
     }
 }

@@ -17,8 +17,8 @@ namespace Game.Modules.Health.Systems;
 /// <summary>Complex-health counterpart to SimpleHealthRegenSystem -- regenerates one body part per due entity per visit, adjusting for ability scores, modifiers, and processing tier.</summary>
 /// <remarks>
 /// Routes each visit through HealthHeal.Apply (targetMode: LowestPercentage, sourceEntityId:
-/// entityId -- a self-heal), which is what BodyPartSelection.PickLowestPercentage/the
-/// bodyPartBurningTimers exclusion actually run against now (ComplexHealthHeal.ApplyToSinglePart
+/// entityId -- a self-heal), which is what BodyPartSelection.PickLowestPercentage and its
+/// regen-lockout exclusion actually run against now (ComplexHealthHeal.ApplyToSinglePart
 /// -- see its own doc comment); this system no longer picks a part or mutates health itself.
 /// Requires a SimpleHealthComponent pool purely to satisfy HealthHeal.Apply's Simple-vs-Complex
 /// dispatch check -- every entity this system's own stripe set drives owns BodyPartComponent, so
@@ -39,12 +39,11 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
 
     private readonly EntityBodyParts _bodyParts;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
-    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly PackedComponentPool<AbilityScoresComponent>? _abilityScores;
-    private readonly MultiComponentPool<BodyPartBurningTimerComponent>? _bodyPartBurningTimers;
-    private readonly EventBus? _eventBus;
-    private readonly IPlayerQuery? _playerQuery;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
+    private readonly PackedComponentPool<DeadComponent> _deadEntities;
+    private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores;
+    private readonly EventBus _eventBus;
+    private readonly IPlayerQuery _playerQuery;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public ComplexHealthRegenSystem(
@@ -53,19 +52,17 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
         PackedComponentPool<SimpleHealthComponent> health,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null,
-        PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
-        MultiComponentPool<BodyPartBurningTimerComponent>? bodyPartBurningTimers = null,
-        EventBus? eventBus = null,
-        IPlayerQuery? playerQuery = null)
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        PackedComponentPool<DeadComponent> deadEntities,
+        PackedComponentPool<AbilityScoresComponent> abilityScores,
+        EventBus eventBus,
+        IPlayerQuery playerQuery)
     {
         _bodyParts = bodyParts;
         _health = health;
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
         _abilityScores = abilityScores;
-        _bodyPartBurningTimers = bodyPartBurningTimers;
         _eventBus = eventBus;
         _playerQuery = playerQuery;
 
@@ -95,7 +92,7 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
     private void Regenerate(int entityId, float seconds, long now)
     {
         // A corpse shouldn't regenerate back above 0.
-        if (_deadEntities?.Has(entityId) == true)
+        if (_deadEntities.Has(entityId))
         {
             return;
         }
@@ -104,10 +101,10 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
         // BodyPartSelection.PickLowestPercentage compares against the current frame, so nothing
         // has to visit a part for its lockout to end.
 
-        // No AbilityScoresModule loaded, or this entity never got a Constitution score --
+        // This entity never got a Constitution score --
         // 0 regen, same as SimpleHealthRegenSystem's own effectiveRegen == 0 skip below, just
         // resolved a step earlier.
-        if (_abilityScores is null || !AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Constitution, out var constitution))
+        if (!AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Constitution, out var constitution))
         {
             return;
         }
@@ -121,6 +118,6 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
             return;
         }
 
-        HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, bodyPartBurningTimers: _bodyPartBurningTimers, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
+        HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
     }
 }

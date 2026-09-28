@@ -30,7 +30,7 @@ public sealed class EntityIconElement(
     {
         _entityId = entityId;
         _fixedVisual = null;
-        _glyphFont = fontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction));
+        _glyphFont = FontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction));
     }
 
     /// <summary>Shows a visual that belongs to no entity -- a terrain cell's.</summary>
@@ -38,7 +38,7 @@ public sealed class EntityIconElement(
     {
         _entityId = -1;
         _fixedVisual = visual;
-        _glyphFont = fontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction));
+        _glyphFont = FontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction));
     }
 
     public override void DrawContent(GameTime gameTime)

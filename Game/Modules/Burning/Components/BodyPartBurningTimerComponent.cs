@@ -1,16 +1,10 @@
 using Engine.ECS.Components;
 using Game.World;
 
-namespace Game.Modules.Health.Components;
+namespace Game.Modules.Burning.Components;
 
 /// <summary>Present on a body part only while that specific part currently has at least one body-part-scoped Burning stack -- one instance per currently-burning part, in a MultiComponentPool keyed by entityId (see BodyPartBurningSystem).</summary>
 /// <remarks>
-/// Lives under Game.Modules.Health rather than Game.Modules.Burning (unlike BurningTimerComponent,
-/// its entity-scoped counterpart) because BodyPartSelection.PickLowestPercentage (Health module)
-/// needs to read this pool directly to exclude a burning part from regen -- Health never otherwise
-/// depends on an effect-specific component type, so keeping that direction one-way (Burning depends
-/// on Health, never the reverse) means the component itself has to sit on the Health side.
-///
 /// A keyed timer-wheel timer (IKeyedScheduledTimer): PartId names the instance, since an entity can
 /// have several parts burning at once.
 /// </remarks>

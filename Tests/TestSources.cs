@@ -1,3 +1,4 @@
+using Game.Blueprints;
 using Engine.ECS.Components;
 using Engine.ECS.Entities;
 using Game.World;
@@ -19,6 +20,6 @@ internal static class TestSources
             entityKeys.Issue(id);
         }
 
-        return ActionSource.FromEntity(new ComponentManager(initialEntityCapacity: entityId + 1, initialComponentCapacity: 1), entityKeys, entityId);
+        return ActionSource.FromEntity(BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: entityId + 1, initialComponentCapacity: 1)), entityKeys, entityId, creatures: new BlueprintRegistry());
     }
 }

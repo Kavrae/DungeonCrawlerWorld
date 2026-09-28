@@ -51,8 +51,6 @@ public sealed class ItemDetailsWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
-    SpriteSheetService spriteSheetService,
-    SpriteRenderer spriteRenderer,
     ActionCatalog actionCatalog)
     : Window(fontService, elementPoolService, labelRenderer)
 {

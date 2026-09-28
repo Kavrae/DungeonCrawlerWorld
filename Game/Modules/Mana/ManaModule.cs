@@ -8,15 +8,19 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
 using Microsoft.Xna.Framework;
+using Game.Modules.AbilityScores;
+using Game.Modules.Death;
+using Game.Modules.StatModifiers;
 
 namespace Game.Modules.Mana;
 
-/// <summary>Mirrors HealthModule's shape exactly -- see its own doc comment for why each optional pool stays optional rather than a hard Dependencies requirement.</summary>
 public sealed class ManaModule : IGameModule
 {
-    public Guid Id { get; } = new("8e2a4f61-3c9d-4b7e-a1f5-6d8c2b9e4a71");
+    public static readonly Guid ModuleId = new("8e2a4f61-3c9d-4b7e-a1f5-6d8c2b9e4a71");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [];
+    public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [StatModifiersModule.ModuleId, DeathModule.ModuleId, AbilityScoresModule.ModuleId, ProcessingTierModule.ModuleId];
 
     private ProcessingTierEvents _processingTierEvents = null!;
 
@@ -33,15 +37,9 @@ public sealed class ManaModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
-            ? componentManager.GetMultiPool<StatModifierComponent>()
-            : null;
-        var deadEntities = componentManager.IsRegistered<DeadComponent>()
-            ? componentManager.GetPackedPool<DeadComponent>()
-            : null;
-        var abilityScores = componentManager.IsRegistered<AbilityScoresComponent>()
-            ? componentManager.GetPackedPool<AbilityScoresComponent>()
-            : null;
+        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
+        var deadEntities = componentManager.GetPackedPool<DeadComponent>();
+        var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
 
         systemManager.Register(new ManaRegenSystem(
             componentManager.GetPackedPool<ManaComponent>(),

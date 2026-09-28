@@ -126,7 +126,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     /// (a System notification published this same frame needs to have already called
     /// OpenMenuWindow, in ShowActive, before that check).
     /// </summary>
-    public void Update(GameTime gameTime) => eventBus.DispatchBuffered<NotificationRequestedEvent>();
+    public void Update() => eventBus.DispatchBuffered<NotificationRequestedEvent>();
 
     public Guid AddNotification(NotificationCategory category, string text, bool showImmediately = true, string? title = null, AchievementNotificationDetails? achievement = null)
     {

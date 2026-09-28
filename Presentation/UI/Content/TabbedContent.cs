@@ -1,9 +1,7 @@
 using Engine.Utilities;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
-using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
@@ -39,7 +37,7 @@ namespace Presentation.UI.Content;
 /// a contiguous, same-order subset of _tabs, _headerTiles now carries each visible tile's real
 /// _tabs index alongside it, rather than relying on its own list position to mean that index.
 /// </summary>
-public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tabs, ElementPoolService elementPoolService, FontService fontService, LabelRenderer labelRenderer, Color? bodyBackgroundColor = null) : IElementContent
+public sealed class TabbedContent(IReadOnlyList<TabbedContent.TabDefinition> tabs, ElementPoolService elementPoolService, FontService fontService, Color? bodyBackgroundColor = null) : IElementContent
 {
     public sealed record TabDefinition(string Label, IElementContent Content);
 

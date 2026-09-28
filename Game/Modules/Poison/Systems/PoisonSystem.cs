@@ -8,6 +8,7 @@ using Game.Modules.Poison.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Modules.Death.Components;
 
 namespace Game.Modules.Poison.Systems;
 
@@ -30,11 +31,12 @@ public sealed class PoisonSystem : ISystem
 
     private readonly PackedComponentPool<PoisonTimerComponent> _timers;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
     private readonly EventBus _eventBus;
-    private readonly IPlayerQuery? _playerQuery;
+    private readonly IPlayerQuery _playerQuery;
     private readonly MathUtility _mathUtility;
-    private readonly EntityBodyParts? _bodyParts;
+    private readonly EntityBodyParts _bodyParts;
+    private readonly PackedComponentPool<DeadComponent> _deadEntities;
     private readonly PackedTimerWheel<PoisonTimerComponent> _wheel;
 
     // Cached once instead of passing the Tick method group every Update -- an instance method
@@ -45,10 +47,11 @@ public sealed class PoisonSystem : ISystem
         PackedComponentPool<PoisonTimerComponent> timers,
         PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
-        IPlayerQuery? playerQuery,
+        IPlayerQuery playerQuery,
         MathUtility mathUtility,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        EntityBodyParts? bodyParts = null)
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        EntityBodyParts bodyParts,
+        PackedComponentPool<DeadComponent> deadEntities)
     {
         _timers = timers;
         _health = health;
@@ -57,8 +60,9 @@ public sealed class PoisonSystem : ISystem
         _playerQuery = playerQuery;
         _mathUtility = mathUtility;
         _bodyParts = bodyParts;
+        _deadEntities = deadEntities;
         _tick = Tick;
-        _wheel = new PackedTimerWheel<PoisonTimerComponent>(timers);
+        _wheel = new PackedTimerWheel<PoisonTimerComponent>(timers, SimulationScope.Unscoped);
     }
 
     public void Update(EngineTime time, byte stripeIndex) => _wheel.Tick(time.FrameCount, _tick);
@@ -71,7 +75,7 @@ public sealed class PoisonSystem : ISystem
             return true;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), now, _statModifiers, _bodyParts, _mathUtility,
+        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities,
             targetRule: new BodyPartTargetRule(BodyPartType.Internal, BodyPartFallback.Random), damageTags: PoisonDamageTags);
 
         var remainingDuration = (ushort)(timer.RemainingDurationTicks - 1);

@@ -26,8 +26,6 @@ public static class RandomSeed
     /// <returns>The seed to construct the shared randomizer from.</returns>
     public static int Parse(IEnumerable<string> args)
     {
-        ArgumentNullException.ThrowIfNull(args);
-
         foreach (var arg in args)
         {
             if (arg.StartsWith(ArgumentPrefix, StringComparison.OrdinalIgnoreCase) &&

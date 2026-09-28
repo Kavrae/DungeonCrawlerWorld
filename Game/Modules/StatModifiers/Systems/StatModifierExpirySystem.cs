@@ -51,7 +51,7 @@ public sealed class StatModifierExpirySystem : ISystem
         _expiries = expiries;
         _eventBus = eventBus;
         _tick = Tick;
-        _wheel = new PackedTimerWheel<ExpiringStatModifierComponent>(expiries);
+        _wheel = new PackedTimerWheel<ExpiringStatModifierComponent>(expiries, SimulationScope.Unscoped);
 
         // Modifiers already granted before this system existed (a blueprint-built entity, a test
         // that populates first) get the same treatment as one granted a moment later -- the

@@ -4,6 +4,7 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
+using Game.Modules.Burning.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -36,10 +37,10 @@ public sealed class BodyPartBurningSystem : ISystem
     private readonly MultiComponentPool<BodyPartBurningTimerComponent> _timers;
     private readonly EntityBodyParts _bodyParts;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
     private readonly EventBus _eventBus;
-    private readonly IPlayerQuery? _playerQuery;
-    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
+    private readonly IPlayerQuery _playerQuery;
+    private readonly PackedComponentPool<DeadComponent> _deadEntities;
     private readonly MultiTimerWheel<BodyPartBurningTimerComponent> _wheel;
 
     // Cached once instead of passing the Tick method group every Update -- an instance method
@@ -51,9 +52,9 @@ public sealed class BodyPartBurningSystem : ISystem
         EntityBodyParts bodyParts,
         PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
-        IPlayerQuery? playerQuery,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null)
+        IPlayerQuery playerQuery,
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        PackedComponentPool<DeadComponent> deadEntities)
     {
         _timers = timers;
         _bodyParts = bodyParts;
@@ -63,7 +64,7 @@ public sealed class BodyPartBurningSystem : ISystem
         _playerQuery = playerQuery;
         _deadEntities = deadEntities;
         _tick = Tick;
-        _wheel = new MultiTimerWheel<BodyPartBurningTimerComponent>(timers);
+        _wheel = new MultiTimerWheel<BodyPartBurningTimerComponent>(timers, SimulationScope.Unscoped);
     }
 
     public void Update(EngineTime time, byte stripeIndex) => _wheel.Tick(time.FrameCount, _tick);

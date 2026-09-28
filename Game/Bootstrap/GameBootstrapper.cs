@@ -1,5 +1,6 @@
 using Engine.Bootstrap;
 using Engine.Diagnostics;
+using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
@@ -48,6 +49,41 @@ namespace Game.Bootstrap;
 /// </summary>
 public static class GameBootstrapper
 {
+    /// <summary>A fresh instance of every module the game ships with, in their default order.</summary>
+    /// <remarks>Fresh on every call: modules keep what Configure and RegisterSystems hand them.</remarks>
+    public static IReadOnlyList<IModule> BuiltInModules() =>
+    [
+        new Terrain.TerrainModule(),
+        new CoreModule(),
+        new HealthModule(),
+        new ManaModule(),
+        new NpcBehaviorModule(),
+        new MovementModule(),
+        new DeathModule(),
+        new ProcessingTierModule(),
+        new RaceModule(),
+        new ClassModule(),
+        new BlueprintsModule(),
+        new ActionsModule(),
+        new CoreActionsModule(),
+        new StatusEffectsModule(),
+        new StatModifiersModule(),
+        new AbilityScoresModule(),
+        new BodyPartEffectsModule(),
+        new BurningModule(),
+        new PoisonModule(),
+        new ParalysisModule(),
+        new ContactDamageModule(),
+        new StatusEffectAuraModule(),
+        new AchievementModule(),
+        new CrawlerModule(),
+        new InventoryModule(),
+        new CoreItemsModule(),
+        new CurrencyModule(),
+        new ContainersModule(),
+        new ShopModule(),
+    ];
+
     public static GameBootstrapResult Build(
         World.World world,
         MathUtility mathUtility,
@@ -58,44 +94,7 @@ public static class GameBootstrapper
         UniqueNumberAllocator? crawlerNumbers = null,
         ulong runtimeSpawnSeed = 0)
     {
-        IReadOnlyList<IModule> builtInModules =
-        [
-            new Terrain.TerrainModule(),
-            new CoreModule(),
-            new HealthModule(),
-            new ManaModule(),
-            // NpcBehaviorModule before MovementModule -- TestCombatBehaviorSystem must run before
-            // MovementSystem every frame so a heal/attack decision this tick is visible to
-            // MovementSystem's same-frame pending-activation check (see both systems' own doc
-            // comments). Component *registration* order doesn't depend on this (every module's
-            // RegisterComponents runs before any module's RegisterSystems), only per-frame
-            // Update/system-registration order does.
-            new NpcBehaviorModule(),
-            new MovementModule(),
-            new DeathModule(),
-            new ProcessingTierModule(),
-            new RaceModule(),
-            new ClassModule(),
-            new BlueprintsModule(),
-            new ActionsModule(),
-            new CoreActionsModule(),
-            new StatusEffectsModule(),
-            new StatModifiersModule(),
-            new AbilityScoresModule(),
-            new BodyPartEffectsModule(),
-            new BurningModule(),
-            new PoisonModule(),
-            new ParalysisModule(),
-            new ContactDamageModule(),
-            new StatusEffectAuraModule(),
-            new AchievementModule(),
-            new CrawlerModule(),
-            new InventoryModule(),
-            new CoreItemsModule(),
-            new CurrencyModule(),
-            new ContainersModule(),
-            new ShopModule(),
-        ];
+        var builtInModules = BuiltInModules();
 
         var mapQuery = (IMapQuery)world;
         var eventBus = new EventBus();
@@ -133,8 +132,7 @@ public static class GameBootstrapper
         // parameter explains why -- MovementModule.Configure needs an IMapQuery before
         // Bootstrapper.Build can produce the ComponentManager these pools come from), so they
         // can't be World constructor dependencies. Wired up here, not left to GameLoop, so
-        // every real caller of this method gets them -- absence would silently default every
-        // entity to Blocking (see World.IsBlocking).
+        // every real caller of this method gets them.
         world.NonBlockingComponents = ecsContext.ComponentManager.GetMultiPool<NonBlockingComponent>();
         world.ForceBlockingComponents = ecsContext.ComponentManager.GetMultiPool<ForceBlockingComponent>();
         world.EntityManager = ecsContext.EntityManager;
@@ -145,16 +143,13 @@ public static class GameBootstrapper
         // catch-all behind ProcessingTierResolver.CreateEntityAt. See that class's own remarks.
         world.EntityPlaced += context.ProcessingTierResolver.EnsureTiered;
 
-        // One factory for every entity this session ever spawns (see EntityFactory). Skeletons are
-        // wired onto it afterwards rather than passed in, since they are built around the same
-        // factory -- one of the two has to know about the other second.
-        var factory = new EntityFactory(context.Definitions, world, ecsContext.EntityManager, ecsContext.ComponentManager, context.MovedEntities, context.ProcessingTierResolver, context.SimulationClock, crawlerNumbers, runtimeSpawnSeed);
+        // One factory for every entity this session ever spawns (see EntityFactory), with its skeletons.
+        var factory = new EntityFactory(context.Definitions, world, ecsContext.EntityManager, ecsContext.ComponentManager, context.MovedEntities, context.SimulationClock, context.ProcessingTierEvents, context.ProcessingTierResolver, crawlerNumbers, runtimeSpawnSeed);
 
-        // Forgotten first, so every later destruction handler sees an ordinary entity rather than a
-        // skeleton the access guard would stop it reading.
-        var skeletons = new CreatureSkeletons(factory, ecsContext.ComponentManager, context.SimulationClock);
-        factory.Skeletons = skeletons;
-        ecsContext.EntityManager.EntityDestroying += skeletons.Forget;
+        // The factory forgets a skeleton as it is destroyed, ahead of every destruction handler wired
+        // below, so each of them sees an ordinary entity rather than a skeleton the access guard would
+        // stop it reading.
+        var skeletons = factory.Skeletons!;
 
         // First in the frame, so a spawn recorded late last frame reaches every reader of the moves.
         ecsContext.SystemManager.RegisterFirst(factory.SpawnMoves!);
@@ -167,7 +162,7 @@ public static class GameBootstrapper
         // every timer wheel through SimulationScope. Engine only ever sees a count and a predicate;
         // what the tiers mean stays here.
         ecsContext.SystemManager.SimulatedTierCount = ProcessingTierDivisors.SimulatedTierCount;
-        WireSimulationScope(context, ecsContext, skeletons);
+        WireSimulationScope(context, ecsContext);
 
         // The clock modules were configured against (and captured) becomes the one SystemManager
         // advances, so every deadline reader sees the same "now". Presentation reaches it as
@@ -186,8 +181,8 @@ public static class GameBootstrapper
             factory.SpawnMoves!,
             ecsContext.EventBus,
             skeletons,
-            componentManager.IsRegistered<Modules.Movement.Components.MovementComponent>() ? componentManager.GetPackedPool<Modules.Movement.Components.MovementComponent>() : null,
-            componentManager.IsRegistered<Modules.Actions.Components.PendingDelayedActionComponent>() ? componentManager.GetPackedPool<Modules.Actions.Components.PendingDelayedActionComponent>() : null);
+            componentManager.GetPackedPool<Modules.Movement.Components.MovementComponent>(),
+            componentManager.GetPackedPool<Modules.Actions.Components.PendingDelayedActionComponent>());
     }
 
     /// <summary>A separately configured and built copy of every module, as the staging world SpawnRecordRebuilder rebuilds creatures in.</summary>
@@ -210,14 +205,14 @@ public static class GameBootstrapper
     private static void WireEntityDestruction(GameModuleContext context, Engine.ECS.Context.EcsContext ecsContext, World.World world)
     {
         var componentManager = ecsContext.ComponentManager;
-        var auraSources = componentManager.IsRegistered<StatusEffectAuraSourceComponent>() ? componentManager.GetMultiPool<StatusEffectAuraSourceComponent>() : null;
+        var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         var transforms = componentManager.GetDirectPool<TransformComponent>();
         var processingTierResolver = context.ProcessingTierResolver;
         var eventBus = ecsContext.EventBus;
 
         ecsContext.EntityManager.EntityDestroying += entityId =>
         {
-            if (auraSources?.Has(entityId) == true)
+            if (auraSources.Has(entityId))
             {
                 AuraSourceEffects.RemoveAll(auraSources, eventBus, entityId);
             }
@@ -239,25 +234,12 @@ public static class GameBootstrapper
     /// the entities that go untiered (never placed on the map) are exactly the ones nothing would
     /// ever resume.
     /// </remarks>
-    /// <remarks>A skeleton promoted into a simulated tier is built on TierChanging, before any TierChanged handler (tier stripe sets, the Local roster, resume and timer catch-up) sees the change.</remarks>
-    private static void WireSimulationScope(GameModuleContext context, Engine.ECS.Context.EcsContext ecsContext, CreatureSkeletons skeletons)
+    private static void WireSimulationScope(GameModuleContext context, Engine.ECS.Context.EcsContext ecsContext)
     {
-        if (!ecsContext.ComponentManager.IsRegistered<ProcessingTierComponent>())
-        {
-            return;
-        }
-
         var tiers = ecsContext.ComponentManager.GetDirectPool<ProcessingTierComponent>();
         var simulationScope = context.SimulationScope;
 
         simulationScope.SetPolicy(new ProcessingTierQuery(tiers).IsSimulated);
-        context.ProcessingTierEvents.TierChanging += (entityId, tier) =>
-        {
-            if (ProcessingTierQuery.IsSimulatedTier(tier))
-            {
-                skeletons.EnsureBuilt(entityId);
-            }
-        };
         context.ProcessingTierEvents.TierChanged += (entityId, tier) =>
         {
             if (ProcessingTierQuery.IsSimulatedTier(tier))
@@ -268,7 +250,8 @@ public static class GameBootstrapper
     }
 
     /// <summary>
-    /// Trial-registers each mod module alongside every built-in (not other mods -- no real
+    /// Trial-registers each mod module with every built-in, combined the way the real build combines
+    /// them so a replacement stands in for the module it replaces (not with other mods -- no real
     /// mod ecosystem exists yet to justify solving cross-mod dependency ordering), entirely
     /// against throwaway instances, so a mod depending on a built-in component (the common
     /// case) validates correctly while nothing the mod does during the trial is observable
@@ -291,10 +274,12 @@ public static class GameBootstrapper
         {
             try
             {
-                var trialModules = new List<IModule>(builtInModules) { mod };
+                var trialModules = ModuleSet.Combine(builtInModules, [mod]);
                 var throwawayEventBus = new EventBus();
 
                 ConfigureGameModules(trialModules, mapQuery, playerQuery, mathUtility, throwawayEventBus, entityMoveSync);
+
+                ThrowIfBreaksReplacementContract(builtInModules, mod);
 
                 Bootstrapper.Build(trialModules, initialEntityCapacity: 10, initialComponentCapacity: 10, throwawayEventBus);
 
@@ -307,6 +292,35 @@ public static class GameBootstrapper
         }
 
         return survivors;
+    }
+
+    /// <summary>Throws unless a mod that replaces a built-in registers every component the built-in did, each as the same kind of pool.</summary>
+    private static void ThrowIfBreaksReplacementContract(IReadOnlyList<IModule> builtInModules, IModule mod)
+    {
+        if (mod.Id == Guid.Empty || builtInModules.FirstOrDefault(builtIn => builtIn.Id == mod.Id) is not { } replacedModule)
+        {
+            return;
+        }
+
+        var providedPools = RegisteredPools(mod);
+        var missingPools = RegisteredPools(replacedModule)
+            .Where(requiredPool => !providedPools.Contains(requiredPool))
+            .Select(missingPool => $"{missingPool.ComponentType.Name} ({missingPool.PoolKind.Name[..missingPool.PoolKind.Name.IndexOf('`')]})")
+            .ToList();
+
+        if (missingPools.Count > 0)
+        {
+            throw new InvalidOperationException($"{mod.Name} replaces {replacedModule.Name} but does not register: {string.Join(", ", missingPools)}.");
+        }
+    }
+
+    /// <summary>Each component type a module registers, with the kind of pool it registers it as (DirectComponentPool&lt;&gt; and so on).</summary>
+    private static HashSet<(Type ComponentType, Type PoolKind)> RegisteredPools(IModule module)
+    {
+        var componentManager = new ComponentManager(initialEntityCapacity: 1, initialComponentCapacity: 1);
+        module.RegisterComponents(componentManager);
+
+        return componentManager.AllPools.Select(pool => (pool.ComponentType, pool.GetType().GetGenericTypeDefinition())).ToHashSet();
     }
 
     private static GameModuleContext ConfigureGameModules(IReadOnlyList<IModule> modules, IMapQuery mapQuery, IPlayerQuery playerQuery, MathUtility mathUtility, EventBus eventBus, IEntityMoveSync entityMoveSync, StartupProfiler? startupProfiler = null)

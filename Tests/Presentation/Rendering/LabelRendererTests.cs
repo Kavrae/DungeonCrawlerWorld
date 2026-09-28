@@ -124,7 +124,7 @@ public sealed class LabelRendererTests
         var footprintTopLeft = new Vector2(10, 20);
         var footprintSize = new Vector2(200, font.LineHeight);
 
-        var position = renderer.GetLeftAlignedPosition(font, "Understocked", footprintTopLeft, footprintSize);
+        var position = renderer.GetLeftAlignedPosition(font, footprintTopLeft, footprintSize);
 
         Assert.AreEqual(footprintTopLeft.Y, position.Y, 0.01f);
     }

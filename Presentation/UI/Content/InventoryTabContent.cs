@@ -1,6 +1,4 @@
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
-using Presentation.Rendering;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
@@ -18,7 +16,7 @@ namespace Presentation.UI.Content;
 /// Initialize built, the same discipline InventoryGridContent/TabbedContent's own tab tiles
 /// already follow.
 /// </summary>
-public sealed class InventoryTabContent(ElementPoolService elementPoolService, FontService fontService, LabelRenderer labelRenderer, InventoryGridContent gridContent) : IElementContent
+public sealed class InventoryTabContent(ElementPoolService elementPoolService, InventoryGridContent gridContent) : IElementContent
 {
     private static readonly IReadOnlyList<string> SortOptionLabels = ["A-Z", "Z-A", "Qty Hi", "Qty Lo", "New"];
 

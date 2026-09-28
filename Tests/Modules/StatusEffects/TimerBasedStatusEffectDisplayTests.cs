@@ -14,8 +14,7 @@ public sealed class TimerBasedStatusEffectDisplayTests
 
     private static ComponentManager CreateComponentManagerWithPoisonTimerPool()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4));
         return componentManager;
     }
 

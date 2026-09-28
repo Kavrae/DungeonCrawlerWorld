@@ -119,7 +119,7 @@ public class ShopItemStackCell(FontService fontService, ElementPoolService eleme
 
         var priceColor = isGreyedOut ? Color.Gray : PriceIsFavorable ? FavorableColor : PriceIsUnfavorable ? UnfavorableColor : textColor;
 
-        var priceFont = fontService.GetFont((int)(ContentSize.Y * CompactStatFontSizeFraction));
+        var priceFont = FontService.GetFont((int)(ContentSize.Y * CompactStatFontSizeFraction));
         var priceRowPosition = new Vector2(textLeft, ContentAbsolutePosition.Y + halfHeight);
         var priceRowSize = new Vector2(textWidth, halfHeight);
 

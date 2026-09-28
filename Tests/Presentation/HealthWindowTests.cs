@@ -53,7 +53,7 @@ public sealed class HealthWindowTests
         var bodyParts = BodyPartTestWorld.WithParts(EntityId, ("Head", BodyPartType.Head, 10, 10, true), ("Torso", BodyPartType.Torso, 15, 20, true), ("Left Arm", BodyPartType.Arm, 8, 8, false), ("Right Arm", BodyPartType.Arm, 8, 8, false), ("Left Leg", BodyPartType.Leg, 4, 9, false), ("Right Leg", BodyPartType.Leg, 9, 9, false)).BodyParts;
 
         List<HealthWindow.BodyPartRow> rows = [];
-        HealthWindow.BuildBodyPartRows(rows, EntityId, healthPool, bodyParts, statModifiers: null);
+        HealthWindow.BuildBodyPartRows(rows, EntityId, healthPool, bodyParts, statModifiers: EmptyPools.Multi<StatModifierComponent>());
 
         Assert.HasCount(6, rows);
         var torsoRow = rows.Single(row => row.Name == "Torso");
@@ -87,7 +87,7 @@ public sealed class HealthWindowTests
         var bodyParts = new BodyPartTestWorld().BodyParts;
 
         List<HealthWindow.BodyPartRow> rows = [];
-        HealthWindow.BuildBodyPartRows(rows, EntityId, healthPool, bodyParts, statModifiers: null);
+        HealthWindow.BuildBodyPartRows(rows, EntityId, healthPool, bodyParts, statModifiers: EmptyPools.Multi<StatModifierComponent>());
 
         Assert.HasCount(1, rows);
         Assert.AreEqual("HP", rows[0].Name);
@@ -98,10 +98,7 @@ public sealed class HealthWindowTests
     /// <summary>Fresh ComponentManager with every timer component pool registered -- BuildStatusEffectRows reads both presence and duration through TimerBasedStatusEffectDisplay's own GetPackedPool lookup, so the pools have to live behind a real ComponentManager instead of standing alone.</summary>
     private static ComponentManager CreateComponentManagerWithStatusEffectPools()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8);
-        componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterPackedPool<ParalysisTimerComponent>(static (ref existing, incoming) => { });
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8));
         return componentManager;
     }
 
@@ -248,14 +245,6 @@ public sealed class HealthWindowTests
         Assert.AreEqual(string.Empty, text);
     }
 
-    [TestMethod]
-    public void TryGetBodyPartBurningLine_NoPoolSupplied_ReturnsFalse()
-    {
-        var found = HealthWindow.TryGetBodyPartBurningLine(null, EntityId, partId: 0, now: 0, out _, out _);
-
-        Assert.IsFalse(found);
-    }
-
     private static PackedComponentPool<PotionCooldownComponent> CreatePotionCooldownPool() =>
         new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
@@ -264,14 +253,6 @@ public sealed class HealthWindowTests
         var itemCatalog = new ItemCatalog();
         itemCatalog.Register(HealthPotion.Build());
         return itemCatalog;
-    }
-
-    [TestMethod]
-    public void TryGetPotionCooldownLine_NoPoolSupplied_ReturnsFalse()
-    {
-        var found = HealthWindow.TryGetPotionCooldownLine(null, CreateItemCatalogWithHealthPotion(), EntityId, now: 0, out _, out _);
-
-        Assert.IsFalse(found);
     }
 
     [TestMethod]
@@ -324,16 +305,6 @@ public sealed class HealthWindowTests
 
     private static MultiComponentPool<StatModifierComponent> CreateStatModifiersPool() =>
         new(entityCapacity: 10, initialCapacity: 4);
-
-    [TestMethod]
-    public void BuildModifierRows_NoPoolSupplied_Empty()
-    {
-        List<HealthWindow.ModifierRow> rows = [];
-
-        HealthWindow.BuildModifierRows(rows, EntityId, statModifiers: null, StatModifierPolarity.Buff, now: 0);
-
-        Assert.IsEmpty(rows);
-    }
 
     [TestMethod]
     public void BuildModifierRows_NoActiveModifiers_Empty()
@@ -643,16 +614,6 @@ public sealed class HealthWindowTests
 
     private static MultiComponentPool<StatusEffectImmunityComponent> CreateImmunitiesPool() =>
         new(entityCapacity: 10, initialCapacity: 4);
-
-    [TestMethod]
-    public void BuildImmunityRows_NoPoolSupplied_Empty()
-    {
-        List<HealthWindow.ImmunityRow> rows = [];
-
-        HealthWindow.BuildImmunityRows(rows, EntityId, statusEffectImmunities: null, now: 0);
-
-        Assert.IsEmpty(rows);
-    }
 
     [TestMethod]
     public void BuildImmunityRows_NoActiveImmunities_Empty()

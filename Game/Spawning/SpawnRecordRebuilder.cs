@@ -13,24 +13,21 @@ namespace Game.Spawning;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class SpawnRecordRebuilder(EcsContext staging, BlueprintRegistry definitions)
 {
-    private readonly EcsContext _staging = staging ?? throw new ArgumentNullException(nameof(staging));
     private readonly EntityFactory _builder = new(definitions, staging.EntityManager.Keys);
 
     /// <summary>Builds record's creature on a staging entity, hands it to read, then destroys it.</summary>
     /// <remarks>The staging entity only lives for the duration of read -- read copies out whatever it needs.</remarks>
     public void Rebuild(SpawnRecordComponent record, Action<ComponentManager, int> read)
     {
-        ArgumentNullException.ThrowIfNull(read);
-
-        var entityId = _staging.EntityManager.CreateEntity();
+        var entityId = staging.EntityManager.CreateEntity();
         try
         {
-            _builder.Build(_staging.ComponentManager, entityId, record.BlueprintId, record.Seed, now: 0, record.Flags);
-            read(_staging.ComponentManager, entityId);
+            _builder.Build(staging.ComponentManager, entityId, record.BlueprintId, record.Seed, now: 0, record.Flags);
+            read(staging.ComponentManager, entityId);
         }
         finally
         {
-            _staging.EntityManager.DestroyEntity(entityId);
+            staging.EntityManager.DestroyEntity(entityId);
         }
     }
 }

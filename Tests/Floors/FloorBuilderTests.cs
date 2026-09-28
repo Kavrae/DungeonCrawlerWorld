@@ -48,99 +48,14 @@ public sealed class FloorBuilderTests
     {
         var eventBus = new EventBus();
         context = new GameModuleContext(world, mathUtility, eventBus) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
-        new TerrainModule().Configure(context);
+        var ecsContext = BuiltInTestModules.Build(context, 5000, 5000);
         world.Terrain = context.Terrain;
-
-        var movementModule = new MovementModule();
-        movementModule.Configure(context);
-
-        var actionsModule = new ActionsModule();
-        actionsModule.Configure(context);
-
-        var coreActionsModule = new CoreActionsModule();
-        coreActionsModule.Configure(context);
-
-        var burningModule = new BurningModule();
-        burningModule.Configure(context);
-
-        var poisonModule = new PoisonModule();
-        poisonModule.Configure(context);
-
-        var contactDamageModule = new ContactDamageModule();
-        contactDamageModule.Configure(context);
-
-        var statusEffectAuraModule = new StatusEffectAuraModule();
-        statusEffectAuraModule.Configure(context);
-
-        var processingTierModule = new ProcessingTierModule();
-        processingTierModule.Configure(context);
-
-        var coreModule = new CoreModule();
-        coreModule.Configure(context);
-
-        var healthModule = new HealthModule();
-        healthModule.Configure(context);
-
-        var manaModule = new ManaModule();
-        manaModule.Configure(context);
-
-        var statModifiersModule = new StatModifiersModule();
-        statModifiersModule.Configure(context);
-
-        var abilityScoresModule = new AbilityScoresModule();
-        abilityScoresModule.Configure(context);
-
-        var coreItemsModule = new CoreItemsModule();
-        coreItemsModule.Configure(context);
-
-        var statusEffectsModule = new StatusEffectsModule();
-
-        var containersModule = new ContainersModule();
-        containersModule.Configure(context);
-
-        var shopModule = new ShopModule();
-        shopModule.Configure(context);
-
-        var npcBehaviorModule = new NpcBehaviorModule();
-        npcBehaviorModule.Configure(context);
-
-        var creatureModule = new BlueprintsModule();
-        creatureModule.Configure(context);
-
-        IReadOnlyList<IModule> modules =
-        [
-            coreModule,
-            healthModule,
-            manaModule,
-            statModifiersModule,
-            abilityScoresModule,
-            movementModule,
-            new RaceModule(),
-            new ClassModule(),
-            creatureModule,
-            actionsModule,
-            coreActionsModule,
-            statusEffectsModule,
-            burningModule,
-            poisonModule,
-            contactDamageModule,
-            statusEffectAuraModule,
-            new CrawlerModule(),
-            processingTierModule,
-            new InventoryModule(),
-            coreItemsModule,
-            new CurrencyModule(),
-            containersModule,
-            shopModule,
-            npcBehaviorModule,
-        ];
-
-        return Bootstrapper.Build(modules, initialEntityCapacity: 5000, initialComponentCapacity: 5000, entityKeys: context.EntityKeys);
+        return ecsContext;
     }
 
     /// <summary>The one spawn path, for a context these tests assembled themselves -- GameBootstrapper builds the real session's (see GameBootstrapResult.Factory).</summary>
-    private static EntityFactory FactoryFor(Game.World.World world, EcsContext ecsContext, GameModuleContext context, MathUtility mathUtility, ProcessingTierResolver? tierResolver = null) =>
-        new(context.Definitions, world, ecsContext.EntityManager, ecsContext.ComponentManager, context.MovedEntities, tierResolver, ecsContext.SystemManager.Clock, new UniqueNumberAllocator(1, 1, 24));
+    private static EntityFactory FactoryFor(Game.World.World world, EcsContext ecsContext, GameModuleContext context, ProcessingTierResolver? tierResolver = null) =>
+        new(context.Definitions, world, ecsContext.EntityManager, ecsContext.ComponentManager, context.MovedEntities, ecsContext.SystemManager.Clock, context.ProcessingTierEvents, tierResolver, new UniqueNumberAllocator(1, 1, 24));
 
     /// <summary>
     /// The player must not be placed before/during TestMapBuilder.Populate (PlaceEntityOnMap
@@ -161,7 +76,7 @@ public sealed class FloorBuilderTests
         var ecsContext = BuildEcsContext(world, mathUtility, out var context);
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
-        var factory = FactoryFor(world, ecsContext, context, mathUtility);
+        var factory = FactoryFor(world, ecsContext, context);
         FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Definitions);
         FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId);
         world.PlayerEntityId = playerEntityId;
@@ -195,7 +110,7 @@ public sealed class FloorBuilderTests
         var mathUtility = new MathUtility(new Random(1));
         var ecsContext = BuildEcsContext(world, mathUtility, out var context);
 
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), FactoryFor(world, ecsContext, context, mathUtility), context.Terrain, context.Definitions);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), FactoryFor(world, ecsContext, context), context.Terrain, context.Definitions);
 
         var transforms = ecsContext.ComponentManager.GetDirectPool<TransformComponent>();
         var creatures = 0;
@@ -219,7 +134,7 @@ public sealed class FloorBuilderTests
         var mathUtility = new MathUtility(new Random(1));
         var ecsContext = BuildEcsContext(world, mathUtility, out var context);
 
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), FactoryFor(world, ecsContext, context, mathUtility), context.Terrain, context.Definitions);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), FactoryFor(world, ecsContext, context), context.Terrain, context.Definitions);
 
         var wallId = context.Terrain.GetId(BuiltInTerrain.StoneWallKey);
         Assert.AreEqual(wallId, world.GetStructureAt(new Vector3Int(10, 2, (int)MapLayer.Ground)).TypeId);
@@ -296,7 +211,7 @@ public sealed class FloorBuilderTests
         var raisedDuringPopulation = new HashSet<int>();
         context.ProcessingTierEvents.TierChanged += (entityId, _) => raisedDuringPopulation.Add(entityId);
 
-        var factory = FactoryFor(world, ecsContext, context, mathUtility, resolver);
+        var factory = FactoryFor(world, ecsContext, context, resolver);
         FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Definitions);
         FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId, resolver);
         world.PlayerEntityId = playerEntityId;
@@ -368,7 +283,7 @@ public sealed class FloorBuilderTests
         var world = new Game.World.World(new Map(bounds));
         var mathUtility = new MathUtility(new Random(1));
         var ecsContext = BuildEcsContext(world, mathUtility, out var context);
-        var factory = FactoryFor(world, ecsContext, context, mathUtility);
+        var factory = FactoryFor(world, ecsContext, context);
         var builder = new Game.TestMapBuilder(ecsContext.EntityManager, factory, context.Terrain, context.Definitions);
         return (world, ecsContext, builder, context.Definitions, factory);
     }

@@ -75,23 +75,11 @@ public sealed class ConsumableActivationSystemTests
     /// <param name="withProcessingTiers">Also registers ProcessingTierComponent and gives the system its ProcessingTierQuery, as InventoryModule does.</param>
     private static (ConsumableActivationSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, EventBus EventBus) Build(bool withProcessingTiers = false)
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
         if (withProcessingTiers)
         {
-            componentManager.RegisterDirectPool<ProcessingTierComponent>(static (ref existing, incoming) => existing = incoming);
         }
 
-        componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
 
         var itemCatalog = new ItemCatalog();
         var splashTargeting = new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1);
@@ -114,7 +102,7 @@ public sealed class ConsumableActivationSystemTests
         var eventBus = new EventBus();
         var mathUtility = new MathUtility();
 
-        var system = new ConsumableActivationSystem(
+        var system = TestSystems.ConsumableActivationSystem(
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PotionCooldownComponent>(),
@@ -144,18 +132,7 @@ public sealed class ConsumableActivationSystemTests
     /// <summary>Same wiring as Build, plus an AbilityScoresComponent pool -- for tests exercising Constitution's effect on the potion cooldown duration.</summary>
     private static (ConsumableActivationSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, EventBus EventBus) BuildWithAbilityScores()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
-        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
-        AbilityScoreTestPools.Register(componentManager);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
         var itemCatalog = new ItemCatalog();
         var splashTargeting = new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1);
@@ -168,7 +145,7 @@ public sealed class ConsumableActivationSystemTests
         var eventBus = new EventBus();
         var mathUtility = new MathUtility();
 
-        var system = new ConsumableActivationSystem(
+        var system = TestSystems.ConsumableActivationSystem(
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PotionCooldownComponent>(),

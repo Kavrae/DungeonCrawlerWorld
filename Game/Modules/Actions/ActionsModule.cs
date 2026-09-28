@@ -20,17 +20,25 @@ using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
 using Game.Blueprints;
+using Game.Modules.Core;
+using Game.Modules.StatModifiers;
+using Game.Modules.Death;
+using Game.Modules.Mana;
+using Game.Modules.AbilityScores;
+using Game.Modules.StatusEffectAura;
+using Game.Modules.BodyPartEffects;
+using Game.Modules.Race;
 
 namespace Game.Modules.Actions;
 
 /// <summary>
 /// Parameterless (required for runtime discovery) with its runtime dependencies (ActionCatalog,
 /// IMapQuery, EventBus, IPlayerQuery, StatusEffectAuraApplierRegistry) supplied via
-/// IGameModule.Configure instead of the constructor. No hard Dependencies on StatusEffectsModule:
+/// IGameModule.Configure instead of the constructor. Doesn't require StatusEffectsModule:
 /// GameModuleContext.StatusEffectAuraAppliers is always a live, shared registry regardless of
 /// which effect modules (if any) are loaded -- ActionEffectResolver's StatusEffects grant is a
 /// graceful no-op (TryGet returning false) for any StatusEffectType nothing registered an
-/// applier for, the same optional treatment StatModifierComponent/SimpleHealthComponent already get.
+/// applier for.
 ///
 /// Also owns PotionCooldownComponent/PotionCooldownSystem (Game.Modules.Actions.Activators/
 /// Systems) -- that bookkeeping is a property of a PotionActivator-kind activation happening, not
@@ -45,15 +53,17 @@ namespace Game.Modules.Actions;
 /// </summary>
 public sealed class ActionsModule : IGameModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000000c");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000000c");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [];
+    public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, StatusEffectAuraModule.ModuleId, BodyPartEffectsModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId];
 
     private ActionCatalog _actionCatalog = null!;
     private IMapQuery _mapQuery = null!;
     private EventBus _eventBus = null!;
     private MathUtility _mathUtility = null!;
-    private IPlayerQuery? _playerQuery;
+    private IPlayerQuery _playerQuery = null!;
     private StatusEffectAuraApplierRegistry _statusEffectAppliers = null!;
     private ProcessingTierEvents _processingTierEvents = null!;
     private SimulationScope _simulationScope = null!;
@@ -105,24 +115,17 @@ public sealed class ActionsModule : IGameModule
 
         systemManager.Register(new PotionCooldownSystem(componentManager.GetPackedPool<PotionCooldownComponent>()));
 
-        if (!componentManager.IsRegistered<SimpleHealthComponent>())
-        {
-            return;
-        }
-
-        var statModifiers = componentManager.GetOptionalMultiPool<StatModifierComponent>();
-        var deadEntities = componentManager.GetOptionalPackedPool<DeadComponent>();
-        var mana = componentManager.GetOptionalPackedPool<ManaComponent>();
-        var abilityScores = componentManager.GetOptionalPackedPool<AbilityScoresComponent>();
-        var auraSources = componentManager.GetOptionalMultiPool<StatusEffectAuraSourceComponent>();
+        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
+        var deadEntities = componentManager.GetPackedPool<DeadComponent>();
+        var mana = componentManager.GetPackedPool<ManaComponent>();
+        var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
+        var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         var hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
-        var bodyParts = componentManager.IsRegistered<BodyPartStateComponent>() ? EntityBodyParts.For(componentManager, _creatures) : null;
-        var meleeDisabled = componentManager.GetOptionalPackedPool<MeleeDisabledComponent>();
+        var bodyParts = EntityBodyParts.For(componentManager, _creatures);
+        var meleeDisabled = componentManager.GetPackedPool<MeleeDisabledComponent>();
         var dodgingEntities = componentManager.GetPackedPool<DodgingComponent>();
 
-        // Null when ProcessingTierModule is not registered (test contexts): nothing is frozen, so
-        // every target resolves -- see ProcessingTierQuery.
-        var processingTiers = componentManager.GetOptionalDirectPool<ProcessingTierComponent>() is { } tiers ? new ProcessingTierQuery(tiers) : null;
+        var processingTiers = new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>());
 
         systemManager.Register(new DodgeExpirySystem(dodgingEntities));
 
@@ -143,12 +146,13 @@ public sealed class ActionsModule : IGameModule
             statModifiers,
             deadEntities,
             abilityScores,
+            mana,
             auraSources,
             hotkeyExpansionUnlocks,
             bodyParts,
             dodgingEntities,
-            _simulationScope,
             processingTiers,
+            _simulationScope,
             _processingTierEvents,
             _creatures));
 

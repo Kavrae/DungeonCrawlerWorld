@@ -1,3 +1,4 @@
+using Game.Blueprints;
 using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
@@ -89,7 +90,7 @@ public sealed class ActionEffectResolverTests
         var eventBus = new EventBus();
         var mathUtility = new MathUtility();
         var statusEffectAppliers = new StatusEffectAuraApplierRegistry();
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
 
         return (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager);
     }
@@ -101,7 +102,7 @@ public sealed class ActionEffectResolverTests
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
-        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
 
         DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
@@ -114,7 +115,7 @@ public sealed class ActionEffectResolverTests
         mapQuery.AddNonBlockingOccupant(TargetTile, NonBlockingTargetEntityId);
         health.Add(NonBlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
-        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
 
         DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(NonBlockingTargetEntityId).CurrentHealth);
     }
@@ -129,7 +130,7 @@ public sealed class ActionEffectResolverTests
         health.Add(NonBlockingTargetEntityId, new SimpleHealthComponent(100, 100));
         health.Add(SecondNonBlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
-        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
 
         DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(NonBlockingTargetEntityId).CurrentHealth);
         DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(SecondNonBlockingTargetEntityId).CurrentHealth);
@@ -145,7 +146,7 @@ public sealed class ActionEffectResolverTests
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
         health.Add(NonBlockingTargetEntityId, new SimpleHealthComponent(100, 100));
 
-        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
 
         DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
         DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(NonBlockingTargetEntityId).CurrentHealth);
@@ -156,7 +157,7 @@ public sealed class ActionEffectResolverTests
     {
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
 
-        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
 
         Assert.IsFalse(health.Has(BlockingTargetEntityId));
     }
@@ -172,26 +173,13 @@ public sealed class ActionEffectResolverTests
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
-        AbilityScoreTestPools.Register(componentManager);
         var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
         abilityScores.Add(SourceEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Strength, baseValue: 8, total: 8));
 
-        ActionEffectResolver.Apply(StrengthTaggedAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
+        TestActionEffects.Apply(StrengthTaggedAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
 
         // 15 base damage + 8 Strength Total = 23.
         DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 23, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
-    }
-
-    [TestMethod]
-    public void Apply_NullAbilityScoresPool_BehavesExactlyAsToday_NoBonusNoCrash()
-    {
-        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
-        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
-        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
-
-        ActionEffectResolver.Apply(StrengthTaggedAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
-
-        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
 
     [TestMethod]
@@ -200,11 +188,10 @@ public sealed class ActionEffectResolverTests
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
-        AbilityScoreTestPools.Register(componentManager);
         var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
         // SourceEntityId has no ability scores at all.
 
-        ActionEffectResolver.Apply(StrengthTaggedAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
+        TestActionEffects.Apply(StrengthTaggedAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, statModifiers: null, deadEntities: null, abilityScores: abilityScores);
 
         DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
@@ -222,11 +209,11 @@ public sealed class ActionEffectResolverTests
         statusEffectAppliers.Register(applier);
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
 
         Assert.HasCount(1, applier.AppliedCalls);
         Assert.AreEqual(BlockingTargetEntityId, applier.AppliedCalls[0].EntityId);
-        Assert.AreEqual(ActionSource.FromEntity(componentManager, Keys, SourceEntityId), applier.AppliedCalls[0].Source);
+        Assert.AreEqual(ActionSource.FromEntity(componentManager, Keys, SourceEntityId, creatures: new BlueprintRegistry()), applier.AppliedCalls[0].Source);
     }
 
     [TestMethod]
@@ -237,7 +224,7 @@ public sealed class ActionEffectResolverTests
         statusEffectAppliers.Register(applier);
         mapQuery.AddNonBlockingOccupant(TargetTile, NonBlockingTargetEntityId);
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
 
         Assert.HasCount(1, applier.AppliedCalls);
         Assert.AreEqual(NonBlockingTargetEntityId, applier.AppliedCalls[0].EntityId);
@@ -252,7 +239,7 @@ public sealed class ActionEffectResolverTests
         statusEffectAppliers.Register(applier);
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
 
         Assert.IsFalse(health.Has(BlockingTargetEntityId));
         Assert.HasCount(1, applier.AppliedCalls);
@@ -264,7 +251,7 @@ public sealed class ActionEffectResolverTests
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
     }
 
     [TestMethod]
@@ -276,12 +263,12 @@ public sealed class ActionEffectResolverTests
         StatusEffectAppliedEvent? published = null;
         eventBus.Subscribe<StatusEffectAppliedEvent>(e => published = e);
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
 
         Assert.IsNotNull(published);
         Assert.AreEqual(BlockingTargetEntityId, published!.Value.EntityId);
         Assert.AreEqual(StatusEffectType.Paralysis, published.Value.EffectType);
-        Assert.AreEqual(ActionSource.FromEntity(componentManager, Keys, SourceEntityId), published.Value.Source);
+        Assert.AreEqual(ActionSource.FromEntity(componentManager, Keys, SourceEntityId, creatures: new BlueprintRegistry()), published.Value.Source);
     }
 
     [TestMethod]
@@ -292,7 +279,7 @@ public sealed class ActionEffectResolverTests
         var published = false;
         eventBus.Subscribe<StatusEffectAppliedEvent>(_ => published = true);
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
 
         Assert.IsFalse(published);
     }
@@ -305,10 +292,9 @@ public sealed class ActionEffectResolverTests
         var applier = new FakeStatusEffectAuraApplier(StatusEffectType.Paralysis);
         statusEffectAppliers.Register(applier);
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
-        componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.GetPackedPool<DeadComponent>().Add(BlockingTargetEntityId, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
 
-        ActionEffectResolver.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, statModifiers: null, componentManager.GetPackedPool<DeadComponent>());
+        TestActionEffects.Apply(ActionWithStatusEffect, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, statModifiers: null, componentManager.GetPackedPool<DeadComponent>());
 
         Assert.IsEmpty(applier.AppliedCalls);
     }
@@ -327,7 +313,7 @@ public sealed class ActionEffectResolverTests
         var dodgingEntities = new PackedComponentPool<DodgingComponent>(entityCapacity: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
         dodgingEntities.Add(BlockingTargetEntityId, new DodgingComponent(expiresAtFrame: 30));
 
-        ActionEffectResolver.Apply(DodgeableAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, dodgingEntities: dodgingEntities);
+        TestActionEffects.Apply(DodgeableAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, dodgingEntities: dodgingEntities);
 
         Assert.AreEqual(100, health.GetReadonly(BlockingTargetEntityId).CurrentHealth, "A Dodgeable action must not affect a target currently holding DodgingComponent.");
     }
@@ -341,7 +327,7 @@ public sealed class ActionEffectResolverTests
         var dodgingEntities = new PackedComponentPool<DodgingComponent>(entityCapacity: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
         dodgingEntities.Add(BlockingTargetEntityId, new DodgingComponent(expiresAtFrame: 30));
 
-        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, dodgingEntities: dodgingEntities);
+        TestActionEffects.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, dodgingEntities: dodgingEntities);
 
         DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth, "Only Dodgeable-tagged actions are affected by DodgingComponent -- everything else lands as normal.");
     }
@@ -354,19 +340,7 @@ public sealed class ActionEffectResolverTests
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
         var dodgingEntities = new PackedComponentPool<DodgingComponent>(entityCapacity: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
 
-        ActionEffectResolver.Apply(DodgeableAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, dodgingEntities: dodgingEntities);
-
-        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
-    }
-
-    [TestMethod]
-    public void Apply_DodgeableAction_NullDodgingEntitiesPool_BehavesExactlyAsToday_NoCrash()
-    {
-        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
-        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
-        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
-
-        ActionEffectResolver.Apply(DodgeableAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(DodgeableAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, dodgingEntities: dodgingEntities);
 
         DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
@@ -381,7 +355,7 @@ public sealed class ActionEffectResolverTests
         var tiers = new DirectComponentPool<ProcessingTierComponent>(16, static (ref existing, incoming) => existing = incoming);
         tiers.Add(BlockingTargetEntityId, new ProcessingTierComponent(ProcessingTierLevel.Borough));
 
-        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0,
+        TestActionEffects.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0,
             processingTiers: new ProcessingTierQuery(tiers));
 
         Assert.AreEqual(100f, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
@@ -398,7 +372,7 @@ public sealed class ActionEffectResolverTests
         var tiers = new DirectComponentPool<ProcessingTierComponent>(16, static (ref existing, incoming) => existing = incoming);
         tiers.Add(BlockingTargetEntityId, new ProcessingTierComponent(tier));
 
-        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0,
+        TestActionEffects.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0,
             processingTiers: new ProcessingTierQuery(tiers));
 
         Assert.IsLessThan(100f, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
@@ -423,7 +397,7 @@ public sealed class ActionEffectResolverTests
         health.Add(SourceEntityId, new SimpleHealthComponent(100, 100));
         var staggered = RecordStaggers(eventBus);
 
-        ActionEffectResolver.Apply(StaggeringAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(StaggeringAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
 
         CollectionAssert.AreEqual(new[] { BlockingTargetEntityId }, staggered);
     }
@@ -438,7 +412,7 @@ public sealed class ActionEffectResolverTests
         dodgingEntities.Add(BlockingTargetEntityId, new DodgingComponent(expiresAtFrame: 30));
         var staggered = RecordStaggers(eventBus);
 
-        ActionEffectResolver.Apply(StaggeringAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, dodgingEntities: dodgingEntities);
+        TestActionEffects.Apply(StaggeringAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, dodgingEntities: dodgingEntities);
 
         Assert.IsEmpty(staggered);
     }
@@ -451,7 +425,7 @@ public sealed class ActionEffectResolverTests
         health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
         var staggered = RecordStaggers(eventBus);
 
-        ActionEffectResolver.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
+        TestActionEffects.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0);
 
         Assert.IsEmpty(staggered);
     }

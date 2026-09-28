@@ -23,9 +23,7 @@ public sealed class MapTintGridTests
 
     private static (ComponentManager ComponentManager, EventBus EventBus) BuildComponentManager()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
-        componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<StatusEffectAuraSourceComponent>();
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
         return (componentManager, new EventBus());
     }
 
@@ -34,7 +32,7 @@ public sealed class MapTintGridTests
     public void Constructor_SourcePlacedBeforeConstruction_ScattersItImmediately()
     {
         var (componentManager, eventBus) = BuildComponentManager();
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         componentManager.GetMultiPool<StatusEffectAuraSourceComponent>().Add(SourceEntityId, new StatusEffectAuraSourceComponent(StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange));
 
         var tintGrid = new MapTintGrid(componentManager, new Game.World.World(new Map(MapSize)), new TerrainRegistry(), eventBus);
@@ -48,7 +46,7 @@ public sealed class MapTintGridTests
     public void TryGetTint_OutsideAnySourceRadius_ReturnsFalse()
     {
         var (componentManager, eventBus) = BuildComponentManager();
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         componentManager.GetMultiPool<StatusEffectAuraSourceComponent>().Add(SourceEntityId, new StatusEffectAuraSourceComponent(StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange));
 
         var tintGrid = new MapTintGrid(componentManager, new Game.World.World(new Map(MapSize)), new TerrainRegistry(), eventBus);
@@ -65,7 +63,7 @@ public sealed class MapTintGridTests
         var tintGrid = new MapTintGrid(componentManager, new Game.World.World(new Map(MapSize)), new TerrainRegistry(), eventBus);
         Assert.IsFalse(tintGrid.TryGetTint(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out _));
 
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         var source = new StatusEffectAuraSourceComponent(StatusEffectType.Poison, auraAndGlowStrength: 8, Color.DarkGreen);
         eventBus.Publish(new AuraSourceAddedEvent(SourceEntityId, source));
 
@@ -78,7 +76,7 @@ public sealed class MapTintGridTests
     public void SourceRemovedAfterConstruction_NoLongerReflectedInTryGetTint()
     {
         var (componentManager, eventBus) = BuildComponentManager();
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         var source = new StatusEffectAuraSourceComponent(StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange);
         componentManager.GetMultiPool<StatusEffectAuraSourceComponent>().Add(SourceEntityId, source);
         var tintGrid = new MapTintGrid(componentManager, new Game.World.World(new Map(MapSize)), new TerrainRegistry(), eventBus);
@@ -93,12 +91,12 @@ public sealed class MapTintGridTests
     public void TwoOverlappingSources_ColorsAreFalloffWeightedBlend()
     {
         var (componentManager, eventBus) = BuildComponentManager();
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         componentManager.GetMultiPool<StatusEffectAuraSourceComponent>().Add(SourceEntityId, new StatusEffectAuraSourceComponent(StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Red));
 
         const int secondSourceEntityId = 2;
         var secondPosition = new Vector3Int(SourcePosition.X + 2, SourcePosition.Y, SourcePosition.Z);
-        componentManager.Merge(secondSourceEntityId, new TransformComponent(secondPosition, UnitSize));
+        TestTransforms.Set(componentManager, secondSourceEntityId, new TransformComponent(secondPosition, UnitSize));
         componentManager.GetMultiPool<StatusEffectAuraSourceComponent>().Add(secondSourceEntityId, new StatusEffectAuraSourceComponent(StatusEffectType.Poison, auraAndGlowStrength: 4, Color.Green));
 
         var tintGrid = new MapTintGrid(componentManager, new Game.World.World(new Map(MapSize)), new TerrainRegistry(), eventBus);
@@ -114,13 +112,13 @@ public sealed class MapTintGridTests
     public void SourceMoves_TintFollowsToNewPositionAndLeavesOldOne()
     {
         var (componentManager, eventBus) = BuildComponentManager();
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         componentManager.GetMultiPool<StatusEffectAuraSourceComponent>().Add(SourceEntityId, new StatusEffectAuraSourceComponent(StatusEffectType.Burning, auraAndGlowStrength: 8, Color.Orange));
         var tintGrid = new MapTintGrid(componentManager, new Game.World.World(new Map(MapSize)), new TerrainRegistry(), eventBus);
         Assert.IsTrue(tintGrid.TryGetTint(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out _));
 
         var newPosition = new Vector3Int(SourcePosition.X + 20, SourcePosition.Y, SourcePosition.Z);
-        componentManager.Merge(SourceEntityId, new TransformComponent(newPosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(newPosition, UnitSize));
         eventBus.Publish(new EntityMovedEvent(SourceEntityId, SourcePosition, newPosition, UnitSize));
 
         Assert.IsFalse(tintGrid.TryGetTint(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out _), "Old position must no longer show the tint once the source has moved away.");
@@ -133,7 +131,7 @@ public sealed class MapTintGridTests
     public void SourceTogglesOnThenMovesThenTogglesOff_NoResidualTintAtEitherPosition()
     {
         var (componentManager, eventBus) = BuildComponentManager();
-        componentManager.Merge(SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
         var tintGrid = new MapTintGrid(componentManager, new Game.World.World(new Map(MapSize)), new TerrainRegistry(), eventBus);
         var sourcePool = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
 
@@ -141,7 +139,7 @@ public sealed class MapTintGridTests
         Assert.IsTrue(tintGrid.TryGetTint(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out _));
 
         var newPosition = new Vector3Int(SourcePosition.X + 20, SourcePosition.Y, SourcePosition.Z);
-        componentManager.Merge(SourceEntityId, new TransformComponent(newPosition, UnitSize));
+        TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(newPosition, UnitSize));
         eventBus.Publish(new EntityMovedEvent(SourceEntityId, SourcePosition, newPosition, UnitSize));
         Assert.IsTrue(tintGrid.TryGetTint(newPosition.X, newPosition.Y, newPosition.Z, out _));
 

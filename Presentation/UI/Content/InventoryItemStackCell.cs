@@ -163,9 +163,9 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         _groupBorderBottom = false;
         _groupBorderLeft = false;
         _groupBorderRight = false;
-        _iconGlyphFont = fontService.GetFont((int)(cellSize.Y * FontChrome.InventoryStackIconGlyphFontFraction));
-        _quantityFont = fontService.GetFont((int)(cellSize.Y * FontChrome.InventoryStackQuantityFontFraction));
-        _badgeFont = fontService.GetFont((int)(cellSize.Y * FontChrome.InventoryStackBadgeFontFraction));
+        _iconGlyphFont = FontService.GetFont((int)(cellSize.Y * FontChrome.InventoryStackIconGlyphFontFraction));
+        _quantityFont = FontService.GetFont((int)(cellSize.Y * FontChrome.InventoryStackQuantityFontFraction));
+        _badgeFont = FontService.GetFont((int)(cellSize.Y * FontChrome.InventoryStackBadgeFontFraction));
     }
 
     /// <summary>

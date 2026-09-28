@@ -56,15 +56,7 @@ public sealed class ActionActivationSystemTests
     /// <summary>Never rolls a crit -- NextDouble always returns 1.0, comfortably above any crit chance -- so damage-amount assertions here stay deterministic.</summary>
     private static (ActionActivationSystem System, ComponentManager ComponentManager, ActionCatalog Catalog, FakeMapQuery MapQuery) Build()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<PendingActionActivationComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ActionInstanceComponent>();
-        componentManager.RegisterMultiPool<ActionCooldownComponent>();
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
@@ -98,7 +90,7 @@ public sealed class ActionActivationSystemTests
             FreeCastReleasingLockActionId, "Test Lock-Releasing FreeCast", null, "#", default, [], [ActionEffect.None],
             new SpellActivator(targeting, new ActionTiming(ActionTimingCategory.FreeCast, CooldownFrames: 40, ReleasesActionLock: true))));
 
-        var system = new ActionActivationSystem(
+        var system = TestSystems.ActionActivationSystem(
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             ActionsOf(componentManager, actionCatalog),
@@ -493,14 +485,7 @@ public sealed class ActionActivationSystemTests
     [TestMethod]
     public void Immediate_MeleeTaggedAction_MeleeDisabled_DoesNothingButStillConsumesRequest()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<PendingActionActivationComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ActionInstanceComponent>();
-        componentManager.RegisterMultiPool<ActionCooldownComponent>();
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<Game.Modules.BodyPartEffects.Components.MeleeDisabledComponent>(static (ref existing, incoming) => { });
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
         var mapQuery = new FakeMapQuery();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
@@ -515,7 +500,7 @@ public sealed class ActionActivationSystemTests
         var meleeDisabled = componentManager.GetPackedPool<Game.Modules.BodyPartEffects.Components.MeleeDisabledComponent>();
         meleeDisabled.Add(CasterEntityId, default);
 
-        var system = new ActionActivationSystem(
+        var system = TestSystems.ActionActivationSystem(
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             ActionsOf(componentManager, actionCatalog),

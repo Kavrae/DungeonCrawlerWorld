@@ -47,26 +47,7 @@ public sealed class AbilityScoreMilestoneAchievementTests
         var eventBus = new EventBus();
         var context = new GameModuleContext(world, new MathUtility(), eventBus) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
 
-        var coreModule = new CoreModule();
-        coreModule.Configure(context);
-
-        var movementModule = new MovementModule();
-        movementModule.Configure(context);
-
-        var processingTierModule = new ProcessingTierModule();
-        processingTierModule.Configure(context);
-
-        var statModifiersModule = new StatModifiersModule();
-        statModifiersModule.Configure(context);
-
-        var abilityScoresModule = new AbilityScoresModule();
-        abilityScoresModule.Configure(context);
-
-        var module = new AchievementModule();
-        module.Configure(context);
-
-        IReadOnlyList<IModule> modules = [module, coreModule, movementModule, processingTierModule, statModifiersModule, abilityScoresModule];
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus, entityKeys: context.EntityKeys);
+        var ecsContext = BuiltInTestModules.Build(context, 10, 10);
 
         return (ecsContext, eventBus, world);
     }

@@ -9,18 +9,12 @@ namespace Game.Modules.AbilityScores;
 /// Tag.Strength and a future damaging consumable tagged the same way both get the identical
 /// bonus through this one path. Relocated from AbilityEffectResolver's private
 /// ComputeAbilityScoreBonus/MapTagToAbilityScore, now usable by any DirectDamage regardless
-/// of which activator kind carries it. No-op (returns 0) when abilityScores is null
-/// (AbilityScoresModule not registered in this build).
+/// of which activator kind carries it.
 /// </summary>
 public static class AbilityScoreTagBonus
 {
-    public static ushort Compute(int sourceEntityId, IReadOnlyList<Tag> tags, PackedComponentPool<AbilityScoresComponent>? abilityScores)
+    public static ushort Compute(int sourceEntityId, IReadOnlyList<Tag> tags, PackedComponentPool<AbilityScoresComponent> abilityScores)
     {
-        if (abilityScores is null)
-        {
-            return 0;
-        }
-
         ushort bonus = 0;
         foreach (var tag in tags)
         {

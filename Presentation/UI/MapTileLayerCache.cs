@@ -54,8 +54,6 @@ public sealed class MapTileLayerCache : IDisposable
 
     public MapTileLayerCache(GraphicsDevice graphicsDevice)
     {
-        ArgumentNullException.ThrowIfNull(graphicsDevice);
-
         _graphicsDevice = graphicsDevice;
     }
 
@@ -80,9 +78,6 @@ public sealed class MapTileLayerCache : IDisposable
     /// <param name="drawTiles">Renders the grid at whole-tile positions with no sub-tile offset -- MapWindow supplies the pass itself here rather than this type knowing anything about Map, entities or pools.</param>
     public void EnsureRendered(SpriteBatch spriteBatch, int tileColumns, int tileRows, Point tileSize, Action<SpriteBatch> drawTiles)
     {
-        ArgumentNullException.ThrowIfNull(spriteBatch);
-        ArgumentNullException.ThrowIfNull(drawTiles);
-
         if (tileColumns <= 0 || tileRows <= 0 || tileSize.X <= 0 || tileSize.Y <= 0)
         {
             return;
@@ -156,8 +151,6 @@ public sealed class MapTileLayerCache : IDisposable
     /// <returns>Whether anything was drawn -- false before the first successful render, so the caller can fall back to drawing the tiles directly rather than showing an empty viewport for a frame.</returns>
     public bool Draw(SpriteBatch spriteBatch, Vector2 position)
     {
-        ArgumentNullException.ThrowIfNull(spriteBatch);
-
         if (_target is null || _target.IsDisposed || _isDirty)
         {
             return false;

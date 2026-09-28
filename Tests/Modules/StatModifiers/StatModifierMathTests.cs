@@ -15,17 +15,6 @@ public sealed class StatModifierMathTests
         new(target, operation, StatModifierPolarity.Buff, canModify: false, magnitude, FrameDeadline.Never, ActionSource.Admin);
 
     [TestMethod]
-    public void GetEffectiveValues_NoPool_ReturnsBothBaseValuesUnchanged()
-    {
-        var destination = new float[2];
-
-        StatModifierMath.GetEffectiveValues(null, 0, [(StatModifierTarget.HealthRegen, 10f), (StatModifierTarget.MaximumHealth, 200f)], destination);
-
-        Assert.AreEqual(10f, destination[0]);
-        Assert.AreEqual(200f, destination[1]);
-    }
-
-    [TestMethod]
     public void GetEffectiveValues_NoModifiers_ReturnsBothBaseValuesUnchanged()
     {
         var pool = CreatePool();

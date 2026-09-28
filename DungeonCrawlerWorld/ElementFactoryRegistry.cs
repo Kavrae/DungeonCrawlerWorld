@@ -82,7 +82,7 @@ public static class ElementFactoryRegistry
         Register<Folder>((font, elements, glyph) => new Folder(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
 
         elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer,
+            presentationContext.FontService, elementPool, presentationContext.LabelRenderer,
             componentManager, itemCatalog, world, contextMenuController, mapViewState, ecsContext.EventBus, simulationClock: ecsContext.SystemManager.Clock));
         Register<InventoryItemStackCell>((font, elements, glyph) => new InventoryItemStackCell(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
         Register<ShopItemStackCell>((font, elements, glyph) => new ShopItemStackCell(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
@@ -102,23 +102,21 @@ public static class ElementFactoryRegistry
         Register<Tooltip>((font, elements, glyph) => new Tooltip(font, elements, glyph));
 
         elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(
-            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager,
-            presentationContext.SpriteSheetService, presentationContext.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState,
+            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState, ecsContext.EventBus,
             simulationClock: ecsContext.SystemManager.Clock, creatures: creatures));
         elementPool.RegisterFactory<ShopWindow>(() => new ShopWindow(
-            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager,
-            presentationContext.SpriteSheetService, presentationContext.SpriteRenderer, itemCatalog, world, contextMenuController, mapViewState,
+            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState, ecsContext.EventBus,
             simulationClock: ecsContext.SystemManager.Clock, creatures: creatures));
         elementPool.RegisterFactory<TradeWindow>(() => new TradeWindow(
             presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager,
-            itemCatalog, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer, world, contextMenuController, mapViewState,
+            itemCatalog, world, contextMenuController, mapViewState,
             ecsContext.EventBus, simulationClock: ecsContext.SystemManager.Clock));
         Register<EntityIconElement>((font, elements, glyph) => new EntityIconElement(
             font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer,
             mapView));
 
         Register<InspectionWindow>((font, elements, glyph) => new InspectionWindow(font, elements, glyph, mapViewState));
-        Register<ItemDetailsWindow>((font, elements, glyph) => new ItemDetailsWindow(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer, actionCatalog));
+        Register<ItemDetailsWindow>((font, elements, glyph) => new ItemDetailsWindow(font, elements, glyph, actionCatalog));
         Register<ItemIconElement>((font, elements, glyph) => new ItemIconElement(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
         Register<CurrencyElement>((font, elements, glyph) => new CurrencyElement(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
         Register<TargetShapePreviewElement>((font, elements, glyph) => new TargetShapePreviewElement(font, elements, glyph));

@@ -10,9 +10,9 @@ namespace Game.Modules.Core;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class CoreModule : IGameModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000001");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000001");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [];
+    public Guid Id => ModuleId;
 
     /// <summary>Nothing to configure -- kept because IGameModule requires it, and because Core is still a game module by every other measure.</summary>
     public void Configure(GameModuleContext context)

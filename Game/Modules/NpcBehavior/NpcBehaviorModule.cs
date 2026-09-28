@@ -8,6 +8,7 @@ using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.NpcBehavior.Components;
 using Game.Modules.NpcBehavior.Systems;
@@ -16,6 +17,10 @@ using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race.Components;
 using Game.World;
 using Game.Blueprints;
+using Game.Modules.Core;
+using Game.Modules.Inventory;
+using Game.Modules.Death;
+using Game.Modules.Race;
 
 namespace Game.Modules.NpcBehavior;
 
@@ -23,16 +28,19 @@ namespace Game.Modules.NpcBehavior;
 /// Owns TestCombatBehaviorSystem and TestDummyAttackSystem (plus TestDummyComponent, the only
 /// component either of them introduces) -- no dedicated home for either exists otherwise (RaceModule
 /// explicitly owns no systems of its own, and folding this into MovementModule/ActionsModule/
-/// InventoryModule would give each an unrelated coupling in the wrong direction). Registered in
-/// GameBootstrapper.builtInModules *before* MovementModule specifically so TestCombatBehaviorSystem.
-/// Update runs before MovementSystem.Update every frame -- see TestCombatBehaviorSystem's own doc
-/// comment for why that ordering matters.
+/// InventoryModule would give each an unrelated coupling in the wrong direction). Runs before
+/// MovementModule so TestCombatBehaviorSystem.Update runs before MovementSystem.Update every
+/// frame -- see TestCombatBehaviorSystem's own doc comment for why that ordering matters.
 /// </summary>
 public sealed class NpcBehaviorModule : IGameModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000018");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000018");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [];
+    public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, InventoryModule.ModuleId, ActionsModule.ModuleId, DeathModule.ModuleId, MovementModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId];
+
+    public IReadOnlyList<Guid> RunsBefore { get; } = [MovementModule.ModuleId];
 
     private IMapQuery _mapQuery = null!;
     private MathUtility _mathUtility = null!;
@@ -54,18 +62,7 @@ public sealed class NpcBehaviorModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (!componentManager.IsRegistered<SimpleHealthComponent>() ||
-            !componentManager.IsRegistered<InventoryItemStackComponent>() ||
-            !componentManager.IsRegistered<ActionInstanceComponent>() ||
-            !componentManager.IsRegistered<PendingActionActivationComponent>() ||
-            !componentManager.IsRegistered<PendingConsumableActivationComponent>())
-        {
-            return;
-        }
-
-        var deadEntities = componentManager.IsRegistered<DeadComponent>()
-            ? componentManager.GetPackedPool<DeadComponent>()
-            : null;
+        var deadEntities = componentManager.GetPackedPool<DeadComponent>();
 
         systemManager.Register(new TestCombatBehaviorSystem(
             componentManager.GetPackedPool<MovementComponent>(),

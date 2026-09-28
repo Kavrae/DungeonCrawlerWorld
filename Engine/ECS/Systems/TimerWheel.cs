@@ -75,8 +75,6 @@ public sealed class TimerWheel
     /// <remarks>Anything scheduled while the caller processes the results lands on a later frame -- this frame is already consumed.</remarks>
     public void DrainDue(long now, List<TimerEntry> due)
     {
-        ArgumentNullException.ThrowIfNull(due);
-
         for (; _nextFrame <= now; _nextFrame++)
         {
             if ((_nextFrame & _mask) == 0 && _overflow.Count > 0)

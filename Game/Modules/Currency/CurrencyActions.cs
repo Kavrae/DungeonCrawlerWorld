@@ -16,7 +16,7 @@ public static class CurrencyActions
 {
     public static bool TryTransfer(ComponentManager componentManager, int sourceEntityId, int destinationEntityId, CurrencyType type)
     {
-        if (sourceEntityId == destinationEntityId || !componentManager.IsRegistered<CurrencyComponent>())
+        if (sourceEntityId == destinationEntityId)
         {
             return false;
         }
@@ -54,7 +54,7 @@ public static class CurrencyActions
             return true;
         }
 
-        if (sourceEntityId == destinationEntityId || !componentManager.IsRegistered<CurrencyComponent>())
+        if (sourceEntityId == destinationEntityId)
         {
             return false;
         }

@@ -121,7 +121,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     {
         _diagnostics.Tick();
 
-        _shell.PreSimulationUpdate(gameTime);
+        _shell.PreSimulationUpdate();
 
         if (!(_shell.MapWindow.IsPaused || _shell.Layers.IsMenuModeActive))
         {

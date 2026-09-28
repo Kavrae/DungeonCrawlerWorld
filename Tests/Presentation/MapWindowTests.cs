@@ -1,3 +1,5 @@
+using Engine.ECS.Systems;
+using Game.Blueprints;
 using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
@@ -20,6 +22,8 @@ using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI;
+using Game.Modules.AbilityScores.Components;
+using Game.Modules.Mana.Components;
 
 namespace Tests.Presentation;
 
@@ -89,38 +93,16 @@ public sealed class MapWindowTests
 
     private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager) BuildMapWindowCore(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int? playerPosition, ActionCatalog? actionCatalog = null, ItemCatalog? itemCatalog = null)
     {
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(mapSizeX, mapSizeY, mapSizeZ)));
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(mapSizeX, mapSizeY, mapSizeZ)));
         var mapViewState = new MapViewState();
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
 
-        var componentManager = new ComponentManager(100, 50);
-        componentManager.RegisterDirectPool<TransformComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<GlyphComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<SpriteComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<BackgroundComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<NonBlockingComponent>();
-        componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<StatusEffectAuraSourceComponent>();
-        componentManager.RegisterMultiPool<ActionInstanceComponent>();
-        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
-        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PendingActionActivationComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PendingDelayedActionComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<DodgingComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(100, 50));
 
         if (playerPosition is { } position)
         {
-            componentManager.Merge(PlayerEntityId, new TransformComponent(position, new Vector2Byte(1, 1)));
+            TestTransforms.Set(componentManager, PlayerEntityId, new TransformComponent(position, new Vector2Byte(1, 1)));
             componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
             // Fully unlocked -- these tests are about arm/target/confirm behavior, not the Expansion lock itself, so default to every slot being usable rather than incidentally locking out whichever slot a given test happens to bind to.
             componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 20));
@@ -154,13 +136,15 @@ public sealed class MapWindowTests
             componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
-            inputBuffer);
+            inputBuffer,
+            componentManager.GetPackedPool<ManaComponent>(),
+            componentManager.GetPackedPool<AbilityScoresComponent>(), simulationClock: new SimulationClock());
         var playerMovement = new PlayerMovementController(inputBuffer);
 
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
 
         var terrain = new Game.Terrain.TerrainRegistry();
-        var mapView = new Game.Views.MapViewQuery(world, componentManager, resolvedActionCatalog, terrain);
+        var mapView = new Game.Views.MapViewQuery(world, componentManager, resolvedActionCatalog, terrain, creatures: new BlueprintRegistry());
         var playerActionGate = new Game.Views.PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), world, new Engine.ECS.Systems.SimulationClock());
         var tintGrid = new MapTintGrid(componentManager, world, terrain, eventBus);
 

@@ -1,8 +1,6 @@
-using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Game.Modules.Inventory;
 using Game.Modules.Shops;
-using Game.Modules.Shops.Components;
 using Game.World;
 
 namespace Presentation.Input.DragDrop;
@@ -13,28 +11,17 @@ namespace Presentation.Input.DragDrop;
 /// feature-specific resolver (Trade, Shop) has already declined the drag. Not itself a "feature"
 /// opting in, unlike ShopDragDropResolver/TradeDragDropResolver.
 /// </summary>
-internal sealed class PlainInventoryDragDropResolver : IDragDropResolver
+internal sealed class PlainInventoryDragDropResolver(IPlayerQuery playerQuery, EventBus eventBus) : IDragDropResolver
 {
-    private readonly IPlayerQuery? _playerQuery;
-    private readonly PackedComponentPool<ShopComponent>? _shopPool;
-    private readonly EventBus? _eventBus;
-
-    public PlainInventoryDragDropResolver(IPlayerQuery? playerQuery, PackedComponentPool<ShopComponent>? shopPool, EventBus? eventBus)
-    {
-        _playerQuery = playerQuery;
-        _shopPool = shopPool;
-        _eventBus = eventBus;
-    }
-
     public bool TryResolve(in DragDropContext context)
     {
         if (context.ItemStackInstanceId is { } stackInstanceId)
         {
-            InventoryActions.TryTransferStack(context.ComponentManager, context.OriginEntityId, context.DestinationEntityId, stackInstanceId, _playerQuery);
+            InventoryActions.TryTransferStack(context.ComponentManager, context.OriginEntityId, context.DestinationEntityId, stackInstanceId, playerQuery);
         }
         else if (context.MergedItemDefinitionId is { } itemDefinitionId)
         {
-            InventoryActions.TryTransferAllStacksOfItem(context.ComponentManager, context.OriginEntityId, context.DestinationEntityId, itemDefinitionId, _playerQuery);
+            InventoryActions.TryTransferAllStacksOfItem(context.ComponentManager, context.OriginEntityId, context.DestinationEntityId, itemDefinitionId, playerQuery);
         }
         else if (context.CurrencyType is { } currencyType)
         {
@@ -42,7 +29,7 @@ internal sealed class PlainInventoryDragDropResolver : IDragDropResolver
             // the destination is shop-registered before publishing GoldGivenToShopEvent, so this
             // one call degrades to a plain transfer when it isn't. ShopDragDropResolver has already
             // claimed and refused any shop-*origin* currency drag before this resolver ever runs.
-            ShopActions.TryGiveCurrencyToShop(context.ComponentManager, _shopPool, _eventBus, context.OriginEntityId, context.DestinationEntityId, currencyType);
+            ShopActions.TryGiveCurrencyToShop(context.ComponentManager, eventBus, context.OriginEntityId, context.DestinationEntityId, currencyType);
         }
 
         return true;

@@ -11,6 +11,10 @@ using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
 using Game.Blueprints;
+using Game.Modules.StatModifiers;
+using Game.Modules.Death;
+using Game.Modules.Race;
+using Game.Modules.ContactDamage;
 
 namespace Game.Modules.Burning;
 
@@ -27,12 +31,14 @@ public sealed class BurningModule : IGameModule
 {
     private BlueprintRegistry _creatures = null!;
 
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000008");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000008");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [typeof(StatusEffectsModule)];
+    public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [StatusEffectsModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, RaceModule.ModuleId, ContactDamageModule.ModuleId];
 
     private EventBus _eventBus = null!;
-    private IPlayerQuery? _playerQuery;
+    private IPlayerQuery _playerQuery = null!;
     private MathUtility _mathUtility = null!;
 
     public void Configure(GameModuleContext context)
@@ -58,20 +64,9 @@ public sealed class BurningModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (!componentManager.IsRegistered<SimpleHealthComponent>())
-        {
-            return;
-        }
-
-        var statModifiers = componentManager.IsRegistered<StatModifierComponent>()
-            ? componentManager.GetMultiPool<StatModifierComponent>()
-            : null;
-        var bodyParts = componentManager.IsRegistered<BodyPartStateComponent>()
-            ? EntityBodyParts.For(componentManager, _creatures)
-            : null;
-        var deadEntities = componentManager.IsRegistered<DeadComponent>()
-            ? componentManager.GetPackedPool<DeadComponent>()
-            : null;
+        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
+        var bodyParts = EntityBodyParts.For(componentManager, _creatures);
+        var deadEntities = componentManager.GetPackedPool<DeadComponent>();
 
         systemManager.Register(new BurningSystem(
             componentManager.GetPackedPool<BurningTimerComponent>(),
@@ -80,13 +75,9 @@ public sealed class BurningModule : IGameModule
             _playerQuery,
             _mathUtility,
             statModifiers,
-            bodyParts));
+            bodyParts,
+            deadEntities));
 
-        // Always registered alongside BurningSystem, even before any Complex entity exists --
-        // mirrors HealthModule's own "each empty and free until populated" precedent for
-        // SimpleHealthRegenSystem/ComplexHealthRegenSystem. Guarded by the same SimpleHealthComponent
-        // check above (BodyPartComponent is registered in that same HealthModule.RegisterComponents
-        // call, so it's always safely fetchable here too).
         systemManager.Register(new BodyPartBurningSystem(
             componentManager.GetMultiPool<BodyPartBurningTimerComponent>(),
             EntityBodyParts.For(componentManager, _creatures),

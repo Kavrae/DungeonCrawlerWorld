@@ -22,9 +22,7 @@ namespace Game.Views;
 
 /// <summary>The live <see cref="IMapViewQuery"/> over World and the component pools.</summary>
 /// <remarks>
-/// Optional pools (a module that isn't registered) read as "absent" rather than throwing, matching
-/// how MapWindow treated them before this existed. Pools are resolved once at construction; every
-/// answer is a direct read of them per call.
+// Pools are resolved once at construction; every answer is a direct read of them per call.
 /// </remarks>
 public sealed class MapViewQuery : IMapViewQuery
 {
@@ -38,27 +36,22 @@ public sealed class MapViewQuery : IMapViewQuery
     private readonly EntityNaming _naming;
     private readonly MultiComponentPool<NonBlockingComponent> _nonBlocking;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
-    private readonly EntityBodyParts? _bodyParts;
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
-    private readonly PackedComponentPool<DeadComponent>? _dead;
-    private readonly MultiComponentPool<InventoryItemStackComponent>? _inventoryStacks;
-    private readonly PackedComponentPool<LootedComponent>? _looted;
-    private readonly PackedComponentPool<ContainerComponent>? _containers;
-    private readonly PackedComponentPool<ShopComponent>? _shops;
-    private readonly PackedComponentPool<ActionLockComponent>? _actionLocks;
-    private readonly PackedComponentPool<PendingDelayedActionComponent>? _pendingDelayedActions;
-    private readonly PackedComponentPool<DodgingComponent>? _dodging;
-    private readonly BlueprintRegistry? _creatures;
-    private readonly DirectComponentPool<SpawnRecordComponent>? _spawnRecords;
+    private readonly EntityBodyParts _bodyParts;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
+    private readonly PackedComponentPool<DeadComponent> _dead;
+    private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks;
+    private readonly PackedComponentPool<LootedComponent> _looted;
+    private readonly PackedComponentPool<ContainerComponent> _containers;
+    private readonly PackedComponentPool<ShopComponent> _shops;
+    private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
+    private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
+    private readonly PackedComponentPool<DodgingComponent> _dodging;
+    private readonly BlueprintRegistry _creatures;
+    private readonly DirectComponentPool<SpawnRecordComponent> _spawnRecords;
 
-    /// <param name="creatures">The blueprint definitions, for drawing and naming every entity that holds no visual or name of its own -- which is nearly all of them, built or skeleton. Optional: without it, such an entity draws nothing.</param>
-    public MapViewQuery(World.World world, ComponentManager componentManager, ActionCatalog actionCatalog, TerrainRegistry terrain, BlueprintRegistry? creatures = null)
+    /// <param name="creatures">The blueprint definitions, for drawing and naming every entity that holds no visual or name of its own -- which is nearly all of them, built or skeleton.</param>
+    public MapViewQuery(World.World world, ComponentManager componentManager, ActionCatalog actionCatalog, TerrainRegistry terrain, BlueprintRegistry creatures)
     {
-        ArgumentNullException.ThrowIfNull(world);
-        ArgumentNullException.ThrowIfNull(componentManager);
-        ArgumentNullException.ThrowIfNull(actionCatalog);
-        ArgumentNullException.ThrowIfNull(terrain);
-
         _world = world;
         _terrain = terrain;
         _actionCatalog = actionCatalog;
@@ -69,18 +62,18 @@ public sealed class MapViewQuery : IMapViewQuery
         _naming = EntityNaming.For(componentManager, creatures);
         _nonBlocking = componentManager.GetMultiPool<NonBlockingComponent>();
         _health = componentManager.GetPackedPool<SimpleHealthComponent>();
-        _bodyParts = componentManager.IsRegistered<BodyPartStateComponent>() ? EntityBodyParts.For(componentManager, creatures) : null;
-        _statModifiers = componentManager.GetOptionalMultiPool<StatModifierComponent>();
-        _dead = componentManager.GetOptionalPackedPool<DeadComponent>();
-        _inventoryStacks = componentManager.GetOptionalMultiPool<InventoryItemStackComponent>();
-        _looted = componentManager.GetOptionalPackedPool<LootedComponent>();
-        _containers = componentManager.GetOptionalPackedPool<ContainerComponent>();
-        _shops = componentManager.GetOptionalPackedPool<ShopComponent>();
-        _actionLocks = componentManager.GetOptionalPackedPool<ActionLockComponent>();
-        _pendingDelayedActions = componentManager.GetOptionalPackedPool<PendingDelayedActionComponent>();
-        _dodging = componentManager.GetOptionalPackedPool<DodgingComponent>();
+        _bodyParts = EntityBodyParts.For(componentManager, creatures);
+        _statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
+        _dead = componentManager.GetPackedPool<DeadComponent>();
+        _inventoryStacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        _looted = componentManager.GetPackedPool<LootedComponent>();
+        _containers = componentManager.GetPackedPool<ContainerComponent>();
+        _shops = componentManager.GetPackedPool<ShopComponent>();
+        _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
+        _pendingDelayedActions = componentManager.GetPackedPool<PendingDelayedActionComponent>();
+        _dodging = componentManager.GetPackedPool<DodgingComponent>();
         _creatures = creatures;
-        _spawnRecords = componentManager.IsRegistered<SpawnRecordComponent>() ? componentManager.GetDirectPool<SpawnRecordComponent>() : null;
+        _spawnRecords = componentManager.GetDirectPool<SpawnRecordComponent>();
     }
 
     public MapBounds Bounds => _world.Map.Bounds;
@@ -173,7 +166,7 @@ public sealed class MapViewQuery : IMapViewQuery
     /// <remarks>An entity's own SpriteComponent or GlyphComponent -- a per-instance override -- wins over its blueprint's appearance. The glyph pool is only read when there is no sprite: every skipped read is a scattered access into an entity-indexed array on the per-tile draw path. The blueprint path carries the glyph beside the sprite (renderers draw the sprite when there is one), so a reader that only shows glyphs still gets one.</remarks>
     public bool TryGetVisual(int entityId, out EntityVisualView visual)
     {
-        var isDead = _dead?.Has(entityId) == true;
+        var isDead = _dead.Has(entityId);
 
         if (_sprites.TryGetReadonly(entityId, out var sprite))
         {
@@ -209,19 +202,19 @@ public sealed class MapViewQuery : IMapViewQuery
             return false;
         }
 
-        occupant = new OccupantView(transform.Position, transform.Size, NonBlockingQueries.CombinedKind(_nonBlocking, entityId), _dead?.Has(entityId) == true);
+        occupant = new OccupantView(transform.Position, transform.Size, NonBlockingQueries.CombinedKind(_nonBlocking, entityId), _dead.Has(entityId));
         return true;
     }
 
     /// <remarks>The loot bag is only resolved for a container or a corpse, the two things that ever show one -- every live creature carries inventory stacks, and counting them for each visible occupant every frame would be wasted work.</remarks>
     public EntityStatusView GetStatus(int entityId)
     {
-        var isContainer = _containers?.Has(entityId) == true;
-        var lootBag = (isContainer || _dead?.Has(entityId) == true) && _inventoryStacks?.CountForEntity(entityId) > 0
-            ? _looted?.Has(entityId) == true ? LootBagState.Looted : LootBagState.Unlooted
+        var isContainer = _containers.Has(entityId);
+        var lootBag = (isContainer || _dead.Has(entityId)) && _inventoryStacks.CountForEntity(entityId) > 0
+            ? _looted.Has(entityId) ? LootBagState.Looted : LootBagState.Unlooted
             : LootBagState.None;
 
-        return new EntityStatusView(GetHealthBarFraction(entityId), isContainer, lootBag, _dodging?.Has(entityId) == true);
+        return new EntityStatusView(GetHealthBarFraction(entityId), isContainer, lootBag, _dodging.Has(entityId));
     }
 
     /// <summary>Current over modifier-effective maximum, or null when the bar is hidden: no health at all, a non-positive maximum, or already full.</summary>
@@ -238,8 +231,7 @@ public sealed class MapViewQuery : IMapViewQuery
 
     public bool TryGetChargingAction(int entityId, out ChargingActionView action)
     {
-        if (_pendingDelayedActions is null ||
-            !_pendingDelayedActions.TryGetReadonly(entityId, out var pending) ||
+        if (!_pendingDelayedActions.TryGetReadonly(entityId, out var pending) ||
             !_actionCatalog.TryGet(pending.ActionId, out var definition))
         {
             action = default;
@@ -255,20 +247,20 @@ public sealed class MapViewQuery : IMapViewQuery
     }
 
     public int GetActionLockTotalFrames(int entityId) =>
-        _actionLocks is not null && _actionLocks.TryGetReadonly(entityId, out var actionLock) ? actionLock.CurrentLockTotalFrames : 0;
+        _actionLocks.TryGetReadonly(entityId, out var actionLock) ? actionLock.CurrentLockTotalFrames : 0;
 
     public EntityInteractionView GetInteraction(int entityId) => new(
         ResolveName(entityId),
-        _shops?.Has(entityId) == true,
-        _containers?.Has(entityId) == true,
-        _dead?.Has(entityId) == true);
+        _shops.Has(entityId),
+        _containers.Has(entityId),
+        _dead.Has(entityId));
 
     private string ResolveName(int entityId) => _naming.NameOf(entityId);
 
     /// <summary>An entity with a spawn record and no visual of its own -- which is every entity not given one -- draws as its blueprint's appearance for its seed, built or not.</summary>
     private bool TryGetBlueprintAppearance(int entityId, out SpawnRecordComponent record, out EntityAppearance appearance)
     {
-        if (_creatures is not null && _spawnRecords is not null && _spawnRecords.TryGetReadonly(entityId, out record) && _creatures.TryGetAppearance(record.BlueprintId, out appearance))
+        if (_spawnRecords.TryGetReadonly(entityId, out record) && _creatures.TryGetAppearance(record.BlueprintId, out appearance))
         {
             return true;
         }

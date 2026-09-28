@@ -1,3 +1,4 @@
+using Game.Blueprints;
 using System.Runtime.CompilerServices;
 using Engine.ECS.Components;
 using Engine.ECS.Entities;
@@ -20,13 +21,12 @@ public sealed class ActionSourceTests
     [TestMethod]
     public void FromEntity_RecordsTheKeyAndTheNameAtThatMoment()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
-        componentManager.RegisterPackedPool<DisplayTextComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4));
         var entityKeys = new EntityKeys();
         var key = entityKeys.Issue(2);
         componentManager.Merge(2, new DisplayTextComponent("Goblin", "A goblin."));
 
-        var source = ActionSource.FromEntity(componentManager, entityKeys, 2);
+        var source = ActionSource.FromEntity(componentManager, entityKeys, 2, creatures: new BlueprintRegistry());
         componentManager.Merge(2, new DisplayTextComponent("Renamed", "Later."));
 
         Assert.AreEqual(key, source.Key);
@@ -37,9 +37,9 @@ public sealed class ActionSourceTests
     [TestMethod]
     public void IsEntity_NoneKey_IsNeverTrue()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4));
 
-        var keyless = ActionSource.FromEntity(componentManager, new EntityKeys(), 1);
+        var keyless = ActionSource.FromEntity(componentManager, new EntityKeys(), 1, creatures: new BlueprintRegistry());
 
         Assert.IsFalse(keyless.IsEntity(EntityKey.None));
         Assert.IsFalse(ActionSource.Admin.IsEntity(EntityKey.None));

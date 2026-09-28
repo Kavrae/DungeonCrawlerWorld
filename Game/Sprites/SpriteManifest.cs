@@ -39,8 +39,6 @@ public static class SpriteManifest
     /// <param name="sprite">The chosen cell as a SpriteComponent, or default on a miss.</param>
     public static bool TryGetRandom(string name, MathUtility mathUtility, out SpriteComponent sprite)
     {
-        ArgumentNullException.ThrowIfNull(mathUtility);
-
         if (FindCells(name) is { } cells)
         {
             // A single-candidate entry short-circuits rather than rolling a one-outcome roll.

@@ -5,8 +5,6 @@ public sealed class CloseBehavior : IChromeBehavior
 {
     public void Attach(Window window)
     {
-        ArgumentNullException.ThrowIfNull(window);
-
         var closeButton = Window.BuildTitleButton(window, "X");
         closeButton.Clicked += _ => window.Close();
         window.AddTitleButton(closeButton);

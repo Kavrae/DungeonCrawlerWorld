@@ -6,6 +6,7 @@ using Game.Modules.Paralysis.Components;
 using Game.Modules.Paralysis.Systems;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Modules.Core;
 
 namespace Game.Modules.Paralysis;
 
@@ -14,19 +15,20 @@ namespace Game.Modules.Paralysis;
 /// (shared immunity storage). Registers a TimerBasedAuraApplier&lt;ParalysisTimerComponent&gt; into
 /// the shared StatusEffectAuraApplierRegistry during Configure, so any future aura source (or a
 /// StatusEffectGrant inside any IActionActivator's own ActionEffect) can grant Paralysis
-/// without depending on this module directly. Unlike BurningModule/PoisonModule,
-/// RegisterSystems does NOT gate on SimpleHealthComponent -- Paralysis has nothing to do with hit
-/// points, only ActionLockComponent -- the concrete proof that a status effect can apply to
+/// without depending on this module directly. Paralysis has nothing to do with hit points, only
+/// ActionLockComponent -- the concrete proof that a status effect can apply to
 /// entities without hit points.
 /// </summary>
 public sealed class ParalysisModule : IGameModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000014");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000014");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [typeof(StatusEffectsModule)];
+    public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [StatusEffectsModule.ModuleId, CoreModule.ModuleId];
 
     private EventBus _eventBus = null!;
-    private IPlayerQuery? _playerQuery;
+    private IPlayerQuery _playerQuery = null!;
 
     public void Configure(GameModuleContext context)
     {
@@ -45,11 +47,6 @@ public sealed class ParalysisModule : IGameModule
 
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (!componentManager.IsRegistered<ActionLockComponent>())
-        {
-            return;
-        }
-
         systemManager.Register(new ParalysisSystem(componentManager.GetPackedPool<ParalysisTimerComponent>()));
     }
 }

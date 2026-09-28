@@ -12,8 +12,6 @@ public sealed class SpriteBatchRenderer
 
     public SpriteBatchRenderer(GraphicsDevice graphicsDevice)
     {
-        ArgumentNullException.ThrowIfNull(graphicsDevice);
-
         _spriteBatch = new SpriteBatch(graphicsDevice);
     }
 

@@ -10,7 +10,7 @@ namespace Game.Modules.Actions.Effects;
 /// separate Source/Target choice: a caller that wants to buff itself (e.g. a self-targeted
 /// action) does so via a Self-shaped TargetingSpec, which already resolves TargetEntityId to the
 /// caster, the same way every other effect entry reads "who this lands on" (see AuraSourceGrant's
-/// own doc comment for the identical reasoning). No-op when context.StatModifiers isn't wired.
+/// own doc comment for the identical reasoning).
 /// DurationFrames is scaled by context.DurationScaleMultiplier (a ScrollActivator activation sets
 /// this off the caster's Intelligence -- see ScrollScalingEffects; every other activator leaves
 /// it at the default 1.0, a no-op) -- guarded so a permanent (null) duration is never multiplied
@@ -32,11 +32,6 @@ public sealed record StatModifierGrant(
 {
     public void Apply(ActionEffectContext context)
     {
-        if (context.StatModifiers is null)
-        {
-            return;
-        }
-
         var durationFrames = ScaleDurationFrames(context, DurationFrames, Polarity);
         var expiresAtFrame = durationFrames is { } frames ? FrameDeadline.After(context.Now, frames) : FrameDeadline.Never;
 

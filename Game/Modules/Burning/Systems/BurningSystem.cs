@@ -8,6 +8,7 @@ using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
+using Game.Modules.Death.Components;
 
 namespace Game.Modules.Burning.Systems;
 
@@ -32,11 +33,12 @@ public sealed class BurningSystem : ISystem
 
     private readonly PackedComponentPool<BurningTimerComponent> _timers;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
     private readonly EventBus _eventBus;
-    private readonly IPlayerQuery? _playerQuery;
+    private readonly IPlayerQuery _playerQuery;
     private readonly MathUtility _mathUtility;
-    private readonly EntityBodyParts? _bodyParts;
+    private readonly EntityBodyParts _bodyParts;
+    private readonly PackedComponentPool<DeadComponent> _deadEntities;
     private readonly PackedTimerWheel<BurningTimerComponent> _wheel;
 
     // Cached once instead of passing the Tick method group every Update -- an instance method
@@ -47,10 +49,11 @@ public sealed class BurningSystem : ISystem
         PackedComponentPool<BurningTimerComponent> timers,
         PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
-        IPlayerQuery? playerQuery,
+        IPlayerQuery playerQuery,
         MathUtility mathUtility,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        EntityBodyParts? bodyParts = null)
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        EntityBodyParts bodyParts,
+        PackedComponentPool<DeadComponent> deadEntities)
     {
         _timers = timers;
         _health = health;
@@ -59,8 +62,9 @@ public sealed class BurningSystem : ISystem
         _playerQuery = playerQuery;
         _mathUtility = mathUtility;
         _bodyParts = bodyParts;
+        _deadEntities = deadEntities;
         _tick = Tick;
-        _wheel = new PackedTimerWheel<BurningTimerComponent>(timers);
+        _wheel = new PackedTimerWheel<BurningTimerComponent>(timers, SimulationScope.Unscoped);
     }
 
     public void Update(EngineTime time, byte stripeIndex) => _wheel.Tick(time.FrameCount, _tick);
@@ -74,7 +78,7 @@ public sealed class BurningSystem : ISystem
             return true;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), now, _statModifiers, _bodyParts, _mathUtility, damageTags: BurningDamageTags);
+        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, damageTags: BurningDamageTags);
 
         var remainingStacks = (byte)(stackCount - 1);
         if (remainingStacks == 0)

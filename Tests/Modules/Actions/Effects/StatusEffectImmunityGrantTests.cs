@@ -20,7 +20,7 @@ public sealed class StatusEffectImmunityGrantTests
     private const int SourceEntityId = 1;
     private const int TargetEntityId = 2;
 
-    private static ActionEffectContext BuildContext(ComponentManager componentManager, float durationScaleMultiplier = 1.0f) => new(
+    private static ActionEffectContext BuildContext(ComponentManager componentManager, float durationScaleMultiplier = 1.0f) => TestActionEffects.Context(
         SourceEntityId: SourceEntityId,
         TargetEntityId: TargetEntityId,
         Health: componentManager.GetPackedPool<SimpleHealthComponent>(),
@@ -35,10 +35,7 @@ public sealed class StatusEffectImmunityGrantTests
 
     private static ComponentManager Build()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<StatModifierComponent>();
-        componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
         return componentManager;
     }
 

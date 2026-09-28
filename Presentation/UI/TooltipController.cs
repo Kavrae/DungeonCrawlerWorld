@@ -12,7 +12,7 @@ namespace Presentation.UI;
 /// check on Hide, which is what makes the previous stomping race structurally impossible: sharing
 /// one Tooltip across two independently-polling consumers used to mean whichever one's Update ran
 /// later in a frame won, since an unrelated consumer's routine "nothing hovered" Hide() call had no
-/// way to know it wasn't the one currently showing something. Now it does.
+/// way to know it wasn't the one currently showing something. CurrentFrame it does.
 /// </summary>
 public sealed class TooltipController
 {

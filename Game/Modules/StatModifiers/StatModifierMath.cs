@@ -15,13 +15,8 @@ public static class StatModifierMath
     /// <param name="baseValue">The base value of the stat.</param>
     /// <param name="activeTags">The current activation's own Tags (e.g. ActionEffectContext.ActivatorTags) -- a modifier with a non-null ConditionTag only contributes when activeTags contains it; null (the default) means only unconditional modifiers apply.</param>
     /// <returns>The effective value of the stat.</returns>
-    public static float GetEffectiveValue(MultiComponentPool<StatModifierComponent>? pool, int entityId, StatModifierTarget target, float baseValue, IReadOnlyList<Tag>? activeTags = null)
+    public static float GetEffectiveValue(MultiComponentPool<StatModifierComponent> pool, int entityId, StatModifierTarget target, float baseValue, IReadOnlyList<Tag>? activeTags = null)
     {
-        if (pool is null)
-        {
-            return baseValue;
-        }
-
         var additiveSum = 0f;
         var multiplicativeSum = 0f;
 
@@ -64,19 +59,9 @@ public static class StatModifierMath
     /// <param name="pairs">Each target stat and its base value.</param>
     /// <param name="destination">Receives each pairs entry's effective value, at the same index.</param>
     /// <param name="activeTags">Same meaning as GetEffectiveValue's own activeTags parameter, applied uniformly across every pair.</param>
-    public static void GetEffectiveValues(MultiComponentPool<StatModifierComponent>? pool, int entityId, ReadOnlySpan<(StatModifierTarget Target, float BaseValue)> pairs, Span<float> destination, IReadOnlyList<Tag>? activeTags = null)
+    public static void GetEffectiveValues(MultiComponentPool<StatModifierComponent> pool, int entityId, ReadOnlySpan<(StatModifierTarget Target, float BaseValue)> pairs, Span<float> destination, IReadOnlyList<Tag>? activeTags = null)
     {
         ArgumentOutOfRangeException.ThrowIfNotEqual(pairs.Length, destination.Length);
-
-        if (pool is null)
-        {
-            for (var i = 0; i < pairs.Length; i++)
-            {
-                destination[i] = pairs[i].BaseValue;
-            }
-
-            return;
-        }
 
         Span<float> additiveSums = stackalloc float[pairs.Length];
         Span<float> multiplicativeSums = stackalloc float[pairs.Length];
@@ -127,15 +112,10 @@ public static class StatModifierMath
     /// Unconditional modifiers only: a ConditionTag modifier depends on the activation being
     /// resolved, which a snapshot has no notion of.
     /// </remarks>
-    public static void GetSums(MultiComponentPool<StatModifierComponent>? pool, int entityId, StatModifierTarget target, out float additiveSum, out float multiplicativeSum)
+    public static void GetSums(MultiComponentPool<StatModifierComponent> pool, int entityId, StatModifierTarget target, out float additiveSum, out float multiplicativeSum)
     {
         additiveSum = 0f;
         multiplicativeSum = 0f;
-
-        if (pool is null)
-        {
-            return;
-        }
 
         for (var denseIndex = pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
         {

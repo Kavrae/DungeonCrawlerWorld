@@ -25,8 +25,6 @@ public sealed class PoolMemoryReport(ComponentManager componentManager, EntityMa
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    private readonly ComponentManager _componentManager = componentManager ?? throw new ArgumentNullException(nameof(componentManager));
-    private readonly EntityManager _entityManager = entityManager ?? throw new ArgumentNullException(nameof(entityManager));
     private readonly List<PoolSampler> _samplers = [];
 
     private ProcessFigures _atBaseline;
@@ -43,9 +41,9 @@ public sealed class PoolMemoryReport(ComponentManager componentManager, EntityMa
             GC.CollectionCount(2));
 
         _samplers.Clear();
-        foreach (var pool in _componentManager.AllPools)
+        foreach (var pool in componentManager.AllPools)
         {
-            if (PoolSampler.TryCreate(pool, _entityManager) is { } sampler)
+            if (PoolSampler.TryCreate(pool, entityManager) is { } sampler)
             {
                 sampler.CaptureBaseline();
                 _samplers.Add(sampler);
@@ -84,7 +82,7 @@ public sealed class PoolMemoryReport(ComponentManager componentManager, EntityMa
             Environment.ProcessId,
             range.StartFrame,
             range.EndFrame,
-            _entityManager.LivingEntityCount,
+            entityManager.LivingEntityCount,
             _atBaseline.AllocatedBytes,
             _atBaseline.Gen0Collections,
             _atBaseline.Gen1Collections,

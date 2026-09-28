@@ -12,8 +12,7 @@ public sealed class StatusEffectQueriesTests
 {
     private static ComponentManager CreateComponentManager()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
         return componentManager;
     }
 

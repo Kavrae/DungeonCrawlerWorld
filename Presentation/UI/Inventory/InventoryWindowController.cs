@@ -4,8 +4,6 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
-using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
@@ -23,11 +21,6 @@ public sealed class InventoryWindowController(
     ElementPoolService elementPoolService,
     World world,
     ComponentManager componentManager,
-    FontService fontService,
-    LabelRenderer labelRenderer,
-    SpriteSheetService spriteSheetService,
-    SpriteRenderer spriteRenderer,
-    ItemCatalog itemCatalog,
     MapWindow mapWindow,
     ContextMenuController contextMenuController,
     TooltipController tooltipController)
@@ -92,7 +85,7 @@ public sealed class InventoryWindowController(
     }
 
     /// <summary>Reflects InventoryDisabledComponent on the button itself -- Enabled false both grays the icon (see Button.DrawContent) and excludes it from hit-testing (see Button.IsHitTestable), so a disabled inventory reads as genuinely unclickable rather than clickable-but-silently-refused the way WindowLifecycle's own isDisabled check alone would leave it.</summary>
-    public void Update(GameTime gameTime) =>
+    public void Update() =>
         _button.Enabled = !IsInventoryDisabled();
 
     private bool IsInventoryDisabled() => InventoryQueries.IsInventoryDisabled(_disabledPool, world.PlayerEntityId);

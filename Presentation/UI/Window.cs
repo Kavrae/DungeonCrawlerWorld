@@ -226,8 +226,6 @@ public class Window : Element
     /// </summary>
     public void SetContent(IElementContent content)
     {
-        ArgumentNullException.ThrowIfNull(content);
-
         ElementPoolService.CloseAllChildren(this);
         _content = content;
     }
@@ -244,8 +242,6 @@ public class Window : Element
     /// </summary>
     public void SetFooterContent(IElementContent content, float height)
     {
-        ArgumentNullException.ThrowIfNull(content);
-
         _footerContent = content;
         FooterHeight = height;
     }
@@ -253,8 +249,6 @@ public class Window : Element
     /// <summary>Attaches a chrome capability (see IChromeBehavior) to this window.</summary>
     public void AddChromeBehavior(IChromeBehavior behavior)
     {
-        ArgumentNullException.ThrowIfNull(behavior);
-
         behavior.Attach(this);
     }
 
@@ -373,8 +367,6 @@ public class Window : Element
     /// </summary>
     public void AddTitleButton(Button newButton, int? insertIndex = null)
     {
-        ArgumentNullException.ThrowIfNull(newButton);
-
         if (!ShowHeader)
         {
             return;

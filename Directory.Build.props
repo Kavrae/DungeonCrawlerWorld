@@ -1,0 +1,11 @@
+<Project>
+
+  <!--
+    Nullable warnings fail the build: non-nullable types are the guarantee that a dependency is
+    present, in place of runtime null guards, so a nullable warning is a broken guarantee.
+  -->
+  <PropertyGroup>
+    <WarningsAsErrors>$(WarningsAsErrors);nullable</WarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

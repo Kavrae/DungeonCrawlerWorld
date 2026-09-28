@@ -48,7 +48,7 @@ public sealed class SimpleHealthRegenSystemTests
     {
         var pool = CreatePool();
         pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
-        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         system.Update(default, 0);
 
@@ -60,7 +60,7 @@ public sealed class SimpleHealthRegenSystemTests
     {
         var pool = CreatePool();
         pool.Add(0, new SimpleHealthComponent(currentHealth: 199, maximumHealth: 200));
-        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         system.Update(default, 0);
 
@@ -74,7 +74,7 @@ public sealed class SimpleHealthRegenSystemTests
         pool.Add(0, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 200));
         var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         deadEntities.Add(0, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
-        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: null, deadEntities: deadEntities, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: null, deadEntities: deadEntities, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         system.Update(default, 0);
 
@@ -86,7 +86,7 @@ public sealed class SimpleHealthRegenSystemTests
     {
         var pool = CreatePool();
         pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
-        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents());
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents());
 
         system.Update(default, 0);
 
@@ -99,7 +99,7 @@ public sealed class SimpleHealthRegenSystemTests
         var pool = CreatePool();
         pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
         var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
-        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: abilityScores);
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: abilityScores);
 
         system.Update(default, 0);
 
@@ -123,7 +123,7 @@ public sealed class SimpleHealthRegenSystemTests
         var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.HealthRegen, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
             canModify: false, magnitude: -100000f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
-        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: statModifiers, abilityScores: abilityScores);
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: statModifiers, abilityScores: abilityScores);
 
         system.Update(default, 0);
 
@@ -136,7 +136,7 @@ public sealed class SimpleHealthRegenSystemTests
         var pool = CreatePool();
         var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
         pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
-        var system = new SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         // Entity 0, Neighborhood-tiered (StripeCount * the Neighborhood divisor) lands in bucket 0 -- due only when FrameCount is a multiple of that product.
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
@@ -153,7 +153,7 @@ public sealed class SimpleHealthRegenSystemTests
         var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
-        var system = new SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         system.Update(default, 0);
 
@@ -166,7 +166,7 @@ public sealed class SimpleHealthRegenSystemTests
         var pool = CreatePool();
         var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
         pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
-        var system = new SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         // A Neighborhood visit covers StripeCount * divisor frames rather than Local's
         // StripeCount, so the per-visit amount is proportionally larger -- the same total rate

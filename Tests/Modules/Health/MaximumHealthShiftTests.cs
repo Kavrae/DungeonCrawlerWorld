@@ -19,9 +19,7 @@ public sealed class MaximumHealthShiftTests
 
     private static ComponentManager CreateComponentManager()
     {
-        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<StatModifierComponent>();
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
         return componentManager;
     }
 
@@ -163,8 +161,6 @@ public sealed class MaximumHealthShiftTests
 
     private static StatModifierExpirySystem BuildExpirySystem(ComponentManager componentManager, EventBus eventBus)
     {
-        componentManager.RegisterPackedPool<ExpiringStatModifierComponent>(static (ref existing, incoming) =>
-            existing.NextTickFrame = System.Math.Min(existing.NextTickFrame, incoming.NextTickFrame));
 
         var system = new StatModifierExpirySystem(
             componentManager.GetMultiPool<StatModifierComponent>(),

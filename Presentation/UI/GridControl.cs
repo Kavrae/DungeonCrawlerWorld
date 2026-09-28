@@ -111,7 +111,7 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
     {
         base.OnChildrenInitialized();
 
-        _font = fontService.GetFont((int)(RowHeight * FontChrome.GridControlLabelFontFraction));
+        _font = FontService.GetFont((int)(RowHeight * FontChrome.GridControlLabelFontFraction));
 
         // ContentPadding is already zeroed by Build (see its own doc comment) -- LeftMargin below
         // restores this control's own original left inset now that it's no longer automatic.
@@ -122,7 +122,7 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
         x += _countLabel.CurrentSize.X + ControlGap;
 
         var sortButtonSize = new Vector2(MeasureWidest(_sortOptionLabels), RowHeight);
-        _sortButton = elementPoolService.CreateElement<Button>(this, new ElementOptions
+        _sortButton = ElementPoolService.CreateElement<Button>(this, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
             // Same MinimumSize == MaximumSize pinning CreateTile's own doc comment explains --
@@ -145,7 +145,7 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
         foreach (var (label, defaultOn, onToggled) in _toggleDefinitions)
         {
             var toggleWidth = Toggle.CheckboxSize + Toggle.LabelGap + _font.MeasureString(label).X;
-            var toggle = elementPoolService.CreateElement<Toggle>(this, new ElementOptions
+            var toggle = ElementPoolService.CreateElement<Toggle>(this, new ElementOptions
             {
                 Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
                 Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, 0), Size = new Vector2(toggleWidth, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
@@ -157,7 +157,7 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
             x += toggleWidth + ControlGap;
         }
 
-        _searchBox = elementPoolService.CreateElement<TextBox>(this, new ElementOptions
+        _searchBox = ElementPoolService.CreateElement<TextBox>(this, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
             Layout = new ElementLayoutOptions { RelativePosition = SearchBoxPosition(), Size = new Vector2(SearchBoxWidth, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
@@ -226,7 +226,7 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
     private TextWindow CreateTile(string text, float width, float relativePositionX, bool showBorder)
     {
         var tileSize = new Vector2(width, RowHeight);
-        var tile = elementPoolService.CreateElement<TextWindow>(this, new ElementOptions
+        var tile = ElementPoolService.CreateElement<TextWindow>(this, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(relativePositionX, 0), Size = tileSize, MinimumSize = tileSize, MaximumSize = tileSize, DisplayMode = ElementDisplayMode.Fixed },

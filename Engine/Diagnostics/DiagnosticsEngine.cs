@@ -126,9 +126,6 @@ public sealed class DiagnosticsEngine
     /// </summary>
     public void AttachEcsContext(ComponentManager componentManager, EntityManager entityManager)
     {
-        ArgumentNullException.ThrowIfNull(componentManager);
-        ArgumentNullException.ThrowIfNull(entityManager);
-
         if (Features.HasFlag(DiagnosticsFeatures.Memory) && _componentMemoryTracker is null)
         {
             _componentMemoryTracker = new ComponentMemoryTracker(componentManager);

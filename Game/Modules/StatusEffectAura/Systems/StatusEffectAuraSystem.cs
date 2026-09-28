@@ -101,12 +101,12 @@ public sealed class StatusEffectAuraSystem : ISystem
     private readonly StatusEffectAuraApplierRegistry _applierRegistry;
     private readonly IMapQuery _mapQuery;
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
-    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
+    private readonly PackedComponentPool<DeadComponent> _deadEntities;
     private readonly DirectComponentPool<ProcessingTierComponent> _processingTiers;
     private readonly TieredEntityStripeSet _sourceTieredStripeSet;
     private readonly SimulationClock _clock;
     private readonly TerrainRegistry _terrain;
-    private readonly SimulationScope? _simulationScope;
+    private readonly SimulationScope _simulationScope;
 
     /// <summary>
     /// Each exposure type's re-grant tick, keyed by EffectType (see
@@ -152,8 +152,8 @@ public sealed class StatusEffectAuraSystem : ISystem
         ProcessingTierEvents processingTierEvents,
         SimulationClock simulationClock,
         TerrainRegistry terrain,
-        PackedComponentPool<DeadComponent>? deadEntities = null,
-        SimulationScope? simulationScope = null)
+        PackedComponentPool<DeadComponent> deadEntities,
+        SimulationScope simulationScope)
     {
         _terrain = terrain;
         _componentManager = componentManager;
@@ -180,10 +180,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         _tick = Tick;
         _simulationScope = simulationScope;
         _exposureWheel = new MultiTimerWheel<StatusEffectAuraExposureComponent>(exposures, simulationScope);
-        if (simulationScope is not null)
-        {
-            simulationScope.EntityResumed += OnEntityResumed;
-        }
+        simulationScope.EntityResumed += OnEntityResumed;
     }
 
     /// <summary>Moves each of the entity's exposures past every re-grant owed while it froze, granting none -- see SkipOwedExposureTicks.</summary>
@@ -414,7 +411,7 @@ public sealed class StatusEffectAuraSystem : ISystem
                 foreach (var occupantId in _mapQuery.GetOccupantEntityIdsAt(position))
                 {
                     // Frozen occupants gain no new exposure while frozen: a skeleton is granted when it is built (CreatureSkeletons.EnsureBuilt), anything else on its next move.
-                    if (_simulationScope?.IsSimulated(occupantId) == false)
+                    if (!_simulationScope.IsSimulated(occupantId))
                     {
                         continue;
                     }
@@ -501,7 +498,7 @@ public sealed class StatusEffectAuraSystem : ISystem
     /// </summary>
     private bool TryGrantSingleType(int entityId, Vector3Int position, StatusEffectType effectType)
     {
-        if (_deadEntities?.Has(entityId) == true)
+        if (_deadEntities.Has(entityId))
         {
             return false;
         }

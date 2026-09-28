@@ -38,13 +38,8 @@ public sealed class ObsessiveCollectorAchievement : IAchievementDefinition
 
     private static bool HasQualifyingStack(AchievementTriggerContext context)
     {
-        if (context.PlayerQuery is not { } playerQuery)
-        {
-            return false;
-        }
-
         var stacks = context.ComponentManager.GetMultiPool<InventoryItemStackComponent>();
-        var playerEntityId = playerQuery.PlayerEntityId;
+        var playerEntityId = context.PlayerQuery.PlayerEntityId;
 
         for (var denseIndex = stacks.GetFirstDenseIndex(playerEntityId); denseIndex != -1; denseIndex = stacks.GetNextDenseIndex(denseIndex))
         {

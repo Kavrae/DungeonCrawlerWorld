@@ -9,8 +9,6 @@ public static class DiagnosticsFeaturesParser
 
     public static DiagnosticsFeatures Parse(IEnumerable<string> args)
     {
-        ArgumentNullException.ThrowIfNull(args);
-
         foreach (var arg in args)
         {
             if (arg.StartsWith(ArgumentPrefix, StringComparison.OrdinalIgnoreCase))

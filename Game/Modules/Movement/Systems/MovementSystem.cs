@@ -2,11 +2,9 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
-using Game.Modules.Actions.Components;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
-using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
@@ -42,13 +40,11 @@ public sealed class MovementSystem : ITieredSystem
     private readonly EventBus _eventBus;
     private readonly IEntityMoveSync _entityMoveSync;
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntitiesEventBuffer;
-    private readonly IPlayerQuery? _playerQuery;
-    private readonly PackedComponentPool<DeadComponent>? _deadEntities;
-    private readonly PackedComponentPool<PendingActionActivationComponent>? _pendingActionActivations;
-    private readonly PackedComponentPool<PendingConsumableActivationComponent>? _pendingConsumableActivations;
-    private readonly MultiComponentPool<StatusEffectAuraSourceComponent>? _auraSources;
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers;
-    private readonly PackedComponentPool<MovementDisabledComponent>? _movementDisabled;
+    private readonly IPlayerQuery _playerQuery;
+    private readonly PackedComponentPool<DeadComponent> _deadEntities;
+    private readonly MultiComponentPool<StatusEffectAuraSourceComponent> _auraSources;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
+    private readonly PackedComponentPool<MovementDisabledComponent> _movementDisabled;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public MovementSystem(
@@ -59,15 +55,13 @@ public sealed class MovementSystem : ITieredSystem
         EventBus eventBus,
         IEntityMoveSync entityMoveSync,
         FrameEventBuffer<EntityMovedEvent> movedEntities,
-        IPlayerQuery? playerQuery,
+        IPlayerQuery playerQuery,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
-        PackedComponentPool<DeadComponent>? deadEntities = null,
-        PackedComponentPool<PendingActionActivationComponent>? pendingActionActivations = null,
-        PackedComponentPool<PendingConsumableActivationComponent>? pendingConsumableActivations = null,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
-        MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<MovementDisabledComponent>? movementDisabled = null)
+        PackedComponentPool<DeadComponent> deadEntities,
+        MultiComponentPool<StatusEffectAuraSourceComponent> auraSources,
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        PackedComponentPool<MovementDisabledComponent> movementDisabled)
     {
         _transformComponents = transformComponents;
         _actionLocks = actionLocks;
@@ -78,8 +72,6 @@ public sealed class MovementSystem : ITieredSystem
         _movedEntitiesEventBuffer = movedEntities;
         _playerQuery = playerQuery;
         _deadEntities = deadEntities;
-        _pendingActionActivations = pendingActionActivations;
-        _pendingConsumableActivations = pendingConsumableActivations;
         _auraSources = auraSources;
         _statModifiers = statModifiers;
         _movementDisabled = movementDisabled;
@@ -105,36 +97,34 @@ public sealed class MovementSystem : ITieredSystem
     /// <remarks>UpdateBucket skips the player, so the player is still handled exactly once per frame.</remarks>
     public void BeginFrame(EngineTime time)
     {
-        if (_playerQuery?.PlayerEntityId is { } playerEntityId && _movementComponents.Has(playerEntityId))
+        var playerEntityId = _playerQuery.PlayerEntityId;
+        if (_movementComponents.Has(playerEntityId))
         {
-            UpdateEntity(playerEntityId, framesPerVisit: 1, time.FrameCount);
+            UpdateEntity(playerEntityId, time.FrameCount);
         }
     }
 
     public void UpdateBucket(EngineTime time, ReadOnlySpan<int> entityIds, ushort framesPerVisit)
     {
-        var playerEntityId = _playerQuery?.PlayerEntityId ?? -1;
+        var playerEntityId = _playerQuery.PlayerEntityId;
         foreach (var entityId in entityIds)
         {
             if (entityId != playerEntityId)
             {
-                UpdateEntity(entityId, framesPerVisit, time.FrameCount);
+                UpdateEntity(entityId, time.FrameCount);
             }
         }
     }
 
-    /// <summary>
-    /// One due entity's movement step. Neither thing gating it is a countdown any more: the retry
-    /// backoff is MovementComponent.WaitUntilFrame and the shared lock is ActionLockComponent
-    /// .UnlockedAtFrame, both absolute frames compared against `now`. That retires this method's
-    /// original reason for taking framesPerVisit -- the wait used to be decremented by the base
-    /// StripeCountValue regardless of tier, so a Beyond-tier entity (visited every StripeCount * 8
-    /// frames) burned it off at an eighth of real time and moved that much less often than
-    /// intended. A deadline cannot drift that way at any tier.
-    /// </summary>
-    private void UpdateEntity(int entityId, ushort framesPerVisit, long now)
+    /// <summary>One due entity's movement step.</summary>
+    /// <remarks>
+    /// Both gates are deadlines, not countdowns: the retry backoff is MovementComponent.WaitUntilFrame
+    /// and the shared lock is ActionLockComponent.UnlockedAtFrame, both absolute frames compared
+    /// against `now`, so the step needs no scaling by how often the entity's tier is visited.
+    /// </remarks>
+    private void UpdateEntity(int entityId, long now)
     {
-        if (_deadEntities?.Has(entityId) == true || _movementDisabled?.Has(entityId) == true)
+        if (_deadEntities.Has(entityId) || _movementDisabled.Has(entityId))
         {
             return;
         }
@@ -156,16 +146,6 @@ public sealed class MovementSystem : ITieredSystem
         }
 
         if (!_mapQuery.IsOnMap(transformComponent.Position))
-        {
-            return;
-        }
-
-        // Something upstream (TestCombatBehaviorSystem) already decided this entity's turn
-        // this frame via a queued action/consumable activation -- don't also try to move
-        // it. Requires TestCombatBehaviorSystem to run earlier in the frame (see
-        // GameBootstrapper's module order) so this check sees the same-frame request.
-        //TEMPORARY replace with a more generic mechanics
-        if (_pendingActionActivations?.Has(entityId) == true || _pendingConsumableActivations?.Has(entityId) == true)
         {
             return;
         }
@@ -228,7 +208,7 @@ public sealed class MovementSystem : ITieredSystem
             _entityMoveSync.SyncMove(entityMovedEvent, isBlocking);
             _movedEntitiesEventBuffer.Record(entityMovedEvent);
 
-            if (entityId == _playerQuery?.PlayerEntityId || _auraSources?.Has(entityId) == true)
+            if (entityId == _playerQuery.PlayerEntityId || _auraSources.Has(entityId))
             {
                 _eventBus.Publish(entityMovedEvent);
             }

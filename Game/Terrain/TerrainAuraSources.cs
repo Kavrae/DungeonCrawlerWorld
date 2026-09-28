@@ -15,10 +15,6 @@ public static class TerrainAuraSources
     /// <summary>ForEach, over only the cells of area (clipped to the map, and skipping unloaded neighborhoods, whose terrain reads as empty).</summary>
     public static void ForEach(IMapQuery map, TerrainRegistry registry, MapBounds area, Action<Vector3Int, StatusEffectAuraSourceComponent> visit)
     {
-        ArgumentNullException.ThrowIfNull(map);
-        ArgumentNullException.ThrowIfNull(registry);
-        ArgumentNullException.ThrowIfNull(visit);
-
         var auras = AurasByTypeId(registry);
         if (auras is null)
         {
@@ -58,8 +54,6 @@ public static class TerrainAuraSources
     /// <summary>The aura typeId radiates, if any.</summary>
     public static bool TryGetAura(TerrainRegistry registry, ushort typeId, out StatusEffectAuraSourceComponent aura)
     {
-        ArgumentNullException.ThrowIfNull(registry);
-
         if (registry.TryGet(typeId, out var definition) && definition.Aura is { } found)
         {
             aura = found;
@@ -74,9 +68,6 @@ public static class TerrainAuraSources
     /// <remarks>Reads only neighborhoodLayout and terrainRegistry, so a worker can list them while it plans a neighborhood, and loading doesn't have to scan for them.</remarks>
     public static IReadOnlyList<TerrainAuraCell>[] ByRow(NeighborhoodLayout neighborhoodLayout, TerrainRegistry terrainRegistry)
     {
-        ArgumentNullException.ThrowIfNull(neighborhoodLayout);
-        ArgumentNullException.ThrowIfNull(terrainRegistry);
-
         var auraCellsByRow = new IReadOnlyList<TerrainAuraCell>[neighborhoodLayout.MaxY - neighborhoodLayout.MinY];
         var aurasByTypeId = AurasByTypeId(terrainRegistry);
         for (var row = neighborhoodLayout.MinY; row < neighborhoodLayout.MaxY; row++)

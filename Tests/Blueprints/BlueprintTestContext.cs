@@ -63,5 +63,5 @@ internal static class BlueprintTestContext
     }
 
     private static GameModuleContext ModuleContext(BlueprintRegistry creatures) =>
-        new(new Game.World.World(new Map(new Vector3Int(1, 1, 1))), new MathUtility(), new EventBus()) { Definitions = creatures };
+        new(new Game.World.World(new Map(new Vector3Int(1, 1, 1))), new MathUtility(), new EventBus()) { PlayerQuery = TestPlayerQuery.NoPlayer, Definitions = creatures };
 }

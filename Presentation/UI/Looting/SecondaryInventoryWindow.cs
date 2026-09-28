@@ -44,14 +44,13 @@ public sealed class SecondaryInventoryWindow(
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
     ComponentManager componentManager,
-    SpriteSheetService spriteSheetService,
-    SpriteRenderer spriteRenderer,
     ItemCatalog itemCatalog,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    Engine.ECS.Systems.SimulationClock? simulationClock = null,
-    BlueprintRegistry? creatures = null)
+    Engine.Events.EventBus eventBus,
+    Engine.ECS.Systems.SimulationClock simulationClock,
+    BlueprintRegistry creatures)
     : Window(fontService, elementPoolService, labelRenderer)
 {
     private static readonly Vector2 IconSize = new(48, 48);
@@ -88,7 +87,7 @@ public sealed class SecondaryInventoryWindow(
         // self-referential shape BuildGrid's own InventoryGridContent uses -- this window *is*
         // the secondary target for as long as it exists, so its own currency row's context menu
         // only ever needs to offer "Take"/"Take All".
-        _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, () => _entityId);
+        _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, ElementPoolService, () => _entityId, eventBus);
         SetFooterContent(_currencyRowContent, CurrencyRowContent.Height);
     }
 
@@ -211,7 +210,7 @@ public sealed class SecondaryInventoryWindow(
         // once), so its own grid's Give/Take menu only ever needs to offer "Take," never query
         // anything external (contrast InventoryManagementWindow's own callback, which has to ask
         // whether a secondary window is open at all).
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, FontService, LabelRenderer, spriteSheetService, spriteRenderer, contextMenuController, _entityId, filterTag: null, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, simulationClock: simulationClock)); // Activate is player-inventory-only (see InventoryGridContent.CanActivate) -- never reached for a corpse/container grid.
+        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, contextMenuController, _entityId, filterTag: null, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, simulationClock: simulationClock)); // Activate is player-inventory-only (see InventoryGridContent.CanActivate) -- never reached for a corpse/container grid.
         AddChild(gridWindow); // Initializes gridWindow, which in turn Initializes (and builds the cells of) its InventoryGridContent -- see Window.OnChildrenInitialized/AddChild's own doc comment on why Initialize is never called explicitly here.
     }
 

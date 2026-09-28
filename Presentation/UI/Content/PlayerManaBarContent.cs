@@ -24,11 +24,7 @@ public sealed class PlayerManaBarContent(World world, ComponentManager component
 
     private readonly PackedComponentPool<ManaComponent> _manaPool = componentManager.GetPackedPool<ManaComponent>();
 
-    // Optional -- see StatModifierMath.GetEffectiveValue's own doc comment for why a null pool
-    // (StatModifiersModule not registered) is treated the same as "no active modifiers."
-    private readonly MultiComponentPool<StatModifierComponent>? _statModifiers = componentManager.IsRegistered<StatModifierComponent>()
-        ? componentManager.GetMultiPool<StatModifierComponent>()
-        : null;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
 
     private Window _hostWindow = null!;
 

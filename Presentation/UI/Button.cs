@@ -92,7 +92,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         _spriteName = options.Button?.SpriteName;
 
         _hotkeyLabel = options.Button?.HotkeyLabel;
-        _hotkeyLabelFont = _hotkeyLabel is not null ? fontService.GetFont((int)(OriginalSize.Y * FontChrome.ButtonHotkeyLabelFontFraction)) : null;
+        _hotkeyLabelFont = _hotkeyLabel is not null ? FontService.GetFont((int)(OriginalSize.Y * FontChrome.ButtonHotkeyLabelFontFraction)) : null;
 
         _restingBorderStyle = options.Chrome?.BorderStyle ?? BorderStyle.Outset;
         BorderStyle = _restingBorderStyle;

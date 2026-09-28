@@ -77,9 +77,6 @@ public sealed class EntityFactory
     /// <summary>Builds only -- for a staging world that never places anything (see SpawnRecordRebuilder).</summary>
     public EntityFactory(BlueprintRegistry definitions, EntityKeys entityKeys)
     {
-        ArgumentNullException.ThrowIfNull(definitions);
-        ArgumentNullException.ThrowIfNull(entityKeys);
-
         _definitions = definitions;
         _entityKeys = entityKeys;
         _rolls = new MathUtility(_random);
@@ -88,6 +85,7 @@ public sealed class EntityFactory
     /// <summary>Builds and spawns, into world and the ECS its pools belong to.</summary>
     /// <param name="tierResolver">When supplied, an entity is created through it and born with its processing tier as its first component, so no tiered consumer ever has to migrate it.</param>
     /// <param name="clock">The simulation's "now", which a freshly built entity's action-lock stagger counts from.</param>
+    /// <param name="processingTierEvents">The session's tier changes, so a skeleton promoted into a simulated tier is built before anything sees the change.</param>
     /// <param name="crawlerNumbers">The session's crawler numbers, which a crawler draws from when it is first built.</param>
     /// <param name="runtimeSeed">Seeds the sequence a request that names no seed draws its own from -- kept apart from every other random sequence, so a spawn at runtime shifts nothing else.</param>
     public EntityFactory(
@@ -96,17 +94,13 @@ public sealed class EntityFactory
         EntityManager entityManager,
         ComponentManager componentManager,
         FrameEventBuffer<EntityMovedEvent> movedEntities,
+        SimulationClock clock,
+        ProcessingTierEvents processingTierEvents,
         ProcessingTierResolver? tierResolver = null,
-        SimulationClock? clock = null,
         UniqueNumberAllocator? crawlerNumbers = null,
         ulong runtimeSeed = 0)
-        : this(definitions, entityManager?.Keys!)
+        : this(definitions, entityManager.Keys)
     {
-        ArgumentNullException.ThrowIfNull(world);
-        ArgumentNullException.ThrowIfNull(entityManager);
-        ArgumentNullException.ThrowIfNull(componentManager);
-        ArgumentNullException.ThrowIfNull(movedEntities);
-
         _world = world;
         _entityManager = entityManager;
         _componentManager = componentManager;
@@ -116,15 +110,19 @@ public sealed class EntityFactory
         _crawlerNumbers = crawlerNumbers;
         _runtimeSeeds = new MathUtility(new SeededRandom(runtimeSeed));
         _transforms = componentManager.GetDirectPool<TransformComponent>();
-        _tiers = componentManager.IsRegistered<ProcessingTierComponent>() ? componentManager.GetDirectPool<ProcessingTierComponent>() : null;
+        _tiers = componentManager.GetDirectPool<ProcessingTierComponent>();
+
+        Skeletons = new CreatureSkeletons(this, componentManager, clock);
+        entityManager.EntityDestroying += Skeletons.Forget;
+        processingTierEvents.TierChanging += BuildIfPromotedToSimulated;
     }
 
     /// <summary>Where every spawn's move is recorded -- register it first in the frame (see SpawnMoves). Null for a factory that only builds.</summary>
     public SpawnMoves? SpawnMoves { get; }
 
-    /// <summary>When set, an entity born into an unsimulated tier is spawned as a skeleton and built only once simulated (see CreatureSkeletons); otherwise every entity is built at spawn.</summary>
-    /// <remarks>Set after construction rather than taken as a parameter: CreatureSkeletons is built around this same factory, so one of the two has to be wired to the other afterwards.</remarks>
-    public CreatureSkeletons? Skeletons { get; set; }
+    /// <summary>The skeletons an entity born into an unsimulated tier is spawned as, built only once simulated (see CreatureSkeletons). Null for a factory that only builds.</summary>
+    /// <remarks>Created by the factory itself, since CreatureSkeletons is built around it. Forgets an entity as it is destroyed, ahead of any destruction handler registered after the factory, and builds one promoted into a simulated tier.</remarks>
+    public CreatureSkeletons? Skeletons { get; }
 
     /// <summary>Spawns one entity of blueprint at (x, y), everything else defaulting as <see cref="SpawnRequest"/> describes.</summary>
     /// <inheritdoc cref="Spawn(in SpawnRequest)"/>
@@ -158,7 +156,7 @@ public sealed class EntityFactory
         }
         else
         {
-            Build(componentManager, entityId, request.BlueprintId, seed, _clock?.CurrentFrame ?? 0, flags);
+            Build(componentManager, entityId, request.BlueprintId, seed, _clock!.CurrentFrame, flags);
         }
 
         ref var transform = ref _transforms!.Get(entityId);
@@ -219,11 +217,11 @@ public sealed class EntityFactory
         var blueprint = _definitions.Resolve(blueprintId);
         var appliedParts = componentManager.GetMultiPool<AppliedBlueprintComponent>();
 
-        Skeletons?.EnsureBuilt(entityId);
+        Skeletons!.EnsureBuilt(entityId);
 
         ResolvedBlueprint? own = null;
         var seed = 0u;
-        if (componentManager.IsRegistered<SpawnRecordComponent>() && componentManager.GetDirectPool<SpawnRecordComponent>().TryGetReadonly(entityId, out var record))
+        if (componentManager.GetDirectPool<SpawnRecordComponent>().TryGetReadonly(entityId, out var record))
         {
             seed = record.Seed;
             _definitions.TryResolve(record.BlueprintId, out own);
@@ -275,8 +273,6 @@ public sealed class EntityFactory
     /// <summary>Writes entityId's skeleton (see SkeletonComponentTypes) from its blueprint: an unplaced transform on the blueprint's layer and size if it has none yet, its occupancy and its spawn record.</summary>
     public void BuildSkeleton(ComponentManager componentManager, int entityId, ushort blueprintId, uint seed, SpawnFlags flags = SpawnFlags.None)
     {
-        ArgumentNullException.ThrowIfNull(componentManager);
-
         var resolved = _definitions.Resolve(blueprintId);
         if (!componentManager.GetDirectPool<TransformComponent>().Has(entityId))
         {
@@ -295,8 +291,6 @@ public sealed class EntityFactory
     /// <param name="now">The frame it is built on -- the action-lock stagger counts from it.</param>
     public void BuildComplete(ComponentManager componentManager, int entityId, ushort blueprintId, uint seed, long now)
     {
-        ArgumentNullException.ThrowIfNull(componentManager);
-
         var resolved = _definitions.Resolve(blueprintId);
         _random.Reseed(seed);
         var context = new BlueprintContext(componentManager, entityId, _rolls, _entityKeys, seed, _definitions);
@@ -308,13 +302,10 @@ public sealed class EntityFactory
 
         GrantManaIfAnyActionCosts(componentManager, entityId, resolved.Actions);
 
-        if (componentManager.IsRegistered<ActionLockComponent>())
+        var actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
+        if (actionLocks.Has(entityId))
         {
-            var actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
-            if (actionLocks.Has(entityId))
-            {
-                ActionLockGate.Lock(actionLocks, entityId, now, (ushort)_rolls.Next(0, MaximumStaggerFrames + 1));
-            }
+            ActionLockGate.Lock(actionLocks, entityId, now, (ushort)_rolls.Next(0, MaximumStaggerFrames + 1));
         }
 
         AssignCrawlerNumber(componentManager, entityId);
@@ -333,7 +324,6 @@ public sealed class EntityFactory
         if (_crawlerNumbers is null
             || !spawnRecords.TryGetReadonly(entityId, out var record)
             || !record.Flags.HasFlag(SpawnFlags.Crawler)
-            || !componentManager.IsRegistered<CrawlerComponent>()
             || componentManager.GetPackedPool<CrawlerComponent>().Has(entityId))
         {
             return;
@@ -364,13 +354,22 @@ public sealed class EntityFactory
 
     /// <summary>Whether entityId can be left unbuilt: born unsimulated, of a blueprint a skeleton can draw and name itself from (see ResolvedBlueprint.Deferrable).</summary>
     private bool CanDefer(int entityId, ResolvedBlueprint blueprint) =>
-        Skeletons is not null
-        && !IsBornSimulated(entityId)
+        !IsBornSimulated(entityId)
         && blueprint.Deferrable;
+
+    /// <summary>Builds entityId if it is a skeleton and tier is simulated.</summary>
+    /// <remarks>On TierChanging, before any TierChanged handler (tier stripe sets, the Local roster, resume and timer catch-up) sees the change.</remarks>
+    private void BuildIfPromotedToSimulated(int entityId, ProcessingTierLevel tier)
+    {
+        if (ProcessingTierQuery.IsSimulatedTier(tier))
+        {
+            Skeletons!.EnsureBuilt(entityId);
+        }
+    }
 
     /// <summary>Whether entityId was born into a simulated tier. An entity born without a tier (no resolver) counts as simulated.</summary>
     private bool IsBornSimulated(int entityId) =>
-        _tiers is null || !_tiers.TryGetReadonly(entityId, out var tier) || ProcessingTierQuery.IsSimulatedTier(tier.Tier);
+        !_tiers!.TryGetReadonly(entityId, out var tier) || ProcessingTierQuery.IsSimulatedTier(tier.Tier);
 
     /// <summary>Grants partId's race or class, then builds its own blueprint, so a blueprint already sees the race or class it belongs to.</summary>
     private void BuildPart(BlueprintContext context, ushort partId, ClassGrantKind classGrantedBy = ClassGrantKind.Spawn)
@@ -378,12 +377,12 @@ public sealed class EntityFactory
         var definition = _definitions.Get(partId);
         var componentManager = context.ComponentManager;
 
-        if (definition.Race is not null && componentManager.IsRegistered<RaceSlotsComponent>())
+        if (definition.Race is not null)
         {
             componentManager.Merge(context.EntityId, new RaceSlotsComponent(partId));
         }
 
-        if (definition.Class is not null && componentManager.IsRegistered<ClassSlotsComponent>())
+        if (definition.Class is not null)
         {
             ClassEffects.Grant(componentManager, context.EntityId, partId, classGrantedBy);
         }
@@ -396,7 +395,7 @@ public sealed class EntityFactory
     {
         for (var index = 0; index < actions.Count; index++)
         {
-            if (actions[index].ManaCost > 0 && componentManager.IsRegistered<ManaComponent>())
+            if (actions[index].ManaCost > 0)
             {
                 ManaGrant.EnsureManaComponentExists(componentManager, entityId);
                 return;

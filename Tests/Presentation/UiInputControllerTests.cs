@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 ﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
@@ -60,6 +61,9 @@ public sealed class UiInputControllerTests
     /// a shim on UiLayerStack/UiInputController themselves, so test convenience shapes this test
     /// file, not production API surface.
     /// </summary>
+    private static ComponentManager NewComponentManager() =>
+        BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
+
     private static UiInputController CreateController(
         IReadOnlyList<Element> baseElements, IReadOnlyList<Element> staticHudElements, IReadOnlyList<Element> dynamicHudElements, IReadOnlyList<Element> userElements,
         Vector2 screenSize, HotbarController? hotbarController = null, ComponentManager? componentManager = null, IPlayerQuery? playerQuery = null, ItemCatalog? itemCatalog = null, MapViewState? mapViewState = null, EventBus? eventBus = null)
@@ -81,7 +85,7 @@ public sealed class UiInputControllerTests
         {
             layers.Add(UiLayer.User, element);
         }
-        return new UiInputController(layers, screenSize, hotbarController, componentManager, playerQuery, itemCatalog: itemCatalog, mapViewState: mapViewState, eventBus: eventBus);
+        return new UiInputController(layers, screenSize, componentManager ?? NewComponentManager(), playerQuery ?? TestPlayerQuery.NoPlayer, eventBus ?? new EventBus(), hotbarController, itemCatalog: itemCatalog, mapViewState: mapViewState);
     }
 
     /// <summary>Records HandleRightDragStart/HandleRightDrag calls, so UiInputController's right-button wiring (hit-test on press, total-delta-since-start on every held frame) can be verified end-to-end without a real MapWindow.</summary>
@@ -358,7 +362,7 @@ public sealed class UiInputControllerTests
         var layers = new UiLayerStack();
         layers.Add(UiLayer.Base, windowA);
         layers.Add(UiLayer.Base, windowB);
-        var controller = new UiInputController(layers, LargeScreenSize);
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus());
 
         var pressPoint = windowA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1087,7 +1091,7 @@ public sealed class UiInputControllerTests
         textBox.Initialize();
         layers.Add(UiLayer.DynamicHud, textBox);
 
-        var controller = new UiInputController(layers, LargeScreenSize, contextMenuController: contextMenuController);
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), contextMenuController: contextMenuController);
 
         var textBoxCenter = textBox.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(textBoxCenter.X, textBoxCenter.Y, ButtonState.Released));
@@ -1127,7 +1131,7 @@ public sealed class UiInputControllerTests
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var layers = new UiLayerStack();
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, layers);
-        var controller = new UiInputController(layers, LargeScreenSize, contextMenuController: contextMenuController);
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), contextMenuController: contextMenuController);
 
         var picked = 0;
         List<ContextMenuOption> submenu = [ContextMenuOption.Header("Kinds"), new ContextMenuOption("Pick", null, true, () => picked++)];
@@ -1143,10 +1147,10 @@ public sealed class UiInputControllerTests
 
         Click(contextMenuController.Menu.ChildElements[1]);
         Assert.IsTrue(contextMenuController.IsOpen, "Choosing a submenu keeps the menu open.");
-        Assert.AreEqual(2, contextMenuController.Menu.ChildElements.Count, "Not swapped yet -- that waits for the menu's next update.");
+        Assert.HasCount(2, contextMenuController.Menu.ChildElements, "Not swapped yet -- that waits for the menu's next update.");
 
         contextMenuController.Menu.Update(new GameTime());
-        Assert.AreEqual(submenu.Count, contextMenuController.Menu.ChildElements.Count);
+        Assert.HasCount(submenu.Count, contextMenuController.Menu.ChildElements);
         Assert.AreEqual(0, picked);
 
         Click(contextMenuController.Menu.ChildElements[1]);
@@ -1186,7 +1190,7 @@ public sealed class UiInputControllerTests
         });
         parentWindow.AddChild(textBox);
 
-        var controller = new UiInputController(layers, LargeScreenSize, contextMenuController: contextMenuController);
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), contextMenuController: contextMenuController);
 
         var textBoxCenter = textBox.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(textBoxCenter.X, textBoxCenter.Y, ButtonState.Released));
@@ -1454,7 +1458,7 @@ public sealed class UiInputControllerTests
         layers.Add(UiLayer.Base, blockedWindow);
         layers.Add(UiLayer.DynamicHud, menuWindow);
         layers.OpenMenuWindow(menuWindow);
-        var controller = new UiInputController(layers, LargeScreenSize);
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus());
 
         var blockedPoint = blockedWindow.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(blockedPoint.X, blockedPoint.Y, ButtonState.Released));
@@ -1479,7 +1483,7 @@ public sealed class UiInputControllerTests
         layers.Add(UiLayer.DynamicHud, menuWindowB);
         layers.OpenMenuWindow(menuWindowA);
         layers.OpenMenuWindow(menuWindowB);
-        var controller = new UiInputController(layers, LargeScreenSize);
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus());
 
         var pointA = menuWindowA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pointA.X, pointA.Y, ButtonState.Released));
@@ -1504,7 +1508,7 @@ public sealed class UiInputControllerTests
         layers.MarkMenuModeExempt(exemptWindow);
         layers.Add(UiLayer.DynamicHud, menuWindow);
         layers.OpenMenuWindow(menuWindow);
-        var controller = new UiInputController(layers, LargeScreenSize);
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus());
 
         var pressPoint = exemptWindow.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1523,7 +1527,7 @@ public sealed class UiInputControllerTests
         var layers = new UiLayerStack();
         layers.Add(UiLayer.Base, focused);
         layers.Add(UiLayer.DynamicHud, menuWindow);
-        var controller = new UiInputController(layers, LargeScreenSize);
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus());
 
         var pressPoint = focused.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1718,7 +1722,7 @@ public sealed class UiInputControllerTests
         var layers = new UiLayerStack();
         layers.Add(UiLayer.Base, windowA);
         layers.Add(UiLayer.Base, windowB);
-        var controller = new UiInputController(layers, LargeScreenSize);
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus());
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab), MouseAt(0, 0, ButtonState.Released));
@@ -2187,16 +2191,7 @@ public sealed class UiInputControllerTests
     {
         const int playerEntityId = 1;
 
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
-        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<ActionInstanceComponent>();
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
         var itemId = Guid.NewGuid();
@@ -2221,7 +2216,7 @@ public sealed class UiInputControllerTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), componentManager, new EventBus(), new ActionCatalog(), itemCatalog,
-            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
+            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
@@ -2238,16 +2233,7 @@ public sealed class UiInputControllerTests
         const int playerEntityId = 1;
         const int corpseEntityId = 2;
 
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
-        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<ActionInstanceComponent>();
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
         var itemId = Guid.NewGuid();
@@ -2272,7 +2258,7 @@ public sealed class UiInputControllerTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), componentManager, new EventBus(), new ActionCatalog(), itemCatalog,
-            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
+            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
@@ -2316,7 +2302,7 @@ public sealed class UiInputControllerTests
     public void Drag_FromInventoryCellToHotbarSlot_BindsTheItem()
     {
         var (cell, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
-        var controller = CreateController([cell], [hotbarWindow], [], [], LargeScreenSize);
+        var controller = CreateController([cell], [hotbarWindow], [], [], LargeScreenSize, playerQuery: new TestPlayerQuery(1));
 
         var pressPoint = cell.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -2337,7 +2323,7 @@ public sealed class UiInputControllerTests
     public void Drag_FromInventoryCellToHotbarSlot_DoesNotRemoveTheItemFromInventory()
     {
         var (cell, hotbarWindow, hotbar, componentManager, itemId) = BuildDragAndDropHarness();
-        var controller = CreateController([cell], [hotbarWindow], [], [], LargeScreenSize);
+        var controller = CreateController([cell], [hotbarWindow], [], [], LargeScreenSize, playerQuery: new TestPlayerQuery(1));
 
         var pressPoint = cell.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -2446,7 +2432,7 @@ public sealed class UiInputControllerTests
     public void Drag_FromInventoryCell_TurnsOnHotbarDragHighlight_UntilReleased()
     {
         var (cell, hotbarWindow, hotbar, _, _) = BuildDragAndDropHarness();
-        var controller = CreateController([cell], [hotbarWindow], [], [], LargeScreenSize);
+        var controller = CreateController([cell], [hotbarWindow], [], [], LargeScreenSize, playerQuery: new TestPlayerQuery(1));
         Assert.IsFalse(hotbar.IsAcceptingDrag);
 
         var pressPoint = cell.ContentRectangle.Center;
@@ -2477,9 +2463,7 @@ public sealed class UiInputControllerTests
         const int sourceEntityId = 1;
         const int destinationEntityId = 2;
 
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
         var itemId = Guid.NewGuid();
         var itemCatalog = new ItemCatalog();
@@ -2509,7 +2493,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, resolvedOnItemSelected, static (_, _) => { }, static (_, _) => { }));
+            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, resolvedOnItemSelected, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock()));
             window.Initialize();
             return window;
         }
@@ -2623,12 +2607,7 @@ public sealed class UiInputControllerTests
         const int playerEntityId = 1;
         const int shopEntityId = 2;
 
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<Game.Modules.Shops.Components.ShopComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<Game.Modules.Shops.Components.ShopStockPreferenceComponent>();
-        componentManager.RegisterPackedPool<Game.Modules.Currency.Components.CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20));
 
         var potionItemId = Guid.NewGuid();
         var toolItemId = Guid.NewGuid();
@@ -2670,7 +2649,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }));
+            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock()));
             window.Initialize();
             return window;
         }
@@ -2777,12 +2756,7 @@ public sealed class UiInputControllerTests
         const int tradePlayerEntityId = 3;
         const int tradeShopEntityId = 4;
 
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<Game.Modules.Shops.Components.ShopComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<Game.Modules.Shops.Components.ShopStockPreferenceComponent>();
-        componentManager.RegisterPackedPool<Game.Modules.Currency.Components.CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20));
 
         var potionItemId = Guid.NewGuid();
         var itemCatalog = new ItemCatalog();
@@ -2823,7 +2797,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, tradeGridIsShopSide));
+            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, new SimulationClock(), tradeGridIsShopSide));
             window.Initialize();
             return window;
         }
@@ -3112,9 +3086,7 @@ public sealed class UiInputControllerTests
         const int tradePlayerEntityId = 3;
         const int tradeShopEntityId = 4;
 
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20);
-        componentManager.RegisterPackedPool<Game.Modules.Shops.Components.ShopComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<Game.Modules.Currency.Components.CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20));
 
         componentManager.Merge(shopEntityId, new Game.Modules.Shops.Components.ShopComponent(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(playerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 0, credits: 0));
@@ -3135,7 +3107,7 @@ public sealed class UiInputControllerTests
 
         Window BuildCurrencyWindow(int entityId, Vector2 position)
         {
-            var content = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, static () => null);
+            var content = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, windowService, static () => null, new EventBus());
             var window = windowService.CreateElement<Window>(null, new ElementOptions
             {
                 Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
@@ -3309,9 +3281,7 @@ public sealed class UiInputControllerTests
         const int sourceEntityId = 2;
         const int destinationEntityId = 1;
 
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
         var itemId = Guid.NewGuid();
         var itemCatalog = new ItemCatalog();
@@ -3334,7 +3304,7 @@ public sealed class UiInputControllerTests
         var mapViewState = new MapViewState();
 
         windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState));
+            fontService, windowService, labelRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState, new EventBus(), simulationClock: new SimulationClock()));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
@@ -3345,7 +3315,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        sourceGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, fontService, labelRenderer, spriteSheetService, spriteRenderer, contextMenuController, sourceEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }));
+        sourceGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, sourceEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock()));
         sourceGridWindow.Initialize();
         var cell = sourceGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
 
@@ -3419,16 +3389,7 @@ public sealed class UiInputControllerTests
     {
         const int playerEntityId = 1;
 
-        var componentManager = new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10);
-        componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>();
-        componentManager.RegisterMultiPool<ActionInstanceComponent>();
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
-        componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterPackedPool<HotkeyExpansionUnlockComponent>(static (ref existing, incoming) => existing = incoming);
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
         var actionId = Guid.NewGuid();
@@ -3442,7 +3403,7 @@ public sealed class UiInputControllerTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), componentManager, new EventBus(), actionCatalog, new ItemCatalog(),
-            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080));
+            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },

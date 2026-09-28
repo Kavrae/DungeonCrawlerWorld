@@ -27,8 +27,6 @@ public sealed class SkeletonAccessGuard(CreatureSkeletons skeletons, SystemManag
     /// <summary>Sets a guard on every registered pool a skeleton doesn't hold (see EntityFactory.SkeletonComponentTypes).</summary>
     public static void Install(ComponentManager componentManager, SkeletonAccessGuard guard)
     {
-        ArgumentNullException.ThrowIfNull(componentManager);
-
         foreach (var pool in componentManager.AllPools)
         {
             if (!EntityFactory.SkeletonComponentTypes.Contains(pool.ComponentType))

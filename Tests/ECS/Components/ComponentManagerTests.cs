@@ -298,7 +298,7 @@ public sealed class ComponentManagerTests
 
         packed.Add(12, new PackedTestComponent { Value = 12 });
         multi.Add(12, new MultiTestComponent { Value = 12 });
-        Assert.IsTrue(packed.EstimatedBytes > packedBytes);
-        Assert.IsTrue(multi.EstimatedBytes > multiBytes);
+        Assert.IsGreaterThan(packedBytes, packed.EstimatedBytes);
+        Assert.IsGreaterThan(multiBytes, multi.EstimatedBytes);
     }
 }

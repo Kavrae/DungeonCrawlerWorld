@@ -16,9 +16,9 @@ namespace Game.Modules.Achievements;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class AchievementModule : IGameModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000010");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000010");
 
-    public IReadOnlyList<Type> Dependencies { get; } = [];
+    public Guid Id => ModuleId;
 
     private static readonly IReadOnlyList<IAchievementDefinition> Definitions = [
         new AngelInvestorAchievement(),
@@ -42,8 +42,8 @@ public sealed class AchievementModule : IGameModule
         new ObsessiveCollectorAchievement()
         ];
 
-    private EventBus? _eventBus;
-    private IPlayerQuery? _playerQuery;
+    private EventBus _eventBus = null!;
+    private IPlayerQuery _playerQuery = null!;
     private ActionCatalog? _actionCatalog;
     private ItemCatalog? _itemCatalog;
 
@@ -86,7 +86,7 @@ public sealed class AchievementModule : IGameModule
     /// </remarks>
     public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
     {
-        if (_eventBus is not { } eventBus || _actionCatalog is not { } actionCatalog || _itemCatalog is not { } itemCatalog)
+        if (_actionCatalog is not { } actionCatalog || _itemCatalog is not { } itemCatalog)
         {
             throw new InvalidOperationException("AchievementModule.Configure must run before RegisterSystems.");
         }
@@ -95,7 +95,7 @@ public sealed class AchievementModule : IGameModule
 
         foreach (var definition in Definitions)
         {
-            var triggerContext = new AchievementTriggerContext(eventBus, _playerQuery, componentManager, actionCatalog, itemCatalog, entityId => Unlock(definition, entityId, componentManager, unlockedAchievements, eventBus), _polledConditions);
+            var triggerContext = new AchievementTriggerContext(_eventBus, _playerQuery, componentManager, actionCatalog, itemCatalog, entityId => Unlock(definition, entityId, componentManager, unlockedAchievements, _eventBus), _polledConditions);
             definition.RegisterTrigger(triggerContext);
         }
 

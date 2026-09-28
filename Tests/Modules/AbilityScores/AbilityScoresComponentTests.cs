@@ -10,7 +10,7 @@ public sealed class AbilityScoresComponentTests
     [TestMethod]
     public void Count_CoversEveryAbilityScoreType()
     {
-        Assert.AreEqual(AbilityScoresComponent.Count, Enum.GetValues<AbilityScoreType>().Length);
+        Assert.HasCount(AbilityScoresComponent.Count, Enum.GetValues<AbilityScoreType>());
         Assert.AreEqual(AbilityScoresComponent.Count - 1, (int)Enum.GetValues<AbilityScoreType>().Max(), "AbilityScoreType must stay a gapless 0-based enum -- the component indexes by its value.");
     }
 

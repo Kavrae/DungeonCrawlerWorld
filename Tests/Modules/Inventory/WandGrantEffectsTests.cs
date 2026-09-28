@@ -7,6 +7,8 @@ using Game.Modules.AbilityScores.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Microsoft.Xna.Framework;
+using Game.Modules.StatModifiers.Components;
+using Game.Modules.Death.Components;
 
 namespace Tests.Modules.Inventory;
 
@@ -15,9 +17,7 @@ public sealed class WandGrantEffectsTests
 {
     private static ComponentManager CreateRegisteredManager()
     {
-        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        new InventoryModule().RegisterComponents(manager);
-        AbilityScoreTestPools.Register(manager);
+        var manager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4));
         return manager;
     }
 
@@ -48,7 +48,7 @@ public sealed class WandGrantEffectsTests
         var manager = CreateRegisteredManager();
         var baseDefinition = CreateBaseWandDefinition();
 
-        WandGrantEffects.Grant(manager, abilityScores: null, entityId: 0, baseDefinition, quantity: 1);
+        WandGrantEffects.Grant(manager, abilityScores: EmptyPools.Packed<AbilityScoresComponent>(), entityId: 0, baseDefinition, quantity: 1);
 
         var stacks = manager.GetMultiPool<InventoryItemStackComponent>();
         Assert.IsTrue(InventoryQueries.TryGetStack(stacks, entityId: 0, baseDefinition.Id, out var stack));
@@ -62,7 +62,7 @@ public sealed class WandGrantEffectsTests
         var manager = CreateRegisteredManager();
         var baseDefinition = CreateBaseWandDefinition();
 
-        WandGrantEffects.Grant(manager, abilityScores: null, entityId: 0, baseDefinition, quantity: 10);
+        WandGrantEffects.Grant(manager, abilityScores: EmptyPools.Packed<AbilityScoresComponent>(), entityId: 0, baseDefinition, quantity: 10);
 
         var stacks = manager.GetMultiPool<InventoryItemStackComponent>();
         Assert.AreEqual(1, stacks.CountForEntity(0));

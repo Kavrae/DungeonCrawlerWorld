@@ -437,7 +437,7 @@ public sealed class NotificationCenterTests
         Assert.IsFalse(notificationCenter.HasBlockingNotification);
         Assert.IsFalse(ClickDynamicHud(layers, FirstActiveNotificationTopLeft));
 
-        notificationCenter.Update(new GameTime());
+        notificationCenter.Update();
 
         Assert.IsTrue(notificationCenter.HasBlockingNotification);
         Assert.IsTrue(ClickDynamicHud(layers, FirstActiveNotificationTopLeft));

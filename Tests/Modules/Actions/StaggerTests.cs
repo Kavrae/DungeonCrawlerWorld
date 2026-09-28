@@ -24,21 +24,9 @@ public sealed class StaggerTests
     private static (EcsContext EcsContext, EventBus EventBus, int TargetEntityId) Build()
     {
         var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-        var context = new GameModuleContext(world, new MathUtility(), new EventBus()) { EntityMoveSync = new WorldEventSync(world) };
+        var context = new GameModuleContext(world, new MathUtility(), new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
 
-        var movementModule = new MovementModule();
-        movementModule.Configure(context);
-        var coreModule = new CoreModule();
-        coreModule.Configure(context);
-        var healthModule = new HealthModule();
-        healthModule.Configure(context);
-        var actionsModule = new ActionsModule();
-        actionsModule.Configure(context);
-        var processingTierModule = new ProcessingTierModule();
-        processingTierModule.Configure(context);
-
-        IReadOnlyList<IModule> modules = [coreModule, healthModule, movementModule, actionsModule, processingTierModule];
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, entityKeys: context.EntityKeys);
+        var ecsContext = BuiltInTestModules.Build(context, 10, 10);
 
         var targetEntityId = ecsContext.EntityManager.CreateEntity();
         ecsContext.ComponentManager.Merge(targetEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, unlockedAtFrame: LockedUntilFrame));

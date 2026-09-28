@@ -1,4 +1,3 @@
-using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
 using Engine.Utilities;
@@ -194,20 +193,6 @@ public sealed class MapWindow : Window
         PlayerMovementController playerMovement,
         ContextMenuController contextMenuController) : base(fontService, elementPoolService, labelRenderer)
     {
-        ArgumentNullException.ThrowIfNull(mapView);
-        ArgumentNullException.ThrowIfNull(playerActionGate);
-        ArgumentNullException.ThrowIfNull(mapViewState);
-        ArgumentNullException.ThrowIfNull(tintGrid);
-        ArgumentNullException.ThrowIfNull(eventBus);
-        ArgumentNullException.ThrowIfNull(tileRenderer);
-        ArgumentNullException.ThrowIfNull(labelRenderer);
-        ArgumentNullException.ThrowIfNull(spriteSheetService);
-        ArgumentNullException.ThrowIfNull(spriteRenderer);
-        ArgumentNullException.ThrowIfNull(camera);
-        ArgumentNullException.ThrowIfNull(actionTargeting);
-        ArgumentNullException.ThrowIfNull(playerMovement);
-        ArgumentNullException.ThrowIfNull(contextMenuController);
-
         _mapView = mapView;
         _playerActionGate = playerActionGate;
         _mapViewState = mapViewState;
@@ -833,7 +818,7 @@ public sealed class MapWindow : Window
     /// load-bearing rather than incidental: a multi-tile entity's sprite is drawn once from its
     /// origin tile covering its whole footprint, so a neighbouring tile's terrain draw -- a later
     /// call, and SpriteSortMode.Deferred submits in call order with no depth buffer -- would
-    /// otherwise land on top of part of that footprint. Now that terrain lives in its own texture
+    /// otherwise land on top of part of that footprint. CurrentFrame that terrain lives in its own texture
     /// blitted before any occupant, that separation is structural rather than something the loop
     /// order has to keep getting right.
     /// </remarks>

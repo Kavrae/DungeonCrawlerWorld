@@ -7,7 +7,9 @@ namespace Game.Modules.Class;
 
 public sealed class ClassModule : IModule
 {
-    public Guid Id { get; } = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000006");
+    public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000006");
+
+    public Guid Id => ModuleId;
 
     public void RegisterComponents(ComponentManager componentManager)
     {

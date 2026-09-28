@@ -29,10 +29,9 @@ namespace Presentation.UI.Content;
 /// (not overlaid on top of it -- that read as visual clutter against the glyph) instead of a
 /// stack count.
 /// </summary>
-public sealed class PlayerStatusEffectsContent(World world, ComponentManager componentManager, ItemCatalog itemCatalog, FontService fontService, StatusEffectDisplayRegistry statusEffectDisplays, SimulationClock? simulationClock = null) : IElementContent
+/// <param name="simulationClock">"CurrentFrame" for the potion cooldown's remaining seconds -- it stores an absolute deadline.</param>
+public sealed class PlayerStatusEffectsContent(World world, ComponentManager componentManager, ItemCatalog itemCatalog, FontService fontService, StatusEffectDisplayRegistry statusEffectDisplays, SimulationClock simulationClock) : IElementContent
 {
-    /// <summary>"Now" for the potion cooldown's remaining seconds -- it stores an absolute deadline. Optional only so tests needn't build one; the shell always passes the simulation's real clock.</summary>
-    private readonly SimulationClock _simulationClock = simulationClock ?? new SimulationClock();
 
     public static readonly Vector2 Size = new(PlayerHealthBarContent.Size.X, HudChrome.EntrySize.Y / 2f * 1.5f);
 
@@ -88,7 +87,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
         }
 
         _potionCooldownFramesRemaining = _potionCooldowns.TryGetReadonly(playerEntityId, out var potionCooldown)
-            ? PotionCooldownEffects.FramesRemaining(potionCooldown, _simulationClock.CurrentFrame)
+            ? PotionCooldownEffects.FramesRemaining(potionCooldown, simulationClock.CurrentFrame)
             : 0;
         _hasPotionCooldown = _potionCooldownFramesRemaining > 0;
     }

@@ -261,7 +261,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
         // A window that grows to the right could otherwise end up partly off-screen -- the same
         // clamp AbilityScoreWindowController's own initial placement already applies.
-        var screenBounds = elementPoolService.GraphicsDevice.Viewport.Bounds;
+        var screenBounds = ElementPoolService.GraphicsDevice.Viewport.Bounds;
         SetRelativePosition(ScreenBoundsClamp.Clamp(RelativePosition, CurrentSize, new Vector2(screenBounds.Width, screenBounds.Height)));
     }
 
@@ -292,7 +292,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         {
             var columnX = index * (columnWidth + ColumnGap);
 
-            var header = elementPoolService.CreateElement<AbilityScoreColumnHeader>(this, new ElementOptions
+            var header = ElementPoolService.CreateElement<AbilityScoreColumnHeader>(this, new ElementOptions
             {
                 Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
                 Layout = new ElementLayoutOptions { RelativePosition = new Vector2(columnX, 0), Size = new Vector2(columnWidth, HeaderHeight), DisplayMode = ElementDisplayMode.Fixed },
@@ -303,7 +303,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
             AddChild(header);
             _columnHeaders[index] = header;
 
-            var listWindow = elementPoolService.CreateElement<Window>(this, new ElementOptions
+            var listWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions
             {
                 Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
                 Layout = new ElementLayoutOptions { RelativePosition = new Vector2(columnX, HeaderHeight + WindowChrome.Gap), Size = new Vector2(columnWidth, listHeight), DisplayMode = ElementDisplayMode.Fixed },
@@ -317,7 +317,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     }
 
     /// <summary>CloseAllChildren recursively closes an element's entire subtree (see ElementPoolService.CloseElement), so closing this window's own direct children (headers, list-windows) already reaches each list-window's rows/separators too. Doesn't touch _columnHeaders/_columnListWindows themselves -- BuildColumns (the only caller) immediately reallocates both right after this returns.</summary>
-    private void ClearColumns() => elementPoolService.CloseAllChildren(this);
+    private void ClearColumns() => ElementPoolService.CloseAllChildren(this);
 
     private void RefreshAllColumns()
     {
@@ -332,7 +332,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         var type = ActiveTypes[index];
         var listWindow = _columnListWindows[index];
 
-        elementPoolService.CloseAllChildren(listWindow);
+        ElementPoolService.CloseAllChildren(listWindow);
 
         _columnHeaders[index].Configure(type, GetTotal(type), new Vector2(listWindow.CurrentSize.X, HeaderHeight));
 
@@ -341,7 +341,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         {
             if (NeedsSeparatorBefore(lines, lineIndex))
             {
-                var separator = elementPoolService.CreateElement<SeparatorBar>(listWindow, new ElementOptions
+                var separator = ElementPoolService.CreateElement<SeparatorBar>(listWindow, new ElementOptions
                 {
                     Layout = new ElementLayoutOptions { Size = new Vector2(listWindow.ContentSize.X, SeparatorHeight), DisplayMode = ElementDisplayMode.Fixed },
                     Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
@@ -351,7 +351,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
                 listWindow.AddChild(separator);
             }
 
-            var row = elementPoolService.CreateElement<AbilityScoreModifierRow>(listWindow, new ElementOptions
+            var row = ElementPoolService.CreateElement<AbilityScoreModifierRow>(listWindow, new ElementOptions
             {
                 Layout = new ElementLayoutOptions { Size = new Vector2(listWindow.ContentSize.X, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
@@ -392,7 +392,5 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     private uint GetAbilityScoreVersion() => componentManager.GetPackedPool<AbilityScoresComponent>().GetVersion(_entityId);
 
     private uint GetStatModifierVersion() =>
-        componentManager.IsRegistered<StatModifierComponent>()
-            ? componentManager.GetMultiPool<StatModifierComponent>().GetEntityVersion(_entityId)
-            : 0;
+        componentManager.GetMultiPool<StatModifierComponent>().GetEntityVersion(_entityId);
 }

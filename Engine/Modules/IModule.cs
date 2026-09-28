@@ -4,11 +4,12 @@ using Engine.ECS.Systems;
 namespace Engine.Modules;
 
 /// <summary> A self-contained collection of components and systems for one purpose.</summary>
-/// <remarks>Dependencies lists other modules this one requires (e.g. Movement requires
-/// Core for TransformComponent)
-/// 
-/// Bootstrapper validates and topologically sorts these
-/// before registration, rather than relying on hand-ordered registration calls.
+/// <remarks>
+/// Other modules are named by Id, so a mod that replaces one by Id still satisfies everything that names
+/// it. Requires is about presence and RunsAfter/RunsBefore about system order, and neither implies the
+/// other: every component is registered before any system, so a pool another module owns is available
+/// whatever the order. Bootstrapper validates Requires and sorts by the ordering lists, keeping the
+/// caller's order wherever nothing constrains it.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public interface IModule
@@ -24,7 +25,16 @@ public interface IModule
     /// </remarks>
     Guid Id => Guid.Empty;
 
-    IReadOnlyList<Type> Dependencies => [];
+    /// <summary>Ids of modules that must be in the module set for this one to work.</summary>
+    IReadOnlyList<Guid> Requires => [];
+
+    /// <summary>Ids of modules whose systems must run before this one's each frame.</summary>
+    /// <remarks>An Id that isn't in the module set is ignored.</remarks>
+    IReadOnlyList<Guid> RunsAfter => [];
+
+    /// <summary>Ids of modules whose systems must run after this one's each frame.</summary>
+    /// <remarks>An Id that isn't in the module set is ignored.</remarks>
+    IReadOnlyList<Guid> RunsBefore => [];
 
     void RegisterComponents(ComponentManager componentManager);
 

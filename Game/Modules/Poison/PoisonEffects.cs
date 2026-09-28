@@ -39,7 +39,7 @@ public static class PoisonEffects
     /// a longer one already landed does nothing to the timer.
     /// </summary>
     /// <param name="now">The simulation frame the stack lands on. A new poisoning's first tick is TickIntervalFrames after it; a re-application leaves the running tick alone.</param>
-    public static void ApplyStack(ComponentManager componentManager, EntityKeys entityKeys, int entityId, ActionSource source, ushort durationInTicks, long now, EventBus? eventBus = null, IPlayerQuery? playerQuery = null)
+    public static void ApplyStack(ComponentManager componentManager, EntityKeys entityKeys, int entityId, ActionSource source, ushort durationInTicks, long now, EventBus eventBus, IPlayerQuery playerQuery)
     {
         if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Poison, source, eventBus, playerQuery))
         {
@@ -53,7 +53,7 @@ public static class PoisonEffects
             return;
         }
 
-        var statModifiers = componentManager.IsRegistered<StatModifierComponent>() ? componentManager.GetMultiPool<StatModifierComponent>() : null;
+        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
         var scaledDuration = ScaleDebuffDuration(entityKeys, statModifiers, source, entityId, durationInTicks);
 
         if (timers.Has(entityId))
@@ -70,7 +70,7 @@ public static class PoisonEffects
         }
     }
 
-    private static ushort ScaleDebuffDuration(EntityKeys entityKeys, MultiComponentPool<StatModifierComponent>? statModifiers, ActionSource source, int targetEntityId, ushort durationInTicks)
+    private static ushort ScaleDebuffDuration(EntityKeys entityKeys, MultiComponentPool<StatModifierComponent> statModifiers, ActionSource source, int targetEntityId, ushort durationInTicks)
     {
         var scaled = (float)durationInTicks;
 

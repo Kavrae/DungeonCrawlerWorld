@@ -17,7 +17,7 @@ public sealed class WorldEventSyncTests
     [TestMethod]
     public void SyncMove_UpdatesMapNodeIndexAtOldAndNewPositions()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
+        var world = TestWorlds.Create(new Map(new Vector3Int(5, 5, 1)));
         var worldEventSync = new WorldEventSync(world);
 
         var oldPosition = new Vector3Int(1, 1, 0);
@@ -34,7 +34,7 @@ public sealed class WorldEventSyncTests
     [TestMethod]
     public void SyncMove_MultiTileEntity_UpdatesEveryOccupiedCell()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
+        var world = TestWorlds.Create(new Map(new Vector3Int(5, 5, 1)));
         var worldEventSync = new WorldEventSync(world);
 
         var oldPosition = new Vector3Int(0, 0, 0);
@@ -54,7 +54,7 @@ public sealed class WorldEventSyncTests
     [TestMethod]
     public void SyncMove_NonBlockingEntity_MovesNonBlockingIndexEntryInsteadOfMapNodeIndex()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
+        var world = TestWorlds.Create(new Map(new Vector3Int(5, 5, 1)));
         var nonBlockingPool = new Engine.ECS.Components.Stores.MultiComponentPool<NonBlockingComponent>(10, 10);
         nonBlockingPool.Add(7, new NonBlockingComponent());
         world.NonBlockingComponents = nonBlockingPool;

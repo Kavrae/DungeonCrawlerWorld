@@ -278,12 +278,6 @@ public sealed class StringUtilityTests
     }
 
     [TestMethod]
-    public void FormatTextCriteria_NullTextMeasurer_ThrowsArgumentNullException()
-    {
-        Assert.ThrowsExactly<ArgumentNullException>(() => new FormatTextCriteria(null!, 100, "text", FormatTextMode.Wordwrap));
-    }
-
-    [TestMethod]
     public void FormatText_WordwrapMode_EmbeddedNewlineWithNoAdjacentSpace_StartsOwnLineInsteadOfBeingMismeasured()
     {
         // Regression: unlike SimpleWordWrap (see the sibling test below, a documented, accepted
