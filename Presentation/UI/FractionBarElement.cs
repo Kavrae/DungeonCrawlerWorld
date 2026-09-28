@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 
 namespace Presentation.UI;
 
@@ -19,13 +20,25 @@ public sealed class FractionBarElement(FontService fontService, ElementPoolServi
     private bool _hasResource;
     private Color _outlineColor;
     private Func<float, Color> _fractionColor = null!;
+    private readonly ResourceBarValueText _valueText = new();
+    private bool _showValueText;
 
-    public void Configure(float fraction, bool hasResource, Color outlineColor, Func<float, Color> fractionColor)
+    /// <summary>The "current / maximum" text the bar draws, or null when Configure was given no displayedValues.</summary>
+    internal string? ValueText => _showValueText ? _valueText.Text : null;
+
+    /// <param name="displayedValues">Already-rounded current and maximum to draw centred on the bar (see ResourceBarValueText's rounding helpers); null draws no text.</param>
+    public void Configure(float fraction, bool hasResource, Color outlineColor, Func<float, Color> fractionColor, (int Current, int Maximum)? displayedValues = null)
     {
         _fraction = fraction;
         _hasResource = hasResource;
         _outlineColor = outlineColor;
         _fractionColor = fractionColor;
+
+        _showValueText = displayedValues is not null;
+        if (displayedValues is { } values)
+        {
+            _valueText.Update(values.Current, values.Maximum);
+        }
     }
 
     public override void DrawContent(GameTime gameTime)
@@ -35,5 +48,10 @@ public sealed class FractionBarElement(FontService fontService, ElementPoolServi
         var bar = new Rectangle((int)origin.X, (int)origin.Y, (int)size.X, (int)size.Y);
 
         ResourceBarRenderer.Draw(ElementPoolService.SpriteBatch, ElementPoolService.UnitRectangle, bar, _fraction, _hasResource, _outlineColor, _fractionColor);
+
+        if (_showValueText)
+        {
+            ResourceBarRenderer.DrawCenteredValueText(ElementPoolService.SpriteBatch, FontService.GetFont((int)(bar.Height * FontChrome.ResourceBarValueFontFraction)), bar, _valueText.Text);
+        }
     }
 }

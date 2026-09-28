@@ -49,6 +49,9 @@ public static class FontChrome
     public static float PlayerStatusGlyphFontFraction = 0.75f;
     public static float PlayerStatusCountdownFontFraction = 0.6f;
 
+    /// <summary>The "current / maximum" text on a resource bar (the HUD health/mana bars, HealthWindow's per-body-part bars), as a fraction of the drawn bar's height.</summary>
+    public static float ResourceBarValueFontFraction = 0.85f;
+
     public static float DragGhostGlyphFontFraction = 0.6f;
 
     public static float InventoryStackIconGlyphFontFraction = 0.6f;

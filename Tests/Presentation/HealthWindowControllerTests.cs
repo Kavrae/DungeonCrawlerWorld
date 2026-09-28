@@ -93,6 +93,21 @@ public sealed class HealthWindowControllerTests
         Assert.IsNull(FindWindow(layers), "Re-clicking an already-open window's own trigger must close it, same as Inventory/Ability Score's own toggle.");
     }
 
+    private static IEnumerable<Element> SelfAndDescendants(Element element) =>
+        element.ChildElements.SelectMany(SelfAndDescendants).Prepend(element);
+
+    [TestMethod]
+    public void ButtonClick_OpensHealthWindow_BodyPartBarShowsCurrentOverMaximum()
+    {
+        var (_, layers) = Build();
+        var button = FindButton(layers);
+
+        button.HandleClick(button.Rectangle.Center);
+
+        var bar = SelfAndDescendants(FindWindow(layers)!).OfType<FractionBarElement>().Single();
+        Assert.AreEqual("50 / 100", bar.ValueText);
+    }
+
     [TestMethod]
     public void InventoryButtonPosition_ShiftedBelowHealthButton_NoOverlap()
     {

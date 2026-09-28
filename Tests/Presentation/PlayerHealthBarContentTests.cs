@@ -35,7 +35,7 @@ public sealed class PlayerHealthBarContentTests
     private const int PlayerEntityId = 1;
     private static readonly Rectangle ScreenBounds = new(0, 0, 1920, 1080);
 
-    private static (PlayerHealthBarContent Content, Window HostWindow) Build(bool complexHealth)
+    private static (PlayerHealthBarContent Content, Window HostWindow) Build(bool complexHealth, bool hasHealth = true)
     {
         var world = new Game.World.World(new Game.World.Map(new Vector3Int(20, 20, 1))) { PlayerEntityId = PlayerEntityId };
         var fontService = TestFonts.Shared;
@@ -50,7 +50,7 @@ public sealed class PlayerHealthBarContentTests
         {
             BodyPartTestWorld.WithParts(componentManager, PlayerEntityId, ("Head", BodyPartType.Head, 10, 10, true), ("Torso", BodyPartType.Torso, 15, 20, true), ("Left Arm", BodyPartType.Arm, 8, 8, false), ("Right Arm", BodyPartType.Arm, 8, 8, false), ("Left Leg", BodyPartType.Leg, 4, 9, false), ("Right Leg", BodyPartType.Leg, 9, 9, false));
         }
-        else
+        else if (hasHealth)
         {
             componentManager.Merge(PlayerEntityId, new SimpleHealthComponent(50, 100));
         }
@@ -82,6 +82,36 @@ public sealed class PlayerHealthBarContentTests
     }
 
     private static readonly Point OutsideBar = new(-100, -100);
+
+    [TestMethod]
+    public void Update_SimpleHealth_ValueTextShowsCurrentOverMaximum()
+    {
+        var (content, _) = Build(complexHealth: false);
+
+        content.Update(MouseAt(OutsideBar), ScreenBounds);
+
+        Assert.AreEqual("50 / 100", content.ValueText);
+    }
+
+    [TestMethod]
+    public void Update_ComplexHealth_ValueTextShowsBodyPartTotals()
+    {
+        var (content, _) = Build(complexHealth: true);
+
+        content.Update(MouseAt(OutsideBar), ScreenBounds);
+
+        Assert.AreEqual("54 / 64", content.ValueText);
+    }
+
+    [TestMethod]
+    public void Update_NoHealth_NoValueText()
+    {
+        var (content, _) = Build(complexHealth: false, hasHealth: false);
+
+        content.Update(MouseAt(OutsideBar), ScreenBounds);
+
+        Assert.IsNull(content.ValueText);
+    }
 
     [TestMethod]
     public void Update_HoveringBelowDelayThreshold_PopupStaysHidden()

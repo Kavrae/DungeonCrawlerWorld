@@ -50,6 +50,8 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
     private Window _hostWindow = null!;
     private Window _hoverPopup = null!;
 
+    private readonly ResourceBarValueText _valueText = new();
+
     private bool _hasHealth;
     private float _healthFraction = 1f;
 
@@ -57,6 +59,9 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
 
     /// <summary>Test-only seam onto the popup this content owns/drives -- see the internal Update overload below for why the real screen-bounds source (ElementPoolService.GraphicsDevice, unavailable headlessly) is also parameterized out for tests.</summary>
     internal Window HoverPopup => _hoverPopup;
+
+    /// <summary>The "current / maximum" text the bar draws, or null when the player has no health to show.</summary>
+    internal string? ValueText => _hasHealth ? _valueText.Text : null;
 
     public void Initialize(Window hostWindow)
     {
@@ -105,6 +110,7 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
             _healthFraction = effectiveMaximumHealth > 0
                 ? MathHelper.Clamp(currentHealth / effectiveMaximumHealth, 0f, 1f)
                 : 1f;
+            _valueText.Update(ResourceBarValueText.DisplayedHealth(currentHealth), ResourceBarValueText.DisplayedMaximum(effectiveMaximumHealth));
         }
 
         UpdateHover(mouseState, screenBounds);
@@ -143,6 +149,12 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
         // ShellBootstrapper to position/size the host window itself); the actual drawable
         // area is whatever's left after its border insets that, so the bar has to size itself
         // off ContentSize to fit inside the border rather than drawing over it.
-        ResourceBarRenderer.Draw(spriteBatch, unitRectangle, BarRectangle(), _healthFraction, _hasHealth, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor);
+        var barRectangle = BarRectangle();
+        ResourceBarRenderer.Draw(spriteBatch, unitRectangle, barRectangle, _healthFraction, _hasHealth, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor);
+
+        if (_hasHealth)
+        {
+            ResourceBarRenderer.DrawCenteredValueText(spriteBatch, fontService.GetFont((int)(barRectangle.Height * FontChrome.ResourceBarValueFontFraction)), barRectangle, _valueText.Text);
+        }
     }
 }

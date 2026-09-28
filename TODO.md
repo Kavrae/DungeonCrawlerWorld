@@ -120,6 +120,13 @@ primitive. Companion to the Game/Presentation equipment items below.
 
 ### High Priority
 
+#### NPC attack charge fill freezes at 100% before the action fires
+
+Bug: an NPC's attack charge fill often sits at 100% for up to roughly 1 second before the attack
+actually triggers. The displayed fill and the frame the action resolves disagree -- find which side is
+late (the fill reaching full early, or the windup resolving on a coarser cadence than its deadline)
+and make the action fire the frame the fill completes.
+
 #### Paralysis V2 -- body-part-scoped status effects
 
 Paralysis can be applied to an entire entity or to individual body parts. A paralyzed body part
@@ -1262,16 +1269,6 @@ needed.
 Related: Per-entity sprite scale and Multi-tile sprites (both Low) -- a larger player sprite is the
 first real consumer of this.
 
-#### HP and mana numbers on the HUD bars
-
-Inspired by Dungeon Settlers. Draw "15 / 20" in white, centred on `PlayerHealthBarContent`'s and
-`PlayerManaBarContent`'s bars. `ResourceBarRenderer.Draw` only takes a fraction today, so either
-callers pass current/max through or the text draws separately on top. Health's max is the effective
-one (`StatModifierMath.GetEffectiveValue(..., MaximumHealth, ...)`), not the base, and current health
-is a float -- round it for display. `PlayerManaBarContent` has no `FontService` yet. Use an
-outlined/contrast draw (`ContrastTextRenderer`, or `LabelRenderer.DrawCentered(..., outline: true)`)
-so white text stays readable over a bright fill.
-
 #### Show "Self" as the source when an entity is its own source
 
 A `ActionSource` created from the entity the effect landed on renders as that entity's own name
@@ -1547,7 +1544,8 @@ targeting. There's no circle primitive yet -- `unitRectangle` plus `GlowRenderer
 #### Extract a shared tick-fraction HUD bar element
 
 `PlayerHealthBarContent`/`PlayerManaBarContent` are near-duplicates (same outline+inset-fill+tick-mark
-shape, differing only in backing component/palette). Tolerable at two copies -- abstract into one
+shape and centred "current / maximum" value text via `ResourceBarValueText`, differing only in
+backing component, palette and how the current value rounds). Tolerable at two copies -- abstract into one
 generic element if a third shows up (e.g. Soul Essence). `MapWindow.DrawHealthBar` is arguably a lighter
 third instance already (same fraction math, no ticks, per-any-entity) -- include it in scope if this is
 ever picked up.

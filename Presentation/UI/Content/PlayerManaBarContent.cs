@@ -5,7 +5,9 @@ using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
+using Presentation.Fonts;
 using Presentation.Rendering;
+using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
@@ -18,7 +20,7 @@ namespace Presentation.UI.Content;
 /// ability yet" (see ManaGrant.EnsureManaComponentExists), the same fallback treatment
 /// PlayerHealthBarContent gives a hypothetical SimpleHealthComponent-less player.
 /// </summary>
-public sealed class PlayerManaBarContent(World world, ComponentManager componentManager) : IElementContent
+public sealed class PlayerManaBarContent(World world, ComponentManager componentManager, FontService fontService) : IElementContent
 {
     public static readonly Vector2 Size = PlayerHealthBarContent.Size;
 
@@ -26,10 +28,15 @@ public sealed class PlayerManaBarContent(World world, ComponentManager component
 
     private readonly MultiComponentPool<StatModifierComponent> _statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
 
+    private readonly ResourceBarValueText _valueText = new();
+
     private Window _hostWindow = null!;
 
     private bool _hasMana;
     private float _manaFraction = 1f;
+
+    /// <summary>The "current / maximum" text the bar draws, or null when the player has no mana to show.</summary>
+    internal string? ValueText => _hasMana ? _valueText.Text : null;
 
     public void Initialize(Window hostWindow) => _hostWindow = hostWindow;
 
@@ -49,6 +56,7 @@ public sealed class PlayerManaBarContent(World world, ComponentManager component
         _manaFraction = effectiveMaximumMana > 0
             ? MathHelper.Clamp(mana.CurrentMana / effectiveMaximumMana, 0f, 1f)
             : 1f;
+        _valueText.Update(ResourceBarValueText.DisplayedMana(mana.CurrentMana), ResourceBarValueText.DisplayedMaximum(effectiveMaximumMana));
     }
 
     public void DrawContent(GameTime gameTime)
@@ -65,5 +73,10 @@ public sealed class PlayerManaBarContent(World world, ComponentManager component
         var outerRectangle = new Rectangle((int)origin.X, (int)origin.Y, (int)contentSize.X, (int)contentSize.Y);
 
         ResourceBarRenderer.Draw(spriteBatch, unitRectangle, outerRectangle, _manaFraction, _hasMana, ManaBarPalette.OutlineColor, ManaBarPalette.FractionColor);
+
+        if (_hasMana)
+        {
+            ResourceBarRenderer.DrawCenteredValueText(spriteBatch, fontService.GetFont((int)(outerRectangle.Height * FontChrome.ResourceBarValueFontFraction)), outerRectangle, _valueText.Text);
+        }
     }
 }

@@ -1,3 +1,4 @@
+using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -23,6 +24,7 @@ public static class ResourceBarRenderer
     private static readonly Color NoResourceColor = Color.LightGray;
     private static readonly float[] MajorTickFractions = [0.25f, 0.5f, 0.75f];
     private static readonly float[] MinorTickFractions = [0.125f, 0.375f, 0.625f, 0.875f];
+    private const int ValueTextRaise = 1;
 
     /// <param name="fraction">Current/effective-maximum, clamped [0,1] by the caller.</param>
     /// <param name="hasResource">False draws NoResourceColor instead of fractionColor(fraction) -- e.g. "no SimpleHealthComponent at all," not merely "empty."</param>
@@ -41,6 +43,18 @@ public static class ResourceBarRenderer
         }
 
         DrawTicks(spriteBatch, unitRectangle, bar, outlineColor);
+    }
+
+    /// <summary>Draws valueText centred on bar in outlined white, on top of whatever Draw put there.</summary>
+    /// <remarks>Raised by ValueTextRaise above true centre so the bottom of the outline clears the bar's bottom border.</remarks>
+    public static void DrawCenteredValueText(SpriteBatch spriteBatch, SpriteFontBase font, Rectangle bar, string valueText)
+    {
+        var textSize = font.MeasureString(valueText);
+        var position = new Vector2(
+            MathF.Round(bar.X + (bar.Width - textSize.X) / 2f),
+            MathF.Round(bar.Y + (bar.Height - textSize.Y) / 2f) - ValueTextRaise);
+
+        ContrastTextRenderer.Draw(spriteBatch, font, valueText, position);
     }
 
     /// <summary>Major ticks (half bar height) at the 1/4, 1/2, 3/4 marks; minor ticks (quarter bar height) at the 1/8, 3/8, 5/8, 7/8 marks -- both flush with the bar's bottom edge (ruler-style graduations), drawn over the fill.</summary>

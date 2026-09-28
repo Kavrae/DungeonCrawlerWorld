@@ -322,7 +322,7 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        playerManaBarWindow.SetContent(new PlayerManaBarContent(world, ecsContext.ComponentManager));
+        playerManaBarWindow.SetContent(new PlayerManaBarContent(world, ecsContext.ComponentManager, presentation.FontService));
         playerManaBarWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerManaBarWindow);
 

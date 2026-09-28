@@ -407,7 +407,7 @@ public sealed class HealthWindow(
         {
             var row = _bodyPartRows[index];
             BuildDivider(parent, width, row.Name, extraSpacingBefore: index > 0 ? BodyPartSpacing : 0f, spacingAfter: BodyPartBarTopSpacing);
-            _bodyPartBars.Add(AddBarRow(parent, width, ComputeFraction(row)));
+            _bodyPartBars.Add(AddBarRow(parent, width, row));
 
             _bodyPartStatusEffectRowWindows.Add(TryGetBodyPartBurningLine(_bodyPartBurningTimers, _entityId, row.PartId, CurrentFrame, out var text, out var color)
                 ? AddTextRow(parent, text, color)
@@ -422,7 +422,7 @@ public sealed class HealthWindow(
         var bodyPartCount = System.Math.Min(_bodyPartRows.Count, _bodyPartBars.Count);
         for (var index = 0; index < bodyPartCount; index++)
         {
-            _bodyPartBars[index].Configure(ComputeFraction(_bodyPartRows[index]), hasResource: true, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor);
+            _bodyPartBars[index].Configure(ComputeFraction(_bodyPartRows[index]), hasResource: true, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor, DisplayedValues(_bodyPartRows[index]));
 
             if (index < _bodyPartStatusEffectRowWindows.Count
                 && _bodyPartStatusEffectRowWindows[index] is { } bodyPartStatusEffectRow
@@ -467,6 +467,8 @@ public sealed class HealthWindow(
     }
 
     private static float ComputeFraction(BodyPartRow row) => row.MaximumHealth > 0 ? MathHelper.Clamp(row.CurrentHealth / row.MaximumHealth, 0f, 1f) : 0f;
+
+    private static (int Current, int Maximum) DisplayedValues(BodyPartRow row) => (ResourceBarValueText.DisplayedHealth(row.CurrentHealth), ResourceBarValueText.DisplayedMaximum(row.MaximumHealth));
 
     /// <summary>
     /// Section-opening divider -- a single labeled TextDivider row, the same 95%-width/12.5%-label-position
@@ -523,7 +525,7 @@ public sealed class HealthWindow(
     /// WindowChrome.Padding on top and bottom instead, letting the bar keep its original BarHeight
     /// exactly, with real breathing room around it rather than being squeezed into a smaller box.
     /// </summary>
-    private FractionBarElement AddBarRow(Window parent, float width, float fraction)
+    private FractionBarElement AddBarRow(Window parent, float width, BodyPartRow bodyPartRow)
     {
         var rowHeight = BarHeight + WindowChrome.Padding * 2;
         var row = ElementPoolService.CreateElement<Window>(parent, new ElementOptions
@@ -547,7 +549,7 @@ public sealed class HealthWindow(
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
         row.AddChild(bar);
-        bar.Configure(fraction, hasResource: true, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor);
+        bar.Configure(ComputeFraction(bodyPartRow), hasResource: true, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor, DisplayedValues(bodyPartRow));
         return bar;
     }
 
