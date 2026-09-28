@@ -12,6 +12,7 @@ using Game.Modules.StatusEffects;
 using Game.World;
 using Game.Modules.Core;
 using Game.Modules.Death;
+using Engine.Modules;
 
 namespace Game.Modules.StatusEffectAura;
 
@@ -27,9 +28,7 @@ namespace Game.Modules.StatusEffectAura;
 /// StatusEffectAuraSystem's own Update always runs after MovementSystem's within the same
 /// SystemManager.Update() cycle, required for it to see this frame's moves via the shared
 /// FrameEventBuffer&lt;EntityMovedEvent&gt; (see that class's own doc comment on why
-/// producer-before-consumer ordering matters). Parameterless, with runtime dependencies
-/// (IMapQuery, the applier registry, the moved-entities buffer) supplied via
-/// IGameModule.Configure.
+/// producer-before-consumer ordering matters).
 /// </summary>
 public sealed class StatusEffectAuraModule : IGameModule
 {
@@ -41,38 +40,21 @@ public sealed class StatusEffectAuraModule : IGameModule
 
     public IReadOnlyList<Guid> RunsAfter { get; } = [MovementModule.ModuleId];
 
-    private IMapQuery _mapQuery = null!;
-    private EventBus _eventBus = null!;
-    private StatusEffectAuraApplierRegistry _applierRegistry = null!;
-    private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
-    private ProcessingTierEvents _processingTierEvents = null!;
-    private SimulationClock _simulationClock = null!;
-    private SimulationScope _simulationScope = null!;
-    private FloatingTextFeed _floatingTextFeed = null!;
-    private Terrain.TerrainRegistry _terrain = null!;
-
-    public void Configure(GameModuleContext context)
+    public void RegisterComponents(ComponentRegistration registration)
     {
-        _mapQuery = context.MapQuery;
-        _eventBus = context.EventBus;
-        _applierRegistry = context.StatusEffectAuraAppliers;
-        _movedEntities = context.MovedEntities;
-        _processingTierEvents = context.ProcessingTierEvents;
-        _simulationClock = context.SimulationClock;
-        _simulationScope = context.SimulationScope;
-        _floatingTextFeed = context.FloatingTextFeed;
-        _terrain = context.Terrain;
-    }
+        var componentManager = registration.ComponentManager;
 
-    public void RegisterComponents(ComponentManager componentManager)
-    {
         componentManager.RegisterMultiPool<StatusEffectAuraSourceComponent>();
         componentManager.RegisterMultiPool<StatusEffectAuraExposureComponent>();
         componentManager.RegisterPackedPool<AuraSourceExpiryComponent>(static (ref existing, incoming) => existing = incoming);
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
+        var context = registration.Context;
+        var systemManager = registration.SystemManager;
+        var componentManager = registration.ComponentManager;
+
         var deadEntities = componentManager.GetPackedPool<DeadComponent>();
 
         systemManager.Register(new StatusEffectAuraSystem(
@@ -80,22 +62,22 @@ public sealed class StatusEffectAuraModule : IGameModule
             componentManager.GetMultiPool<StatusEffectAuraExposureComponent>(),
             componentManager.GetMultiPool<StatusEffectAuraSourceComponent>(),
             componentManager.GetDirectPool<TransformComponent>(),
-            _mapQuery,
-            _eventBus,
-            _applierRegistry,
-            _movedEntities,
+            context.MapQuery,
+            context.EventBus,
+            context.StatusEffectAuraAppliers,
+            context.MovedEntities,
             componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents,
-            _simulationClock,
-            _terrain,
+            context.ProcessingTierEvents,
+            context.SimulationClock,
+            context.Terrain,
             deadEntities,
-            _simulationScope,
-            _floatingTextFeed));
+            context.SimulationScope,
+            context.FloatingTextFeed));
 
         systemManager.Register(new AuraSourceExpirySystem(
             componentManager.GetPackedPool<AuraSourceExpiryComponent>(),
             componentManager.GetMultiPool<StatusEffectAuraSourceComponent>(),
-            _eventBus,
-            _simulationScope));
+            context.EventBus,
+            context.SimulationScope));
     }
 }

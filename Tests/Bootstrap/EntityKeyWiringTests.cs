@@ -13,16 +13,12 @@ namespace Tests.Bootstrap;
 [TestClass]
 public sealed class EntityKeyWiringTests
 {
-    private static readonly DirectoryInfo EmptyModsDirectory = Directory.CreateTempSubdirectory();
-
-    [ClassCleanup]
-    public static void DeleteEmptyModsDirectory() => EmptyModsDirectory.Delete(recursive: true);
-
     [TestMethod]
     public void AnActionsDamageSource_HoldsTheKeyTheEntityManagerIssuedItsCaster()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(40, 40, 3)));
-        var result = GameBootstrapper.Build(world, new MathUtility(new Random(1)), EmptyModsDirectory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var map = new Map(new Vector3Int(40, 40, 3));
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var world = result.World;
         var ecs = result.EcsContext;
         result.ProcessingTierResolver.SetReferencePosition(new Vector3Int(10, 10, (int)MapLayer.Ground));
 

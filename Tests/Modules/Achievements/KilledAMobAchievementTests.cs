@@ -1,5 +1,4 @@
 ﻿using Engine.ECS.Entities;
-using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
@@ -20,17 +19,9 @@ public sealed class KilledAMobAchievementTests
 
     private static (EcsContext EcsContext, EventBus EventBus, Game.World.World World) Build()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-        var eventBus = new EventBus();
+        var build = BuiltInTestModules.BuildModules([new AchievementModule()]);
 
-        var module = new AchievementModule();
-        module.Configure(new GameModuleContext(world, new MathUtility(), eventBus) { PlayerQuery = world });
-
-        IReadOnlyList<IModule> modules = [module];
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus);
-        world.EntityKeys = ecsContext.EntityManager.Keys;
-
-        return (ecsContext, eventBus, world);
+        return (build.EcsContext, build.Context.EventBus, build.World);
     }
 
     [TestMethod]

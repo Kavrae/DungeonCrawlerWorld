@@ -36,6 +36,46 @@ Global), each split High/Medium/Low priority. Landed work lives in `IMPLEMENTATI
 
 ### High Priority
 
+#### Diagnostics wired through named engine hooks
+
+`DiagnosticsEngine` is constructed by the composition root before any session exists, and reaches
+the engine through a separate hand-wired path for each feature:
+- `StartupProfiler` is threaded as an optional parameter through `WorldSessionBootstrapper`,
+  `GameBootstrapper.Build` and `Bootstrapper.Build`, and every step wraps itself in
+  `startupProfiler?.Phase(...)`.
+- Memory and LeakDetection trackers are nullable until `AttachEcsContext` runs after the build.
+  `AttachEcsContext` only constructs a tracker the first time, so a second session in the same run
+  (new game or load from a menu) would keep measuring the first session's pools.
+- `SystemManager.Profiler` and `EventBus.Profiler` are settable null-means-off properties, set by
+  `WorldSessionBootstrapper`. The shell gets `FrameCostRecorder` through `LoadContent`.
+- `GameLoop` and `HeadlessBenchmark` each call `BeginSimulationFrame`, `RecordSimulationTick` and
+  `Tick` themselves, duplicating the frame protocol.
+
+Goal: the engine raises named hooks and diagnostics subscribes to them. Nothing threads a profiler
+through parameters, and no host repeats the frame protocol.
+- Build hooks from the staged bootstrapper (`EcsBuilder`'s stages): each stage and
+  each module's phase start/end. The startup profiler subscribes instead of being passed in.
+- Session hooks: a session's ECS created and torn down. Trackers attach per session and detach
+  when it ends.
+- Frame hooks: simulation frame begin/end around `SystemManager.Update`, raised by the engine rather
+  than by each host.
+- Diagnostics stays opt-in, costing nothing beyond a check when a feature is off.
+
+**Unreal Engine reference:** Unreal Insights is built this way. Engine code declares named trace
+channels (`UE_TRACE_CHANNEL`) and emits scoped events (`TRACE_CPUPROFILER_EVENT_SCOPE`,
+`SCOPED_NAMED_EVENT`) unconditionally; a channel that's off costs one branch. Which channels are on is
+chosen at launch (`-trace=cpu,frame,memory`) or at runtime, and the viewer subscribes to the stream --
+nothing passes a profiler object around. The frame boundary is emitted once by the engine loop, never
+by each host. Worth copying: channels named by feature, a scope helper that compiles to a check when
+off, and one engine-owned frame marker.
+
+**Godot reference:** Godot's debugger adds custom monitors: `Performance.add_custom_monitor("game/streamer_queue",
+callable)` registers a named value that the Monitors tab samples and graphs over time beside the
+engine's own (FPS, memory, object counts). A diagnostics hook for "register a named gauge" -- entity
+count, streamer queue depth, pool fill, gen-1 GC count -- sampled every frame and written to the
+report, would have made the gen-1 GC window-shift investigation ("Gen-1 GC frames during a window
+shift", Game) a graph instead of an inference.
+
 #### Class exceptions: runtime class grants
 
 NPC classes come from spawn rules and fit two fixed class slots. The player's don't: a first class on
@@ -78,6 +118,220 @@ visibility for 1-frame latency (check this is OK for `MovementSystem`'s `Contact
 `SubscribeOnce`/`DispatchBuffered` (`Engine/Events/`) for consistency -- a different mechanism (deferred
 re-entrant handler vs. high-frequency batching), never compared side by side.
 
+**Bevy reference:** Bevy 0.17 split the two mechanisms by name. Buffered, double-buffered events are
+now *Messages* (`MessageWriter<T>`/`MessageReader<T>`): each reader keeps its own cursor, a message
+lives for two frame updates so a reader running earlier in the next frame still sees it, and nothing
+is ever dropped for a reader that runs every frame. Immediate, handler-style events are *Events*,
+delivered to observers when triggered (see "Component lifecycle hooks and observers", above). That
+split is a reasonable target for `FrameEventBuffer` vs `EventBus` here. Pairs with "Deferred
+structural changes" (above), which removes the other reason for same-cycle recording hazards.
+
+#### Console variables and console commands
+
+Settings come only from the command line (`CommandLineSettingsSource`, the one `ISettingsSource`), are
+read once at startup, and can't be changed while the game runs. Admin/debug tools are separate
+hand-wired context-menu entries (see "Consolidate Admin Mode features out of the bootstrappers",
+Presentation). Add:
+- **Console variables:** a `SettingDefinition` that opts in can be read and changed at runtime, with a
+  change notification for the code that caches it. Every change records who set it, so a lower-priority
+  source never overwrites a higher one (a config file never overwrites something typed at the console).
+- **Console commands:** named commands with arguments and help text, registered by modules the way
+  settings are (`SettingsDeclarations`), so a mod can add its own. Admin Mode's tools ("Spawn here",
+  "Apply", "Teleport here", "Regenerate") become commands, with the context menu one way to call them.
+- **A console window:** a text box with history and completion that runs commands and sets variables,
+  available only in Admin Mode (F12).
+- **Command-line parity:** `--exec="cmd; cmd"` runs commands at startup, so a benchmark or bug
+  reproduction can set up its scenario without new flags.
+
+**Unreal Engine reference:** `IConsoleManager` owns every console variable (`TAutoConsoleVariable<T>`,
+declared next to the code that reads it, with help text) and command (`FAutoConsoleCommand`,
+`UFUNCTION(Exec)` on a `UCheatManager`). Each variable tracks the priority of whoever last set it
+(`ECVF_SetByConstructor` < `SetByScalability` < `SetByGameSetting` < `SetByProjectSetting` <
+`SetByDeviceProfile` < `SetByCommandline` < `SetByCode` < `SetByConsole`), and a lower-priority write is
+ignored. Variables can be set from `.ini` sections (`[ConsoleVariables]`, `[SystemSettings]`), the command
+line (`-ExecCmds=`) or the `~` console. `ECVF_Cheat` variables and the whole Cheat Manager are compiled
+out of shipping builds; the equivalent here is gating on Admin Mode. `FConsoleVariableDelegate` is the
+change callback.
+
+**Bevy reference:** Bevy has no console in core (`bevy-console` is third-party), but its one-shot
+systems are a good shape for commands: `world.register_system(spawn_here)` returns a `SystemId`, and
+`commands.run_system_with(id, input)` runs it on demand with the same access to the world as any
+system. A console command would be a registered one-shot system plus parsed arguments, so commands
+and systems share one way of reaching pools.
+
+#### Hierarchical gameplay tags
+
+`Tag` (`Game/Modules/Tag.cs`) is a flat `byte` enum shared by abilities and items. It can't express a
+parent/child relationship (`Damage.Fire.Lava` is also `Damage.Fire` and `Damage`), a mod can't add a
+tag, and nothing keeps a tag in step with what it describes ("Tag.Spell can drift out of sync", Game).
+Build a generic tag facility in Engine:
+- Tags are dot-separated names registered at startup (by modules and mods), interned to small integer
+  ids. Each id knows its parents, so "has `Damage.Fire`" matches `Damage.Fire.Lava`, with an exact
+  match available when a check needs it.
+- A tag container: a small fixed-size set of ids with has-any/has-all/has-none and parent-aware
+  queries. It must be allocation-free and cheap enough for component fields.
+- A tag query: a reusable expression ("any of these, none of those") stored on a definition, used for
+  "this effect requires the target have X and not Y" or "this immunity blocks anything tagged Z".
+- Consumers once it exists: damage types ("Damage types", Game), immunities and status-effect
+  requirements, inventory tabs (today's per-`Tag` tabs), Gameplay Cues (Game), and achievement
+  criteria.
+
+**Unreal Engine reference:** `FGameplayTag` / `FGameplayTagContainer` / `FGameplayTagQuery`
+(GameplayTags module). Tags are registered in `DefaultGameplayTags.ini`, in data tables or natively
+(`UE_DEFINE_GAMEPLAY_TAG`), and live in one tree owned by `UGameplayTagsManager`. `HasTag` matches
+parents; `HasTagExact` doesn't. Containers cache their parent tags so a parent-aware check is a set
+lookup rather than a tree walk. Unreal's containers are `TArray`-backed and allocate, which is fine for
+actors but not here -- use a fixed-capacity inline set instead. Also note Unreal's tag redirects
+(`GameplayTagRedirects` in config): a renamed tag keeps loading from old saves and data, the same
+problem "Data storage" (Global) raises for mod content.
+
+#### Relationships -- links between entities that maintain both sides
+
+Every link from one entity to another is a one-way `EntityKey` in a component (`ActionSource`,
+`DeadComponent.KilledBy`, aura sources), and nothing can ask the other direction ("which auras is this
+entity the source of", "what's in this container") without a scan or a hand-kept index. Cleanup is by
+hand too: `GameBootstrapper` clears aura sources, map footprint and tier membership at
+`EntityDestroying`, and each new link needs its own line there. Planned features add many links:
+equipment and its wearer, container contents, companions and their leader, Torch V2's "attach to a
+specific other entity", claimed spots ("Spatial queries for NPC decisions", Game), an NPC's current
+target, a pet's bonded player ("Entity storage", Global).
+- **A relationship is a pair of component types:** the source side (on the item: "equipped by X") is
+  the one code writes; the target side (on the wearer: "items equipped") is maintained by the engine
+  whenever the source is added, changed or removed. Code never writes the target side.
+- **Cleanup policy per relationship:** when the target is destroyed, either remove the source side
+  from every linked entity (an aura's source dies, the aura stays), or destroy the linked entities too
+  (a container's contents go with it). Declared once on the relationship.
+- **Storage:** the target side is a Multi pool (many sources per target), so it costs nothing on
+  entities with no links.
+- **Across frames and saves** the source side holds an `EntityKey`, as today. Saving and loading remap
+  both sides ("Save and load Beyond neighborhoods", Global).
+- **Skeletons:** a link to a skeleton is allowed; building it doesn't touch its links.
+
+**Bevy reference:** Relationships (0.16). A component marked `#[relationship(relationship_target =
+Children)]` (the built-in `ChildOf`) automatically keeps the matching `#[relationship_target]` component
+(`Children`) on the target up to date, through component hooks. `linked_spawn` on the target side makes
+despawning the target despawn everything related to it. Custom relationships use the same attributes,
+so equipment or containers would be two small components. Bevy allows only one target per source
+component (an entity is `ChildOf` exactly one parent); a many-to-many link is several relationship
+types or an intermediate entity.
+
+#### Component lifecycle hooks and observers
+
+Code that must react when a component is added or removed on any entity has two routes today: pool
+`ComponentChanged` events (Packed and Multi pools only, change-shaped, subscribed by timer wheels and
+stripe sets) and `EntityManager.EntityDestroying` (every entity, whatever it holds). State kept outside
+the pools about an entity (map footprint, aura sources, UI selections, tier membership) has to remember
+to let go at `EntityDestroying`, and CLAUDE.md carries that as a rule because it's easy to miss.
+- **Hooks per component type:** on add, on insert (add or replace), on replace (before the old value
+  goes), on remove, and on destroy, registered with the pool. Cleanup lives next to the component:
+  the map footprint clears in `TransformComponent`'s remove hook, whoever removes it and however the
+  entity is destroyed. The `EntityDestroying` handlers in `GameBootstrapper` and `ShellBootstrapper`
+  move into hooks.
+- **Observers:** handlers subscribed to lifecycle events of a type (every entity) or of one entity
+  (this corpse's contents change, update the open loot window). Presentation subscribes to
+  observers rather than Game pushing to it.
+- **Order and cost:** hooks run synchronously during the write, so they must be cheap and not make
+  structural changes directly (see "Deferred structural changes", below). A pool with no hooks pays
+  one null check.
+- **Components that can only be replaced, not edited in place:** a component marked this way can only
+  change through a whole-value write, so its insert/replace hooks see every change. Candidates:
+  `ProcessingTierComponent`, occupancy markers, spawn record.
+- **Required components:** a component can declare others that must exist alongside it (with default
+  values); adding it adds them. This catches pairs that must always come together, which blueprints
+  and the skeleton list handle by convention today.
+
+**Bevy reference:** component hooks (`#[component(on_add = ..., on_insert = ..., on_replace = ...,
+on_remove = ..., on_despawn = ...)]` or `register_component_hooks`) run synchronously for every
+entity with the component, and receive a `DeferredWorld` that can read and queue commands but not make
+structural changes directly. Observers (`app.add_observer(|event: On<Add, Burning>| ...)`, or
+`commands.entity(e).observe(...)` for one entity) are the subscribable version of the same lifecycle
+events, and also handle custom events, with optional propagation up a relationship (a click bubbling
+from a child to its parent). `#[component(immutable)]` (0.16) makes a component replace-only, so hooks
+see every change. `#[require(B)]` (0.15) inserts `B` with its default whenever `A` is added.
+
+#### Change detection
+
+Knowing that a component changed today means subscribing to a pool's `ComponentChanged` event, which
+fires on every write, costs a delegate call per write per subscriber, and exists only on Packed and
+Multi pools. Things that only need "did it change since I last looked" pay for more than they use or
+compare values by hand: `HealthWindow` and HUD refresh, Presentation caches (`MapTileLayerCache`),
+and perception that could skip recomputing when nothing nearby moved.
+- **Per-component change ticks:** each pool stores, per entity, the frame the component was added and
+  the frame it last changed. Every write through the pool's update path stamps it; no subscriber
+  exists.
+- **Queries:** "added since frame N", "changed since frame N", and a reader for "removed since frame
+  N" (a per-pool list of removals, kept for a frame or two). A system or window remembers the frame
+  it last ran and asks about everything since.
+- **Write only when different:** an update helper that compares and skips the write (and the stamp)
+  when the value didn't change, so a system that rewrites the same value every visit doesn't count as
+  a change.
+- **Cost:** one `uint` per entity per pool that opts in, written on every write. Measure it on the
+  hottest pools with the `phase-performance-testing` skill before turning it on everywhere; opt-in
+  per pool is the fallback.
+- Events stay the tool for "something happened" (damage, death), and for the timer wheels, which need
+  every write.
+
+**Bevy reference:** every component stores `added` and `changed` ticks. `Mut<T>` marks a component
+changed when it's dereferenced mutably, `Ref<T>::is_added`/`is_changed` and the `Added<T>`/`Changed<T>`
+query filters compare against the tick the system last ran at, and `RemovedComponents<T>` reads a
+per-type buffer of removals. `set_if_neq` writes (and marks) only when the value differs. Bevy pays the
+tick cost on every component by default and considers it cheap relative to the systems it lets skip
+work.
+
+#### Named schedules, system sets and run conditions
+
+System order is the module order (`RunsAfter`/`RunsBefore`) plus registration order within a module,
+with `SystemManager.RegisterFirst` for the systems that must lead the frame (`NeighborhoodStreamer`,
+`SpawnMoves`). `BuiltInModulesTests` pins the resulting order. Whether a system runs at all is decided
+inside it (pause is a `GameLoop` skip of the whole ECS; tier gates are in `TieredSystemRunner`). Two
+things are hard to express: ordering a single system against another module's system, and "this
+system doesn't run in this state" (menus, game over, a frozen map).
+- **Named phases** in a fixed order (for example: frame start, input, streaming, decisions, actions,
+  movement, resolution, cleanup). A system declares its phase, and a mod adds systems into a phase
+  without caring about module order. `RegisterFirst` becomes the frame-start phase.
+- **System sets:** a named group of systems (every damage-over-time system, every NPC decision system)
+  that other systems or sets order against, so a mod's DoT runs with the built-in DoTs without naming
+  each one.
+- **Per-system ordering:** `before`/`after` against systems and sets, on top of module order,
+  checked for cycles the same way `RunsAfter`/`RunsBefore` already are.
+- **Run conditions:** a declared predicate on a system or set ("in state Playing", "session not
+  paused", "any events of type X this frame") evaluated by `SystemManager` before running it. A
+  condition on a set is checked once for the whole set.
+- Module order stays for what it's for (registering components and configuring); phases and sets
+  decide system order.
+
+**Bevy reference:** the main schedule runs `First`, `PreUpdate`, `StateTransition`, `FixedUpdate` (as
+many times as the fixed clock needs), `Update`, `PostUpdate`, `Last`, and games add their own schedules.
+Systems join sets (`.in_set(DamageSet)`), sets are ordered with `configure_sets(...).chain()`, and any
+system or set can be ordered `.before()`/`.after()` another. `.run_if(condition)` takes a system that
+returns `bool` (`in_state(GameState::Playing)`, `on_message::<T>`, `resource_changed::<R>`); conditions
+on a set are evaluated once per frame for the set. Plugins add systems into the app's schedules
+without knowing about each other, which is the property wanted for mods here.
+
+#### Deferred structural changes
+
+Spawning, destroying and adding or removing components happen immediately, wherever they're called
+from, and each hazard this causes is handled separately: `SpawnMoves` defers a spawn's move to "this
+frame if the moves are still unread, otherwise next frame", `FrameEventBuffer` throws on a second
+same-cycle `Record`, `NeighborhoodStreamer` orders evictions ahead of promotions, and a system
+iterating a stripe set has to be careful about entities it destroys mid-iteration.
+- **A command queue:** structural changes requested during a system go into a queue and are applied
+  at defined points (between phases, or at the end of the system), in the order requested. Plain
+  value writes to existing components stay immediate.
+- **Ids immediately:** spawning through the queue reserves the entity id at once, so the caller can
+  refer to the new entity (write further components into the queue for it) before it exists.
+- **Deterministic:** application order is request order, so seeds and benchmarks still reproduce.
+- **Outside systems** (Presentation between frames, bootstrapping) changes can still apply directly,
+  or queue and apply at frame start.
+- Needed before "Parallel system execution" (Low): parallel systems can't all make structural changes
+  directly. Pairs with "FrameEventBuffer double-buffering" (above).
+
+**Bevy reference:** `Commands` queue spawns, despawns, inserts and removes, applied at `ApplyDeferred`
+sync points that the scheduler inserts automatically between a system that queues commands and any
+system ordered after it. `commands.spawn(...)` reserves the `Entity` immediately (`reserve_entity`).
+Exclusive systems (`&mut World`) are the escape hatch that applies changes directly.
+`DeferredWorld` (what hooks get) can queue commands but not change structure.
+
 ### Low Priority
 
 #### Partial module replacement
@@ -90,6 +344,93 @@ keep `HealthModule`'s pools and every other system. Open questions: how finely s
 replaced (per system or the whole set), how a replaced system keeps its place in the run order, and
 how a component replacement with a different merge action is checked against what depends on it.
 
+**Bevy reference:** a `PluginGroup` (`DefaultPlugins`) is built by a `PluginGroupBuilder` that can
+replace one plugin (`.set(WindowPlugin { ... })`), remove one (`.disable::<LogPlugin>()`) or insert
+one before or after another (`add_before`/`add_after`). That's replacement at the plugin level only,
+the same granularity as today. Finer replacement in Bevy comes from system sets: a plugin puts its
+systems in a named set, and another plugin can order against, or add a run condition to, that set
+(see "Named schedules, system sets and run conditions", above). A set that a run condition turns off
+while a replacement system runs in the same slot is one way to replace a single system.
+
+#### Reload mods without restarting
+
+`ModuleLoader` already loads each mod DLL into its own collectible `AssemblyLoadContext`, so unloading
+is possible, but nothing uses it: a changed mod means restarting the game. Let Admin Mode reload one
+mod: end the session (or return to a start menu once one exists), unload the mod's context, reload the
+DLL, and rebuild the session through `GameBootstrapper.Build`. Rebuilding the session avoids carrying
+live entities across a changed component layout; reloading inside a running session is out of scope.
+The collectible context only unloads if nothing still references the mod's types: event subscriptions,
+static caches, registered blueprints and `SettingsCatalog` entries all have to go when the session
+does. `WeakReference` on the context is how to test that it actually unloads.
+
+**Unreal Engine reference:** Unreal plugins are modules with an explicit lifecycle
+(`IModuleInterface::StartupModule` / `ShutdownModule`) that must undo everything they registered.
+Live Coding patches changed functions into the running process, but it can't change class layouts
+(new members need a restart), and the older Hot Reload, which swapped whole DLLs, was deprecated
+because leftover references to old types corrupted state. That's the case for reloading at a session
+boundary rather than in place. A `Shutdown`/unregister hook on `IModule`, mirroring Unreal's
+`ShutdownModule`, would make "a mod releases what it registered" explicit.
+
+**Bevy reference:** Bevy doesn't reload code either; plugins are compiled into the app, and
+`bevy_dynamic_plugin` (loading plugins from dynamic libraries) was deprecated and removed. Its hot
+reloading is for assets (see "Data tables for content", Game) and, experimentally (0.17's `hotpatching`
+feature, built on Dioxus's `subsecond`), for changed system function bodies -- not for new components
+or changed layouts. Both point the same way as Unreal: reload data
+freely, reload code only at a boundary.
+
+#### Parallel system execution
+
+`SystemManager.Update` runs every system one after another on the main thread; only neighborhood
+planning uses workers. Systems that touch different pools (regen and NPC decisions, say) could run at
+the same time, and a heavy per-entity loop could split across cores. Only worth it if a profile shows
+the simulation, not rendering or GC, is what's over budget.
+- **Declared access:** each system declares which pools it reads and which it writes. The scheduler
+  runs two systems at once only if neither writes what the other touches, and keeps the declared order
+  otherwise.
+- **Ambiguity detection:** report pairs of systems with conflicting access and no defined order. Even
+  single-threaded that's useful: such pairs are where a harmless-looking registration change alters
+  results.
+- **Parallel loops inside a system:** split a stripe's entity list across workers when per-entity
+  work only writes that entity's own components.
+- **Determinism:** results must not depend on thread timing, so seeds and benchmarks still reproduce.
+  Parallel loops can't draw from a shared random sequence (per-entity reseeding already solves this
+  for builds) or append to shared lists in completion order.
+- **Prerequisites:** "Deferred structural changes" (Medium, above), because systems running at once
+  can't spawn or destroy directly; event publishing that is safe from several threads; and the Debug
+  `SkeletonAccessGuard` becoming thread-safe.
+
+**Bevy reference:** the `MultiThreadedExecutor` reads each system's parameters (`Query<&A, &mut B>`,
+`Res<R>`, `ResMut<R>`) to know its access and runs non-conflicting systems in parallel on the
+`ComputeTaskPool`; exclusive systems (`&mut World`) run alone. `ScheduleBuildSettings {
+ambiguity_detection: LogLevel::Warn }` reports conflicting unordered systems. `query.par_iter_mut()`
+splits one query across threads in batches. Bevy's results can still depend on the order of
+ambiguous systems, which is why the ambiguity report matters as much as the speedup.
+
+#### Content-only mods -- overriding files by path
+
+Mods are DLLs only: `ModuleLoader` looks for `*.dll` and constructs `IModule` types. Replacing a
+sprite, a sound or (once "Data tables for content", Game, exists) a table row means writing and
+compiling a C# project, which excludes most would-be modders, and there's no way to ship art alone.
+- **A mod folder can hold content:** files under a mod's `Content/` override the game's file at the
+  same relative path (`Spritesheets/Wall_Tiles.png`, `SpriteManifest.json`, a loot table), in mod load
+  order, the last mod winning. A mod may contain content, code or both.
+- **Merging for structured files:** a whole-file override is right for images and sounds; for
+  manifests and tables, a mod should add or replace entries by key rather than replace the file, so
+  two mods adding sprites don't erase each other (the same rule as the Data tables item).
+- **One lookup:** every content read goes through a single path resolver that knows the mod stack, so
+  `SpriteSheetService`, fonts, audio and tables don't each learn about mods.
+- **Reported like code mods:** a content file that fails to load is a `ModuleFailure`-style entry with
+  the mod's name, and the game falls back to the base file.
+- Pairs with "Reload mods without restarting" (above): content can reload in place, since it has no
+  type identity to leak.
+
+**Godot reference:** resource packs. `ProjectSettings.load_resource_pack("mod.pck", replace_files =
+true)` mounts a `.pck` or `.zip` into the virtual `res://` file system, and its files replace the
+game's at the same paths for every later load. That's the standard way Godot games take mods, and it
+works for any file type because everything loads through `ResourceLoader` by path. Its weakness is the
+one noted above: two packs that both replace the same file conflict wholesale, so games with many mods
+add their own merge layer for data files.
+
 #### Equipment (Engine)
 
 Slot/equip-unequip mechanics -- move an `InventoryItemStackComponent` stack into a slot, no new storage
@@ -99,58 +440,29 @@ primitive. Companion to the Game/Presentation equipment items below.
 
 ### High Priority
 
-#### One pattern for dependencies created before the pools exist
+#### ProcessingTierResolver.PromotionsHeld set after the session is assembled
 
-Several shared objects have to exist during `IGameModule.Configure`, so modules can keep a reference
-to them, but they read component pools, which only exist once `Bootstrapper.Build` has registered
-the components. Each one bridges that gap its own way:
-- **The fields in the gap:** nullable with `!` at every use, `= null!`, fetched lazily with `??=` on
-  first call, or guarded by a "resolved" flag.
-- **Where the wiring happens:** after the build in `GameBootstrapper.Build`, inside
-  `ProcessingTierModule.RegisterSystems` (so it depends on module order), or on first use.
-- **Tests repeat it by hand.** Tests that build the modules themselves have to redo
-  `GameBootstrapper`'s wiring steps (`BuiltInTestModules`, `TestWorlds.WireOccupancy`). Missing one
-  only shows up at runtime: `EntityStripingTests` hit exactly that with `FloatingTextFeed`.
+`ProcessingTierResolver.PromotionsHeld` is a settable `Func<bool>?`. `WorldSessionBootstrapper` sets
+it to `() => neighborhoodStreamer.IsEvictingBuiltCreatures` once the streamer exists, and
+`ProcessingTierSystem` invokes it every frame. Null means "never held", a silent fallback: a session
+assembled without it lets promotions build creatures while evictions are still freeing storage,
+which is the pool growth the hold exists to prevent (IMPLEMENTATION-NOTES "Evictions before
+promotions").
 
-Goal: one pattern.
-- Each such object is declared in one place and wired once, by a single step that both
-  `GameBootstrapper` and `BuiltInTestModules` run.
-- Fields are non-nullable, and using the object before it is wired fails loudly. No silent
-  "publish nothing" fallback.
-- Keep "every component registers before any system" and CLAUDE.md's rule that allows guards in
-  `Wire` methods.
+Cause: the streamer is built in the exe after population, and it needs the resolver, so the resolver
+can't take the streamer in its constructor.
 
-Designs to weigh:
-- A two-phase interface, such as `IPoolBound.Bind(ComponentManager)`, that `GameModuleContext`
-  enumerates and one bind step calls after `Bootstrapper.Build`.
-- A post-registration hook in `Bootstrapper` itself.
-- Constructing these objects after the build and handing modules a handle to them.
-
-First example: `FloatingTextFeed`. `GameModuleContext` creates it, `GameBootstrapper.Build` wires
-it, and `BuiltInTestModules` wires it again. Its fields are `= null!`.
-
-Others that need the same treatment (surveyed 2026-09-28):
-- `LocalTierRoster`: owned by the context, `Wire` called in `ProcessingTierModule.RegisterSystems`,
-  nullable `_drivingPool`/`_tiers` used with `!`.
-- `ProcessingTierResolver`: owned by the context, `Wire` called in
-  `ProcessingTierModule.RegisterSystems`, nullable `_tiers`/`_transforms` used with `!`.
-- `SimulationScope`: owned by the context, `SetPolicy` called in
-  `GameBootstrapper.WireSimulationScope`.
-- `TimerBasedAuraApplier` and `TimerBasedStatusEffectDisplay`: built in `Configure`, pool fetched
-  with `??=` on first call.
-- `BurningAuraApplier`: built in `Configure`, pools resolved on first call through `EnsurePools`
-  and a `_poolsResolved` flag, nullable fields used with `!`.
-- `World`: built before the ECS, because `FloorBuilder.CreateMap` must run before the build.
-  `GameBootstrapper` then sets `NonBlockingComponents`, `ForceBlockingComponents`, `EntityManager`,
-  `EntityKeys`, `EventBus` and `Terrain` as settable properties. `TestWorlds.WireOccupancy` repeats
-  part of that. It mixes `= null!` and nullable fields.
-- `GameModuleContext.EntityFactory`: a settable property, null until after `Configure`, and null in
-  dry runs and the staging world.
-
-Related, but a different cause, so decide whether each should share the pattern:
-- `EntityFactory`'s own nullable `_tiers`, `_transforms`, `SpawnMoves` and `Skeletons` come from
-  its build-only constructor, not from late wiring.
-- `DiagnosticsEngine.AttachEcsContext` (Engine) attaches diagnostics to an ECS that is built later.
+Direction:
+- Build `NeighborhoodStreamer` inside the build pass, not the exe. After register-first, everything
+  it needs (World, pools, EventBus, resolver, factory, terrain, definitions, a neighborhood-record
+  source) exists by `RegisterSystems`. It stays first in the frame, and
+  `BuiltInSystems_RunInThePinnedOrder` pins it.
+- Break the cycle with state that has one owner. Either the streamer pushes "evicting built
+  creatures" into a small non-null gate created with the context and read by
+  `ProcessingTierSystem`, or `ProcessingTierSystem` takes the streamer directly. No settable
+  delegate, and no null default.
+- Keep new-game and load separate: whatever the streamer needs per session (records, seed,
+  window centre) arrives as session input, not by setting properties afterwards.
 
 #### Paralysis V2 -- body-part-scoped status effects
 
@@ -242,6 +554,35 @@ planning a neighborhood as data on a worker already exist (`NeighborhoodRecords`
 budget); the new generator produces the same plan. Subsumes the seed
 plumbing in "Random map generation v1" below. Needs its own plan.
 
+**Unreal Engine reference:** two Unreal features cover this ground.
+- *PCG framework:* generation is a graph of nodes (sample points, filter, pick from weighted lists,
+  spawn), seeded per component so the same seed always gives the same result. At runtime, "runtime
+  generation" builds cells on a partitioned grid around generation sources (the player) within a radius
+  and discards them when they leave -- the same shape as `NeighborhoodStreamer`, and it also runs
+  generation off the game thread. The ideas worth taking are hierarchical grid sizes (big features
+  decided on a coarse grid, detail on a fine one, like templates first and then tiles) and a seed per
+  cell, never a shared sequence. That's already the rule here.
+- *Level Instances / Packed Level Actors:* an authored chunk of level (a room, a shop, a goblin camp) is
+  saved once and placed many times as a unit. That's the authored-piece half of the Spelunky model:
+  layout templates built from authored room chunks, stored as data (see "Data tables for content",
+  Game), with the generator choosing and placing them.
+- Unreal also ships an experimental Wave Function Collapse plugin, another way to fill a layout template
+  from authored tile adjacency rules.
+
+**Bevy reference:** Bevy's scenes (`DynamicScene`, saved as `.scn.ron`) are its prefabs: a set of
+entities with their reflected components, spawned into the world as a unit, with entity references
+inside the scene remapped to the new ids. An authored room or camp as a scene-like data file (tiles
+plus spawn requests by blueprint Guid) is the same idea as Level Instances. Bevy has no procedural
+generation framework in core.
+
+**Godot reference:** Godot has no generation framework either, but ships `FastNoiseLite` (Simplex,
+Perlin, cellular/Worley, value noise, fractal layering, domain warping), which is the usual building
+block for cave shapes, terrain patches (lava pools, moss) and population density maps. Nothing
+provides noise here yet; a small seeded noise type in `Engine.Math`, sampled from the neighborhood's
+own seed so generation stays order-independent, is enough. Godot's terrain autotiling ("Autotiling
+with terrain sets", Presentation) is the other half: the generator decides *what* each cell is, and
+autotiling decides which edge or corner art it shows.
+
 #### Simplify non-local combat for performance
 
 A Delayed action's windup/telegraph/badge exist for player-visible tactical value -- an off-screen
@@ -281,7 +622,9 @@ doesn't exist yet) plus an actual "use" action.
 - Scroll of Torch's `StatusEffectType.Light` grant is glow-only -- no `IStatusEffectAuraApplier`
   registered for `Light`. Needs a real applier (fog-of-war reveal, light-weakness damage). Also worth
   reconsidering once fog of war lands: today's grant is per-*entity*; a light source reads more
-  naturally anchored to a *location* (see Torch V2 below).
+  naturally anchored to a *location* (see Torch V2 below). The per-tile light level in "Field of view
+  and perception" (High, above) is where the reveal belongs: a Torch writes light into tiles, fog of war
+  and NPC sight read it, and light-weakness damage checks the light level on the victim's tile.
 - `ScrollMasteryEffects.MasteryThreshold` (flat 200) and a synthesized spell's placeholder `ManaCost: 0`
   should scale with the effect's power. Blocked on Action Effects gaining a power-scaling concept.
 
@@ -362,6 +705,114 @@ If every race should have body parts, these come first, then measure again:
 Not yet verified as an A/B: the figures above extrapolate one mixed-population benchmark rather than
 two runs with every race converted each way. Do that A/B before committing to (2), which is the
 expensive one to build.
+
+#### Grid pathfinding and navigation
+
+No pathfinding exists. Creatures move by random adjacent steps (`MovementMode.Random`), and the NPC
+behavior plan's Engage/Flee (`PLAN-npc-behavior-composition.md`) step one tile toward or away from a
+hostile, which gets stuck on the first wall. Every planned feature that sends a creature somewhere needs
+this: `SeekTarget` ("Movement System"), NPCs using shops, mobs looting corpses, corpse-cleanup NPCs,
+companions following through `EndOfLevelStairs`, NPCs avoiding stairs, quest NPCs, and the plan's
+deferred errands.
+- **Path queries over `IMapQuery`:** A* with an octile heuristic (diagonals cost x√2, matching the
+  movement lock), or Jump Point Search on uniform-cost areas. Blocking comes from `IMapQuery.IsBlocking`
+  and structures. Other creatures are dynamic obstacles handled at step time (wait, repath or swap),
+  not baked into the path.
+- **Per-agent cost filters:** one query, different rules per agent -- flyers ignore ground terrain,
+  diggers can pass walls at a cost on `UnderGround`, a lava-immune creature doesn't avoid lava, a
+  cowardly one weights tiles near hostiles (see "MapLayer interaction", Game). Costs come from
+  `TerrainCell` flyweights, so no per-tile nav data is stored.
+- **Flow fields for crowds:** many creatures chasing the player share one Dijkstra map centred on the
+  player (Local radius only, recomputed when the player moves a tile), instead of an A* each. Flee uses
+  the same map, inverted and rescaled (Brogue's "safety map"), which avoids fleeing into corners.
+- **Hierarchical search for long routes:** routes across neighborhoods (a shop 400 tiles away, quest
+  NPCs) search an abstract graph of region entrances first (HPA*), computed per neighborhood when it
+  loads, as part of the worker's `NeighborhoodPlan`. Only Local and Neighborhood tier creatures ever
+  refine it to tiles.
+- **Budgeted and cached:** path requests go through a queue with a per-frame node budget, like the
+  streamer's unit budget, deterministic so benchmarks and seeds reproduce. A path is followed until it
+  is blocked or its target moves more than a set distance, not recomputed every step. A committed path
+  fits the plan's commitment deadlines.
+- **Tier-aware:** Borough and Beyond don't path at all (frozen). A path is invalidated when its
+  neighborhood unloads.
+- **Admin Mode:** draw the selected creature's current path and the flow field (see "Debug drawing
+  and an AI debugger", Presentation).
+
+**Unreal Engine reference:** Unreal's `UNavigationSystemV1` builds a Recast navmesh and searches it with
+Detour. Most of it is 3D geometry work that a tile grid doesn't need, but these ideas carry over:
+- *Nav areas and query filters:* `UNavArea` subclasses give regions a travel and entry cost (or make them
+  impassable), and a `UNavigationQueryFilter` per agent overrides those costs per query. That is the
+  per-agent cost filter above.
+- *Nav links:* `ANavLinkProxy` / smart links join places the mesh doesn't (jumps, ladders, doors), with
+  custom traversal logic. These are stairs and layer changes (Land, Take Off, Burrow) here.
+- *Navigation invokers:* `UNavigationInvokerComponent` builds navmesh only around chosen actors in huge
+  worlds. That's the Local/Neighborhood-only rule here.
+- *Async queries:* `FindPathAsync` runs pathfinding off the game thread and hands back results later.
+  This is the queue above; a worker-thread version is possible if the map can be read safely.
+- *Crowd avoidance:* `UCrowdFollowingComponent` (Detour Crowd) and RVO steer agents around each other.
+  On a grid this reduces to swap/wait rules at step time.
+- *Path following:* `UPathFollowingComponent` owns "walk this path", reports blocked/finished, and
+  requests a repath when the goal actor moves past a tolerance. It's worth keeping this a separate
+  concern from deciding where to go.
+- *Mass AI's ZoneGraph* (lane graphs for thousands of agents) is the analogue of the flow fields and
+  hierarchical graph above.
+
+**Godot reference:** `AStarGrid2D` is the closest built-in model of the three engines. Set a `region`
+and `cell_size`, call `update()`, mark cells with `set_point_solid` and `set_point_weight_scale`, and
+query `get_id_path(from, to)` (with `allow_partial_path` to get as close as possible when the target is
+unreachable). `diagonal_mode` chooses between always, never, at least one walkable neighbour, and
+only if no obstacles (no corner cutting -- the rule wanted here), and the heuristic is selectable
+(Euclidean, Manhattan, octile, Chebyshev). `jumping_enabled` switches on Jump Point Search, but Godot
+ignores weight scales while it's on, which is the same trade-off here: JPS only on uniform-cost areas.
+`AStar2D` is the general-graph version, which fits the hierarchical graph of neighborhood entrances.
+Godot's `NavigationServer2D` also supports navigation layers per tile in a TileSet and
+`NavigationAgent2D` with RVO avoidance, covering the same ground as the Unreal notes.
+
+#### Field of view and perception, shared by fog of war and NPCs
+
+What a creature can see is currently computed ad hoc: the NPC plan's `NpcDecisionContext` counts
+hostiles within a Chebyshev radius regardless of walls, and the player sees the whole map. Three
+planned features need real sight: Fog of War (Presentation), Torch reveal + light-weakness damage
+(above), and NPC behavior, where a goblin shouldn't engage through a wall. Digger detection needs a
+non-visual version. Build one perception facility for all of them:
+- **Field of view:** symmetric shadowcasting over `IMapQuery` (walls and sight-blocking terrain block;
+  the Bresenham helpers in `TargetShapeResolver` are a start for single lines). Symmetric means that if
+  A sees B, B sees A, so neither the player nor an NPC gets an unfair ambush.
+- **Light:** a tile is seen if it's in view and lit, or within a creature's own darkvision radius. Light
+  sources (Torch, lava, later day/night) add to a per-tile light level. This settles Torch's "per-entity
+  grant vs. a location" question: light is a per-tile quantity that sources write into.
+- **Senses as a list:** sight (field of view plus light), hearing (noise events with a radius, raised
+  by combat and movement, blocked or reduced by walls), and touch/damage (anything that hit me). A race
+  declares which senses it has and their ranges; Diggers have tremorsense instead of sight.
+- **Memory:** each perceiving creature keeps its last-known location of what it has perceived, with an
+  age. Losing sight doesn't make a hostile vanish; the NPC goes to the last-known location. This is the
+  "tracking" state in the plan's DCSS/Brogue research.
+- **Factions:** perception reports hostile/neutral/friendly relative to the perceiver, so behavior code
+  asks "hostiles I can see" rather than filtering by race.
+- **Budget:** only Local creatures get real field-of-view checks. Neighborhood tier falls back to a
+  cheap radius, and frozen tiers don't perceive. Computed on the creature's decision visit, not every
+  frame, and cached for that visit like the plan's lazy perception.
+- **Player's view:** the player's field of view is the visible set for Fog of War.
+
+**Unreal Engine reference:** `UAIPerceptionComponent` on the AI controller, fed by
+`UAIPerceptionStimuliSourceComponent` on anything that can be sensed. Senses are separate classes:
+`UAISense_Sight` (sight radius, a larger lose-sight radius for hysteresis, peripheral angle, auto-success
+range from the last seen location), `UAISense_Hearing` (fed by `ReportNoiseEvent` with loudness and
+range), `UAISense_Damage`, `UAISense_Touch` and `UAISense_Team`. Each stimulus has a max age, and the
+component remembers the last sensed location after the stimulus is lost. Attitude comes from
+`IGenericTeamAgentInterface` / `FGenericTeamId` (Friendly/Neutral/Hostile). Sight is budgeted: the
+sense runs a capped number of line traces per tick (`MaxTracesPerTick`) and time-slices the rest, which
+is the same idea as the Local-only budget here. Unreal has no built-in fog of war or 2D light map;
+Paper2D sprites are lit by ordinary 3D lights. For those two, roguelikes are the reference (Brogue's
+light and field of view, "symmetric shadowcasting" by Albert Ford).
+
+**Godot reference:** Godot has the 2D lighting the other two lack (`PointLight2D`, `LightOccluder2D`,
+`CanvasModulate`; see "Visual 2D lighting", Presentation), but it is purely visual -- a light's
+reach isn't queryable by gameplay. Keep the split: the per-tile light level here is the gameplay
+truth (what's lit, what's seen, what burns a light-weak creature), and the visual lighting pass reads
+the same light sources to draw it. The two must agree on radius and falloff, so both read one light
+source definition. Godot TileSets can carry occluder shapes per tile (occlusion layers); here that is
+a "blocks sight" and "blocks light" flag on `TerrainDefinition` (beside `BlocksMovement`), read by both.
 
 ### Medium Priority
 
@@ -517,6 +968,180 @@ Only `DirectDamage` runs both an Outgoing (source) and Incoming (target)
 `StatusEffectGrant`/`ChainedEffect`/`AuraSourceGrant` check neither. Make both checks standard on every
 effect entry's `Apply`, even with no real `StatModifierTarget` consumer yet, so a future buff/equipment
 source can hook in by granting a modifier alone. Calling-convention change, not a new stat.
+
+**Unreal Engine reference:** GAS (Gameplay Ability System) makes this the only path. Every change goes
+through a `UGameplayEffect` spec, and an effect that needs both sides runs a
+`UGameplayEffectExecutionCalculation`, which declares the source and target attributes it captures
+(`DECLARE_ATTRIBUTE_CAPTUREDEF`). Each capture is either a *snapshot* (value when the spec was made,
+e.g. the caster's Strength when the fireball launched) or live (value on application). That choice is
+worth making explicit per effect entry here, since a Delayed action resolves seconds after it was
+cast. Each effect also carries tag requirements (`ApplicationTagRequirements`, source/target tag
+requirements on modifiers), so "only while the target is Burning" is data, not code -- see
+"Hierarchical gameplay tags" (Engine). Damage usually goes through a *meta attribute* (`IncomingDamage`):
+the execution writes a raw number, and one place (`PostGameplayEffectExecute`) applies shields,
+resistances and Health. That corresponds to `HealthDamage.Apply` being the one chokepoint.
+
+#### Spatial queries for NPC decisions, and a per-NPC blackboard
+
+The NPC plan's behaviors (`PLAN-npc-behavior-composition.md`) decide *whether* to engage, flee or wander
+through dual utility, but not *where*: Flee picks "away", Wander picks a random adjacent tile, and
+nothing can ask for "a tile out of melee reach but within spell range", "a tile behind an ally", "the
+nearest shop that buys potions" or "a corpse I have rights to loot". Add a small query facility:
+- **A query is data:** a generator (tiles in a radius, tiles on a ring, entities of a kind nearby, a
+  path's tiles) plus a list of tests that filter or score each candidate (distance to X, can see X, path
+  length, danger from the flow field, occupied, terrain cost), plus a pick rule (best, weighted random
+  among the top N%). Behaviors and grants name a query rather than writing the search.
+- **Evaluated in the decision visit** with a candidate cap, on the same cached perception, so it costs
+  what the plan already budgets.
+- **Claimable spots:** things NPCs use (a shop counter, a corpse being looted, a bed, a Dread Idol's
+  worship spots) advertise slots that an NPC claims before walking over and releases after. Two
+  goblins don't both walk to loot the same corpse, and "NPCs use shops" queues rather than piling up.
+  Also the natural home for the plan's deferred errands.
+- **Blackboard:** the cached perception and commitment state in `NpcDecisionContext` is a per-decision
+  blackboard today. Anything that must outlive a decision (the current target's `EntityKey`, the
+  last-known location from perception, a claimed slot) needs a small per-NPC component rather than
+  per-creature objects (the plan's GC point about Caves of Qud's goal stacks).
+
+**Unreal Engine reference:**
+- *EQS (Environment Query System):* `UEnvQuery` assets made of a generator (`EnvQueryGenerator_SimpleGrid`,
+  `_OnCircle`, `_ActorsOfClass`, `_PathingGrid`) and tests (`Distance`, `Trace`, `Pathfinding`, `Dot`,
+  `GameplayTags`) that each filter, score or both, with contexts (the querier, its target) to measure
+  from. Run modes: single best, random among the best 5% or 25%, or all matching. Queries run
+  time-sliced over several frames. Behavior trees and StateTree call them as a task.
+- *Smart Objects:* `USmartObjectComponent` defines slots on an object; an AI finds one with
+  `USmartObjectSubsystem::FindSmartObjects` (filtered by tags), claims it, uses it (the slot supplies the
+  behavior to run) and releases it. This is exactly the claimable-spot idea above, and it's designed to
+  work with Mass for large crowds.
+- *Blackboard:* `UBlackboardComponent` is a typed key/value store per AI; behavior tree decorators
+  watch keys and abort a running branch when one changes (observer aborts). The plan's utility
+  arbitration replaces the tree, but "re-decide immediately when my target key changes" is a useful
+  interrupt rule to keep in mind.
+- Unreal has no built-in utility AI. The utility arbitration the plan already chose stays; EQS and
+  Smart Objects are complements, not replacements.
+
+#### Gameplay Cues -- presentation feedback raised by gameplay
+
+"User feedback for actions is missing entirely" (Low, below) and every effect that should be seen or
+heard need gameplay to announce *that something happened* without Game knowing how Presentation will
+show it. Floating text (`IMPLEMENTATION-NOTES.md`, "Floating Text") already works this way for damage
+taken, but through its own event. Generalize it:
+- A cue is a tag (see "Hierarchical gameplay tags", Engine) plus a small payload: where (entity or
+  tile), who caused it, a magnitude, and whether it's a one-shot or a start/stop pair (a Burning loop
+  starts when the status is added and stops when it's removed).
+- Game raises cues from the chokepoints that already exist (`HealthDamage`, status effect grant and
+  expiry, action windup start, activation, cancel, Dodge success, Immune). One cue event type instead of
+  one event per feature.
+- Presentation maps cue tags to handlers: floating text, a sprite flash, a particle effect (see
+  "Particles", Presentation), a sound (see "Audio", Presentation). A tag with no handler does nothing,
+  and a parent tag's handler serves children without their own (`Cue.Damage` for any damage type until
+  `Cue.Damage.Fire` gets its own).
+- Culled like floating text: only Local, only in the viewport, so off-screen fights raise cheaply or
+  not at all.
+- Mods add cue tags and Presentation handlers for their own effects.
+
+**Unreal Engine reference:** GAS Gameplay Cues. A cue is identified by a `GameplayCue.*` tag and fired
+from a gameplay effect or ability (`ExecuteGameplayCue` for one-shots, `AddGameplayCue`/`RemoveGameplayCue`
+for looping ones) with `FGameplayCueParameters` (location, instigator, effect causer, magnitude).
+`UGameplayCueManager` maps tags to handlers: `UGameplayCueNotify_Static` (stateless, for one-shots)
+and `AGameplayCueNotify_Actor` (spawned and kept alive for a looping cue, receiving
+OnActive/WhileActive/Removed). A tag with no exact handler falls back to its nearest parent's. Cues are
+cosmetic by contract -- gameplay never waits on or reads them -- which is the same boundary as
+Game → Presentation here.
+
+**Bevy reference:** Bevy has no cue system; the idiomatic version is an entity-targeted event
+triggered from gameplay and handled by observers in the rendering and audio plugins (see "Component
+lifecycle hooks and observers", Engine). A looping cue maps onto a marker component whose add and
+remove hooks start and stop the effect, which keeps start/stop pairs from getting out of step.
+
+**Godot reference:** the handlers Godot games typically hang off such events are cheap and effective:
+a white flash on the hit sprite (a `CanvasItem` shader parameter or `modulate` tweened back -- see
+"Sprite shaders and tinting", Presentation), a short screen shake (`Camera2D.offset` jittered and
+decayed by a tween), and hit-stop (a few frames of reduced `Engine.time_scale` -- here, a presentation
+freeze, never a simulation one). `MapCamera` has zoom levels but no offset or smoothing to shake with;
+adding a decaying offset is the smallest piece.
+
+#### Data tables for content
+
+Content that is really a table is written as C# today: loot box contents (`RandomSingleStackContents`),
+shop stock, prices, per-race baseline scores, achievement criteria. Several planned items are tables or
+curves: "Lootbox drop tables", "Preferred stock for items added to shops", "CVS (Cosmic Value Shop)
+general store", "Achievement content backlog", Dexterity → `StandardLockFrames` ("Dexterity scaling
+ActionLockComponent.StandardLockFrames"), Intelligence → durations, falloff shapes. Add a data table
+facility:
+- A table is a list of rows of one struct type, keyed by name or Guid, loaded from JSON in `Content/`
+  the way `SpriteManifest.json` is. Rows reference other content by Guid (items, blueprints, tags).
+- Curves: a list of (x, y) keys with an interpolation mode, sampled by a stat (Dexterity 1..300 →
+  0.5 s..1 s). This replaces hand-written formula constants and makes scaling tunable without a
+  rebuild.
+- Mods add rows, or add a table that overrides rows of a built-in one by key, in load order -- the same
+  replace-by-Id rule `ModuleSet.Combine` and `BlueprintRegistry` already use.
+- Validated at load, as part of each mod's dry run: a row referencing a missing Guid fails the load.
+- Blueprints stay C# (their `Build` steps are code); this is for rows of numbers and references.
+
+**Unreal Engine reference:** `UDataTable` (rows of one `FTableRowBase`-derived struct, keyed by
+`FName`, imported from CSV or JSON), `UCurveTable` and `UCurveFloat` (keyed curves with per-key
+interpolation, sampled with `Eval`). `UCompositeDataTable` stacks several tables, and a later table's
+row replaces an earlier one's with the same key -- exactly the mod-override rule above.
+`UPrimaryDataAsset` plus the Asset Manager give content stable ids (`FPrimaryAssetId`) and let it be
+found and loaded by type. Designers edit these without touching code, which is the goal here for loot,
+shops and scaling.
+
+**Bevy reference:** the asset server adds what Unreal's tables need the editor for: hot reloading
+while the game runs. `asset_server.load("loot/alchemist.ron")` returns a `Handle<T>` at once and loads
+in the background through an `AssetLoader` for that file type; with the `file_watcher` feature, editing
+the file reloads it and raises `AssetEvent::Modified`, and systems holding the handle see the new
+data next frame. For here: tables load through one loader per table type, a file watcher in Debug
+reloads a changed table between frames, and anything that caches derived data from a table listens
+for the reload. Tuning a drop table or a scaling curve then needs no restart.
+
+**Godot reference:** custom `Resource` classes (saved as `.tres`) are Godot's data definitions, and
+their default is the rule this project already follows for GC reasons: loading the same resource path
+twice returns the *same* object, shared by everything that uses it, and a per-instance copy is an
+explicit opt-in (`resource_local_to_scene`, `duplicate()`). Tables should load the same way -- one
+immutable instance per definition, referenced, never copied per creature. `ResourceLoader.load_threaded_request`
+loads in the background and is polled for completion, which fits loading a neighborhood's tables on
+the streamer's worker.
+
+#### Game flow -- start menu, session states, floor transitions
+
+The game goes straight into a world session at launch, and several planned items need defined states
+around it: a start menu ("Show module load failures on the start menu", Presentation), a game over
+state ("Game over screen on player 0 HP", Presentation), the level collapse timer, floor changes
+through `EndOfLevelStairs`, and the long-range teleport's "pause and reload the map". Today's pause
+modalities (see Pause modality, `IMPLEMENTATION-NOTES.md`) cover pausing within a session only.
+- **States:** start menu, loading, playing, paused, floor transition, game over. Each defines what
+  updates (simulation, UI, streaming) and what input does. `GameLoop.Update` asks the current state
+  instead of checking flags.
+- **Session vs. run:** a run spans floors; a world session is one floor. State that lives across floors
+  (the player's entity and inventory, crawler number, achievements, meta-progression) belongs to a
+  run-level object that outlives any `EcsContext`, not to a session. The multi-floor seam
+  (`FloorBuilder.CreateMap`'s `floorNumber`) and "Save and load Beyond neighborhoods" (Global) both
+  need this split.
+- **Transitions:** tearing down a session and building the next one is one operation with a loading
+  state in between, also used by "Reload mods without restarting" (Engine) and a future "load game".
+
+**Unreal Engine reference:** Unreal's gameplay framework separates these roles:
+- `UGameInstance` lives for the whole process and survives map changes -- the run-level object.
+  `UGameInstanceSubsystem`s hang run-level services off it.
+- `AGameModeBase` holds the rules of the current map; `AGameMode` adds a match state machine
+  (`WaitingToStart`, `InProgress`, `WaitingPostMatch`, `LeavingMap`). `AGameStateBase` holds the state
+  everyone can see (time left, the level collapse timer).
+- `APlayerController` (input and UI for a player) is separate from the `APawn` it controls, so the
+  player's body can die, be replaced or be possessed while the controller and its UI stay.
+  `APlayerState` holds per-player data that survives the pawn.
+- Map changes are `OpenLevel` (a hard load) or seamless travel through a transition map; either way,
+  anything not on the Game Instance is destroyed. That's the rule the session/run split above enforces.
+- `UWorldSubsystem` is per-map, the equivalent of per-session services.
+
+**Bevy reference:** States. `init_state::<GameState>()` adds an enum state; systems in `OnEnter(S)` /
+`OnExit(S)` / `OnTransition { exited, entered }` schedules run once on each change; `.run_if(in_state(S))`
+limits ordinary systems to a state; `NextState<S>` requests a change, applied at a fixed point in the
+frame (`StateTransition`). `SubStates` exist only while a parent state is active (Paused only inside
+Playing), and `ComputedStates` are derived from others. `DespawnOnExit(S)` (formerly `StateScoped`) on
+an entity despawns it when the state is left, which is a tidy rule for UI and per-state entities (the
+game-over screen, a floor's contents on a floor transition). Bevy has no run-level object like
+`UGameInstance`; resources simply persist across states unless removed. Pairs with "Named schedules,
+system sets and run conditions" (Engine), where "in state X" is a run condition.
 
 ### Low Priority
 
@@ -915,6 +1540,17 @@ Constitution->potion-cooldown. Needs an `ActionEffect` duration field as a real 
 
 No concept exists -- every hit is undifferentiated. Starting set: Magic, Blunt, Explosive, Slashing.
 
+Model damage types as hierarchical tags ("Hierarchical gameplay tags", Engine) rather than an enum:
+`Damage.Physical.Blunt`, `Damage.Magic.Fire`, so a resistance to `Damage.Magic` covers every magic
+subtype and a mod adds `Damage.Magic.Void` without touching Game. Resistances and vulnerabilities are
+stat modifiers conditioned on a tag, applied in the Incoming pass ("Add source and target modifier
+checks for all actions", Medium).
+
+**Unreal Engine reference:** Unreal's old `UDamageType` classes (passed to `ApplyDamage`) were one class
+per type with no hierarchy or data; GAS projects replaced them with damage-type gameplay tags on the
+effect spec, read by the damage execution calculation to look up a matching resistance attribute.
+The tag approach is the one to follow.
+
 #### Level collapse timer
 
 Global per-floor countdown pressure mechanic (not a `CountdownTicker` variant -- those are
@@ -945,10 +1581,31 @@ Follow-ups to the temporary `TestCombatBehaviorSystem` stand-in (`IMPLEMENTATION
   directly to know a turn's claimed -- doesn't scale as action types grow. Needs a single shared
   "turn claimed" marker any decision system can set/check generically.
 
+Planned in `PLAN-npc-behavior-composition.md`. Behaviors that move need "Grid pathfinding and
+navigation" (High) -- today's Engage/Flee steps get stuck on walls -- and "can I see it" needs "Field
+of view and perception" (High). "Where to go" (flee to which tile, which shop, which corpse) is
+"Spatial queries for NPC decisions" (Medium).
+
+**Unreal Engine reference:** Unreal's decision layers are Behavior Trees (with a Blackboard) and the
+newer StateTree; neither is utility-based, and the plan's dual utility stays. What maps across:
+- *The "turn claimed" marker* is how GAS gates abilities with tags: an active ability adds tags to its
+  owner (`ActivationOwnedTags`), and others list tags that block them (`ActivationBlockedTags`) or that
+  they cancel (`CancelAbilitiesWithTag`). "A turn is claimed" is then a tag any system can check,
+  rather than a list of queues. The same mechanism would express Stagger locking actions while
+  allowing Dodge.
+- *StateTree* keeps a small hierarchy of states with enter conditions and transitions, evaluated when
+  something changes rather than every tick. It's a model for the plan's "small activity slot later if
+  needed" (errands: go to shop, buy, return).
+- *Mass AI* (`MassEntity`, Unreal's ECS) runs crowds with LOD processors that update distant agents less
+  often -- the same idea as processing tiers, confirming the tier design rather than adding to it.
+
 #### User feedback for actions is missing entirely
 
 Casting, cancelling, AOE/melee landing, status effects applied -- no player-visible feedback beyond the
-state change itself. No design yet.
+state change itself. The mechanism is "Gameplay Cues -- presentation feedback raised by gameplay"
+(Medium, above): Game raises a tagged cue at each of these points, and Presentation chooses what to
+show (flash, floating text, particles, sound). What's still undesigned is the feedback itself, per
+event. Floating text already covers damage taken.
 
 #### Corpse decay/destruction and destructible terrain
 
@@ -990,7 +1647,9 @@ store keyed by (entityId, bodyPartId) for the part-scoped case. Feeds the Health
 
 #### Movement System
 
-`SeekTarget` movement mode.
+`SeekTarget` movement mode. Needs "Grid pathfinding and navigation" (High): seeking a target that
+isn't in a straight line needs a path, plus a path-following step that repaths when blocked or when
+the target moves (Unreal separates these as `UPathFollowingComponent` and the navigation query).
 
 #### Lootbox delivery, and moving Lootbox out of Achievements
 
@@ -1014,6 +1673,11 @@ Replace it with real drop tables: type decides which items can appear (Alchemist
 weapons, ...), rarity decides their value (e.g. a Gold value budget per rarity), and a box can be either
 set contents (specific rewards) or a random pull from its table. Needs higher-value items to exist
 before rarities above Gold mean anything -- today every item is worth 1-20 Gold.
+
+Author the tables as data ("Data tables for content", Medium): one row per entry (item Guid, weight,
+stack range, rarity), a table per box type, and mods adding rows or overriding a table by key. Unreal
+projects typically do drop tables as a `UDataTable` of weighted rows, with a `UCompositeDataTable` to
+layer expansion or mod rows over the base table.
 
 #### Advanced boss loot box awards
 
@@ -1098,6 +1762,11 @@ Hand-authored, independent of `IActionActivator` -- nothing enforces it, and `Sp
 trusts it alone. Either drop `Tag.Spell` and key off `action.Activator is SpellActivator` directly, or
 keep it as an independent classification but have `SpellActivator`/its registration apply it
 automatically so a definition can't forget it.
+
+"Hierarchical gameplay tags" (Engine) is the general fix: tags become registered, parent-aware names
+(`Action.Spell.Fire`), and a spell activator grants `Action.Spell` automatically. Unreal's GAS does the
+same: an ability's `AbilityTags` are declared on the ability class itself, so the classification can't
+live somewhere separate from what it describes.
 
 #### Boundary-aware ProcessingTierSystem recompute
 
@@ -1209,7 +1878,9 @@ and a trailing "+" tab for custom user-created tags.
 #### Game over screen on player 0 HP
 
 `HealthDamage.Apply`/`DeathSystem`/`DeadComponent` exempt the player from death today since there's no
-end-state UI. Build this before lifting that exemption.
+end-state UI. Build this before lifting that exemption. Game over is one state of "Game flow -- start
+menu, session states, floor transitions" (Game, Medium): the simulation stops, the map stays drawn
+behind the screen, and "new run" goes through the same session teardown and rebuild as a floor change.
 
 #### TextBox context menu wiring, and "Bind To..." sub-menu
 
@@ -1259,7 +1930,25 @@ entry. Two parts:
 Needs a frame-sequence concept `SpriteComponent`/`SpriteManifest` don't have yet (one cell per
 entity today, chosen once at build). Scope to Local tier -- nothing off-screen should pay for
 animation state. Pairs with the AI-generated sprite item (Medium, below), which would be the natural
-point to author walk/action frames.
+point to author walk/action frames. The frame sequence and the position lerp are "Animation
+primitives -- flipbooks, tweens and curves" (Medium, below).
+
+**Unreal Engine reference:** Paper2D's `UPaperFlipbook` is a list of sprite keyframes, each held for a
+number of frames, played at a frames-per-second rate by a `UPaperFlipbookComponent` that can loop, play
+once or be scrubbed to a position -- the "drive the windup off the charge fraction" idea is scrubbing
+(`SetPlaybackPositionInFrames`). A character switches flipbooks by state (idle, walk, attack); Paper2D
+leaves that switch to game code, and PaperZD (a popular plugin) adds an animation state machine for
+2D. Paper2D's own flipbook-per-direction convention (one flipbook each for up/down/left/right) is the
+usual answer for facing.
+
+**Bevy reference:** the walking lerp is where Bevy's fixed timestep matters. Simulation runs in
+`FixedUpdate` at a set rate while rendering runs every display frame, and `Time<Fixed>::overstep_fraction()`
+says how far the renderer is between two simulation steps; drawing a moving sprite at
+`lerp(previous, current, overstep)` makes movement smooth on a 144 Hz display while the simulation
+stays at 60. Here the simulation and rendering share FNA's fixed step, so this only matters if the
+two are ever separated -- but keeping "previous position" and "current position" as the inputs to the
+walking lerp keeps that door open. Sprite-sheet animation in Bevy is a `TextureAtlas` index advanced by
+game code (an example, not a built-in); `bevy_animation`'s curves and animation graphs target 3D.
 
 #### Sprites taller than one tile, and two-tile walls (front + top)
 
@@ -1295,6 +1984,50 @@ needed.
 Related: Per-entity sprite scale and Multi-tile sprites (both Low) -- a larger player sprite is the
 first real consumer of this.
 
+**Godot reference:** already researched in `PLAN-tall-sprites-and-wall-tops.md`, which cites Godot's
+Y-sort (`y_sort_enabled`: siblings draw in order of their origin's Y, so the sprite's origin must be its
+feet, not its top-left). The other Godot pieces that apply: `z_index` for things that must break the
+row order on purpose (a flying creature's shadow under everything, a spell effect over everything),
+and `CanvasLayer` for layers that never sort with the world (the HUD). "Autotiling with terrain sets"
+(below) extends the plan's Phase 5 linked wall tops beyond walls.
+
+#### Autotiling with terrain sets
+
+`PLAN-tall-sprites-and-wall-tops.md` Phase 5 joins wall tops with a 4-bit neighbour mask (16
+variants, N/E/S/W). Everything else is still one sprite per `TerrainCell` regardless of what's next
+to it: a lava pool is a grid of identical squares, and where floor meets water there's no edge. Real
+map generation ("Real map generation -- neighborhood templates", Game) will make this much more
+visible, since generated shapes are irregular.
+- **Terrain sets:** a terrain type (water, lava, moss, dirt) declares a set of variants keyed by which
+  neighbours share its terrain. Sides only (16 variants, the Phase 5 case), or corners and sides (the
+  47-variant "blob" set, needed for concave corners to look right).
+- **Transitions between terrains:** several terrains in one set (floor, dirt, water), with variants
+  for where two of them meet, so a water edge is drawn from the water side onto the floor.
+- **Chosen when the cell changes, not every frame:** the variant is computed when a neighborhood
+  loads (on the worker, in the plan) and recomputed for a cell and its 8 neighbours when a cell
+  changes (destructible terrain), then stored in `TerrainCell.Variant` the way random variants are
+  today. Drawing stays a lookup, and `MapTileLayerCache` invalidates as it does now.
+- **Across neighborhood edges:** a cell on the border needs its neighbour's terrain. Either plan the
+  border row with the adjacent record's decided edge (the rolling plan already decides shared
+  edges), or re-tile border cells when the neighbour loads.
+- **Per-cell data on the flyweight:** movement cost, blocks sight, blocks light, flammable -- as
+  fields on the terrain definition rather than code checks by type, read by pathfinding and
+  perception. `TerrainDefinition` already carries `BlocksMovement`, `ContactHazard` and `Aura`;
+  this is making it the rule for every per-terrain property.
+- **Tile animation:** a terrain can declare frames with durations (lava, water, torches on walls),
+  advanced by presentation time with a per-cell random start so a pool doesn't pulse in unison.
+  Needs `MapTileLayerCache` to redraw animated cells, or to draw them in a separate pass.
+- `DevTools/SpriteManifestBuilder` needs an editor for these sets, the way Phase 5 adds linked sets.
+
+**Godot reference:** a Godot `TileSet` has *terrain sets*, each in one of three modes -- match corners
+and sides, match corners, or match sides -- containing one or more terrains. Each tile is painted with
+*peering bits* saying which terrain it expects at each side and corner, and `set_cells_terrain_connect`
+/ `set_cells_terrain_path` pick, for every changed cell and its neighbours, the tile whose bits match.
+Several terrains in one set give transitions. TileSets also have *custom data layers* (typed per-tile
+fields read with `TileData.get_custom_data`), *physics, navigation and occlusion layers* per tile, and
+*animated tiles* (frame columns, per-frame durations, and a random-start mode so neighbours don't
+animate in sync). RimWorld's linked atlas, cited in the plan, is the sides-only case of the same idea.
+
 #### Show "Self" as the source when an entity is its own source
 
 A `ActionSource` created from the entity the effect landed on renders as that entity's own name
@@ -1316,6 +2049,64 @@ Fold the two copies of the logic into one while doing it: `ModifierDisplayFormat
 Entity-vs-`ToString()` switch written twice, and `SecondaryInventoryWindow.ResolveKillerName` is a
 third partial copy (the corpse "killed by" line -- suicide/self-kill should read "Self" there as well).
 `ActionSource.ToString()` stays as-is: it's diagnostics with no subject to be relative to.
+
+#### Input actions and mapping contexts
+
+Keys are hardcoded where they're handled: around 50 `Keys.*` checks across `UiInputController`,
+`PlayerMovementController`, `ActionTargetingController`, `MapWindow` (hotkeys), `HotkeySlotLayout` and
+`TextBox`. What a key means in which situation (typing in a text box, a context menu open, targeting,
+normal play) is decided by the order of those checks. Several items need one input layer: "Keybindings
+page on the options menu", "Targeted key-press routing instead of a full-keyboard scan", "Diagonal
+movement input timing", and the input buffer (`PlayerInputBuffer`), which is built by hand for movement
+and activations.
+- **Input actions:** named, typed actions (`Move` as a 2D vector, `Hotkey3`, `Dodge`, `ToggleInventory`,
+  `Cancel`, `ToggleAdminMode`) that code binds to. Code never names a key.
+- **Mapping contexts:** sets of key → action bindings with a priority, pushed and popped as the
+  situation changes (Gameplay, Targeting, Menu, TextEntry, Admin). A higher-priority context that
+  maps a key consumes it, so a focused text box swallows `I` without every window checking focus. The
+  focused element or controller pushes its context instead of scanning the keyboard.
+- **Triggers:** when an action fires -- pressed, released, held for N frames, tapped (released within
+  N frames), double-tapped, a chord (Shift+click) -- declared on the binding, not reimplemented per
+  handler. Today's double-tap auto-target and re-press-confirms rules become triggers.
+- **Buffering:** `PlayerInputBuffer`'s newest-wins 0.25 s window becomes a property of an action,
+  applying to any action that opts in, not just movement and activations.
+- **Rebinding:** bindings are data (defaults in `Content/`, user overrides persisted through "Data
+  storage" and "Layered config files", Global). The keybindings page edits the user's layer, and
+  conflicts are reported per context (the same key in Gameplay and Targeting is fine; twice in
+  Gameplay isn't).
+- **Mouse and later gamepad** go through the same actions, so a gamepad needs bindings, not new code.
+
+**Unreal Engine reference:** Enhanced Input. `UInputAction` assets have a value type (bool, 1D, 2D,
+3D axis). `UInputMappingContext` assets map keys to actions, and are added to or removed from the local
+player (`UEnhancedInputLocalPlayerSubsystem::AddMappingContext`) with a priority; a higher-priority
+mapping of the same key consumes it by default. Each mapping has *modifiers*, which transform the raw
+value (`Negate`, `Swizzle` -- how WASD becomes one 2D `Move` vector -- dead zones, scaling), and
+*triggers*, which decide when it fires (`Pressed`, `Released`, `Hold`, `HoldAndRelease`, `Tap`, `Pulse`,
+`ChordedAction`, `Combo` with per-step time windows). Handlers bind to trigger events (`Started`,
+`Ongoing`, `Triggered`, `Completed`, `Canceled`). Rebinding is `UEnhancedInputUserSettings` with
+player-mappable key profiles (UE 5.1+), saved per user, each mapping named so a rebind survives changes
+to the default contexts. Unreal has no built-in input buffer; Souls-like Unreal games add one on top of
+the `Triggered` events, which is where `PlayerInputBuffer` would sit.
+
+**Bevy reference:** core Bevy input is key-level only (`ButtonInput<KeyCode>` with `pressed` /
+`just_pressed` / `just_released`), like FNA's today. The action layer is the third-party
+`leafwing-input-manager`: an `Actionlike` enum of actions, an `InputMap` binding keys, chords and
+virtual D-pads (four keys → one 2D value) to them, and an `ActionState` component queried for
+`just_pressed(Action::Dodge)` and hold durations. Several `InputMap`s can be active on different
+entities, and clashes between a chord and its parts (Shift+S vs S) are resolved by a clash strategy.
+It's closer in size to what's needed here than Enhanced Input, and a smaller model to copy.
+
+**Godot reference:** Godot's contribution is event routing rather than binding. Every input event goes
+through a fixed chain -- `_input` → GUI (`Control._gui_input`, topmost control first) →
+`_shortcut_input` → `_unhandled_key_input` → `_unhandled_input` -- and any handler calling
+`set_input_as_handled()` stops it. Windows get first refusal, and gameplay reads only what no
+window consumed. That's a simpler way to get what mapping-context priority gives, and it matches how
+`UiInputController` already hands events to UI before gameplay; the missing piece is making "consumed"
+explicit instead of implied by check order. Actions are named in `InputMap` and queried with
+`Input.is_action_just_pressed`, and `Input.get_vector(left, right, up, down, deadzone)` combines four
+actions into the 2D `Move` value. `Input.parse_input_event(InputEventAction)` injects a synthetic action
+as if a key were pressed, a ready shape for "Replay by recording input" and "In-world scenario tests"
+(Global).
 
 ### Medium Priority
 
@@ -1360,6 +2151,12 @@ the scattered `GlobalState.IsAdminModeOn` reads that change what windows show (t
 scores, admin inspection); those are display rules, not tools. The admin blueprint menus and
 "Teleport here" stay -- this only changes how they're wired.
 
+"Console variables and console commands" (Engine, Medium) gives the collection its shape: each admin
+tool is a registered command, the context menu is one way to invoke it and the console another, and
+a mod's admin tools register the same way. This follows Unreal's `UCheatManager`, where each cheat is
+a `UFUNCTION(Exec)` on one object that exists only in non-shipping builds, instantiated for the
+player controller, callable from the `~` console and from UI.
+
 #### Draw neighborhood borders and the Local radius in Admin Mode
 
 The map gives no sign of where one 1024x1024 neighborhood ends and the next begins, or where the
@@ -1380,6 +2177,10 @@ draw both over the map, **in two different colours**:
 Worth extending to the tier itself once the lines exist -- tinting or outlining the player's own
 neighborhood against the frozen ring would make a crossing, and phase 6's smeared thaw, directly
 visible while testing rather than something to infer.
+
+Draw both through the debug drawing service in "Debug drawing and an AI debugger" (Medium, below)
+rather than as `MapWindow` special cases, so later overlays (paths, flow fields, perception ranges) use
+the same mechanism.
 
 #### AI-generated sprites with a hovered state
 
@@ -1423,7 +2224,9 @@ textEnd`'s line-drawing) so the line doesn't sit flush against the text.
 
 `PlayerMovementController.HandleInput` only treats a move as diagonal if both keys are down in the
 exact same poll -- a few-frame gap between W and D lands as cardinal. Needs a short input-buffering
-window before committing to a cardinal move.
+window before committing to a cardinal move. Part of "Input actions and mapping contexts" (High,
+above): movement becomes one 2D-vector action built from the four keys, and a trigger holds a lone
+cardinal for a few frames to see if the second key arrives.
 
 #### Targeting tile highlights extend beyond the actual spell/scroll range
 
@@ -1447,6 +2250,15 @@ the processing-tier regions (a 1024x1024 neighborhood, and the 3072x3072 3x3 win
 today's 1000x1000/2000x2000 predate them) -- static structures + boss/landmark
 sprites only, no moving entities, snapping to preset regions instead of following the player.
 Fog of war is its own item below.
+
+**Godot reference:** a Godot minimap is a `SubViewport` sharing the main world (`world_2d`) with its
+own zoomed-out camera, shown through a `ViewportTexture`; everything the main view knows how to draw
+appears in it for free. Here, the equivalent is rendering into a `RenderTarget2D`, which
+`MapTileLayerCache` already does for terrain. Since the minimap shows static content only, it can be
+a low-resolution render target per neighborhood, drawn once when the neighborhood loads (one pixel per
+tile, colour from the terrain definition) and patched when a cell changes, then composed and cropped
+per frame. That is far cheaper than re-rendering a 1024² area, and the same textures serve the
+Neighborhood/Borough zoom levels.
 
 #### Fog of War
 
@@ -1479,6 +2291,10 @@ are the standard model.
 - **Admin Mode (F12) bypasses fog.**
 - **Light sources:** Scroll of Torch's Light grant is meant to become a fog-of-war reveal (see "Torch
   reveal + light-weakness damage" above). Design the visible set so a light source can add to it.
+- **The visible set comes from "Field of view and perception" (Game, High),** the same shadowcasting
+  and light levels NPCs use, so the player and a goblin see by the same rules. This item is the
+  rendering and UI half. Unreal has no built-in fog of war; RTS-style fog in Unreal games is custom
+  (typically a visibility texture sampled by a post-process), so the RTS games above remain the model.
 
 #### Magic Menu
 
@@ -1518,6 +2334,205 @@ an entity, e.g. "#1234". A modifier granted by a blueprint part should name that
 instead, e.g. "Race(Human)" or "Class(Tank)". When a line has a part to name, that replaces the
 entity-number source entirely.
 
+#### Animation primitives -- flipbooks, tweens and curves
+
+Nothing on screen animates except the charge fill, the glows and floating text, each timed by its own
+code. Planned items that need shared primitives: "Walking and action animations" (High), "Window
+open/close/minimize animation" (Low), "Folder glow blink" (Low), taller sprites, and HUD transitions.
+- **Flipbooks:** a sprite manifest entry can be a sequence of cells with per-cell durations and a loop
+  mode (loop, once, ping-pong), played by time or scrubbed to a fraction (a Delayed action's windup
+  driven by `IMapViewQuery.GetChargeFraction`). Per-entity playback state only in Local and the
+  viewport.
+- **Tweens:** animate a value (position, size, alpha, color) from A to B over a duration with an easing
+  function, with completion callbacks. Used for tile-to-tile movement, window open/close and toasts.
+  Driven by presentation time, not simulation frames, so a paused game can still animate its UI.
+- **Curves:** a small keyed-curve type (shared with "Data tables for content", Game) for anything tuned
+  by hand: a hit flash, a bounce, glow pulses.
+
+**Unreal Engine reference:** `UPaperFlipbook` for sprite sequences (see "Walking and action
+animations"). `UTimelineComponent` plays float/vector/color/event tracks over time, each track a
+`UCurveFloat`-style asset, with play, reverse, set-position and finished events. UMG widgets have
+their own keyframed widget animations (`UWidgetAnimation`) for UI transitions. Easing is a set of
+helper functions (`FMath::InterpEaseInOut`, `InterpTo` for framerate-independent smoothing, and the
+`EEasingFunc` set used by `Ease`). Those correspond to the three primitives above; Unreal keeps them
+separate by domain (sprites, gameplay objects, UI), but one tween and curve type serves all of them here.
+
+**Godot reference:** `AnimationPlayer` keyframes *any* property of any node, plus *method-call tracks*
+that call a function at a given frame. A strike animation calls "spawn hit particles" on frame 3,
+so timing lives with the animation rather than being duplicated in code. Worth copying as flipbook
+events: a frame can name a presentation event, raised when playback crosses it. `Tween`
+(`create_tween().tween_property(node, "position", target, 0.2).set_trans(TRANS_QUAD).set_ease(EASE_OUT)`,
+with `chain`, `parallel` and `tween_callback`) is the code-driven version and the model for the tween
+API above. `AnimationTree` state machines switch animations by state (idle, walk, windup, strike),
+which the walking/action item will need once a sprite has more than one sequence.
+
+#### Audio
+
+No audio exists. FNA includes FAudio (`SoundEffect`, `SoundEffectInstance` with volume, pitch and pan),
+so the playback layer is there; what's missing is everything around it:
+- **Sound definitions as data:** a named sound is one or more files, picked randomly with pitch and
+  volume variation so repeated hits don't sound identical, referenced from cue handlers (see "Gameplay
+  Cues", Game) and UI events.
+- **Positional sound:** volume and pan from the source tile's distance and direction relative to the
+  camera centre, with a max audible distance. Nothing outside Local plays.
+- **Concurrency limits:** at most N instances of a sound (or of a group like "hits") at once, dropping
+  the quietest or oldest -- otherwise a 20-goblin fight is 20 overlapping hit sounds.
+- **Volume categories:** master, music, effects, UI, ambient -- each a slider on the Options menu,
+  persisted with the other settings. Ducking (lowering music during a boss roar) is a later nicety.
+- **Music:** looping tracks with crossfades, chosen by context (exploring, combat, shop, boss).
+- Headless benchmark runs never load or play audio.
+
+**Unreal Engine reference:** `USoundCue` and MetaSounds combine and randomize sounds (random node,
+modulator for pitch/volume variation). `USoundAttenuation` defines distance falloff shape and spatial
+panning. `USoundConcurrency` sets max instances per sound or group and a resolution rule (stop oldest,
+stop quietest, stop farthest, prevent new). `USoundClass` and `USoundMix` give volume categories and
+ducking (a mix pushed while a boss roars), and are what an options menu's sliders adjust. Audio is
+triggered from Gameplay Cue notifies in GAS projects, the same route suggested above.
+
+**Godot reference:** the same concepts at a size worth copying directly. A *bus layout* (Master,
+Music, SFX, UI, Ambient) where each bus has a volume, mute, an effect chain (`AudioEffectLowPassFilter`,
+`Reverb`, `Compressor`) and a send to another bus -- the volume categories above, plus "muffle
+everything but UI while paused or in a menu" as one low-pass effect toggled on a bus.
+`AudioStreamRandomizer` holds variants with random pitch and volume offsets (the "sound definition"
+bullet), and `AudioStreamPlayer2D` has `max_distance`, an attenuation curve and `max_polyphony`
+(per-sound concurrency). FNA's FAudio has submix voices with effect chains, so buses map onto it
+directly.
+
+#### Particles
+
+No particle effects exist. Planned consumers: "Blood pool under dead entities" (a splash on the killing
+blow), spell and aura effects, burning and lava, Torch, level-up, loot box opening, and cue handlers
+("Gameplay Cues", Game).
+- A pooled CPU particle system in Presentation: an emitter definition (spawn rate or burst, lifetime,
+  velocity, gravity, color and size over lifetime, sprite or flipbook), instances attached to an entity
+  or a tile.
+- A global particle budget with viewport and Local culling, like floating text: an emitter off screen
+  doesn't simulate, and new emitters beyond the budget are dropped.
+- Drawn in the map's draw order (under or over occupants per emitter).
+- Emitter definitions are data, so mods add effects without code.
+
+**Unreal Engine reference:** Niagara. Systems are made of emitters, each a stack of modules (spawn,
+update, render) with CPU or GPU simulation. The parts that apply here are scalability and pooling:
+`UNiagaraEffectType` sets per-type budgets (max instances, cull distance, what to do when over budget),
+significance handlers decide which instances to cull, and `UNiagaraComponentPool` reuses finished
+components (`ENCPoolMethod::AutoRelease`) instead of allocating new ones -- the same GC concern as
+everywhere else here.
+
+#### Debug drawing and an AI debugger
+
+Admin Mode shows inspection data in windows, but nothing can be drawn on the map for debugging, and
+there's no way to see *why* a creature did something after the fact. Coming work needs both: "Draw
+neighborhood borders and the Local radius in Admin Mode", pathfinding (paths, flow fields),
+perception (sight cones, last-known locations), NPC behavior (utility scores per behavior, commitment
+deadlines), and spatial queries (candidate tiles and scores).
+- **Debug draw service:** any code in any layer can request a line, tile outline, filled tile, text
+  label or circle at world coordinates, for one frame or a duration, in a category. `MapWindow` draws
+  the queue over the map in Admin Mode, and a category can be toggled. Requests from Game go through an
+  Engine-level interface, so Game doesn't reference Presentation. Compiled or gated out of release
+  builds.
+- **AI debugger:** with a creature selected in Admin Mode, show its current decision (each behavior's
+  utility and the winner), its perception (what it sees and remembers), its path and its claimed spots,
+  both on the map and in the inspection window.
+- **Decision recorder:** keep the last N seconds of a selected creature's (or every Local creature's)
+  decisions and debug shapes, so after something odd happens the timeline can be scrubbed back to see
+  what it was thinking. Saved to `Log/` with the seed and frame, so it can be attached to a bug report.
+
+**Unreal Engine reference:**
+- *Debug drawing:* `DrawDebugLine`, `DrawDebugBox`, `DrawDebugSphere`, `DrawDebugString`, each with a
+  duration and a persistent flag, stripped from shipping builds.
+- *Gameplay Debugger:* toggled with the apostrophe key. It shows categories (AI, Behavior Tree, EQS,
+  Perception, Navmesh, Abilities) for the actor under the crosshair, drawn in the world and as text,
+  each category toggled with the number keys. Projects add categories (`FGameplayDebuggerCategory`).
+- *Visual Logger:* `UE_VLOG` (text) and `UE_VLOG_LOCATION` / `UE_VLOG_SEGMENT` / `UE_VLOG_BOX` (shapes)
+  record per-object entries each frame into a timeline. The Visual Logger window scrubs the timeline
+  and redraws the shapes in the world at that moment, and recordings save to `.vlog` files. This is the
+  decision recorder above, and the most useful tool for tuning utility AI.
+
+**Bevy reference:** `Gizmos` is an immediate-mode debug-drawing system parameter (`gizmos.line_2d`,
+`rect_2d`, `circle_2d`, text via a separate label) callable from any system, redrawn each frame, with
+retained gizmos (`GizmoAsset`, 0.16) for shapes that don't change. Drawing is grouped by
+`GizmoConfigGroup` types, each with its own enabled flag, line width and depth settings, toggled at
+runtime through `GizmoConfigStore` -- the per-category toggle above. For inspection, the third-party
+`bevy-inspector-egui` shows every entity and its reflected components live and lets them be edited,
+which is roughly Admin Mode's inspection window generalized to any component; see "Remote inspection
+of a running game" (Global) for the out-of-process version.
+
+#### Visual 2D lighting
+
+The map is uniformly lit. Torch, lava, darkness and (later) day/night change nothing visually, and
+fog of war's explored-but-not-visible state needs a dimmed look. "Field of view and perception" (Game,
+High) decides the gameplay light level per tile; this is drawing it.
+- **Ambient level:** a floor or neighborhood sets a darkness colour multiplied over everything.
+- **Light sources** (the same definitions gameplay reads -- Torch, lava, glowing creatures, wall
+  torches) add light in a radius with a falloff and colour.
+- **Occlusion:** walls block light, using the same "blocks light" flag as perception, so the visual
+  shadow and the gameplay shadow match.
+- **Implementation options:** (a) per tile -- compute a light colour per visible tile from the gameplay
+  light map and tint each tile and occupant by it (cheap, blocky, fits pixel art); (b) a light render
+  target -- draw each light's gradient into a texture, cut out shadows, and multiply the scene by it
+  (smooth, more GPU work, needs a shader). Start with (a), since the gameplay light map already has
+  the numbers.
+- **Local and viewport only;** off-screen lights cost nothing.
+- **Glow overlaps:** today's glow cache (`GlowRenderer`) draws light-like auras; decide whether glows
+  become light sources or stay a separate effect.
+
+**Godot reference:** `PointLight2D` (a texture-shaped light with energy, colour, range and optional
+shadows), `DirectionalLight2D`, `LightOccluder2D` with an `OccluderPolygon2D` (TileSets can carry
+occluders per tile), and `CanvasModulate` for the ambient colour. Lights are additive or subtractive
+blend modes over the canvas, and sprites can take normal maps (`CanvasTexture`) for per-pixel shading.
+It is purely visual; gameplay can't ask a light what it lights, which is why the gameplay light map in
+the perception item stays the source of truth.
+
+#### Sprite shaders and tinting
+
+No custom shaders exist; every sprite draws with `SpriteBatch`'s default effect, tinted at most by a
+colour multiply. Several items want per-sprite effects: "Investigate mask-based recoloring for shared
+sprites" (Low -- palette swaps), hit feedback ("Gameplay Cues", Game -- a white flash), selection and
+highlight ("Highlighted-tile visual redesign", Low -- outlines), death (dissolve or fade), Phasing
+(already alpha), and petrification or poison (desaturate or tint).
+- **A small set of sprite effects,** each an FNA `Effect` (HLSL compiled to FNA's format) with
+  parameters: palette swap (a lookup texture maps greyscale mask values to colours), flash (mix toward
+  a colour by an amount), outline (sample neighbouring texels), desaturate, dissolve (threshold against
+  a noise texture).
+- **Batched by effect:** `SpriteBatch` can only use one effect per `Begin`/`End`, so draws are grouped
+  by effect, which fights the row-ordered occupant pass in the tall-sprites plan. Options: per-sprite
+  parameters packed into the vertex colour (one "uber" effect reads flash amount and palette row from
+  the colour channels, so one batch serves everything), or a few effects and accept extra batches.
+  The packed-colour approach keeps draw order intact.
+- **Content pipeline:** FNA loads effects compiled with `fxc` (DirectX 9-style effect binaries,
+  translated at runtime by MojoShader); the `Content` project doesn't compile anything today, so this
+  adds a shader build step.
+
+**Godot reference:** every `CanvasItem` can take a `ShaderMaterial` with a `canvas_item` shader
+(`fragment() { COLOR = texture(TEXTURE, UV) * ...; }`), and `modulate`/`self_modulate` feed a colour
+through to it. Palette swaps, flashes and outlines are the standard examples. Godot batches items
+that share a material, so games that want many per-sprite variations use the same trick as above --
+parameters through `modulate` or vertex colour into one shared material -- to keep batching.
+
+#### Rich text
+
+All text is plain strings drawn in one colour per label (`LabelRenderer`, `ContrastTextRenderer`).
+Wanted by: the chat log and speech ("Chat and speech", Low), item tooltips and details (rarity-coloured
+names, green/red stat deltas in "Equipped-item comparison"), notifications and achievements, "Ability
+score buffs name where they come from", floating text variants, and the Health window's per-target
+formatting.
+- **Markup** in `DisplayText`: colour, bold (a second font weight), inline icons (an item, a status
+  effect, a currency coin, a key glyph for "press F"), and links (hover for a tooltip, click to open
+  an item or entity).
+- **Parsed once** when the text is set, into runs (text, style, icon) measured with the existing
+  `ITextMeasurer`; drawing iterates runs, never re-parses.
+- **Wrapping** across runs, with icons as unbreakable glyphs sized to the line height.
+- **Localization-safe** ("Localization", Global): markup lives in the translated string, so a
+  translator can move a coloured word, and arguments are formatted before markup is parsed.
+- Later: per-run effects (shake, wave, a rainbow for legendary items) for flavour text.
+
+**Godot reference:** `RichTextLabel` with BBCode: `[color=red]`, `[b]`, `[i]`, `[img]` for inline
+textures, `[url=...]` with a `meta_clicked` signal for links, `[table]`, and `fit_content`. Custom tags
+come from `RichTextEffect` subclasses (`_process_custom_fx` moves or recolours each character per
+frame), and `visible_characters` gives a typewriter reveal. Text shaping, BiDi and font fallback are
+handled by the `TextServer`, which is the part hardest to replicate; for Latin-script languages,
+FontStashSharp's measuring is enough.
+
 ### Low Priority
 
 #### Health Window: status effects in a third column
@@ -1528,6 +2543,25 @@ effects into a third column of their own.
 #### Health bar hover popup text in white
 
 The player health bar's hover popup (`PlayerHealthHoverContent`) should draw its text in white.
+
+#### Compare input hit-testing against a unified picking pipeline
+
+Pointer handling is split: `UiInputController` hit-tests windows and elements, the map resolves tiles
+and entities in `MapWindow`/`ActionTargetingController`, and drag-drop resolves through
+`IDragDropResolver`s. Live testing has turned up hit-test, popup and tap-versus-drag bugs repeatedly,
+each fixed in the shared layer. Worth a design review, not a rewrite: would one pipeline -- every
+pointer position resolved once per frame to a stack of hits (topmost UI element, then map entity, then
+tile), with standard pointer events (over, out, down, up, click, drag start, drag, drop) sent to the
+hit and bubbling up the element tree until handled -- remove whole classes of those bugs? Compare
+against how `UiLayerStack`, the tap threshold and the drag-drop resolvers work today before deciding.
+
+**Bevy reference:** `bevy_picking` (0.15). *Backends* (sprites, UI nodes, meshes, or custom) each report
+what's under each pointer with a depth; a single pass sorts the hits and decides which entities are
+hovered, respecting `Pickable { should_block_lower, is_hoverable }`. It then emits `Pointer<Over>`,
+`Pointer<Out>`, `Pointer<Press>`, `Pointer<Click>`, `Pointer<DragStart>`, `Pointer<Drag>`,
+`Pointer<DragDrop>` and friends as entity-targeted events that bubble up `ChildOf` to parents through
+observers, where a handler can stop propagation. Map entities and UI elements go through the same
+events, so a drag from the inventory onto a map tile is one drag, not two systems handing off.
 
 #### Split Presentation into Presentation + UIEngine projects
 
@@ -1580,6 +2614,9 @@ earlier opaque-border version was deliberately replaced so the sprite stays visi
 follow-up directions, worth deciding between rather than landing both: (1) add back a thin 100%-opacity
 border ring on top of the wash; (2) make the wash fainter and replace the ring with four opaque corner
 brackets instead of a full perimeter. No corner-mark geometry worked out for (2) yet.
+A third option once "Sprite shaders and tinting" (Medium) exists: outline the highlighted *sprite*
+rather than the tile (the common Godot approach, a `canvas_item` outline shader on the selected
+sprite), which also stays correct for tall sprites that overhang their tile.
 
 #### Circle selection under the entity instead of a tile border
 
@@ -1684,6 +2721,15 @@ edit-history design (edit stack or snapshots, coalescing rules, a depth cap), an
 whether the history should live on `TextBox` or a shared primitive a future second editable control
 would also want.
 
+**Godot reference:** Godot has both. `LineEdit`/`TextEdit` own their history internally and coalesce
+consecutive typing into one undo step (a new step starts on a pause, a cursor jump or a
+different kind of edit). Separately, the general `UndoRedo` class records actions --
+`create_action(name, merge_mode)`, `add_do_method`/`add_undo_method` (or `add_do_property`/`add_undo_property`),
+`commit_action` -- with a step cap (`max_steps`), and `MERGE_ENDS` folds repeated actions of the same
+name into one (dragging a slider). A shared primitive shaped like `UndoRedo` answers the open
+question: `TextBox` records its edits into it with its own coalescing rule, and later users (Admin Mode
+spawn/apply, inventory rearranging) record theirs.
+
 #### WrapContent parent sizing collapses when a child resizes itself after attach
 
 Discovered building the quest composer: a `WrapContent` window whose size depends on a child, paired
@@ -1733,7 +2779,9 @@ window's edge.
 
 #### Window open/close/minimize animation
 
-Everything snaps instantly. Pure polish, lowest priority UI item.
+Everything snaps instantly. Pure polish, lowest priority UI item. Use the tweens from "Animation
+primitives -- flipbooks, tweens and curves" (Medium); Unreal does this with UMG widget animations
+(`UWidgetAnimation`, played on open/close from the widget itself).
 
 #### Show module load failures on the start menu
 
@@ -1741,26 +2789,35 @@ Depends on a start menu, which doesn't exist yet. A mod that fails to load (it t
 built-in's components, or has an unmet `Requires`) is dropped and reported only through
 `Console.Error` (`WorldSessionBootstrapper`). The game is a WinExe, so a normal launch shows nothing.
 List `GameBootstrapResult.Failures` on the start menu: each mod's type name and the exception's
-message, with the full exception available on demand.
+message, with the full exception available on demand. The start menu itself is a state in "Game flow
+-- start menu, session states, floor transitions" (Game, Medium). Failures should also go to the log
+("Debug/event logging with levels", Global) rather than only `Console.Error`.
 
 #### Options menu
 
 No settings screen exists -- Escape currently does nothing. Wanted: Escape (global, unconditional, same
 as Tab) opens it, and the game pauses while open -- just `OpenMenuWindow`/`CloseMenuWindow` (see Pause
-modality, `IMPLEMENTATION-NOTES.md`), no new modality code needed.
+modality, `IMPLEMENTATION-NOTES.md`), no new modality code needed. Settings it changes are saved to
+the user layer of "Layered config files" (Global); Unreal's equivalent is `UGameUserSettings`, one
+object holding user-changeable options, loaded from and saved to the user's `GameUserSettings.ini`
+with `ApplySettings`/`SaveSettings`.
 
 #### Floating text settings on the options menu
 
 Needs Options menu (above). Settings for the Floating Text feature (`IMPLEMENTATION-NOTES.md`, "Floating Text"): a master
 on/off, per-kind toggles (damage taken, healing, regen, status stacks, Dodge/Immune, and later XP/Level
 Up/Skill Up), and possibly text size and duration. Persisted through Data storage (Global) once it
-covers more than window geometry.
+covers more than window geometry -- specifically its "Layered config files" user layer.
 
 #### Keybindings page on the options menu
 
 Needs Options menu (above) to live in, and Standard widget set (needs at least something list-like) --
 today's hotkeys are hardcoded in `MapWindow.OnHotkeysAction`/`UiInputController`. Would eventually want
 persisted storage for rebinds (see Data storage under Global, which today only covers window geometry).
+Depends on "Input actions and mapping contexts" (High): the page lists input actions per mapping
+context and edits the user's binding layer, the way Unreal's player-mappable keys
+(`UEnhancedInputUserSettings`) work -- rebinds are stored per named mapping, not as a copy of the whole
+context, so a later default change doesn't wipe them.
 
 #### Targeted key-press routing instead of a full-keyboard scan
 
@@ -1768,13 +2825,18 @@ persisted storage for rebinds (see Data storage under Global, which today only c
 (confirmed via reflection: FNA has no non-allocating variant) -- allocates every frame for the session.
 `HandleKeyPress` has exactly one real consumer (`TextBox`, caring only about Backspace). Let the focused
 content declare the small key set it actually wants checked instead of scanning/diffing the whole
-keyboard.
+keyboard. Falls out of "Input actions and mapping contexts" (High): the focused content pushes a
+mapping context, and only keys bound in active contexts are polled (Enhanced Input likewise only
+evaluates the mappings of its active contexts).
 
 #### Chat and speech
 
 Glowing per-NPC speech bubbles (clickable for the full line), separate from a WoW-style configurable
 chat log (Loot/Combat/Local Chat/Notifications tabs, user-routable message types). `NotificationCenter`
 is the closest precedent but is popup-shaped, not a persistent scrollback -- a different, bigger widget.
+NPC lines should be localizable text from the start (see "Localization", Global). Unreal's
+`UDialogueWave` holds one line with per-speaker/listener variants and its subtitle text, which is a
+reasonable shape for a line definition: speaker, text key, optional sound, display duration.
 
 #### Visual improvement pass
 
@@ -1787,7 +2849,9 @@ Every potion needs a fully-authored sprite even though most differ only by liqui
 `SpriteManifest`/`SpriteSheetService` have no tinting concept. Worth investigating a mask (grayscale/
 alpha region marking recolorable pixels) + a `Color` field `SpriteRenderer` tints per-instance, instead
 of a duplicate sprite per color variant. Generalizes to any other "one silhouette, many colors" case
-(dyed equipment, faction banners).
+(dyed equipment, faction banners). The GPU route is the palette-swap effect in "Sprite shaders and
+tinting" (Medium); Godot games do this with a `canvas_item` shader that maps greyscale mask values
+through a palette texture, one palette row per variant, selected per sprite.
 
 ## Global
 
@@ -1815,6 +2879,41 @@ just the affected reference while the rest of the save loads, (3) last resort, d
 the missing content is load-bearing for it. Consider letting a mod register its own fallback id per
 content id it defines.
 
+**Unreal Engine reference:**
+- *What gets saved is marked, not listed:* `USaveGame` subclasses hold the data, saved with
+  `UGameplayStatics::SaveGameToSlot` / `AsyncSaveGameToSlot` (serialization on a worker, the disk write
+  off the game thread). For whole objects, properties tagged `UPROPERTY(SaveGame)` are written by an
+  `FArchive` with `ArIsSaveGame` set, so a component opts its fields into saves where they're declared.
+  The equivalent here is a per-component serializer registered with the pool, so a mod's component
+  saves without the save system knowing about it, and a component with no serializer is rebuilt
+  rather than saved (most skeleton data already is, from the spawn record).
+- *Versioning:* `FCustomVersion` registers a Guid plus version number per subsystem. The number is
+  written into the save, and loading code branches on it (`Ar.CustomVer(...)`) to migrate old data.
+  One version per module (keyed by `IModule.Id`) fits the module system, so a mod bumps its own version
+  without a global save format change.
+- *Renames:* `CoreRedirects` in config map old class, property and asset names to new ones at load.
+  That's tier (1) of the fallback hierarchy above -- a mod-supplied redirect from an old content Guid
+  to its replacement.
+- *Slots and user index:* saves are named slots per user, with a small header (version, timestamp,
+  floor, playtime) readable without loading the whole save, for a load menu.
+
+**Bevy reference:** reflection is the generic half. `#[derive(Reflect)]` plus `#[reflect(Component)]`
+registers a component's fields in the `TypeRegistry`, and from then on any code can read, write,
+serialize and deserialize it without knowing the type -- saves, the inspector, the remote protocol and
+scenes all use that one registry. A component that isn't registered is simply not saved, and
+`DynamicSceneBuilder`'s allow/deny lists choose which registered components go into a given save. Here,
+an equivalent is a per-pool serializer registered alongside the pool, generated or hand-written, so a
+mod's component joins saves by registering one. Unlike Unreal, Bevy has no built-in save versioning;
+migration is left to the game, so the per-module version in the Unreal note above is still needed.
+
+**Godot reference:** one detail from Godot's `RandomNumberGenerator`, which exposes both `seed` and
+`state`: restoring a seed restarts a sequence, restoring the state continues it. A save must store
+the *position* of every live random sequence (the factory's runtime sequence, the crawler-number
+allocator, any per-system generator), not just the session seed, or a loaded game diverges from the
+one that was saved. `SeededRandom` needs a readable and restorable state for this. Godot's
+`ConfigFile` and `ResourceSaver` are simpler than either other engine's and don't add anything beyond
+the notes above.
+
 #### Save and load Beyond neighborhoods
 
 Today a neighborhood evicted from the window's cache
@@ -1840,6 +2939,21 @@ since generation), so a revisited neighborhood holds the same creatures, corpses
   beside the spawn record -- together they are everything the entity was built from. A crawler's number
   is persisted once assigned; an unbuilt crawler has only its `SpawnFlags.Crawler` flag.
 
+**Unreal Engine reference:** World Partition streams cells but never saves runtime changes to them; a
+cell that unloads and reloads comes back as authored. Games that persist per-cell changes build it
+themselves, usually as a per-cell save record keyed by cell and written when the cell unloads -- the
+"record plus changes" format above. Unreal's async package loading (`LoadPackageAsync`) keeps that read
+off the game thread, which the streamer's worker already does here.
+
+**Bevy reference:** `DynamicScene` is close to this item's full-snapshot case: `DynamicSceneBuilder`
+extracts chosen entities with their reflected components into a serializable scene, and spawning it
+creates new entities. References between entities are fixed up by `MapEntities`: a component
+implements it (or marks fields `#[entities]`, 0.16) to say which of its fields are entity references,
+and loading rewrites each one through an old-id → new-id map. That's the mechanism the **References**
+bullet above needs for anything that holds an entity id rather than an `EntityKey` -- and for
+`EntityKey`s themselves if keys are re-issued on load instead of kept. Relationships ("Relationships",
+Engine) restore their target side automatically once the source side is remapped.
+
 #### CI step for the performance-filtered tests
 
 `Tests.csproj` defaults `VSTestTestCaseFilter` to `TestCategory!=Performance`, so an unfiltered `dotnet
@@ -1859,6 +2973,10 @@ with standing one up: build the solution, run the ordinary suite, then the perfo
   absolute speed, so a looser CI ceiling still does that job.
 - Unrelated to the `phase-performance-testing` skill's whole-game per-system benchmark, which needs a
   real run and a fixed seed rather than a test filter.
+- The same pipeline should later run "In-world scenario tests" (Low, below) and a short headless
+  benchmark as a smoke test. Unreal's equivalent is Gauntlet, which launches built game instances
+  headless on CI, runs automation tests or scripted scenarios in them, and collects results and
+  performance data.
 
 ### Low Priority
 
@@ -1867,7 +2985,33 @@ with standing one up: build the solution, run the ordinary suite, then the perfo
 `Game/Diagnostics/PlayerActivityLog.cs` is a narrow, single-purpose EventBus subscriber (Burning
 damage/moves to a file), deliberately not a general logging facility. Worth a real design (log
 levels, a generic "subscribe any event to a log line" mechanism, configurable sinks) once more than one
-thing wants to log. See Entity storage below for a narrower, related need.
+thing wants to log. See Entity storage below for a narrower, related need. More than one thing now
+does: module load failures (`Console.Error` only, invisible in a WinExe launch), settings failures,
+and the planned AI decision recorder ("Debug drawing and an AI debugger", Presentation).
+
+**Unreal Engine reference:** `UE_LOG(LogCategory, Verbosity, ...)`. Categories are declared per system
+(`DECLARE_LOG_CATEGORY_EXTERN(LogAI, Log, All)`) with a default verbosity and a compile-time maximum, so
+`VeryVerbose` lines cost nothing in shipping builds. Verbosities: Fatal, Error, Warning, Display, Log,
+Verbose, VeryVerbose. A category's verbosity can be changed at runtime with the `log LogAI Verbose`
+console command or at launch with `-LogCmds="LogAI Verbose"`. Output goes to a set of output devices
+(file under `Saved/Logs`, the console, the debugger). `UE_LOGFMT` (5.2+) adds structured fields.
+For here: a category per module (named from `IModule`), levels settable through "Console variables and
+console commands" (Engine), a file sink in `Log/`, and cheap-when-off call sites -- the same "one check
+when disabled" rule as diagnostics.
+
+**Bevy reference:** `bevy_log` is the Rust `tracing` crate. Categories are just module paths, so
+nothing is declared: a filter string (`LogPlugin { filter: "wgpu=error,game::ai=debug" }`, or the
+`RUST_LOG` environment variable) sets levels per module prefix. Spans (`info_span!("npc_decide")`)
+group everything logged inside them and double as profiler zones (Tracy via the `trace_tracy`
+feature). Taking the "category = namespace or module name, levels set by a prefix filter" idea saves
+declaring categories by hand, and it composes with the Unreal-style runtime `log` command.
+
+**Godot reference:** Godot's own logging is minimal (`print`, `push_warning`, `push_error` with a
+script stack trace, a rotating file log under `user://logs`). Two useful details: 4.5's `Logger`
+class, registered with `OS.add_logger`, receives every engine message and error, so a game can route
+them into its own log window or crash report; and errors surface in the editor's debugger with the
+stack that raised them. For here: route unhandled exceptions and `Console.Error` output into the same
+sink, and keep the last N lines in memory for an in-game log window in Admin Mode.
 
 #### Entity storage -- suspend an entity from processing without per-system checks
 
@@ -1885,6 +3029,153 @@ same-session freeze/thaw first; how do cross-entity references (an equipped item
 bonded player) stay valid across a storage/restore cycle (same class of problem Data storage's modded-
 content section already raises for saves generally). Motivating case: a tamed companion or caged NPC
 that can leave and rejoin the active simulation with its exact accumulated state intact.
+
+**Bevy reference:** Bevy 0.16 solved the same-session half with entity disabling. A `Disabled`
+marker component is excluded from every query by default (`DefaultQueryFilters`), so adding it takes
+the entity out of every system with no per-system check and nothing removed, and removing it puts the
+entity back with its exact state. Queries that must see disabled entities opt in (`With<Disabled>`,
+`Has<Disabled>`). Here, the equivalent is a marker pool that `EntityStripeSet`/`TieredEntityStripeSet`
+treat like removal (drop the entity from their buckets when the marker is added, re-add it when the
+marker goes), with `SkeletonAccessGuard`-style Debug checks for anything that reads a disabled entity.
+That gives the freeze/thaw half without serializing anything; the snapshot half (for saves and leaving
+the session) is `DynamicScene`, see "Save and load Beyond neighborhoods" above.
+
+#### Layered config files
+
+Settings come only from the command line (`CommandLineSettingsSource`), so nothing the player changes
+survives a restart, and there's nowhere to put project defaults other than code. The Options menu,
+floating text settings, keybindings, audio volumes and window layout all need persistence. Add
+`ISettingsSource`s for files, applied in layers where each later one overrides an earlier one:
+1. Code defaults (`SettingDefinition`).
+2. Game defaults shipped in `Content/` (one file, or one per module).
+3. Each mod's own defaults, in mod load order.
+4. The user's file (written by the Options menu, in the user's app data folder, not the install).
+5. The command line, last, as today.
+- The Options menu writes only what the user changed, into layer 4, so a later default change still
+  reaches settings the user never touched.
+- A malformed file is reported and skipped, never fatal, the way `MalformedEntries` already works.
+- Console variables ("Console variables and console commands", Engine) record which layer last set
+  them, so a console change during play isn't written to the user's file unless asked.
+
+**Unreal Engine reference:** Unreal's config system is layered `.ini` files: engine `Base*.ini`, the
+project's `Config/Default*.ini`, platform folders (`Config/Windows/WindowsGame.ini`), then the user's
+`Saved/Config/<Platform>/*.ini`, each overriding the last, with command-line overrides on top
+(`-ini:Game:[/Script/Module.Class]:Key=Value`). Classes marked `UCLASS(config=Game)` read their
+`UPROPERTY(config)` fields from the matching section automatically, and `SaveConfig()` writes only
+values that differ from the layers below. Array edits use `+`/`-` prefixes so a lower layer's list can
+be extended or trimmed rather than replaced -- useful for mods adding to a list setting.
+
+#### Replay by recording input
+
+The simulation is deterministic -- seeded worlds (`--seed`), per-entity reseeding in `BuildComplete`,
+streaming applied at fixed update counts, the unit budget instead of wall-clock -- so recording the
+seed, settings, mod list and the player's input per simulation frame is enough to replay a run exactly.
+Uses: reproducing a bug from a recording instead of a description, a benchmark driven by real play
+rather than an idle player, a regression test that replays a recording and checks the end state, and
+later the Crawler TV show ("Crawler TV show", Game) replaying highlights.
+- Record at the boundary between Presentation and Game (the requests Presentation queues:
+  moves, activations, UI commands that change the simulation), not raw keys, so UI layout changes
+  don't break old recordings.
+- A recording stores the build version and fails clearly on a mismatch; determinism only holds for the
+  same code and mods.
+- Scrubbing backwards needs periodic snapshots (checkpoints) of the whole world, which needs "Data
+  storage" (above). Without them, replay only plays forward from the start.
+- A determinism check (replay twice, compare a world hash every N frames) catches accidental
+  nondeterminism -- iteration over a hash set, unseeded `Random` -- as soon as it's introduced.
+
+**Unreal Engine reference:** Unreal's replay system (`UDemoNetDriver`, `UReplaySubsystem`) records the
+*replicated network stream* rather than input, because Unreal's simulation isn't deterministic, and
+writes periodic checkpoints (full snapshots) so playback can jump to any time by loading the nearest
+checkpoint and playing forward from it. Input recording is cheaper and only works because this
+simulation is deterministic; the checkpoint-plus-forward-play scheme is the part to copy for scrubbing.
+
+#### In-world scenario tests
+
+Unit tests build pools and systems directly, and live testing has repeatedly caught input, hit-test
+and measurement bugs they missed. There's nothing in between: a test that builds a real world
+session from a seed, sets up a scenario (spawn a goblin two tiles from the player, give the player a
+potion), runs N frames headless and asserts on the outcome (the goblin engaged, the potion was drunk,
+nothing threw).
+- Built on `HeadlessBenchmark`'s session setup, run as a separate MSTest category so the default suite
+  stays fast.
+- Scenario setup uses the same commands as Admin Mode ("Console variables and console commands",
+  Engine), so a scenario found by hand in-game can be written down as a test.
+- A replay ("Replay by recording input", above) is a scenario whose inputs come from a recording.
+
+**Unreal Engine reference:** Functional Tests: an `AFunctionalTest` actor placed in a test map runs a
+scenario with `PrepareTest` / `StartTest` / `FinishTest(Result)`, reports through the automation
+framework, and runs from the Session Frontend or the command line. The Automation Spec framework
+(`BEGIN_DEFINE_SPEC`, `Describe`/`It` with latent steps spanning frames) covers the "run N frames then
+assert" shape in code. Gauntlet then runs them against a built game on CI (see "CI step for the
+performance-filtered tests", High).
+
+**Bevy reference:** Bevy makes this the default way to test: build an `App` with `MinimalPlugins` (no
+window, no renderer) plus the game's own plugins, spawn the scenario through `app.world_mut()`, call
+`app.update()` N times, then query the world. The same plugins as the real game, so nothing is wired
+differently for tests. The lesson for here is the same one the register-first bootstrap applied to
+module builds (IMPLEMENTATION-NOTES, `GameBuildPass`): a scenario test should build the session
+through exactly the path the game uses (`WorldSessionBootstrapper` in headless mode), never a
+test-only assembly.
+
+#### Remote inspection of a running game
+
+Inspecting a running game means Admin Mode's windows, by hand. There's no way for an external tool --
+a script, a test harness, Claude during live testing -- to ask the running game what's going on or to
+set up a situation, so live verification is a person reading the screen.
+- **A local-only endpoint** (off by default, enabled by a setting or Admin Mode) that answers
+  requests: list entities matching components, read an entity's components, write or add a
+  component, spawn from a blueprint, run a console command ("Console variables and console commands",
+  Engine), step N frames while paused, capture the frame's diagnostics.
+- Requests are applied between frames on the main thread, never mid-system.
+- Components are read and written through the same serializers as saves ("Data storage", above), so a
+  component registered for saving is inspectable for free.
+- Uses: scripted checks against a real windowed session ("spawn a goblin next to the player, advance
+  120 frames, is it engaging?"), an external inspector window, and letting Claude verify gameplay
+  changes in the running game without screenshots.
+
+**Bevy reference:** the Bevy Remote Protocol (`bevy_remote`, 0.15): a JSON-RPC server (over HTTP with
+`RemoteHttpPlugin`) exposing the world. Built-in methods query entities by component, get, insert and
+remove components, spawn and despawn entities, and list registered types; games register their own
+methods, which run as systems with world access. Everything goes through reflection, so any registered
+component is visible. The editor-style inspectors in the Bevy ecosystem are built on top of it rather
+than inside the game.
+
+**Godot reference:** when a game runs from the Godot editor, the editor's *Remote* scene tree shows
+the running game's live node tree, and selecting a node shows and edits its properties in the
+inspector while the game runs; the debugger adds the profiler, custom monitors (see the Diagnostics
+hooks item, Engine) and a "pick an object in the running game" button. It's tied to the editor rather
+than being an open protocol, so Bevy's remote protocol is the better model for scripting and tests;
+Godot's is the better model for the *viewer*: a live tree of entities grouped by neighborhood and tier,
+filterable by component, with an editable component view.
+
+#### Localization
+
+All text is English string literals in code and in blueprint/item definitions (`DisplayText` formats
+it but doesn't look it up). Nothing to translate yet, but retrofitting is expensive once content grows,
+and mods will add text too.
+- Player-facing text goes through a key → string table per language, with English as the fallback.
+  Blueprint names, descriptions, item text, UI labels and notifications refer to keys.
+- Formatting with named arguments and plural rules ("1 goblin", "3 goblins", and languages with more
+  than two forms), and number formatting per culture.
+- Mods ship their own tables and can override a built-in key.
+- Crawler names and generated names stay untranslated.
+
+**Unreal Engine reference:** `FText` is the localizable text type (vs `FString` for everything else),
+created with `LOCTEXT`/`NSLOCTEXT` (a namespace, a key and the English source) or from String Tables
+(CSV-backed key → text assets). The Localization Dashboard gathers every `FText` from code and assets
+into `.po` files for translators. `FText::Format` uses named arguments with ICU plural and gender forms
+(`{Count}|plural(one=goblin,other=goblins)`), and `FText::AsNumber`/`AsCurrency` format per culture.
+The key lesson is Unreal's separation of display text from every other string at the type level, so
+nothing player-facing can skip localization by accident.
+
+**Godot reference:** `TranslationServer` with CSV or gettext `.po` tables, `tr()`/`tr_n()` (plural
+forms) and automatic translation of `Control` text. The piece worth taking *now*, before any
+translation exists, is pseudolocalization: a project setting that rewrites every string on the fly
+-- accented characters, vowels doubled to lengthen text by a set ratio, optional brackets around each
+string and fake right-to-left. It shows at once which windows clip or overflow with longer text, and
+which strings aren't going through the translation path at all (they come out unaltered). A
+debug-only pseudolocalization switch on whatever text lookup exists would catch layout problems in
+windows that already exist.
 
 #### Field and property cleanup
 
@@ -1919,6 +3210,23 @@ engine at all.
 ## Accessibility
 
 ### Low Priority
+
+#### UI scale option, and screen reader support later
+
+UI sizes are fixed pixels (`HudMetrics`, per-window Chrome constants, `FontChrome` sizes), so the UI is
+small on a 4K display and large on a small laptop, and there's no player control over it. Add a UI
+scale setting (for example 75%–200%) on the Options menu that scales window geometry, fonts and hit
+areas together, persisted with the other settings ("Layered config files", Global). Font sizes must
+scale by re-rasterizing at the new size (FontStash already rasterizes on demand), not by stretching
+glyphs. Saved window positions and sizes need storing in unscaled units so changing the scale doesn't
+push windows off screen. Screen reader support is much larger (every element exposing a role, name
+and state) and only worth it once the UI stops churning.
+
+**Godot reference:** `Window.content_scale_factor` (and the project's stretch mode and aspect
+settings) scales the whole UI by one factor, with fonts re-rendered at the scaled size, and Godot
+exposes it at runtime so games offer it as a setting. Godot 4.5 added screen reader support through
+AccessKit: `Control`s report a role, name and description to the OS accessibility API. AccessKit has
+C bindings, so the same library is an option here when the time comes.
 
 #### Read the OS double-click speed instead of a hardcoded window
 
@@ -1994,3 +3302,17 @@ Notes for whoever picks this up:
 - Clocks: the timer wheel uses one simulation clock, passed explicitly to everything that reads
   it, so this is a wiring change. A frozen map needs its own clock (or its deadlines parked the
   same way unsimulated-tier entities are); decide which when the second map exists.
+- **Bevy reference:** Bevy separates `Time<Real>` (wall clock) from `Time<Virtual>` (game time, which
+  can be `pause()`d or run at `set_relative_speed(0.5)`), and `Time<Fixed>` advances from virtual
+  time. Pausing is a property of a clock, not of the loop: UI and presentation read real time and keep
+  animating while game time stands still. A clock per map, each pausable and with its own speed, is
+  the per-map version of that, and would also give slow motion and a fast-forward for testing. Bevy
+  itself has one world clock; per-map clocks would be this project's extension.
+- **Godot reference:** Godot makes pause a property of a subtree. Each node has a `process_mode`
+  (Inherit, Pausable, WhenPaused, Always, Disabled), inherited down the tree, and `SceneTree.paused`
+  stops every Pausable node. A map's root set to Pausable and the UI set to Always gives global pause
+  today; per-map pause is the same flag moved from the tree to each map's root (Disabled on the frozen
+  map, Inherit on the active one). Here that's a pause state per map (or per session) checked by
+  `SystemManager` when it decides which systems and tiers run, with presentation always running --
+  which also argues for pause being a run condition ("Named schedules, system sets and run
+  conditions", Engine) rather than `GameLoop` skipping the whole ECS.

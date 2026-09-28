@@ -30,11 +30,7 @@ internal static class EmptyPools
     public static ProcessingTierQuery Tiers() =>
         new(Direct<ProcessingTierComponent>());
 
-    /// <summary>A wired feed over empty pools: no entity is Local, so it publishes nothing.</summary>
-    public static FloatingTextFeed FloatingTextFeed()
-    {
-        var feed = new FloatingTextFeed();
-        feed.Wire(new EventBus(), Direct<ProcessingTierComponent>(), Direct<TransformComponent>());
-        return feed;
-    }
+    /// <summary>A feed over empty pools: no entity is Local, so it publishes nothing.</summary>
+    public static FloatingTextFeed FloatingTextFeed() =>
+        new(new EventBus(), Direct<ProcessingTierComponent>(), Direct<TransformComponent>());
 }

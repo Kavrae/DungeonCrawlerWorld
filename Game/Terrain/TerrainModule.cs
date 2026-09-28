@@ -1,5 +1,4 @@
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
+using Engine.Modules;
 using Game.Modules;
 
 namespace Game.Terrain;
@@ -13,11 +12,11 @@ public sealed class TerrainModule : IGameModule
 
     public void Configure(GameModuleContext context) => BuiltInTerrain.RegisterAll(context.Terrain);
 
-    public void RegisterComponents(ComponentManager componentManager)
+    public void RegisterComponents(ComponentRegistration registration)
     {
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
     }
 }

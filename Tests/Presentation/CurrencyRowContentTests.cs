@@ -34,7 +34,7 @@ public sealed class CurrencyRowContentTests
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
 
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = new ContextMenuController(windowService);
         contextMenuController.Initialize(new UiLayerStack());
 
@@ -111,7 +111,7 @@ public sealed class CurrencyRowContentTests
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
 
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = PlayerEntityId };
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
 
         var content = new CurrencyRowContent(rowEntityId, componentManager, world, contextMenuController, windowService, () => secondaryTargetEntityId, eventBus ?? new EventBus());

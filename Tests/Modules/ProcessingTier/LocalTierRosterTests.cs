@@ -16,14 +16,14 @@ public sealed class LocalTierRosterTests
         public DirectComponentPool<ProcessingTierComponent> Tiers { get; } = new(10, static (ref existing, incoming) => existing = incoming);
         public DirectComponentPool<TransformComponent> Transforms { get; } = new(10, static (ref existing, incoming) => existing = incoming);
         public ProcessingTierEvents Events { get; } = new();
-        public ProcessingTierResolver Resolver { get; } = new();
-        public LocalTierRoster Roster { get; } = new();
+        public ProcessingTierResolver Resolver { get; }
+        public LocalTierRoster Roster { get; }
 
         public Fixture()
         {
-            Resolver.Wire(Tiers, Transforms, Events);
+            Resolver = new ProcessingTierResolver(Tiers, Transforms, Events);
             Resolver.SetReferencePosition(new Vector3Int(500, 500, 0));
-            Roster.Wire(Movers, Tiers, Events);
+            Roster = new LocalTierRoster(Movers, Tiers, Events);
         }
 
         public void AddMover(int entityId) => Movers.Add(entityId, new MovementComponent(MovementMode.Random, null, null));

@@ -145,24 +145,24 @@ public sealed class StatusEffectAuraSystemTests
             componentManager.GetDirectPool<TransformComponent>(),
             mapQuery,
             eventBus,
-            applierRegistry ?? DefaultApplierRegistry(),
+            applierRegistry ?? DefaultApplierRegistry(componentManager),
             movedEntities,
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             new ProcessingTierEvents(),
             _clock,
             terrain ?? new TerrainRegistry(),
             componentManager.GetPackedPool<DeadComponent>(),
-            simulationScope: simulationScope ?? new SimulationScope(),
+            simulationScope: simulationScope ?? new SimulationScope(static _ => true),
             floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
         return (system, componentManager, mapQuery, movedEntities, eventBus);
     }
 
-    private static StatusEffectAuraApplierRegistry DefaultApplierRegistry()
+    private static StatusEffectAuraApplierRegistry DefaultApplierRegistry(ComponentManager componentManager)
     {
         var registry = new StatusEffectAuraApplierRegistry();
-        registry.Register(new TimerBasedAuraApplier<BurningTimerComponent>(StatusEffectType.Burning, (cm, id, source, now) => BurningEffects.ApplyStack(cm, id, source, now, new EventBus(), TestPlayerQuery.NoPlayer)));
-        registry.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(StatusEffectType.Poison, (cm, id, source, now) => PoisonEffects.ApplyStack(cm, new EntityKeys(), id, source, durationInTicks: 1, now, new EventBus(), TestPlayerQuery.NoPlayer)));
+        registry.Register(new TimerBasedAuraApplier<BurningTimerComponent>(StatusEffectType.Burning, componentManager.GetPackedPool<BurningTimerComponent>(), (id, source, now) => BurningEffects.ApplyStack(componentManager, id, source, now, new EventBus(), TestPlayerQuery.NoPlayer)));
+        registry.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(StatusEffectType.Poison, componentManager.GetPackedPool<PoisonTimerComponent>(), (id, source, now) => PoisonEffects.ApplyStack(componentManager, new EntityKeys(), id, source, durationInTicks: 1, now, new EventBus(), TestPlayerQuery.NoPlayer)));
         return registry;
     }
 
@@ -953,8 +953,7 @@ public sealed class StatusEffectAuraSystemTests
     [TestMethod]
     public void EntityResumed_OwedExposureRegrants_AreSkippedNotGranted()
     {
-        var scope = new SimulationScope();
-        scope.SetPolicy(static _ => false);
+        var scope = new SimulationScope(static _ => false);
         var (_, componentManager, _, _, _) = Build(simulationScope: scope);
         componentManager.GetMultiPool<StatusEffectAuraExposureComponent>().Add(ObserverEntityId, new StatusEffectAuraExposureComponent(StatusEffectType.Burning, nextTickFrame: 60));
         _clock.Advance(630);

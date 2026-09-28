@@ -15,15 +15,11 @@ namespace Tests.Bootstrap;
 [TestClass]
 public sealed class EntityDestructionTests
 {
-    private static readonly DirectoryInfo EmptyModsDirectory = Directory.CreateTempSubdirectory();
-
-    [ClassCleanup]
-    public static void DeleteEmptyModsDirectory() => EmptyModsDirectory.Delete(recursive: true);
-
     private static (Game.World.World World, EcsContext Ecs, ProcessingTierResolver Resolver) Build()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(40, 40, 3)));
-        var result = GameBootstrapper.Build(world, new MathUtility(new Random(1)), EmptyModsDirectory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var map = new Map(new Vector3Int(40, 40, 3));
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var world = result.World;
         result.ProcessingTierResolver.SetReferencePosition(new Vector3Int(1, 1, (int)MapLayer.Ground));
         return (world, result.EcsContext, result.ProcessingTierResolver);
     }

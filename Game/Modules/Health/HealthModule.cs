@@ -1,8 +1,5 @@
 using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
-using Engine.ECS.Systems;
-using Engine.Events;
-using Engine.Math;
+using Engine.Modules;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Death;
@@ -14,9 +11,7 @@ using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
-using Game.World;
 using Microsoft.Xna.Framework;
-using Game.Blueprints;
 
 namespace Game.Modules.Health;
 
@@ -28,31 +23,16 @@ public sealed class HealthModule : IGameModule
 
     public IReadOnlyList<Guid> Requires { get; } = [StatModifiersModule.ModuleId, DeathModule.ModuleId, AbilityScoresModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId];
 
-    private BlueprintRegistry _creatures = null!;
-    private ProcessingTierEvents _processingTierEvents = null!;
-    private MathUtility _mathUtility = null!;
-    private EventBus _eventBus = null!;
-    private IPlayerQuery _playerQuery = null!;
-    private FloatingTextFeed _floatingTextFeed = null!;
-
     /// <summary>The entity whose MaximumHealth sums were snapshotted by the most recent StatModifierExpiringEvent, and those sums -- consumed by the matching StatModifierExpiredEvent. See MaximumHealthShift.</summary>
     /// <remarks>A single slot rather than a map: StatModifierExpirySystem sweeps one entity at a time and publishes both events synchronously within that sweep, so a snapshot never has to outlive the entity it was taken for.</remarks>
     private int _expiringEntityId = -1;
     private float _expiringAdditiveSum;
     private float _expiringMultiplicativeSum;
 
-    public void Configure(GameModuleContext context)
+    public void RegisterComponents(ComponentRegistration registration)
     {
-        _creatures = context.Definitions;
-        _processingTierEvents = context.ProcessingTierEvents;
-        _mathUtility = context.MathUtility;
-        _eventBus = context.EventBus;
-        _playerQuery = context.PlayerQuery;
-        _floatingTextFeed = context.FloatingTextFeed;
-    }
+        var componentManager = registration.ComponentManager;
 
-    public void RegisterComponents(ComponentManager componentManager)
-    {
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) =>
         {
             // Floored at 0: a negative MaximumHealth here would make the Clamp below throw
@@ -66,8 +46,12 @@ public sealed class HealthModule : IGameModule
         componentManager.RegisterPackedPool<BodyPartStateComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 20_000);
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
+        var context = registration.Context;
+        var systemManager = registration.SystemManager;
+        var componentManager = registration.ComponentManager;
+
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
         var deadEntities = componentManager.GetPackedPool<DeadComponent>();
         var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
@@ -75,42 +59,42 @@ public sealed class HealthModule : IGameModule
         systemManager.Register(new SimpleHealthRegenSystem(
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents,
+            context.ProcessingTierEvents,
             statModifiers,
             deadEntities,
             abilityScores,
-            EntityBodyParts.For(componentManager, _creatures),
-            _eventBus,
-            _playerQuery,
-            _floatingTextFeed));
+            EntityBodyParts.For(componentManager, context.Definitions),
+            context.EventBus,
+            context.PlayerQuery,
+            context.FloatingTextFeed));
 
         systemManager.Register(new ComplexHealthRegenSystem(
-            EntityBodyParts.For(componentManager, _creatures),
+            EntityBodyParts.For(componentManager, context.Definitions),
             componentManager.GetPackedPool<BodyPartStateComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents,
+            context.ProcessingTierEvents,
             statModifiers,
             deadEntities,
             abilityScores,
-            _eventBus,
-            _playerQuery,
-            _floatingTextFeed));
+            context.EventBus,
+            context.PlayerQuery,
+            context.FloatingTextFeed));
 
-        WireMaximumHealthShift(componentManager);
+        WireMaximumHealthShift(componentManager, context);
     }
 
     /// <summary>Current health follows the effective maximum when a MaximumHealth modifier wears off, the expiry half of MaximumHealthShift -- the grant half is MaximumHealthShift.ApplyModifier, called by whoever grants one.</summary>
     /// <remarks>Two events because the amount to give back is the distance the maximum moved, and that is only knowable from both sides of the removal: the sums are snapshotted while the modifiers are still there, and spent once they are gone.</remarks>
-    private void WireMaximumHealthShift(ComponentManager componentManager)
+    private void WireMaximumHealthShift(ComponentManager componentManager, GameModuleContext context)
     {
-        _eventBus.Subscribe<StatModifierExpiringEvent>(expiring =>
+        context.EventBus.Subscribe<StatModifierExpiringEvent>(expiring =>
         {
             _expiringEntityId = expiring.EntityId;
             MaximumHealthShift.Capture(componentManager, expiring.EntityId, out _expiringAdditiveSum, out _expiringMultiplicativeSum);
         });
 
-        _eventBus.Subscribe<StatModifierExpiredEvent>(expired =>
+        context.EventBus.Subscribe<StatModifierExpiredEvent>(expired =>
         {
             if (expired.Target != StatModifierTarget.MaximumHealth || expired.EntityId != _expiringEntityId)
             {
@@ -120,7 +104,7 @@ public sealed class HealthModule : IGameModule
             // Cleared first: a sweep that expires two MaximumHealth modifiers at once publishes two
             // of these, and the snapshot already covers both, so only the first may spend it.
             _expiringEntityId = -1;
-            MaximumHealthShift.Apply(componentManager, _creatures, expired.EntityId, _expiringAdditiveSum, _expiringMultiplicativeSum);
+            MaximumHealthShift.Apply(componentManager, context.Definitions, expired.EntityId, _expiringAdditiveSum, _expiringMultiplicativeSum);
         });
     }
 }

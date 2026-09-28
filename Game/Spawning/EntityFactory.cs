@@ -3,18 +3,12 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Math;
-using Engine.Utilities;
 using Game.Blueprints;
-using Game.Modules.Actions;
-using Game.Modules.Class;
 using Game.Modules.Class.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
-using Game.Modules.Mana;
-using Game.Modules.Mana.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
-using Game.Modules.Race.Components;
 using Game.World;
 
 namespace Game.Spawning;
@@ -23,23 +17,12 @@ namespace Game.Spawning;
 /// <remarks>
 /// Every entity spawns through this -- a goblin rolled by population, a shop, the player -- so every
 /// entity carries a SpawnRecordComponent and can be deferred, rebuilt or read back as "blueprint plus
-/// a seed". Building is in two steps: the skeleton is what the entity needs to exist on the map before
-/// it is ever simulated (its spawn record, and a NonBlockingComponent for a part that never blocks its
-/// cell), the body is every definition in the blueprint's resolved build order -- each one's race or
-/// class, then its own blueprint -- then its action-lock stagger. One reusable random sequence,
-/// reseeded per entity, is the BlueprintContext.Rolls every part builds with, so an entity's rolls
-/// depend on its seed alone -- not on how many entities were built before it, in what order, or when.
-///
-/// The spawning half (Spawn) needs the world, its entity manager and the session's tier resolver,
-/// skeletons, move buffer and crawler numbers; the building half needs none of them, which is what lets
-/// SpawnRecordRebuilder rebuild a record in a staging world with the build-only constructor.
+/// a seed". Building itself is EntityBuilder's; this adds what only a session has: placing on the map,
+/// being born tiered, skeletons for creatures born unsimulated, spawn moves and crawler numbers.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class EntityFactory
 {
-    /// <summary>The longest a freshly built entity waits before its first action, so a batch built together doesn't act in lockstep.</summary>
-    private static readonly ushort MaximumStaggerFrames = GameTiming.FramesForSeconds(1f);
-
     /// <summary>What Spawn returns when the entity could not be placed and was destroyed again.</summary>
     public const int NoEntity = -1;
 
@@ -60,33 +43,22 @@ public sealed class EntityFactory
     };
 
     private readonly BlueprintRegistry _definitions;
-    private readonly EntityKeys _entityKeys;
-    private readonly SeededRandom _random = new();
-    private readonly MathUtility _rolls;
-
-    private readonly World.World? _world;
-    private readonly EntityManager? _entityManager;
-    private readonly ComponentManager? _componentManager;
-    private readonly ProcessingTierResolver? _tierResolver;
-    private readonly SimulationClock? _clock;
+    private readonly EntityBuilder _builder;
+    private readonly World.World _world;
+    private readonly EntityManager _entityManager;
+    private readonly ComponentManager _componentManager;
+    private readonly ProcessingTierResolver _tierResolver;
+    private readonly SimulationClock _clock;
     private readonly UniqueNumberAllocator? _crawlerNumbers;
-    private readonly MathUtility? _runtimeSeeds;
-    private readonly DirectComponentPool<ProcessingTierComponent>? _tiers;
-    private readonly DirectComponentPool<TransformComponent>? _transforms;
-
-    /// <summary>Builds only -- for a staging world that never places anything (see SpawnRecordRebuilder).</summary>
-    public EntityFactory(BlueprintRegistry definitions, EntityKeys entityKeys)
-    {
-        _definitions = definitions;
-        _entityKeys = entityKeys;
-        _rolls = new MathUtility(_random);
-    }
+    private readonly MathUtility _runtimeSeeds;
+    private readonly DirectComponentPool<ProcessingTierComponent> _tiers;
+    private readonly DirectComponentPool<TransformComponent> _transforms;
 
     /// <summary>Builds and spawns, into world and the ECS its pools belong to.</summary>
-    /// <param name="tierResolver">When supplied, an entity is created through it and born with its processing tier as its first component, so no tiered consumer ever has to migrate it.</param>
+    /// <param name="tierResolver">Every entity is created through it, born with its processing tier as its first component, so no tiered consumer ever has to migrate it.</param>
     /// <param name="clock">The simulation's "now", which a freshly built entity's action-lock stagger counts from.</param>
     /// <param name="processingTierEvents">The session's tier changes, so a skeleton promoted into a simulated tier is built before anything sees the change.</param>
-    /// <param name="crawlerNumbers">The session's crawler numbers, which a crawler draws from when it is first built.</param>
+    /// <param name="crawlerNumbers">The session's crawler numbers, which a crawler draws from when it is first built; null for a session that spawns no crawlers.</param>
     /// <param name="runtimeSeed">Seeds the sequence a request that names no seed draws its own from -- kept apart from every other random sequence, so a spawn at runtime shifts nothing else.</param>
     public EntityFactory(
         BlueprintRegistry definitions,
@@ -96,33 +68,34 @@ public sealed class EntityFactory
         FrameEventBuffer<EntityMovedEvent> movedEntities,
         SimulationClock clock,
         ProcessingTierEvents processingTierEvents,
-        ProcessingTierResolver? tierResolver = null,
+        ProcessingTierResolver tierResolver,
         UniqueNumberAllocator? crawlerNumbers = null,
         ulong runtimeSeed = 0)
-        : this(definitions, entityManager.Keys)
     {
+        _definitions = definitions;
+        _builder = new EntityBuilder(definitions, entityManager.Keys);
         _world = world;
         _entityManager = entityManager;
         _componentManager = componentManager;
-        SpawnMoves = new SpawnMoves(movedEntities, entityManager.Keys);
         _tierResolver = tierResolver;
         _clock = clock;
         _crawlerNumbers = crawlerNumbers;
         _runtimeSeeds = new MathUtility(new SeededRandom(runtimeSeed));
         _transforms = componentManager.GetDirectPool<TransformComponent>();
         _tiers = componentManager.GetDirectPool<ProcessingTierComponent>();
+        SpawnMoves = new SpawnMoves(movedEntities, entityManager.Keys);
 
-        Skeletons = new CreatureSkeletons(this, componentManager, clock);
+        Skeletons = new CreatureSkeletons(this, SpawnMoves, componentManager, clock);
         entityManager.EntityDestroying += Skeletons.Forget;
         processingTierEvents.TierChanging += BuildIfPromotedToSimulated;
     }
 
-    /// <summary>Where every spawn's move is recorded -- register it first in the frame (see SpawnMoves). Null for a factory that only builds.</summary>
-    public SpawnMoves? SpawnMoves { get; }
+    /// <summary>Where every spawn's move is recorded -- register it first in the frame (see SpawnMoves).</summary>
+    public SpawnMoves SpawnMoves { get; }
 
-    /// <summary>The skeletons an entity born into an unsimulated tier is spawned as, built only once simulated (see CreatureSkeletons). Null for a factory that only builds.</summary>
+    /// <summary>The skeletons an entity born into an unsimulated tier is spawned as, built only once simulated (see CreatureSkeletons).</summary>
     /// <remarks>Created by the factory itself, since CreatureSkeletons is built around it. Forgets an entity as it is destroyed, ahead of any destruction handler registered after the factory, and builds one promoted into a simulated tier.</remarks>
-    public CreatureSkeletons? Skeletons { get; }
+    public CreatureSkeletons Skeletons { get; }
 
     /// <summary>Spawns one entity of blueprint at (x, y), everything else defaulting as <see cref="SpawnRequest"/> describes.</summary>
     /// <inheritdoc cref="Spawn(in SpawnRequest)"/>
@@ -132,9 +105,9 @@ public sealed class EntityFactory
     /// <exception cref="InvalidOperationException">The blueprint can't be spawned on its own (see ResolvedBlueprint.IsSpawnable), or the request is a Crawler and this factory was given no crawler numbers. Nothing is created.</exception>
     public int Spawn(in SpawnRequest request)
     {
-        var world = _world ?? throw new InvalidOperationException("This factory builds only -- it was not given a world to spawn into.");
-        var entityManager = _entityManager!;
-        var componentManager = _componentManager!;
+        var world = _world;
+        var entityManager = _entityManager;
+        var componentManager = _componentManager;
         var resolved = RequireSpawnable(request.BlueprintId);
 
         if (request.Crawler && _crawlerNumbers is null)
@@ -144,22 +117,23 @@ public sealed class EntityFactory
 
         var position = new Vector3Int(request.X, request.Y, (int)(request.Layer ?? resolved.Layer));
         var size = request.Size ?? resolved.Size;
-        var seed = request.Seed ?? _runtimeSeeds!.NextSeed();
-        var flags = request.Crawler && !_crawlerNumbers!.IsExhausted ? SpawnFlags.Crawler : SpawnFlags.None;
-        var entityId = request.ReservedEntityId ?? _tierResolver?.CreateEntityAt(entityManager, position) ?? entityManager.CreateEntity();
+        var seed = request.Seed ?? _runtimeSeeds.NextSeed();
+        var flags = request.Crawler && _crawlerNumbers is { IsExhausted: false } ? SpawnFlags.Crawler : SpawnFlags.None;
+        var entityId = request.ReservedEntityId ?? _tierResolver.CreateEntityAt(entityManager, position);
         var deferred = CanDefer(entityId, resolved);
 
         if (deferred)
         {
             componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn((MapLayer)position.Z), size));
-            Skeletons!.Spawn(entityId, request.BlueprintId, seed, flags);
+            Skeletons.Spawn(entityId, request.BlueprintId, seed, flags);
         }
         else
         {
-            Build(componentManager, entityId, request.BlueprintId, seed, _clock!.CurrentFrame, flags);
+            _builder.BuildSkeleton(componentManager, entityId, request.BlueprintId, seed, flags);
+            BuildComplete(componentManager, entityId, request.BlueprintId, seed, _clock.CurrentFrame);
         }
 
-        ref var transform = ref _transforms!.Get(entityId);
+        ref var transform = ref _transforms.Get(entityId);
         transform.Size = size;
 
         world.PlaceEntityOnMap(entityId, position, ref transform);
@@ -183,7 +157,7 @@ public sealed class EntityFactory
             // drain, not published on the bus -- this is bulk population-time placement (tens of
             // thousands of entities per floor), not the rare player-move frequency PlayerActivityLog
             // is built around.
-            SpawnMoves!.Record(new EntityMovedEvent(entityId, position, position, transform.Size));
+            SpawnMoves.Record(new EntityMovedEvent(entityId, position, position, transform.Size));
         }
 
         return entityId;
@@ -213,109 +187,27 @@ public sealed class EntityFactory
     /// </remarks>
     public void Apply(int entityId, ushort blueprintId, ClassGrantKind classGrantedBy = ClassGrantKind.Spawn)
     {
-        var componentManager = _componentManager ?? throw new InvalidOperationException("Cannot apply blueprint without a component manager.");
-        var blueprint = _definitions.Resolve(blueprintId);
-        var appliedParts = componentManager.GetMultiPool<AppliedBlueprintComponent>();
-
-        Skeletons!.EnsureBuilt(entityId);
-
-        ResolvedBlueprint? own = null;
-        var seed = 0u;
-        if (componentManager.GetDirectPool<SpawnRecordComponent>().TryGetReadonly(entityId, out var record))
-        {
-            seed = record.Seed;
-            _definitions.TryResolve(record.BlueprintId, out own);
-        }
-
-        _random.Reseed(seed ^ ((ulong)(uint)blueprint.Definition.Id.GetHashCode() << 32));
-        var context = new BlueprintContext(componentManager, entityId, _rolls, _entityKeys, seed, _definitions);
-
-        foreach (var partId in blueprint.BuildOrder)
-        {
-            if (own?.BuildOrder.Contains(partId) == true || IsApplied(appliedParts, entityId, partId))
-            {
-                continue;
-            }
-
-            var definition = _definitions.Get(partId);
-            if (definition.NonBlocking is { } kind)
-            {
-                componentManager.Merge(entityId, new NonBlockingComponent(kind));
-            }
-
-            BuildPart(context, partId, classGrantedBy);
-            appliedParts.Add(entityId, new AppliedBlueprintComponent(partId, (ushort)appliedParts.CountForEntity(entityId)));
-            GrantManaIfAnyActionCosts(componentManager, entityId, definition.Actions);
-        }
+        Skeletons.EnsureBuilt(entityId);
+        _builder.Apply(_componentManager, entityId, blueprintId, classGrantedBy);
     }
 
-    private static bool IsApplied(MultiComponentPool<AppliedBlueprintComponent> appliedParts, int entityId, ushort partId)
-    {
-        for (var denseIndex = appliedParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = appliedParts.GetNextDenseIndex(denseIndex))
-        {
-            if (appliedParts.GetReadonlyByDenseIndex(denseIndex).BlueprintId == partId)
-            {
-                return true;
-            }
-        }
+    /// <inheritdoc cref="EntityBuilder.BuildSkeleton"/>
+    public void BuildSkeleton(ComponentManager componentManager, int entityId, ushort blueprintId, uint seed, SpawnFlags flags = SpawnFlags.None) =>
+        _builder.BuildSkeleton(componentManager, entityId, blueprintId, seed, flags);
 
-        return false;
-    }
-
-    /// <summary>The skeleton, then everything else (BuildComplete).</summary>
-    /// <param name="now">The frame the body is built on -- the action-lock stagger counts from it.</param>
-    public void Build(ComponentManager componentManager, int entityId, ushort blueprintId, uint seed, long now, SpawnFlags flags = SpawnFlags.None)
-    {
-        BuildSkeleton(componentManager, entityId, blueprintId, seed, flags);
-        BuildComplete(componentManager, entityId, blueprintId, seed, now);
-    }
-
-    /// <summary>Writes entityId's skeleton (see SkeletonComponentTypes) from its blueprint: an unplaced transform on the blueprint's layer and size if it has none yet, its occupancy and its spawn record.</summary>
-    public void BuildSkeleton(ComponentManager componentManager, int entityId, ushort blueprintId, uint seed, SpawnFlags flags = SpawnFlags.None)
-    {
-        var resolved = _definitions.Resolve(blueprintId);
-        if (!componentManager.GetDirectPool<TransformComponent>().Has(entityId))
-        {
-            componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(resolved.Layer), resolved.Size));
-        }
-
-        foreach (var kind in resolved.NonBlocking)
-        {
-            componentManager.Merge(entityId, new NonBlockingComponent(kind));
-        }
-
-        componentManager.Merge(entityId, new SpawnRecordComponent(blueprintId, flags, seed));
-    }
-
-    /// <summary>Builds everything but the skeleton: each part in build order -- its race or class, then its Build step -- then its action-lock stagger and, for a crawler, its crawler number.</summary>
+    /// <summary>Builds everything but the skeleton (see EntityBuilder.BuildComplete), then, for a crawler, its crawler number.</summary>
     /// <param name="now">The frame it is built on -- the action-lock stagger counts from it.</param>
     public void BuildComplete(ComponentManager componentManager, int entityId, ushort blueprintId, uint seed, long now)
     {
-        var resolved = _definitions.Resolve(blueprintId);
-        _random.Reseed(seed);
-        var context = new BlueprintContext(componentManager, entityId, _rolls, _entityKeys, seed, _definitions);
-
-        foreach (var partId in resolved.BuildOrder)
-        {
-            BuildPart(context, partId);
-        }
-
-        GrantManaIfAnyActionCosts(componentManager, entityId, resolved.Actions);
-
-        var actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
-        if (actionLocks.Has(entityId))
-        {
-            ActionLockGate.Lock(actionLocks, entityId, now, (ushort)_rolls.Next(0, MaximumStaggerFrames + 1));
-        }
-
+        _builder.BuildComplete(componentManager, entityId, blueprintId, seed, now);
         AssignCrawlerNumber(componentManager, entityId);
     }
 
     /// <summary>Gives entityId the session's next crawler number if its spawn record makes it a crawler and it has none yet.</summary>
     /// <remarks>
     /// On first build, not at spawn: a crawler number is only ever read on an entity that acts or is
-    /// inspected built, so an unbuilt crawler never draws a number it may never use. A build-only factory
-    /// (SpawnRecordRebuilder' staging world) has no crawler numbers and assigns none. A crawler built after
+    /// inspected built, so an unbuilt crawler never draws a number it may never use. A session given no crawler
+    /// numbers assigns none. A crawler built after
     /// the numbers ran out has its Crawler flag cleared and stays a plain NPC.
     /// </remarks>
     private void AssignCrawlerNumber(ComponentManager componentManager, int entityId)
@@ -363,43 +255,11 @@ public sealed class EntityFactory
     {
         if (ProcessingTierQuery.IsSimulatedTier(tier))
         {
-            Skeletons!.EnsureBuilt(entityId);
+            Skeletons.EnsureBuilt(entityId);
         }
     }
 
-    /// <summary>Whether entityId was born into a simulated tier. An entity born without a tier (no resolver) counts as simulated.</summary>
+    /// <summary>Whether entityId was born into a simulated tier. An entity born without a tier (one created on a reserved id) counts as simulated.</summary>
     private bool IsBornSimulated(int entityId) =>
-        !_tiers!.TryGetReadonly(entityId, out var tier) || ProcessingTierQuery.IsSimulatedTier(tier.Tier);
-
-    /// <summary>Grants partId's race or class, then builds its own blueprint, so a blueprint already sees the race or class it belongs to.</summary>
-    private void BuildPart(BlueprintContext context, ushort partId, ClassGrantKind classGrantedBy = ClassGrantKind.Spawn)
-    {
-        var definition = _definitions.Get(partId);
-        var componentManager = context.ComponentManager;
-
-        if (definition.Race is not null)
-        {
-            componentManager.Merge(context.EntityId, new RaceSlotsComponent(partId));
-        }
-
-        if (definition.Class is not null)
-        {
-            ClassEffects.Grant(componentManager, context.EntityId, partId, classGrantedBy);
-        }
-
-        definition.Build?.Invoke(context);
-    }
-
-    /// <summary>The definition-grant counterpart of ActionGrantEffects' mana hook: an entity whose blueprint grants a mana-costing action gains a ManaComponent, once every part has granted the ability scores it is sized from.</summary>
-    private static void GrantManaIfAnyActionCosts(ComponentManager componentManager, int entityId, IReadOnlyList<ActionGrant> actions)
-    {
-        for (var index = 0; index < actions.Count; index++)
-        {
-            if (actions[index].ManaCost > 0)
-            {
-                ManaGrant.EnsureManaComponentExists(componentManager, entityId);
-                return;
-            }
-        }
-    }
+        !_tiers.TryGetReadonly(entityId, out var tier) || ProcessingTierQuery.IsSimulatedTier(tier.Tier);
 }

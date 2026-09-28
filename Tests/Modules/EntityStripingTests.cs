@@ -1,5 +1,4 @@
 using Engine.ECS.Entities;
-using Engine.Bootstrap;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -177,12 +176,9 @@ public sealed class EntityStripingTests
     [TestMethod]
     public void RealSystemsWithLargePopulation_RunManyFrames_DoesNotThrowAndKeepsRecharging()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(20, 20, 1)));
-        var mathUtility = new MathUtility();
-
-        var context = new GameModuleContext(world, mathUtility, new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
-
-        var ecsContext = BuiltInTestModules.Build(context, 500, 500);
+        var pass = BuiltInTestModules.Build(new Map(new Vector3Int(20, 20, 1)), initialEntityCapacity: 500, initialComponentCapacity: 500);
+        var world = pass.World;
+        var ecsContext = pass.EcsContext;
         var healthPool = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>();
 
         const int entityCount = 200;

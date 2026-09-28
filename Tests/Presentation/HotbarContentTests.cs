@@ -62,7 +62,7 @@ public sealed class HotbarContentTests
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = PlayerEntityId };
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
 

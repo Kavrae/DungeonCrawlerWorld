@@ -30,7 +30,7 @@ public sealed class MapViewQueryTests
 
     private sealed class Fixture
     {
-        public Game.World.World World { get; } = new(new Map(new Vector3Int(10, 10, 3)));
+        public Game.World.World World { get; }
         public ComponentManager Components { get; } = BuiltInTestComponents.RegisterAll(new ComponentManager(32, 16));
         public ActionCatalog Actions { get; } = new();
         public TerrainRegistry Terrain { get; } = new();
@@ -39,7 +39,7 @@ public sealed class MapViewQueryTests
 
         public Fixture()
         {
-            TestWorlds.WireOccupancy(World, Components);
+            World = TestWorlds.Over(new Map(new Vector3Int(10, 10, 3)), Components);
             Query = new MapViewQuery(World, Components, Actions, Terrain, creatures: new BlueprintRegistry(), Clock);
         }
 

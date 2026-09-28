@@ -1538,11 +1538,10 @@ after") became three Id-keyed lists; see CLAUDE.md's Modding section for the rul
   replacement must register every component the built-in did (checked in the dry run), so in a game
   every built-in pool always exists. The only ways one was ever missing were tests with hand-picked
   module sets or bare `ComponentManager`s, and per "tests don't drive design" those tests now build
-  the full set (`BuiltInTestComponents`, `BuiltInTestModules`) instead. Nullable pools that remain
-  are null for a real reason: resolved lazily (`BurningAuraApplier`, `TimerBasedAuraApplier`,
-  `TimerBasedStatusEffectDisplay`), wired after construction (`World`, `ProcessingTierResolver`),
-  `EntityFactory`'s build-only mode, or no component manager at all (`UiInputController`'s shop pool
-  in UI tests).
+  the full set (`BuiltInTestComponents`, `BuiltInTestModules`) instead. The lazily resolved and
+  late-wired pools left over at the time went with the register-first bootstrap (below); the one
+  that remains is null for a real reason: no component manager at all (`UiInputController`'s shop
+  pool in UI tests).
 - **Health never reads a status effect.** Health's regen used to skip a part holding a
   `BodyPartBurningTimerComponent`, a pool Burning registers. That check was already redundant apart
   from the ~1 s before a burn's first tick, since every tick resets the part's regen lockout for
@@ -1564,3 +1563,50 @@ after") became three Id-keyed lists; see CLAUDE.md's Modding section for the rul
   3072, 5 runs a side interleaved): `EcsContext.Update` 3.98 -> 3.93 ms/frame (-1.3%, within the
   baseline's own spread), no system outside its run-to-run range, worst frames overlapping.
   Same world over the whole range (short-name fingerprint `4185967D5DB33537` on both).
+
+### Register-first bootstrap, self-contained build passes, settings
+
+Landed 2026-09-28. Every object that read pools used to be created empty with `GameModuleContext`
+(before any pool existed) and wired later, each its own way (`Wire`, setters, `??=`, a resolved
+flag); tests had to repeat the wiring by hand, and missing a step only failed at runtime. See
+CLAUDE.md's ECS and Modding sections for the resulting rules.
+
+- **Register first.** The sequence is DeclareSettings → RegisterComponents → Configure →
+  RegisterSystems. Chosen over a post-registration bind hook and over handles (Forge's
+  `RegistryObject` shape) because it removes the gap instead of bridging it -- the shape of Forge's
+  registry events, Factorio's data stage and Bevy's `build()`. No built-in `RegisterComponents`
+  depended on `Configure`, so nothing had to move for it.
+- **Staged Engine builder, named for states.** `EcsBuilder.Begin` → `SortedModules` →
+  `RegisteredComponents` → `ConfiguredModules` → `RegisteredSystems`: each type is what is already
+  true, its methods the transitions; each stage advances once. Chosen over one `Build` call with a
+  callback in the middle.
+- **Engine owns every phase, generic over the context.** `IModule<TContext>`; `RegisterSystems`
+  gets the context in `SystemRegistration<TContext>`, which removed ~100 `= null!` fields modules
+  carried from `Configure`. `Configure` still exists as its own phase: catalogs and registries
+  another module's `RegisterSystems` reads (aura appliers, actions, blueprints before `ResolveAll`)
+  must be complete before any system is built.
+- **Foundation modules.** The context is built from Core's, ProcessingTier's and Blueprints' pools,
+  so every build contains them (`GameModuleContext.FoundationModuleIds`). ProcessingTier's
+  `Requires` on Movement existed only for `LocalTierRoster`'s wiring; the roster moved out of the
+  context into the pass result, so ProcessingTier now requires only Core (still runs after
+  Movement) -- which keeps the foundation small enough for test builds of a few modules.
+- **Self-contained passes.** Before, one `GameBootstrapper.Build` reconfigured the *same* module
+  instances N+2 times (each mod's dry run, staging, real) against the *real* World, and was correct
+  only because the real build ran last. Now every pass instantiates from `ModuleFactory`s and gets
+  its own World (dry runs and staging over `CreatePlaceholderMap()`), EventBus, keys and
+  MathUtility. `ModValidation` and `GameBootstrapper.Build` are separate entry points for the
+  future menu: validation at game start / mods changed, the build at new game / load. Found on the
+  way: the staging and dry-run builds had never wired their `FloatingTextFeed`, and dry runs drew
+  from the session's own MathUtility.
+- **`EntityFactory` split.** `EntityBuilder` (definitions, key table, rolls) builds;
+  `EntityFactory` spawns through one. The build-only constructor and its nullable fields are gone;
+  `SpawnRecordRebuilder` builds into the staging pools with an `EntityBuilder` over the *session's*
+  registry, so a blueprint registered after staging was built still rebuilds.
+- **Settings (phase 0).** Built with no consumers: typed keys owned by a module `Id`, validated
+  declarations, frozen values, failures reported rather than dropped; command-line source only
+  until something needs a file. Settings may size pools, never remove a built-in one.
+- **Verified unchanged.** Same headless world fingerprint as before on seeds 1, 7 and 11; headless
+  A/B vs the pre-change build: `EcsContext.Update` 3.81 vs 3.81 ms/frame, no system beyond run
+  spread. Subscription order moved in two places, neither observable: `LocalTierRoster` now
+  subscribes after every system; the factory's `EntityDestroying`/`TierChanging` handlers before
+  every system (no system subscribes to either).

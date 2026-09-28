@@ -3,6 +3,7 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.StatModifiers;
+using Engine.Modules;
 
 namespace Game.Modules.AbilityScores;
 
@@ -22,14 +23,19 @@ public sealed class AbilityScoresModule : IGameModule
 
     public IReadOnlyList<Guid> Requires { get; } = [StatModifiersModule.ModuleId];
 
-    private EventBus _eventBus = null!;
+    public void RegisterComponents(ComponentRegistration registration)
+    {
+        var componentManager = registration.ComponentManager;
 
-    public void Configure(GameModuleContext context) => _eventBus = context.EventBus;
-
-    public void RegisterComponents(ComponentManager componentManager) =>
         componentManager.RegisterPackedPool<AbilityScoresComponent>(static (ref existing, incoming) => existing.MergeFrom(incoming), initialCapacity: 80_000);
+    }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) =>
-        _eventBus.Subscribe<StatModifierExpiredEvent>(expired =>
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    {
+        var context = registration.Context;
+        var componentManager = registration.ComponentManager;
+
+        context.EventBus.Subscribe<StatModifierExpiredEvent>(expired =>
             AbilityScoreEffects.RecomputeIfAbilityScore(componentManager, expired.EntityId, expired.Target));
+    }
 }

@@ -25,7 +25,7 @@ public readonly record struct TimerEntry(int EntityId, int Key, uint Deadline);
 /// - Draining past several frames at once drains each of them in order.
 ///
 /// Frame 0 is always the first frame drained, because a wheel is always built before the
-/// simulation runs: every one of them is constructed during GameBootstrapper.Build, and a
+/// simulation runs: every one of them is constructed during a GameBuildPass, and a
 /// SimulationClock starts each session at 0. There is deliberately no way to start one elsewhere
 /// -- a wheel handed a later start frame would just be one more thing to keep in sync with the
 /// clock, and nothing needs it.

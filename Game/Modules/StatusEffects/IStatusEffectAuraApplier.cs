@@ -1,4 +1,3 @@
-using Engine.ECS.Components;
 using Game.World;
 
 namespace Game.Modules.StatusEffects;
@@ -18,9 +17,9 @@ public interface IStatusEffectAuraApplier
     StatusEffectType EffectType { get; }
 
     /// <summary>This entity's current stack count for EffectType, or 0 if it has none.</summary>
-    int GetCurrentStackCount(ComponentManager componentManager, int entityId);
+    int GetCurrentStackCount(int entityId);
 
     /// <summary>Applies exactly one more stack, attributed to source.</summary>
     /// <param name="now">The simulation frame the stack lands on -- a newly started effect's timer is scheduled from it (FrameDeadline.After(now, ...)).</param>
-    void ApplyStack(ComponentManager componentManager, int entityId, ActionSource source, long now);
+    void ApplyStack(int entityId, ActionSource source, long now);
 }

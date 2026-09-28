@@ -24,7 +24,7 @@ public sealed class SystemManager
     /// <summary>
     /// Advanced to each update's EngineTime.FrameCount before any system runs, so everything that
     /// reads it during or after that frame sees the frame being simulated. The game replaces this
-    /// default with the instance its modules were configured against (GameBootstrapper) -- the same
+    /// default with the instance its modules were configured against (GameBuildPass) -- the same
     /// injected-policy shape as SimulatedTierCount. See SimulationClock's own remarks.
     /// </summary>
     public SimulationClock Clock { get; set; } = new();

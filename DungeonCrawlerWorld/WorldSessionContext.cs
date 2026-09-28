@@ -22,7 +22,7 @@ namespace DungeonCrawlerWorld;
 ///
 /// Mirrors PresentationContext/ShellContext's own shape (an immutable bundle produced by a single
 /// Build call) -- the one this one doesn't share with those two is that it's built from a real
-/// multi-step sequence with a genuine internal ordering constraint (World must exist before
+/// multi-step sequence with a genuine internal ordering constraint (the Map must exist before
 /// WorldSessionBootstrapper's own GameBootstrapper.Build call, and PlayerActivityLog must
 /// subscribe before CreatePlayer publishes the player's spawn EntityMovedEvent), not just several
 /// independently constructed services.

@@ -1,6 +1,5 @@
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
 using Engine.Modules;
+using Game.Modules;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 
@@ -16,15 +15,17 @@ namespace Mods.TestFixtures;
 /// running game's Mods/ folder would switch regeneration off: GameBootstrapperTests exercises this at
 /// the GameBootstrapper.Build level only.
 /// </summary>
-public sealed class ReplacementHealthModule : IModule
+public sealed class ReplacementHealthModule : IGameModule
 {
     public Guid Id => HealthModule.ModuleId;
 
-    public void RegisterComponents(ComponentManager componentManager)
+    public void RegisterComponents(ComponentRegistration registration)
     {
+        var componentManager = registration.ComponentManager;
+
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<BodyPartStateComponent>(static (ref existing, incoming) => existing = incoming);
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) { }
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration) { }
 }

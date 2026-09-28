@@ -39,10 +39,10 @@ public sealed class ConsumableActivationSystemTests
     private static readonly Vector3Int TargetTile = new(5, 5, 0);
 
     /// <summary>Mirrors PoisonModule.Configure's own registration -- the real path StatusEffectQueries reads through.</summary>
-    private static StatusEffectDisplayRegistry CreateStatusEffectDisplays()
+    private static StatusEffectDisplayRegistry CreateStatusEffectDisplays(ComponentManager componentManager)
     {
         var displays = new StatusEffectDisplayRegistry();
-        displays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph,
+        displays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph, componentManager.GetPackedPool<PoisonTimerComponent>(),
             (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));
         return displays;
     }
@@ -385,9 +385,9 @@ public sealed class ConsumableActivationSystemTests
 
         system.Update(default, 0);
 
-        var displays = CreateStatusEffectDisplays();
-        Assert.AreEqual(1, StatusEffectQueries.CountStacks(displays, componentManager, TargetEntityId, StatusEffectType.Poison));
-        Assert.AreEqual(0, StatusEffectQueries.CountStacks(displays, componentManager, CasterEntityId, StatusEffectType.Poison));
+        var displays = CreateStatusEffectDisplays(componentManager);
+        Assert.AreEqual(1, StatusEffectQueries.CountStacks(displays, TargetEntityId, StatusEffectType.Poison));
+        Assert.AreEqual(0, StatusEffectQueries.CountStacks(displays, CasterEntityId, StatusEffectType.Poison));
         Assert.IsNotNull(published);
         Assert.AreEqual(TargetEntityId, published!.EntityId);
     }
@@ -407,7 +407,7 @@ public sealed class ConsumableActivationSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(0, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, TargetEntityId, StatusEffectType.Poison));
+        Assert.AreEqual(0, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(componentManager), TargetEntityId, StatusEffectType.Poison));
         Assert.IsFalse(published);
     }
 

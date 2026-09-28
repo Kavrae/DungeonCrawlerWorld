@@ -1,5 +1,4 @@
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
+using Engine.Modules;
 using Game.Modules.Inventory.Definitions;
 
 namespace Game.Modules.Inventory;
@@ -37,12 +36,12 @@ public sealed class CoreItemsModule : IGameModule
         }
     }
 
-    public void RegisterComponents(ComponentManager componentManager)
+    public void RegisterComponents(ComponentRegistration registration)
     {
         // No components of its own -- see class doc comment.
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
         // No systems of its own -- see class doc comment.
     }

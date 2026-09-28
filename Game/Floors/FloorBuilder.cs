@@ -16,9 +16,8 @@ namespace Game.Floors;
 
 /// <summary>
 /// Builds a single floor's content. Split into two phases because of a real ordering
-/// constraint, not style: CreateMap must run before GameBootstrapper.Build (MovementModule's
-/// Configure step needs an IMapQuery -- i.e. a World wrapping this Map -- to configure
-/// itself), while PopulateFloor needs the EntityManager/ComponentManager that
+/// constraint, not style: CreateMap must run before GameBootstrapper.Build, which builds the World
+/// over this Map (MovementModule's Configure step needs that World as its IMapQuery), while PopulateFloor needs the EntityManager/ComponentManager that
 /// GameBootstrapper.Build is what produces. See TestMapBuilder's own doc comment for the same
 /// constraint from the population side.
 ///

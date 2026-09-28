@@ -12,9 +12,9 @@ public static class ModuleSet
     /// anything, even another unset Guid.Empty -- otherwise two mods that both forgot to set
     /// an Id would incorrectly replace each other instead of coexisting.
     /// </remarks>
-    public static IReadOnlyList<IModule> Combine(IReadOnlyList<IModule> builtIn, IReadOnlyList<IModule> mods)
+    public static IReadOnlyList<TModule> Combine<TModule>(IReadOnlyList<TModule> builtIn, IReadOnlyList<TModule> mods) where TModule : IModule
     {
-        var combined = new List<IModule>(builtIn);
+        var combined = new List<TModule>(builtIn);
 
         foreach (var mod in mods)
         {

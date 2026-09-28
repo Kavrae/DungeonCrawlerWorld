@@ -1,10 +1,10 @@
 using Engine.ECS.Entities;
-using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
+using Game.Bootstrap;
 using Game.Spawning;
 using Game.Floors;
 using Game.Modules;
@@ -42,20 +42,8 @@ namespace Tests.Floors;
 [TestClass]
 public sealed class FloorBuilderTests
 {
-    private static EcsContext BuildEcsContext(Game.World.World world, MathUtility mathUtility) => BuildEcsContext(world, mathUtility, out _);
-
-    private static EcsContext BuildEcsContext(Game.World.World world, MathUtility mathUtility, out GameModuleContext context)
-    {
-        var eventBus = new EventBus();
-        context = new GameModuleContext(world, mathUtility, eventBus) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
-        var ecsContext = BuiltInTestModules.Build(context, 5000, 5000);
-        world.Terrain = context.Terrain;
-        return ecsContext;
-    }
-
-    /// <summary>The one spawn path, for a context these tests assembled themselves -- GameBootstrapper builds the real session's (see GameBootstrapResult.Factory).</summary>
-    private static EntityFactory FactoryFor(Game.World.World world, EcsContext ecsContext, GameModuleContext context, ProcessingTierResolver? tierResolver = null) =>
-        new(context.Definitions, world, ecsContext.EntityManager, ecsContext.ComponentManager, context.MovedEntities, ecsContext.SystemManager.Clock, context.ProcessingTierEvents, tierResolver, new UniqueNumberAllocator(1, 1, 24));
+    private static GameBuildPassResult Build(Map map, MathUtility mathUtility) =>
+        BuiltInTestModules.Build(map, mathUtility, initialEntityCapacity: 5000, initialComponentCapacity: 5000, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24));
 
     /// <summary>
     /// The player must not be placed before/during TestMapBuilder.Populate (PlaceEntityOnMap
@@ -71,12 +59,14 @@ public sealed class FloorBuilderTests
     [TestMethod]
     public void PopulateFloor_PlacesPlayerOnAFreeOnMapCellAndWiresPlayerEntityId()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(20, 20, 3)));
         var mathUtility = new MathUtility(new Random(1));
-        var ecsContext = BuildEcsContext(world, mathUtility, out var context);
+        var pass = Build(new Map(new Vector3Int(20, 20, 3)), mathUtility);
+        var world = pass.World;
+        var ecsContext = pass.EcsContext;
+        var context = pass.Context;
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
-        var factory = FactoryFor(world, ecsContext, context);
+        var factory = pass.Factory;
         FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Definitions);
         FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId);
         world.PlayerEntityId = playerEntityId;
@@ -106,11 +96,13 @@ public sealed class FloorBuilderTests
     [TestMethod]
     public void PopulateFloor_EveryCreatureCreatedIsOnTheMap()
     {
-        var world = new Game.World.World(new Map(new MapBounds(-1024, 0, 0, 1024, 3)));
         var mathUtility = new MathUtility(new Random(1));
-        var ecsContext = BuildEcsContext(world, mathUtility, out var context);
+        var pass = Build(new Map(new MapBounds(-1024, 0, 0, 1024, 3)), mathUtility);
+        var world = pass.World;
+        var ecsContext = pass.EcsContext;
+        var context = pass.Context;
 
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), FactoryFor(world, ecsContext, context), context.Terrain, context.Definitions);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), pass.Factory, context.Terrain, context.Definitions);
 
         var transforms = ecsContext.ComponentManager.GetDirectPool<TransformComponent>();
         var creatures = 0;
@@ -130,11 +122,13 @@ public sealed class FloorBuilderTests
     [TestMethod]
     public void PopulateFloor_WallsAreStructuresAndNoOccupantStandsInOne()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(40, 40, 3)));
         var mathUtility = new MathUtility(new Random(1));
-        var ecsContext = BuildEcsContext(world, mathUtility, out var context);
+        var pass = Build(new Map(new Vector3Int(40, 40, 3)), mathUtility);
+        var world = pass.World;
+        var ecsContext = pass.EcsContext;
+        var context = pass.Context;
 
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), FactoryFor(world, ecsContext, context), context.Terrain, context.Definitions);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), pass.Factory, context.Terrain, context.Definitions);
 
         var wallId = context.Terrain.GetId(BuiltInTerrain.StoneWallKey);
         Assert.AreEqual(wallId, world.GetStructureAt(new Vector3Int(10, 2, (int)MapLayer.Ground)).TypeId);
@@ -172,9 +166,11 @@ public sealed class FloorBuilderTests
     [TestMethod]
     public void ReservePlayerEntity_CalledFirst_ReturnsEntityIdZero()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(20, 20, 3)));
         var mathUtility = new MathUtility(new Random(1));
-        var ecsContext = BuildEcsContext(world, mathUtility);
+        var pass = Build(new Map(new Vector3Int(20, 20, 3)), mathUtility);
+        var world = pass.World;
+        var ecsContext = pass.EcsContext;
+        var context = pass.Context;
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
 
@@ -198,9 +194,11 @@ public sealed class FloorBuilderTests
     [TestMethod]
     public void PopulateFloor_WithTierResolver_EveryIndexedEntityIsBornCorrectlyTiered()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(200, 20, 3)));
         var mathUtility = new MathUtility(new Random(1));
-        var ecsContext = BuildEcsContext(world, mathUtility, out var context);
+        var pass = Build(new Map(new Vector3Int(200, 20, 3)), mathUtility);
+        var world = pass.World;
+        var ecsContext = pass.EcsContext;
+        var context = pass.Context;
         var resolver = context.ProcessingTierResolver;
         world.EntityPlaced += resolver.EnsureTiered; // As GameBootstrapper wires it.
 
@@ -211,7 +209,7 @@ public sealed class FloorBuilderTests
         var raisedDuringPopulation = new HashSet<int>();
         context.ProcessingTierEvents.TierChanged += (entityId, _) => raisedDuringPopulation.Add(entityId);
 
-        var factory = FactoryFor(world, ecsContext, context, resolver);
+        var factory = pass.Factory;
         FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Definitions);
         FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId, resolver);
         world.PlayerEntityId = playerEntityId;
@@ -264,7 +262,7 @@ public sealed class FloorBuilderTests
         {
             if (tiers.TryGetReadonly(moverId, out var tier) && tier.Tier == Game.Modules.ProcessingTier.Components.ProcessingTierLevel.Local)
             {
-                Assert.IsTrue(context.LocalTierRoster.IsLocal(moverId), $"Mover {moverId} is Local but missing from LocalTierRoster.");
+                Assert.IsTrue(pass.LocalTierRoster.IsLocal(moverId), $"Mover {moverId} is Local but missing from LocalTierRoster.");
             }
         }
     }
@@ -280,10 +278,12 @@ public sealed class FloorBuilderTests
 
     private static (Game.World.World World, EcsContext Ecs, Game.TestMapBuilder Builder, BlueprintRegistry Creatures, EntityFactory Factory) BuildForGeneration(MapBounds bounds)
     {
-        var world = new Game.World.World(new Map(bounds));
         var mathUtility = new MathUtility(new Random(1));
-        var ecsContext = BuildEcsContext(world, mathUtility, out var context);
-        var factory = FactoryFor(world, ecsContext, context);
+        var pass = Build(new Map(bounds), mathUtility);
+        var world = pass.World;
+        var ecsContext = pass.EcsContext;
+        var context = pass.Context;
+        var factory = pass.Factory;
         var builder = new Game.TestMapBuilder(ecsContext.EntityManager, factory, context.Terrain, context.Definitions);
         return (world, ecsContext, builder, context.Definitions, factory);
     }

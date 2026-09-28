@@ -1,7 +1,7 @@
 using Engine.ECS.Entities;
-using Engine.Bootstrap;
 using Engine.Events;
 using Engine.Math;
+using Engine.Modules;
 using Game.Bootstrap;
 using Game.Modules;
 using Game.Modules.Core.Components;
@@ -13,21 +13,15 @@ namespace Tests.Modules;
 
 /// <summary>
 /// Validates the real built-in modules (not the toy modules in Tests.Bootstrap.BootstrapperTests)
-/// register and schedule together correctly through the real Bootstrapper.
+/// register and schedule together correctly through the real EcsBuilder.
 /// </summary>
 [TestClass]
 public sealed class GameModuleIntegrationTests
 {
-    /// <summary>All IGameModules sharing one Bootstrapper.Build call must Configure off the same GameModuleContext instance, so they share one ProcessingTierEvents object -- separate contexts would leave ActionLockSystem's TierChanged subscription listening to a different event than the one ProcessingTierSystem actually raises on.</summary>
-    private static GameModuleContext CreateContext(Game.World.World world) =>
-        new(world, new MathUtility(), new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
-
     [TestMethod]
     public void Build_BuiltInModules_RegistersEveryComponentType()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-
-        var ecsContext = BuiltInTestModules.Build(CreateContext(world));
+        var ecsContext = BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1))).EcsContext;
 
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<TransformComponent>());
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<DisplayTextComponent>());
@@ -43,15 +37,9 @@ public sealed class GameModuleIntegrationTests
     {
         // Requires is about presence, not order: a module listed before the ones it requires still
         // builds, since every component is registered before any system.
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-        var context = CreateContext(world);
-        var modules = GameBootstrapper.BuiltInModules().Reverse().ToList();
-        foreach (var gameModule in modules.OfType<IGameModule>())
-        {
-            gameModule.Configure(context);
-        }
+        var modules = GameBootstrapper.BuiltInModules().Reverse().CreateAll();
 
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 100, initialComponentCapacity: 50, context.EventBus, entityKeys: context.EntityKeys);
+        var ecsContext = BuiltInTestModules.BuildModules(modules, initialEntityCapacity: 100, initialComponentCapacity: 50).EcsContext;
 
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<MovementComponent>());
     }
@@ -59,9 +47,9 @@ public sealed class GameModuleIntegrationTests
     [TestMethod]
     public void Build_ThenCreateEntityAndTick_RunsWithoutThrowing()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-
-        var ecsContext = BuiltInTestModules.Build(CreateContext(world));
+        var pass = BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)));
+        var world = pass.World;
+        var ecsContext = pass.EcsContext;
 
         var entityId = ecsContext.EntityManager.CreateEntity();
         var transform = new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1));

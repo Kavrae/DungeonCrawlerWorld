@@ -1,6 +1,5 @@
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
 using Engine.Modules;
+using Game.Modules;
 
 namespace Mods.TestFixtures;
 
@@ -12,12 +11,12 @@ namespace Mods.TestFixtures;
 /// trivial-mod fixture) so each can be dropped into Mods/ independently for a full game run
 /// without one adversarial fixture's effects bleeding into another's verification.
 /// </summary>
-public sealed class ThrowingModule : IModule
+public sealed class ThrowingModule : IGameModule
 {
     public Guid Id { get; } = new("e6f2a017-4b3d-4a1e-9c72-000000000002");
 
-    public void RegisterComponents(ComponentManager componentManager) =>
+    public void RegisterComponents(ComponentRegistration registration) =>
         throw new InvalidOperationException("Intentional failure for GameBootstrapper dry-run testing.");
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) { }
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration) { }
 }

@@ -1,5 +1,4 @@
 using Engine.ECS.Entities;
-using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
@@ -43,13 +42,9 @@ public sealed class AbilityScoreMilestoneAchievementTests
 
     private static (EcsContext EcsContext, EventBus EventBus, Game.World.World World) Build()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-        var eventBus = new EventBus();
-        var context = new GameModuleContext(world, new MathUtility(), eventBus) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
+        var pass = BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)), initialEntityCapacity: 10, initialComponentCapacity: 10);
 
-        var ecsContext = BuiltInTestModules.Build(context, 10, 10);
-
-        return (ecsContext, eventBus, world);
+        return (pass.EcsContext, pass.Context.EventBus, pass.World);
     }
 
     private static bool HasEarned(EcsContext ecsContext, int entityId, Guid achievementId) =>

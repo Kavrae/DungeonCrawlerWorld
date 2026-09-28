@@ -1,35 +1,27 @@
-using Engine.ECS.Entities;
-using Engine.ECS.Components;
 using Engine.ECS.Systems;
-using Engine.Events;
-using Engine.Math;
+using Engine.Modules;
+using Game.Modules.Death;
+using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison.Components;
 using Game.Modules.Poison.Systems;
+using Game.Modules.Race;
+using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
-using Game.World;
-using Game.Blueprints;
-using Game.Modules.StatModifiers;
-using Game.Modules.Race;
-using Game.Modules.Death;
-using Game.Modules.Death.Components;
 
 namespace Game.Modules.Poison;
 
 /// <summary>
 /// Poison-specific: its own timer component and system, depending on StatusEffectsModule
-/// (shared immunity storage). Parameterless, with runtime dependencies (EventBus, IPlayerQuery)
-/// supplied via IGameModule.Configure. Also registers a
+/// (shared immunity storage). Registers a
 /// TimerBasedAuraApplier&lt;PoisonTimerComponent&gt; into the shared
 /// StatusEffectAuraApplierRegistry during Configure, so StatusEffectAuraSystem can grant
 /// Poison stacks without depending on this module directly.
 /// </summary>
 public sealed class PoisonModule : IGameModule
 {
-    private BlueprintRegistry _creatures = null!;
-
     public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000009");
 
     public Guid Id => ModuleId;
@@ -47,44 +39,48 @@ public sealed class PoisonModule : IGameModule
     // outlive having left the aura by that many extra ticks for no reason.
     private const int AuraDurationTicks = 1;
 
-    private EventBus _eventBus = null!;
-    private IPlayerQuery _playerQuery = null!;
-    private FloatingTextFeed _floatingTextFeed = null!;
-    private EntityKeys _entityKeys = null!;
-    private MathUtility _mathUtility = null!;
-
     public void Configure(GameModuleContext context)
     {
-        _creatures = context.Definitions;
-        _eventBus = context.EventBus;
-        _playerQuery = context.PlayerQuery;
-        _floatingTextFeed = context.FloatingTextFeed;
-        _entityKeys = context.EntityKeys;
-        _mathUtility = context.MathUtility;
+        var componentManager = context.ComponentManager;
+        var entityKeys = context.EntityKeys;
+        var eventBus = context.EventBus;
+        var playerQuery = context.PlayerQuery;
+        var timers = componentManager.GetPackedPool<PoisonTimerComponent>();
+
         context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(
             StatusEffectType.Poison,
-            (componentManager, entityId, source, now) => PoisonEffects.ApplyStack(componentManager, _entityKeys, entityId, source, AuraDurationTicks, now, _eventBus, _playerQuery)));
+            timers,
+            (entityId, source, now) => PoisonEffects.ApplyStack(componentManager, entityKeys, entityId, source, AuraDurationTicks, now, eventBus, playerQuery)));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph,
+            timers,
             static (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));
     }
 
-    public void RegisterComponents(ComponentManager componentManager) =>
-        componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
-
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterComponents(ComponentRegistration registration)
     {
+        var componentManager = registration.ComponentManager;
+
+        componentManager.RegisterPackedPool<PoisonTimerComponent>(static (ref existing, incoming) => { });
+    }
+
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    {
+        var context = registration.Context;
+        var systemManager = registration.SystemManager;
+        var componentManager = registration.ComponentManager;
+
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
-        var bodyParts = EntityBodyParts.For(componentManager, _creatures);
+        var bodyParts = EntityBodyParts.For(componentManager, context.Definitions);
 
         systemManager.Register(new PoisonSystem(
             componentManager.GetPackedPool<PoisonTimerComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
-            _eventBus,
-            _playerQuery,
-            _mathUtility,
+            context.EventBus,
+            context.PlayerQuery,
+            context.MathUtility,
             statModifiers,
             bodyParts,
             componentManager.GetPackedPool<DeadComponent>(),
-            _floatingTextFeed));
+            context.FloatingTextFeed));
     }
 }

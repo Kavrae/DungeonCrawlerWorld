@@ -297,9 +297,8 @@ public sealed class MultiTimerWheelTests
     public void UnsimulatedEntity_InstancesRestThenAllFireOnResume()
     {
         var pool = CreatePool();
-        var scope = new SimulationScope();
         var simulated = false;
-        scope.SetPolicy(_ => simulated);
+        var scope = new SimulationScope(_ => simulated);
         var wheel = new MultiTimerWheel<Exposure>(pool, scope);
         pool.Add(2, new Exposure(1, 5));
         pool.Add(2, new Exposure(7, 9));

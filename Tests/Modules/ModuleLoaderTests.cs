@@ -8,9 +8,9 @@ public sealed class ModuleLoaderTests
     [TestMethod]
     public void LoadFromDirectory_NonexistentDirectory_ReturnsEmptyResultWithoutThrowing()
     {
-        var result = ModuleLoader.LoadFromDirectory(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
+        var result = ModuleLoader.LoadFromDirectory<Game.Modules.GameModuleContext>(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()));
 
-        Assert.IsEmpty(result.Modules);
+        Assert.IsEmpty(result.ModuleFactories);
         Assert.IsEmpty(result.Failures);
     }
 
@@ -20,9 +20,9 @@ public sealed class ModuleLoaderTests
         var directory = Directory.CreateTempSubdirectory();
         try
         {
-            var result = ModuleLoader.LoadFromDirectory(directory.FullName);
+            var result = ModuleLoader.LoadFromDirectory<Game.Modules.GameModuleContext>(directory.FullName);
 
-            Assert.IsEmpty(result.Modules);
+            Assert.IsEmpty(result.ModuleFactories);
             Assert.IsEmpty(result.Failures);
         }
         finally
@@ -39,9 +39,9 @@ public sealed class ModuleLoaderTests
         {
             File.WriteAllBytes(Path.Combine(directory.FullName, "garbage.dll"), [0x00, 0x01, 0x02, 0x03, 0x04]);
 
-            var result = ModuleLoader.LoadFromDirectory(directory.FullName);
+            var result = ModuleLoader.LoadFromDirectory<Game.Modules.GameModuleContext>(directory.FullName);
 
-            Assert.IsEmpty(result.Modules);
+            Assert.IsEmpty(result.ModuleFactories);
             Assert.HasCount(1, result.Failures);
         }
         finally

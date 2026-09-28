@@ -282,8 +282,7 @@ public sealed class ContactDamageSystemTests
         exposures.Add(MoverEntityId, new ContactDamageExposureComponent(nextTickFrame: 60, hazardId));
         var clock = new SimulationClock();
         clock.Advance(630);
-        var scope = new SimulationScope();
-        scope.SetPolicy(static _ => false);
+        var scope = new SimulationScope(static _ => false);
         _ = TestSystems.ContactDamageSystem(terrain, exposures, health, new EventBus(), new FakeMapQuery(), new TestPlayerQuery(-1), new FrameEventBuffer<EntityMovedEvent>(), new MathUtility(), clock, simulationScope: scope);
 
         scope.RaiseResumed(MoverEntityId);

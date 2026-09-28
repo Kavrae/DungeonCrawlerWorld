@@ -103,14 +103,14 @@ public sealed class HealthWindowTests
     }
 
     /// <summary>Mirrors PoisonModule/BurningModule/ParalysisModule's own real Configure registrations -- same formulas, just assembled directly instead of via GameBootstrapper.</summary>
-    private static StatusEffectDisplayRegistry CreateStatusEffectDisplayRegistry()
+    private static StatusEffectDisplayRegistry CreateStatusEffectDisplayRegistry(ComponentManager componentManager)
     {
         var registry = new StatusEffectDisplayRegistry();
-        registry.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph,
+        registry.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph, componentManager.GetPackedPool<PoisonTimerComponent>(),
             (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));
-        registry.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph,
+        registry.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph, componentManager.GetPackedPool<BurningTimerComponent>(),
             (burning, now) => FrameDeadline.Remaining(burning.NextTickFrame, now) + (burning.StackCount - 1) * BurningEffects.TickIntervalFrames));
-        registry.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph,
+        registry.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph, componentManager.GetPackedPool<ParalysisTimerComponent>(),
             (paralysis, now) => FrameDeadline.Remaining(paralysis.ExpiresAtFrame, now)));
         return registry;
     }
@@ -122,7 +122,7 @@ public sealed class HealthWindowTests
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
 
-        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(), componentManager, now: 0);
+        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(componentManager), componentManager, now: 0);
 
         Assert.IsEmpty(rows);
     }
@@ -136,7 +136,7 @@ public sealed class HealthWindowTests
 
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
-        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(), componentManager, now: 0);
+        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(componentManager), componentManager, now: 0);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual(StatusEffectType.Poison, rows[0].Type);
@@ -153,7 +153,7 @@ public sealed class HealthWindowTests
 
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
-        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(), componentManager, now: 0);
+        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(componentManager), componentManager, now: 0);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual(StatusEffectType.Burning, rows[0].Type);
@@ -170,7 +170,7 @@ public sealed class HealthWindowTests
 
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
-        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(), componentManager, now: 0);
+        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(componentManager), componentManager, now: 0);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual(StatusEffectType.Paralysis, rows[0].Type);
@@ -183,7 +183,7 @@ public sealed class HealthWindowTests
     {
         var row = new HealthWindow.StatusEffectRow(StatusEffectType.Burning, RemainingSeconds: 5, StackCount: 5);
 
-        Assert.AreEqual($"{BurningEffects.Glyph} Burning x5", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry()));
+        Assert.AreEqual($"{BurningEffects.Glyph} Burning x5", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry(CreateComponentManagerWithStatusEffectPools())));
     }
 
     [TestMethod]
@@ -191,7 +191,7 @@ public sealed class HealthWindowTests
     {
         var row = new HealthWindow.StatusEffectRow(StatusEffectType.Burning, RemainingSeconds: 5, StackCount: 1);
 
-        Assert.AreEqual($"{BurningEffects.Glyph} Burning", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry()));
+        Assert.AreEqual($"{BurningEffects.Glyph} Burning", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry(CreateComponentManagerWithStatusEffectPools())));
     }
 
     [TestMethod]
@@ -199,7 +199,7 @@ public sealed class HealthWindowTests
     {
         var row = new HealthWindow.StatusEffectRow(StatusEffectType.Poison, RemainingSeconds: 18, StackCount: 21);
 
-        Assert.AreEqual($"{PoisonEffects.Glyph} Poison (x21): 18s", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry()));
+        Assert.AreEqual($"{PoisonEffects.Glyph} Poison (x21): 18s", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry(CreateComponentManagerWithStatusEffectPools())));
     }
 
     [TestMethod]
@@ -207,7 +207,7 @@ public sealed class HealthWindowTests
     {
         var row = new HealthWindow.StatusEffectRow(StatusEffectType.Poison, RemainingSeconds: 18, StackCount: 1);
 
-        Assert.AreEqual($"{PoisonEffects.Glyph} Poison: 18s", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry()));
+        Assert.AreEqual($"{PoisonEffects.Glyph} Poison: 18s", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry(CreateComponentManagerWithStatusEffectPools())));
     }
 
     /// <summary>Paralysis's own StackCount is always exactly 1 (never a stacking effect -- see ParalysisTimerComponent), so it never enters the stack-count-shown branch at all.</summary>
@@ -216,7 +216,7 @@ public sealed class HealthWindowTests
     {
         var row = new HealthWindow.StatusEffectRow(StatusEffectType.Paralysis, RemainingSeconds: 2, StackCount: 1);
 
-        Assert.AreEqual($"{ParalysisEffects.Glyph} Paralysis: 2s", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry()));
+        Assert.AreEqual($"{ParalysisEffects.Glyph} Paralysis: 2s", HealthWindow.FormatStatusEffectRow(row, CreateStatusEffectDisplayRegistry(CreateComponentManagerWithStatusEffectPools())));
     }
 
     [TestMethod]

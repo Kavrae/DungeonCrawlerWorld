@@ -1,6 +1,5 @@
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
 using Engine.Modules;
+using Game.Modules;
 using Game.Modules.Currency;
 
 namespace Mods.TestFixtures;
@@ -10,11 +9,11 @@ namespace Mods.TestFixtures;
 /// for the replacement contract: GameBootstrapper's dry run must exclude it, naming the missing
 /// CurrencyComponent, and keep the built-in in its place.
 /// </summary>
-public sealed class IncompleteReplacementCurrencyModule : IModule
+public sealed class IncompleteReplacementCurrencyModule : IGameModule
 {
     public Guid Id => CurrencyModule.ModuleId;
 
-    public void RegisterComponents(ComponentManager componentManager) { }
+    public void RegisterComponents(ComponentRegistration registration) { }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) { }
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration) { }
 }

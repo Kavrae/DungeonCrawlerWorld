@@ -3,8 +3,8 @@ namespace Game.Modules.StatusEffects;
 /// <summary>
 /// Collects each concrete status-effect module's own IStatusEffectDisplay during
 /// IGameModule.Configure. Every IGameModule's Configure call completes before any
-/// RegisterSystems runs (see GameBootstrapper.Build's ConfigureGameModules-then-Bootstrapper.
-/// Build ordering), so by the time a display consumer (HealthWindow, PlayerStatusEffectsContent)
+/// RegisterSystems runs (see EcsBuilder: every module's Configure, then every module's
+/// RegisterSystems), so by the time a display consumer (HealthWindow, PlayerStatusEffectsContent)
 /// is constructed, every effect registered here -- regardless of Configure call order -- is
 /// available. This is what lets those consumers depend only on StatusEffectsModule again,
 /// instead of a concrete effect module: they never need to know which effects exist, only that

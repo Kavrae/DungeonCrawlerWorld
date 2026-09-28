@@ -23,14 +23,9 @@ namespace Tests.Presentation;
 [TestClass]
 public sealed class DodgeDuringActionLockTests
 {
-    private static readonly DirectoryInfo EmptyModsDirectory = Directory.CreateTempSubdirectory();
-
     private static readonly Vector3Int Start = new(10, 10, (int)MapLayer.Ground);
     private static readonly Vector3Int North = new(10, 9, (int)MapLayer.Ground);
     private static readonly Vector3Int NorthEast = new(11, 9, (int)MapLayer.Ground);
-
-    [ClassCleanup]
-    public static void DeleteEmptyModsDirectory() => EmptyModsDirectory.Delete(recursive: true);
 
     private sealed class Harness
     {
@@ -73,8 +68,9 @@ public sealed class DodgeDuringActionLockTests
 
     private static Harness Build()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(40, 40, 3)));
-        var result = GameBootstrapper.Build(world, new MathUtility(new Random(1)), EmptyModsDirectory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var map = new Map(new Vector3Int(40, 40, 3));
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var world = result.World;
         var ecs = result.EcsContext;
         var components = ecs.ComponentManager;
         result.ProcessingTierResolver.SetReferencePosition(Start);

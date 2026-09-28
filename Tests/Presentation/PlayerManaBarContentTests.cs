@@ -20,7 +20,7 @@ public sealed class PlayerManaBarContentTests
 
     private static (PlayerManaBarContent Content, ComponentManager ComponentManager) Build(ManaComponent? mana)
     {
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(20, 20, 1))) { PlayerEntityId = PlayerEntityId };
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
 

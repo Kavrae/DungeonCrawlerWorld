@@ -12,11 +12,6 @@ namespace Tests.Spawning;
 [TestClass]
 public sealed class BlueprintSkeletonTests
 {
-    private static readonly DirectoryInfo EmptyModsDirectory = Directory.CreateTempSubdirectory();
-
-    [ClassCleanup]
-    public static void DeleteEmptyModsDirectory() => EmptyModsDirectory.Delete(recursive: true);
-
     private static List<string> SkeletonComponentsOf(ComponentManager componentManager, int entityId)
     {
         var entries = new List<InspectedComponentEntry>();
@@ -28,7 +23,7 @@ public sealed class BlueprintSkeletonTests
     }
 
     private static GameBootstrapResult Bootstrap() =>
-        GameBootstrapper.Build(new Game.World.World(new Map(new Vector3Int(20, 20, 3))), new MathUtility(new Random(1)), EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100);
+        GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 1_000, initialComponentCapacity: 100);
 
     /// <summary>Builds blueprintId's skeleton, gives it a footprint no blueprint declares (so even a same-sized transform merge would show), then builds the rest and reports whether any skeleton component changed.</summary>
     private static bool WritesASkeletonComponent(GameBootstrapResult result, ushort blueprintId)

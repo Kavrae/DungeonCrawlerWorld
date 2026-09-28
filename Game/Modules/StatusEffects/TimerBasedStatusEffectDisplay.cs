@@ -1,4 +1,3 @@
-using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 
 namespace Game.Modules.StatusEffects;
@@ -13,32 +12,15 @@ namespace Game.Modules.StatusEffects;
 /// IStatusEffectStackCount constraint -- GetStackCount reads T.StackCount generically the same way
 /// TimerBasedAuraApplier&lt;T&gt;.GetCurrentStackCount does).
 /// </summary>
-public sealed class TimerBasedStatusEffectDisplay<T> : IStatusEffectDisplay where T : struct, IStatusEffectStackCount
+/// <param name="getRemainingDurationFrames">(timer, now) -> frames remaining as of now.</param>
+public sealed class TimerBasedStatusEffectDisplay<T>(StatusEffectType effectType, string glyph, PackedComponentPool<T> timers, Func<T, long, int> getRemainingDurationFrames) : IStatusEffectDisplay where T : struct, IStatusEffectStackCount
 {
-    public StatusEffectType EffectType { get; }
-    public string Glyph { get; }
+    public StatusEffectType EffectType { get; } = effectType;
+    public string Glyph { get; } = glyph;
 
-    private readonly Func<T, long, int> _getRemainingDurationFrames;
-    private PackedComponentPool<T>? _timers;
+    public int? GetRemainingDurationFrames(int entityId, long now) =>
+        timers.TryGetReadonly(entityId, out var timer) ? getRemainingDurationFrames(timer, now) : null;
 
-    /// <param name="getRemainingDurationFrames">(timer, now) -> frames remaining as of now.</param>
-    public TimerBasedStatusEffectDisplay(StatusEffectType effectType, string glyph, Func<T, long, int> getRemainingDurationFrames)
-    {
-        EffectType = effectType;
-        Glyph = glyph;
-        _getRemainingDurationFrames = getRemainingDurationFrames;
-    }
-
-    /// <summary>Cached lazily, not at construction: Configure (where this is built) runs before any module's RegisterComponents, so componentManager's pools don't exist yet -- by the time this is actually called, componentManager is the same stable instance for the life of the game.</summary>
-    public int? GetRemainingDurationFrames(ComponentManager componentManager, int entityId, long now)
-    {
-        _timers ??= componentManager.GetPackedPool<T>();
-        return _timers.TryGetReadonly(entityId, out var timer) ? _getRemainingDurationFrames(timer, now) : null;
-    }
-
-    public int GetStackCount(ComponentManager componentManager, int entityId)
-    {
-        _timers ??= componentManager.GetPackedPool<T>();
-        return _timers.TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
-    }
+    public int GetStackCount(int entityId) =>
+        timers.TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
 }

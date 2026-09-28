@@ -22,7 +22,7 @@ public sealed class AuraSourceExpirySystemTests
         var sources = new MultiComponentPool<StatusEffectAuraSourceComponent>(entityCapacity: 10, initialCapacity: 4);
         var eventBus = new EventBus();
 
-        return (new AuraSourceExpirySystem(expiries, sources, eventBus, new SimulationScope()), expiries, sources, eventBus);
+        return (new AuraSourceExpirySystem(expiries, sources, eventBus, new SimulationScope(static _ => true)), expiries, sources, eventBus);
     }
 
     [TestMethod]

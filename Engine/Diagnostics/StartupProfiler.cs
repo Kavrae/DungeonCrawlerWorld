@@ -6,7 +6,7 @@ namespace Engine.Diagnostics;
 /// <summary>Records wall-clock cost of named startup phases, plus wall-clock time from construction until frame pacing stabilizes.</summary>
 /// <remarks>
 /// Phase(name) is a Stopwatch-backed scope -- `using var _ = startupProfiler?.Phase("Module Load")`
-/// around each major startup step (see GameLoop.Initialize, Bootstrapper.Build,
+/// around each major startup step (see GameLoop.Initialize, EcsBuilder's stages,
 /// GameBootstrapper.Build). Phases are recorded in call order, one entry per call -- unlike
 /// FrameBudgetTracker, nothing repeats every frame here, so there's nothing to aggregate.
 ///

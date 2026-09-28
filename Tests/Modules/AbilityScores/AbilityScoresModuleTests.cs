@@ -1,5 +1,4 @@
 using Engine.ECS.Entities;
-using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
@@ -26,11 +25,7 @@ public sealed class AbilityScoresModuleTests
 {
     private static (EcsContext EcsContext, int EntityId) BuildAndGrantStrength(ushort baseValue)
     {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-        var mathUtility = new MathUtility();
-        var context = new GameModuleContext(world, mathUtility, new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
-
-        var ecsContext = BuiltInTestModules.Build(context, 10, 10);
+        var ecsContext = BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)), initialEntityCapacity: 10, initialComponentCapacity: 10).EcsContext;
 
         var entityId = ecsContext.EntityManager.CreateEntity();
         AbilityScoreEffects.Grant(ecsContext.ComponentManager, entityId, AbilityScoreType.Strength, baseValue);
@@ -46,19 +41,9 @@ public sealed class AbilityScoresModuleTests
     [TestMethod]
     public void Build_MissingStatModifiersModule_ThrowsInvalidOperationException()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-        var mathUtility = new MathUtility();
-        var context = new GameModuleContext(world, mathUtility, new EventBus()) { PlayerQuery = world };
+        IReadOnlyList<IModule<GameModuleContext>> modules = [new ProcessingTierModule(), new AbilityScoresModule()];
 
-        var processingTierModule = new ProcessingTierModule();
-        processingTierModule.Configure(context);
-
-        var abilityScoresModule = new AbilityScoresModule();
-        abilityScoresModule.Configure(context);
-
-        IReadOnlyList<IModule> modules = [processingTierModule, abilityScoresModule];
-
-        Assert.ThrowsExactly<InvalidOperationException>(() => Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, new EventBus()));
+        Assert.ThrowsExactly<InvalidOperationException>(() => BuiltInTestModules.BuildModules(modules));
     }
 
     [TestMethod]

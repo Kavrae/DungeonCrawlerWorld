@@ -1,5 +1,4 @@
 using Engine.ECS.Entities;
-using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
@@ -23,20 +22,9 @@ public sealed class SpellCasterAchievementTests
 
     private static (EcsContext EcsContext, EventBus EventBus, Game.World.World World) Build()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-        var eventBus = new EventBus();
-        var context = new GameModuleContext(world, new MathUtility(), eventBus) { PlayerQuery = world };
+        var build = BuiltInTestModules.BuildModules([new AchievementModule(), new CoreActionsModule()]);
 
-        var coreActionsModule = new CoreActionsModule();
-        coreActionsModule.Configure(context);
-
-        var module = new AchievementModule();
-        module.Configure(context);
-
-        IReadOnlyList<IModule> modules = [module, coreActionsModule];
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity: 10, initialComponentCapacity: 10, eventBus, entityKeys: context.EntityKeys);
-
-        return (ecsContext, eventBus, world);
+        return (build.EcsContext, build.Context.EventBus, build.World);
     }
 
     [TestMethod]

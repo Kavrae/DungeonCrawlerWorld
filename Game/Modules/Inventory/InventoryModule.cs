@@ -1,72 +1,41 @@
-using Engine.ECS.Entities;
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
-using Engine.Events;
-using Engine.Math;
+using Engine.Modules;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.AbilityScores.Components;
+using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Death;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Inventory.Systems;
+using Game.Modules.Mana;
+using Game.Modules.Mana.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
-using Game.Modules.Inventory.Systems;
-using Game.Modules.Mana.Components;
-using Game.Modules.StatModifiers.Components;
-using Game.Modules.StatusEffectAura.Components;
-using Game.Modules.StatusEffects;
-using Game.World;
-using Game.Blueprints;
-using Game.Modules.Core;
-using Game.Modules.StatModifiers;
-using Game.Modules.Death;
-using Game.Modules.Mana;
-using Game.Modules.AbilityScores;
-using Game.Modules.StatusEffectAura;
 using Game.Modules.Race;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
+using Game.Modules.StatusEffectAura;
+using Game.Modules.StatusEffectAura.Components;
 
 namespace Game.Modules.Inventory;
 
 public sealed class InventoryModule : IGameModule
 {
-    private BlueprintRegistry _creatures = null!;
-
     public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000019");
 
     public Guid Id => ModuleId;
 
     public IReadOnlyList<Guid> Requires { get; } = [ActionsModule.ModuleId, CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, StatusEffectAuraModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId];
 
-    private ItemCatalog _itemCatalog = null!;
-    private ActionCatalog _actionCatalog = null!;
-    private IMapQuery _mapQuery = null!;
-    private EventBus _eventBus = null!;
-    private MathUtility _mathUtility = null!;
-    private StatusEffectAuraApplierRegistry _statusEffectAppliers = null!;
-    private IPlayerQuery _playerQuery = null!;
-    private FloatingTextFeed _floatingTextFeed = null!;
-    private EntityKeys _entityKeys = null!;
-
-    public void Configure(GameModuleContext context)
+    public void RegisterComponents(ComponentRegistration registration)
     {
-        _creatures = context.Definitions;
-        _itemCatalog = context.Items;
-        _actionCatalog = context.Actions;
-        _mapQuery = context.MapQuery;
-        _eventBus = context.EventBus;
-        _mathUtility = context.MathUtility;
-        _statusEffectAppliers = context.StatusEffectAuraAppliers;
-        _playerQuery = context.PlayerQuery;
-        _floatingTextFeed = context.FloatingTextFeed;
-        _entityKeys = context.EntityKeys;
-    }
+        var componentManager = registration.ComponentManager;
 
-    public void RegisterComponents(ComponentManager componentManager)
-    {
         componentManager.RegisterMultiPool<InventoryItemStackComponent>();
 
         // Rare -- generally only once at a time on the player, but could be more via a lock-down status effect.
@@ -86,8 +55,12 @@ public sealed class InventoryModule : IGameModule
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
+        var context = registration.Context;
+        var systemManager = registration.SystemManager;
+        var componentManager = registration.ComponentManager;
+
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
         var deadEntities = componentManager.GetPackedPool<DeadComponent>();
         var mana = componentManager.GetPackedPool<ManaComponent>();
@@ -95,20 +68,20 @@ public sealed class InventoryModule : IGameModule
         var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
         var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         var itemHotkeyBindings = componentManager.GetMultiPool<ItemHotkeyBindingComponent>();
-        var bodyParts = EntityBodyParts.For(componentManager, _creatures);
+        var bodyParts = EntityBodyParts.For(componentManager, context.Definitions);
 
         systemManager.Register(new ConsumableActivationSystem(
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PotionCooldownComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
-            _itemCatalog,
-            _actionCatalog,
-            _mapQuery,
-            _eventBus,
-            _mathUtility,
+            context.Items,
+            context.Actions,
+            context.MapQuery,
+            context.EventBus,
+            context.MathUtility,
             componentManager,
-            _entityKeys,
+            context.EntityKeys,
             statModifiers,
             deadEntities,
             mana,
@@ -118,9 +91,9 @@ public sealed class InventoryModule : IGameModule
             itemHotkeyBindings,
             bodyParts,
             new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>()),
-            _playerQuery,
-            _statusEffectAppliers,
-            _creatures,
-            _floatingTextFeed));
+            context.PlayerQuery,
+            context.StatusEffectAuraAppliers,
+            context.Definitions,
+            context.FloatingTextFeed));
     }
 }

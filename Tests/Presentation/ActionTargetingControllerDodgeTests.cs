@@ -30,7 +30,7 @@ public sealed class ActionTargetingControllerDodgeTests
 
     private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager, PlayerMovementController PlayerMovement, SimulationClock Clock, EventBus EventBus) Build()
     {
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(20, 20, 1))) { PlayerEntityId = PlayerEntityId };
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
         var mapViewState = new MapViewState();
 
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));

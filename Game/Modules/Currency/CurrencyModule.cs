@@ -1,5 +1,4 @@
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
+using Engine.Modules;
 using Game.Modules.Currency.Components;
 
 namespace Game.Modules.Currency;
@@ -14,12 +13,14 @@ public sealed class CurrencyModule : IGameModule
     {
     }
 
-    public void RegisterComponents(ComponentManager componentManager)
+    public void RegisterComponents(ComponentRegistration registration)
     {
+        var componentManager = registration.ComponentManager;
+
         componentManager.RegisterPackedPool<CurrencyComponent>(static (ref existing, incoming) => existing = incoming);
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
     }
 }

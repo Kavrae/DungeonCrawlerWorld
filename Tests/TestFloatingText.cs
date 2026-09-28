@@ -6,17 +6,17 @@ using Game.World;
 
 namespace Tests;
 
-/// <summary>A wired FloatingTextFeed over its own tier and transform pools, recording every FloatingTextEvent it publishes.</summary>
+/// <summary>A FloatingTextFeed over its own tier and transform pools, recording every FloatingTextEvent it publishes.</summary>
 internal sealed class TestFloatingText
 {
     public TestFloatingText()
     {
-        Feed.Wire(EventBus, ProcessingTiers, Transforms);
+        Feed = new FloatingTextFeed(EventBus, ProcessingTiers, Transforms);
         EventBus.Subscribe<FloatingTextEvent>(Published.Add);
     }
 
     public EventBus EventBus { get; } = new();
-    public FloatingTextFeed Feed { get; } = new();
+    public FloatingTextFeed Feed { get; }
     public List<FloatingTextEvent> Published { get; } = [];
     public Engine.ECS.Components.Stores.DirectComponentPool<ProcessingTierComponent> ProcessingTiers { get; } = EmptyPools.Direct<ProcessingTierComponent>();
     public Engine.ECS.Components.Stores.DirectComponentPool<TransformComponent> Transforms { get; } = EmptyPools.Direct<TransformComponent>();

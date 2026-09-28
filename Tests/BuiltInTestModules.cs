@@ -1,36 +1,27 @@
-using Engine.Bootstrap;
-using Engine.ECS.Context;
+using Engine.Math;
+using Engine.Modules;
+using Engine.Utilities;
 using Game.Bootstrap;
 using Game.Modules;
+using Game.World;
 
 namespace Tests;
 
-/// <summary>Configures and builds every built-in module against a test's own GameModuleContext -- the game's module set, without GameBootstrapper's mods or factory.</summary>
-/// <remarks>The context's FloatingTextFeed, and a World behind the context's occupancy pools, get wired as GameBootstrapper.Build does.</remarks>
+/// <summary>Builds the game's modules for a test: every built-in as one complete GameBuildPass, or a chosen few alone.</summary>
 internal static class BuiltInTestModules
 {
-    public static EcsContext Build(GameModuleContext context, int initialEntityCapacity = 100, int initialComponentCapacity = 50)
+    /// <summary>Every built-in module, as a complete, self-contained build over map with no mods and default settings.</summary>
+    public static GameBuildPassResult Build(Map map, MathUtility? mathUtility = null, int initialEntityCapacity = 100, int initialComponentCapacity = 50, UniqueNumberAllocator? crawlerNumbers = null) =>
+        GameBuildPass.Run(GameBootstrapper.BuiltInModules(), [], map, mathUtility ?? new MathUtility(), [], initialEntityCapacity, initialComponentCapacity, crawlerNumbers: crawlerNumbers);
+
+    /// <summary>Builds modules alone -- the module build without the game wiring a whole set needs -- over map with default settings.</summary>
+    /// <remarks>Any of GameModuleContext.FoundationModuleIds modules lacks is added ahead of them: every build needs the pools the context is built from.</remarks>
+    public static GameModuleBuild BuildModules(IReadOnlyList<IModule<GameModuleContext>> modules, Map? map = null, MathUtility? mathUtility = null, int initialEntityCapacity = 10, int initialComponentCapacity = 10)
     {
-        var modules = GameBootstrapper.BuiltInModules();
+        var missingFoundation = GameBootstrapper.BuiltInModules().CreateAll()
+            .Where(builtIn => GameModuleContext.FoundationModuleIds.Contains(builtIn.Id) && modules.All(module => module.Id != builtIn.Id));
+        List<IModule<GameModuleContext>> buildModules = [.. missingFoundation, .. modules];
 
-        foreach (var gameModule in modules.OfType<IGameModule>())
-        {
-            gameModule.Configure(context);
-        }
-
-        context.Definitions.ResolveAll();
-
-        var ecsContext = Bootstrapper.Build(modules, initialEntityCapacity, initialComponentCapacity, context.EventBus, entityKeys: context.EntityKeys);
-        context.FloatingTextFeed.Wire(
-            context.EventBus,
-            ecsContext.ComponentManager.GetDirectPool<Game.Modules.ProcessingTier.Components.ProcessingTierComponent>(),
-            ecsContext.ComponentManager.GetDirectPool<Game.Modules.Core.Components.TransformComponent>());
-
-        if (context.MapQuery is Game.World.World world)
-        {
-            TestWorlds.WireOccupancy(world, ecsContext.ComponentManager);
-        }
-
-        return ecsContext;
+        return GameBuildPass.BuildModules(buildModules, TestModuleRegistration.DefaultSettings(buildModules), map ?? new Map(new Vector3Int(5, 5, 1)), mathUtility ?? new MathUtility(), initialEntityCapacity, initialComponentCapacity);
     }
 }

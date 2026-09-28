@@ -75,14 +75,14 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
             return;
         }
 
-        StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, componentManager, playerEntityId, _activeEffectTypes);
+        StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, playerEntityId, _activeEffectTypes);
 
         _stackCountsByType.Clear();
         foreach (var effectType in _activeEffectTypes)
         {
             if (effectType is StatusEffectType.Poison or StatusEffectType.Burning)
             {
-                _stackCountsByType[effectType] = StatusEffectQueries.CountStacks(statusEffectDisplays, componentManager, playerEntityId, effectType);
+                _stackCountsByType[effectType] = StatusEffectQueries.CountStacks(statusEffectDisplays, playerEntityId, effectType);
             }
         }
 

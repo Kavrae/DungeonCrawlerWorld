@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Engine.Modules;
 using Game.Modules;
 using Game.Modules.Achievements;
 using Game.Modules.Achievements.Components;
@@ -14,11 +15,7 @@ namespace Tests.Modules.Achievements;
 
 /// <summary>
 /// Exercises ObsessiveCollectorAchievement's polled trigger (see AchievementTriggerContext.
-/// SubscribePolled) directly through InventoryModule + AchievementModule, without the full
-/// Bootstrapper.Build module graph AchievementModuleTests uses -- InventoryModule.RegisterSystems
-/// itself is never called here (it needs ActionsModule-configured dependencies this test doesn't
-/// care about), only RegisterComponents, the same "just need the pools" shape
-/// InventoryActionsTests.CreateRegisteredManager already uses.
+/// SubscribePolled) through the whole built-in module set.
 /// </summary>
 [TestClass]
 public sealed class ObsessiveCollectorAchievementTests
@@ -27,19 +24,9 @@ public sealed class ObsessiveCollectorAchievementTests
 
     private static (ComponentManager ComponentManager, SystemManager SystemManager, Game.World.World World) Build()
     {
-        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        var systemManager = new SystemManager();
-        var eventBus = new EventBus();
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
+        var pass = BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)), initialEntityCapacity: 10, initialComponentCapacity: 10);
 
-        new InventoryModule().RegisterComponents(manager);
-
-        var achievementModule = new AchievementModule();
-        achievementModule.Configure(new GameModuleContext(world, new MathUtility(), eventBus) { PlayerQuery = world });
-        achievementModule.RegisterComponents(manager);
-        achievementModule.RegisterSystems(systemManager, manager);
-
-        return (manager, systemManager, world);
+        return (pass.EcsContext.ComponentManager, pass.EcsContext.SystemManager, pass.World);
     }
 
     private static void Tick(SystemManager systemManager) =>

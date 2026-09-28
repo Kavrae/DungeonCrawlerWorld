@@ -153,7 +153,7 @@ public sealed class HealthWindow(
 
         BuildColumns();
         RebuildContent();
-        StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, componentManager, _entityId, _previousActiveEffectTypes);
+        StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, _entityId, _previousActiveEffectTypes);
         BuildBurningPartIds(_previousActiveBurningPartIds, _bodyParts, _bodyPartBurningTimers, _entityId, CurrentFrame);
         BuildModifierSignature(_previousModifierSignature, _entityId, _statModifiers);
         BuildActiveImmunityTypes(_previousActiveImmunityTypes, _entityId, _statusEffectImmunities);
@@ -241,7 +241,7 @@ public sealed class HealthWindow(
     {
         base.Update(gameTime);
 
-        StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, componentManager, _entityId, _activeEffectTypesScratch);
+        StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, _entityId, _activeEffectTypesScratch);
         BuildBurningPartIds(_activeBurningPartIdsScratch, _bodyParts, _bodyPartBurningTimers, _entityId, CurrentFrame);
         BuildModifierSignature(_activeModifierSignatureScratch, _entityId, _statModifiers);
         BuildActiveImmunityTypes(_activeImmunityTypesScratch, _entityId, _statusEffectImmunities);
@@ -834,15 +834,15 @@ public sealed class HealthWindow(
         ComponentManager componentManager,
         long now)
     {
-        StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, componentManager, entityId, activeTypesScratch);
+        StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, entityId, activeTypesScratch);
 
         destination.Clear();
         foreach (var effectType in activeTypesScratch)
         {
             var display = statusEffectDisplays.TryGet(effectType, out var foundDisplay) ? foundDisplay : null;
-            var remainingFrames = display?.GetRemainingDurationFrames(componentManager, entityId, now);
+            var remainingFrames = display?.GetRemainingDurationFrames(entityId, now);
             var remainingSeconds = remainingFrames is { } frames ? (int)System.Math.Ceiling(frames / (float)GameTiming.FramesPerSecond) : (int?)null;
-            var stackCount = display?.GetStackCount(componentManager, entityId) ?? 0;
+            var stackCount = display?.GetStackCount(entityId) ?? 0;
             destination.Add(new StatusEffectRow(effectType, remainingSeconds, stackCount));
         }
     }

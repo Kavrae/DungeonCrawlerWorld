@@ -1,113 +1,147 @@
-﻿using Engine.ECS.Entities;
+using Engine.ECS.Components;
+using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Engine.Settings;
+using Engine.Utilities;
+using Game.Blueprints;
 using Game.Modules.Achievements;
 using Game.Modules.Actions;
+using Game.Modules.Core;
+using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.ProcessingTier;
+using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffects;
+using Game.Spawning;
 using Game.World;
-using Game.Blueprints;
 
 namespace Game.Modules;
 
-/// <summary>
-/// Everything a module's Configure step can reach, shared across every module in one build.
-/// </summary>
-public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtility, EventBus EventBus)
+/// <summary>Everything a module's Configure and RegisterSystems can reach, shared across every module in one build.</summary>
+/// <remarks>
+/// Built once every component is registered and before any module is configured, so every member is
+/// complete from construction: the objects that read pools are given them here. That makes the context
+/// depend on the pools of <see cref="FoundationModuleIds"/>, which every build therefore contains.
+/// </remarks>
+public sealed class GameModuleContext
 {
+    /// <summary>The modules whose pools the context itself is built from: transforms and occupancy (Core), processing tiers (ProcessingTier) and spawn records (Blueprints).</summary>
+    public static IReadOnlyList<Guid> FoundationModuleIds { get; } = [CoreModule.ModuleId, ProcessingTierModule.ModuleId, BlueprintsModule.ModuleId];
+
+    /// <param name="world">The build's World, over the pools of componentManager.</param>
+    /// <param name="crawlerNumbers">The session's crawler numbers; null for a build that spawns no crawlers.</param>
+    /// <param name="runtimeSpawnSeed">Seeds the factory's own sequence for spawns that name no seed.</param>
+    public GameModuleContext(
+        World.World world,
+        ComponentManager componentManager,
+        EntityManager entityManager,
+        EventBus eventBus,
+        SettingValues settings,
+        MathUtility mathUtility,
+        UniqueNumberAllocator? crawlerNumbers = null,
+        ulong runtimeSpawnSeed = 0)
+    {
+        MapQuery = world;
+        PlayerQuery = world;
+        EntityMoveSync = new WorldEventSync(world);
+        ComponentManager = componentManager;
+        EntityManager = entityManager;
+        EventBus = eventBus;
+        Settings = settings;
+        MathUtility = mathUtility;
+        EntityKeys = entityManager.Keys;
+        Terrain = world.Terrain;
+
+        var tiers = componentManager.GetDirectPool<ProcessingTierComponent>();
+        var transforms = componentManager.GetDirectPool<TransformComponent>();
+
+        ProcessingTierResolver = new ProcessingTierResolver(tiers, transforms, ProcessingTierEvents);
+
+        // Every placement through World gets a correct tier without its caller having to ask -- the
+        // catch-all behind ProcessingTierResolver.CreateEntityAt. See that class's own remarks.
+        world.EntityPlaced += ProcessingTierResolver.EnsureTiered;
+
+        SimulationScope = new SimulationScope(new ProcessingTierQuery(tiers).IsSimulated);
+        FloatingTextFeed = new FloatingTextFeed(eventBus, tiers, transforms);
+        EntityFactory = new EntityFactory(Definitions, world, entityManager, componentManager, MovedEntities, SimulationClock, ProcessingTierEvents, ProcessingTierResolver, crawlerNumbers, runtimeSpawnSeed);
+    }
+
+    public IMapQuery MapQuery { get; }
+
     /// <summary>Who the player is, for everything that treats the player differently.</summary>
-    public required IPlayerQuery PlayerQuery { get; init; }
+    public IPlayerQuery PlayerQuery { get; }
 
-    /// <summary>Mandatory map-occupancy sync MovementModule wires into MovementSystem; MovementModule.RegisterSystems throws if this is still null when it constructs MovementSystem.</summary>
-    public IEntityMoveSync? EntityMoveSync { get; init; }
+    /// <summary>Map-occupancy sync MovementModule wires into MovementSystem.</summary>
+    public IEntityMoveSync EntityMoveSync { get; }
 
-    /// <summary>
-    /// Shared across every module's Configure call within one GameBootstrapper.Build (or one
-    /// DryRunValidateMods trial) -- a fresh registry per GameModuleContext instance, so the
-    /// dry-run trial's registrations never leak into the real build's. See
-    /// StatusEffectAuraApplierRegistry's own doc comment for why registering here (during
-    /// Configure) rather than in RegisterComponents/RegisterSystems is what makes ordering safe.
-    /// </summary>
-    public StatusEffectAuraApplierRegistry StatusEffectAuraAppliers { get; init; } = new();
+    public ComponentManager ComponentManager { get; }
 
-    /// <summary>Shared across every module's Configure call within one build -- same reasoning as StatusEffectAuraAppliers above.</summary>
-    public StatusEffectDisplayRegistry StatusEffectDisplays { get; init; } = new();
+    public EntityManager EntityManager { get; }
 
-    /// <summary>Shared across every module's Configure call within one build -- same reasoning as StatusEffectAuraAppliers above.</summary>
-    public ActionCatalog Actions { get; init; } = new();
+    public EventBus EventBus { get; }
 
-    /// <summary>Shared across every module's Configure call within one build -- same reasoning as Actions above; a mod could register its own achievements the same way a mod could register its own actions.</summary>
-    public AchievementCatalog Achievements { get; init; } = new();
+    /// <summary>Every setting this build's modules declared, resolved.</summary>
+    public SettingValues Settings { get; }
 
-    /// <summary>Shared across every module's Configure call within one build -- same reasoning as Actions/Achievements above; a mod could register its own items the same way.</summary>
-    public ItemCatalog Items { get; init; } = new();
+    public MathUtility MathUtility { get; }
 
     /// <summary>
-    /// MovementSystem's confirmed moves this frame, shared with ContactDamageSystem/
-    /// StatusEffectAuraSystem so they can react without a per-move EventBus dispatch -- see
-    /// FrameEventBuffer's own doc comment. Always a real instance (never null), the same
-    /// always-safe-default reasoning as Actions/StatusEffectAuraAppliers above.
+    /// Filled during Configure by every effect module -- see StatusEffectAuraApplierRegistry's own doc
+    /// comment for why registering here (during Configure) rather than in RegisterSystems is what makes
+    /// ordering safe.
     /// </summary>
-    public FrameEventBuffer<EntityMovedEvent> MovedEntities { get; init; } = new();
+    public StatusEffectAuraApplierRegistry StatusEffectAuraAppliers { get; } = new();
 
-    /// <summary>
-    /// Shared across every module's Configure call within one build -- same always-real-default
-    /// reasoning as MovedEntities above. Any module can subscribe to TierChanged regardless of
-    /// whether ProcessingTierModule has run its own Configure/RegisterSystems yet -- see
-    /// ProcessingTierEvents' own doc comment.
-    /// </summary>
-    public ProcessingTierEvents ProcessingTierEvents { get; init; } = new();
+    /// <summary>Filled during Configure -- same reasoning as StatusEffectAuraAppliers above.</summary>
+    public StatusEffectDisplayRegistry StatusEffectDisplays { get; } = new();
 
-    /// <summary>
-    /// The live Local-tier membership set, for consumers that act on only the Local population
-    /// rather than throttling their visit cadence by tier -- see LocalTierRoster's own doc
-    /// comment for why that needs its own shape rather than reusing TieredEntityStripeSet. Wired
-    /// to ProcessingTierEvents above (and to the same driving pool ProcessingTierSystem tiers) by
-    /// ProcessingTierModule.RegisterSystems; until that runs it is simply empty, which reads as
-    /// "nothing is Local yet" -- the same safe default an untiered entity already gets.
-    /// </summary>
-    public LocalTierRoster LocalTierRoster { get; init; } = new();
+    /// <summary>Filled during Configure -- same reasoning as StatusEffectAuraAppliers above.</summary>
+    public ActionCatalog Actions { get; } = new();
 
-    /// <summary>
-    /// The single place an entity's tier is decided and written -- see ProcessingTierResolver's own
-    /// doc comment. Shared here, rather than owned privately by ProcessingTierSystem, because the
-    /// spawn sequence needs it *before* the first system update: it sets the reference position
-    /// ahead of population and creates entities through it so they are born correctly tiered.
-    /// Wired by ProcessingTierModule.RegisterSystems.
-    /// </summary>
-    public ProcessingTierResolver ProcessingTierResolver { get; init; } = new();
+    /// <summary>Filled during Configure -- same reasoning as Actions above; a mod could register its own achievements the same way a mod could register its own actions.</summary>
+    public AchievementCatalog Achievements { get; } = new();
 
-    /// <summary>
-    /// The simulation's "now", for anything a module builds that reads a FrameDeadline outside a
-    /// system's own Update. Always a real instance, the same always-safe-default reasoning as
-    /// MovedEntities. GameBootstrapper hands this same instance to SystemManager.Clock, which is
-    /// what advances it.
-    /// </summary>
-    public SimulationClock SimulationClock { get; init; } = new();
+    /// <summary>Filled during Configure -- same reasoning as Actions/Achievements above; a mod could register its own items the same way.</summary>
+    public ItemCatalog Items { get; } = new();
 
-    /// <summary>
-    /// Which entities are simulated, for every timer wheel a module builds -- see SimulationScope.
-    /// Always a real instance; GameBootstrapper supplies the policy (an entity's processing tier
-    /// against SystemManager.SimulatedTierCount) once the pools it reads exist.
-    /// </summary>
-    public SimulationScope SimulationScope { get; init; } = new();
+    /// <summary>MovementSystem's confirmed moves this frame, shared with ContactDamageSystem/StatusEffectAuraSystem so they can react without a per-move EventBus dispatch -- see FrameEventBuffer's own doc comment.</summary>
+    public FrameEventBuffer<EntityMovedEvent> MovedEntities { get; } = new();
+
+    /// <summary>Every tier change, for any module to subscribe to -- see ProcessingTierEvents' own doc comment.</summary>
+    public ProcessingTierEvents ProcessingTierEvents { get; } = new();
+
+    /// <summary>The single place an entity's tier is decided and written -- see ProcessingTierResolver's own doc comment.</summary>
+    /// <remarks>Shared here, rather than owned privately by ProcessingTierSystem, because the spawn sequence needs it before the first system update: it sets the reference position ahead of population and creates entities through it so they are born correctly tiered.</remarks>
+    public ProcessingTierResolver ProcessingTierResolver { get; }
+
+    /// <summary>The simulation's "now", for anything a module builds that reads a FrameDeadline outside a system's own Update.</summary>
+    /// <remarks>GameBuildPass hands this same instance to SystemManager.Clock, which is what advances it.</remarks>
+    public SimulationClock SimulationClock { get; } = new();
+
+    /// <summary>Which entities are simulated, for every timer wheel a module builds: an entity is simulated while its processing tier is below ProcessingTierDivisors.SimulatedTierCount -- see SimulationScope.</summary>
+    /// <remarks>
+    /// An entity with no ProcessingTierComponent counts as simulated. That is the opposite of the
+    /// stripe sets' fail-open-to-Beyond, deliberately: a stripe set visiting an untiered entity rarely
+    /// costs only staleness, while a timer wheel skipping one would stop its timers outright, and
+    /// the entities that go untiered (never placed on the map) are exactly the ones nothing would
+    /// ever resume.
+    /// </remarks>
+    public SimulationScope SimulationScope { get; }
 
     /// <summary>Where anything that happens to an entity publishes the floating text shown above it.</summary>
-    /// <remarks>Always a real instance; GameBootstrapper wires it to the pools it reads once they exist. A module may keep it from Configure, but nothing may publish through it before it is wired.</remarks>
-    public FloatingTextFeed FloatingTextFeed { get; init; } = new();
+    public FloatingTextFeed FloatingTextFeed { get; }
 
-    /// <summary>The stable key table every entity is issued into, created here so modules can hold it before the ECS exists.</summary>
-    /// <remarks>GameBootstrapper hands this same instance to Bootstrapper.Build, which gives it to the EntityManager that issues and releases the keys.</remarks>
-    public EntityKeys EntityKeys { get; init; } = new();
+    /// <summary>The stable key table every entity is issued into -- the EntityManager's own.</summary>
+    public EntityKeys EntityKeys { get; }
 
     /// <summary>Every terrain definition, filled during Configure -- same reasoning as StatusEffectAuraAppliers above. A mod registers its own terrain here, or replaces a built-in by registering its key.</summary>
-    public Terrain.TerrainRegistry Terrain { get; init; } = new();
+    public Terrain.TerrainRegistry Terrain { get; }
 
-    public Blueprints.BlueprintRegistry Definitions { get; init; } = new();
+    public BlueprintRegistry Definitions { get; } = new();
 
-    /// <summary>The session's one spawn path -- for a system or action that spawns an entity or applies a blueprint to one at runtime.</summary>
-    /// <remarks>Set by GameBootstrapper once the ECS is built, which is after every module's Configure: keep the context and read this when a system runs, never during Configure. Null in a dry run or a staging world, which never spawn.</remarks>
-    public Spawning.EntityFactory? EntityFactory { get; set; }
+    /// <summary>The build's one spawn path -- for a system or action that spawns an entity or applies a blueprint to one at runtime.</summary>
+    /// <remarks>Spawn only once the build is complete: blueprints are resolved after every module's Configure.</remarks>
+    public EntityFactory EntityFactory { get; }
 }

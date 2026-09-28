@@ -1,6 +1,5 @@
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Modules;
 using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 
@@ -22,8 +21,11 @@ public sealed class CoreModule : IGameModule
     /// <summary>Registers core components with their appropriate component pools.</summary>
     /// <remarks>For each component type, defines the merge action for combining two of those components.</remarks>
     /// <param name="componentManager"></param>
-    public void RegisterComponents(ComponentManager componentManager)
+    public void RegisterComponents(ComponentRegistration registration)
     {
+        var componentManager = registration.ComponentManager;
+
+
         componentManager.RegisterPackedPool<BackgroundComponent>(static (ref existing, incoming) =>
         {
             existing.BackgroundColor = Color.Lerp(existing.BackgroundColor, incoming.BackgroundColor, 0.5f);
@@ -75,7 +77,7 @@ public sealed class CoreModule : IGameModule
     /// here; the lock is a deadline now (see ActionLockComponent), so nothing has to visit an
     /// entity for it to become unlocked.
     /// </summary>
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
     }
 }

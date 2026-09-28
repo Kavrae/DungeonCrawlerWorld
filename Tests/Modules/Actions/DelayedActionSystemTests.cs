@@ -121,8 +121,7 @@ public sealed class DelayedActionSystemTests
     {
         var tiers = new Engine.ECS.Components.Stores.DirectComponentPool<ProcessingTierComponent>(8, static (ref existing, incoming) => existing = incoming);
         var transforms = new Engine.ECS.Components.Stores.DirectComponentPool<Game.Modules.Core.Components.TransformComponent>(8, static (ref existing, incoming) => existing = incoming);
-        var resolver = new ProcessingTierResolver();
-        resolver.Wire(tiers, transforms, tierEvents);
+        var resolver = new ProcessingTierResolver(tiers, transforms, tierEvents);
         resolver.SetReferencePosition(new Vector3Int(0, 0, 0));
         tiers.Add(CasterEntityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
 

@@ -1,4 +1,3 @@
-using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
@@ -15,7 +14,7 @@ using Game.World;
 
 namespace Tests.Modules.Actions;
 
-/// <summary>Drives ActionsModule's own EntityStaggeredEvent subscription, wired by Bootstrapper.Build the same way the game wires it.</summary>
+/// <summary>Drives ActionsModule's own EntityStaggeredEvent subscription, wired by the module build the same way the game wires it.</summary>
 [TestClass]
 public sealed class StaggerTests
 {
@@ -23,14 +22,12 @@ public sealed class StaggerTests
 
     private static (EcsContext EcsContext, EventBus EventBus, int TargetEntityId) Build()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-        var context = new GameModuleContext(world, new MathUtility(), new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
-
-        var ecsContext = BuiltInTestModules.Build(context, 10, 10);
+        var pass = BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)), initialEntityCapacity: 10, initialComponentCapacity: 10);
+        var ecsContext = pass.EcsContext;
 
         var targetEntityId = ecsContext.EntityManager.CreateEntity();
         ecsContext.ComponentManager.Merge(targetEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, unlockedAtFrame: LockedUntilFrame));
-        return (ecsContext, context.EventBus, targetEntityId);
+        return (ecsContext, pass.Context.EventBus, targetEntityId);
     }
 
     [TestMethod]

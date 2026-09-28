@@ -11,7 +11,7 @@ public sealed class MapCameraTests
     /// <summary>36-pixel tiles in a 360-pixel view: 12 columns and rows, with the +2 partial-tile margin.</summary>
     private static MapCamera CameraOverCentredMap()
     {
-        var camera = new MapCamera(new Game.World.World(new Map(new MapBounds(-1024, -1024, 1024, 1024, 1))));
+        var camera = new MapCamera(TestWorlds.Create(new Map(new MapBounds(-1024, -1024, 1024, 1024, 1))));
         camera.Initialize(new Vector2(360, 360));
         return camera;
     }
@@ -56,7 +56,7 @@ public sealed class MapCameraTests
     {
         var map = Map.Unbounded(depth: 1);
         map.LoadNeighborhood(0, 0);
-        var camera = new MapCamera(new Game.World.World(map));
+        var camera = new MapCamera(TestWorlds.Create(map));
         camera.Initialize(new Vector2(360, 360));
 
         map.LoadNeighborhood(1, 0);

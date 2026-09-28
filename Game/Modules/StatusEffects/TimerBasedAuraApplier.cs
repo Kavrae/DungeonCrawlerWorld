@@ -1,4 +1,3 @@
-using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.World;
 
@@ -13,27 +12,14 @@ namespace Game.Modules.StatusEffects;
 /// in a lambda at the registration call site -- see PoisonModule.Configure) -- register one of
 /// these per effect from that effect's own Configure instead of writing a new class per effect.
 /// </summary>
-public sealed class TimerBasedAuraApplier<T> : IStatusEffectAuraApplier where T : struct, IStatusEffectStackCount
+/// <param name="applyStack">(entityId, source, now) -- see IStatusEffectAuraApplier.ApplyStack.</param>
+public sealed class TimerBasedAuraApplier<T>(StatusEffectType effectType, PackedComponentPool<T> timers, Action<int, ActionSource, long> applyStack) : IStatusEffectAuraApplier where T : struct, IStatusEffectStackCount
 {
-    public StatusEffectType EffectType { get; }
+    public StatusEffectType EffectType { get; } = effectType;
 
-    private readonly Action<ComponentManager, int, ActionSource, long> _applyStack;
-    private PackedComponentPool<T>? _timers;
+    public int GetCurrentStackCount(int entityId) =>
+        timers.TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
 
-    /// <param name="applyStack">(componentManager, entityId, source, now) -- see IStatusEffectAuraApplier.ApplyStack.</param>
-    public TimerBasedAuraApplier(StatusEffectType effectType, Action<ComponentManager, int, ActionSource, long> applyStack)
-    {
-        EffectType = effectType;
-        _applyStack = applyStack;
-    }
-
-    /// <summary>Cached lazily, not at construction: Configure (where this is built) runs before any module's RegisterComponents, so componentManager's pools don't exist yet -- by the time this is actually called, componentManager is the same stable instance for the life of the game.</summary>
-    public int GetCurrentStackCount(ComponentManager componentManager, int entityId)
-    {
-        _timers ??= componentManager.GetPackedPool<T>();
-        return _timers.TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
-    }
-
-    public void ApplyStack(ComponentManager componentManager, int entityId, ActionSource source, long now) =>
-        _applyStack(componentManager, entityId, source, now);
+    public void ApplyStack(int entityId, ActionSource source, long now) =>
+        applyStack(entityId, source, now);
 }

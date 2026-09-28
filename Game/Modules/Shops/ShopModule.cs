@@ -1,9 +1,8 @@
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
+using Engine.Modules;
+using Game.Modules.AbilityScores;
 using Game.Modules.Currency;
 using Game.Modules.Inventory;
 using Game.Modules.Shops.Components;
-using Game.Modules.AbilityScores;
 
 namespace Game.Modules.Shops;
 
@@ -20,13 +19,15 @@ public sealed class ShopModule : IGameModule
     {
     }
 
-    public void RegisterComponents(ComponentManager componentManager)
+    public void RegisterComponents(ComponentRegistration registration)
     {
+        var componentManager = registration.ComponentManager;
+
         componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterMultiPool<ShopStockPreferenceComponent>();
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
     }
 }

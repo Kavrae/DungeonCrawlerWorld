@@ -1,15 +1,19 @@
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
+using Engine.Settings;
 
 namespace Engine.Modules;
 
-/// <summary> A self-contained collection of components and systems for one purpose.</summary>
+/// <summary>A self-contained collection of components and systems for one purpose: its identity, its ordering, and the phases that need no context.</summary>
 /// <remarks>
 /// Other modules are named by Id, so a mod that replaces one by Id still satisfies everything that names
 /// it. Requires is about presence and RunsAfter/RunsBefore about system order, and neither implies the
-/// other: every component is registered before any system, so a pool another module owns is available
-/// whatever the order. Bootstrapper validates Requires and sorts by the ordering lists, keeping the
-/// caller's order wherever nothing constrains it.
+/// other: every component is registered before any module is configured or any system registered, so a
+/// pool another module owns is available whatever the order. The phases run in this order, each for
+/// every module before the next starts: DeclareSettings, RegisterComponents, then
+/// <see cref="IModule{TContext}"/>'s Configure and RegisterSystems.
+///
+/// Implement <see cref="IModule{TContext}"/>, never this alone: the builder, the loader and
+/// replacement all work on the generic form. This non-generic base is what identity, ordering and
+/// replacement read.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public interface IModule
@@ -36,7 +40,25 @@ public interface IModule
     /// <remarks>An Id that isn't in the module set is ignored.</remarks>
     IReadOnlyList<Guid> RunsBefore => [];
 
-    void RegisterComponents(ComponentManager componentManager);
+    /// <summary>Declares every setting this module reads, with its default.</summary>
+    /// <remarks>Runs before any other phase, with no pools yet. A module that declares settings must have a non-empty Id.</remarks>
+    void DeclareSettings(SettingsDeclarations settings)
+    {
+    }
 
-    void RegisterSystems(SystemManager systemManager, ComponentManager componentManager);
+    void RegisterComponents(ComponentRegistration registration);
+}
+
+/// <summary>A module configured with, and registering its systems against, a context of type TContext.</summary>
+/// <remarks>The context is whatever the layer building the modules shares between them; Engine never looks inside it.</remarks>
+/// <cleanupVersion>1</cleanupVersion>
+public interface IModule<TContext> : IModule
+{
+    /// <summary>Fills whatever the context shares that another module's RegisterSystems reads.</summary>
+    /// <remarks>Runs after every module's RegisterComponents and before any module's RegisterSystems.</remarks>
+    void Configure(TContext context)
+    {
+    }
+
+    void RegisterSystems(SystemRegistration<TContext> registration);
 }

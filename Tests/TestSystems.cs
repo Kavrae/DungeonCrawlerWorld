@@ -158,7 +158,7 @@ internal static class TestSystems
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),
-            simulationScope ?? new SimulationScope(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
+            simulationScope ?? new SimulationScope(static _ => true), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static ActionActivationSystem ActionActivationSystem(
         PackedComponentPool<PendingActionActivationComponent> pendingActivations,
@@ -233,7 +233,7 @@ internal static class TestSystems
             bodyParts ?? EmptyPools.BodyParts(),
             dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
             processingTiers ?? EmptyPools.Tiers(),
-            simulationScope ?? new SimulationScope(), processingTierEvents ?? new ProcessingTierEvents(), creatures ?? new BlueprintRegistry(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
+            simulationScope ?? new SimulationScope(static _ => true), processingTierEvents ?? new ProcessingTierEvents(), creatures ?? new BlueprintRegistry(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static ConsumableActivationSystem ConsumableActivationSystem(
         PackedComponentPool<PendingConsumableActivationComponent> pendingActivations,

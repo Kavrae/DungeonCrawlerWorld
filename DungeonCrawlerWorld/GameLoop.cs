@@ -1,6 +1,7 @@
 using Engine.Diagnostics;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Settings;
 using Engine.Utilities;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -45,20 +46,24 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
     private readonly int? _mapSizeOverride;
 
+    private readonly IReadOnlyList<ISettingsSource> _settingsSources;
+
     /// <summary>FNA/SDL's own default window title is empty at the point Initialize() runs (nothing else in this codebase sets one), so the OS title bar is set explicitly here rather than captured. See _lastAdminModeOn.</summary>
     private const string BaseWindowTitle = "Dungeon Crawler World";
 
     /// <summary>Mirrors GlobalState.IsAdminModeOn as of the last frame Window.Title was synced -- Window.Title is only ever written on an actual change, not every frame.</summary>
     private bool _lastAdminModeOn;
 
+    /// <param name="settingsSources">Where setting overrides come from, in order -- Program.cs passes the command line.</param>
     /// <param name="diagnosticsFeatures">Which Diagnostics engine features to enable -- opt-in, defaults to None. See DiagnosticsFeaturesParser (Program.cs passes --diagnostics= here).</param>
     /// <param name="randomSeed">Seed for the shared MathUtility every system and blueprint draws from -- see RandomSeed. Defaults to a generated one so a caller that doesn't care (tests constructing a GameLoop directly) still gets a reproducible, reportable session rather than an unseeded one.</param>
     /// <param name="benchmarkFrameRange">Simulation frames to benchmark, or null -- see FrameRangeBenchmark (Program.cs passes --benchmark-frames= here).</param>
     /// <param name="mapSizeOverride">Square map width and height, or null for the default -- see MapSizeArgument (Program.cs passes --map-size= here).</param>
-    public GameLoop(DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, int? randomSeed = null, BenchmarkFrameRange? benchmarkFrameRange = null, int? mapSizeOverride = null)
+    public GameLoop(IReadOnlyList<ISettingsSource> settingsSources, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, int? randomSeed = null, BenchmarkFrameRange? benchmarkFrameRange = null, int? mapSizeOverride = null)
     {
         _randomSeed = randomSeed ?? RandomSeed.Generate();
         _mapSizeOverride = mapSizeOverride;
+        _settingsSources = settingsSources;
 
         // Constructed here, not in Initialize(), so its FrameBudget/Startup trackers' clocks
         // (and Startup's Phase("Module Load") wrap around WorldSessionBootstrapper.Build below)
@@ -83,7 +88,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         var playerActivityLogFilePath = Path.Combine(FindProjectRoot(), "Log", "player-activity.log");
         using (_diagnostics.StartupProfiler?.Phase("World Session Setup"))
         {
-            _worldSession = WorldSessionBootstrapper.Build(FloorNumber, modsDirectory, InitialEntityCapacity, InitialComponentCapacity, MinCrawlerNumber, CrawlerNumberBits, playerActivityLogFilePath, _diagnostics, _randomSeed, _mapSizeOverride);
+            _worldSession = WorldSessionBootstrapper.Build(FloorNumber, modsDirectory, InitialEntityCapacity, InitialComponentCapacity, MinCrawlerNumber, CrawlerNumberBits, playerActivityLogFilePath, _diagnostics, _randomSeed, _settingsSources, _mapSizeOverride);
         }
 
         using (_diagnostics.StartupProfiler?.Phase("Presentation Bootstrap"))

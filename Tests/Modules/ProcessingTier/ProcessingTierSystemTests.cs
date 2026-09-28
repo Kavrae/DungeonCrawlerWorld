@@ -51,14 +51,14 @@ public sealed class ProcessingTierSystemTests
         public DirectComponentPool<TransformComponent> Transforms { get; } = new(10, static (ref existing, incoming) => existing = incoming);
         public DirectComponentPool<ProcessingTierComponent> Tiers { get; } = new(10, static (ref existing, incoming) => existing = incoming);
         public ProcessingTierEvents Events { get; } = new();
-        public ProcessingTierResolver Resolver { get; } = new();
+        public ProcessingTierResolver Resolver { get; }
         public FrameEventBuffer<EntityMovedEvent> MovedEntities { get; } = new();
         public FakeMapQuery Map { get; } = new();
         public ProcessingTierSystem System { get; }
 
         public Fixture(IPlayerQuery? playerQuery = null, int transitionsPerFrame = ProcessingTierSystem.DefaultTransitionsPerFrame)
         {
-            Resolver.Wire(Tiers, Transforms, Events);
+            Resolver = new ProcessingTierResolver(Tiers, Transforms, Events);
             System = new ProcessingTierSystem(Transforms, Map, MovedEntities, Resolver, playerQuery ?? new TestPlayerQuery(PlayerEntityId), transitionsPerFrame);
         }
 
@@ -105,8 +105,7 @@ public sealed class ProcessingTierSystemTests
     {
         var transforms = new DirectComponentPool<TransformComponent>(10, static (ref existing, incoming) => existing = incoming);
         var tiers = new DirectComponentPool<ProcessingTierComponent>(10, static (ref existing, incoming) => existing = incoming);
-        var resolver = new ProcessingTierResolver();
-        resolver.Wire(tiers, transforms, new ProcessingTierEvents());
+        var resolver = new ProcessingTierResolver(tiers, transforms, new ProcessingTierEvents());
         transforms.Add(OtherEntityId, new TransformComponent(new Vector3Int(2, 2, 0), new Vector2Byte(1, 1)));
 
         var system = new ProcessingTierSystem(transforms, new FakeMapQuery(), new FrameEventBuffer<EntityMovedEvent>(), resolver, playerQuery: TestPlayerQuery.NoPlayer);

@@ -21,19 +21,21 @@ public sealed class StatusEffectsModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    private SimulationScope _simulationScope = null!;
-
-    public void Configure(GameModuleContext context) => _simulationScope = context.SimulationScope;
-
-    public void RegisterComponents(ComponentManager componentManager)
+    public void RegisterComponents(ComponentRegistration registration)
     {
+        var componentManager = registration.ComponentManager;
+
         componentManager.RegisterMultiPool<StatusEffectImmunityComponent>();
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
+        var context = registration.Context;
+        var systemManager = registration.SystemManager;
+        var componentManager = registration.ComponentManager;
+
         systemManager.Register(new StatusEffectImmunityExpirySystem(
             componentManager.GetMultiPool<StatusEffectImmunityComponent>(),
-            _simulationScope));
+            context.SimulationScope));
     }
 }

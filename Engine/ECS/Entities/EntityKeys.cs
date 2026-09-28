@@ -4,8 +4,8 @@ namespace Engine.ECS.Entities;
 /// <remarks>
 /// EntityManager issues a key when it creates an entity and releases it when it destroys one. Keys
 /// count up from 1 and are never handed out twice, so a key whose entity is gone resolves to nothing
-/// rather than to whichever entity reused the id. Owned by EntityManager; a game whose systems need the
-/// table before the ECS is built creates it first and hands it to Bootstrapper.Build.
+/// rather than to whichever entity reused the id. Owned by EntityManager, which
+/// creates it; everything that needs the table reads it from there.
 /// </remarks>
 public sealed class EntityKeys
 {

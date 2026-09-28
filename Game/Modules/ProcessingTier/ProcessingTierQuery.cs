@@ -15,7 +15,7 @@ namespace Game.Modules.ProcessingTier;
 /// </para>
 /// <para>
 /// An entity with no tier counts as simulated, matching the SimulationScope policy this backs (see
-/// GameBootstrapper.WireSimulationScope): the entities that go untiered are the ones never placed on
+/// GameBuildPass.WireSimulationScope): the entities that go untiered are the ones never placed on
 /// the map, and refusing to resolve effects on them would break every test double and every
 /// inventory-only entity.
 /// </para>

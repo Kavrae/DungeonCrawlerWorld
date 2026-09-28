@@ -1,12 +1,9 @@
-using Engine.ECS.Components;
 using Engine.ECS.Systems;
-using Engine.Events;
-using Game.Modules.Core.Components;
+using Engine.Modules;
+using Game.Modules.Core;
 using Game.Modules.Paralysis.Components;
 using Game.Modules.Paralysis.Systems;
 using Game.Modules.StatusEffects;
-using Game.World;
-using Game.Modules.Core;
 
 namespace Game.Modules.Paralysis;
 
@@ -27,26 +24,34 @@ public sealed class ParalysisModule : IGameModule
 
     public IReadOnlyList<Guid> Requires { get; } = [StatusEffectsModule.ModuleId, CoreModule.ModuleId];
 
-    private EventBus _eventBus = null!;
-    private IPlayerQuery _playerQuery = null!;
-
     public void Configure(GameModuleContext context)
     {
-        _eventBus = context.EventBus;
-        _playerQuery = context.PlayerQuery;
+        var componentManager = context.ComponentManager;
+        var eventBus = context.EventBus;
+        var playerQuery = context.PlayerQuery;
+        var timers = componentManager.GetPackedPool<ParalysisTimerComponent>();
 
         context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<ParalysisTimerComponent>(
             StatusEffectType.Paralysis,
-            (componentManager, entityId, source, now) => ParalysisEffects.Apply(componentManager, entityId, source, now, _eventBus, _playerQuery)));
+            timers,
+            (entityId, source, now) => ParalysisEffects.Apply(componentManager, entityId, source, now, eventBus, playerQuery)));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph,
+            timers,
             static (paralysis, now) => FrameDeadline.Remaining(paralysis.ExpiresAtFrame, now)));
     }
 
-    public void RegisterComponents(ComponentManager componentManager) =>
-        componentManager.RegisterPackedPool<ParalysisTimerComponent>(static (ref existing, incoming) => { });
-
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterComponents(ComponentRegistration registration)
     {
+        var componentManager = registration.ComponentManager;
+
+        componentManager.RegisterPackedPool<ParalysisTimerComponent>(static (ref existing, incoming) => { });
+    }
+
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    {
+        var systemManager = registration.SystemManager;
+        var componentManager = registration.ComponentManager;
+
         systemManager.Register(new ParalysisSystem(componentManager.GetPackedPool<ParalysisTimerComponent>()));
     }
 }

@@ -13,15 +13,14 @@ public sealed class EntityManager
     private readonly FreeIdPool _entityIdPool;
     private int _capacity;
 
-    /// <param name="keys">The key table to issue into, when something needs it before this manager exists; a new one otherwise.</param>
-    public EntityManager(ComponentManager componentManager, int initialCapacity, EntityKeys? keys = null)
+    public EntityManager(ComponentManager componentManager, int initialCapacity)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(initialCapacity);
 
         _componentManager = componentManager;
         _capacity = initialCapacity;
         _entityIdPool = new FreeIdPool(initialCapacity);
-        Keys = keys ?? new EntityKeys();
+        Keys = new EntityKeys();
     }
 
     public int Capacity => _capacity;

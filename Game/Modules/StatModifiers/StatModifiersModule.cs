@@ -1,6 +1,4 @@
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
-using Engine.Events;
+using Engine.Modules;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatModifiers.Systems;
 
@@ -19,15 +17,10 @@ public sealed class StatModifiersModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    private EventBus _eventBus = null!;
-
-    public void Configure(GameModuleContext context)
+    public void RegisterComponents(ComponentRegistration registration)
     {
-        _eventBus = context.EventBus;
-    }
+        var componentManager = registration.ComponentManager;
 
-    public void RegisterComponents(ComponentManager componentManager)
-    {
         componentManager.RegisterMultiPool<StatModifierComponent>();
 
         // Merging keeps the EARLIER deadline: this is an entity's "next modifier to expire", so a
@@ -37,9 +30,15 @@ public sealed class StatModifiersModule : IGameModule
             existing.NextTickFrame = System.Math.Min(existing.NextTickFrame, incoming.NextTickFrame));
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) =>
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    {
+        var context = registration.Context;
+        var systemManager = registration.SystemManager;
+        var componentManager = registration.ComponentManager;
+
         systemManager.Register(new StatModifierExpirySystem(
             componentManager.GetMultiPool<StatModifierComponent>(),
             componentManager.GetPackedPool<ExpiringStatModifierComponent>(),
-            _eventBus));
+            context.EventBus));
+    }
 }

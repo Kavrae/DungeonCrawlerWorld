@@ -49,12 +49,29 @@ namespace Game.Modules.ProcessingTier;
 /// </remarks>
 public sealed class LocalTierRoster
 {
+    private readonly IEntityMembershipPool _drivingPool;
+    private readonly IReadOnlyComponentPool<ProcessingTierComponent> _tiers;
+
     private readonly HashSet<int> _localEntityIds = [];
 
     /// <summary>Rebuilt from _localEntityIds only when it has actually changed since the last read -- callers iterate this every frame, and copying an unchanged set each time would give back most of what walking the small side was meant to save.</summary>
     private int[] _snapshot = [];
     private int _snapshotCount;
     private bool _snapshotStale = true;
+
+    /// <summary>Subscribes the roster to a driving pool's membership and to tier changes -- mirrors ProcessingTierWiring.CreateAndWire's role for TieredEntityStripeSet; there is exactly one of these per build rather than one per consuming system.</summary>
+    /// <param name="drivingPool">The pool whose members this roster tracks -- MovementComponent. Tiering itself now covers every positioned entity (see ProcessingTierSystem), but this roster deliberately stays scoped to movers: it exists to be the small side of "Local AND pending something", and admitting every stationary entity within the Local radius would make it far larger and defeat that.</param>
+    /// <param name="tiers">Read when an entity joins the driving pool -- see OnEntityAdded.</param>
+    /// <param name="processingTierEvents">The shared tier-change event source.</param>
+    public LocalTierRoster(IEntityMembershipPool drivingPool, IReadOnlyComponentPool<ProcessingTierComponent> tiers, ProcessingTierEvents processingTierEvents)
+    {
+        _drivingPool = drivingPool;
+        _tiers = tiers;
+
+        drivingPool.EntityAdded += OnEntityAdded;
+        drivingPool.EntityRemoved += OnEntityRemoved;
+        processingTierEvents.TierChanged += OnTierChanged;
+    }
 
     /// <summary>Whether entityId is currently Local. An entity with no ProcessingTierComponent yet is not Local -- matching ProcessingTierWiring's own fail-open-to-Beyond default, for the same reason (bulk population creates thousands of untiered entities at once, and treating "unknown" as "right next to the player" is the exact cost tiering exists to avoid).</summary>
     public bool IsLocal(int entityId) => _localEntityIds.Contains(entityId);
@@ -88,27 +105,6 @@ public sealed class LocalTierRoster
         }
     }
 
-    private IEntityMembershipPool? _drivingPool;
-    private IReadOnlyComponentPool<ProcessingTierComponent>? _tiers;
-
-    /// <summary>Subscribes this roster to a driving pool's membership and to tier changes -- mirrors ProcessingTierWiring.CreateAndWire's role for TieredEntityStripeSet, kept as a method on the roster itself since (unlike a stripe set) there is exactly one of these per game rather than one per consuming system.</summary>
-    /// <param name="drivingPool">The pool whose members this roster tracks -- MovementComponent. Tiering itself now covers every positioned entity (see ProcessingTierSystem), but this roster deliberately stays scoped to movers: it exists to be the small side of "Local AND pending something", and admitting every stationary entity within the Local radius would make it far larger and defeat that.</param>
-    /// <param name="tiers">Read when an entity joins the driving pool -- see OnEntityAdded.</param>
-    /// <param name="processingTierEvents">The shared tier-change event source.</param>
-    public void Wire(IEntityMembershipPool drivingPool, IReadOnlyComponentPool<ProcessingTierComponent> tiers, ProcessingTierEvents processingTierEvents)
-    {
-        ArgumentNullException.ThrowIfNull(drivingPool);
-        ArgumentNullException.ThrowIfNull(tiers);
-        ArgumentNullException.ThrowIfNull(processingTierEvents);
-
-        _drivingPool = drivingPool;
-        _tiers = tiers;
-
-        drivingPool.EntityAdded += OnEntityAdded;
-        drivingPool.EntityRemoved += OnEntityRemoved;
-        processingTierEvents.TierChanged += OnTierChanged;
-    }
-
     /// <summary>
     /// Entities now arrive already tiered: ProcessingTierResolver.CreateEntityAt writes the tier as
     /// an entity's first component, silently, before its blueprint adds MovementComponent. So a new
@@ -120,7 +116,7 @@ public sealed class LocalTierRoster
     /// </summary>
     private void OnEntityAdded(int entityId)
     {
-        if (_tiers!.TryGetReadonly(entityId, out var tier) && tier.Tier == ProcessingTierLevel.Local && _localEntityIds.Add(entityId))
+        if (_tiers.TryGetReadonly(entityId, out var tier) && tier.Tier == ProcessingTierLevel.Local && _localEntityIds.Add(entityId))
         {
             _snapshotStale = true;
         }
@@ -134,13 +130,13 @@ public sealed class LocalTierRoster
         }
     }
 
-    /// <summary>TierChanged now fires for every positioned entity, stationary ones included, so this filters to driving-pool members -- see Wire's own note on why the roster stays movers-only.</summary>
+    /// <summary>TierChanged now fires for every positioned entity, stationary ones included, so this filters to driving-pool members -- see the constructor's own note on why the roster stays movers-only.</summary>
     private void OnTierChanged(int entityId, ProcessingTierLevel tier)
     {
         bool changed;
         if (tier == ProcessingTierLevel.Local)
         {
-            changed = _drivingPool!.Has(entityId) && _localEntityIds.Add(entityId);
+            changed = _drivingPool.Has(entityId) && _localEntityIds.Add(entityId);
         }
         else
         {

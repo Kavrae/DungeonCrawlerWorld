@@ -1,5 +1,3 @@
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
 using Engine.Modules;
 
 namespace Tests.Modules;
@@ -10,8 +8,7 @@ public sealed class ModuleSetTests
     private sealed class TestModule(Guid id) : IModule
     {
         public Guid Id { get; } = id;
-        public void RegisterComponents(ComponentManager componentManager) { }
-        public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) { }
+        public void RegisterComponents(ComponentRegistration registration) { }
     }
 
     [TestMethod]

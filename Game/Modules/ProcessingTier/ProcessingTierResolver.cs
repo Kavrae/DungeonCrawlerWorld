@@ -1,5 +1,4 @@
 using Engine.ECS.Components.Stores;
-using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Core.Components;
 using Game.Modules.ProcessingTier.Components;
@@ -44,7 +43,7 @@ namespace Game.Modules.ProcessingTier;
 /// asking, and "not checked or updated again" is the requirement.
 /// </para>
 /// </remarks>
-public sealed class ProcessingTierResolver
+public sealed class ProcessingTierResolver(DirectComponentPool<ProcessingTierComponent> tiers, DirectComponentPool<TransformComponent> transforms, ProcessingTierEvents events)
 {
     /// <summary>Chebyshev distance at or within which a non-Local entity is promoted to Local.</summary>
     public const int LocalRadiusTiles = 80;
@@ -57,10 +56,6 @@ public sealed class ProcessingTierResolver
 
     private readonly HashSet<int> _pinnedLocal = [];
 
-    private DirectComponentPool<ProcessingTierComponent>? _tiers;
-    private DirectComponentPool<TransformComponent>? _transforms;
-    private ProcessingTierEvents? _events;
-
     /// <summary>The position every non-pinned entity's tier is computed from. Null until the spawn sequence (or the first observation of the player) establishes one -- see this class's own remarks.</summary>
     public Vector3Int? ReferencePosition { get; private set; }
 
@@ -71,18 +66,6 @@ public sealed class ProcessingTierResolver
     /// <summary>Neighborhoods whose entities a window shift changed the tier of, drained by ProcessingTierSystem under its per-frame budget -- see ProcessingTierTransitionQueue.</summary>
     /// <remarks>Kept here with the window rather than on the system, so anything waiting for a shift to settle can ask HasPending.</remarks>
     public ProcessingTierTransitionQueue Transitions { get; } = new();
-
-    /// <summary>Connects the resolver to the pools it reads and writes. Called once from ProcessingTierModule.RegisterSystems, after components are registered -- the same shape as LocalTierRoster.Wire.</summary>
-    public void Wire(DirectComponentPool<ProcessingTierComponent> tiers, DirectComponentPool<TransformComponent> transforms, ProcessingTierEvents events)
-    {
-        ArgumentNullException.ThrowIfNull(tiers);
-        ArgumentNullException.ThrowIfNull(transforms);
-        ArgumentNullException.ThrowIfNull(events);
-
-        _tiers = tiers;
-        _transforms = transforms;
-        _events = events;
-    }
 
     /// <summary>Forgets entityId: drops it from the membership index and unpins it, for an entity being destroyed.</summary>
     public void Forget(int entityId)
@@ -141,7 +124,6 @@ public sealed class ProcessingTierResolver
     /// <returns>Whether the tier actually changed -- an entity that already existed at a different tier needs the caller to raise TierChanged so existing stripe-set memberships follow. <see cref="PinLocalAndNotify"/> does that for you.</returns>
     private bool PinLocal(int entityId)
     {
-        var tiers = RequireWired();
         _pinnedLocal.Add(entityId);
 
         if (tiers.TryGetReadonly(entityId, out var existing) && existing.Tier == ProcessingTierLevel.Local)
@@ -162,7 +144,7 @@ public sealed class ProcessingTierResolver
     {
         if (PinLocal(entityId))
         {
-            _events!.RaiseTierChanged(entityId, ProcessingTierLevel.Local);
+            events.RaiseTierChanged(entityId, ProcessingTierLevel.Local);
         }
     }
 
@@ -190,7 +172,6 @@ public sealed class ProcessingTierResolver
     /// <returns>The new entity's id.</returns>
     public int CreateEntityAt(Engine.ECS.Entities.EntityManager entityManager, Vector3Int plannedPosition)
     {
-        var tiers = RequireWired();
 
         var entityId = entityManager.CreateEntity();
         Membership.Set(entityId, plannedPosition);
@@ -219,8 +200,7 @@ public sealed class ProcessingTierResolver
     /// </summary>
     public void Retier(int entityId)
     {
-        RequireWired();
-        if (_transforms!.TryGetReadonly(entityId, out var transform))
+        if (transforms.TryGetReadonly(entityId, out var transform))
         {
             RetierAt(entityId, transform.Position);
         }
@@ -233,7 +213,6 @@ public sealed class ProcessingTierResolver
     /// <exception cref="InvalidOperationException">The resolver hasn't been wired.</exception>
     private void RetierAt(int entityId, Vector3Int position)
     {
-        var tiers = RequireWired();
         Membership.Set(entityId, position);
 
         if (ReferencePosition is not { } reference || _pinnedLocal.Contains(entityId))
@@ -256,7 +235,7 @@ public sealed class ProcessingTierResolver
         // ProcessingTierWiring), so landing on Beyond is not a change any of them needs to hear about.
         if (hasExisting || tier != ProcessingTierLevel.Beyond)
         {
-            _events!.RaiseTierChanged(entityId, tier);
+            events.RaiseTierChanged(entityId, tier);
         }
     }
 
@@ -310,7 +289,4 @@ public sealed class ProcessingTierResolver
             tiers.Add(entityId, component);
         }
     }
-
-    private DirectComponentPool<ProcessingTierComponent> RequireWired() =>
-        _tiers ?? throw new InvalidOperationException($"{nameof(ProcessingTierResolver)} used before {nameof(Wire)} -- ProcessingTierModule.RegisterSystems wires it.");
 }

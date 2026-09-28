@@ -369,8 +369,7 @@ public sealed class PackedTimerWheelTests
     public void UnsimulatedEntity_DueTimerIsNotFiredAndRests()
     {
         var pool = CreatePool();
-        var scope = new SimulationScope();
-        scope.SetPolicy(static entityId => entityId != 3);
+        var scope = new SimulationScope(static entityId => entityId != 3);
         var wheel = new PackedTimerWheel<Burn>(pool, scope);
         pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 1 });
         pool.Add(4, new Burn { NextTickFrame = 5, Stacks = 1 });
@@ -385,9 +384,8 @@ public sealed class PackedTimerWheelTests
     public void ResumedEntity_OverdueTimerFiresOnTheNextTick()
     {
         var pool = CreatePool();
-        var scope = new SimulationScope();
         var simulated = false;
-        scope.SetPolicy(_ => simulated);
+        var scope = new SimulationScope(_ => simulated);
         var wheel = new PackedTimerWheel<Burn>(pool, scope);
         pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 2 });
         Assert.IsEmpty(Run(wheel, pool, 0, 20));
@@ -403,7 +401,7 @@ public sealed class PackedTimerWheelTests
     public void ResumeRaisedForAnAlreadyScheduledTimer_DoesNotDoubleFire()
     {
         var pool = CreatePool();
-        var scope = new SimulationScope();
+        var scope = new SimulationScope(static _ => true);
         var wheel = new PackedTimerWheel<Burn>(pool, scope);
         pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 1 });
 
@@ -418,7 +416,7 @@ public sealed class PackedTimerWheelTests
     public void ResumeRaisedForAnEntityWithNoTimer_IsANoOp()
     {
         var pool = CreatePool();
-        var scope = new SimulationScope();
+        var scope = new SimulationScope(static _ => true);
         var wheel = new PackedTimerWheel<Burn>(pool, scope);
 
         scope.RaiseResumed(9);

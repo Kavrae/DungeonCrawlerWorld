@@ -1,5 +1,4 @@
 using Engine.ECS.Entities;
-using Engine.Bootstrap;
 using Engine.ECS.Components;
 using Engine.ECS.Context;
 using Engine.Events;
@@ -57,14 +56,8 @@ public sealed class BlueprintTests
     private static short? FlatDamageOf(ActionDefinition action) =>
         action.Effects.SelectMany(effect => effect.Entries).OfType<Game.Modules.Actions.Effects.DirectDamage>().First().MinFlatDamage;
 
-    private static EcsContext BuildEcsContext()
-    {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-        var mathUtility = new MathUtility();
-        var context = new GameModuleContext(world, mathUtility, new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
-
-        return BuiltInTestModules.Build(context);
-    }
+    private static EcsContext BuildEcsContext() =>
+        BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1))).EcsContext;
 
     [TestMethod]
     public void TreasureChest_Build_IsNamedAndDrawnByItsDefinition_AndSetsTransformHealthContainerAndImmunities()

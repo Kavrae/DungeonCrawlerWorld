@@ -1,63 +1,23 @@
-using Engine.Diagnostics;
-using Engine.ECS.Context;
-using Engine.ECS.Entities;
-using Engine.Events;
 using Engine.Modules;
 
 namespace Engine.Bootstrap;
 
-/// <summary> Registers built-in and modded modules by their components and systems. </summary>
-/// <remarks>
-/// Checks every module's Requires and sorts the set by RunsAfter/RunsBefore, then registers all
-/// components before any systems (a system may need a component pool owned by a different module)
-/// and produces the finished <see cref="EcsContext"/>.
-///
-/// Throws, registering nothing, on a missing requirement, a circular ordering, or two modules sharing a type or a non-empty Id.
-/// </remarks>
+/// <summary>Validates a module set and orders it by RunsAfter/RunsBefore.</summary>
+/// <remarks>Throws, ordering nothing, on a missing requirement, a circular ordering, or two modules sharing a type or a non-empty Id.</remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public static class Bootstrapper
+internal static class ModuleOrder
 {
-    public static EcsContext Build(IReadOnlyList<IModule> modules, int initialEntityCapacity, int initialComponentCapacity, EventBus eventBus, StartupProfiler? startupProfiler = null, EntityKeys? entityKeys = null)
-    {
-        var sortedModules = TopologicalSort(modules);
-
-        var builder = new EcsContextBuilder(initialEntityCapacity, initialComponentCapacity, eventBus, entityKeys);
-
-        RegisterAllComponents(sortedModules, builder, startupProfiler);
-        RegisterAllSystems(sortedModules, builder, startupProfiler);
-
-        return builder.Build();
-    }
-
-    private static void RegisterAllComponents(IReadOnlyList<IModule> sortedModules, EcsContextBuilder builder, StartupProfiler? startupProfiler)
-    {
-        foreach (var module in sortedModules)
-        {
-            using var _ = startupProfiler?.Phase($"RegisterComponents:{module.Name}");
-            module.RegisterComponents(builder.ComponentManager);
-        }
-    }
-
-    private static void RegisterAllSystems(IReadOnlyList<IModule> sortedModules, EcsContextBuilder builder, StartupProfiler? startupProfiler)
-    {
-        foreach (var module in sortedModules)
-        {
-            using var _ = startupProfiler?.Phase($"RegisterSystems:{module.Name}");
-            module.RegisterSystems(builder.SystemManager, builder.ComponentManager);
-        }
-    }
-
     /// <summary>Orders modules so every RunsAfter/RunsBefore constraint holds, keeping the caller's order wherever nothing constrains it.</summary>
     /// <remarks>Depth-first in input order, visiting a module's predecessors (in input order) before it, so a list that already satisfies every constraint comes back unchanged.</remarks>
-    private static List<IModule> TopologicalSort(IReadOnlyList<IModule> modules)
+    public static List<TModule> Sort<TModule>(IReadOnlyList<TModule> modules) where TModule : class, IModule
     {
         var modulesById = IndexById(modules);
         ValidateRequirements(modules, modulesById);
 
         var predecessorsByModule = FindPredecessors(modules, modulesById);
-        var sortedModules = new List<IModule>(modules.Count);
-        var visitStatesByModule = new Dictionary<IModule, VisitState>(ReferenceEqualityComparer.Instance);
-        var visitPath = new List<(IModule Module, string? ReachedBy)>();
+        var sortedModules = new List<TModule>(modules.Count);
+        var visitStatesByModule = new Dictionary<TModule, VisitState>(ReferenceEqualityComparer.Instance);
+        var visitPath = new List<(TModule Module, string? ReachedBy)>();
 
         foreach (var module in modules)
         {
@@ -69,10 +29,10 @@ public static class Bootstrapper
 
     /// <summary>Every module with a non-empty Id, by that Id.</summary>
     /// <remarks>Guid.Empty is no identity at all, so any number of such modules coexist and none can be named by another.</remarks>
-    private static Dictionary<Guid, IModule> IndexById(IReadOnlyList<IModule> modules)
+    private static Dictionary<Guid, TModule> IndexById<TModule>(IReadOnlyList<TModule> modules) where TModule : class, IModule
     {
         var moduleTypes = new HashSet<Type>();
-        var modulesById = new Dictionary<Guid, IModule>();
+        var modulesById = new Dictionary<Guid, TModule>();
 
         foreach (var module in modules)
         {
@@ -90,7 +50,7 @@ public static class Bootstrapper
         return modulesById;
     }
 
-    private static void ValidateRequirements(IReadOnlyList<IModule> modules, Dictionary<Guid, IModule> modulesById)
+    private static void ValidateRequirements<TModule>(IReadOnlyList<TModule> modules, Dictionary<Guid, TModule> modulesById) where TModule : class, IModule
     {
         var missingRequirements = new List<string>();
 
@@ -112,12 +72,12 @@ public static class Bootstrapper
     }
 
     /// <summary>One module that must run before another, and the declaration that says so -- "Movement.RunsAfter" or "NpcBehavior.RunsBefore" -- for the cycle message.</summary>
-    private readonly record struct OrderingEdge(IModule Predecessor, string DeclaredBy);
+    private readonly record struct OrderingEdge<TModule>(TModule Predecessor, string DeclaredBy);
 
     /// <summary>For each module, the modules that must run before it -- its RunsAfter targets and every module naming it in RunsBefore -- in input order.</summary>
-    private static Dictionary<IModule, List<OrderingEdge>> FindPredecessors(IReadOnlyList<IModule> modules, Dictionary<Guid, IModule> modulesById)
+    private static Dictionary<TModule, List<OrderingEdge<TModule>>> FindPredecessors<TModule>(IReadOnlyList<TModule> modules, Dictionary<Guid, TModule> modulesById) where TModule : class, IModule
     {
-        var predecessorsByModule = new Dictionary<IModule, List<OrderingEdge>>(ReferenceEqualityComparer.Instance);
+        var predecessorsByModule = new Dictionary<TModule, List<OrderingEdge<TModule>>>(ReferenceEqualityComparer.Instance);
         foreach (var module in modules)
         {
             predecessorsByModule[module] = [];
@@ -129,7 +89,7 @@ public static class Bootstrapper
             {
                 if (modulesById.TryGetValue(runsAfterId, out var predecessor) && !ReferenceEquals(predecessor, module))
                 {
-                    predecessorsByModule[module].Add(new OrderingEdge(predecessor, $"{module.Name}.{nameof(IModule.RunsAfter)}"));
+                    predecessorsByModule[module].Add(new OrderingEdge<TModule>(predecessor, $"{module.Name}.{nameof(IModule.RunsAfter)}"));
                 }
             }
 
@@ -137,12 +97,12 @@ public static class Bootstrapper
             {
                 if (modulesById.TryGetValue(runsBeforeId, out var successor) && !ReferenceEquals(successor, module))
                 {
-                    predecessorsByModule[successor].Add(new OrderingEdge(module, $"{module.Name}.{nameof(IModule.RunsBefore)}"));
+                    predecessorsByModule[successor].Add(new OrderingEdge<TModule>(module, $"{module.Name}.{nameof(IModule.RunsBefore)}"));
                 }
             }
         }
 
-        var inputIndexByModule = new Dictionary<IModule, int>(ReferenceEqualityComparer.Instance);
+        var inputIndexByModule = new Dictionary<TModule, int>(ReferenceEqualityComparer.Instance);
         for (var index = 0; index < modules.Count; index++)
         {
             inputIndexByModule[modules[index]] = index;
@@ -163,13 +123,13 @@ public static class Bootstrapper
     }
 
     /// <param name="reachedBy">The declaration of the edge that led here from the previous module on visitPath; null for a module the sort starts from.</param>
-    private static void Visit(
-        IModule module,
+    private static void Visit<TModule>(
+        TModule module,
         string? reachedBy,
-        Dictionary<IModule, List<OrderingEdge>> predecessorsByModule,
-        Dictionary<IModule, VisitState> visitStatesByModule,
-        List<(IModule Module, string? ReachedBy)> visitPath,
-        List<IModule> sortedModules)
+        Dictionary<TModule, List<OrderingEdge<TModule>>> predecessorsByModule,
+        Dictionary<TModule, VisitState> visitStatesByModule,
+        List<(TModule Module, string? ReachedBy)> visitPath,
+        List<TModule> sortedModules) where TModule : class, IModule
     {
         if (visitStatesByModule.TryGetValue(module, out var visitState))
         {
@@ -195,7 +155,7 @@ public static class Bootstrapper
     }
 
     /// <summary>Each link of the cycle closing at module, as "A runs after B (declared by)".</summary>
-    private static string DescribeCycle(List<(IModule Module, string? ReachedBy)> visitPath, IModule module, string? closingDeclaration)
+    private static string DescribeCycle<TModule>(List<(TModule Module, string? ReachedBy)> visitPath, TModule module, string? closingDeclaration) where TModule : class, IModule
     {
         var cycleStart = visitPath.FindIndex(step => ReferenceEquals(step.Module, module));
         var links = new List<string>();

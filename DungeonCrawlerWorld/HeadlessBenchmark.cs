@@ -41,7 +41,7 @@ internal static class HeadlessBenchmark
     private const int FramesPerSecond = 60;
 
     /// <param name="diagnosticsFeatures">Memory adds a PoolMemoryReport over the same frame range; the other features have nothing to report headless.</param>
-    public static int Run(int randomSeed, BenchmarkFrameRange frameRange, int? mapSizeOverride = null, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None)
+    public static int Run(int randomSeed, BenchmarkFrameRange frameRange, IReadOnlyList<Engine.Settings.ISettingsSource> settingsSources, int? mapSizeOverride = null, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None)
     {
         using var timerResolution = WindowsTimerResolution.Request(milliseconds: 1);
         var diagnostics = new DiagnosticsEngine(diagnosticsFeatures & DiagnosticsFeatures.Memory, randomSeed, frameRange);
@@ -61,6 +61,7 @@ internal static class HeadlessBenchmark
             activityLogPath,
             diagnostics,
             randomSeed,
+            settingsSources,
             mapSizeOverride);
 
         try

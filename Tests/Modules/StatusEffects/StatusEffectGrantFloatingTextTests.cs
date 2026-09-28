@@ -17,22 +17,22 @@ public sealed class StatusEffectGrantFloatingTextTests
     private const int SourceEntityId = 1;
     private const int TargetEntityId = 2;
 
-    private sealed class CountingApplier(StatusEffectType effectType, int maxStacks) : IStatusEffectAuraApplier
+    private sealed class CountingApplier(ComponentManager componentManager, StatusEffectType effectType, int maxStacks) : IStatusEffectAuraApplier
     {
         private readonly Dictionary<int, int> _stacksByEntityId = [];
 
         public StatusEffectType EffectType { get; } = effectType;
 
-        public int GetCurrentStackCount(ComponentManager componentManager, int entityId) => _stacksByEntityId.GetValueOrDefault(entityId);
+        public int GetCurrentStackCount(int entityId) => _stacksByEntityId.GetValueOrDefault(entityId);
 
-        public void ApplyStack(ComponentManager componentManager, int entityId, ActionSource source, long now)
+        public void ApplyStack(int entityId, ActionSource source, long now)
         {
             if (StatusEffectImmunity.HasImmunity(componentManager, entityId, EffectType))
             {
                 return;
             }
 
-            _stacksByEntityId[entityId] = System.Math.Min(GetCurrentStackCount(componentManager, entityId) + 1, maxStacks);
+            _stacksByEntityId[entityId] = System.Math.Min(GetCurrentStackCount(entityId) + 1, maxStacks);
         }
     }
 
@@ -40,7 +40,7 @@ public sealed class StatusEffectGrantFloatingTextTests
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
         var appliers = new StatusEffectAuraApplierRegistry();
-        appliers.Register(new CountingApplier(StatusEffectType.Burning, maxStacks));
+        appliers.Register(new CountingApplier(componentManager, StatusEffectType.Burning, maxStacks));
         var floatingText = new TestFloatingText().Place(TargetEntityId, ProcessingTierLevel.Local);
 
         var context = TestActionEffects.Context(

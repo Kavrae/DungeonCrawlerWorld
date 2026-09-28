@@ -1,4 +1,3 @@
-using Engine.Bootstrap;
 using Engine.ECS.Components;
 using Engine.ECS.Context;
 using Engine.Events;
@@ -32,13 +31,8 @@ namespace Tests.Blueprints;
 [TestClass]
 public sealed class BlueprintCompositionTests
 {
-    private static EcsContext BuildEcsContext()
-    {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-        var context = new GameModuleContext(world, new MathUtility(), new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
-
-        return BuiltInTestModules.Build(context, 100, 50);
-    }
+    private static EcsContext BuildEcsContext() =>
+        BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)), initialEntityCapacity: 100, initialComponentCapacity: 50).EcsContext;
 
     /// <summary>A build step that appends marker to the entity's name, so the name spells out the order the parts built in.</summary>
     private static Action<BlueprintContext> MarkerBuild(string marker) =>
@@ -51,7 +45,7 @@ public sealed class BlueprintCompositionTests
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
-        new EntityFactory(definitions, ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId, blueprintId, seed: 1, now: 0);
+        new EntityBuilder(definitions, ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId, blueprintId, seed: 1, now: 0);
         return (ecsContext, entityId);
     }
 

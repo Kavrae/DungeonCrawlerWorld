@@ -1,40 +1,34 @@
-using Engine.ECS.Entities;
 using Engine.ECS.Components;
-using Engine.ECS.Systems;
-using Engine.Events;
-using Engine.Math;
+using Engine.Modules;
+using Game.Blueprints;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Systems;
-using Game.Modules.AbilityScores.Components;
+using Game.Modules.BodyPartEffects;
 using Game.Modules.BodyPartEffects.Components;
+using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Death;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.Mana;
 using Game.Modules.Mana.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
-using Game.Modules.StatModifiers.Components;
-using Game.Modules.StatusEffectAura.Components;
-using Game.Modules.StatusEffects;
-using Game.World;
-using Game.Blueprints;
-using Game.Modules.Core;
-using Game.Modules.StatModifiers;
-using Game.Modules.Death;
-using Game.Modules.Mana;
-using Game.Modules.AbilityScores;
-using Game.Modules.StatusEffectAura;
-using Game.Modules.BodyPartEffects;
 using Game.Modules.Race;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
+using Game.Modules.StatusEffectAura;
+using Game.Modules.StatusEffectAura.Components;
+using Game.World;
 
 namespace Game.Modules.Actions;
 
 /// <summary>
-/// Parameterless (required for runtime discovery) with its runtime dependencies (ActionCatalog,
-/// IMapQuery, EventBus, IPlayerQuery, StatusEffectAuraApplierRegistry) supplied via
-/// IGameModule.Configure instead of the constructor. Doesn't require StatusEffectsModule:
+/// Doesn't require StatusEffectsModule:
 /// GameModuleContext.StatusEffectAuraAppliers is always a live, shared registry regardless of
 /// which effect modules (if any) are loaded -- ActionEffectResolver's StatusEffects grant is a
 /// graceful no-op (TryGet returning false) for any StatusEffectType nothing registered an
@@ -59,37 +53,10 @@ public sealed class ActionsModule : IGameModule
 
     public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, StatusEffectAuraModule.ModuleId, BodyPartEffectsModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId];
 
-    private ActionCatalog _actionCatalog = null!;
-    private IMapQuery _mapQuery = null!;
-    private EventBus _eventBus = null!;
-    private MathUtility _mathUtility = null!;
-    private IPlayerQuery _playerQuery = null!;
-    private FloatingTextFeed _floatingTextFeed = null!;
-    private StatusEffectAuraApplierRegistry _statusEffectAppliers = null!;
-    private ProcessingTierEvents _processingTierEvents = null!;
-    private SimulationScope _simulationScope = null!;
-    private EntityKeys _entityKeys = null!;
-    private SimulationClock _simulationClock = null!;
-    private BlueprintRegistry _creatures = null!;
-
-    public void Configure(GameModuleContext context)
+    public void RegisterComponents(ComponentRegistration registration)
     {
-        _actionCatalog = context.Actions;
-        _mapQuery = context.MapQuery;
-        _eventBus = context.EventBus;
-        _mathUtility = context.MathUtility;
-        _playerQuery = context.PlayerQuery;
-        _floatingTextFeed = context.FloatingTextFeed;
-        _statusEffectAppliers = context.StatusEffectAuraAppliers;
-        _processingTierEvents = context.ProcessingTierEvents;
-        _simulationScope = context.SimulationScope;
-        _entityKeys = context.EntityKeys;
-        _simulationClock = context.SimulationClock;
-        _creatures = context.Definitions;
-    }
+        var componentManager = registration.ComponentManager;
 
-    public void RegisterComponents(ComponentManager componentManager)
-    {
         componentManager.RegisterMultiPool<ActionInstanceComponent>(initialCapacity: 64);
 
         // Sparse: written the first time an entity uses an action that has a cooldown at all.
@@ -110,8 +77,11 @@ public sealed class ActionsModule : IGameModule
         componentManager.RegisterMultiPool<ScrollMasteryComponent>(initialCapacity: 8);
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
+        var context = registration.Context;
+        var systemManager = registration.SystemManager;
+        var componentManager = registration.ComponentManager;
         // No cooldown system: an action's cooldown is a deadline (ActionInstanceComponent.
         // CooldownReadyAtFrame), read against the current frame rather than walked down.
 
@@ -123,7 +93,7 @@ public sealed class ActionsModule : IGameModule
         var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
         var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         var hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
-        var bodyParts = EntityBodyParts.For(componentManager, _creatures);
+        var bodyParts = EntityBodyParts.For(componentManager, context.Definitions);
         var meleeDisabled = componentManager.GetPackedPool<MeleeDisabledComponent>();
         var dodgingEntities = componentManager.GetPackedPool<DodgingComponent>();
 
@@ -131,20 +101,20 @@ public sealed class ActionsModule : IGameModule
 
         systemManager.Register(new DodgeExpirySystem(dodgingEntities));
 
-        WireStagger(componentManager);
+        WireStagger(componentManager, context);
 
         systemManager.Register(new DelayedActionSystem(
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            EntityActions.For(componentManager, _actionCatalog, _creatures),
+            EntityActions.For(componentManager, context.Actions, context.Definitions),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
-            _actionCatalog,
-            _mapQuery,
-            _eventBus,
-            _mathUtility,
-            _playerQuery,
-            _statusEffectAppliers,
+            context.Actions,
+            context.MapQuery,
+            context.EventBus,
+            context.MathUtility,
+            context.PlayerQuery,
+            context.StatusEffectAuraAppliers,
             componentManager,
-            _entityKeys,
+            context.EntityKeys,
             statModifiers,
             deadEntities,
             abilityScores,
@@ -154,25 +124,25 @@ public sealed class ActionsModule : IGameModule
             bodyParts,
             dodgingEntities,
             processingTiers,
-            _simulationScope,
-            _processingTierEvents,
-            _creatures,
-            _floatingTextFeed));
+            context.SimulationScope,
+            context.ProcessingTierEvents,
+            context.Definitions,
+            context.FloatingTextFeed));
 
         systemManager.Register(new ActionActivationSystem(
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
-            EntityActions.For(componentManager, _actionCatalog, _creatures),
+            EntityActions.For(componentManager, context.Actions, context.Definitions),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
-            _actionCatalog,
-            _mapQuery,
-            _eventBus,
-            _mathUtility,
-            _playerQuery,
-            _statusEffectAppliers,
+            context.Actions,
+            context.MapQuery,
+            context.EventBus,
+            context.MathUtility,
+            context.PlayerQuery,
+            context.StatusEffectAuraAppliers,
             componentManager,
-            _entityKeys,
+            context.EntityKeys,
             statModifiers,
             deadEntities,
             mana,
@@ -183,17 +153,17 @@ public sealed class ActionsModule : IGameModule
             meleeDisabled,
             dodgingEntities,
             processingTiers,
-            _creatures,
-            _floatingTextFeed));
+            context.Definitions,
+            context.FloatingTextFeed));
     }
 
     /// <summary>A staggered entity loses its windup, and with it the time the windup already cost: the lock it set is kept.</summary>
-    private void WireStagger(ComponentManager componentManager)
+    private static void WireStagger(ComponentManager componentManager, GameModuleContext context)
     {
         var pendingDelayedActions = componentManager.GetPackedPool<PendingDelayedActionComponent>();
         var actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
 
-        _eventBus.Subscribe<EntityStaggeredEvent>(staggered =>
-            WindupCancel.TryCancel(pendingDelayedActions, actionLocks, staggered.EntityId, _simulationClock.CurrentFrame, releaseLock: false));
+        context.EventBus.Subscribe<EntityStaggeredEvent>(staggered =>
+            WindupCancel.TryCancel(pendingDelayedActions, actionLocks, staggered.EntityId, context.SimulationClock.CurrentFrame, releaseLock: false));
     }
 }

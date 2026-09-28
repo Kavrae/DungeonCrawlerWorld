@@ -5,7 +5,6 @@ using Game.Modules.Core.Components;
 using Game.Modules.Currency.Components;
 using Game.Modules.Health.Components;
 using Game.World;
-using GameWorldModel = Game.World.World;
 
 namespace Tests.Bootstrap;
 
@@ -57,8 +56,8 @@ public sealed class GameBootstrapperTests
         File.Copy(sourcePath, destinationPath, overwrite: true);
     }
 
-    private static (GameWorldModel World, MathUtility MathUtility) BuildWorldAndMathUtility() =>
-        (new GameWorldModel(new Map(new Vector3Int(5, 5, 1))), new MathUtility());
+    private static GameBootstrapResult BuildWithModsFrom(string modsDirectory) =>
+        GameBootstrapper.Build(ModValidation.Validate(modsDirectory, []), new Map(new Vector3Int(5, 5, 1)), new MathUtility(), initialEntityCapacity: 100, initialComponentCapacity: 50);
 
     /// <summary>
     /// ModuleLoader's collectible AssemblyLoadContext is never explicitly unloaded (by
@@ -86,9 +85,7 @@ public sealed class GameBootstrapperTests
         var directory = Directory.CreateTempSubdirectory();
         try
         {
-            var (world, mathUtility) = BuildWorldAndMathUtility();
-
-            var result = GameBootstrapper.Build(world, mathUtility, directory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
+            var result = BuildWithModsFrom(directory.FullName);
 
             Assert.IsEmpty(result.Failures);
             Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<SimpleHealthComponent>());
@@ -106,9 +103,7 @@ public sealed class GameBootstrapperTests
         try
         {
             CopyModTo(directory.FullName, "Mods.ExampleMod");
-            var (world, mathUtility) = BuildWorldAndMathUtility();
-
-            var result = GameBootstrapper.Build(world, mathUtility, directory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
+            var result = BuildWithModsFrom(directory.FullName);
 
             Assert.IsEmpty(result.Failures);
             // ExampleModule registers nothing observable -- its presence is proven by the
@@ -130,9 +125,7 @@ public sealed class GameBootstrapperTests
         try
         {
             CopyModTo(directory.FullName, "Mods.TestFixtures");
-            var (world, mathUtility) = BuildWorldAndMathUtility();
-
-            var result = GameBootstrapper.Build(world, mathUtility, directory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
+            var result = BuildWithModsFrom(directory.FullName);
 
             Assert.AreEqual(1, result.Failures.Count(failure => failure.Source.Contains("ThrowingModule")));
             Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<ActionLockComponent>());
@@ -152,9 +145,7 @@ public sealed class GameBootstrapperTests
         try
         {
             CopyModTo(directory.FullName, "Mods.TestFixtures");
-            var (world, mathUtility) = BuildWorldAndMathUtility();
-
-            var result = GameBootstrapper.Build(world, mathUtility, directory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
+            var result = BuildWithModsFrom(directory.FullName);
             var recorder = new SystemOrderRecorder();
             result.EcsContext.SystemManager.Profiler = recorder;
             result.EcsContext.SystemManager.Update(new EngineTime(TimeSpan.Zero, TimeSpan.FromSeconds(1d / 60), false, 1));
@@ -178,9 +169,7 @@ public sealed class GameBootstrapperTests
         try
         {
             CopyModTo(directory.FullName, "Mods.TestFixtures");
-            var (world, mathUtility) = BuildWorldAndMathUtility();
-
-            var result = GameBootstrapper.Build(world, mathUtility, directory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
+            var result = BuildWithModsFrom(directory.FullName);
 
             var failure = result.Failures.Single(failure => failure.Source.Contains("IncompleteReplacementCurrencyModule"));
             Assert.Contains("CurrencyComponent", failure.Exception.Message);

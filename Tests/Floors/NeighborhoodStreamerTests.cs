@@ -23,19 +23,15 @@ public sealed class NeighborhoodStreamerTests
 
     private static readonly Vector3Int Reference = new(10, 5, (int)MapLayer.Ground);
 
-    private static readonly DirectoryInfo EmptyModsDirectory = Directory.CreateTempSubdirectory();
-
-    [ClassCleanup]
-    public static void DeleteEmptyModsDirectory() => EmptyModsDirectory.Delete(recursive: true);
-
     private sealed record Session(Game.World.World World, EcsContext Ecs, ProcessingTierResolver Resolver, NeighborhoodStreamer Streamer, FrameEventBuffer<EntityMovedEvent> MovedEntities, BlueprintRegistry Definitions, CreatureSkeletons Skeletons);
 
     private static Session Build(int budgetPerFrame = NeighborhoodStreamer.DefaultBudgetPerFrame)
     {
-        var world = new Game.World.World(new Map(new MapBounds(0, 0, 2 * Neighborhoods.SizeTiles, Rows, 3)));
+        var map = new Map(new MapBounds(0, 0, 2 * Neighborhoods.SizeTiles, Rows, 3));
         var mathUtility = new MathUtility(new Random(1));
         var crawlerNumbers = new UniqueNumberAllocator(1, 1, 24);
-        var result = GameBootstrapper.Build(world, mathUtility, EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
+        var world = result.World;
         var ecs = result.EcsContext;
         result.ProcessingTierResolver.SetReferencePosition(Reference);
 
@@ -261,15 +257,16 @@ public sealed class NeighborhoodStreamerTests
     /// <summary>A strip eleven neighborhoods wide (-5 to 5) and a few rows tall, with only the window around neighborhood 0 loaded and populated, and the window centred there.</summary>
     private static Session BuildWindow()
     {
-        var world = new Game.World.World(new Map(new MapBounds(-5 * Neighborhoods.SizeTiles, 0, 6 * Neighborhoods.SizeTiles, Rows, 3)));
+        var map = new Map(new MapBounds(-5 * Neighborhoods.SizeTiles, 0, 6 * Neighborhoods.SizeTiles, Rows, 3));
         foreach (var cellX in new[] { -5, -4, -3, -2, 2, 3, 4, 5 })
         {
-            world.Map.UnloadNeighborhood(cellX, 0);
+            map.UnloadNeighborhood(cellX, 0);
         }
 
         var mathUtility = new MathUtility(new Random(1));
         var crawlerNumbers = new UniqueNumberAllocator(1, 1, 24);
-        var result = GameBootstrapper.Build(world, mathUtility, EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
+        var world = result.World;
         var ecs = result.EcsContext;
         result.ProcessingTierResolver.SetReferencePosition(Reference);
         result.ProcessingTierResolver.SetWindowCenter(0, 0);

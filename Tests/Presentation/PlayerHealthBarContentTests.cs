@@ -37,7 +37,7 @@ public sealed class PlayerHealthBarContentTests
 
     private static (PlayerHealthBarContent Content, Window HostWindow) Build(bool complexHealth, bool hasHealth = true)
     {
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(20, 20, 1))) { PlayerEntityId = PlayerEntityId };
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
         var fontService = TestFonts.Shared;
         var layers = new UiLayerStack();
         var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
@@ -219,7 +219,7 @@ public sealed class PlayerHealthBarContentTests
         var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(5, 5, 1))) { PlayerEntityId = PlayerEntityId };
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(5, 5, 1)), playerEntityId: PlayerEntityId);
         var hoverContent = new PlayerHealthHoverContent(world, bodyParts, TestFonts.Shared, statModifiers);
 
         var rows = new List<PlayerHealthHoverContent.RowData>();

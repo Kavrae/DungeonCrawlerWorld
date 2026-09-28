@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
+using Engine.Modules;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Mana.Components;
@@ -22,12 +23,10 @@ public sealed class ManaModule : IGameModule
 
     public IReadOnlyList<Guid> Requires { get; } = [StatModifiersModule.ModuleId, DeathModule.ModuleId, AbilityScoresModule.ModuleId, ProcessingTierModule.ModuleId];
 
-    private ProcessingTierEvents _processingTierEvents = null!;
-
-    public void Configure(GameModuleContext context) => _processingTierEvents = context.ProcessingTierEvents;
-
-    public void RegisterComponents(ComponentManager componentManager)
+    public void RegisterComponents(ComponentRegistration registration)
     {
+        var componentManager = registration.ComponentManager;
+
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) =>
         {
             existing.MaximumMana = MathHelper.Clamp((existing.MaximumMana + incoming.MaximumMana) / 2f, 0f, float.MaxValue);
@@ -35,8 +34,12 @@ public sealed class ManaModule : IGameModule
         });
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
+        var context = registration.Context;
+        var systemManager = registration.SystemManager;
+        var componentManager = registration.ComponentManager;
+
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
         var deadEntities = componentManager.GetPackedPool<DeadComponent>();
         var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
@@ -44,7 +47,7 @@ public sealed class ManaModule : IGameModule
         systemManager.Register(new ManaRegenSystem(
             componentManager.GetPackedPool<ManaComponent>(),
             componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents,
+            context.ProcessingTierEvents,
             statModifiers,
             deadEntities,
             abilityScores));

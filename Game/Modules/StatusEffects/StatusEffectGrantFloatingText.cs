@@ -17,7 +17,7 @@ public static class StatusEffectGrantFloatingText
             return;
         }
 
-        var stacksAdded = applier.GetCurrentStackCount(componentManager, entityId) - stackCountBefore;
+        var stacksAdded = applier.GetCurrentStackCount(entityId) - stackCountBefore;
         if (stacksAdded > 0)
         {
             floatingTextFeed.Publish(entityId, FloatingTextKind.StatusEffectStacksAdded, (ushort)System.Math.Min(stacksAdded, ushort.MaxValue), applier.EffectType);

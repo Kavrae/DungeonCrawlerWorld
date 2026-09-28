@@ -52,7 +52,7 @@ public sealed class InventoryManagementWindowTests
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
         windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
 
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = new ContextMenuController(windowService);
         contextMenuController.Initialize(new UiLayerStack());
         var mapViewState = new MapViewState();

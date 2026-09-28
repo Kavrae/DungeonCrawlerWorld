@@ -19,10 +19,10 @@ public sealed class BurningEffectsTests
     }
 
     /// <summary>Mirrors BurningModule.Configure's own registration -- the real path StatusEffectQueries reads through.</summary>
-    private static StatusEffectDisplayRegistry CreateStatusEffectDisplays()
+    private static StatusEffectDisplayRegistry CreateStatusEffectDisplays(ComponentManager componentManager)
     {
         var displays = new StatusEffectDisplayRegistry();
-        displays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph,
+        displays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph, componentManager.GetPackedPool<BurningTimerComponent>(),
             (burning, now) => FrameDeadline.Remaining(burning.NextTickFrame, now) + (burning.StackCount - 1) * BurningEffects.TickIntervalFrames));
         return displays;
     }
@@ -35,7 +35,7 @@ public sealed class BurningEffectsTests
 
         BurningEffects.ApplyStack(componentManager, 0, ActionSource.Admin, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
 
-        Assert.AreEqual(0, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Burning));
+        Assert.AreEqual(0, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(componentManager), 0, StatusEffectType.Burning));
         Assert.IsFalse(componentManager.GetPackedPool<BurningTimerComponent>().Has(0));
     }
 
@@ -47,7 +47,7 @@ public sealed class BurningEffectsTests
 
         BurningEffects.ApplyStack(componentManager, 0, ActionSource.Admin, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
 
-        Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Burning));
+        Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(componentManager), 0, StatusEffectType.Burning));
     }
 
     [TestMethod]
@@ -57,7 +57,7 @@ public sealed class BurningEffectsTests
 
         BurningEffects.ApplyStack(componentManager, 0, ActionSource.Admin, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
 
-        Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Burning));
+        Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(componentManager), 0, StatusEffectType.Burning));
     }
 
     [TestMethod]
@@ -81,7 +81,7 @@ public sealed class BurningEffectsTests
             BurningEffects.ApplyStack(componentManager, 0, ActionSource.Admin, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
         }
 
-        Assert.AreEqual(BurningEffects.MaxStacks, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(), componentManager, 0, StatusEffectType.Burning));
+        Assert.AreEqual(BurningEffects.MaxStacks, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(componentManager), 0, StatusEffectType.Burning));
     }
 
     [TestMethod]

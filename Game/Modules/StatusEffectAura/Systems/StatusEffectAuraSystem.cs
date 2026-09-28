@@ -204,7 +204,7 @@ public sealed class StatusEffectAuraSystem : ISystem
 
     /// <summary>
     /// Scatters every currently-registered source on first real use (not the constructor):
-    /// StatusEffectAuraModule.RegisterSystems runs during GameBootstrapper.Build, which is
+    /// StatusEffectAuraModule.RegisterSystems runs during the session's GameBuildPass, which is
     /// before FloorBuilder.PopulateFloor places any terrain (e.g. Lava) -- so no
     /// StatusEffectAuraSourceComponent exists yet at construction time. By the time the first
     /// EntityMovedEvent/Update fires, population has finished.
@@ -573,7 +573,7 @@ public sealed class StatusEffectAuraSystem : ISystem
             return false;
         }
 
-        var currentStackCount = applier.GetCurrentStackCount(_componentManager, entityId);
+        var currentStackCount = applier.GetCurrentStackCount(entityId);
         var stacksToGrant = targetStackCount - currentStackCount;
 
         // Attribution to a specific source entity isn't cheaply recoverable from a grid that
@@ -581,7 +581,7 @@ public sealed class StatusEffectAuraSystem : ISystem
         // FloorBuilder's old temporary seeding used it, for a non-entity-specific source.
         for (var i = 0; i < stacksToGrant; i++)
         {
-            applier.ApplyStack(_componentManager, entityId, ActionSource.Admin, _now);
+            applier.ApplyStack(entityId, ActionSource.Admin, _now);
         }
 
         if (stacksToGrant > 0)

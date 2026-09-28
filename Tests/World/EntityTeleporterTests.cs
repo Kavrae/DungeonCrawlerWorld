@@ -16,11 +16,6 @@ public sealed class EntityTeleporterTests
 {
     private const int Rows = 24;
 
-    private static readonly DirectoryInfo EmptyModsDirectory = Directory.CreateTempSubdirectory();
-
-    [ClassCleanup]
-    public static void DeleteEmptyModsDirectory() => EmptyModsDirectory.Delete(recursive: true);
-
     private sealed record Session(Game.World.World World, EcsContext Ecs, GameBootstrapResult Result, int PlayerEntityId)
     {
         public EntityTeleporter Teleporter => Result.Teleporter;
@@ -31,9 +26,10 @@ public sealed class EntityTeleporterTests
     /// <summary>Three neighborhoods side by side (-1, 0, 1), the window centred on 0 with the player in it.</summary>
     private static Session BuildSession()
     {
-        var world = new Game.World.World(new Map(new MapBounds(-Neighborhoods.SizeTiles, 0, 2 * Neighborhoods.SizeTiles, Rows, 3)));
+        var map = new Map(new MapBounds(-Neighborhoods.SizeTiles, 0, 2 * Neighborhoods.SizeTiles, Rows, 3));
         var mathUtility = new MathUtility(new Random(1));
-        var result = GameBootstrapper.Build(world, mathUtility, EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24));
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24));
+        var world = result.World;
         var ecs = result.EcsContext;
         var resolver = result.ProcessingTierResolver;
         resolver.SetReferencePosition(FloorBuilder.PlayerSpawnOrigin());

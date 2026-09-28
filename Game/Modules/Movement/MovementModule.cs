@@ -1,21 +1,18 @@
-﻿using Engine.ECS.Components;
-using Engine.ECS.Systems;
-using Engine.Events;
+﻿using Engine.Modules;
+using Game.Modules.BodyPartEffects;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Death;
 using Game.Modules.Death.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Movement.Systems;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
-using Game.Modules.StatModifiers.Components;
-using Game.Modules.StatusEffectAura.Components;
-using Game.World;
-using Game.Modules.Death;
-using Game.Modules.StatusEffectAura;
 using Game.Modules.StatModifiers;
-using Game.Modules.BodyPartEffects;
+using Game.Modules.StatModifiers.Components;
+using Game.Modules.StatusEffectAura;
+using Game.Modules.StatusEffectAura.Components;
 
 namespace Game.Modules.Movement;
 
@@ -29,25 +26,10 @@ public sealed class MovementModule : IGameModule
 
     public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, DeathModule.ModuleId, StatusEffectAuraModule.ModuleId, StatModifiersModule.ModuleId, BodyPartEffectsModule.ModuleId, ProcessingTierModule.ModuleId];
 
-    private IMapQuery _mapQuery = null!;
-    private EventBus _eventBus = null!;
-    private IEntityMoveSync? _entityMoveSync;
-    private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
-    private IPlayerQuery _playerQuery = null!;
-    private ProcessingTierEvents _processingTierEvents = null!;
-
-    public void Configure(GameModuleContext context)
+    public void RegisterComponents(ComponentRegistration registration)
     {
-        _mapQuery = context.MapQuery;
-        _eventBus = context.EventBus;
-        _entityMoveSync = context.EntityMoveSync;
-        _movedEntities = context.MovedEntities;
-        _playerQuery = context.PlayerQuery;
-        _processingTierEvents = context.ProcessingTierEvents;
-    }
+        var componentManager = registration.ComponentManager;
 
-    public void RegisterComponents(ComponentManager componentManager)
-    {
         componentManager.RegisterPackedPool<MovementComponent>(static (ref existing, incoming) =>
         {
             existing.MovementMode = (MovementMode)Math.Max((byte)existing.MovementMode, (byte)incoming.MovementMode);
@@ -59,12 +41,11 @@ public sealed class MovementModule : IGameModule
         });
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
-        if (_entityMoveSync is null)
-        {
-            throw new InvalidOperationException($"{nameof(MovementModule)} requires {nameof(GameModuleContext)}.{nameof(GameModuleContext.EntityMoveSync)} to be set.");
-        }
+        var context = registration.Context;
+        var systemManager = registration.SystemManager;
+        var componentManager = registration.ComponentManager;
 
         var deadEntities = componentManager.GetPackedPool<DeadComponent>();
         // Only used to widen MovementSystem's EventBus.Publish gate to an aura-carrying mover (see
@@ -77,18 +58,18 @@ public sealed class MovementModule : IGameModule
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<MovementComponent>(),
-            _mapQuery,
-            _eventBus,
-            _entityMoveSync,
-            _movedEntities,
-            _playerQuery,
+            context.MapQuery,
+            context.EventBus,
+            context.EntityMoveSync,
+            context.MovedEntities,
+            context.PlayerQuery,
             componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents,
+            context.ProcessingTierEvents,
             deadEntities,
             auraSources,
             statModifiers,
             movementDisabled));
 
-        systemManager.RegisterFrameScoped(_movedEntities);
+        systemManager.RegisterFrameScoped(context.MovedEntities);
     }
 }

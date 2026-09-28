@@ -1,6 +1,5 @@
 using Engine.ECS.Components;
 using Engine.ECS.Context;
-using Game.Blueprints;
 
 namespace Game.Spawning;
 
@@ -11,10 +10,9 @@ namespace Game.Spawning;
 /// staging entity and destroys it before returning.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class SpawnRecordRebuilder(EcsContext staging, BlueprintRegistry definitions)
+/// <param name="builder">Builds into the staging world's pools with the session's own blueprint definitions, so a spawn record means the same blueprint in both worlds, including one registered after the staging world was built.</param>
+public sealed class SpawnRecordRebuilder(EcsContext staging, EntityBuilder builder)
 {
-    private readonly EntityFactory _builder = new(definitions, staging.EntityManager.Keys);
-
     /// <summary>Builds record's creature on a staging entity, hands it to read, then destroys it.</summary>
     /// <remarks>The staging entity only lives for the duration of read -- read copies out whatever it needs.</remarks>
     public void Rebuild(SpawnRecordComponent record, Action<ComponentManager, int> read)
@@ -22,7 +20,7 @@ public sealed class SpawnRecordRebuilder(EcsContext staging, BlueprintRegistry d
         var entityId = staging.EntityManager.CreateEntity();
         try
         {
-            _builder.Build(staging.ComponentManager, entityId, record.BlueprintId, record.Seed, now: 0, record.Flags);
+            builder.Build(staging.ComponentManager, entityId, record.BlueprintId, record.Seed, now: 0, record.Flags);
             read(staging.ComponentManager, entityId);
         }
         finally

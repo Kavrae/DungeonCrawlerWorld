@@ -1,12 +1,14 @@
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
-using Engine.Math;
+using Engine.Modules;
+using Game.Blueprints;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
+using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Death;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
@@ -14,13 +16,8 @@ using Game.Modules.NpcBehavior.Components;
 using Game.Modules.NpcBehavior.Systems;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
-using Game.Modules.Race.Components;
-using Game.World;
-using Game.Blueprints;
-using Game.Modules.Core;
-using Game.Modules.Inventory;
-using Game.Modules.Death;
 using Game.Modules.Race;
+using Game.Modules.Race.Components;
 
 namespace Game.Modules.NpcBehavior;
 
@@ -42,26 +39,19 @@ public sealed class NpcBehaviorModule : IGameModule
 
     public IReadOnlyList<Guid> RunsBefore { get; } = [MovementModule.ModuleId];
 
-    private IMapQuery _mapQuery = null!;
-    private MathUtility _mathUtility = null!;
-    private ActionCatalog _actionCatalog = null!;
-    private BlueprintRegistry _creatures = null!;
-    private ProcessingTierEvents _processingTierEvents = null!;
-
-    public void Configure(GameModuleContext context)
+    public void RegisterComponents(ComponentRegistration registration)
     {
-        _mapQuery = context.MapQuery;
-        _mathUtility = context.MathUtility;
-        _processingTierEvents = context.ProcessingTierEvents;
-        _actionCatalog = context.Actions;
-        _creatures = context.Definitions;
+        var componentManager = registration.ComponentManager;
+
+        componentManager.RegisterPackedPool<TestDummyComponent>(static (ref existing, incoming) => existing = incoming);
     }
 
-    public void RegisterComponents(ComponentManager componentManager) =>
-        componentManager.RegisterPackedPool<TestDummyComponent>(static (ref existing, incoming) => existing = incoming);
-
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
+        var context = registration.Context;
+        var systemManager = registration.SystemManager;
+        var componentManager = registration.ComponentManager;
+
         var deadEntities = componentManager.GetPackedPool<DeadComponent>();
 
         systemManager.Register(new TestCombatBehaviorSystem(
@@ -69,16 +59,16 @@ public sealed class NpcBehaviorModule : IGameModule
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
-            EntityBodyParts.For(componentManager, _creatures),
+            EntityBodyParts.For(componentManager, context.Definitions),
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
-            EntityActions.For(componentManager, _actionCatalog, _creatures),
+            EntityActions.For(componentManager, context.Actions, context.Definitions),
             componentManager.GetPackedPool<RaceSlotsComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
-            _mapQuery,
-            _mathUtility,
+            context.MapQuery,
+            context.MathUtility,
             componentManager.GetDirectPool<ProcessingTierComponent>(),
-            _processingTierEvents,
+            context.ProcessingTierEvents,
             deadEntities));
 
         systemManager.Register(new TestDummyAttackSystem(
@@ -86,6 +76,6 @@ public sealed class NpcBehaviorModule : IGameModule
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            _mapQuery));
+            context.MapQuery));
     }
 }

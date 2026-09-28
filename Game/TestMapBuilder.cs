@@ -105,7 +105,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     /// <summary>
     /// Generates every loaded neighborhood, in row-major order. World is built by the
     /// caller (not here) because it must exist before MovementModule -- itself a constructor
-    /// dependency of Bootstrapper.Build, which is what produces the EntityManager/ComponentManager
+    /// dependency of the module build, which is what produces the EntityManager/ComponentManager
     /// this builder needs -- so World can't wait until after that call to be created.
     /// </summary>
     /// <remarks>

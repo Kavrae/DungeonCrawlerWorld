@@ -14,16 +14,9 @@ public sealed class WorldTests
     private static Game.World.World CreateWorld(int sizeX = 10, int sizeY = 10, int sizeZ = 2) =>
         TestWorlds.Create(new Map(new Vector3Int(sizeX, sizeY, sizeZ)));
 
-    private static MultiComponentPool<NonBlockingComponent> CreateNonBlockingPool(int capacity = 10) =>
-        new(capacity, capacity);
-
-    private static MultiComponentPool<ForceBlockingComponent> CreateForceBlockingPool(int capacity = 10) =>
-        new(capacity, capacity);
-
     private static (Game.World.World World, ushort WallId, ushort OpenArchId) CreateWorldWithStructures()
     {
         var world = CreateWorld();
-        world.Terrain = new TerrainRegistry();
         var wallId = world.Terrain.Register(new TerrainDefinition("test:wall", "Wall", "", Color.Gray, "#", Color.Gray, BlocksMovement: true));
         var archId = world.Terrain.Register(new TerrainDefinition("test:arch", "Arch", "", Color.Gray, "n", Color.Gray));
         return (world, wallId, archId);
@@ -59,9 +52,8 @@ public sealed class WorldTests
     {
         var (world, wallId, _) = CreateWorldWithStructures();
         world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId, 0));
-        var nonBlockingPool = CreateNonBlockingPool();
+        var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(1, new NonBlockingComponent(NonBlockingKind.Tiny));
-        world.NonBlockingComponents = nonBlockingPool;
         var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
 
         world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
@@ -75,9 +67,8 @@ public sealed class WorldTests
     {
         var (world, wallId, _) = CreateWorldWithStructures();
         world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId, 0));
-        var nonBlockingPool = CreateNonBlockingPool();
+        var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(1, new NonBlockingComponent(NonBlockingKind.Phasing));
-        world.NonBlockingComponents = nonBlockingPool;
         var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
 
         world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
@@ -89,10 +80,8 @@ public sealed class WorldTests
     public void IsPhasing_ForceBlockingWinsOverPhasing()
     {
         var world = CreateWorld();
-        var nonBlockingPool = CreateNonBlockingPool();
-        var forceBlockingPool = CreateForceBlockingPool();
-        world.NonBlockingComponents = nonBlockingPool;
-        world.ForceBlockingComponents = forceBlockingPool;
+        var nonBlockingPool = world.NonBlockingComponents;
+        var forceBlockingPool = world.ForceBlockingComponents;
         nonBlockingPool.Add(1, new NonBlockingComponent(NonBlockingKind.Tiny));
         nonBlockingPool.Add(1, new NonBlockingComponent(NonBlockingKind.Phasing));
         Assert.IsTrue(world.IsPhasing(1));
@@ -133,7 +122,6 @@ public sealed class WorldTests
     public void SetStructure_PublishesPreviousAndNewType_AndSkipsAnUnchangedCell()
     {
         var (world, wallId, archId) = CreateWorldWithStructures();
-        world.EventBus = new EventBus();
         var published = new List<StructureChangedEvent>();
         world.EventBus.Subscribe<StructureChangedEvent>(published.Add);
         var position = new Vector3Int(3, 3, 1);
@@ -152,7 +140,6 @@ public sealed class WorldTests
     public void PopulateStructure_DoesNotPublish()
     {
         var (world, wallId, _) = CreateWorldWithStructures();
-        world.EventBus = new EventBus();
         var publishedCount = 0;
         world.EventBus.Subscribe<StructureChangedEvent>(_ => publishedCount++);
 
@@ -380,9 +367,8 @@ public sealed class WorldTests
     public void PlaceEntityOnMap_NonBlockingEntity_UpdatesPositionButNeverTouchesMap()
     {
         var world = CreateWorld();
-        var nonBlockingPool = CreateNonBlockingPool();
+        var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(1, new NonBlockingComponent());
-        world.NonBlockingComponents = nonBlockingPool;
         var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
 
         world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
@@ -399,9 +385,8 @@ public sealed class WorldTests
     public void PlaceEntityOnMap_NonBlockingEntity_SharesCellWithBlockingEntityWithoutDisturbingIt()
     {
         var world = CreateWorld();
-        var nonBlockingPool = CreateNonBlockingPool();
+        var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(2, new NonBlockingComponent());
-        world.NonBlockingComponents = nonBlockingPool;
 
         var blockerTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
         world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref blockerTransform);
@@ -422,9 +407,8 @@ public sealed class WorldTests
     public void MoveEntity_NonBlockingEntity_MovesIntoCellOccupiedByBlockingEntityWithoutDisturbingIt()
     {
         var world = CreateWorld();
-        var nonBlockingPool = CreateNonBlockingPool();
+        var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(2, new NonBlockingComponent());
-        world.NonBlockingComponents = nonBlockingPool;
 
         var blockerTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
         world.PlaceEntityOnMap(1, new Vector3Int(4, 4, 1), ref blockerTransform);
@@ -441,9 +425,8 @@ public sealed class WorldTests
     public void RemoveEntityFromMap_NonBlockingEntity_LeavesItUnplacedOnItsLayer()
     {
         var world = CreateWorld();
-        var nonBlockingPool = CreateNonBlockingPool();
+        var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(1, new NonBlockingComponent());
-        world.NonBlockingComponents = nonBlockingPool;
         var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
         world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
 
@@ -464,8 +447,7 @@ public sealed class WorldTests
     public void IsBlocking_TwoOverlappingNonBlockingSources_BothMustEndBeforeBlockingResumes()
     {
         var world = CreateWorld();
-        var nonBlockingPool = CreateNonBlockingPool();
-        world.NonBlockingComponents = nonBlockingPool;
+        var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(1, new NonBlockingComponent());
         nonBlockingPool.Add(1, new NonBlockingComponent());
 
@@ -486,10 +468,8 @@ public sealed class WorldTests
     public void IsBlocking_ForceBlockingAndNonBlockingBothPresent_ForceBlockingWins()
     {
         var world = CreateWorld();
-        var nonBlockingPool = CreateNonBlockingPool();
-        var forceBlockingPool = CreateForceBlockingPool();
-        world.NonBlockingComponents = nonBlockingPool;
-        world.ForceBlockingComponents = forceBlockingPool;
+        var nonBlockingPool = world.NonBlockingComponents;
+        var forceBlockingPool = world.ForceBlockingComponents;
 
         nonBlockingPool.Add(1, new NonBlockingComponent());
         forceBlockingPool.Add(1, new ForceBlockingComponent());
@@ -501,9 +481,8 @@ public sealed class WorldTests
     public void PlaceEntityOnMap_NonBlockingEntity_AddsToNonBlockingIndex()
     {
         var world = CreateWorld();
-        var nonBlockingPool = CreateNonBlockingPool();
+        var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(1, new NonBlockingComponent());
-        world.NonBlockingComponents = nonBlockingPool;
         var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
 
         world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
@@ -528,9 +507,8 @@ public sealed class WorldTests
     public void PlaceEntityOnMap_MultiTileNonBlockingEntity_AddsToEveryOccupiedCell()
     {
         var world = CreateWorld();
-        var nonBlockingPool = CreateNonBlockingPool();
+        var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(1, new NonBlockingComponent());
-        world.NonBlockingComponents = nonBlockingPool;
         var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(2, 2));
 
         world.PlaceEntityOnMap(1, new Vector3Int(2, 2, 1), ref transform);
@@ -546,10 +524,9 @@ public sealed class WorldTests
     public void PlaceEntityOnMap_MultipleNonBlockingEntities_AllStackAtTheSameCell()
     {
         var world = CreateWorld();
-        var nonBlockingPool = CreateNonBlockingPool();
+        var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(1, new NonBlockingComponent());
         nonBlockingPool.Add(2, new NonBlockingComponent());
-        world.NonBlockingComponents = nonBlockingPool;
 
         var firstTransform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
         world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref firstTransform);
@@ -565,9 +542,8 @@ public sealed class WorldTests
     public void MoveEntity_NonBlockingEntity_MovesIndexEntryFromOldToNewPosition()
     {
         var world = CreateWorld();
-        var nonBlockingPool = CreateNonBlockingPool();
+        var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(1, new NonBlockingComponent());
-        world.NonBlockingComponents = nonBlockingPool;
         var transform = new TransformComponent(new Vector3Int(3, 3, 1), new Vector2Byte(1, 1));
         world.PlaceEntityOnMap(1, transform.Position, ref transform);
 
@@ -638,8 +614,7 @@ public sealed class WorldTests
     public void ConvertToNonBlocking_ThenAddNonBlockingComponent_IsBlockingReturnsFalse()
     {
         var world = CreateWorld();
-        var nonBlockingPool = CreateNonBlockingPool();
-        world.NonBlockingComponents = nonBlockingPool;
+        var nonBlockingPool = world.NonBlockingComponents;
         var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
         world.PlaceEntityOnMap(9, new Vector3Int(4, 4, 1), ref transform);
 
@@ -653,9 +628,8 @@ public sealed class WorldTests
     public void RemoveEntityFromMap_NonBlockingEntity_RemovesFromNonBlockingIndex()
     {
         var world = CreateWorld();
-        var nonBlockingPool = CreateNonBlockingPool();
+        var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(1, new NonBlockingComponent());
-        world.NonBlockingComponents = nonBlockingPool;
         var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
         world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
 

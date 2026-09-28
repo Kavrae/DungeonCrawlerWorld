@@ -1,5 +1,6 @@
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Modules;
 using Game.Bootstrap;
 using Game.World;
 using Game.Modules;
@@ -10,15 +11,10 @@ namespace Tests.Bootstrap;
 [TestClass]
 public sealed class BuiltInModulesTests
 {
-    private static readonly DirectoryInfo EmptyModsDirectory = Directory.CreateTempSubdirectory();
-
-    [ClassCleanup]
-    public static void DeleteEmptyModsDirectory() => EmptyModsDirectory.Delete(recursive: true);
-
     [TestMethod]
     public void EveryBuiltInModule_HasANonEmptyId()
     {
-        foreach (var module in GameBootstrapper.BuiltInModules())
+        foreach (var module in GameBootstrapper.BuiltInModules().CreateAll())
         {
             Assert.AreNotEqual(Guid.Empty, module.Id, module.Name);
         }
@@ -27,7 +23,7 @@ public sealed class BuiltInModulesTests
     [TestMethod]
     public void NoTwoBuiltInModules_ShareAnId()
     {
-        var duplicateIds = GameBootstrapper.BuiltInModules()
+        var duplicateIds = GameBootstrapper.BuiltInModules().CreateAll()
             .GroupBy(module => module.Id)
             .Where(group => group.Count() > 1)
             .Select(group => string.Join(", ", group.Select(module => module.Name)))
@@ -41,20 +37,12 @@ public sealed class BuiltInModulesTests
     {
         var failures = new List<string>();
 
-        foreach (var module in GameBootstrapper.BuiltInModules())
+        foreach (var module in GameBootstrapper.BuiltInModules().CreateAll())
         {
-            var closure = RequiresClosure(module, GameBootstrapper.BuiltInModules());
-            var world = new Game.World.World(new Map(new Vector3Int(10, 10, 3)));
-            var context = new GameModuleContext(world, new MathUtility(new Random(1)), new Engine.Events.EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
-
+            var closure = RequiresClosure(module, GameBootstrapper.BuiltInModules().CreateAll());
             try
             {
-                foreach (var gameModule in closure.OfType<IGameModule>())
-                {
-                    gameModule.Configure(context);
-                }
-
-                Engine.Bootstrap.Bootstrapper.Build(closure, initialEntityCapacity: 10, initialComponentCapacity: 10, context.EventBus, entityKeys: context.EntityKeys);
+                BuiltInTestModules.BuildModules(closure, new Map(new Vector3Int(10, 10, 3)), new MathUtility(new Random(1)));
             }
             catch (Exception exception)
             {
@@ -65,7 +53,7 @@ public sealed class BuiltInModulesTests
         Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
     }
 
-    private static List<Engine.Modules.IModule> RequiresClosure(Engine.Modules.IModule module, IReadOnlyList<Engine.Modules.IModule> builtInModules)
+    private static List<Engine.Modules.IModule<GameModuleContext>> RequiresClosure(Engine.Modules.IModule module, IReadOnlyList<Engine.Modules.IModule<GameModuleContext>> builtInModules)
     {
         var modulesById = builtInModules.ToDictionary(builtIn => builtIn.Id);
         var closureIds = new HashSet<Guid>();
@@ -88,8 +76,8 @@ public sealed class BuiltInModulesTests
     [TestMethod]
     public void BuiltInTestComponents_RegistersTheSamePoolsAsTheGame()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(40, 40, 3)));
-        var result = GameBootstrapper.Build(world, new MathUtility(new Random(1)), EmptyModsDirectory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var map = new Map(new Vector3Int(40, 40, 3));
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
 
         var testComponents = BuiltInTestComponents.RegisterAll(new Engine.ECS.Components.ComponentManager(100, 50));
 
@@ -101,8 +89,8 @@ public sealed class BuiltInModulesTests
     [TestMethod]
     public void BuiltInSystems_RunInThePinnedOrder()
     {
-        var world = new Game.World.World(new Map(new Vector3Int(40, 40, 3)));
-        var result = GameBootstrapper.Build(world, new MathUtility(new Random(1)), EmptyModsDirectory.FullName, initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var map = new Map(new Vector3Int(40, 40, 3));
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
         var recorder = new SystemOrderRecorder();
         result.EcsContext.SystemManager.Profiler = recorder;
 

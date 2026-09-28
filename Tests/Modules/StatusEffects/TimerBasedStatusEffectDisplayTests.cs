@@ -18,17 +18,17 @@ public sealed class TimerBasedStatusEffectDisplayTests
         return componentManager;
     }
 
-    private static TimerBasedStatusEffectDisplay<PoisonTimerComponent> CreatePoisonDisplay() =>
-        new(StatusEffectType.Poison, PoisonEffects.Glyph,
+    private static TimerBasedStatusEffectDisplay<PoisonTimerComponent> CreatePoisonDisplay(ComponentManager componentManager) =>
+        new(StatusEffectType.Poison, PoisonEffects.Glyph, componentManager.GetPackedPool<PoisonTimerComponent>(),
             (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames);
 
     [TestMethod]
     public void GetRemainingDurationFrames_TimerNotPresent_ReturnsNull()
     {
         var componentManager = CreateComponentManagerWithPoisonTimerPool();
-        var display = CreatePoisonDisplay();
+        var display = CreatePoisonDisplay(componentManager);
 
-        Assert.IsNull(display.GetRemainingDurationFrames(componentManager, EntityId, now: 0));
+        Assert.IsNull(display.GetRemainingDurationFrames(EntityId, now: 0));
     }
 
     [TestMethod]
@@ -36,9 +36,9 @@ public sealed class TimerBasedStatusEffectDisplayTests
     {
         var componentManager = CreateComponentManagerWithPoisonTimerPool();
         componentManager.GetPackedPool<PoisonTimerComponent>().Add(EntityId, new PoisonTimerComponent(nextTickFrame: 30, stackCount: 1, remainingDurationTicks: 3, ActionSource.Admin));
-        var display = CreatePoisonDisplay();
+        var display = CreatePoisonDisplay(componentManager);
 
         // FramesUntilNextTick 30 + (RemainingDurationTicks 3 - 1) * TickIntervalFrames 60 = 150.
-        Assert.AreEqual(150, display.GetRemainingDurationFrames(componentManager, EntityId, now: 0));
+        Assert.AreEqual(150, display.GetRemainingDurationFrames(EntityId, now: 0));
     }
 }

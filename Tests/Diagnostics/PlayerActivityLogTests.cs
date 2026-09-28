@@ -27,7 +27,7 @@ public sealed class PlayerActivityLogTests
     }
 
     private static Game.World.World CreateWorld(int playerEntityId) =>
-        new(new Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId, EntityKeys = IssueKeys(new EntityKeys()) };
+        TestWorlds.Create(new Map(new Vector3Int(10, 10, 1)), entityKeys: IssueKeys(new EntityKeys()), playerEntityId: playerEntityId);
 
     private static ComponentManager CreateComponentManager()
     {

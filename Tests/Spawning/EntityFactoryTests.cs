@@ -20,17 +20,13 @@ namespace Tests.Spawning;
 [TestClass]
 public sealed class EntityFactoryTests
 {
-    private static readonly DirectoryInfo EmptyModsDirectory = Directory.CreateTempSubdirectory();
-
-    [ClassCleanup]
-    public static void DeleteEmptyModsDirectory() => EmptyModsDirectory.Delete(recursive: true);
-
     private static (GameBootstrapResult Result, Game.World.World World) Bootstrap(bool withCrawlerNumbers = true, int crawlerNumberBits = 24)
     {
-        var world = new Game.World.World(new Map(new Vector3Int(20, 20, 3)));
+        var map = new Map(new Vector3Int(20, 20, 3));
         var mathUtility = new MathUtility(new Random(1));
         var crawlerNumbers = withCrawlerNumbers ? new UniqueNumberAllocator(1, 1, crawlerNumberBits) : null;
-        return (GameBootstrapper.Build(world, mathUtility, EmptyModsDirectory.FullName, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers, runtimeSpawnSeed: 7), world);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers, runtimeSpawnSeed: 7);
+        return (result, result.World);
     }
 
     /// <summary>Every blueprint the game spawns declares a whole appearance -- one that didn't would fail at its first spawn instead.</summary>

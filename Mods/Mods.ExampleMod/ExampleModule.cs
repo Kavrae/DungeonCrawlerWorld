@@ -1,6 +1,5 @@
-using Engine.ECS.Components;
-using Engine.ECS.Systems;
 using Engine.Modules;
+using Game.Modules;
 
 namespace Mods.ExampleMod;
 
@@ -10,11 +9,11 @@ namespace Mods.ExampleMod;
 /// compiled assembly dropped in Mods/, not just an in-process test double. Its Id is fresh
 /// (no built-in shares it), so it's added alongside the built-ins rather than replacing one.
 /// </summary>
-public sealed class ExampleModule : IModule
+public sealed class ExampleModule : IGameModule
 {
     public Guid Id { get; } = new("e6f2a017-4b3d-4a1e-9c72-000000000001");
 
-    public void RegisterComponents(ComponentManager componentManager) { }
+    public void RegisterComponents(ComponentRegistration registration) { }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager) { }
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration) { }
 }

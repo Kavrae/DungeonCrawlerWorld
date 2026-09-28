@@ -21,13 +21,13 @@ public sealed class ProcessingTierResolverTests
         public DirectComponentPool<TransformComponent> Transforms { get; } = new(10, static (ref existing, incoming) => existing = incoming);
         public DirectComponentPool<ProcessingTierComponent> Tiers { get; } = new(10, static (ref existing, incoming) => existing = incoming);
         public ProcessingTierEvents Events { get; } = new();
-        public ProcessingTierResolver Resolver { get; } = new();
+        public ProcessingTierResolver Resolver { get; }
         public List<(int EntityId, ProcessingTierLevel Tier)> Raised { get; } = [];
 
         public Fixture(bool setReference = true)
         {
             EntityManager = new EntityManager(ComponentManager, 10);
-            Resolver.Wire(Tiers, Transforms, Events);
+            Resolver = new ProcessingTierResolver(Tiers, Transforms, Events);
             Events.TierChanged += (entityId, tier) => Raised.Add((entityId, tier));
 
             if (setReference)

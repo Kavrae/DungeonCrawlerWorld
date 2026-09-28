@@ -32,20 +32,17 @@ namespace Game.Modules.Burning;
 /// damage already uses is reused here (ContactHazard.PreferredTargetType, from the terrain
 /// definition), so a burning part and a contact-damaged part read as the same "where a hazard hits" rule.
 /// </remarks>
-public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry terrain, BlueprintRegistry creatures, EventBus eventBus, IPlayerQuery playerQuery) : IStatusEffectAuraApplier
+public sealed class BurningAuraApplier(ComponentManager componentManager, MathUtility mathUtility, TerrainRegistry terrain, BlueprintRegistry creatures, EventBus eventBus, IPlayerQuery playerQuery) : IStatusEffectAuraApplier
 {
+    private readonly PackedComponentPool<BurningTimerComponent> _entityTimers = componentManager.GetPackedPool<BurningTimerComponent>();
+    private readonly EntityBodyParts _bodyParts = EntityBodyParts.For(componentManager, creatures);
+    private readonly MultiComponentPool<BodyPartBurningTimerComponent> _bodyPartTimers = componentManager.GetMultiPool<BodyPartBurningTimerComponent>();
+    private readonly PackedComponentPool<ContactDamageExposureComponent> _contactExposures = componentManager.GetPackedPool<ContactDamageExposureComponent>();
+
     public StatusEffectType EffectType => StatusEffectType.Burning;
 
-    private PackedComponentPool<BurningTimerComponent>? _entityTimers;
-    private EntityBodyParts _bodyParts = null!;
-    private MultiComponentPool<BodyPartBurningTimerComponent>? _bodyPartTimers;
-    private PackedComponentPool<ContactDamageExposureComponent> _contactExposures = null!;
-    private bool _poolsResolved;
-
-    public int GetCurrentStackCount(ComponentManager componentManager, int entityId)
+    public int GetCurrentStackCount(int entityId)
     {
-        EnsurePools(componentManager);
-
         if (TryResolveHazard(entityId, ActionSource.Admin, out var preferredType) && _bodyParts.Has(entityId))
         {
             var partId = ResolveTargetPartId(entityId, preferredType);
@@ -55,41 +52,25 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry 
             }
 
             var timerDenseIndex = FindBodyPartTimer(entityId, resolvedPartId);
-            return timerDenseIndex == -1 ? 0 : _bodyPartTimers!.GetReadonlyByDenseIndex(timerDenseIndex).StackCount;
+            return timerDenseIndex == -1 ? 0 : _bodyPartTimers.GetReadonlyByDenseIndex(timerDenseIndex).StackCount;
         }
 
-        return _entityTimers!.TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
+        return _entityTimers.TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
     }
 
-    public void ApplyStack(ComponentManager componentManager, int entityId, ActionSource source, long now)
+    public void ApplyStack(int entityId, ActionSource source, long now)
     {
-        EnsurePools(componentManager);
-
         if (TryResolveHazard(entityId, source, out var preferredType) && _bodyParts.Has(entityId))
         {
             var partId = ResolveTargetPartId(entityId, preferredType);
             if (partId is { } resolvedPartId)
             {
-                ApplyBodyPartScopedStack(componentManager, entityId, resolvedPartId, source, now);
+                ApplyBodyPartScopedStack(entityId, resolvedPartId, source, now);
                 return;
             }
         }
 
         BurningEffects.ApplyStack(componentManager, entityId, source, now, eventBus, playerQuery);
-    }
-
-    private void EnsurePools(ComponentManager componentManager)
-    {
-        if (_poolsResolved)
-        {
-            return;
-        }
-
-        _entityTimers = componentManager.GetPackedPool<BurningTimerComponent>();
-        _bodyParts = EntityBodyParts.For(componentManager, creatures);
-        _bodyPartTimers = componentManager.GetMultiPool<BodyPartBurningTimerComponent>();
-        _contactExposures = componentManager.GetPackedPool<ContactDamageExposureComponent>();
-        _poolsResolved = true;
     }
 
     /// <summary>True if entityId's Burning grant should be body-part-scoped, out preferredType being the hazard's own BodyPartTargetRule.PreferredType (null means "no type preference, go straight to Bottommost").</summary>
@@ -134,7 +115,7 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry 
     }
 
     /// <summary>Grants (or tops off) one Burning stack on entityId's partId -- mirrors BurningEffects.ApplyStack's own grant-or-top-off-capped-at-MaxStacks (and immunity) shape, scoped to the one part instead of the whole entity.</summary>
-    private void ApplyBodyPartScopedStack(ComponentManager componentManager, int entityId, byte partId, ActionSource source, long now)
+    private void ApplyBodyPartScopedStack(int entityId, byte partId, ActionSource source, long now)
     {
         if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Burning, source, eventBus, playerQuery))
         {
@@ -142,25 +123,25 @@ public sealed class BurningAuraApplier(MathUtility mathUtility, TerrainRegistry 
         }
 
         var existingTimerDenseIndex = FindBodyPartTimer(entityId, partId);
-        if (existingTimerDenseIndex != -1 && _bodyPartTimers!.GetReadonlyByDenseIndex(existingTimerDenseIndex).StackCount >= BurningEffects.MaxStacks)
+        if (existingTimerDenseIndex != -1 && _bodyPartTimers.GetReadonlyByDenseIndex(existingTimerDenseIndex).StackCount >= BurningEffects.MaxStacks)
         {
             return;
         }
 
         if (existingTimerDenseIndex != -1)
         {
-            _bodyPartTimers!.UpdateByDenseIndex(existingTimerDenseIndex, static (ref BodyPartBurningTimerComponent t) => t.StackCount++);
+            _bodyPartTimers.UpdateByDenseIndex(existingTimerDenseIndex, static (ref BodyPartBurningTimerComponent t) => t.StackCount++);
         }
         else
         {
-            _bodyPartTimers!.Add(entityId, new BodyPartBurningTimerComponent(partId, stackCount: 1, FrameDeadline.AfterStaggered(now, BurningEffects.TickIntervalFrames, entityId), source));
+            _bodyPartTimers.Add(entityId, new BodyPartBurningTimerComponent(partId, stackCount: 1, FrameDeadline.AfterStaggered(now, BurningEffects.TickIntervalFrames, entityId), source));
             BodyPartDamageEffects.ResetRegenLockout(_bodyParts, entityId, partId, now);
         }
     }
 
     private int FindBodyPartTimer(int entityId, byte partId)
     {
-        for (var denseIndex = _bodyPartTimers!.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _bodyPartTimers.GetNextDenseIndex(denseIndex))
+        for (var denseIndex = _bodyPartTimers.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _bodyPartTimers.GetNextDenseIndex(denseIndex))
         {
             if (_bodyPartTimers.GetReadonlyByDenseIndex(denseIndex).PartId == partId)
             {

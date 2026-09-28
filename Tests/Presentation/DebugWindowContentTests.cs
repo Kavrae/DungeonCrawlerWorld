@@ -1,5 +1,4 @@
 using Engine.ECS.Entities;
-using Engine.Bootstrap;
 using Engine.ECS.Context;
 using Engine.Events;
 using Engine.Math;
@@ -23,15 +22,8 @@ namespace Tests.Presentation;
 [DoNotParallelize]
 public sealed class DebugWindowContentTests
 {
-    private static EcsContext BuildEcsContext()
-    {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-        var mathUtility = new MathUtility();
-
-        var context = new GameModuleContext(world, mathUtility, new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
-
-        return BuiltInTestModules.Build(context, 100, 50);
-    }
+    private static EcsContext BuildEcsContext() =>
+        BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)), initialEntityCapacity: 100, initialComponentCapacity: 50).EcsContext;
 
     [TestMethod]
     public void Update_WithLivingAndMovingEntities_DoesNotThrow()

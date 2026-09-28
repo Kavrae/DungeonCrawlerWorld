@@ -1,5 +1,6 @@
 using Engine.Diagnostics;
 using Engine.Math;
+using Engine.Settings;
 using Game.Bootstrap;
 using Game.Diagnostics;
 using Game.Floors;
@@ -8,9 +9,9 @@ using Game.World;
 namespace DungeonCrawlerWorld;
 
 /// <summary>
-/// Builds the world/simulation session -- World, then (World must exist first, see
-/// GameBootstrapper's own doc comment) every ECS module via GameBootstrapper, then populates the
-/// floor and spawns the player. Composition-root-specific orchestration (which floor, the
+/// Builds the world/simulation session -- validates the mods, builds the map, builds every ECS
+/// module and the World over that map via GameBootstrapper, then populates the floor and spawns
+/// the player. Composition-root-specific orchestration (which floor, the
 /// Crawler-number range, where mods live) that GameBootstrapper itself deliberately stays
 /// ignorant of -- see its own doc comment ("GameLoop calls this and supplies only the runtime
 /// pieces it uniquely owns"). Lives in DungeonCrawlerWorld, not Game, for the same reason
@@ -23,6 +24,7 @@ public static class WorldSessionBootstrapper
     private const uint CrawlerNumberSalt = 0xC4A71E55;
 
     /// <param name="randomSeed">Seed for the shared MathUtility this session's entire simulation draws from -- see RandomSeed and the body's own note on what it does and does not cover.</param>
+    /// <param name="settingsSources">Where setting overrides come from, in order.</param>
     /// <param name="mapSizeOverride">Square map width and height from "--map-size=", or null for FloorBuilder's default -- see MapSizeArgument.</param>
     public static WorldSessionContext Build(
         int floorNumber,
@@ -34,6 +36,7 @@ public static class WorldSessionBootstrapper
         string playerActivityLogFilePath,
         DiagnosticsEngine diagnostics,
         int randomSeed,
+        IReadOnlyList<ISettingsSource> settingsSources,
         int? mapSizeOverride = null)
     {
         var mathUtility = new MathUtility(new Random(randomSeed));
@@ -43,19 +46,26 @@ public static class WorldSessionBootstrapper
         var crawlerNumberAllocator = new UniqueNumberAllocator(((ulong)(uint)randomSeed << 32) | CrawlerNumberSalt, minCrawlerNumber, crawlerNumberBits);
         var neighborhoodRecords = new NeighborhoodRecords(mathUtility);
 
-        World world;
+        ValidatedMods validatedMods;
+        using (diagnostics.StartupProfiler?.Phase("Mod Validation"))
+        {
+            validatedMods = ModValidation.Validate(modsDirectory, settingsSources, diagnostics.StartupProfiler);
+        }
+
+        Map map;
         using (diagnostics.StartupProfiler?.Phase("World/Map Build"))
         {
-            world = new World(FloorBuilder.CreateMap(floorNumber, mapSizeOverride));
+            map = FloorBuilder.CreateMap(floorNumber, mapSizeOverride);
         }
 
         GameBootstrapResult bootstrapResult;
         using (diagnostics.StartupProfiler?.Phase("Module Load"))
         {
-            bootstrapResult = GameBootstrapper.Build(world, mathUtility, modsDirectory, initialEntityCapacity, initialComponentCapacity, diagnostics.StartupProfiler, crawlerNumberAllocator, runtimeSpawnSeed: (uint)randomSeed);
+            bootstrapResult = GameBootstrapper.Build(validatedMods, map, mathUtility, initialEntityCapacity, initialComponentCapacity, diagnostics.StartupProfiler, crawlerNumberAllocator, runtimeSpawnSeed: (uint)randomSeed, settingsSources: settingsSources);
         }
 
         var ecsContext = bootstrapResult.EcsContext;
+        var world = bootstrapResult.World;
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
         var reservedEntityIds = FloorBuilder.ReserveTradeOfferEntities(ecsContext);
@@ -67,6 +77,11 @@ public static class WorldSessionBootstrapper
         foreach (var failure in bootstrapResult.Failures)
         {
             Console.Error.WriteLine($"[ModuleLoad] {failure.Source}: {failure.Exception}");
+        }
+
+        foreach (var failure in bootstrapResult.SettingsFailures)
+        {
+            Console.Error.WriteLine($"[Settings] {failure.Source}: {failure.Setting}: {failure.Message}");
         }
 
         // Must subscribe (in its own constructor) before CreatePlayer below publishes the

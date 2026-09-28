@@ -15,42 +15,31 @@ using Game.Modules.StatModifiers;
 using Game.Modules.Death;
 using Game.Modules.Race;
 using Game.Modules.ContactDamage;
+using Engine.Modules;
 
 namespace Game.Modules.Burning;
 
 /// <summary>
 /// Burning-specific: its own entity-scoped and body-part-scoped timer components and systems,
 /// depending on StatusEffectsModule (shared immunity storage) and HealthModule (what it damages).
-/// Parameterless, with runtime dependencies (EventBus, IPlayerQuery) supplied via
-/// IGameModule.Configure. Also registers a BurningAuraApplier (dispatches entity-scoped vs
+/// Registers a BurningAuraApplier (dispatches entity-scoped vs
 /// body-part-scoped per grant -- see its own doc comment) into the shared
 /// StatusEffectAuraApplierRegistry during Configure, so StatusEffectAuraSystem can grant
 /// Burning stacks without depending on this module directly.
 /// </summary>
 public sealed class BurningModule : IGameModule
 {
-    private BlueprintRegistry _creatures = null!;
-
     public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000008");
 
     public Guid Id => ModuleId;
 
     public IReadOnlyList<Guid> Requires { get; } = [StatusEffectsModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, RaceModule.ModuleId, ContactDamageModule.ModuleId];
 
-    private EventBus _eventBus = null!;
-    private IPlayerQuery _playerQuery = null!;
-    private FloatingTextFeed _floatingTextFeed = null!;
-    private MathUtility _mathUtility = null!;
-
     public void Configure(GameModuleContext context)
     {
-        _creatures = context.Definitions;
-        _eventBus = context.EventBus;
-        _playerQuery = context.PlayerQuery;
-        _floatingTextFeed = context.FloatingTextFeed;
-        _mathUtility = context.MathUtility;
-        context.StatusEffectAuraAppliers.Register(new BurningAuraApplier(_mathUtility, context.Terrain, context.Definitions, _eventBus, _playerQuery));
+        context.StatusEffectAuraAppliers.Register(new BurningAuraApplier(context.ComponentManager, context.MathUtility, context.Terrain, context.Definitions, context.EventBus, context.PlayerQuery));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph,
+            context.ComponentManager.GetPackedPool<BurningTimerComponent>(),
             static (burning, now) => RemainingFrames(burning.NextTickFrame, burning.StackCount, now)));
     }
 
@@ -58,37 +47,43 @@ public sealed class BurningModule : IGameModule
     public static int RemainingFrames(uint nextTickFrame, byte stackCount, long now) =>
         FrameDeadline.Remaining(nextTickFrame, now) + (stackCount - 1) * BurningEffects.TickIntervalFrames;
 
-    public void RegisterComponents(ComponentManager componentManager)
+    public void RegisterComponents(ComponentRegistration registration)
     {
+        var componentManager = registration.ComponentManager;
+
         componentManager.RegisterPackedPool<BurningTimerComponent>(static (ref existing, incoming) => { });
         componentManager.RegisterMultiPool<BodyPartBurningTimerComponent>();
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
+        var context = registration.Context;
+        var systemManager = registration.SystemManager;
+        var componentManager = registration.ComponentManager;
+
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
-        var bodyParts = EntityBodyParts.For(componentManager, _creatures);
+        var bodyParts = EntityBodyParts.For(componentManager, context.Definitions);
         var deadEntities = componentManager.GetPackedPool<DeadComponent>();
 
         systemManager.Register(new BurningSystem(
             componentManager.GetPackedPool<BurningTimerComponent>(),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
-            _eventBus,
-            _playerQuery,
-            _mathUtility,
+            context.EventBus,
+            context.PlayerQuery,
+            context.MathUtility,
             statModifiers,
             bodyParts,
             deadEntities,
-            _floatingTextFeed));
+            context.FloatingTextFeed));
 
         systemManager.Register(new BodyPartBurningSystem(
             componentManager.GetMultiPool<BodyPartBurningTimerComponent>(),
-            EntityBodyParts.For(componentManager, _creatures),
+            EntityBodyParts.For(componentManager, context.Definitions),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
-            _eventBus,
-            _playerQuery,
+            context.EventBus,
+            context.PlayerQuery,
             statModifiers,
             deadEntities,
-            _floatingTextFeed));
+            context.FloatingTextFeed));
     }
 }

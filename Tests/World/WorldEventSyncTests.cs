@@ -55,9 +55,8 @@ public sealed class WorldEventSyncTests
     public void SyncMove_NonBlockingEntity_MovesNonBlockingIndexEntryInsteadOfMapNodeIndex()
     {
         var world = TestWorlds.Create(new Map(new Vector3Int(5, 5, 1)));
-        var nonBlockingPool = new Engine.ECS.Components.Stores.MultiComponentPool<NonBlockingComponent>(10, 10);
+        var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(7, new NonBlockingComponent());
-        world.NonBlockingComponents = nonBlockingPool;
         var worldEventSync = new WorldEventSync(world);
 
         var oldPosition = new Vector3Int(1, 1, 0);

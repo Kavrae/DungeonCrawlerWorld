@@ -1,14 +1,11 @@
 ﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
-using Engine.ECS.Systems;
 using Engine.Events;
+using Engine.Modules;
 using Game.Modules.Achievements.Components;
 using Game.Modules.Achievements.Definitions;
 using Game.Modules.Achievements.Systems;
-using Game.Modules.Actions;
-using Game.Modules.Inventory;
 using Game.Notifications;
-using Game.World;
 
 namespace Game.Modules.Achievements;
 
@@ -42,22 +39,12 @@ public sealed class AchievementModule : IGameModule
         new ObsessiveCollectorAchievement()
         ];
 
-    private EventBus _eventBus = null!;
-    private IPlayerQuery _playerQuery = null!;
-    private ActionCatalog? _actionCatalog;
-    private ItemCatalog? _itemCatalog;
-
     /// <summary>Shared with every AchievementTriggerContext this module hands out -- SubscribePolled appends to it, AchievementPollingSystem (registered below only if it ends up non-empty) drains it once per frame.</summary>
     private readonly List<Func<bool>> _polledConditions = [];
 
     /// <summary>Sets the achievement data dependencies and registers all built-in achievements with the achievement catalog</summary>
     public void Configure(GameModuleContext context)
     {
-        _eventBus = context.EventBus;
-        _playerQuery = context.PlayerQuery;
-        _actionCatalog = context.Actions;
-        _itemCatalog = context.Items;
-
         foreach (var definition in Definitions)
         {
             context.Achievements.Register(definition);
@@ -69,33 +56,33 @@ public sealed class AchievementModule : IGameModule
     /// Player-only today. initialCapacity
     /// tracks Definitions.Count directly instead of a guessed constant, so it never goes stale as achievements are added.
     /// </remarks>
-    /// <param name="componentManager"></param>
-    public void RegisterComponents(ComponentManager componentManager) =>
+    public void RegisterComponents(ComponentRegistration registration)
+    {
+        var componentManager = registration.ComponentManager;
+
         componentManager.RegisterMultiPool<AchievementUnlockedComponent>(initialCapacity: Definitions.Count);
+    }
 
     /// <remarks>
     /// Almost every achievement trigger is a plain EventBus subscription, needing no per-frame work
-    /// of its own -- wired up here, not in Configure, because Configure runs before any module's
-    /// RegisterComponents (see IGameModule's own doc comment), so AchievementUnlockedComponent's
-    /// pool doesn't exist yet at that point. RegisterSystems is reused as the earliest hook that's
-    /// guaranteed to run after every module's RegisterComponents (see Bootstrapper.Build). The one
+    /// of its own -- wired up here, with the systems, since Configure only fills what other modules
+    /// read (see IModule&lt;TContext&gt;.Configure). The one
     /// exception: an achievement whose condition is a standing state rather than a discrete event
     /// (see AchievementTriggerContext.SubscribePolled) needs an actual per-frame check, which is
     /// what AchievementPollingSystem below is for -- only registered at all if at least one
     /// achievement's RegisterTrigger actually called SubscribePolled.
     /// </remarks>
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
-        if (_actionCatalog is not { } actionCatalog || _itemCatalog is not { } itemCatalog)
-        {
-            throw new InvalidOperationException("AchievementModule.Configure must run before RegisterSystems.");
-        }
+        var context = registration.Context;
+        var systemManager = registration.SystemManager;
+        var componentManager = registration.ComponentManager;
 
         var unlockedAchievements = componentManager.GetMultiPool<AchievementUnlockedComponent>();
 
         foreach (var definition in Definitions)
         {
-            var triggerContext = new AchievementTriggerContext(_eventBus, _playerQuery, componentManager, actionCatalog, itemCatalog, entityId => Unlock(definition, entityId, componentManager, unlockedAchievements, _eventBus), _polledConditions);
+            var triggerContext = new AchievementTriggerContext(context.EventBus, context.PlayerQuery, componentManager, context.Actions, context.Items, entityId => Unlock(definition, entityId, componentManager, unlockedAchievements, context.EventBus), _polledConditions);
             definition.RegisterTrigger(triggerContext);
         }
 

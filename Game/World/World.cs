@@ -10,24 +10,43 @@ namespace Game.World;
 /// <summary>The in-memory game world</summary>
 /// <remarks>The map and bookkeeping for entities placed on it.</remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class World(Map map) : IMapQuery, IPlayerQuery
+public sealed class World(
+    Map map,
+    MultiComponentPool<NonBlockingComponent> nonBlockingComponents,
+    MultiComponentPool<ForceBlockingComponent> forceBlockingComponents,
+    EventBus eventBus,
+    EntityKeys entityKeys,
+    TerrainRegistry terrain) : IMapQuery, IPlayerQuery
 {
     public Map Map { get; set; } = map;
+
+    /// <summary>Tracks the components that temporarily change a blocking entity to non-blocking</summary>
+    public MultiComponentPool<NonBlockingComponent> NonBlockingComponents { get; } = nonBlockingComponents;
+
+    /// <summary>Tracks the components that temporarily change a non-blocking entity to blocking</summary>
+    public MultiComponentPool<ForceBlockingComponent> ForceBlockingComponents { get; } = forceBlockingComponents;
+
+    /// <summary>Used by SetTerrain and SetStructure to publish their change events.</summary>
+    public EventBus EventBus { get; } = eventBus;
+
+    /// <summary>The session's stable entity keys.</summary>
+    public EntityKeys EntityKeys { get; } = entityKeys;
+
+    /// <summary>The session's terrain and structure definitions, which decide whether a cell blocks movement.</summary>
+    /// <remarks>Filled by the modules during the build's configure step, after World exists.</remarks>
+    public TerrainRegistry Terrain { get; } = terrain;
 
     /// <summary>The player character's entity id</summary>
     /// <remarks>Defaults to -1 as the standard sentinel</remarks>
     public int PlayerEntityId { get; set; } = -1;
 
-    /// <summary>The player's stable key, read from EntityKeys; None until both are set.</summary>
-    public EntityKey PlayerEntityKey => EntityKeys?.GetKey(PlayerEntityId) ?? EntityKey.None;
-
-    /// <summary>The session's stable entity keys, wired post-construction like EntityManager.</summary>
-    public EntityKeys? EntityKeys { get; set; }
+    /// <summary>The player's stable key; None while there is no player.</summary>
+    public EntityKey PlayerEntityKey => EntityKeys.GetKey(PlayerEntityId);
 
     /// <summary>
     /// Raised after an entity is successfully placed on the map by PlaceEntityOnMap, with the
     /// position it landed at. Generic by design: World knows nothing
-    /// about processing tiers. GameBootstrapper subscribes ProcessingTierResolver.EnsureTiered, so
+    /// about processing tiers. GameBuildPass subscribes ProcessingTierResolver.EnsureTiered, so
     /// every placement path gets a correct tier without its caller having to ask for one. Carries the
     /// position rather than letting a subscriber re-read the TransformComponent, because callers pass
     /// the transform by ref and not every caller's ref points into the pool.
@@ -35,26 +54,6 @@ public sealed class World(Map map) : IMapQuery, IPlayerQuery
     public event Action<int, Vector3Int>? EntityPlaced;
 
     private static readonly Vector2Byte TransformSize1 = new(1, 1);
-
-    /// <summary>Tracks the components that temporarily change a blocking entity to non-blocking</summary>
-    /// <remarks>Wired post-construction by GameBootstrapper.Build, which produces the pool after World exists; must be set before anything is placed.</remarks>
-    public MultiComponentPool<NonBlockingComponent> NonBlockingComponents { get; set; } = null!;
-
-    /// <summary>Tracks the components that temporarily change a non-blocking entity to blocking</summary>
-    /// <remarks>Wired post-construction alongside NonBlockingComponents.</remarks>
-    public MultiComponentPool<ForceBlockingComponent> ForceBlockingComponents { get; set; } = null!;
-
-    /// <summary>The session's entity lifecycle, for anything placement needs to create or destroy.</summary>
-    /// <remarks>World is constructed before Bootstrapper.Build produces an EntityManager (see NonBlockingComponents above), so this can't be a constructor dependency either -- wired up the same way, post-construction.</remarks>
-    public EntityManager? EntityManager { get; set; }
-
-    /// <summary>Used by SetTerrain and SetStructure to publish their change events.</summary>
-    /// <remarks>Wired post-construction for the same reason as NonBlockingComponents; must be set before terrain or structures change.</remarks>
-    public EventBus EventBus { get; set; } = null!;
-
-    /// <summary>The session's terrain and structure definitions, which decide whether a cell blocks movement.</summary>
-    /// <remarks>Post-construction for the same reason as EventBus: modules register definitions during GameBootstrapper's configure step, after World exists. Until it's wired, no cell blocks.</remarks>
-    public TerrainRegistry Terrain { get; set; } = new();
 
     /// <summary> Moves entityId's map-index presence from transformComponent.Position to newPosition.</summary>
     /// <remarks>

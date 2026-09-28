@@ -8,6 +8,7 @@ using Game.Blueprints.Parts;
 using Game.Blueprints.Races;
 using Game.Spawning;
 using Game.Modules;
+using Engine.Modules;
 
 namespace Game.Blueprints;
 
@@ -64,15 +65,17 @@ public sealed class BlueprintsModule : IGameModule
         }
     }
 
-    public void RegisterComponents(ComponentManager componentManager)
+    public void RegisterComponents(ComponentRegistration registration)
     {
+        var componentManager = registration.ComponentManager;
+
         componentManager.RegisterDirectPool<SpawnRecordComponent>(static (ref existing, incoming) => existing = incoming);
 
         // Rare: only entities something was applied to at runtime.
         componentManager.RegisterMultiPool<AppliedBlueprintComponent>(initialCapacity: 16);
     }
 
-    public void RegisterSystems(SystemManager systemManager, ComponentManager componentManager)
+    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
     {
     }
 }

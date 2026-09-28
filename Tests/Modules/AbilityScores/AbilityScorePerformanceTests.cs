@@ -1,6 +1,5 @@
 using Engine.ECS.Entities;
 using System.Diagnostics;
-using Engine.Bootstrap;
 using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
@@ -147,11 +146,7 @@ public sealed class AbilityScorePerformanceTests
     /// </summary>
     private static double MeasureExpiryRecompute(int entityCount)
     {
-        var world = new Game.World.World(new Map(new Vector3Int(5, 5, 1)));
-        var mathUtility = new MathUtility();
-        var context = new GameModuleContext(world, mathUtility, new EventBus()) { PlayerQuery = world, EntityMoveSync = new WorldEventSync(world) };
-
-        var ecsContext = BuiltInTestModules.Build(context, initialEntityCapacity: entityCount, initialComponentCapacity: 64);
+        var ecsContext = BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)), initialEntityCapacity: entityCount, initialComponentCapacity: 64).EcsContext;
         var processingTiers = ecsContext.ComponentManager.GetDirectPool<ProcessingTierComponent>();
 
         var entityIds = new int[entityCount];

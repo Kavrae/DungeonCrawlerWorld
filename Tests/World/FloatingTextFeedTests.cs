@@ -41,8 +41,4 @@ public sealed class FloatingTextFeedTests
 
         Assert.IsEmpty(floatingText.Published);
     }
-
-    [TestMethod]
-    public void Publish_Unwired_Throws() =>
-        Assert.ThrowsExactly<NullReferenceException>(static () => new FloatingTextFeed().Publish(3, FloatingTextKind.DamageTaken, 12));
 }

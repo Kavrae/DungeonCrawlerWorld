@@ -2193,7 +2193,7 @@ public sealed class UiInputControllerTests
 
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: playerEntityId);
         var itemId = Guid.NewGuid();
         var itemCatalog = new ItemCatalog();
         itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: [], Effects: []));
@@ -2235,7 +2235,7 @@ public sealed class UiInputControllerTests
 
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: playerEntityId);
         var itemId = Guid.NewGuid();
         var itemCatalog = new ItemCatalog();
         itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: [], Effects: []));
@@ -2480,7 +2480,7 @@ public sealed class UiInputControllerTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
         var mapViewState = new MapViewState();
         Action<int, uint> resolvedOnItemSelected = onItemSelected ?? (static (_, _) => { });
@@ -2637,7 +2637,7 @@ public sealed class UiInputControllerTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: playerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
         var mapViewState = new MapViewState { OpenShopEntityId = shopEntityId };
 
@@ -2785,7 +2785,7 @@ public sealed class UiInputControllerTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: playerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
         var mapViewState = new MapViewState { OpenShopEntityId = shopEntityId, ReservedEntityIds = new ReservedEntityIds(tradePlayerEntityId, tradeShopEntityId) };
 
@@ -3101,7 +3101,7 @@ public sealed class UiInputControllerTests
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
 
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: playerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
         var mapViewState = new MapViewState { OpenShopEntityId = shopEntityId, ReservedEntityIds = new ReservedEntityIds(tradePlayerEntityId, tradeShopEntityId) };
 
@@ -3299,7 +3299,7 @@ public sealed class UiInputControllerTests
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
         windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
 
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1)));
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
         var mapViewState = new MapViewState();
 
@@ -3391,7 +3391,7 @@ public sealed class UiInputControllerTests
 
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
-        var world = new Game.World.World(new Game.World.Map(new Vector3Int(10, 10, 1))) { PlayerEntityId = playerEntityId };
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: playerEntityId);
         var actionId = Guid.NewGuid();
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(actionId, "Test Action", null, "t", Color.White, [], Effects: [ActionEffect.None],

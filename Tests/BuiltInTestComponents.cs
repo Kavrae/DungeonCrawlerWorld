@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Modules;
 using Game.Bootstrap;
 
 namespace Tests;
@@ -8,7 +9,7 @@ internal static class BuiltInTestComponents
 {
     public static ComponentManager RegisterAll(ComponentManager componentManager)
     {
-        foreach (var module in GameBootstrapper.BuiltInModules())
+        foreach (var module in GameBootstrapper.BuiltInModules().CreateAll())
         {
             module.RegisterComponents(componentManager);
         }
