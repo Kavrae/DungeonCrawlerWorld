@@ -88,7 +88,7 @@ public static class ShellBootstrapper
         var cursorTextContent = new CursorTextContent(presentation.FontService, presentation.LabelRenderer);
         var dragGhostContent = new DragGhostContent(world, actionCatalog, itemCatalog, componentManager.GetMultiPool<InventoryItemStackComponent>(), presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.LabelRenderer);
         var contextMenuController = new ContextMenuController(presentation.ElementPoolService);
-        var mapView = new Game.Views.MapViewQuery(world, componentManager, actionCatalog, worldSession.Terrain, worldSession.Definitions);
+        var mapView = new Game.Views.MapViewQuery(world, componentManager, actionCatalog, worldSession.Terrain, worldSession.Definitions, ecsContext.SystemManager.Clock);
         var bodyParts = EntityBodyParts.For(componentManager, worldSession.Definitions);
 
         ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, bodyParts, worldSession.Definitions, world, worldSession.Terrain, mapView, mapViewState, camera, actionTargetingController, playerMovementController, cursorTextContent, contextMenuController);

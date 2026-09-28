@@ -120,13 +120,6 @@ primitive. Companion to the Game/Presentation equipment items below.
 
 ### High Priority
 
-#### NPC attack charge fill freezes at 100% before the action fires
-
-Bug: an NPC's attack charge fill often sits at 100% for up to roughly 1 second before the attack
-actually triggers. The displayed fill and the frame the action resolves disagree -- find which side is
-late (the fill reaching full early, or the windup resolving on a coarser cadence than its deadline)
-and make the action fire the frame the fill completes.
-
 #### Paralysis V2 -- body-part-scoped status effects
 
 Paralysis can be applied to an entire entity or to individual body parts. A paralyzed body part
@@ -1226,9 +1219,8 @@ entry. Two parts:
   a sprite has one. Purely visual -- grid position/occupancy still change instantly on the same
   frame as today.
 - **Actions**: a short per-action animation (windup during a Delayed action's charge, a strike on
-  activation). Could drive off the same elapsed-real-time tracking `MapWindow.TrackChargeElapsedFraction`
-  already does for the charge fill, not the stepped `CurrentLockFramesRemaining` (see that method's
-  own remarks for why the stepped value never reaches 0).
+  activation). Could drive off `IMapViewQuery.GetChargeFraction`, which the charge fill already
+  reads.
 
 Needs a frame-sequence concept `SpriteComponent`/`SpriteManifest` don't have yet (one cell per
 entity today, chosen once at build). Scope to Local tier -- nothing off-screen should pay for
@@ -1292,6 +1284,30 @@ third partial copy (the corpse "killed by" line -- suicide/self-kill should read
 `ActionSource.ToString()` stays as-is: it's diagnostics with no subject to be relative to.
 
 ### Medium Priority
+
+#### Shift+click to move a whole stack when looting and shopping
+
+Shift+click a stack to move all of it in one click, with no drag:
+- **Looting**: take the whole stack from a corpse or container into the player's inventory.
+- **Shopping, buying**: buy the whole stack from the shop's inventory.
+- **Shopping, selling**: sell the whole stack from the player's inventory to the shop.
+
+Applies to currency and items alike. Dragging a stack already moves all of it, so this is a click
+shortcut for the same transfers: route it through the same calls the drag-drop resolvers make
+(`ShopActions.TryBuyFromShop`/`TrySellToShop`, `ShopActions.TryGiveCurrencyToShop` for currency
+given to a shop, the loot transfer for corpses and containers), so rules like shop eligibility,
+pricing, inventory capacity and the Angel Investor trigger can't diverge from dragging.
+
+- **Trade window**: shift+click adds the whole stack to the trade offer, the same as dragging it in.
+- **Not enough money**: transfer as many units as the buyer can afford, and leave the rest.
+- **Not enough inventory room**: transfer as many units as fit, until the inventory is full.
+
+Partial transfers need a way to move part of a stack: `TryBuyFromShop`/`TrySellToShop` move one
+exact stack today, all or nothing. The affordable quantity comes from `ShopStockPricing`'s bulk
+bracket pricing, where each unit's price depends on the shop's stock, so find it by pricing
+quantities against it rather than dividing by a unit price. Room is counted in stacks
+(`InventoryCapacity.HasRoomForNewStack`), so as much as fits means topping up existing stacks of
+the item to their max stack size, then filling free slots.
 
 #### Consolidate Admin Mode features out of the bootstrappers
 

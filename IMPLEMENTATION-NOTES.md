@@ -236,6 +236,13 @@ alongside it, found while chasing the framerate regressions that surfaced during
   itself is gone -- the lock is a deadline and nothing decrements it -- so no tier can lag its
   nominal duration any more; the elapsed-time fraction is kept regardless, since it reads no
   component per frame.)
+- The elapsed-time fraction was then replaced by `IMapViewQuery.GetChargeFraction`, which reads the
+  pending action's `ReadyAtFrame` against the simulation clock. Its per-entity state only reset on a
+  Draw that saw the entity not charging, so an NPC queuing its next attack on its resolve frame
+  (every time with a 60-frame windup on `TestCombatBehaviorSystem`'s 15-frame stripe) inherited the
+  previous charge's full fill and sat at 100% for its whole windup. The simulation-derived fraction
+  has no state to carry over, freezes while the simulation is paused, and resumes at the true
+  progress for an entity that enters Local tier mid-charge.
 
 ### Body parts / Complex health
 

@@ -54,8 +54,8 @@ public interface IMapViewQuery
     /// <summary>The action entityId is currently winding up, if any.</summary>
     bool TryGetChargingAction(int entityId, out ChargingActionView action);
 
-    /// <summary>The length of entityId's current action lock, or 0 when it has none.</summary>
-    int GetActionLockTotalFrames(int entityId);
+    /// <summary>How far entityId is through its current windup, 0 at the start to 1 on the frame it resolves; 0 when it isn't winding up.</summary>
+    float GetChargeFraction(int entityId);
 
     EntityInteractionView GetInteraction(int entityId);
 }

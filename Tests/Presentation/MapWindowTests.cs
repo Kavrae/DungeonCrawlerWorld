@@ -144,7 +144,7 @@ public sealed class MapWindowTests
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
 
         var terrain = new Game.Terrain.TerrainRegistry();
-        var mapView = new Game.Views.MapViewQuery(world, componentManager, resolvedActionCatalog, terrain, creatures: new BlueprintRegistry());
+        var mapView = new Game.Views.MapViewQuery(world, componentManager, resolvedActionCatalog, terrain, creatures: new BlueprintRegistry(), new SimulationClock());
         var playerActionGate = new Game.Views.PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), world, new Engine.ECS.Systems.SimulationClock());
         var tintGrid = new MapTintGrid(componentManager, world, terrain, eventBus);
 

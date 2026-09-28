@@ -33,8 +33,7 @@ public enum LootBagState : byte
 public readonly record struct EntityStatusView(float? HealthFraction, bool IsContainer, LootBagState LootBag, bool IsDodging);
 
 /// <summary>The action an entity is winding up, for the charging badge above it.</summary>
-/// <param name="TotalFrames">The windup's full length, for the fill indicator; 0 when unknown.</param>
-public readonly record struct ChargingActionView(SpriteView? Sprite, string Glyph, Color GlyphColor, int TotalFrames);
+public readonly record struct ChargingActionView(SpriteView? Sprite, string Glyph, Color GlyphColor);
 
 /// <summary>A cell's terrain, as the map and the inspector show it.</summary>
 public readonly record struct TerrainView(string Name, string Description, EntityVisualView Visual);

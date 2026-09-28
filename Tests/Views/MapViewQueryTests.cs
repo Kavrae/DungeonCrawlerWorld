@@ -1,5 +1,6 @@
 using Game.Blueprints;
 using Engine.ECS.Components;
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
@@ -33,12 +34,13 @@ public sealed class MapViewQueryTests
         public ComponentManager Components { get; } = BuiltInTestComponents.RegisterAll(new ComponentManager(32, 16));
         public ActionCatalog Actions { get; } = new();
         public TerrainRegistry Terrain { get; } = new();
+        public SimulationClock Clock { get; } = new();
         public MapViewQuery Query { get; }
 
         public Fixture()
         {
             TestWorlds.WireOccupancy(World, Components);
-            Query = new MapViewQuery(World, Components, Actions, Terrain, creatures: new BlueprintRegistry());
+            Query = new MapViewQuery(World, Components, Actions, Terrain, creatures: new BlueprintRegistry(), Clock);
         }
 
         public void Place(int entityId, Vector3Int position)
@@ -263,7 +265,7 @@ public sealed class MapViewQueryTests
     // --- Charging and interaction. ----------------------------------------------------------
 
     [TestMethod]
-    public void TryGetChargingAction_PendingKnownAction_ReportsItsGlyphAndLockLength()
+    public void TryGetChargingAction_PendingKnownAction_ReportsItsGlyph()
     {
         var fixture = new Fixture();
         fixture.Actions.Register(new ActionDefinition(
@@ -277,7 +279,49 @@ public sealed class MapViewQueryTests
         Assert.IsNull(action.Sprite);
         Assert.AreEqual("!", action.Glyph);
         Assert.AreEqual(Color.Orange, action.GlyphColor);
-        Assert.AreEqual(45, action.TotalFrames);
+    }
+
+    [TestMethod]
+    [DataRow(100L, 0f)]
+    [DataRow(115L, 0.25f)]
+    [DataRow(130L, 0.5f)]
+    [DataRow(160L, 1f)]
+    [DataRow(175L, 1f)]
+    public void GetChargeFraction_MeasuresTheWindupAgainstTheSimulationClock(long now, float expectedFraction)
+    {
+        var fixture = new Fixture();
+        fixture.Components.Merge(5, new PendingDelayedActionComponent(ChargingActionId, [], readyAtFrame: 160));
+        fixture.Components.Merge(5, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 60, unlockedAtFrame: 160));
+        fixture.Clock.Advance(now);
+
+        Assert.AreEqual(expectedFraction, fixture.Query.GetChargeFraction(5), 0.0001f);
+    }
+
+    [TestMethod]
+    public void GetChargeFraction_NextWindupQueuedOnTheResolveFrame_StartsFromZero()
+    {
+        var fixture = new Fixture();
+        fixture.Components.Merge(5, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 60, unlockedAtFrame: 160));
+        fixture.Components.Merge(5, new PendingDelayedActionComponent(ChargingActionId, [], readyAtFrame: 160));
+        fixture.Clock.Advance(159);
+        Assert.AreEqual(59f / 60f, fixture.Query.GetChargeFraction(5), 0.0001f);
+
+        fixture.Clock.Advance(160);
+        fixture.Components.Merge(5, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 60, unlockedAtFrame: 220));
+        fixture.Components.GetPackedPool<PendingDelayedActionComponent>().Remove(5);
+        fixture.Components.Merge(5, new PendingDelayedActionComponent(ChargingActionId, [], readyAtFrame: 220));
+
+        Assert.AreEqual(0f, fixture.Query.GetChargeFraction(5));
+    }
+
+    [TestMethod]
+    public void GetChargeFraction_NotWindingUp_IsZero()
+    {
+        var fixture = new Fixture();
+        fixture.Components.Merge(5, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 60, unlockedAtFrame: 160));
+        fixture.Clock.Advance(130);
+
+        Assert.AreEqual(0f, fixture.Query.GetChargeFraction(5));
     }
 
     [TestMethod]

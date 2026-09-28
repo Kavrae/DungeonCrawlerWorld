@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Spawning;
 using Game.Modules.Actions;
@@ -48,10 +49,13 @@ public sealed class MapViewQuery : IMapViewQuery
     private readonly PackedComponentPool<DodgingComponent> _dodging;
     private readonly BlueprintRegistry _creatures;
     private readonly DirectComponentPool<SpawnRecordComponent> _spawnRecords;
+    private readonly SimulationClock _simulationClock;
 
     /// <param name="creatures">The blueprint definitions, for drawing and naming every entity that holds no visual or name of its own -- which is nearly all of them, built or skeleton.</param>
-    public MapViewQuery(World.World world, ComponentManager componentManager, ActionCatalog actionCatalog, TerrainRegistry terrain, BlueprintRegistry creatures)
+    /// <param name="simulationClock">The current simulation frame, which a windup's progress is measured against.</param>
+    public MapViewQuery(World.World world, ComponentManager componentManager, ActionCatalog actionCatalog, TerrainRegistry terrain, BlueprintRegistry creatures, SimulationClock simulationClock)
     {
+        _simulationClock = simulationClock;
         _world = world;
         _terrain = terrain;
         _actionCatalog = actionCatalog;
@@ -242,12 +246,23 @@ public sealed class MapViewQuery : IMapViewQuery
             ? resolved
             : null;
 
-        action = new ChargingActionView(sprite, definition.Glyph, definition.GlyphColor, GetActionLockTotalFrames(entityId));
+        action = new ChargingActionView(sprite, definition.Glyph, definition.GlyphColor);
         return true;
     }
 
-    public int GetActionLockTotalFrames(int entityId) =>
-        _actionLocks.TryGetReadonly(entityId, out var actionLock) ? actionLock.CurrentLockTotalFrames : 0;
+    /// <remarks>The windup's length is the lock's CurrentLockTotalFrames, set on the same frame ReadyAtFrame was copied from the lock's deadline.</remarks>
+    public float GetChargeFraction(int entityId)
+    {
+        if (!_pendingDelayedActions.TryGetReadonly(entityId, out var pending) ||
+            !_actionLocks.TryGetReadonly(entityId, out var actionLock) ||
+            actionLock.CurrentLockTotalFrames == 0)
+        {
+            return 0f;
+        }
+
+        var remainingFrames = FrameDeadline.Remaining(pending.ReadyAtFrame, _simulationClock.CurrentFrame);
+        return Math.Clamp(1f - (float)remainingFrames / actionLock.CurrentLockTotalFrames, 0f, 1f);
+    }
 
     public EntityInteractionView GetInteraction(int entityId) => new(
         ResolveName(entityId),
