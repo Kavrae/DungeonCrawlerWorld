@@ -25,6 +25,14 @@ public sealed class MapWindowArchitectureTests
     public void MapBackgroundCache_ReferencesNoGameComponentType() =>
         AssertNoComponentReferences(typeof(MapBackgroundCache));
 
+    [TestMethod]
+    public void FloatingTextController_ReferencesNoGameComponentType() =>
+        AssertNoComponentReferences(typeof(global::Presentation.UI.FloatingText.FloatingTextController));
+
+    [TestMethod]
+    public void FloatingTextRenderer_ReferencesNoGameComponentType() =>
+        AssertNoComponentReferences(typeof(global::Presentation.UI.FloatingText.FloatingTextRenderer));
+
     /// <summary>The scanner itself must catch every place a component can hide, or the two tests above prove nothing.</summary>
     [TestMethod]
     public void Scanner_FindsComponentsInFieldsParametersLocalsAndClosures()

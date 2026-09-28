@@ -55,5 +55,6 @@ public sealed record ActionEffectContext(
     IPlayerQuery PlayerQuery,
     StatusEffectAuraApplierRegistry StatusEffectAppliers,
     BlueprintRegistry Definitions,
+    FloatingTextFeed FloatingTextFeed,
     float DurationScaleMultiplier = 1.0f,
     byte ChainDepth = 0);

@@ -34,6 +34,7 @@ public sealed class PoisonSystem : ISystem
     private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
     private readonly EventBus _eventBus;
     private readonly IPlayerQuery _playerQuery;
+    private readonly FloatingTextFeed _floatingTextFeed;
     private readonly MathUtility _mathUtility;
     private readonly EntityBodyParts _bodyParts;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
@@ -51,7 +52,8 @@ public sealed class PoisonSystem : ISystem
         MathUtility mathUtility,
         MultiComponentPool<StatModifierComponent> statModifiers,
         EntityBodyParts bodyParts,
-        PackedComponentPool<DeadComponent> deadEntities)
+        PackedComponentPool<DeadComponent> deadEntities,
+        FloatingTextFeed floatingTextFeed)
     {
         _timers = timers;
         _health = health;
@@ -61,6 +63,7 @@ public sealed class PoisonSystem : ISystem
         _mathUtility = mathUtility;
         _bodyParts = bodyParts;
         _deadEntities = deadEntities;
+        _floatingTextFeed = floatingTextFeed;
         _tick = Tick;
         _wheel = new PackedTimerWheel<PoisonTimerComponent>(timers, SimulationScope.Unscoped);
     }
@@ -75,7 +78,7 @@ public sealed class PoisonSystem : ISystem
             return true;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities,
+        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, _floatingTextFeed, DamageCategory.StatusEffect,
             targetRule: new BodyPartTargetRule(BodyPartType.Internal, BodyPartFallback.Random), damageTags: PoisonDamageTags);
 
         var remainingDuration = (ushort)(timer.RemainingDurationTicks - 1);

@@ -42,6 +42,8 @@ public static class HealthHeal
         EntityBodyParts bodyParts,
         EventBus eventBus,
         IPlayerQuery playerQuery,
+        FloatingTextFeed floatingTextFeed,
+        HealCategory healCategory,
         float flatAmount = 0f,
         int? sourceEntityId = null,
         IReadOnlyList<Tag>? activatorTags = null,
@@ -49,6 +51,49 @@ public static class HealthHeal
         BodyPartTargetRule? targetRule = null,
         MathUtility? mathUtility = null,
         string healType = "Heal")
+    {
+        var healthBefore = 0f;
+        var showsHealedText = floatingTextFeed.IsShownFor(entityId)
+            && HealthQueries.TryGetTotals(health, bodyParts, entityId, out healthBefore, out _);
+
+        ApplyHeal(health, entityId, percentOfMaxHealth, now, statModifiers, bodyParts, eventBus, playerQuery, flatAmount, sourceEntityId, activatorTags, targetMode, targetRule, mathUtility, healType);
+
+        if (showsHealedText && HealthQueries.TryGetTotals(health, bodyParts, entityId, out var healthAfter, out _))
+        {
+            PublishHealed(floatingTextFeed, entityId, healthBefore, healthAfter, healCategory);
+        }
+    }
+
+    /// <summary>Publishes the floating text for the health entityId gained, as the HUD displays it.</summary>
+    /// <remarks>The HUD rounds current health up, so the amount is the change in the rounded-up value: what the player sees the bar number move by, never a "+0" for a fraction of a point. Regeneration gains a fraction of a point per visit, so its text appears only on the visits that move the displayed value.</remarks>
+    public static void PublishHealed(FloatingTextFeed floatingTextFeed, int entityId, float healthBefore, float healthAfter, HealCategory healCategory)
+    {
+        var displayedGain = (int)MathF.Ceiling(healthAfter) - (int)MathF.Ceiling(healthBefore);
+        if (displayedGain <= 0)
+        {
+            return;
+        }
+
+        var kind = healCategory == HealCategory.Regeneration ? FloatingTextKind.Regenerated : FloatingTextKind.Healed;
+        floatingTextFeed.Publish(entityId, kind, (ushort)System.Math.Min(displayedGain, ushort.MaxValue));
+    }
+
+    private static void ApplyHeal(
+        PackedComponentPool<SimpleHealthComponent> health,
+        int entityId,
+        float percentOfMaxHealth,
+        long now,
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        EntityBodyParts bodyParts,
+        EventBus eventBus,
+        IPlayerQuery playerQuery,
+        float flatAmount,
+        int? sourceEntityId,
+        IReadOnlyList<Tag>? activatorTags,
+        BodyPartTargetMode targetMode,
+        BodyPartTargetRule? targetRule,
+        MathUtility? mathUtility,
+        string healType)
     {
         if (!health.Has(entityId))
         {

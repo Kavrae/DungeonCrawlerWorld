@@ -27,10 +27,13 @@ public sealed record StatusEffectGrant(StatusEffectType Type, int StackCount = 1
         }
 
         var source = ActionSource.FromEntity(context.ComponentManager, context.EntityKeys, context.SourceEntityId, context.Definitions);
+        var stackCountBefore = applier.GetCurrentStackCount(context.ComponentManager, context.TargetEntityId);
         for (var i = 0; i < StackCount; i++)
         {
             applier.ApplyStack(context.ComponentManager, context.TargetEntityId, source, context.Now);
         }
+
+        StatusEffectGrantFloatingText.Publish(context.FloatingTextFeed, context.ComponentManager, applier, context.TargetEntityId, stackCountBefore);
 
         context.EventBus.Publish(new StatusEffectAppliedEvent(context.TargetEntityId, Type, source));
     }

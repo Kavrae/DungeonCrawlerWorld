@@ -33,6 +33,7 @@ public sealed class HealthModule : IGameModule
     private MathUtility _mathUtility = null!;
     private EventBus _eventBus = null!;
     private IPlayerQuery _playerQuery = null!;
+    private FloatingTextFeed _floatingTextFeed = null!;
 
     /// <summary>The entity whose MaximumHealth sums were snapshotted by the most recent StatModifierExpiringEvent, and those sums -- consumed by the matching StatModifierExpiredEvent. See MaximumHealthShift.</summary>
     /// <remarks>A single slot rather than a map: StatModifierExpirySystem sweeps one entity at a time and publishes both events synchronously within that sweep, so a snapshot never has to outlive the entity it was taken for.</remarks>
@@ -47,6 +48,7 @@ public sealed class HealthModule : IGameModule
         _mathUtility = context.MathUtility;
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
+        _floatingTextFeed = context.FloatingTextFeed;
     }
 
     public void RegisterComponents(ComponentManager componentManager)
@@ -79,7 +81,8 @@ public sealed class HealthModule : IGameModule
             abilityScores,
             EntityBodyParts.For(componentManager, _creatures),
             _eventBus,
-            _playerQuery));
+            _playerQuery,
+            _floatingTextFeed));
 
         systemManager.Register(new ComplexHealthRegenSystem(
             EntityBodyParts.For(componentManager, _creatures),
@@ -91,7 +94,8 @@ public sealed class HealthModule : IGameModule
             deadEntities,
             abilityScores,
             _eventBus,
-            _playerQuery));
+            _playerQuery,
+            _floatingTextFeed));
 
         WireMaximumHealthShift(componentManager);
     }

@@ -33,6 +33,7 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
     private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores;
     private readonly EventBus _eventBus;
     private readonly IPlayerQuery _playerQuery;
+    private readonly FloatingTextFeed _floatingTextFeed;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public SimpleHealthRegenSystem(
@@ -44,7 +45,8 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
         PackedComponentPool<AbilityScoresComponent> abilityScores,
         EntityBodyParts bodyParts,
         EventBus eventBus,
-        IPlayerQuery playerQuery)
+        IPlayerQuery playerQuery,
+        FloatingTextFeed floatingTextFeed)
     {
         _healthComponents = healthComponents;
         _statModifiers = statModifiers;
@@ -53,6 +55,7 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
         _bodyParts = bodyParts;
         _eventBus = eventBus;
         _playerQuery = playerQuery;
+        _floatingTextFeed = floatingTextFeed;
 
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, healthComponents, processingTiers, processingTierEvents);
     }
@@ -99,6 +102,6 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
             return;
         }
 
-        HealthHeal.Apply(_healthComponents, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
+        HealthHeal.Apply(_healthComponents, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, eventBus: _eventBus, playerQuery: _playerQuery, floatingTextFeed: _floatingTextFeed, healCategory: HealCategory.Regeneration, healType: "Regeneration");
     }
 }

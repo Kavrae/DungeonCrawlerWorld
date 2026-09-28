@@ -58,12 +58,13 @@ public sealed record DirectDamage(
         var damageWithTagModifiers = StatModifierMath.GetEffectiveValue(context.StatModifiers, context.SourceEntityId, StatModifierTarget.OutgoingDamage, damageWithAbilityScoreScaling, context.ActivatorTags);
 
         var critChance = StatModifierMath.GetEffectiveValue(context.StatModifiers, context.SourceEntityId, StatModifierTarget.CritChance, CritMath.BaseCritChance);
-        if (context.MathUtility.NextDouble() < critChance)
+        var isCritical = context.MathUtility.NextDouble() < critChance;
+        if (isCritical)
         {
             damageWithTagModifiers *= StatModifierMath.GetEffectiveValue(context.StatModifiers, context.SourceEntityId, StatModifierTarget.CritMultiplier, CritMath.BaseCritMultiplier);
         }
 
         BodyPartTargetRule? targetRule = TargetBodyPartType is { } type ? new BodyPartTargetRule(type, BodyPartFallback.Random) : null;
-        HealthDamage.Apply(context.Health, context.EventBus, context.TargetEntityId, (ushort)damageWithTagModifiers, ActionSource.FromEntity(context.ComponentManager, context.EntityKeys, context.SourceEntityId, context.Definitions), context.PlayerQuery, context.ActivatorName, context.Now, context.StatModifiers, context.BodyParts, context.MathUtility, context.DeadEntities, targetRule, context.ActivatorTags, BodyPartTargetMode);
+        HealthDamage.Apply(context.Health, context.EventBus, context.TargetEntityId, (ushort)damageWithTagModifiers, ActionSource.FromEntity(context.ComponentManager, context.EntityKeys, context.SourceEntityId, context.Definitions), context.PlayerQuery, context.ActivatorName, context.Now, context.StatModifiers, context.BodyParts, context.MathUtility, context.DeadEntities, context.FloatingTextFeed, DamageCategory.Direct, targetRule, context.ActivatorTags, BodyPartTargetMode, isCritical);
     }
 }

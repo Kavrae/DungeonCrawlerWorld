@@ -1139,6 +1139,54 @@ Measured (Release, seed 1, 3072², frames 600-3600) against a baseline saved imm
 
 ## Presentation
 
+### Floating Text
+
+Short alerts drawn in the world above the entity they concern: damage taken, heals, regen, status stacks
+added, Dodge, Immune. Notifications keep carrying the full details. Named generically so XP gained,
+Level Up and Skill Up join later as new `FloatingTextKind` values.
+
+- **One publisher, `FloatingTextFeed` (Game.World), through the EventBus.** A new immediate
+  `FloatingTextEvent`, separate from the player-only logging events (`EntityDamagedEvent` and so on):
+  floating text is for anyone the player can see, needs an enum kind rather than free text, the health
+  actually gained rather than the pre-clamp amount, and the crit flag. With no subscriber (headless) a
+  publish costs one dictionary miss. A buffered event was rejected: nothing drains it headless.
+- **Visibility is the Local tier.** The feed publishes only for `ProcessingTierLevel.Local` entities, which
+  bounds regen publishing to the Local population. A camera panned more than 80 tiles from the player shows
+  no text, and Borough zoom draws none. Local is still far wider than the viewport, so
+  `FloatingTextRenderer` skips a text outside the visible tiles (plus a 2-tile margin) before measuring it:
+  without that, `MapWindow` draw doubled (0.38 -> 0.73-0.90 ms/frame windowed, Release, seed 1); with it,
+  it is within run-to-run spread.
+- **Only damage taken, above the entity taking it** (the player included). Nothing is drawn above an
+  attacker for damage it dealt. A corpse shows nothing for damage it takes; the killing hit still shows.
+- **Heals show the change in the HUD's rounded-up health**, `ceil(after) - ceil(before)`: a heal at full
+  health shows nothing, and regen shows "+1" only on the visits that move the displayed number. No
+  accumulator state. `HealCategory`/`DamageCategory` are required parameters on `HealthHeal`/`HealthDamage`,
+  so no caller can default a DoT to direct damage.
+- **Status stacks are the count after a grant minus the count before**, at the two grant sites
+  (`StatusEffectGrant`, `StatusEffectAuraSystem.GrantStacks`), so a stack stopped by the cap or immunity is
+  never shown. "Immune" is published there once per grant, not from `StatusEffectImmunity.IsImmune`,
+  which runs once per stack. Standing immune in an aura repeats "Immune" on each re-grant, accepted.
+- **Waterfall.** Each entity has two lanes, numbers (damage, heals, Dodge) on the left half of the entity
+  and statuses (stacks, Immune) on the right, each releasing one text every 0.1 s -- one per frame put
+  consecutive numbers ~1.5 px apart. Past 8 waiting, a text of the same kind, effect and flags is added
+  into the newest waiting one, so totals stay exact. At most 256 texts at once; the oldest retires early.
+- **Motion.** Rise 1 tile over 0.4 s easing out while fading 50% -> 100%, then drift at 0.4 tile/s while
+  fading out over the remaining 1.6 s. Horizontal drift at 0.3 tile/s, random direction per text. Dodge and
+  Immune fall and start at the bottom of the footprint; everything else rises from the top. Time is
+  simulation frames, so text freezes while the game is paused. Constants in `FloatingTextChrome`.
+- **Look.** Bordered (`ContrastTextRenderer`, fading the outline with the fill). Red damage, orange status
+  damage, green "+N" heals, light green "+N" regen, white Dodge/Immune. A crit gets a yellow "!" and a
+  1.5x -> 1x pop over 0.1 s. Stacks and Immune show the effect's icon: its `StatusEffect-<Type>` sprite if
+  the manifest has one, else its registered glyph. Colours are floating text's own
+  (`FloatingTextPalette`): `IStatusEffectDisplay` deliberately leaves colour to each consumer.
+- **Not a particle system.** There is no second consumer; `FloatingTextMotion` and the pooled instance
+  array are the pieces one would take over.
+- **Found along the way: multi-tile targets were hit once per covered cell.** A multi-tile entity is in
+  the occupant index of every cell of its footprint, and `ActionEffectResolver` plus potion, scroll and
+  wand activation applied their effects once per cell the shape covered. Each now resolves a target once
+  per activation. This changed gameplay: the seed-1 headless fingerprint moved, and disabling only the
+  resolver fix restores the old one exactly.
+
 ### FontService lifetime, and a test-only FreeType finalizer crash
 
 - `FontService` (`Presentation/Fonts/FontService.cs`) is now `IDisposable`, disposing its owned

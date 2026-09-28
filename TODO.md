@@ -1,24 +1,3 @@
-### Floating Combat Text
-Combat text whenever an entity is damaged, healed, or given a status effect.
-Research industry standard
-Appear above the entity at 50% opacity, move up the distance of a single tile fading to 100% opacity, then move while fading to 0 opacity. Damage and status effect text moves up while "Dodge" and "Immune" text moves down. Remove the text at 0 opacity.
-Text should start with a randomized horizontal offset (half of a tile width in either direction) to improve readability by reducing stacking.
-Text should move diagonally, rather than directly up/down, to futher improve readability. Randomly chosen between negative vertical speed and positive vertical speed.
-Start with 2 second duration.
-Draw order is oldest (bottom) to newest (top)
-Bordered text.
-Red numbers for direct damage
-Orange numbers for status effect damage
-Green numbers for direct healing
-Light green for health regen
-Bolt for critical hits
-Sprite + number of stacks when status effect stacks are added
-"Dodge" whenever an action fails due to a dodgeComponent.
-"Immune" whenever an action fails due to immunity.
-Since multiple sources of damage and effects can happen simultaneously, which would be difficult to read, buffer them into a damage list and a status effect list. Each frame, display the oldest damage/healing number (drawn on left) and oldest status effect(drawn on right) in the list . This will result in a "waterfall" of text.
-Should this feature go through the eventBus (for entities on the screen) rather than directly passed to whatever controls the floating combat text?
-The text creation, movement, fade in/out, and removal combination of mechanics is similar to many game particle effects. Should this be generalized into a particle effect with text as the UI piece of it?
-
 ### Combat Overhaul : Dodge
 
 **Core mechanic landed** -- see `IMPLEMENTATION-NOTES.md`'s own "Combat Overhaul: Dodge" section for
@@ -119,6 +98,59 @@ primitive. Companion to the Game/Presentation equipment items below.
 ## Game
 
 ### High Priority
+
+#### One pattern for dependencies created before the pools exist
+
+Several shared objects have to exist during `IGameModule.Configure`, so modules can keep a reference
+to them, but they read component pools, which only exist once `Bootstrapper.Build` has registered
+the components. Each one bridges that gap its own way:
+- **The fields in the gap:** nullable with `!` at every use, `= null!`, fetched lazily with `??=` on
+  first call, or guarded by a "resolved" flag.
+- **Where the wiring happens:** after the build in `GameBootstrapper.Build`, inside
+  `ProcessingTierModule.RegisterSystems` (so it depends on module order), or on first use.
+- **Tests repeat it by hand.** Tests that build the modules themselves have to redo
+  `GameBootstrapper`'s wiring steps (`BuiltInTestModules`, `TestWorlds.WireOccupancy`). Missing one
+  only shows up at runtime: `EntityStripingTests` hit exactly that with `FloatingTextFeed`.
+
+Goal: one pattern.
+- Each such object is declared in one place and wired once, by a single step that both
+  `GameBootstrapper` and `BuiltInTestModules` run.
+- Fields are non-nullable, and using the object before it is wired fails loudly. No silent
+  "publish nothing" fallback.
+- Keep "every component registers before any system" and CLAUDE.md's rule that allows guards in
+  `Wire` methods.
+
+Designs to weigh:
+- A two-phase interface, such as `IPoolBound.Bind(ComponentManager)`, that `GameModuleContext`
+  enumerates and one bind step calls after `Bootstrapper.Build`.
+- A post-registration hook in `Bootstrapper` itself.
+- Constructing these objects after the build and handing modules a handle to them.
+
+First example: `FloatingTextFeed`. `GameModuleContext` creates it, `GameBootstrapper.Build` wires
+it, and `BuiltInTestModules` wires it again. Its fields are `= null!`.
+
+Others that need the same treatment (surveyed 2026-09-28):
+- `LocalTierRoster`: owned by the context, `Wire` called in `ProcessingTierModule.RegisterSystems`,
+  nullable `_drivingPool`/`_tiers` used with `!`.
+- `ProcessingTierResolver`: owned by the context, `Wire` called in
+  `ProcessingTierModule.RegisterSystems`, nullable `_tiers`/`_transforms` used with `!`.
+- `SimulationScope`: owned by the context, `SetPolicy` called in
+  `GameBootstrapper.WireSimulationScope`.
+- `TimerBasedAuraApplier` and `TimerBasedStatusEffectDisplay`: built in `Configure`, pool fetched
+  with `??=` on first call.
+- `BurningAuraApplier`: built in `Configure`, pools resolved on first call through `EnsurePools`
+  and a `_poolsResolved` flag, nullable fields used with `!`.
+- `World`: built before the ECS, because `FloorBuilder.CreateMap` must run before the build.
+  `GameBootstrapper` then sets `NonBlockingComponents`, `ForceBlockingComponents`, `EntityManager`,
+  `EntityKeys`, `EventBus` and `Terrain` as settable properties. `TestWorlds.WireOccupancy` repeats
+  part of that. It mixes `= null!` and nullable fields.
+- `GameModuleContext.EntityFactory`: a settable property, null until after `Configure`, and null in
+  dry runs and the staging world.
+
+Related, but a different cause, so decide whether each should share the pattern:
+- `EntityFactory`'s own nullable `_tiers`, `_transforms`, `SpawnMoves` and `Skeletons` come from
+  its build-only constructor, not from late wiring.
+- `DiagnosticsEngine.AttachEcsContext` (Engine) attaches diagnostics to an ECS that is built later.
 
 #### Paralysis V2 -- body-part-scoped status effects
 
@@ -270,6 +302,8 @@ XP for kills (`EntityDiedEvent`) and quests (blocked on quest completion existin
 Level-up grants stat boosts/abilities per class. Needs a current/next-threshold Experience component +
 HUD bar (candidate for the shared tick-fraction HUD bar item under Presentation). Check whether its
 level-up curve can share math with Skills/Spell leveling below rather than three independent copies.
+Show XP gained (and Level Up) as floating text above the player -- new `FloatingTextKind` values on the
+Floating Text feature (`IMPLEMENTATION-NOTES.md`, "Floating Text"), with the notification carrying the full details.
 
 #### Skills
 
@@ -1714,6 +1748,13 @@ message, with the full exception available on demand.
 No settings screen exists -- Escape currently does nothing. Wanted: Escape (global, unconditional, same
 as Tab) opens it, and the game pauses while open -- just `OpenMenuWindow`/`CloseMenuWindow` (see Pause
 modality, `IMPLEMENTATION-NOTES.md`), no new modality code needed.
+
+#### Floating text settings on the options menu
+
+Needs Options menu (above). Settings for the Floating Text feature (`IMPLEMENTATION-NOTES.md`, "Floating Text"): a master
+on/off, per-kind toggles (damage taken, healing, regen, status stacks, Dodge/Immune, and later XP/Level
+Up/Skill Up), and possibly text size and duration. Persisted through Data storage (Global) once it
+covers more than window geometry.
 
 #### Keybindings page on the options menu
 

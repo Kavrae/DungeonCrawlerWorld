@@ -24,7 +24,8 @@ namespace Game.Modules.Health;
 /// </remarks>
 public static class ComplexHealthDamage
 {
-    public static void Apply(
+    /// <returns>The damage dealt after the target's IncomingDamage modifiers, or 0 when entityId has no part to hit.</returns>
+    public static ushort Apply(
         PackedComponentPool<SimpleHealthComponent> health,
         EntityBodyParts bodyParts,
         EventBus eventBus,
@@ -48,7 +49,7 @@ public static class ComplexHealthDamage
                 : BodyPartSelection.PickRandom(bodyParts, entityId, mathUtility);
         if (partId == -1)
         {
-            return;
+            return 0;
         }
 
         var effectiveAmount = MathUtility.ClampUShort(
@@ -58,6 +59,7 @@ public static class ComplexHealthDamage
 
         BodyPartDamageEffects.ApplyToPart(bodyParts, entityId, partId, statModifiers, effectiveAmount, now);
         BodyPartDamageEffects.PublishDamageEvents(health, bodyParts, eventBus, entityId, partId, effectiveAmount, source, playerQuery, damageType, statModifiers, deadEntities);
+        return effectiveAmount;
     }
 
     /// <summary>
@@ -72,7 +74,8 @@ public static class ComplexHealthDamage
     /// PublishAggregateDamageEvents) rather than one per part, so a fireball reads as a single hit
     /// on the HUD/combat log, not N separate small ones.
     /// </summary>
-    public static void ApplyToAllParts(
+    /// <returns>The whole hit's damage after the target's IncomingDamage modifiers, or 0 when entityId has no parts.</returns>
+    public static ushort ApplyToAllParts(
         PackedComponentPool<SimpleHealthComponent> health,
         EntityBodyParts bodyParts,
         EventBus eventBus,
@@ -90,7 +93,7 @@ public static class ComplexHealthDamage
 
         if (partCount == 0)
         {
-            return;
+            return 0;
         }
 
         var effectiveAmount = MathUtility.ClampUShort(
@@ -105,5 +108,6 @@ public static class ComplexHealthDamage
         }
 
         BodyPartDamageEffects.PublishAggregateDamageEvents(health, bodyParts, eventBus, entityId, effectiveAmount, source, playerQuery, damageType, statModifiers, deadEntities);
+        return effectiveAmount;
     }
 }

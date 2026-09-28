@@ -76,13 +76,14 @@ internal static class TestSystems
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
         EventBus? eventBus = null,
-        IPlayerQuery? playerQuery = null) =>
+        IPlayerQuery? playerQuery = null,
+        FloatingTextFeed? floatingTextFeed = null) =>
         new(healthComponents, processingTiers, processingTierEvents,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
             abilityScores ?? EmptyPools.Packed<AbilityScoresComponent>(),
             EmptyPools.BodyParts(),
-            eventBus ?? new EventBus(), playerQuery ?? TestPlayerQuery.NoPlayer);
+            eventBus ?? new EventBus(), playerQuery ?? TestPlayerQuery.NoPlayer, floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static ManaRegenSystem ManaRegenSystem(
         PackedComponentPool<ManaComponent> manaComponents,
@@ -103,11 +104,12 @@ internal static class TestSystems
         IPlayerQuery? playerQuery,
         MathUtility mathUtility,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        EntityBodyParts? bodyParts = null) =>
+        EntityBodyParts? bodyParts = null,
+        FloatingTextFeed? floatingTextFeed = null) =>
         new(timers, health, eventBus, playerQuery ?? TestPlayerQuery.NoPlayer, mathUtility,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),
-            EmptyPools.Packed<DeadComponent>());
+            EmptyPools.Packed<DeadComponent>(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static BurningSystem BurningSystem(
         PackedComponentPool<BurningTimerComponent> timers,
@@ -117,11 +119,12 @@ internal static class TestSystems
         MathUtility mathUtility,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         EntityBodyParts? bodyParts = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null) =>
+        PackedComponentPool<DeadComponent>? deadEntities = null,
+        FloatingTextFeed? floatingTextFeed = null) =>
         new(timers, health, eventBus, playerQuery ?? TestPlayerQuery.NoPlayer, mathUtility,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),
-            deadEntities ?? EmptyPools.Packed<DeadComponent>());
+            deadEntities ?? EmptyPools.Packed<DeadComponent>(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static BodyPartBurningSystem BodyPartBurningSystem(
         MultiComponentPool<BodyPartBurningTimerComponent> timers,
@@ -130,10 +133,11 @@ internal static class TestSystems
         EventBus eventBus,
         IPlayerQuery? playerQuery,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<DeadComponent>? deadEntities = null) =>
+        PackedComponentPool<DeadComponent>? deadEntities = null,
+        FloatingTextFeed? floatingTextFeed = null) =>
         new(timers, bodyParts, health, eventBus, playerQuery ?? TestPlayerQuery.NoPlayer,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
-            deadEntities ?? EmptyPools.Packed<DeadComponent>());
+            deadEntities ?? EmptyPools.Packed<DeadComponent>(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static ContactDamageSystem ContactDamageSystem(
         TerrainRegistry terrain,
@@ -148,12 +152,13 @@ internal static class TestSystems
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         EntityBodyParts? bodyParts = null,
-        SimulationScope? simulationScope = null) =>
+        SimulationScope? simulationScope = null,
+        FloatingTextFeed? floatingTextFeed = null) =>
         new(terrain, exposures, health, eventBus, mapQuery, playerQuery ?? TestPlayerQuery.NoPlayer, movedEntities, mathUtility, simulationClock,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),
-            simulationScope ?? new SimulationScope());
+            simulationScope ?? new SimulationScope(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static ActionActivationSystem ActionActivationSystem(
         PackedComponentPool<PendingActionActivationComponent> pendingActivations,
@@ -179,7 +184,8 @@ internal static class TestSystems
         PackedComponentPool<MeleeDisabledComponent>? meleeDisabled = null,
         PackedComponentPool<DodgingComponent>? dodgingEntities = null,
         ProcessingTierQuery? processingTiers = null,
-        BlueprintRegistry? creatures = null) =>
+        BlueprintRegistry? creatures = null,
+        FloatingTextFeed? floatingTextFeed = null) =>
         new(pendingActivations, actionLocks, actions, pendingDelayedActions, health, actionCatalog, mapQuery, eventBus, mathUtility, playerQuery ?? TestPlayerQuery.NoPlayer, statusEffectAppliers, componentManager, entityKeys,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
@@ -191,7 +197,7 @@ internal static class TestSystems
             meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>(),
             dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
             processingTiers ?? EmptyPools.Tiers(),
-            creatures ?? new BlueprintRegistry());
+            creatures ?? new BlueprintRegistry(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static DelayedActionSystem DelayedActionSystem(
         PackedComponentPool<PendingDelayedActionComponent> pendingActions,
@@ -215,7 +221,8 @@ internal static class TestSystems
         SimulationScope? simulationScope = null,
         ProcessingTierQuery? processingTiers = null,
         ProcessingTierEvents? processingTierEvents = null,
-        BlueprintRegistry? creatures = null) =>
+        BlueprintRegistry? creatures = null,
+        FloatingTextFeed? floatingTextFeed = null) =>
         new(pendingActions, actions, health, actionCatalog, mapQuery, eventBus, mathUtility, playerQuery ?? TestPlayerQuery.NoPlayer, statusEffectAppliers, componentManager, entityKeys,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
@@ -226,7 +233,7 @@ internal static class TestSystems
             bodyParts ?? EmptyPools.BodyParts(),
             dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
             processingTiers ?? EmptyPools.Tiers(),
-            simulationScope ?? new SimulationScope(), processingTierEvents ?? new ProcessingTierEvents(), creatures ?? new BlueprintRegistry());
+            simulationScope ?? new SimulationScope(), processingTierEvents ?? new ProcessingTierEvents(), creatures ?? new BlueprintRegistry(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static ConsumableActivationSystem ConsumableActivationSystem(
         PackedComponentPool<PendingConsumableActivationComponent> pendingActivations,
@@ -251,7 +258,8 @@ internal static class TestSystems
         MultiComponentPool<ItemHotkeyBindingComponent>? itemHotkeyBindings = null,
         EntityBodyParts? bodyParts = null,
         BlueprintRegistry? creatures = null,
-        ProcessingTierQuery? processingTiers = null) =>
+        ProcessingTierQuery? processingTiers = null,
+        FloatingTextFeed? floatingTextFeed = null) =>
         new(pendingActivations, actionLocks, potionCooldowns, health, itemCatalog, actionCatalog, mapQuery, eventBus, mathUtility, componentManager, entityKeys,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
@@ -263,7 +271,7 @@ internal static class TestSystems
             bodyParts ?? EmptyPools.BodyParts(),
             processingTiers ?? EmptyPools.Tiers(),
             playerQuery ?? TestPlayerQuery.NoPlayer,
-            statusEffectAppliers ?? new StatusEffectAuraApplierRegistry(), creatures ?? new BlueprintRegistry());
+            statusEffectAppliers ?? new StatusEffectAuraApplierRegistry(), creatures ?? new BlueprintRegistry(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static TestCombatBehaviorSystem TestCombatBehaviorSystem(
         PackedComponentPool<MovementComponent> movementPool,

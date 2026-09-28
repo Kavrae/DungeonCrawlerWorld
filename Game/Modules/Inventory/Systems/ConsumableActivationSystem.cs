@@ -103,6 +103,9 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly MultiComponentPool<ItemHotkeyBindingComponent> _itemHotkeyBindings;
     private readonly EntityBodyParts _bodyParts;
     private readonly BlueprintRegistry _creatures;
+    private readonly FloatingTextFeed _floatingTextFeed;
+    private readonly List<int> _targetIdsScratch = [];
+    private readonly HashSet<int> _seenTargetIdsScratch = [];
     private readonly ProcessingTierQuery _processingTiers;
     private readonly EntityStripeSet _stripeSet;
 
@@ -132,7 +135,8 @@ public sealed class ConsumableActivationSystem : ISystem
         ProcessingTierQuery processingTiers,
         IPlayerQuery playerQuery,
         StatusEffectAuraApplierRegistry statusEffectAppliers,
-        BlueprintRegistry creatures)
+        BlueprintRegistry creatures,
+        FloatingTextFeed floatingTextFeed)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -156,6 +160,7 @@ public sealed class ConsumableActivationSystem : ISystem
         _itemHotkeyBindings = itemHotkeyBindings;
         _bodyParts = bodyParts;
         _creatures = creatures;
+        _floatingTextFeed = floatingTextFeed;
         _processingTiers = processingTiers;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
@@ -249,19 +254,32 @@ public sealed class ConsumableActivationSystem : ISystem
     /// <summary>Whether a consumable landing on targetEntityId's tile reaches it: not while it is frozen, the same seam ActionEffectResolver keeps -- nothing targets across the simulated/frozen boundary.</summary>
     private bool IsTargetable(int targetEntityId) => _processingTiers.IsSimulated(targetEntityId);
 
-    private void ActivatePotion(ItemDefinition item, int sourceEntityId, Vector3Int[] targetTiles)
+    /// <summary>Every targetable entity on targetTiles, once each, in the order first reached.</summary>
+    /// <remarks>A multi-tile entity occupies every cell of its footprint, so a shape covering several of them reaches it once per cell; a consumable affects it once.</remarks>
+    private List<int> CollectTargets(Vector3Int[] targetTiles)
     {
+        _targetIdsScratch.Clear();
+        _seenTargetIdsScratch.Clear();
+
         foreach (var tile in targetTiles)
         {
             foreach (var targetEntityId in _mapQuery.GetOccupantEntityIdsAt(tile))
             {
-                if (!IsTargetable(targetEntityId))
+                if (IsTargetable(targetEntityId) && _seenTargetIdsScratch.Add(targetEntityId))
                 {
-                    continue;
+                    _targetIdsScratch.Add(targetEntityId);
                 }
-
-                ApplyPotionToTarget(item, sourceEntityId, targetEntityId);
             }
+        }
+
+        return _targetIdsScratch;
+    }
+
+    private void ActivatePotion(ItemDefinition item, int sourceEntityId, Vector3Int[] targetTiles)
+    {
+        foreach (var targetEntityId in CollectTargets(targetTiles))
+        {
+            ApplyPotionToTarget(item, sourceEntityId, targetEntityId);
         }
     }
 
@@ -306,17 +324,9 @@ public sealed class ConsumableActivationSystem : ISystem
     {
         var durationScaleMultiplier = ComputeScrollScaleMultiplier(sourceEntityId);
 
-        foreach (var tile in targetTiles)
+        foreach (var targetEntityId in CollectTargets(targetTiles))
         {
-            foreach (var targetEntityId in _mapQuery.GetOccupantEntityIdsAt(tile))
-            {
-                if (!IsTargetable(targetEntityId))
-                {
-                    continue;
-                }
-
-                ApplyScrollToTarget(item, sourceEntityId, targetEntityId, durationScaleMultiplier);
-            }
+            ApplyScrollToTarget(item, sourceEntityId, targetEntityId, durationScaleMultiplier);
         }
 
         ScrollMasteryEffects.RecordUsage(_componentManager, _eventBus, _actionCatalog, item, sourceEntityId, scrollActivator.SpellId);
@@ -345,17 +355,9 @@ public sealed class ConsumableActivationSystem : ISystem
 
     private void ActivateWand(ItemDefinition item, int sourceEntityId, Vector3Int[] targetTiles)
     {
-        foreach (var tile in targetTiles)
+        foreach (var targetEntityId in CollectTargets(targetTiles))
         {
-            foreach (var targetEntityId in _mapQuery.GetOccupantEntityIdsAt(tile))
-            {
-                if (!IsTargetable(targetEntityId))
-                {
-                    continue;
-                }
-
-                ApplyWandToTarget(item, sourceEntityId, targetEntityId);
-            }
+            ApplyWandToTarget(item, sourceEntityId, targetEntityId);
         }
     }
 
@@ -433,5 +435,6 @@ public sealed class ConsumableActivationSystem : ISystem
             BodyParts: _bodyParts,
             PlayerQuery: _playerQuery,
             Definitions: _creatures,
+            FloatingTextFeed: _floatingTextFeed,
             DurationScaleMultiplier: durationScaleMultiplier);
 }

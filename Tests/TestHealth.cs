@@ -28,12 +28,15 @@ internal static class TestHealth
         PackedComponentPool<DeadComponent>? deadEntities = null,
         BodyPartTargetRule? targetRule = null,
         IReadOnlyList<Tag>? damageTags = null,
-        BodyPartTargetMode targetMode = BodyPartTargetMode.SingleTarget) =>
+        BodyPartTargetMode targetMode = BodyPartTargetMode.SingleTarget,
+        FloatingTextFeed? floatingTextFeed = null,
+        DamageCategory damageCategory = DamageCategory.Direct) =>
         HealthDamage.Apply(health, eventBus, entityId, amount, source, playerQuery ?? TestPlayerQuery.NoPlayer, damageType, now,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),
             mathUtility,
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
+            floatingTextFeed ?? EmptyPools.FloatingTextFeed(), damageCategory,
             targetRule, damageTags, targetMode);
 
     public static void Heal(
@@ -51,11 +54,14 @@ internal static class TestHealth
         MathUtility? mathUtility = null,
         EventBus? eventBus = null,
         IPlayerQuery? playerQuery = null,
-        string healType = "Heal") =>
+        string healType = "Heal",
+        FloatingTextFeed? floatingTextFeed = null,
+        HealCategory healCategory = HealCategory.Direct) =>
         HealthHeal.Apply(health, entityId, percentOfMaxHealth, now,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),
             eventBus ?? new EventBus(), playerQuery ?? TestPlayerQuery.NoPlayer,
+            floatingTextFeed ?? EmptyPools.FloatingTextFeed(), healCategory,
             flatAmount, sourceEntityId, activatorTags, targetMode, targetRule, mathUtility, healType);
 
     public static void HealAllParts(

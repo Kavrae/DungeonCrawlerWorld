@@ -14,6 +14,7 @@ using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.AbilityScores;
 using Presentation.UI.Content;
+using Presentation.UI.FloatingText;
 using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
 using Presentation.UI.Shops;
@@ -62,6 +63,8 @@ public static class ElementFactoryRegistry
         // for the Register helper above to pull its weight.
         var playerActionGate = new PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), world, ecsContext.SystemManager.Clock);
         var mapTintGrid = new MapTintGrid(componentManager, world, terrain, ecsContext.EventBus);
+        var floatingTextController = new FloatingTextController(ecsContext.EventBus, ecsContext.SystemManager.Clock);
+        var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, presentationContext.FontService, statusEffectDisplays, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer, presentationContext.LabelRenderer);
         elementPool.RegisterFactory<MapWindow>(() => new MapWindow(
             presentationContext.FontService,
             elementPool,
@@ -77,7 +80,9 @@ public static class ElementFactoryRegistry
             camera,
             actionTargetingController,
             playerMovementController,
-            contextMenuController));
+            contextMenuController,
+            floatingTextController,
+            floatingTextRenderer));
 
         Register<Folder>((font, elements, glyph) => new Folder(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
 

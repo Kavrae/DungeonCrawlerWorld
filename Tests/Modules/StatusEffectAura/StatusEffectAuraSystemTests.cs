@@ -130,7 +130,7 @@ public sealed class StatusEffectAuraSystemTests
     }
 
     /// <summary>Mirrors real game wiring (both BurningModule.Configure and PoisonModule.Configure registering their own applier into the same shared registry) -- the registry a caller can override via applierRegistry to exercise unsupported-effect-type behavior instead.</summary>
-    private (StatusEffectAuraSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, FrameEventBuffer<EntityMovedEvent> MovedEntities, EventBus EventBus) Build(StatusEffectAuraApplierRegistry? applierRegistry = null, TerrainRegistry? terrain = null, FakeMapQuery? mapQuery = null, SimulationScope? simulationScope = null)
+    private (StatusEffectAuraSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, FrameEventBuffer<EntityMovedEvent> MovedEntities, EventBus EventBus) Build(StatusEffectAuraApplierRegistry? applierRegistry = null, TerrainRegistry? terrain = null, FakeMapQuery? mapQuery = null, SimulationScope? simulationScope = null, FloatingTextFeed? floatingTextFeed = null)
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 200, initialComponentCapacity: 50));
 
@@ -152,7 +152,8 @@ public sealed class StatusEffectAuraSystemTests
             _clock,
             terrain ?? new TerrainRegistry(),
             componentManager.GetPackedPool<DeadComponent>(),
-            simulationScope: simulationScope ?? new SimulationScope());
+            simulationScope: simulationScope ?? new SimulationScope(),
+            floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
         return (system, componentManager, mapQuery, movedEntities, eventBus);
     }
@@ -962,5 +963,34 @@ public sealed class StatusEffectAuraSystemTests
 
         Assert.AreEqual(660u, NextTickFrameOf(componentManager, ObserverEntityId, StatusEffectType.Burning));
         Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId));
+    }
+
+    [TestMethod]
+    public void SteppingIntoRange_PublishesTheStacksAdded()
+    {
+        var floatingText = new TestFloatingText().Place(ObserverEntityId, ProcessingTierLevel.Local, SourcePosition.X, SourcePosition.Y);
+        var (system, componentManager, _, movedEntities, _) = Build(floatingTextFeed: floatingText.Feed);
+        AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
+
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
+
+        var published = floatingText.Published.Single();
+        Assert.AreEqual(FloatingTextKind.StatusEffectStacksAdded, published.Kind);
+        Assert.AreEqual(StatusEffectType.Burning, published.EffectType);
+        Assert.AreEqual(8, published.Amount);
+    }
+
+    [TestMethod]
+    public void SteppingIntoRange_Immune_PublishesImmune()
+    {
+        var floatingText = new TestFloatingText().Place(ObserverEntityId, ProcessingTierLevel.Local, SourcePosition.X, SourcePosition.Y);
+        var (system, componentManager, _, movedEntities, _) = Build(floatingTextFeed: floatingText.Feed);
+        AddSource(componentManager, SourceEntityId, SourcePosition, StatusEffectType.Burning, strength: 8);
+        componentManager.GetMultiPool<Game.Modules.StatusEffects.Components.StatusEffectImmunityComponent>().Add(ObserverEntityId, new Game.Modules.StatusEffects.Components.StatusEffectImmunityComponent(StatusEffectType.Burning, uint.MaxValue));
+
+        MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
+
+        Assert.AreEqual(0, StackCountOf(componentManager, ObserverEntityId));
+        Assert.AreEqual(FloatingTextKind.Immune, floatingText.Published.Single().Kind);
     }
 }

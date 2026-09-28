@@ -13,6 +13,7 @@ using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using Presentation.UI.FloatingText;
 
 namespace Presentation.UI;
 
@@ -63,6 +64,8 @@ public sealed class MapWindow : Window
     private readonly PlayerMovementController _playerMovement;
     private readonly ContextMenuController _contextMenuController;
     private readonly MapBackgroundCache _backgroundCache;
+    private readonly FloatingTextController _floatingTextController;
+    private readonly FloatingTextRenderer _floatingTextRenderer;
 
     /// <summary>Null until the first Update that finds a GraphicsDevice on ElementPoolService, and permanently null for a headless MapWindow that never gets one -- DrawContent's own fallback paths cover both cases. See Update for why these can't be built in Initialize.</summary>
     private MapTileLayerCache? _terrainCache;
@@ -182,7 +185,9 @@ public sealed class MapWindow : Window
         MapCamera camera,
         ActionTargetingController actionTargeting,
         PlayerMovementController playerMovement,
-        ContextMenuController contextMenuController) : base(fontService, elementPoolService, labelRenderer)
+        ContextMenuController contextMenuController,
+        FloatingTextController floatingTextController,
+        FloatingTextRenderer floatingTextRenderer) : base(fontService, elementPoolService, labelRenderer)
     {
         _mapView = mapView;
         _playerActionGate = playerActionGate;
@@ -198,6 +203,8 @@ public sealed class MapWindow : Window
         _contextMenuController = contextMenuController;
         _tintGrid = tintGrid;
         _backgroundCache = new MapBackgroundCache(mapView, mapViewState, _camera);
+        _floatingTextController = floatingTextController;
+        _floatingTextRenderer = floatingTextRenderer;
 
         // Terrain and structures are what MapWindow draws that a rare, explicit event can invalidate
         // rather than per-frame change -- see MapTileLayerCache. World.SetTerrain and
@@ -255,6 +262,7 @@ public sealed class MapWindow : Window
         base.Update(gameTime);
 
         _actionTargeting.Tick();
+        _floatingTextController.Update();
 
         if (_mapView.Bounds != _scrollLimitBounds)
         {
@@ -408,6 +416,8 @@ public sealed class MapWindow : Window
         {
             DrawSelectedTileHighlight(spriteBatch, unitRectangle);
         }
+
+        _floatingTextRenderer.Draw(spriteBatch, _mapViewState.CurrentMapLayer);
     }
 
     /// <summary>

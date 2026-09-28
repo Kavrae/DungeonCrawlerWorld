@@ -50,6 +50,7 @@ public sealed class MapCamera
     public Point CurrentScrollPosition => _currentScrollPosition;
     public Vector2 RenderPixelOffset => _renderPixelOffset;
     public bool FollowsPlayer => _cameraFollowsPlayer;
+    public ZoomLevel CurrentZoomLevel => _currentZoomLevel;
 
     /// <summary>The last map position the camera actively followed the player to -- MapWindow.Update compares against this every frame to notice player movement.</summary>
     public Vector3Int LastKnownPlayerPosition { get; set; }
@@ -65,6 +66,10 @@ public sealed class MapCamera
     /// <summary>The screen position of a tile's top-left corner, given its column/row within the visible viewport -- shared by every MapWindow draw method so _renderPixelOffset's smooth drag shift only ever needs applying in one place.</summary>
     public Vector2 TileOrigin(int columnIndex, int rowIndex) =>
         new Vector2(columnIndex * _currentTileSize.X, rowIndex * _currentTileSize.Y) - _renderPixelOffset;
+
+    /// <summary>The screen position of a point in map tile coordinates, where a whole number is a tile's top-left corner.</summary>
+    public Vector2 TileToScreen(Vector2 tilePosition) =>
+        new Vector2((tilePosition.X - _currentScrollPosition.X) * _currentTileSize.X, (tilePosition.Y - _currentScrollPosition.Y) * _currentTileSize.Y) - _renderPixelOffset;
 
     /// <summary>Centres the viewport on position, returning how much the scroll position actually moved.</summary>
     /// <remarks>

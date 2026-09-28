@@ -429,4 +429,56 @@ public sealed class ActionEffectResolverTests
 
         Assert.IsEmpty(staggered);
     }
+
+    [TestMethod]
+    public void Apply_DamagingAction_PublishesFloatingTextAboveTheTargetOnly()
+    {
+        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        health.Add(SourceEntityId, new SimpleHealthComponent(100, 100));
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
+        var floatingText = new TestFloatingText()
+            .Place(SourceEntityId, ProcessingTierLevel.Local)
+            .Place(BlockingTargetEntityId, ProcessingTierLevel.Local, TargetTile.X, TargetTile.Y);
+
+        TestActionEffects.Apply(Action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, floatingTextFeed: floatingText.Feed);
+
+        var published = floatingText.Published.Single();
+        Assert.AreEqual(BlockingTargetEntityId, published.EntityId);
+        Assert.AreEqual(FloatingTextKind.DamageTaken, published.Kind);
+    }
+
+    [TestMethod]
+    public void Apply_DodgeableActionOnADodgingTarget_PublishesDodgedAndNoDamage()
+    {
+        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
+        var dodgingEntities = new PackedComponentPool<DodgingComponent>(entityCapacity: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        dodgingEntities.Add(BlockingTargetEntityId, new DodgingComponent(expiresAtFrame: 30));
+        var floatingText = new TestFloatingText().Place(BlockingTargetEntityId, ProcessingTierLevel.Local, TargetTile.X, TargetTile.Y);
+
+        TestActionEffects.Apply(DodgeableAction, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, dodgingEntities: dodgingEntities, floatingTextFeed: floatingText.Feed);
+
+        Assert.AreEqual(100f, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
+        var published = floatingText.Published.Single();
+        Assert.AreEqual(FloatingTextKind.Dodged, published.Kind);
+        Assert.AreEqual(BlockingTargetEntityId, published.EntityId);
+    }
+
+    [TestMethod]
+    public void Apply_ShapeCoveringSeveralCellsOfOneTarget_ResolvesItOnce()
+    {
+        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
+        var secondTile = new Vector3Int(TargetTile.X + 1, TargetTile.Y, TargetTile.Z);
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        mapQuery.SetBlockingOccupant(secondTile, BlockingTargetEntityId);
+        health.Add(BlockingTargetEntityId, new SimpleHealthComponent(100, 100));
+        var floatingText = new TestFloatingText().Place(BlockingTargetEntityId, ProcessingTierLevel.Local, TargetTile.X, TargetTile.Y, width: 2);
+
+        TestActionEffects.Apply(Action, SourceEntityId, [TargetTile, secondTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0, floatingTextFeed: floatingText.Feed);
+
+        DamageAssert.HealthAfterDamage(startingHealth: 100, expectedNormalDamage: 15, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
+        Assert.HasCount(1, floatingText.Published);
+    }
 }

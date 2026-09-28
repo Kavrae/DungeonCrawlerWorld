@@ -41,6 +41,7 @@ public sealed class ContactDamageModule : IGameModule
     private EventBus _eventBus = null!;
     private IMapQuery _mapQuery = null!;
     private IPlayerQuery _playerQuery = null!;
+    private FloatingTextFeed _floatingTextFeed = null!;
     private FrameEventBuffer<EntityMovedEvent> _movedEntities = null!;
     private MathUtility _mathUtility = null!;
     private SimulationClock _simulationClock = null!;
@@ -56,6 +57,7 @@ public sealed class ContactDamageModule : IGameModule
         _simulationScope = context.SimulationScope;
         _mapQuery = context.MapQuery;
         _playerQuery = context.PlayerQuery;
+        _floatingTextFeed = context.FloatingTextFeed;
         _movedEntities = context.MovedEntities;
         _mathUtility = context.MathUtility;
     }
@@ -84,6 +86,7 @@ public sealed class ContactDamageModule : IGameModule
             statModifiers,
             deadEntities,
             bodyParts,
-            _simulationScope));
+            _simulationScope,
+            _floatingTextFeed));
     }
 }

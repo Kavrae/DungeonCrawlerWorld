@@ -46,7 +46,8 @@ internal static class TestActionEffects
         PackedComponentPool<DodgingComponent>? dodgingEntities = null,
         ProcessingTierQuery? processingTiers = null,
         BlueprintRegistry? creatures = null,
-        PackedComponentPool<ManaComponent>? mana = null) =>
+        PackedComponentPool<ManaComponent>? mana = null,
+        FloatingTextFeed? floatingTextFeed = null) =>
         ActionEffectResolver.Apply(action, sourceEntityId, targetTiles, mapQuery, health, eventBus, mathUtility, playerQuery ?? TestPlayerQuery.NoPlayer, statusEffectAppliers, componentManager, entityKeys, now,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
@@ -57,7 +58,8 @@ internal static class TestActionEffects
             bodyParts ?? EmptyPools.BodyParts(),
             dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
             processingTiers ?? EmptyPools.Tiers(),
-            creatures ?? new BlueprintRegistry());
+            creatures ?? new BlueprintRegistry(),
+            floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static ActionEffectContext Context(
         int SourceEntityId,
@@ -81,7 +83,8 @@ internal static class TestActionEffects
         EntityBodyParts? BodyParts = null,
         IPlayerQuery? PlayerQuery = null,
         float DurationScaleMultiplier = 1.0f,
-        byte ChainDepth = 0) =>
+        byte ChainDepth = 0,
+        FloatingTextFeed? FloatingTextFeed = null) =>
         new(SourceEntityId, TargetEntityId, Health, EventBus, MathUtility, ComponentManager, EntityKeys, ActivatorName, ActivatorTags, Now,
             StatModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             AbilityScores ?? EmptyPools.Packed<AbilityScoresComponent>(),
@@ -91,5 +94,5 @@ internal static class TestActionEffects
             AuraSources ?? EmptyPools.Multi<StatusEffectAuraSourceComponent>(),
             BodyParts ?? EmptyPools.BodyParts(),
             PlayerQuery ?? TestPlayerQuery.NoPlayer,
-            StatusEffectAppliers ?? new StatusEffectAuraApplierRegistry(), Definitions ?? new BlueprintRegistry(), DurationScaleMultiplier, ChainDepth);
+            StatusEffectAppliers ?? new StatusEffectAuraApplierRegistry(), Definitions ?? new BlueprintRegistry(), FloatingTextFeed ?? EmptyPools.FloatingTextFeed(), DurationScaleMultiplier, ChainDepth);
 }

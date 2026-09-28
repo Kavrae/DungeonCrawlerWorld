@@ -48,6 +48,7 @@ public sealed class InventoryModule : IGameModule
     private MathUtility _mathUtility = null!;
     private StatusEffectAuraApplierRegistry _statusEffectAppliers = null!;
     private IPlayerQuery _playerQuery = null!;
+    private FloatingTextFeed _floatingTextFeed = null!;
     private EntityKeys _entityKeys = null!;
 
     public void Configure(GameModuleContext context)
@@ -60,6 +61,7 @@ public sealed class InventoryModule : IGameModule
         _mathUtility = context.MathUtility;
         _statusEffectAppliers = context.StatusEffectAuraAppliers;
         _playerQuery = context.PlayerQuery;
+        _floatingTextFeed = context.FloatingTextFeed;
         _entityKeys = context.EntityKeys;
     }
 
@@ -118,6 +120,7 @@ public sealed class InventoryModule : IGameModule
             new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>()),
             _playerQuery,
             _statusEffectAppliers,
-            _creatures));
+            _creatures,
+            _floatingTextFeed));
     }
 }

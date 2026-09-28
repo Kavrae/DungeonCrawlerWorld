@@ -55,6 +55,7 @@ public sealed class ActionActivationSystem : ISystem
     private readonly PackedComponentPool<DodgingComponent> _dodgingEntities;
     private readonly ProcessingTierQuery _processingTiers;
     private readonly BlueprintRegistry _creatures;
+    private readonly FloatingTextFeed _floatingTextFeed;
     private readonly EntityStripeSet _stripeSet;
 
     public ActionActivationSystem(
@@ -81,7 +82,8 @@ public sealed class ActionActivationSystem : ISystem
         PackedComponentPool<MeleeDisabledComponent> meleeDisabled,
         PackedComponentPool<DodgingComponent> dodgingEntities,
         ProcessingTierQuery processingTiers,
-        BlueprintRegistry creatures)
+        BlueprintRegistry creatures,
+        FloatingTextFeed floatingTextFeed)
     {
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -107,6 +109,7 @@ public sealed class ActionActivationSystem : ISystem
         _dodgingEntities = dodgingEntities;
         _processingTiers = processingTiers;
         _creatures = creatures;
+        _floatingTextFeed = floatingTextFeed;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
     }
@@ -199,7 +202,7 @@ public sealed class ActionActivationSystem : ISystem
             return false;
         }
 
-        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _mana, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures);
+        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _mana, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures, _floatingTextFeed);
         ActionLockGate.Lock(_actionLocks, entityId, now, action.Activator.Timing.ActionLockFrames);
         return true;
     }
@@ -226,7 +229,7 @@ public sealed class ActionActivationSystem : ISystem
 
     private bool TryActivateFreeCast(int entityId, ActionDefinition action, Vector3Int[] targetTiles, long now)
     {
-        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _mana, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures);
+        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _mana, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures, _floatingTextFeed);
         return true;
     }
 

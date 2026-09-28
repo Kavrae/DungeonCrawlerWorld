@@ -94,6 +94,10 @@ public sealed record GameModuleContext(IMapQuery MapQuery, MathUtility MathUtili
     /// </summary>
     public SimulationScope SimulationScope { get; init; } = new();
 
+    /// <summary>Where anything that happens to an entity publishes the floating text shown above it.</summary>
+    /// <remarks>Always a real instance; GameBootstrapper wires it to the pools it reads once they exist. A module may keep it from Configure, but nothing may publish through it before it is wired.</remarks>
+    public FloatingTextFeed FloatingTextFeed { get; init; } = new();
+
     /// <summary>The stable key table every entity is issued into, created here so modules can hold it before the ECS exists.</summary>
     /// <remarks>GameBootstrapper hands this same instance to Bootstrapper.Build, which gives it to the EntityManager that issues and releases the keys.</remarks>
     public EntityKeys EntityKeys { get; init; } = new();

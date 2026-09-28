@@ -49,6 +49,7 @@ public sealed class PoisonModule : IGameModule
 
     private EventBus _eventBus = null!;
     private IPlayerQuery _playerQuery = null!;
+    private FloatingTextFeed _floatingTextFeed = null!;
     private EntityKeys _entityKeys = null!;
     private MathUtility _mathUtility = null!;
 
@@ -57,6 +58,7 @@ public sealed class PoisonModule : IGameModule
         _creatures = context.Definitions;
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
+        _floatingTextFeed = context.FloatingTextFeed;
         _entityKeys = context.EntityKeys;
         _mathUtility = context.MathUtility;
         context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(
@@ -82,6 +84,7 @@ public sealed class PoisonModule : IGameModule
             _mathUtility,
             statModifiers,
             bodyParts,
-            componentManager.GetPackedPool<DeadComponent>()));
+            componentManager.GetPackedPool<DeadComponent>(),
+            _floatingTextFeed));
     }
 }

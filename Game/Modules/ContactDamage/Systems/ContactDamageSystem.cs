@@ -43,6 +43,7 @@ public sealed class ContactDamageSystem : ISystem
     private readonly EventBus _eventBus;
     private readonly IMapQuery _mapQuery;
     private readonly IPlayerQuery _playerQuery;
+    private readonly FloatingTextFeed _floatingTextFeed;
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
     private readonly EntityBodyParts _bodyParts;
@@ -69,7 +70,8 @@ public sealed class ContactDamageSystem : ISystem
         MultiComponentPool<StatModifierComponent> statModifiers,
         PackedComponentPool<DeadComponent> deadEntities,
         EntityBodyParts bodyParts,
-        SimulationScope simulationScope)
+        SimulationScope simulationScope,
+        FloatingTextFeed floatingTextFeed)
     {
         _terrain = terrain;
         _exposures = exposures;
@@ -83,6 +85,7 @@ public sealed class ContactDamageSystem : ISystem
         _mathUtility = mathUtility;
         _bodyParts = bodyParts;
         _clock = simulationClock;
+        _floatingTextFeed = floatingTextFeed;
         _tick = Tick;
         _wheel = new PackedTimerWheel<ContactDamageExposureComponent>(exposures, simulationScope);
         simulationScope.EntityResumed += OnEntityResumed;
@@ -103,7 +106,7 @@ public sealed class ContactDamageSystem : ISystem
         if (_terrain.TryGetContactHazard(terrainTypeId, out var hazard))
         {
             var targetRule = new BodyPartTargetRule(hazard.PreferredTargetType, BodyPartFallback.Bottommost);
-            HealthDamage.Apply(_health, _eventBus, moved.EntityId, hazard.DamagePerTick, ActionSource.FromTerrain(terrainTypeId), _playerQuery, "Contact", now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, targetRule);
+            HealthDamage.Apply(_health, _eventBus, moved.EntityId, hazard.DamagePerTick, ActionSource.FromTerrain(terrainTypeId), _playerQuery, "Contact", now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, _floatingTextFeed, DamageCategory.Direct, targetRule);
 
             var nextTickFrame = FrameDeadline.AfterStaggered(now, hazard.TickIntervalFrames, moved.EntityId);
             if (_exposures.Has(moved.EntityId))
@@ -170,7 +173,7 @@ public sealed class ContactDamageSystem : ISystem
         }
 
         BodyPartTargetRule? targetRule = hazard.PreferredTargetType is { } type ? new BodyPartTargetRule(type, BodyPartFallback.Bottommost) : null;
-        HealthDamage.Apply(_health, _eventBus, entityId, hazard.DamagePerTick, ActionSource.FromTerrain(exposure.HazardTerrainTypeId), _playerQuery, "Contact", now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, targetRule);
+        HealthDamage.Apply(_health, _eventBus, entityId, hazard.DamagePerTick, ActionSource.FromTerrain(exposure.HazardTerrainTypeId), _playerQuery, "Contact", now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, _floatingTextFeed, DamageCategory.Direct, targetRule);
 
         _exposures.TryUpdate(entityId, hazard.TickIntervalFrames, static (ref ContactDamageExposureComponent e, ushort periodFrames) => e.RepeatEvery(periodFrames));
 

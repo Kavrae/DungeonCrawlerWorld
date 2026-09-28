@@ -30,6 +30,10 @@ public static class FontChrome
     /// <summary>Double MapTinyFontSize -- legible at a glance without competing with the main glyph. See MapWindow's own up/down layer-occupancy badges.</summary>
     public static int MapBadgeFontSize = MapTinyFontSize * 2;
 
+    /// <summary>Floating text over the map at Team zoom, and the smaller size used at Neighborhood zoom; Borough zoom draws none.</summary>
+    public static int FloatingTextFontSize = 20;
+    public static int FloatingTextNeighborhoodFontSize = 12;
+
     /// <summary>Icon-sized elements' own glyph font, as a fraction of their icon size -- shared by ItemIconElement and EntityIconElement, which are deliberately kept visually consistent siblings (see either's own doc comment).</summary>
     public static float IconGlyphFontFraction = 0.8f;
 

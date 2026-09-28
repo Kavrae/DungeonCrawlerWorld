@@ -75,6 +75,7 @@ public sealed class DelayedActionSystem : ISystem
     private readonly PackedComponentPool<DodgingComponent> _dodgingEntities;
     private readonly ProcessingTierQuery _processingTiers;
     private readonly BlueprintRegistry _creatures;
+    private readonly FloatingTextFeed _floatingTextFeed;
     private readonly PackedTimerWheel<PendingDelayedActionComponent> _wheel;
 
     // Cached once instead of passing the method group every Update -- an instance method group
@@ -104,7 +105,8 @@ public sealed class DelayedActionSystem : ISystem
         ProcessingTierQuery processingTiers,
         SimulationScope simulationScope,
         ProcessingTierEvents processingTierEvents,
-        BlueprintRegistry creatures)
+        BlueprintRegistry creatures,
+        FloatingTextFeed floatingTextFeed)
     {
         _pendingActions = pendingActions;
         _actions = actions;
@@ -127,6 +129,7 @@ public sealed class DelayedActionSystem : ISystem
         _dodgingEntities = dodgingEntities;
         _processingTiers = processingTiers;
         _creatures = creatures;
+        _floatingTextFeed = floatingTextFeed;
         _resolve = Resolve;
         _wheel = new PackedTimerWheel<PendingDelayedActionComponent>(pendingActions, simulationScope);
 
@@ -147,7 +150,7 @@ public sealed class DelayedActionSystem : ISystem
 
         if (_actions.TryGetEffectiveAction(entityId, pending.ActionId, out var action))
         {
-            ActionEffectResolver.Apply(action, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _mana, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures);
+            ActionEffectResolver.Apply(action, entityId, pending.TargetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _mana, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures, _floatingTextFeed);
         }
 
         return true;

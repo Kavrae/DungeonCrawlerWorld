@@ -163,6 +163,7 @@ public static class GameBootstrapper
         // what the tiers mean stays here.
         ecsContext.SystemManager.SimulatedTierCount = ProcessingTierDivisors.SimulatedTierCount;
         WireSimulationScope(context, ecsContext);
+        context.FloatingTextFeed.Wire(ecsContext.EventBus, ecsContext.ComponentManager.GetDirectPool<ProcessingTierComponent>(), ecsContext.ComponentManager.GetDirectPool<TransformComponent>());
 
         // The clock modules were configured against (and captured) becomes the one SystemManager
         // advances, so every deadline reader sees the same "now". Presentation reaches it as

@@ -40,6 +40,7 @@ public sealed class BodyPartBurningSystem : ISystem
     private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
     private readonly EventBus _eventBus;
     private readonly IPlayerQuery _playerQuery;
+    private readonly FloatingTextFeed _floatingTextFeed;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
     private readonly MultiTimerWheel<BodyPartBurningTimerComponent> _wheel;
 
@@ -54,7 +55,8 @@ public sealed class BodyPartBurningSystem : ISystem
         EventBus eventBus,
         IPlayerQuery playerQuery,
         MultiComponentPool<StatModifierComponent> statModifiers,
-        PackedComponentPool<DeadComponent> deadEntities)
+        PackedComponentPool<DeadComponent> deadEntities,
+        FloatingTextFeed floatingTextFeed)
     {
         _timers = timers;
         _bodyParts = bodyParts;
@@ -63,6 +65,7 @@ public sealed class BodyPartBurningSystem : ISystem
         _eventBus = eventBus;
         _playerQuery = playerQuery;
         _deadEntities = deadEntities;
+        _floatingTextFeed = floatingTextFeed;
         _tick = Tick;
         _wheel = new MultiTimerWheel<BodyPartBurningTimerComponent>(timers, SimulationScope.Unscoped);
     }
@@ -86,6 +89,7 @@ public sealed class BodyPartBurningSystem : ISystem
                 StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.IncomingDamage, stackCount, BurningDamageTags),
                 0,
                 ushort.MaxValue);
+            var wasDead = _deadEntities.Has(entityId);
 
             BodyPartDamageEffects.ApplyToPart(_bodyParts, entityId, timer.PartId, _statModifiers, effectiveAmount, now);
             // Refreshed unconditionally, not only when ApplyToPart's own 0-only lockout fires --
@@ -95,6 +99,11 @@ public sealed class BodyPartBurningSystem : ISystem
             // currently burning" exclusion stops applying the instant the last stack ticks off.
             BodyPartDamageEffects.ResetRegenLockout(_bodyParts, entityId, timer.PartId, now);
             BodyPartDamageEffects.PublishDamageEvents(_health, _bodyParts, _eventBus, entityId, timer.PartId, effectiveAmount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers, _deadEntities);
+
+            if (!wasDead)
+            {
+                HealthDamage.PublishDamageTaken(_floatingTextFeed, entityId, effectiveAmount, DamageCategory.StatusEffect);
+            }
         }
 
         var remainingStacks = (byte)(stackCount - 1);

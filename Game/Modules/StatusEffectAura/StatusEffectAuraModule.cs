@@ -48,6 +48,7 @@ public sealed class StatusEffectAuraModule : IGameModule
     private ProcessingTierEvents _processingTierEvents = null!;
     private SimulationClock _simulationClock = null!;
     private SimulationScope _simulationScope = null!;
+    private FloatingTextFeed _floatingTextFeed = null!;
     private Terrain.TerrainRegistry _terrain = null!;
 
     public void Configure(GameModuleContext context)
@@ -59,6 +60,7 @@ public sealed class StatusEffectAuraModule : IGameModule
         _processingTierEvents = context.ProcessingTierEvents;
         _simulationClock = context.SimulationClock;
         _simulationScope = context.SimulationScope;
+        _floatingTextFeed = context.FloatingTextFeed;
         _terrain = context.Terrain;
     }
 
@@ -87,7 +89,8 @@ public sealed class StatusEffectAuraModule : IGameModule
             _simulationClock,
             _terrain,
             deadEntities,
-            _simulationScope));
+            _simulationScope,
+            _floatingTextFeed));
 
         systemManager.Register(new AuraSourceExpirySystem(
             componentManager.GetPackedPool<AuraSourceExpiryComponent>(),

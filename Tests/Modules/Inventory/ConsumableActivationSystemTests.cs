@@ -198,6 +198,23 @@ public sealed class ConsumableActivationSystemTests
         Assert.AreEqual(70, HealthOf(componentManager, TargetEntityId));
     }
 
+    [TestMethod]
+    public void Potion_TargetTilesCoveringSeveralCellsOfOneTarget_HealsItOnce()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        var secondTile = new Vector3Int(TargetTile.X + 1, TargetTile.Y, TargetTile.Z);
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        mapQuery.SetOccupant(secondTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
+        componentManager.Merge(CasterEntityId, new PendingConsumableActivationComponent(stackInstanceId, [TargetTile, secondTile]));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(70, HealthOf(componentManager, TargetEntityId));
+    }
+
     /// <summary>A Complex target (a body plan, no SimpleHealthComponent) must not be rejected by ApplyPotionToTarget's presence gate -- proves ConsumableActivationSystem actually lands the effect instead of silently no-oping.</summary>
     [TestMethod]
     public void Potion_ComplexTargetWithBodyPartsAndNoSimpleHealth_HealsByHealFractionOfItsOwnMaxHealth()

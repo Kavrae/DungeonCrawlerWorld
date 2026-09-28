@@ -107,6 +107,7 @@ public sealed class StatusEffectAuraSystem : ISystem
     private readonly SimulationClock _clock;
     private readonly TerrainRegistry _terrain;
     private readonly SimulationScope _simulationScope;
+    private readonly FloatingTextFeed _floatingTextFeed;
 
     /// <summary>
     /// Each exposure type's re-grant tick, keyed by EffectType (see
@@ -153,9 +154,11 @@ public sealed class StatusEffectAuraSystem : ISystem
         SimulationClock simulationClock,
         TerrainRegistry terrain,
         PackedComponentPool<DeadComponent> deadEntities,
-        SimulationScope simulationScope)
+        SimulationScope simulationScope,
+        FloatingTextFeed floatingTextFeed)
     {
         _terrain = terrain;
+        _floatingTextFeed = floatingTextFeed;
         _componentManager = componentManager;
         _exposures = exposures;
         _sources = sources;
@@ -579,6 +582,11 @@ public sealed class StatusEffectAuraSystem : ISystem
         for (var i = 0; i < stacksToGrant; i++)
         {
             applier.ApplyStack(_componentManager, entityId, ActionSource.Admin, _now);
+        }
+
+        if (stacksToGrant > 0)
+        {
+            StatusEffectGrantFloatingText.Publish(_floatingTextFeed, _componentManager, applier, entityId, currentStackCount);
         }
 
         return true;

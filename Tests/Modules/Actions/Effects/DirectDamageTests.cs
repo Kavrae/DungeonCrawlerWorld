@@ -170,4 +170,29 @@ public sealed class DirectDamageTests
 
         Assert.AreEqual(80f, componentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "A non-melee action's damage must be untouched by a Tag.Melee-conditional modifier -- full 20 damage.");
     }
+
+    private sealed class AlwaysCritRandom : Random
+    {
+        public override double NextDouble() => 0.0;
+    }
+
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void Apply_FloatingTextCarriesWhetherTheHitWasCritical(bool isCritical)
+    {
+        var (_, context) = Build([]);
+        var floatingText = new TestFloatingText().Place(TargetEntityId, Game.Modules.ProcessingTier.Components.ProcessingTierLevel.Local);
+        context = context with
+        {
+            MathUtility = isCritical ? new MathUtility(new AlwaysCritRandom()) : context.MathUtility,
+            FloatingTextFeed = floatingText.Feed,
+        };
+
+        new DirectDamage(MinFlatDamage: 10, MaxFlatDamage: 10).Apply(context);
+
+        var published = floatingText.Published.Single();
+        Assert.AreEqual(isCritical ? FloatingTextFlags.Critical : FloatingTextFlags.None, published.Flags);
+        Assert.AreEqual(isCritical ? 10 * CritMath.BaseCritMultiplier : 10, published.Amount, 0.001f);
+    }
 }

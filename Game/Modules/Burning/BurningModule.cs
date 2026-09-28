@@ -39,6 +39,7 @@ public sealed class BurningModule : IGameModule
 
     private EventBus _eventBus = null!;
     private IPlayerQuery _playerQuery = null!;
+    private FloatingTextFeed _floatingTextFeed = null!;
     private MathUtility _mathUtility = null!;
 
     public void Configure(GameModuleContext context)
@@ -46,6 +47,7 @@ public sealed class BurningModule : IGameModule
         _creatures = context.Definitions;
         _eventBus = context.EventBus;
         _playerQuery = context.PlayerQuery;
+        _floatingTextFeed = context.FloatingTextFeed;
         _mathUtility = context.MathUtility;
         context.StatusEffectAuraAppliers.Register(new BurningAuraApplier(_mathUtility, context.Terrain, context.Definitions, _eventBus, _playerQuery));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph,
@@ -76,7 +78,8 @@ public sealed class BurningModule : IGameModule
             _mathUtility,
             statModifiers,
             bodyParts,
-            deadEntities));
+            deadEntities,
+            _floatingTextFeed));
 
         systemManager.Register(new BodyPartBurningSystem(
             componentManager.GetMultiPool<BodyPartBurningTimerComponent>(),
@@ -85,6 +88,7 @@ public sealed class BurningModule : IGameModule
             _eventBus,
             _playerQuery,
             statModifiers,
-            deadEntities));
+            deadEntities,
+            _floatingTextFeed));
     }
 }

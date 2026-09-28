@@ -44,6 +44,7 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
     private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores;
     private readonly EventBus _eventBus;
     private readonly IPlayerQuery _playerQuery;
+    private readonly FloatingTextFeed _floatingTextFeed;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
     public ComplexHealthRegenSystem(
@@ -56,7 +57,8 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
         PackedComponentPool<DeadComponent> deadEntities,
         PackedComponentPool<AbilityScoresComponent> abilityScores,
         EventBus eventBus,
-        IPlayerQuery playerQuery)
+        IPlayerQuery playerQuery,
+        FloatingTextFeed floatingTextFeed)
     {
         _bodyParts = bodyParts;
         _health = health;
@@ -65,6 +67,7 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
         _abilityScores = abilityScores;
         _eventBus = eventBus;
         _playerQuery = playerQuery;
+        _floatingTextFeed = floatingTextFeed;
 
         // Driven by the state pool, not by "has a body plan": an entity nothing has happened to
         // has every part at full health, so there is nothing for a regen tick to do.
@@ -118,6 +121,6 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
             return;
         }
 
-        HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, eventBus: _eventBus, playerQuery: _playerQuery, healType: "Regeneration");
+        HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, eventBus: _eventBus, playerQuery: _playerQuery, floatingTextFeed: _floatingTextFeed, healCategory: HealCategory.Regeneration, healType: "Regeneration");
     }
 }

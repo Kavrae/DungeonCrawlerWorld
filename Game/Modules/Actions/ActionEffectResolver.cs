@@ -23,7 +23,8 @@ namespace Game.Modules.Actions;
 /// DelayedActionSystem (a Delayed action's windup completing) -- publishes ActionActivatedEvent,
 /// builds the source-fixed half of an ActionEffectContext (ActivatorTags: action.Tags, for
 /// DirectDamage's ability-score bonus), walks target tiles via IMapQuery.GetOccupantEntityIdsAt,
-/// and calls ActionEffectSequence.Apply(action.Effects, ...) once per resolved target. Contains
+/// and calls ActionEffectSequence.Apply(action.Effects, ...) once per resolved target -- once per
+/// activation even for a multi-tile target the shape covers several cells of. Contains
 /// no per-effect-kind knowledge at all -- what an action's effects actually do lives entirely on
 /// the ActionEffect/IActionEffectEntry types themselves. Takes the already-resolved action
 /// (ActionInstanceQueries.TryResolveEffectiveAction, not a raw ActionCatalog lookup) so a
@@ -61,7 +62,8 @@ public static class ActionEffectResolver
         EntityBodyParts bodyParts,
         PackedComponentPool<DodgingComponent> dodgingEntities,
         ProcessingTierQuery processingTiers,
-        BlueprintRegistry creatures)
+        BlueprintRegistry creatures,
+        FloatingTextFeed floatingTextFeed)
     {
         eventBus.Publish(new ActionActivatedEvent(sourceEntityId, action.Id));
 
@@ -85,10 +87,13 @@ public static class ActionEffectResolver
             AuraSources: auraSources,
             BodyParts: bodyParts,
             PlayerQuery: playerQuery,
-            Definitions: creatures);
+            Definitions: creatures,
+            FloatingTextFeed: floatingTextFeed);
 
         var isDodgeable = action.Tags.Contains(Tag.Dodgeable);
         var isStaggering = action.Tags.Contains(Tag.Staggering);
+
+        HashSet<int>? resolvedTargetIds = targetTiles.Count > 1 ? [] : null;
 
         foreach (var tile in targetTiles)
         {
@@ -99,8 +104,14 @@ public static class ActionEffectResolver
                     continue;
                 }
 
+                if (resolvedTargetIds is not null && !resolvedTargetIds.Add(targetEntityId))
+                {
+                    continue;
+                }
+
                 if (isDodgeable && dodgingEntities.Has(targetEntityId))
                 {
+                    floatingTextFeed.Publish(targetEntityId, FloatingTextKind.Dodged, 0);
                     continue;
                 }
 

@@ -64,6 +64,7 @@ public sealed class ActionsModule : IGameModule
     private EventBus _eventBus = null!;
     private MathUtility _mathUtility = null!;
     private IPlayerQuery _playerQuery = null!;
+    private FloatingTextFeed _floatingTextFeed = null!;
     private StatusEffectAuraApplierRegistry _statusEffectAppliers = null!;
     private ProcessingTierEvents _processingTierEvents = null!;
     private SimulationScope _simulationScope = null!;
@@ -78,6 +79,7 @@ public sealed class ActionsModule : IGameModule
         _eventBus = context.EventBus;
         _mathUtility = context.MathUtility;
         _playerQuery = context.PlayerQuery;
+        _floatingTextFeed = context.FloatingTextFeed;
         _statusEffectAppliers = context.StatusEffectAuraAppliers;
         _processingTierEvents = context.ProcessingTierEvents;
         _simulationScope = context.SimulationScope;
@@ -154,7 +156,8 @@ public sealed class ActionsModule : IGameModule
             processingTiers,
             _simulationScope,
             _processingTierEvents,
-            _creatures));
+            _creatures,
+            _floatingTextFeed));
 
         systemManager.Register(new ActionActivationSystem(
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
@@ -180,7 +183,8 @@ public sealed class ActionsModule : IGameModule
             meleeDisabled,
             dodgingEntities,
             processingTiers,
-            _creatures));
+            _creatures,
+            _floatingTextFeed));
     }
 
     /// <summary>A staggered entity loses its windup, and with it the time the windup already cost: the lock it set is kept.</summary>

@@ -15,16 +15,7 @@ public static class StatusEffectImmunity
     /// </summary>
     public static bool IsImmune(ComponentManager componentManager, int entityId, StatusEffectType effectType, ActionSource source, EventBus eventBus, IPlayerQuery playerQuery)
     {
-        var immunities = componentManager.GetMultiPool<StatusEffectImmunityComponent>();
-        var immune = false;
-        for (var denseIndex = immunities.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = immunities.GetNextDenseIndex(denseIndex))
-        {
-            if (immunities.GetReadonlyByDenseIndex(denseIndex).EffectType == effectType)
-            {
-                immune = true;
-                break;
-            }
-        }
+        var immune = HasImmunity(componentManager, entityId, effectType);
 
         if (immune)
         {
@@ -32,6 +23,21 @@ public static class StatusEffectImmunity
         }
 
         return immune;
+    }
+
+    /// <summary>Whether entityId is currently immune to effectType, without reporting a blocked grant.</summary>
+    public static bool HasImmunity(ComponentManager componentManager, int entityId, StatusEffectType effectType)
+    {
+        var immunities = componentManager.GetMultiPool<StatusEffectImmunityComponent>();
+        for (var denseIndex = immunities.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = immunities.GetNextDenseIndex(denseIndex))
+        {
+            if (immunities.GetReadonlyByDenseIndex(denseIndex).EffectType == effectType)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void PublishBlockedEvent(EventBus eventBus, IPlayerQuery playerQuery, int entityId, StatusEffectType effectType, ActionSource source)

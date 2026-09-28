@@ -40,10 +40,15 @@ public static class HealthDamage
         EntityBodyParts bodyParts,
         MathUtility? mathUtility,
         PackedComponentPool<DeadComponent> deadEntities,
+        FloatingTextFeed floatingTextFeed,
+        DamageCategory damageCategory,
         BodyPartTargetRule? targetRule = null,
         IReadOnlyList<Tag>? damageTags = null,
-        BodyPartTargetMode targetMode = BodyPartTargetMode.SingleTarget)
+        BodyPartTargetMode targetMode = BodyPartTargetMode.SingleTarget,
+        bool isCritical = false)
     {
+        var wasDead = deadEntities.Has(entityId);
+
         if (!health.TryGetReadonly(entityId, out var beforeHealth))
         {
             if (bodyParts.Has(entityId))
@@ -53,13 +58,13 @@ public static class HealthDamage
                     throw new InvalidOperationException($"{nameof(HealthDamage)}.{nameof(Apply)} requires {nameof(mathUtility)} to be set for a Complex-health entity (entityId {entityId}).");
                 }
 
-                if (targetMode == BodyPartTargetMode.All)
+                var complexEffectiveAmount = targetMode == BodyPartTargetMode.All
+                    ? ComplexHealthDamage.ApplyToAllParts(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, deadEntities, now, damageTags)
+                    : ComplexHealthDamage.Apply(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, mathUtility, deadEntities, now, targetRule, damageTags, targetMode);
+
+                if (!wasDead)
                 {
-                    ComplexHealthDamage.ApplyToAllParts(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, deadEntities, now, damageTags);
-                }
-                else
-                {
-                    ComplexHealthDamage.Apply(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, mathUtility, deadEntities, now, targetRule, damageTags, targetMode);
+                    PublishDamageTaken(floatingTextFeed, entityId, complexEffectiveAmount, damageCategory, isCritical);
                 }
             }
 
@@ -100,6 +105,11 @@ public static class HealthDamage
             eventBus.Publish(new EntityDiedEvent(entityId, source));
         }
 
+        if (!wasDead)
+        {
+            PublishDamageTaken(floatingTextFeed, entityId, effectiveAmount, damageCategory, isCritical);
+        }
+
         var playerInvolved = entityId == playerQuery.PlayerEntityId
             || source.IsEntity(playerQuery.PlayerEntityKey);
         if (!playerInvolved)
@@ -113,5 +123,18 @@ public static class HealthDamage
         // nothing reading this event needs.
         var effectiveMaximumHealthForEvent = MathUtility.ClampUShort(StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, updatedHealth.MaximumHealth), 0, ushort.MaxValue);
         eventBus.Publish(new EntityDamagedEvent(entityId, effectiveAmount, source, (ushort)updatedHealth.CurrentHealth, effectiveMaximumHealthForEvent, damageType));
+    }
+
+    /// <summary>Publishes the floating text for damage entityId has just taken.</summary>
+    /// <remarks>For a damage source that applies damage to a body part itself rather than through Apply (BodyPartBurningSystem). Damage fully absorbed by modifiers shows nothing.</remarks>
+    public static void PublishDamageTaken(FloatingTextFeed floatingTextFeed, int entityId, ushort effectiveAmount, DamageCategory damageCategory, bool isCritical = false)
+    {
+        if (effectiveAmount == 0)
+        {
+            return;
+        }
+
+        var kind = damageCategory == DamageCategory.StatusEffect ? FloatingTextKind.StatusEffectDamageTaken : FloatingTextKind.DamageTaken;
+        floatingTextFeed.Publish(entityId, kind, effectiveAmount, flags: isCritical ? FloatingTextFlags.Critical : FloatingTextFlags.None);
     }
 }
