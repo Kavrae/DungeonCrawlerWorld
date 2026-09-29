@@ -2,7 +2,6 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Game.Modules;
-using Game.Modules.Actions.Activators;
 using Game.Modules.Core.Components;
 using Game.Modules.Currency.Components;
 using Game.Modules.Inventory;
@@ -49,6 +48,7 @@ public sealed class InventoryGridContent(
     Action<int, uint> onItemSelected,
     Action<int, uint> onCompareRequested,
     Action<int, uint> onActivateRequested,
+    Action<int> onOpenLootboxesRequested,
     // "CurrentFrame" for the shared action lock, which is a deadline (see ActionLockGate) -- only read by
     // IsPlayerActionLocked below.
     SimulationClock simulationClock,
@@ -507,19 +507,10 @@ public sealed class InventoryGridContent(
             return;
         }
 
-        var summary = definition.Summary;
-        if (definition.Activator is { } activator)
-        {
-            summary = $"{summary}\nTarget: {activator.Targeting.Shape}";
-
-            // Charges only makes sense for one specific physical stack -- a merged cell could be
-            // averaging over several different charge counts, so it's suppressed there entirely
-            // rather than showing a misleading single number.
-            if (isSingleStack && activator is WandActivator wandActivator)
-            {
-                summary += $"\nCharges: {wandActivator.Charges}/{wandActivator.MaxCharges}";
-            }
-        }
+        // Charges only makes sense for one specific physical stack -- a merged cell could be
+        // averaging over several different charge counts, so it's suppressed there entirely
+        // rather than showing a misleading single number.
+        var summary = ItemHoverSummary.For(definition, showCharges: isSingleStack);
 
         var rows = ComputeHoverRows(definition, stackQuantity);
 
@@ -710,6 +701,12 @@ public sealed class InventoryGridContent(
     /// </summary>
     private void OnCellDoubleClicked(Element element)
     {
+        if (element is InventoryItemStackCell lootboxCell && IsPlayerLootbox(lootboxCell))
+        {
+            onOpenLootboxesRequested(world.PlayerEntityId);
+            return;
+        }
+
         if (element is InventoryItemStackCell { StackInstanceId: { } stackInstanceId } cell)
         {
             TryActivate(cell.EntityId, stackInstanceId);
@@ -737,6 +734,12 @@ public sealed class InventoryGridContent(
         InventoryQueries.TryFindByStackInstanceId(_stacks, world.PlayerEntityId, stackInstanceId, out var stack) &&
         InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) &&
         item.Activator is not null;
+
+    /// <summary>A loot box in the player's own inventory: activating it opens every loot box the player holds, with no target to arm and no action lock to wait for.</summary>
+    private bool IsPlayerLootbox(InventoryItemStackCell cell) =>
+        cell.EntityId == world.PlayerEntityId &&
+        itemCatalog.TryGet(cell.ItemDefinitionId, out var definition) &&
+        definition.Tags.Contains(Tag.Lootbox);
 
     /// <summary>Mirrors MapWindow's own "Inspect" context-menu option, the existing precedent for gating a UI action on the shared per-entity action lock (ActionLockGate.IsBlocked).</summary>
     private bool IsPlayerActionLocked() => ActionLockGate.IsBlocked(_actionLockPool, world.PlayerEntityId, simulationClock.CurrentFrame);
@@ -766,6 +769,12 @@ public sealed class InventoryGridContent(
     {
         List<ContextMenuOption> options = [];
 
+        if (IsPlayerLootbox(cell))
+        {
+            options.Add(new ContextMenuOption("Open All", null, Enabled: true, () => onOpenLootboxesRequested(world.PlayerEntityId)));
+            return options;
+        }
+
         if (cell.StackInstanceId is not { } stackInstanceId)
         {
             return options;
@@ -783,6 +792,11 @@ public sealed class InventoryGridContent(
         // it) means Give/Take must not even be offered, closing the same currency-drain-style
         // exploit a naive reuse of plain Give/Take would otherwise open.
         var isShopIneligible = mapViewState.OpenShopEntityId is not null && !cell.ShopTradeEligible;
+
+        if (!cell.CanTrade)
+        {
+            return options;
+        }
 
         // "Add to trade" -- gated on CanStageInTrade (tag match only, see its own doc comment), not
         // the stricter isShopIneligible (tag match AND affordability) Sell All/Buy All below use --
@@ -804,7 +818,7 @@ public sealed class InventoryGridContent(
             if (tradeTargetEntityId is { } tradeTarget)
             {
                 options.Add(new ContextMenuOption("Add to trade", null, Enabled: true, () =>
-                    InventoryActions.TryTransferStack(componentManager, cell.EntityId, tradeTarget, stackInstanceId, world)));
+                    InventoryActions.TryTransferStack(componentManager, itemCatalog, cell.EntityId, tradeTarget, stackInstanceId, world)));
             }
         }
 
@@ -828,7 +842,7 @@ public sealed class InventoryGridContent(
                     }
                     else
                     {
-                        InventoryActions.TryTransferStack(componentManager, cell.EntityId, secondaryTargetEntityId, stackInstanceId, world);
+                        InventoryActions.TryTransferStack(componentManager, itemCatalog, cell.EntityId, secondaryTargetEntityId, stackInstanceId, world);
                     }
                 }));
             }
@@ -842,7 +856,7 @@ public sealed class InventoryGridContent(
                     }
                     else
                     {
-                        InventoryActions.TryTransferStack(componentManager, cell.EntityId, world.PlayerEntityId, stackInstanceId, world);
+                        InventoryActions.TryTransferStack(componentManager, itemCatalog, cell.EntityId, world.PlayerEntityId, stackInstanceId, world);
                     }
                 }));
             }
@@ -869,7 +883,7 @@ public sealed class InventoryGridContent(
         var realOwnerEntityId = isTradeShopSide ? mapViewState.OpenShopEntityId : world.PlayerEntityId;
         if (realOwnerEntityId is { } destination)
         {
-            InventoryActions.TryTransferStack(componentManager, cell.EntityId, destination, stackInstanceId, world);
+            InventoryActions.TryTransferStack(componentManager, itemCatalog, cell.EntityId, destination, stackInstanceId, world);
         }
     }
 
@@ -974,7 +988,7 @@ public sealed class InventoryGridContent(
                     ? elementPoolService.CreateElement<ShopItemStackCell>(_hostWindow, options)
                     : elementPoolService.CreateElement<InventoryItemStackCell>(_hostWindow, options);
 
-            cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Quantity, entry.IsDisabled, entry.IsDivergent, entry.MergedStackBadgeVisible, cellSize);
+            cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Definition.SpriteTint, entry.Quantity, entry.IsDisabled, entry.IsDivergent, entry.MergedStackBadgeVisible, entry.Definition.CanTrade, ItemHotkeyBindingQueries.CanBind(entry.Definition), cellSize);
 
             if (cell is ShopItemStackCell shopCell)
             {

@@ -1,4 +1,5 @@
 using Game.Modules.AbilityScores;
+using Game.Modules.Lootboxes;
 
 namespace Game.Modules.Achievements.Definitions;
 
@@ -17,7 +18,7 @@ public sealed class KillerQueenAchievement : IAchievementDefinition
     public string Description => "Your base charisma is now over 100. You're like Freddy Mercury, but with battle scars.";
 
     /// <summary>Intended reward: 3 upgrade choices (see TODO.md's Achievement content backlog) -- the ability-score upgrade-choice system doesn't exist yet, so there's nothing to grant beyond the notification itself.</summary>
-    public Lootbox? Lootbox => null;
+    public LootboxReward? Lootbox => null;
 
     public string RewardText => "You've received an upgrade!";
 

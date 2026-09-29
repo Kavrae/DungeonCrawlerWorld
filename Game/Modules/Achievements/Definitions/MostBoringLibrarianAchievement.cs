@@ -1,3 +1,4 @@
+using Game.Modules.Lootboxes;
 using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
@@ -19,7 +20,7 @@ public sealed class MostBoringLibrarianAchievement : IAchievementDefinition
         "history is so boring that it has me pondering the metaphysical ramifications of sleep " +
         "on an artificial intelligence!";
 
-    public Lootbox? Lootbox => null;
+    public LootboxReward? Lootbox => null;
 
     public string RewardText =>
         "I'm just gonna go ahead and give you the spell. Now you can stop carrying around all " +

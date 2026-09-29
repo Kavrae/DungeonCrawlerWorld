@@ -2,6 +2,7 @@ using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
 using Game.Modules.Health;
+using Game.Modules.Lootboxes;
 
 namespace Game.Blueprints;
 
@@ -54,6 +55,10 @@ public sealed record BlueprintDefinition(Guid Id, string Name)
 
     /// <summary>The footprint an entity of it spawns with when the spawn names none.</summary>
     public Vector2Byte? Size { get; init; }
+
+    /// <summary>The loot box the player is granted for landing the killing blow on an entity built with this definition, or null for none -- see BossLootboxAwarder.</summary>
+    /// <remarks>Declared rather than built, so an entity that died before it was ever built past a skeleton still pays out.</remarks>
+    public LootboxReward? Lootbox { get; init; }
 }
 
 /// <summary>What makes a definition a race: the body plan every creature of it shares.</summary>

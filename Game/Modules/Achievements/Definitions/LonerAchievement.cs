@@ -1,4 +1,5 @@
-﻿using Game.World;
+﻿using Game.Modules.Lootboxes;
+using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
 
@@ -14,7 +15,7 @@ public sealed class LonerAchievement : IAchievementDefinition
 
     public string Description => "You entered the dungeon without any human companions. Didn't anyone teach you there is safety in numbers?";
 
-    public Lootbox? Lootbox => null;
+    public LootboxReward? Lootbox => null;
 
     public string RewardText => "None! Haha. You are so dead.";
 

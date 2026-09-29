@@ -1,4 +1,5 @@
-﻿using Game.World;
+﻿using Game.Modules.Lootboxes;
+using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
 
@@ -14,7 +15,7 @@ public sealed class EmptyPocketsAchievement : IAchievementDefinition
 
     public string Description => "You didn't bring any supplies. None. You know you still gotta eat, right?";
 
-    public Lootbox? Lootbox => new(LootboxRarity.Bronze, "Adventurer");
+    public LootboxReward? Lootbox => new(LootboxTypes.Adventurer.Id, LootboxRarity.Bronze);
 
     public string RewardText => "";
 

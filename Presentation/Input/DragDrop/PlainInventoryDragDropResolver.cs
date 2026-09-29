@@ -11,17 +11,17 @@ namespace Presentation.Input.DragDrop;
 /// feature-specific resolver (Trade, Shop) has already declined the drag. Not itself a "feature"
 /// opting in, unlike ShopDragDropResolver/TradeDragDropResolver.
 /// </summary>
-internal sealed class PlainInventoryDragDropResolver(IPlayerQuery playerQuery, EventBus eventBus) : IDragDropResolver
+internal sealed class PlainInventoryDragDropResolver(ItemCatalog itemCatalog, IPlayerQuery playerQuery, EventBus eventBus) : IDragDropResolver
 {
     public bool TryResolve(in DragDropContext context)
     {
         if (context.ItemStackInstanceId is { } stackInstanceId)
         {
-            InventoryActions.TryTransferStack(context.ComponentManager, context.OriginEntityId, context.DestinationEntityId, stackInstanceId, playerQuery);
+            InventoryActions.TryTransferStack(context.ComponentManager, itemCatalog, context.OriginEntityId, context.DestinationEntityId, stackInstanceId, playerQuery);
         }
         else if (context.MergedItemDefinitionId is { } itemDefinitionId)
         {
-            InventoryActions.TryTransferAllStacksOfItem(context.ComponentManager, context.OriginEntityId, context.DestinationEntityId, itemDefinitionId, playerQuery);
+            InventoryActions.TryTransferAllStacksOfItem(context.ComponentManager, itemCatalog, context.OriginEntityId, context.DestinationEntityId, itemDefinitionId, playerQuery);
         }
         else if (context.CurrencyType is { } currencyType)
         {

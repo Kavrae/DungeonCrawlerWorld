@@ -16,6 +16,9 @@ namespace Game.Modules.Inventory;
 /// <param name="Activator">The optional activator type for the item that determines how the effects are activated, if any.</param>
 /// <param name="GoldValue">The item's base worth in Gold -- what a shop's buy/sell price is computed from (see Game/Modules/Shops/ShopActions.cs), and shown in the item details window. Not itself a price; a shop applies its own buy/sell multiplier on top.</param>
 /// <param name="MaximumShopStock">The stock level at which a shop's overstock price curve bottoms out (see Game/Modules/Shops/ShopStockPricing.cs). Null falls back to ShopStockPricing.DefaultMaximumShopStock (999), which covers most items -- only a handful of rare/heavy items need a lower override.</param>
+/// <param name="Contents">What the item grants when it's opened; null for an item that isn't opened.</param>
+/// <param name="CanTrade">False for an item that never leaves its owner's inventory: it can't be traded, looted, sold, bought, dropped or destroyed (a loot box). See InventoryActions.TryTransferStack.</param>
+/// <param name="SpriteTint">Multiplied into the item's sprite wherever it's drawn; null draws it untinted. A loot box is tinted its rarity's color.</param>
 /// <remarks>Max stack size is not an item property -- every item stack shares whichever entity holds it own cap instead (see InventoryActions.GetEffectiveMaxStackSize/MaxStackSizeComponent), uniformly across every item that entity carries.</remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed record ItemDefinition(
@@ -30,5 +33,8 @@ public sealed record ItemDefinition(
     string Summary = "",
     IActionActivator? Activator = null,
     int GoldValue = 0,
-    int? MaximumShopStock = null)
+    int? MaximumShopStock = null,
+    IItemContents? Contents = null,
+    bool CanTrade = true,
+    Color? SpriteTint = null)
     : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Tags, Effects, Description, Summary);

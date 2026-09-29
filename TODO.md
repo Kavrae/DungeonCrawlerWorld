@@ -922,6 +922,7 @@ which is where that decision would live once it exists.
 A "destroyed" item state: displays as "destroyed", modified description, can still be picked up, but
 can't be used. Update `ContainerDestructionSystem` (and any future container types) to mark a destroyed container's inventory items destroyed instead of
 deleting them outright, once this lands.
+An item with `ItemDefinition.CanTrade` false (a loot box) can never be destroyed or dropped.
 
 #### Add source and target modifier checks for all actions
 
@@ -1260,6 +1261,7 @@ need a per-stack damage modifier applied on top of the flat catalog value -- nec
 not per-`ItemDefinition`, same split Item weight below already follows for a different field. Repair
 likely wants to be the same Repair skill the entry above already wants, generalized to cover
 "damaged" as well as "destroyed" rather than two independent mechanics.
+An item with `ItemDefinition.CanTrade` false (a loot box) never takes damage.
 
 #### Trapped containers
 
@@ -1613,24 +1615,16 @@ store keyed by (entityId, bodyPartId) for the part-scoped case. Feeds the Health
 isn't in a straight line needs a path, plus a path-following step that repaths when blocked or when
 the target moves (Unreal separates these as `UPathFollowingComponent` and the navigation query).
 
-#### Lootbox delivery, and moving Lootbox out of Achievements
-
-`AchievementModule`'s unlock path describes a `Lootbox` reward in the notification but never calls
-`InventoryActions.AddItem` to actually deliver it (now available, unblocked). Separately: `Lootbox`/`LootboxRarity` currently live in and
-are named for Achievements, but quests/loot-drops/level-up should be able to award one too -- move into
-their own module once a second real awarder exists. Planned in `PLAN-loot-boxes.md`; delete this entry
-when its Phase 2 lands.
-
 #### Loot boxes can only be opened in safe rooms
 
-Refuse loot box opening (Activate/double-click, see `PLAN-loot-boxes.md`) unless the player is standing
+Refuse loot box opening (Activate/double-click, see IMPLEMENTATION-NOTES.md "Loot boxes") unless the player is standing
 in a Safe Room, with clear feedback (disabled "Activate" with a reason) rather than a silent no-op.
 Blocked on first creating Safe Rooms and zones -- no zone concept exists yet.
 
 #### Lootbox drop tables
 
 Every loot box currently drops a single stack of 1-10 of one item picked uniformly from the whole item
-catalog, regardless of type or rarity (the placeholder `RandomSingleStackContents` in `PLAN-loot-boxes.md`).
+catalog, regardless of type or rarity (the placeholder `RandomSingleStackContents`, see IMPLEMENTATION-NOTES.md "Loot boxes").
 Replace it with real drop tables: type decides which items can appear (Alchemist -> potions, Weapon ->
 weapons, ...), rarity decides their value (e.g. a Gold value budget per rarity), and a box can be either
 set contents (specific rewards) or a random pull from its table. Needs higher-value items to exist
@@ -1644,7 +1638,7 @@ layer expansion or mod rows over the base table.
 #### Advanced boss loot box awards
 
 A boss currently grants at most one box, and only when the player lands the killing blow
-(`BossLootboxAwarder`, see `PLAN-loot-boxes.md`). Award boxes per contribution instead -- different
+(`BossLootboxAwarder`, see IMPLEMENTATION-NOTES.md "Loot boxes"). Award boxes per contribution instead -- different
 boxes for landing the killing blow, dealing the most damage, starting the fight, etc. -- so one fight
 can grant the player several. Needs per-fight damage/participation tracking; shares that need with
 "Corpse looting rights based on damage dealt". Also decide how an active quest's own award for killing a
@@ -1687,7 +1681,7 @@ buy/sell margins vs. a normal `GeneralShop`. First use grants an achievement who
 Receipt" item, its description text unusually long and generated from the actual items/currency
 traded that session (the joke being real CVS receipts). Also enrolls the player in a newsletter
 delivered via floor mail each floor -- needs floor mail as a delivery channel (no mail system exists
-yet) and depends on achievement rewards being deliverable (see Lootbox delivery above, mostly landed).
+yet).
 
 Also add a CVS Rewards currency, worth 10% of a Gold in trades (`ShopActions` pricing math would need
 a real conversion-rate concept, not just another flat `CurrencyType` enum value). Blocked on making
@@ -1763,7 +1757,17 @@ save-file-level meta-progression store distinct from anything in a single `EcsCo
 
 ### High Priority
 
-#### Global hard minimum/maximum element sizes for user resizing
+#### Bug: open achievement popups fall behind the pause mask when a menu window opens
+
+Whenever a menu window opens, achievement popups that were already open stop being active and are
+drawn behind the pause window mask, so they can't be read, closed or minimized until menu mode ends.
+Popups opened after the menu window is already open work correctly: `UiLayerStack.Add` promotes
+anything added during menu mode into the open menu-window set, but nothing does the same for popups
+that were already open when `OpenMenuWindow` ran. Decide whether already-open notification popups join
+menu mode (the way later ones do) or stay usable above the mask as menu-mode-exempt, and fix it in
+`UiLayerStack`/`NotificationCenter` rather than per menu window.
+
+#### Global hard minimum/maximum element sizes, and horizontally scrolling title text
 
 `UiInputController.ComputeResize`/`ClampResizeToBounds` clamp a drag-resize to `element.MinimumSize`/
 `MaximumSize` alone (`ElementLayoutOptions.MinimumSize`/`MaximumSize`, both optional per element) --
@@ -1777,6 +1781,19 @@ regardless of whether the element sets its own `MinimumSize`/`MaximumSize`. A pe
 min/max should only ever narrow that global range, never escape it -- needs validation (or clamping) at
 whichever point an element's own min/max gets set, so a caller can't accidentally configure one outside
 the global bounds.
+
+Title-style text that runs too long should grow its window up to that maximum and then scroll
+horizontally within its line, rather than word-wrapping into the space below. Two live cases:
+- **Corpse summary lines** (`SecondaryInventoryWindow.BuildSummary`): a long "Slain by: ..." line
+  word-wraps and overlaps the "Died at tick" line under it, since each line is a fixed
+  `SummaryLineHeight` tall.
+- **Item Details name** (`ItemDetailsWindow`'s name row): a long item name word-wraps and overlaps the
+  rows below it. The window should widen as needed, up to its maximum size, and only then make the name
+  scroll.
+
+Solve it once, as a single-line text mode on `TextWindow` (or a title element) that measures its text,
+asks its host to grow within the global/per-element maximum, and scrolls horizontally past it -- not a
+per-window fix for each case.
 
 #### Inventory management -- grid cell reorder still open
 
@@ -1873,7 +1890,7 @@ edge tiles). So "tile count" is a function of tile size and the map window's lay
 `ShellBootstrapper`, and both may need to change. Start by measuring Dungeon Settlers' visible
 columns x rows and tile pixel size at a common resolution, then decide whether to match size, count,
 or both. Things that scale with tile size and need a visual check afterward: sprite legibility (pairs
-with AI-generated sprites and Per-entity sprite scale), map fonts/badges, `HudMetrics`, and
+with AI-generated sprites and "SpriteDefinition" sprite scale), map fonts/badges, `HudMetrics`, and
 per-frame cost -- larger tiles means fewer visible tiles and a cheaper `DrawOccupants`; smaller means
 the reverse.
 
@@ -1912,6 +1929,34 @@ two are ever separated -- but keeping "previous position" and "current position"
 walking lerp keeps that door open. Sprite-sheet animation in Bevy is a `TextureAtlas` index advanced by
 game code (an example, not a built-in); `bevy_animation`'s curves and animation graphs target 3D.
 
+#### SpriteDefinition: tint, scale and multi-tile footprint on the sprite itself
+
+A sprite is only a name today: whatever draws it decides its tint, size and footprint. Introduce a
+`SpriteDefinition` (the natural home is the data-driven `Content/SpriteManifest.json` /
+`SpriteManifest`) that carries everything about how a sprite draws, so it's self-contained and works
+wherever the sprite is used -- items, entities, terrain, UI icons -- rather than being re-declared by
+each kind of thing that shows one.
+
+- **Tint**: move `ItemDefinition.SpriteTint` off the item and onto the sprite. It's on the item today
+  only because loot boxes needed one (each rarity tints the chest sprite its color, see
+  IMPLEMENTATION-NOTES.md "Loot boxes"), and it only works for items: `InventoryItemStackCell` and
+  `ItemIconElement` read it, nothing else does. A tinted variant becomes its own sprite definition
+  (e.g. "Chest-Bronze" pointing at the chest cells with a bronze tint), and `LootboxCatalog` names it
+  instead of setting a tint. Remove `SpriteTint` from `ItemDefinition` and `AreEquivalentOverrides`.
+- **Scale** (was "Per-entity sprite scale"): `SpriteRenderer.Draw` always stretches to fill the tile
+  footprint exactly -- wrong for character sprites (confirmed in-game: player needs to render larger,
+  goblins smaller). A scale factor on the sprite definition, applied in `MapWindow.TryDrawEntityVisual`
+  and every other sprite draw.
+- **Multi-tile footprint** (was "Multi-tile sprites"): no sprite spans more than one tile today --
+  `TransformComponent.Size` already carries a footprint (a corpse/tiny-entity grid already reasons
+  about it), but `MapWindow`'s draw path always renders one sprite stretched to exactly one tile's own
+  `CurrentTileSize`, never a single sprite spanning the whole footprint. `Shop`'s `"Shop-1x1"` is a
+  deliberately-named 1x1 placeholder; a real "Shop-2x2" is the concrete first implementation.
+
+Every draw site (`SpriteOrGlyphRenderer`, `MapWindow`, the inventory/hotbar/details icons, the drag
+ghost) then reads the definition instead of taking tint/size as separate parameters. Pairs with
+"Sprites taller than one tile" just below, which needs the same footprint/scale information.
+
 #### Sprites taller than one tile, and two-tile walls (front + top)
 
 Inspired by Dungeon Settlers. Two related wants: character sprites that extend above their own tile,
@@ -1921,8 +1966,8 @@ other way round.
 
 Two things in `MapWindow` stand in the way today:
 - `DrawOccupants` walks column-outer, row-inner. Within a column that's already top-down, but column
-  c+1's row r-1 draws after column c's row r, so anything wider than one tile (see Per-entity sprite
-  scale, Low) gets overdrawn by its upper-right neighbour. Its own remarks say row-major measured no
+  c+1's row r-1 draws after column c's row r, so anything wider than one tile (see the SpriteDefinition
+  item's scale, above) gets overdrawn by its upper-right neighbour. Its own remarks say row-major measured no
   performance difference and was only left alone because it would change overlap order for no gain.
   This is that gain.
 - Walls are terrain (`Map`'s separate `TerrainLayer` array), rendered into the `MapTileLayerCache`
@@ -1943,7 +1988,7 @@ per-tile "is the player or inspected entity under this sprite's overhang" check 
 tall terrain draws in the occupant pass at all -- at most two entities to check, so no spatial index
 needed.
 
-Related: Per-entity sprite scale and Multi-tile sprites (both Low) -- a larger player sprite is the
+Related: "SpriteDefinition: tint, scale and multi-tile footprint" (High, just above) -- a larger player sprite is the
 first real consumer of this.
 
 **Godot reference:** already researched in `PLAN-tall-sprites-and-wall-tops.md`, which cites Godot's
@@ -2071,6 +2116,13 @@ as if a key were pressed, a ready shape for "Replay by recording input" and "In-
 (Global).
 
 ### Medium Priority
+
+#### Player status window
+
+A window for the player's own status that sits alongside the Health window (its own HUD button and
+hotkey, the same shape as Health/Inventory/Ability Scores), for things about the player that aren't
+health, inventory or ability scores. First consumer: "Boss and crawler kill icons" (Low Priority, this
+section).
 
 #### Shift+click to move a whole stack when looting and shopping
 
@@ -2497,6 +2549,13 @@ FontStashSharp's measuring is enough.
 
 ### Low Priority
 
+#### Boss and crawler kill icons
+
+Show an icon for each boss and each crawler an entity has killed, in two places: the Inspection window
+(for whichever entity is inspected) and the player's status window. Needs a per-entity record of kills
+by kind (boss/crawler), fed from `EntityDiedEvent` the same way `BossLootboxAwarder` reads a slain
+boss's blueprint. Blocked on "Player status window" (Medium Priority, this section).
+
 #### Health Window: status effects in a third column
 
 The Health Window has two columns today (see IMPLEMENTATION-NOTES.md, "HealthWindow"). Move status
@@ -2628,21 +2687,6 @@ A per-stack "Sell" marking -- the bulk-sale equivalent of other games' "junk" fl
 `InventoryTabContent`) that sells every Sell-marked, currently-eligible item in the *active* tab
 through `ShopActions.TrySellToShop` in one action -- any tab, not only a
 dedicated "Sell" tab; marking curates what a sweep picks up, it isn't itself a tab requirement.
-
-#### Per-entity sprite scale
-
-`SpriteRenderer.Draw` always stretches to fill the tile footprint exactly -- wrong for character
-sprites (confirmed in-game: player needs to render larger, goblins smaller). Needs a per-entity/
-per-`SpriteComponent` scale factor applied in `MapWindow.TryDrawEntityVisual`.
-
-#### Multi-tile sprites
-
-No entity's sprite spans more than one tile today -- `TransformComponent.Size` already carries a
-footprint (e.g. a corpse/tiny-entity grid already reasons about it), but `MapWindow`'s draw path
-always renders one sprite stretched to exactly one tile's own `CurrentTileSize`, never a single
-sprite spanning the whole footprint. `Shop`'s own `Sprite = "Shop-1x1"` is a
-deliberately-named 1x1 placeholder for this -- a real multi-tile shop sprite (e.g. "Shop-2x2") is
-the concrete first implementation once this lands.
 
 #### Player stats v2
 

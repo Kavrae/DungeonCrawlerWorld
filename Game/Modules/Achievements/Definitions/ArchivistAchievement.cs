@@ -1,5 +1,6 @@
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Lootboxes;
 using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
@@ -21,7 +22,7 @@ public sealed class ArchivistAchievement : IAchievementDefinition
         "Just don't get too close to any fire elementals.";
 
     /// <summary>Real reward (craft-your-own-scrolls) is blocked on a crafting system that doesn't exist yet -- same treatment as every other TODO.md-flagged future-blocked achievement.</summary>
-    public Lootbox? Lootbox => null;
+    public LootboxReward? Lootbox => new(LootboxTypes.Librarian.Id, LootboxRarity.Bronze);
 
     public string RewardText =>
         "Let your creative juices flow all over the page! That... sounds kinda gross. Anyway, you can now craft your own scrolls.";

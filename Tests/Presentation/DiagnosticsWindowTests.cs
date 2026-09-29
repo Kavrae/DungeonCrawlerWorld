@@ -33,7 +33,7 @@ public sealed class DiagnosticsWindowTests
             TestFonts.Shared, elementPool, new LabelRenderer(), ecsContext.EntityManager, ecsContext.ComponentManager.GetPackedPool<MovementComponent>(), ecsContext.SystemManager.Clock, diagnostics));
         var layers = new UiLayerStack();
         var controller = new DiagnosticsWindowController(elementPool, layers);
-        var input = new UiInputController(layers, ScreenSize, ecsContext.ComponentManager, TestPlayerQuery.NoPlayer, new EventBus(), diagnosticsWindowController: controller);
+        var input = new UiInputController(layers, ScreenSize, ecsContext.ComponentManager, TestPlayerQuery.NoPlayer, new EventBus(), new Game.Modules.Inventory.ItemCatalog(), diagnosticsWindowController: controller);
         return new Harness(ecsContext, layers, elementPool, controller, input);
     }
 

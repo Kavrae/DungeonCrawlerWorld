@@ -85,7 +85,7 @@ public sealed class UiInputControllerTests
         {
             layers.Add(UiLayer.User, element);
         }
-        return new UiInputController(layers, screenSize, componentManager ?? NewComponentManager(), playerQuery ?? TestPlayerQuery.NoPlayer, eventBus ?? new EventBus(), hotbarController, itemCatalog: itemCatalog, mapViewState: mapViewState);
+        return new UiInputController(layers, screenSize, componentManager ?? NewComponentManager(), playerQuery ?? TestPlayerQuery.NoPlayer, eventBus ?? new EventBus(), itemCatalog ?? new ItemCatalog(), hotbarController, mapViewState: mapViewState);
     }
 
     /// <summary>Records HandleRightDragStart/HandleRightDrag calls, so UiInputController's right-button wiring (hit-test on press, total-delta-since-start on every held frame) can be verified end-to-end without a real MapWindow.</summary>
@@ -362,7 +362,7 @@ public sealed class UiInputControllerTests
         var layers = new UiLayerStack();
         layers.Add(UiLayer.Base, windowA);
         layers.Add(UiLayer.Base, windowB);
-        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus());
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), new ItemCatalog());
 
         var pressPoint = windowA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1091,7 +1091,7 @@ public sealed class UiInputControllerTests
         textBox.Initialize();
         layers.Add(UiLayer.DynamicHud, textBox);
 
-        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), contextMenuController: contextMenuController);
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), new ItemCatalog(), contextMenuController: contextMenuController);
 
         var textBoxCenter = textBox.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(textBoxCenter.X, textBoxCenter.Y, ButtonState.Released));
@@ -1131,7 +1131,7 @@ public sealed class UiInputControllerTests
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var layers = new UiLayerStack();
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, layers);
-        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), contextMenuController: contextMenuController);
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), new ItemCatalog(), contextMenuController: contextMenuController);
 
         var picked = 0;
         List<ContextMenuOption> submenu = [ContextMenuOption.Header("Kinds"), new ContextMenuOption("Pick", null, true, () => picked++)];
@@ -1190,7 +1190,7 @@ public sealed class UiInputControllerTests
         });
         parentWindow.AddChild(textBox);
 
-        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), contextMenuController: contextMenuController);
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), new ItemCatalog(), contextMenuController: contextMenuController);
 
         var textBoxCenter = textBox.Rectangle.Center;
         controller.Update(NoKeys, MouseAt(textBoxCenter.X, textBoxCenter.Y, ButtonState.Released));
@@ -1458,7 +1458,7 @@ public sealed class UiInputControllerTests
         layers.Add(UiLayer.Base, blockedWindow);
         layers.Add(UiLayer.DynamicHud, menuWindow);
         layers.OpenMenuWindow(menuWindow);
-        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus());
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), new ItemCatalog());
 
         var blockedPoint = blockedWindow.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(blockedPoint.X, blockedPoint.Y, ButtonState.Released));
@@ -1483,7 +1483,7 @@ public sealed class UiInputControllerTests
         layers.Add(UiLayer.DynamicHud, menuWindowB);
         layers.OpenMenuWindow(menuWindowA);
         layers.OpenMenuWindow(menuWindowB);
-        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus());
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), new ItemCatalog());
 
         var pointA = menuWindowA.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pointA.X, pointA.Y, ButtonState.Released));
@@ -1508,7 +1508,7 @@ public sealed class UiInputControllerTests
         layers.MarkMenuModeExempt(exemptWindow);
         layers.Add(UiLayer.DynamicHud, menuWindow);
         layers.OpenMenuWindow(menuWindow);
-        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus());
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), new ItemCatalog());
 
         var pressPoint = exemptWindow.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1527,7 +1527,7 @@ public sealed class UiInputControllerTests
         var layers = new UiLayerStack();
         layers.Add(UiLayer.Base, focused);
         layers.Add(UiLayer.DynamicHud, menuWindow);
-        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus());
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), new ItemCatalog());
 
         var pressPoint = focused.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -1722,7 +1722,7 @@ public sealed class UiInputControllerTests
         var layers = new UiLayerStack();
         layers.Add(UiLayer.Base, windowA);
         layers.Add(UiLayer.Base, windowB);
-        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus());
+        var controller = new UiInputController(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), new ItemCatalog());
 
         controller.Update(NoKeys, MouseAt(0, 0, ButtonState.Released));
         controller.Update(new KeyboardState(Keys.Tab), MouseAt(0, 0, ButtonState.Released));
@@ -2211,7 +2211,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(24, 24), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        cell.Configure(playerEntityId, itemId, stackInstanceId, null, "t", Color.White, quantity: 1, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, cellSize: new Vector2(24, 24));
+        cell.Configure(playerEntityId, itemId, stackInstanceId, null, "t", Color.White, spriteTint: null, quantity: 1, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, canTrade: true, itemCanBindToHotbar: true, cellSize: new Vector2(24, 24));
         cell.Initialize();
 
         var hotbar = new HotbarContent(
@@ -2253,7 +2253,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(24, 24), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        cell.Configure(corpseEntityId, itemId, stackInstanceId, null, "t", Color.White, quantity: 1, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, cellSize: new Vector2(24, 24));
+        cell.Configure(corpseEntityId, itemId, stackInstanceId, null, "t", Color.White, spriteTint: null, quantity: 1, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, canTrade: true, itemCanBindToHotbar: true, cellSize: new Vector2(24, 24));
         cell.Initialize();
 
         var hotbar = new HotbarContent(
@@ -2493,7 +2493,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, resolvedOnItemSelected, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock()));
+            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, resolvedOnItemSelected, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
             window.Initialize();
             return window;
         }
@@ -2649,7 +2649,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock()));
+            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
             window.Initialize();
             return window;
         }
@@ -2797,7 +2797,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, new SimulationClock(), tradeGridIsShopSide));
+            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, new SimulationClock(), tradeGridIsShopSide));
             window.Initialize();
             return window;
         }
@@ -3315,7 +3315,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        sourceGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, sourceEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock()));
+        sourceGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, sourceEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
         sourceGridWindow.Initialize();
         var cell = sourceGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
 
@@ -3325,7 +3325,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = new Vector2(300, 300), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, CanUserFocus = false },
         });
-        destinationWindow.Configure(destinationEntityId, tooltipController, static () => null, static (_, _) => { }, static (_, _) => { }, static (_, _) => { });
+        destinationWindow.Configure(destinationEntityId, tooltipController, static () => null, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { });
         destinationWindow.Initialize();
 
         var controller = CreateController([], [], [sourceGridWindow, destinationWindow], [], LargeScreenSize, componentManager: componentManager, playerQuery: null);

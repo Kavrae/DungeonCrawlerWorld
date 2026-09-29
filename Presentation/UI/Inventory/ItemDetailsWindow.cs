@@ -54,6 +54,9 @@ public sealed class ItemDetailsWindow(
     ActionCatalog actionCatalog)
     : Window(fontService, elementPoolService, labelRenderer)
 {
+    /// <summary>The stack id Configure is given for an item shown from its definition alone (a loot box reward whose stack is gone) -- there's no stack to compare, so Compare does nothing.</summary>
+    public const uint NoStackInstanceId = 0;
+
     private const float IconSize = 32f;
     private const float RowHeight = 18f;
     private const float RowTextGap = 6f;
@@ -140,7 +143,13 @@ public sealed class ItemDetailsWindow(
         if (OnCompareRequested is not null)
         {
             var compareButton = BuildTitleButton(this, "↔");
-            compareButton.Clicked += _ => OnCompareRequested?.Invoke(_currentEntityId, _currentStackInstanceId);
+            compareButton.Clicked += _ =>
+            {
+                if (_currentStackInstanceId != NoStackInstanceId)
+                {
+                    OnCompareRequested?.Invoke(_currentEntityId, _currentStackInstanceId);
+                }
+            };
             AddTitleButton(compareButton);
         }
     }
@@ -263,7 +272,7 @@ public sealed class ItemDetailsWindow(
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
-        icon.Configure(definition.SpriteName, definition.Glyph, definition.GlyphColor, new Vector2(IconSize, IconSize));
+        icon.Configure(definition.SpriteName, definition.Glyph, definition.GlyphColor, new Vector2(IconSize, IconSize), definition.SpriteTint);
         row.AddChild(icon);
 
         // row's own content width is width - ContentPadding*2 (see the width comment above), not

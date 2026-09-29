@@ -372,7 +372,8 @@ public sealed class HotbarContent(
     /// IHotkeySlotBinding's own doc comment). Does not touch the inventory stack itself: binding
     /// is a reference, not a transfer (see ItemHotkeyBindingComponent's own doc comment). The
     /// real assignment path, driven by UiInputController's content-drag drop resolution. A
-    /// not-yet-unlocked Expansion slot silently refuses the binding -- it isn't a valid drop
+    /// not-yet-unlocked Expansion slot, or an item that can never be bound (ItemHotkeyBindingQueries.
+    /// CanBind -- a loot box), silently refuses the binding -- it isn't a valid drop
     /// target (see this class's own doc comment on the disabled-alpha treatment) -- rather than
     /// UiInputController needing its own separate lock-awareness. Publishes ItemHotkeyBoundEvent
     /// -- ArchivistAchievement's trigger -- deliberately not raised by PlayerKit's own
@@ -386,6 +387,13 @@ public sealed class HotbarContent(
         }
 
         var playerEntityId = world.PlayerEntityId;
+        if (InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, playerEntityId, stackInstanceId, out var boundStack) &&
+            InventoryQueries.TryResolveEffectiveItem(itemCatalog, in boundStack, out var boundItem) &&
+            !ItemHotkeyBindingQueries.CanBind(boundItem))
+        {
+            return;
+        }
+
         ClearSlotBinding(playerEntityId, slot);
         _itemHotkeyBindings.Add(playerEntityId, new ItemHotkeyBindingComponent(slot, stackInstanceId));
 

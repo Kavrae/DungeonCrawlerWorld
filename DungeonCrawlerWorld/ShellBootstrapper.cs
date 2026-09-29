@@ -24,6 +24,7 @@ using Presentation.UI.Content;
 using Presentation.UI.Diagnostics;
 using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
+using Presentation.UI.Lootboxes;
 using Presentation.UI.Notifications;
 using Presentation.UI.Shops;
 using Presentation.UI.Trade;
@@ -144,6 +145,17 @@ public static class ShellBootstrapper
 
         mapWindow.NeighborhoodStreamer = worldSession.NeighborhoodStreamer;
         mapWindow.BlueprintAdmin = new Game.Spawning.BlueprintAdminCommands(worldSession.Factory, worldSession.Definitions);
+        mapWindow.LootboxAdmin = new Game.Modules.Lootboxes.LootboxAdminCommands(componentManager, worldSession.LootboxCatalog, ecsContext.EventBus);
+
+        // An achievement's loot box is granted when the player closes its notification, not when it unlocks.
+        var achievementLootboxClaims = new Game.Modules.Achievements.AchievementLootboxClaims(componentManager, worldSession.LootboxCatalog, ecsContext.EventBus);
+        notificationCenter.NotificationDismissed += notification =>
+        {
+            if (notification.Achievement is { } achievement)
+            {
+                achievementLootboxClaims.TryClaim(world.PlayerEntityId, achievement.AchievementId);
+            }
+        };
         mapWindow.Teleporter = worldSession.Teleporter;
 
         // A destroyed entity's id is reused straight away, so nothing on screen may keep pointing at
@@ -211,8 +223,34 @@ public static class ShellBootstrapper
         tradeWindowController.OnItemSelected = OnItemClicked;
 
         inventoryController.OnActivateRequested = (_, stackInstanceId) => actionTargetingController.ArmItemFromStack(stackInstanceId);
+        var lootboxResultsController = new LootboxResultsWindowController(presentation.ElementPoolService, worldSession.LootboxCatalog, itemCatalog, tooltipController, contextMenuController, inventoryController, mapWindow, world);
+        lootboxResultsController.Initialize(uiLayers);
+        itemDetailsController.GetLootboxResultsWindowRectangle = () => lootboxResultsController.Rectangle;
+        inventoryController.OnOpenLootboxesRequested = entityId => lootboxResultsController.Show(worldSession.LootboxOpener.OpenAll(entityId));
 
-        var inputController = new UiInputController(uiLayers, screenSize, componentManager, world, ecsContext.EventBus, hotbarController, contextMenuController, itemDetailsController, itemComparisonController, itemCatalog, mapViewState, healthController, inventoryController, abilityScoreController, diagnosticsController);
+        // A reward opens Item Details beside the results window: on the stack it landed in while
+        // that still exists, otherwise read-only from its definition.
+        var inventoryStacks = componentManager.GetMultiPool<Game.Modules.Inventory.Components.InventoryItemStackComponent>();
+        lootboxResultsController.OnRewardClicked = reward =>
+        {
+            if (lootboxResultsController.Window is not { } resultsWindow)
+            {
+                return;
+            }
+
+            var playerEntityId = world.PlayerEntityId;
+            itemComparisonController.ClearIfAnchorChanging(playerEntityId, reward.StackInstanceId);
+            if (Game.Modules.Inventory.InventoryQueries.TryFindByStackInstanceId(inventoryStacks, playerEntityId, reward.StackInstanceId, out _))
+            {
+                itemDetailsController.Open(playerEntityId, reward.StackInstanceId, resultsWindow);
+            }
+            else if (itemCatalog.TryGet(reward.ItemDefinitionId, out var rewardDefinition))
+            {
+                itemDetailsController.OpenDefinition(playerEntityId, rewardDefinition, resultsWindow);
+            }
+        };
+
+        var inputController = new UiInputController(uiLayers, screenSize, componentManager, world, ecsContext.EventBus, itemCatalog, hotbarController, contextMenuController, itemDetailsController, itemComparisonController, mapViewState, healthController, inventoryController, abilityScoreController, diagnosticsController);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 

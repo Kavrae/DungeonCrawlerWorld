@@ -5,6 +5,7 @@ using Engine.Modules;
 using Game.Modules.Achievements.Components;
 using Game.Modules.Achievements.Definitions;
 using Game.Modules.Achievements.Systems;
+using Game.Modules.Lootboxes;
 using Game.Notifications;
 
 namespace Game.Modules.Achievements;
@@ -16,6 +17,8 @@ public sealed class AchievementModule : IGameModule
     public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000010");
 
     public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [LootboxModule.ModuleId];
 
     private static readonly IReadOnlyList<IAchievementDefinition> Definitions = [
         new AngelInvestorAchievement(),
@@ -51,7 +54,7 @@ public sealed class AchievementModule : IGameModule
         }
     }
 
-    /// <summary>Registers the AchievementUnlockedComponent multi pool</summary>
+    /// <summary>Registers the AchievementUnlockedComponent and UnclaimedAchievementLootboxComponent multi pools</summary>
     /// <remarks>
     /// Player-only today. initialCapacity
     /// tracks Definitions.Count directly instead of a guessed constant, so it never goes stale as achievements are added.
@@ -61,6 +64,7 @@ public sealed class AchievementModule : IGameModule
         var componentManager = registration.ComponentManager;
 
         componentManager.RegisterMultiPool<AchievementUnlockedComponent>(initialCapacity: Definitions.Count);
+        componentManager.RegisterMultiPool<UnclaimedAchievementLootboxComponent>(initialCapacity: Definitions.Count);
     }
 
     /// <remarks>
@@ -79,10 +83,11 @@ public sealed class AchievementModule : IGameModule
         var componentManager = registration.ComponentManager;
 
         var unlockedAchievements = componentManager.GetMultiPool<AchievementUnlockedComponent>();
+        var unclaimedLootboxes = componentManager.GetMultiPool<UnclaimedAchievementLootboxComponent>();
 
         foreach (var definition in Definitions)
         {
-            var triggerContext = new AchievementTriggerContext(context.EventBus, context.PlayerQuery, componentManager, context.Actions, context.Items, entityId => Unlock(definition, entityId, componentManager, unlockedAchievements, context.EventBus), _polledConditions);
+            var triggerContext = new AchievementTriggerContext(context.EventBus, context.PlayerQuery, componentManager, context.Actions, context.Items, entityId => Unlock(definition, entityId, componentManager, unlockedAchievements, unclaimedLootboxes, context.Lootboxes, context.EventBus), _polledConditions);
             definition.RegisterTrigger(triggerContext);
         }
 
@@ -92,7 +97,7 @@ public sealed class AchievementModule : IGameModule
         }
     }
 
-    private static void Unlock(IAchievementDefinition definition, int entityId, ComponentManager componentManager, MultiComponentPool<AchievementUnlockedComponent> unlockedAchievements, EventBus eventBus)
+    private static void Unlock(IAchievementDefinition definition, int entityId, ComponentManager componentManager, MultiComponentPool<AchievementUnlockedComponent> unlockedAchievements, MultiComponentPool<UnclaimedAchievementLootboxComponent> unclaimedLootboxes, LootboxCatalog lootboxCatalog, EventBus eventBus)
     {
         if (AchievementQueries.HasEarned(unlockedAchievements, entityId, definition.Id))
         {
@@ -102,11 +107,16 @@ public sealed class AchievementModule : IGameModule
         unlockedAchievements.Add(entityId, new AchievementUnlockedComponent(definition.Id, DateTime.UtcNow.Ticks));
         definition.ApplyReward(componentManager, entityId);
 
+        if (definition.Lootbox is { } lootbox)
+        {
+            unclaimedLootboxes.Add(entityId, new UnclaimedAchievementLootboxComponent(definition.Id, lootbox));
+        }
+
         eventBus.Publish(new NotificationRequestedEvent(
             NotificationCategory.Achievement,
             definition.Description,
             ShowImmediately: false,
             Title: definition.Name,
-            Achievement: new AchievementNotificationDetails(definition.RequirementText, definition.Lootbox?.DisplayLabel, definition.RewardText)));
+            Achievement: new AchievementNotificationDetails(definition.Id, definition.RequirementText, definition.Lootbox is { } reward ? lootboxCatalog.DisplayName(reward.Kind) : null, definition.RewardText)));
     }
 }

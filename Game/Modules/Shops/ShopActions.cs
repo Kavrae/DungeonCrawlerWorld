@@ -20,9 +20,9 @@ namespace Game.Modules.Shops;
 /// </summary>
 public static class ShopActions
 {
-    /// <summary>AllowedTags null means the shop trades any item (General Shop); otherwise the item must carry at least one matching tag (Potion Shop).</summary>
+    /// <summary>AllowedTags null means the shop trades any item (General Shop); otherwise the item must carry at least one matching tag (Potion Shop). An item that can't be traded at all (ItemDefinition.CanTrade) is never tradeable with any shop.</summary>
     public static bool CanTrade(ShopComponent shop, ItemDefinition item) =>
-        shop.AllowedTags is null || item.Tags.Any(shop.AllowedTags.Contains);
+        item.CanTrade && (shop.AllowedTags is null || item.Tags.Any(shop.AllowedTags.Contains));
 
     /// <summary>The flat, stock-*un*aware base price: GoldValue marked up by the shop's BuyMultiplier, no ShopStockPricing curve applied. What a trade actually charges is ShopStockPricing.ComputeBulkBuyPrice below -- this stays as the simple "Normal band" reference value.</summary>
     public static int ComputeBuyPrice(ShopComponent shop, ItemDefinition item) => (int)MathF.Round(item.GoldValue * shop.BuyMultiplier);
@@ -72,7 +72,7 @@ public static class ShopActions
             return false;
         }
 
-        if (!InventoryActions.TryTransferStack(componentManager, shopEntityId, playerEntityId, stackInstanceId, playerQuery))
+        if (!InventoryActions.TryTransferStack(componentManager, itemCatalog, shopEntityId, playerEntityId, stackInstanceId, playerQuery))
         {
             CurrencyActions.TryTransfer(componentManager, shopEntityId, playerEntityId, CurrencyType.Gold, totalPrice);
             return false;
@@ -122,7 +122,7 @@ public static class ShopActions
             return false;
         }
 
-        if (!InventoryActions.TryTransferStack(componentManager, playerEntityId, shopEntityId, stackInstanceId, playerQuery))
+        if (!InventoryActions.TryTransferStack(componentManager, itemCatalog, playerEntityId, shopEntityId, stackInstanceId, playerQuery))
         {
             CurrencyActions.TryTransfer(componentManager, playerEntityId, shopEntityId, CurrencyType.Gold, totalPrice);
             return false;

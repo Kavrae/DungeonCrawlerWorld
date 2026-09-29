@@ -22,4 +22,7 @@ public interface IStatusEffectAuraApplier
     /// <summary>Applies exactly one more stack, attributed to source.</summary>
     /// <param name="now">The simulation frame the stack lands on -- a newly started effect's timer is scheduled from it (FrameDeadline.After(now, ...)).</param>
     void ApplyStack(int entityId, ActionSource source, long now);
+
+    /// <summary>Removes every stack of EffectType from entityId, ending the effect; a no-op when it has none.</summary>
+    void RemoveAllStacks(int entityId);
 }

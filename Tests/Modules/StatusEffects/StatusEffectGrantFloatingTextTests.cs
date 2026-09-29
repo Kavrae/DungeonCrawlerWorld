@@ -34,6 +34,8 @@ public sealed class StatusEffectGrantFloatingTextTests
 
             _stacksByEntityId[entityId] = System.Math.Min(GetCurrentStackCount(entityId) + 1, maxStacks);
         }
+
+        public void RemoveAllStacks(int entityId) => _stacksByEntityId.Remove(entityId);
     }
 
     private static (ComponentManager ComponentManager, TestFloatingText FloatingText, Game.Modules.Actions.ActionEffectContext Context) Build(int maxStacks = 10)

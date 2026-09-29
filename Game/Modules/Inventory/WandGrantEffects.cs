@@ -18,7 +18,8 @@ public static class WandGrantEffects
 {
     private const ushort FallbackIntelligenceTotal = 1;
 
-    public static void Grant(ComponentManager componentManager, PackedComponentPool<AbilityScoresComponent> abilityScores, int entityId, ItemDefinition baseDefinition, ushort quantity)
+    /// <returns>The StackInstanceId of whichever stack the last granted wand ended up in.</returns>
+    public static uint Grant(ComponentManager componentManager, PackedComponentPool<AbilityScoresComponent> abilityScores, int entityId, ItemDefinition baseDefinition, ushort quantity)
     {
         var intelligenceTotal = AbilityScoreQueries.TryGetComponent(abilityScores, entityId, AbilityScoreType.Intelligence, out var intelligence)
             ? intelligence.Total
@@ -28,6 +29,6 @@ public static class WandGrantEffects
         var baseActivator = (WandActivator)baseDefinition.Activator!;
         var grantedDefinition = baseDefinition with { Activator = baseActivator with { Charges = maxCharges, MaxCharges = maxCharges } };
 
-        InventoryActions.AddItemWithOverride(componentManager, entityId, grantedDefinition, quantity);
+        return InventoryActions.AddItemWithOverride(componentManager, entityId, grantedDefinition, quantity);
     }
 }

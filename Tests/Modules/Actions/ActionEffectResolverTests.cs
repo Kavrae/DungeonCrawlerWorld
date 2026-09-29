@@ -44,6 +44,8 @@ public sealed class ActionEffectResolverTests
         public int GetCurrentStackCount(int entityId) => AppliedCalls.Count(call => call.EntityId == entityId);
 
         public void ApplyStack(int entityId, ActionSource source, long now) => AppliedCalls.Add((entityId, source));
+
+        public void RemoveAllStacks(int entityId) => AppliedCalls.RemoveAll(call => call.EntityId == entityId);
     }
 
     /// <summary>Never rolls a crit -- NextDouble always returns 1.0, comfortably above any crit chance -- so damage-amount assertions in these orchestration tests stay deterministic.</summary>

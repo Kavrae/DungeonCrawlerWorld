@@ -3,7 +3,7 @@ using Engine.ECS.Context;
 using Engine.Math;
 using Engine.Modules;
 using Engine.Settings;
-using Game.Spawning;
+using Game.Blueprints;
 using Game.Modules;
 using Game.Modules.AbilityScores;
 using Game.Modules.Achievements;
@@ -21,6 +21,7 @@ using Game.Modules.Currency;
 using Game.Modules.Death;
 using Game.Modules.Health;
 using Game.Modules.Inventory;
+using Game.Modules.Lootboxes;
 using Game.Modules.Mana;
 using Game.Modules.Movement;
 using Game.Modules.NpcBehavior;
@@ -32,8 +33,8 @@ using Game.Modules.Shops;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffects;
+using Game.Spawning;
 using Game.World;
-using Game.Blueprints;
 
 namespace Game.Bootstrap;
 
@@ -75,6 +76,7 @@ public static class GameBootstrapper
         ModuleFactory<GameModuleContext>.For<CrawlerModule>(),
         ModuleFactory<GameModuleContext>.For<InventoryModule>(),
         ModuleFactory<GameModuleContext>.For<CoreItemsModule>(),
+        ModuleFactory<GameModuleContext>.For<LootboxModule>(),
         ModuleFactory<GameModuleContext>.For<CurrencyModule>(),
         ModuleFactory<GameModuleContext>.For<ContainersModule>(),
         ModuleFactory<GameModuleContext>.For<ShopModule>(),
@@ -105,7 +107,7 @@ public static class GameBootstrapper
         var factory = session.Factory;
         var skeletons = factory.Skeletons;
 
-        return new GameBootstrapResult(ecsContext, session.World, validatedMods.Failures, session.Settings.Values, session.Settings.Failures, context.Actions, context.MovedEntities, context.Items, context.StatusEffectDisplays, session.LocalTierRoster, context.ProcessingTierResolver, context.Terrain, context.Definitions, new SpawnRecordRebuilder(staging.EcsContext, new EntityBuilder(context.Definitions, staging.EcsContext.EntityManager.Keys)), skeletons, factory, CreateTeleporter(session.World, ecsContext, factory, skeletons));
+        return new GameBootstrapResult(ecsContext, session.World, validatedMods.Failures, session.Settings.Values, session.Settings.Failures, context.Actions, context.MovedEntities, context.Items, context.Lootboxes, context.LootboxOpener, context.StatusEffectDisplays, session.LocalTierRoster, context.ProcessingTierResolver, context.Terrain, context.Definitions, new SpawnRecordRebuilder(staging.EcsContext, new EntityBuilder(context.Definitions, staging.EcsContext.EntityManager.Keys)), skeletons, factory, CreateTeleporter(session.World, ecsContext, factory, skeletons));
     }
 
     private static EntityTeleporter CreateTeleporter(World.World world, EcsContext ecsContext, EntityFactory factory, CreatureSkeletons skeletons)

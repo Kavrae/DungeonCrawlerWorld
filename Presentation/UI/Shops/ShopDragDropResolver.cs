@@ -15,7 +15,7 @@ namespace Presentation.UI.Shops;
 /// never itself shop-registered, but a trade column's real shop-side counterpart is -- Trade gets
 /// first refusal on anything touching its own reserved entities).
 /// </summary>
-internal sealed class ShopDragDropResolver(PackedComponentPool<ShopComponent> shopPool, ItemCatalog? itemCatalog, IPlayerQuery playerQuery) : IDragDropResolver
+internal sealed class ShopDragDropResolver(PackedComponentPool<ShopComponent> shopPool, ItemCatalog itemCatalog, IPlayerQuery playerQuery) : IDragDropResolver
 {
     public bool TryResolve(in DragDropContext context)
     {
@@ -24,20 +24,17 @@ internal sealed class ShopDragDropResolver(PackedComponentPool<ShopComponent> sh
 
         if (context.ItemStackInstanceId is { } stackInstanceId)
         {
-            // If a shop is involved but ItemCatalog was never wired, neither branch below matches --
-            // this resolver returns false and the drag falls through to a plain transfer via
-            // PlainInventoryDragDropResolver, same as today's degrade path.
-            if (originIsShop && itemCatalog is { } buyCatalog)
+            if (originIsShop)
             {
                 // Dragged out of the shop's own grid, into the player's -- a purchase.
-                ShopActions.TryBuyFromShop(context.ComponentManager, buyCatalog, context.DestinationEntityId, context.OriginEntityId, stackInstanceId, playerQuery);
+                ShopActions.TryBuyFromShop(context.ComponentManager, itemCatalog, context.DestinationEntityId, context.OriginEntityId, stackInstanceId, playerQuery);
                 return true;
             }
 
-            if (destinationIsShop && itemCatalog is { } sellCatalog)
+            if (destinationIsShop)
             {
                 // Dragged out of the player's own grid, into the shop's -- a sale.
-                ShopActions.TrySellToShop(context.ComponentManager, sellCatalog, context.OriginEntityId, context.DestinationEntityId, stackInstanceId, playerQuery);
+                ShopActions.TrySellToShop(context.ComponentManager, itemCatalog, context.OriginEntityId, context.DestinationEntityId, stackInstanceId, playerQuery);
                 return true;
             }
 

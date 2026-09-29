@@ -147,6 +147,9 @@ public sealed class MapWindow : Window
     /// <summary>What Admin Mode's "Spawn here" and "Apply" context-menu options drive -- wired by ShellBootstrapper; null offers neither.</summary>
     public Game.Spawning.BlueprintAdminCommands? BlueprintAdmin { get; set; }
 
+    /// <summary>What Admin Mode's "Grant loot box" context-menu option drives -- wired by ShellBootstrapper; null offers none.</summary>
+    public Game.Modules.Lootboxes.LootboxAdminCommands? LootboxAdmin { get; set; }
+
     /// <summary>What Admin Mode's "Teleport here" context-menu option drives -- wired by ShellBootstrapper; null offers no such option.</summary>
     public Game.World.EntityTeleporter? Teleporter { get; set; }
 
@@ -1326,7 +1329,18 @@ public sealed class MapWindow : Window
         {
             options.Add(ContextMenuOption.Opening("Apply", ApplyChoices(admin, entityId)));
         }
+
+        if (GlobalState.IsAdminModeOn && LootboxAdmin is { } lootboxAdmin)
+        {
+            options.Add(ContextMenuOption.Opening("Grant loot box", LootboxTypeChoices(lootboxAdmin, entityId)));
+        }
     }
+
+    /// <summary>Admin Mode's "Grant loot box" submenu: every loot box type, each opening a submenu of rarities that grants one box of it to entityId.</summary>
+    private static List<ContextMenuOption> LootboxTypeChoices(Game.Modules.Lootboxes.LootboxAdminCommands lootboxAdmin, int entityId) =>
+        [.. lootboxAdmin.Types().Select(type => ContextMenuOption.Opening(type.Name,
+            [.. Enum.GetValues<Game.Modules.Lootboxes.LootboxRarity>().Select(rarity =>
+                new ContextMenuOption(rarity.ToString(), null, true, () => lootboxAdmin.Grant(entityId, type.Id, rarity)))]))];
 
     /// <summary>Admin Mode's "Spawn here" submenu: every spawnable blueprint, spawned on the tile and layer the menu was opened on.</summary>
     private static List<ContextMenuOption> SpawnChoices(Game.Spawning.BlueprintAdminCommands admin, Vector3Int tilePosition) =>

@@ -1,4 +1,5 @@
 ﻿using Game.Modules.Crawler.Components;
+using Game.Modules.Lootboxes;
 using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
@@ -17,7 +18,7 @@ public sealed class EarlyAdopterAchievement : IAchievementDefinition
 
     public string Description => "You are one of the first 5,000 Crawlers to enter a new World Dungeon. Sucker.";
 
-    public Lootbox? Lootbox => new(LootboxRarity.Silver, "Adventurer");
+    public LootboxReward? Lootbox => new(LootboxTypes.Adventurer.Id, LootboxRarity.Silver);
 
     public string RewardText => "";
 

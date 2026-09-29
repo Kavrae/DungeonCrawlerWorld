@@ -1,4 +1,7 @@
-﻿using Game.World;
+﻿using Game.Modules.Inventory;
+using Game.Modules.Inventory.Definitions;
+using Game.Modules.Lootboxes;
+using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
 
@@ -6,6 +9,9 @@ namespace Game.Modules.Achievements.Definitions;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class SpellCasterAchievement : IAchievementDefinition
 {
+    private static readonly LootboxReward Reward = new(LootboxTypes.Adventurer.Id, LootboxRarity.Bronze,
+        new SetItemContents([new ItemContentsEntry(ManaPotion.Id, 5)]));
+
     public Guid Id { get; } = new("3a1f8c2e-9d4b-47a6-8e2f-000000000009");
 
     public string Name => "You're a wizard, <copyright warning>";
@@ -14,7 +20,7 @@ public sealed class SpellCasterAchievement : IAchievementDefinition
 
     public string Description => "You cast your first spell! Lets hope it's not your last.";
 
-    public Lootbox? Lootbox => null;
+    public LootboxReward? Lootbox => Reward;
 
     public string RewardText => "";
 

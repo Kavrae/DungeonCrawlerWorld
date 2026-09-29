@@ -1137,6 +1137,127 @@ Measured (Release, seed 1, 3072², frames 600-3600) against a baseline saved imm
 - **Save/load** will need to persist the counter alongside the seed; nothing restores it yet.
 - The same session seed now gives different crawler numbers than before this change.
 
+### Loot boxes
+
+A loot box is an untradeable inventory item that, when activated, opens every box the player holds and
+grants their contents straight into the inventory. Module: `Game/Modules/Lootboxes/` (`LootboxModule`,
+requires `BlueprintsModule`; `AchievementModule` requires it). Replaced the old `Lootbox` placeholder
+record in Achievements.
+
+**Types, rarities and item definitions**
+- `LootboxTypeDefinition` (Id, Name, optional sprite/glyph) registers into `LootboxCatalog`
+  (`GameModuleContext.Lootboxes`), so a mod adds or replaces a type by Id. Built-in types
+  (`LootboxTypes`): Adventurer, Alchemist, Exorcist, Investor, Librarian, Weapon, Boss, Quest, Viewer Gift,
+  Sponsor Gift. `LootboxRarity` (Bronze..Celestial) ordinal order is the rarity order.
+- **Item definitions are created on demand**, never up front: there will be dozens of types and most
+  (type, rarity) pairs will never be granted. `LootboxCatalog.GetOrCreateItem(LootboxKind)` builds the
+  pair's `ItemDefinition` on first grant and registers it into `ItemCatalog`. Its Id is a SHA-256
+  name-based Guid of (TypeId, Rarity) (`ItemIdFor`), the same in every session and save.
+- `ItemCatalog.TryGet` is now overridable (`Catalog<T>.TryGet` virtual) and falls back to
+  `IItemDefinitionSource`s: `LootboxCatalog.TryResolveItem` recognizes any pair's id (it indexes every
+  registered type x 6 rarities, ids only, re-indexed when types were added) and creates the definition.
+  Only a loaded save needs this today; it keeps the id scheme save-safe.
+- A box's definition: "{Rarity} {Type} Box", `[Tag.Lootbox]` (the inventory tab), `CanTrade: false`,
+  `GoldValue` 0, the placeholder contents, the type's sprite (the chest, "Inventory", by default) tinted
+  by the new generic `ItemDefinition.SpriteTint` in the rarity's color (`LootboxRarityColors`, also the
+  glyph color), and no `Activator`.
+- Same type and rarity stack through plain `InventoryActions.AddItem`.
+
+**Contents, and overriding them per box**
+- `IItemContents.Roll(SeededRandom, ItemCatalog)` lives in Inventory, beside `ItemDefinition.Contents`:
+  "an item that grants items when opened" isn't loot-box-specific. Implementations compare by value.
+- `RandomSingleStackContents` is the placeholder every box uses: one stack of 1-10 of one item picked
+  uniformly (candidates sorted by Id) from every tradeable item that isn't itself opened. Type and rarity
+  don't affect it -- TODO.md's "Lootbox drop tables" replaces it.
+- `SetItemContents` is fixed rewards; equal when its entries are equal in order.
+- `LootboxReward(TypeId, Rarity, Contents?)` is what every award declares. A reward with `Contents`
+  is granted as a per-stack `Override` of its kind's definition (`AddItemWithOverride`), cached per
+  (kind, contents) so every grant shares one definition. It keeps the kind's id, name, sprite and tab,
+  stacks only with boxes carrying equal contents, and never stacks with the usual box of its kind.
+  Opening reads each stack's effective definition, so overridden boxes need no special path.
+- Side fix: plain `AddItem` now only merges into a stack with no `Override` (it used to merge into an
+  overridden stack of the same item id). `AreEquivalentOverrides` compares `Contents`, `CanTrade` and
+  `SpriteTint` too.
+
+**Untradeable items and the hotbar**
+- `ItemDefinition.CanTrade` (default true), not the tag, is the "can't be traded, looted, sold, bought,
+  dropped or destroyed" rule, so a future quest item can reuse it. Named to match `CanBindToHotbar`.
+- `InventoryActions.TryTransferStack`/`TryTransferAllStacksOfItem` now take the `ItemCatalog` and refuse
+  an untradeable stack with no state changed -- the one check behind give, take, corpse looting, shop
+  buy/sell, trade staging and plain drag-drop. An item the catalog doesn't know carries no restriction.
+  To pass the catalog, `UiInputController`'s `ItemCatalog` became required (it was optional for tests)
+  and the shop/trade drag-drop resolvers lost their no-catalog branches.
+- `ShopActions.CanTrade` is false for an untradeable item, so shop and trade UI grey it out. The item
+  context menu offers no Give/Take/Sell All/Buy All/Add to trade for it.
+- Not hotbar-bindable is separate from `CanTrade` (an untradeable quest item may still be usable):
+  `ItemHotkeyBindingQueries.CanBind` is false for `Tag.Lootbox`, read by the cell's `CanBindToHotbar`
+  and `HotbarContent.BindItem`.
+- A cell that can neither be traded nor bound never starts a drag -- no drop could send it anywhere.
+
+**Granting and sources**
+- `LootboxActions.Grant` is the one grant path; it publishes `LootboxGrantedEvent`. Admin Mode's map
+  context menu has "Grant loot box >" (type, then rarity) on any entity -- a permanent test tool.
+- **Achievements** (`IAchievementDefinition.Lootbox`): unlocking records an
+  `UnclaimedAchievementLootboxComponent` (achievement id + reward as declared) -- game state, not UI.
+  The box is granted only when the player closes that notification for good:
+  `NotificationCenter.NotificationDismissed` fires for Close, "Close" and "Close All", never for
+  minimize (the Closed handler tells them apart because minimizing re-queues the notification as unread
+  first). `AchievementLootboxClaims.TryClaim` removes the record then grants, so it can't grant twice.
+  A minimized or never-opened notification never pays out -- no timeout, no fallback.
+  Boxes: AngelInvestor Bronze Investor, Archivist Bronze Librarian, DrinkingProblem Bronze Alchemist
+  (set contents: 2 Health Potions, 2 Cure Poison Potions), EarlyAdopter Silver Adventurer, EmptyPockets
+  Bronze Adventurer, InertGas Bronze Exorcist, SpellCaster Bronze Adventurer (set contents: 5 Mana
+  Potions), UnarmedCombat Bronze Weapon. `RewardText` explains only an unusual reward, why a particular
+  one was given, or why none was; the popup omits the Reward line when it's blank, so an achievement
+  that just grants its box has none.
+- **Bosses**: `BlueprintDefinition.Lootbox` is a facet, resolved like the others (the last part in
+  build order to declare one wins; `ResolvedBlueprint.Lootbox`). The `Boss` trait declares Bronze Boss,
+  so the Goblin Foreman and anything Boss is applied to pay out. `BossLootboxAwarder` (subscribed to
+  `EntityDiedEvent` in `LootboxModule.RegisterSystems`) grants the box when the killing blow's source is
+  the player: the most recently applied part with a box wins, else the spawn blueprint's. It reads
+  definitions, never components, so a boss that died unbuilt still pays out. One box per death, player
+  killing blow only -- confirmed as intended. Kill credit for a status-effect tick goes to whoever
+  started that run of the status (poison and burning keep their first applier's source); left as-is.
+  Credit by contribution is TODO.md's "Advanced boss loot box awards".
+- Quests, viewer gifts and sponsor gifts don't exist yet; their types do, and each will call
+  `LootboxActions.Grant` with a `LootboxReward` on its own award declaration.
+
+**Opening**
+- "Open All" (the context menu's only option on a box) or double-clicking any box opens
+  every box the player holds. Never blocked: no action lock and no location check (safe rooms are a TODO).
+- **A direct call, not a System.** `ConsumableActivationSystem` is a system because consumables need the
+  action lock, map targeting, system ordering and the skeleton guard; opening needs none of that and only
+  touches the player's own built inventory, which Presentation already mutates between frames. A system
+  would poll an empty queue every frame.
+- `LootboxOpener` (`GameModuleContext.LootboxOpener`, handed to Presentation through
+  `GameBootstrapResult`/`WorldSessionContext`) groups the boxes by kind -- every stack of one kind, split
+  or overridden, is one group -- orders groups by rarity then type name (ordinal), and for each unit
+  consumes it, rolls its effective contents and grants the rewards. It returns `OpenedLootboxGroup`s:
+  kind, count, and items combined by id (`GrantedItem`: id, summed quantity, the stack the last one
+  landed in). It draws from its own `SeededRandom` (runtime spawn seed xor a salt), so opening shifts no
+  other roll and seeded runs reproduce.
+- Rewards go through `ItemGrants.Grant`, which bakes a wand's charges from the recipient's Intelligence
+  (`WandGrantEffects.Grant`) and adds anything else plainly; `AddItemWithOverride` and
+  `WandGrantEffects.Grant` now return the stack they granted into. `PlayerKit`'s wand grant uses it;
+  `TreasureChest` deliberately doesn't (its wands would bake from the chest's absent Intelligence).
+- Rewards are always items. A non-item reward is authored as a one-time consumable whose effects do it.
+
+**Results window** (`Presentation/UI/Lootboxes/`)
+- `LootboxResultsWindowController.Show` opens one "Loot Boxes" window beside the player's Inventory
+  window (a menu window: pauses, Escape closes), replacing its contents if already open. Sized from
+  `LootboxChrome` (8 columns at open, up to 75% of the map's height; beyond that it scrolls).
+- `LootboxResultsContent` (an `IElementContent`) lays out one section per group: a header in the rarity
+  color, "Bronze Adventurer Box" or "... x3" when more than one box of that kind opened, then the
+  group's combined rewards as `InventoryItemStackCell`s showing what the group granted. Re-flows on
+  resize with the same reentrancy guard as `InventoryGridContent`.
+- Reward cells set the new `IsDragSource = false` (reset true by every `Configure`), so they never
+  start a drag and offer no context menu. Hover shows the inventory's tooltip (the summary text is now
+  shared as `ItemHoverSummary`).
+- Click opens Item Details docked beside the results window: `ItemDetailsWindowController.Open` takes
+  an optional anchor window, and a reward whose stack has since been used up opens read-only through
+  `OpenDefinition` (stack id `ItemDetailsWindow.NoStackInstanceId`; Compare does nothing).
+  `GetLootboxResultsWindowRectangle` is its own outside-click hook, never folded into another window's.
+
 ## Presentation
 
 ### Floating Text

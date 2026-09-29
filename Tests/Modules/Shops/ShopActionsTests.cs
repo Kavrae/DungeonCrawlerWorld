@@ -25,6 +25,7 @@ public sealed class ShopActionsTests
     private static readonly Guid PotionItemId = Guid.NewGuid();
     private static readonly Guid ToolItemId = Guid.NewGuid();
     private static readonly Guid CappedItemId = Guid.NewGuid();
+    private static readonly Guid UntradeableItemId = Guid.NewGuid();
 
     private static readonly ShopComponent PotionOnlyShop = new(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f);
     private static readonly ShopComponent GeneralShop = new(allowedTags: null, buyMultiplier: 1.20f, sellMultiplier: 0.80f);
@@ -37,6 +38,7 @@ public sealed class ShopActionsTests
         catalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue));
         catalog.Register(new ItemDefinition(ToolItemId, "Test Tool", null, "t", Color.White, Tags: [Tag.Tool], Effects: [], GoldValue: ToolValue));
         catalog.Register(new ItemDefinition(CappedItemId, "Test Capped Potion", null, "c", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue, MaximumShopStock: 5));
+        catalog.Register(new ItemDefinition(UntradeableItemId, "Test Untradeable Potion", null, "u", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue, CanTrade: false));
 
         return (manager, catalog);
     }
@@ -57,6 +59,32 @@ public sealed class ShopActionsTests
         catalog.TryGet(PotionItemId, out var potion);
 
         Assert.IsTrue(ShopActions.CanTrade(PotionOnlyShop, potion));
+    }
+
+    [TestMethod]
+    public void CanTrade_UntradeableItem_ReturnsFalse_EvenForAShopThatTradesAnything()
+    {
+        var (_, catalog) = BuildManager();
+        catalog.TryGet(UntradeableItemId, out var untradeable);
+
+        Assert.IsFalse(ShopActions.CanTrade(GeneralShop, untradeable));
+        Assert.IsFalse(ShopActions.CanTrade(PotionOnlyShop, untradeable));
+    }
+
+    [TestMethod]
+    public void TrySellToShop_UntradeableItem_RefusesWithNoStateChanged()
+    {
+        var (manager, catalog) = BuildManager();
+        manager.Merge(ShopEntityId, GeneralShop);
+        manager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 0, credits: 0));
+        var stackId = InventoryActions.AddItem(manager, PlayerEntityId, UntradeableItemId, quantity: 2);
+
+        var result = ShopActions.TrySellToShop(manager, catalog, PlayerEntityId, ShopEntityId, stackId, TestPlayerQuery.NoPlayer);
+
+        Assert.IsFalse(result);
+        Assert.AreEqual(0, manager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold);
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(manager.GetMultiPool<InventoryItemStackComponent>(), PlayerEntityId, stackId, out _));
     }
 
     [TestMethod]

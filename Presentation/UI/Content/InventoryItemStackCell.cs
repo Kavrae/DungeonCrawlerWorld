@@ -60,8 +60,10 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     protected string? _spriteName;
     protected string _glyph = string.Empty;
     protected Color _glyphColor;
+    private Color? _spriteTint;
     private int _quantity;
     protected bool _isDisabled;
+    private bool _itemCanBindToHotbar;
     private bool _groupBorderTop;
     private bool _groupBorderBottom;
     private bool _groupBorderLeft;
@@ -85,8 +87,9 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     public bool MergedStackBadgeVisible { get; private set; }
 
     /// <summary>
-    /// False only for a merged group cell (StackInstanceId null -- there is no single stack a
-    /// drop onto a hotbar slot could mean). A single divergent stack -- whether it never needed
+    /// False for a merged group cell (StackInstanceId null -- there is no single stack a
+    /// drop onto a hotbar slot could mean), and for an item that can never be bound at all
+    /// (ItemHotkeyBindingQueries.CanBind -- a loot box). A single divergent stack -- whether it never needed
     /// merging in the first place, or is currently shown as one of a Merged Stack's Expansion
     /// Stacks after clicking to expand -- is exactly as bindable as a base stack: it already
     /// resolves to one exact physical StackInstanceId, the same identity ConsumableActivationSystem's
@@ -94,7 +97,13 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     /// was never the thing worth blocking -- ambiguity (which physical stack a merged cell's drag
     /// would even mean) is.
     /// </summary>
-    public bool CanBindToHotbar => StackInstanceId is not null;
+    public bool CanBindToHotbar => StackInstanceId is not null && _itemCanBindToHotbar;
+
+    /// <summary>False for an item that never leaves its owner's inventory (ItemDefinition.CanTrade) -- no Give, Take, Sell, Buy or trade option is offered for it.</summary>
+    public bool CanTrade { get; private set; }
+
+    /// <summary>False for a cell that only displays an item and never starts a drag, such as a loot box reward; reset to true by every Configure.</summary>
+    public bool IsDragSource { get; set; }
 
     /// <summary>Drives a translucent highlight overlay -- see InventoryGridContent's own hover polling. Mirrors AbilityScoreColumnHeader.IsHovered.</summary>
     public bool IsHovered { get; set; }
@@ -146,8 +155,10 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     /// this way). SetGroupBorderEdges, called separately afterward, is the only thing that turns
     /// any of them back on for this Configure's cell.
     /// </summary>
-    public void Configure(int entityId, Guid itemDefinitionId, uint? stackInstanceId, string? spriteName, string glyph, Color glyphColor, int quantity, bool isDisabled, bool isDivergent, bool mergedStackBadgeVisible, Vector2 cellSize)
+    public void Configure(int entityId, Guid itemDefinitionId, uint? stackInstanceId, string? spriteName, string glyph, Color glyphColor, Color? spriteTint, int quantity, bool isDisabled, bool isDivergent, bool mergedStackBadgeVisible, bool canTrade, bool itemCanBindToHotbar, Vector2 cellSize)
     {
+        CanTrade = canTrade;
+        _itemCanBindToHotbar = itemCanBindToHotbar;
         EntityId = entityId;
         ItemDefinitionId = itemDefinitionId;
         StackInstanceId = stackInstanceId;
@@ -156,6 +167,8 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         _spriteName = spriteName;
         _glyph = glyph;
         _glyphColor = glyphColor;
+        _spriteTint = spriteTint;
+        IsDragSource = true;
         _quantity = quantity;
         _isDisabled = isDisabled;
         ShopTradeEligible = true;
@@ -226,7 +239,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
 
         var isGreyedOut = _isDisabled || CompareState == CellCompareState.Ineligible || !ShopTradeEligible;
         SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGetFirst(_spriteName, out var spriteComponent) ? spriteComponent : null;
-        var spriteTint = isGreyedOut ? Color.Gray : Color.White;
+        var spriteTint = isGreyedOut ? Color.Gray : _spriteTint ?? Color.White;
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 
         SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, iconSize, spriteTint);

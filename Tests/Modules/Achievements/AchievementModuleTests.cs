@@ -9,6 +9,7 @@ using Game.Modules.Achievements.Components;
 using Game.Modules.Achievements.Definitions;
 using Game.Modules.Crawler;
 using Game.Modules.Crawler.Components;
+using Game.Modules.Lootboxes;
 using Game.Notifications;
 using Game.World;
 
@@ -28,7 +29,7 @@ public sealed class AchievementModuleTests
 {
     private static (EcsContext EcsContext, EventBus EventBus, Game.World.World World) Build()
     {
-        var build = BuiltInTestModules.BuildModules([new AchievementModule(), new CrawlerModule()]);
+        var build = BuiltInTestModules.BuildModules([new Game.Modules.Lootboxes.LootboxModule(), new AchievementModule(), new CrawlerModule()]);
 
         return (build.EcsContext, build.Context.EventBus, build.World);
     }
@@ -331,5 +332,41 @@ public sealed class AchievementModuleTests
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
             playerEntityId,
             InflictedDamageAchievementId));
+    }
+
+    [TestMethod]
+    public void EnteredDungeon_OwesTheBoxOfEveryUnlockedAchievementThatHasOne()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+
+        eventBus.Publish(new EnteredDungeonEvent());
+
+        var unclaimedLootboxes = new List<UnclaimedAchievementLootboxComponent>();
+        var pool = ecsContext.ComponentManager.GetMultiPool<UnclaimedAchievementLootboxComponent>();
+        for (var denseIndex = pool.GetFirstDenseIndex(playerEntityId); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
+        {
+            unclaimedLootboxes.Add(pool.GetReadonlyByDenseIndex(denseIndex));
+        }
+
+        Assert.HasCount(2, unclaimedLootboxes);
+        Assert.AreEqual(new LootboxReward(LootboxTypes.Weapon.Id, LootboxRarity.Bronze), unclaimedLootboxes.Single(owed => owed.AchievementId == UnarmedCombatAchievementId).Reward);
+        Assert.AreEqual(new LootboxReward(LootboxTypes.Adventurer.Id, LootboxRarity.Bronze), unclaimedLootboxes.Single(owed => owed.AchievementId == EmptyPocketsAchievementId).Reward);
+    }
+
+    [TestMethod]
+    public void UnlockNotification_CarriesTheAchievementId()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        world.PlayerEntityId = ecsContext.EntityManager.CreateEntity();
+        NotificationRequestedEvent? published = null;
+        eventBus.Subscribe<NotificationRequestedEvent>(requested => published = requested);
+
+        eventBus.Publish(new Game.Modules.Shops.GoldGivenToShopEvent(world.PlayerEntityId, ecsContext.EntityManager.CreateEntity(), 50));
+        eventBus.DispatchBuffered<NotificationRequestedEvent>();
+
+        Assert.AreEqual(AngelInvestorAchievementId, published!.Achievement!.AchievementId);
+        Assert.AreEqual("Bronze Investor Box", published.Achievement.LootboxLabel);
     }
 }

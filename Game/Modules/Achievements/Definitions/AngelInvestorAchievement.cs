@@ -1,8 +1,9 @@
+using Game.Modules.Lootboxes;
 using Game.Modules.Shops;
 
 namespace Game.Modules.Achievements.Definitions;
 
-/// <summary>Achievement for giving Gold to a shop. Reward: None (temporary -- see this achievement's own request note).</summary>
+/// <summary>Achievement for giving Gold to a shop.</summary>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class AngelInvestorAchievement : IAchievementDefinition
 {
@@ -14,7 +15,7 @@ public sealed class AngelInvestorAchievement : IAchievementDefinition
 
     public string Description => "You believe in this shop's business model. Or you just wanted the inventory space back.";
 
-    public Lootbox? Lootbox => null;
+    public LootboxReward? Lootbox => new(LootboxTypes.Investor.Id, LootboxRarity.Bronze);
 
     public string RewardText => "";
 

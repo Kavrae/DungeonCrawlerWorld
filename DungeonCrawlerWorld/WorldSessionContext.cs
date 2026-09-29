@@ -38,6 +38,8 @@ public sealed record WorldSessionContext(
     UniqueNumberAllocator CrawlerNumberAllocator,
     ActionCatalog ActionCatalog,
     ItemCatalog ItemCatalog,
+    Game.Modules.Lootboxes.LootboxCatalog LootboxCatalog,
+    Game.Modules.Lootboxes.LootboxOpener LootboxOpener,
     PlayerActivityLog PlayerActivityLog,
     StatusEffectDisplayRegistry StatusEffectDisplays,
     ReservedEntityIds ReservedEntityIds,

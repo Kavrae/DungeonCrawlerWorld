@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Lootboxes;
 
 namespace Game.Modules.Achievements.Definitions;
 
@@ -25,7 +26,7 @@ public sealed class ObsessiveCollectorAchievement : IAchievementDefinition
 
     public string Description => "Just... one... more.";
 
-    public Lootbox? Lootbox => null;
+    public LootboxReward? Lootbox => null;
 
     public string RewardText => "Your inventory grudgingly makes room for one more -- every item's stack cap is now 1000.";
 

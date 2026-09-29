@@ -1,4 +1,5 @@
-﻿using Game.World;
+﻿using Game.Modules.Lootboxes;
+using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
 
@@ -14,7 +15,7 @@ public sealed class InflictedDamageAchievement : IAchievementDefinition
 
     public string Description => "You've inflicted damage on a mob. Hopefully it won't hit back!";
 
-    public Lootbox? Lootbox => null;
+    public LootboxReward? Lootbox => null;
 
     public string RewardText => "It's probably going to hit back.";
 

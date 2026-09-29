@@ -455,6 +455,7 @@ public sealed class NotificationCenterTests
         var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
         var notificationCenter = CreateNotificationCenter(windowService, new UiLayerStack());
         var achievement = new AchievementNotificationDetails(
+            AchievementId: Guid.NewGuid(),
             RequirementText: "Entered the dungeon without a human companion.",
             LootboxLabel: "Bronze Adventurer Box",
             RewardText: "A shiny bronze box.");
@@ -480,6 +481,7 @@ public sealed class NotificationCenterTests
         var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
         var notificationCenter = CreateNotificationCenter(windowService, new UiLayerStack());
         var achievement = new AchievementNotificationDetails(
+            AchievementId: Guid.NewGuid(),
             RequirementText: "Entered the dungeon without a human companion.",
             LootboxLabel: null,
             RewardText: "None! Haha. You are so dead.");
@@ -493,5 +495,98 @@ public sealed class NotificationCenterTests
 
         var activePopup = capturedPopups.Single(popup => popup.TitleButtons.Count > 0);
         StringAssert.Contains(activePopup.OriginalText, "Lootbox: None.");
+    }
+
+    private static List<Notification> RecordDismissals(NotificationCenter notificationCenter)
+    {
+        var dismissed = new List<Notification>();
+        notificationCenter.NotificationDismissed += dismissed.Add;
+        return dismissed;
+    }
+
+    [TestMethod]
+    public void ClickingCloseButton_RaisesNotificationDismissedWithThatNotification()
+    {
+        var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(windowService, layers);
+        var dismissed = RecordDismissals(notificationCenter);
+        var notificationId = notificationCenter.AddNotification(NotificationCategory.Achievement, "Unlocked", showImmediately: true);
+
+        var popup = capturedPopups.Single(window => window.TitleButtons.Count > 0);
+        Assert.IsTrue(ClickDynamicHud(layers, popup.TitleButtons[0].Rectangle.Center));
+
+        Assert.HasCount(1, dismissed);
+        Assert.AreEqual(notificationId, dismissed[0].Id);
+    }
+
+    [TestMethod]
+    public void ClickingMinimizeButton_DoesNotRaiseNotificationDismissed_UntilItIsReopenedAndClosed()
+    {
+        var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(windowService, layers);
+        var dismissed = RecordDismissals(notificationCenter);
+        var notificationId = notificationCenter.AddNotification(NotificationCategory.Achievement, "Unlocked", showImmediately: true);
+
+        var popup = capturedPopups.Single(window => window.TitleButtons.Count > 0);
+        Assert.HasCount(2, popup.TitleButtons);
+        Assert.IsTrue(ClickDynamicHud(layers, popup.TitleButtons[1].Rectangle.Center));
+
+        Assert.IsEmpty(dismissed);
+        Assert.IsFalse(notificationCenter.CloseNotification(notificationId));
+
+        notificationCenter.OpenNextNotification(NotificationCategory.Achievement);
+        Assert.IsTrue(notificationCenter.CloseNotification(notificationId));
+
+        Assert.HasCount(1, dismissed);
+        Assert.AreEqual(notificationId, dismissed[0].Id);
+    }
+
+    [TestMethod]
+    public void MinimizeAllNotifications_DoesNotRaiseNotificationDismissed()
+    {
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), new UiLayerStack());
+        var dismissed = RecordDismissals(notificationCenter);
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "First", showImmediately: true);
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "Second", showImmediately: true);
+
+        notificationCenter.MinimizeAllNotifications();
+
+        Assert.IsEmpty(dismissed);
+    }
+
+    [TestMethod]
+    public void CloseAllNotifications_RaisesNotificationDismissedForEveryActiveNotification()
+    {
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), new UiLayerStack());
+        var dismissed = RecordDismissals(notificationCenter);
+        var firstId = notificationCenter.AddNotification(NotificationCategory.Achievement, "First", showImmediately: true);
+        var secondId = notificationCenter.AddNotification(NotificationCategory.Achievement, "Second", showImmediately: true);
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "Queued", showImmediately: false);
+
+        notificationCenter.CloseAllNotifications();
+
+        CollectionAssert.AreEquivalent(new[] { firstId, secondId }, dismissed.Select(notification => notification.Id).ToArray());
+    }
+
+    [TestMethod]
+    [DataRow("")]
+    [DataRow("   ")]
+    public void AddNotification_WithAchievementDetailsButNoRewardText_ShowsNoRewardLine(string rewardText)
+    {
+        var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
+        var notificationCenter = CreateNotificationCenter(windowService, new UiLayerStack());
+        var achievement = new AchievementNotificationDetails(
+            AchievementId: Guid.NewGuid(),
+            RequirementText: "Activated your first spell.",
+            LootboxLabel: "Bronze Adventurer Box",
+            RewardText: rewardText);
+
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "You cast your first spell!", showImmediately: true, title: "Wizard", achievement: achievement);
+
+        var activePopup = capturedPopups.Single(popup => popup.TitleButtons.Count > 0);
+        StringAssert.Contains(activePopup.OriginalText, "Lootbox: Bronze Adventurer Box.");
+        Assert.DoesNotContain("Reward:", activePopup.OriginalText);
     }
 }

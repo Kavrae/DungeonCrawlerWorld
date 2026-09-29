@@ -1,4 +1,5 @@
 using Game.Modules.AbilityScores;
+using Game.Modules.Lootboxes;
 
 namespace Game.Modules.Achievements.Definitions;
 
@@ -17,7 +18,7 @@ public sealed class RevengeOfTheNerdsAchievement : IAchievementDefinition
     public string Description => "Your base intelligence is now over 100. But I'll bet you knew that already. Nerd.";
 
     /// <summary>Intended reward: 3 upgrade choices (see TODO.md's Achievement content backlog) -- the ability-score upgrade-choice system doesn't exist yet, so there's nothing to grant beyond the notification itself.</summary>
-    public Lootbox? Lootbox => null;
+    public LootboxReward? Lootbox => null;
 
     public string RewardText => "You've received an upgrade!";
 

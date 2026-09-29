@@ -25,7 +25,7 @@ What exists today:
 - `TestCombatBehaviorSystem` (tiered, before `MovementSystem`) runs self-heal -> melee -> wander.
   NPC inventories are capped at `InventoryCapacity.MaxNonPlayerStackCount` (20 distinct stacks), and
   `TryTransferStack` never merges into an existing stack of the same item.
-- `PLAN-loot-boxes.md` / TODO.md's "Advanced boss loot box" entry want per-fight contribution
+- IMPLEMENTATION-NOTES.md's "Loot boxes" / TODO.md's "Advanced boss loot box" entry want per-fight contribution
   tracking too. The ledger below is built so that entry can read it at death without a second store.
 
 ## Design

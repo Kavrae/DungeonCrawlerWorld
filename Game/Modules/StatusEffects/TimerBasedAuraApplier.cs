@@ -22,4 +22,7 @@ public sealed class TimerBasedAuraApplier<T>(StatusEffectType effectType, Packed
 
     public void ApplyStack(int entityId, ActionSource source, long now) =>
         applyStack(entityId, source, now);
+
+    /// <remarks>Removing the timer component is the whole effect: its stack count lives on it, and the effect's timer wheel drops a removed timer's scheduled tick on its own.</remarks>
+    public void RemoveAllStacks(int entityId) => timers.Remove(entityId);
 }

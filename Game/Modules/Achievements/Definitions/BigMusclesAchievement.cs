@@ -1,4 +1,5 @@
 using Game.Modules.AbilityScores;
+using Game.Modules.Lootboxes;
 
 namespace Game.Modules.Achievements.Definitions;
 
@@ -18,7 +19,7 @@ public sealed class BigMusclesAchievement : IAchievementDefinition
         "Your base strength is now over 100. Rawr! Get thee to Chippendales!";
 
     /// <summary>Intended reward: 3 upgrade choices (see TODO.md's Achievement content backlog) -- the ability-score upgrade-choice system doesn't exist yet, so there's nothing to grant beyond the notification itself.</summary>
-    public Lootbox? Lootbox => null;
+    public LootboxReward? Lootbox => null;
 
     public string RewardText => "You've received an upgrade!";
 

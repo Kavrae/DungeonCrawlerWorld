@@ -1,5 +1,6 @@
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
+using Game.Modules.Lootboxes;
 
 namespace Game.Modules.Achievements.Definitions;
 
@@ -16,7 +17,7 @@ public sealed class MinMaxerAchievement : IAchievementDefinition
     public string Description => "Well.  You did it. You got every ability score to 300.  You're a walking statistical anomaly and, you know what, I'll say it. I'll bet you cheated. Didn't you? You found some little exploit and cheesed the hell out of it.  You cheated your way all the way to the top. And I couldn't be more proud.";
 
     /// <summary>Intended reward: 3 upgrade choices (see TODO.md's Achievement content backlog) -- the ability-score upgrade-choice system doesn't exist yet, so there's nothing to grant beyond the notification itself.</summary>
-    public Lootbox? Lootbox => null;
+    public LootboxReward? Lootbox => null;
 
     public string RewardText => "You've received an upgrade!";
 

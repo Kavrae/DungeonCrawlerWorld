@@ -28,7 +28,7 @@ What exists today:
 - `InventoryActions.TryTransferStack` moves a stack verbatim (`Override` included) and is the single
   path for give, take, corpse looting, shop buy/sell, trade staging and plain drag-drop.
 - `MultiComponentPool` raises `ComponentChanged` on every add and update, and nothing on removal.
-- Loot boxes (`PLAN-loot-boxes.md`) set the precedent for an item activation that isn't a system:
+- Loot boxes (IMPLEMENTATION-NOTES.md "Loot boxes") set the precedent for an item activation that isn't a system:
   a direct call from the Activate click, no queue, no lock.
 
 ## Design

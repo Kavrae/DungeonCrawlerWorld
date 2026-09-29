@@ -190,8 +190,8 @@ public sealed class UiInputController
     /// <summary>See _componentManager -- passed to PlainInventoryDragDropResolver/ShopDragDropResolver/TradeDragDropResolver, which pass it straight through to InventoryActions' capacity check for a non-player transfer destination.</summary>
     private readonly IPlayerQuery _playerQuery;
 
-    /// <summary>Needed only by ShopDragDropResolver/TradeDragDropResolver for the actual buy/sell step (ShopActions.TryBuyFromShop/TrySellToShop) -- null in test setups that don't wire one, in which case ShopDragDropResolver declines a shop-touching drag entirely (falling through to the plain, non-priced InventoryActions.TryTransferStack), while TradeDragDropResolver still claims a trade-touching one but skips its direct-sell/direct-buy branches specifically.</summary>
-    private readonly ItemCatalog? _itemCatalog;
+    /// <summary>Resolves a dragged stack's item for every drag-drop resolver: the shop's and trade's buy/sell step, and whether the item can be traded at all (InventoryActions.TryTransferStack).</summary>
+    private readonly ItemCatalog _itemCatalog;
 
     /// <summary>Derived from _componentManager, not a separate constructor parameter.</summary>
     private readonly PackedComponentPool<ShopComponent> _shopPool;
@@ -290,7 +290,7 @@ public sealed class UiInputController
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public UiInputController(UiLayerStack layers, Vector2 screenSize, ComponentManager componentManager, IPlayerQuery playerQuery, EventBus eventBus, HotbarController? hotbarController = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null, ItemCatalog? itemCatalog = null, MapViewState? mapViewState = null, HealthWindowController? healthWindowController = null, InventoryWindowController? inventoryWindowController = null, AbilityScoreWindowController? abilityScoreWindowController = null, DiagnosticsWindowController? diagnosticsWindowController = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, ComponentManager componentManager, IPlayerQuery playerQuery, EventBus eventBus, ItemCatalog itemCatalog, HotbarController? hotbarController = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null, MapViewState? mapViewState = null, HealthWindowController? healthWindowController = null, InventoryWindowController? inventoryWindowController = null, AbilityScoreWindowController? abilityScoreWindowController = null, DiagnosticsWindowController? diagnosticsWindowController = null)
     {
         _layers = layers;
         _screenSize = screenSize;
@@ -332,7 +332,7 @@ public sealed class UiInputController
 
         resolvers.Add(new ShopDragDropResolver(_shopPool, _itemCatalog, _playerQuery));
 
-        resolvers.Add(new PlainInventoryDragDropResolver(_playerQuery, _eventBus));
+        resolvers.Add(new PlainInventoryDragDropResolver(_itemCatalog, _playerQuery, _eventBus));
 
         return resolvers;
     }
@@ -923,6 +923,14 @@ public sealed class UiInputController
         // into the trade window to stage, just not directly bought/sold (ShopActions.TryBuyFromShop/
         // TrySellToShop's own affordability check refuses that with no state changed either way).
         if (_activeInteraction.Element is InventoryItemStackCell { CanStageInTrade: false } && _mapViewState?.OpenShopEntityId is not null)
+        {
+            return;
+        }
+
+        // An item that can neither leave its owner's inventory nor be bound to the hotbar (a loot
+        // box) has nowhere a drop could send it, so it never starts a drag at all -- nor does a
+        // display-only cell (a loot box reward), which stands for an item rather than holding it.
+        if (_activeInteraction.Element is InventoryItemStackCell { CanTrade: false, CanBindToHotbar: false } or InventoryItemStackCell { IsDragSource: false })
         {
             return;
         }

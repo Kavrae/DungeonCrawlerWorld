@@ -11,6 +11,7 @@ using Game.Modules.Actions;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
+using Game.Modules.Lootboxes;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffects;
@@ -29,6 +30,9 @@ public sealed class GameModuleContext
 {
     /// <summary>The modules whose pools the context itself is built from: transforms and occupancy (Core), processing tiers (ProcessingTier) and spawn records (Blueprints).</summary>
     public static IReadOnlyList<Guid> FoundationModuleIds { get; } = [CoreModule.ModuleId, ProcessingTierModule.ModuleId, BlueprintsModule.ModuleId];
+
+    /// <summary>Mixed into the runtime spawn seed so the loot box opener's sequence differs from the factory's.</summary>
+    private const ulong LootboxRollSalt = 0x4C6F6F74626F7853;
 
     /// <param name="world">The build's World, over the pools of componentManager.</param>
     /// <param name="crawlerNumbers">The session's crawler numbers; null for a build that spawns no crawlers.</param>
@@ -62,6 +66,10 @@ public sealed class GameModuleContext
         // Every placement through World gets a correct tier without its caller having to ask -- the
         // catch-all behind ProcessingTierResolver.CreateEntityAt. See that class's own remarks.
         world.EntityPlaced += ProcessingTierResolver.EnsureTiered;
+
+        Lootboxes = new LootboxCatalog(Items);
+        Items.AddDefinitionSource(Lootboxes);
+        LootboxOpener = new LootboxOpener(componentManager, Lootboxes, Items, runtimeSpawnSeed ^ LootboxRollSalt);
 
         SimulationScope = new SimulationScope(new ProcessingTierQuery(tiers).IsSimulated);
         FloatingTextFeed = new FloatingTextFeed(eventBus, tiers, transforms);
@@ -105,6 +113,12 @@ public sealed class GameModuleContext
 
     /// <summary>Filled during Configure -- same reasoning as Actions/Achievements above; a mod could register its own items the same way.</summary>
     public ItemCatalog Items { get; } = new();
+
+    /// <summary>Every loot box type, filled during Configure, and the item definition of each type and rarity once it has been granted.</summary>
+    public LootboxCatalog Lootboxes { get; }
+
+    /// <summary>Opens an entity's loot boxes, drawing from its own sequence seeded from the runtime spawn seed.</summary>
+    public LootboxOpener LootboxOpener { get; }
 
     /// <summary>MovementSystem's confirmed moves this frame, shared with ContactDamageSystem/StatusEffectAuraSystem so they can react without a per-move EventBus dispatch -- see FrameEventBuffer's own doc comment.</summary>
     public FrameEventBuffer<EntityMovedEvent> MovedEntities { get; } = new();

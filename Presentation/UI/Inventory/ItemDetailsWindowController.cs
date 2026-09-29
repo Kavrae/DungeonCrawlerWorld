@@ -16,7 +16,9 @@ namespace Presentation.UI.Inventory;
 /// "one target at a time" shape, but for item selection instead of a loot target. Always opens
 /// next to the player's own InventoryManagementWindow (InventoryWindowController.PlayerInventoryWindow),
 /// even when the click that opened it came from a secondary/corpse grid -- matches the literal
-/// "next to the Inventory Menu" spec rather than whichever grid happened to be clicked. Also
+/// "next to the Inventory Menu" spec rather than whichever grid happened to be clicked. The one
+/// exception is a loot box reward clicked in the results window, which opens next to that window
+/// instead (see Open's anchorWindow and OpenDefinition). Also
 /// drives MapViewState.SelectedItemStackInstanceId, which InventoryGridContent and HotbarContent
 /// both read to glow the selected stack wherever it's shown.
 /// </summary>
@@ -33,6 +35,9 @@ public sealed class ItemDetailsWindowController(
 
     private UiLayerStack _layers = null!;
     private ItemDetailsWindow? _window;
+
+    /// <summary>The window the open Item Details docks beside and takes its width from: the player's Inventory window, or the loot box results window for a reward clicked there.</summary>
+    private Window? _anchorWindow;
 
     public bool IsOpen => _window is not null;
 
@@ -60,6 +65,9 @@ public sealed class ItemDetailsWindowController(
     /// "outside" and closed/cleared the Item Details anchor instead of selecting the shop item).
     /// </summary>
     public Func<Rectangle>? GetTradeWindowRectangle { get; set; }
+
+    /// <summary>Settable late-bound query for the loot box results window's bounds -- wired by ShellBootstrapper to LootboxResultsWindowController.Rectangle. Its own hook, like GetTradeWindowRectangle, since it can be open alongside any of the others.</summary>
+    public Func<Rectangle>? GetLootboxResultsWindowRectangle { get; set; }
 
     /// <summary>Settable late-bound query for every currently-open Item Details Comparison column's own bounds -- without this, a click on a comparison column would look "outside" this window and wrongly close it, since IsOutsideClick has no other way to know those windows exist.</summary>
     public Func<IReadOnlyList<Rectangle>>? GetComparisonColumnRectangles { get; set; }
@@ -100,6 +108,11 @@ public sealed class ItemDetailsWindowController(
             return false;
         }
 
+        if (GetLootboxResultsWindowRectangle?.Invoke().Contains(clickPosition) == true)
+        {
+            return false;
+        }
+
         if (GetComparisonColumnRectangles is { } getColumnRectangles)
         {
             foreach (var columnRectangle in getColumnRectangles())
@@ -124,7 +137,8 @@ public sealed class ItemDetailsWindowController(
     /// first (both grids only exist inside/alongside it), but this controller has no other way
     /// to anchor a first-time position if that assumption is ever violated.
     /// </summary>
-    public void Open(int entityId, uint stackInstanceId)
+    /// <param name="anchorWindow">The window to dock beside if this opens the window; null for the player's own Inventory window.</param>
+    public void Open(int entityId, uint stackInstanceId, Window? anchorWindow = null)
     {
         if (!InventoryQueries.TryFindByStackInstanceId(_stacks, entityId, stackInstanceId, out var stack) ||
             !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition))
@@ -132,19 +146,30 @@ public sealed class ItemDetailsWindowController(
             return;
         }
 
-        if (inventoryWindowController.PlayerInventoryWindow is not { } playerWindow)
+        Show(entityId, stackInstanceId, definition, anchorWindow ?? inventoryWindowController.PlayerInventoryWindow);
+    }
+
+    /// <summary>Shows definition with no stack behind it -- a loot box reward whose stack has since been used up. Read-only: there's no stack to select or compare.</summary>
+    public void OpenDefinition(int entityId, ItemDefinition definition, Window anchorWindow) =>
+        Show(entityId, ItemDetailsWindow.NoStackInstanceId, definition, anchorWindow);
+
+    private void Show(int entityId, uint stackInstanceId, ItemDefinition definition, Window? anchorWindow)
+    {
+        if (anchorWindow is null)
         {
             return;
         }
 
+        _anchorWindow = anchorWindow;
         CurrentDefinition = definition;
         CurrentEntityId = entityId;
-        CurrentStackInstanceId = stackInstanceId;
+        CurrentStackInstanceId = stackInstanceId == ItemDetailsWindow.NoStackInstanceId ? null : stackInstanceId;
+        var selectedStackInstanceId = CurrentStackInstanceId;
 
         if (_window is { } existing)
         {
-            existing.Configure(entityId, stackInstanceId, definition, playerWindow.ContentSize.X);
-            mapViewState.SelectedItemStackInstanceId = stackInstanceId;
+            existing.Configure(entityId, stackInstanceId, definition, anchorWindow.ContentSize.X);
+            mapViewState.SelectedItemStackInstanceId = selectedStackInstanceId;
             return;
         }
 
@@ -168,7 +193,7 @@ public sealed class ItemDetailsWindowController(
                 // player window's own Top (confirmed by reproduction on the comparison-column
                 // version of this same call).
                 RelativePosition = WindowCascadePlacement.ComputePosition(
-                    playerWindow.Rectangle, new Vector2(playerWindow.CurrentSize.X, 0), 0, mapWindow.CurrentSize),
+                    anchorWindow.Rectangle, new Vector2(anchorWindow.CurrentSize.X, 0), 0, mapWindow.CurrentSize),
                 // WrapContent, not Fixed -- see ItemDetailsWindow's own doc comment for why:
                 // a Fixed-mode window whose own height shrinks between rebuilds re-measures its
                 // children against its own (small, stale) content size instead of a stable outer
@@ -179,7 +204,7 @@ public sealed class ItemDetailsWindowController(
                 // that shrink-feedback loop entirely -- the same mechanism Tooltip already relies
                 // on for its own auto-height content. MaximumSize.Y still caps growth at the map's
                 // visible area (CanUserScrollVertical covers whatever still overflows that).
-                MaximumSize = new Vector2(playerWindow.CurrentSize.X, mapWindow.CurrentSize.Y),
+                MaximumSize = new Vector2(anchorWindow.CurrentSize.X, mapWindow.CurrentSize.Y),
                 DisplayMode = ElementDisplayMode.WrapContent,
             },
             Chrome = new ElementChromeOptions
@@ -195,7 +220,7 @@ public sealed class ItemDetailsWindowController(
             },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
-        window.Configure(entityId, stackInstanceId, definition, playerWindow.ContentSize.X);
+        window.Configure(entityId, stackInstanceId, definition, anchorWindow.ContentSize.X);
         window.Closed += HandleClosed;
         DynamicHudContextMenus.WireCloseContextMenu(window, contextMenuController, _layers);
         window.OnCompareRequested = (compareEntityId, compareStackInstanceId) => OnCompareRequested?.Invoke(compareEntityId, compareStackInstanceId);
@@ -204,7 +229,7 @@ public sealed class ItemDetailsWindowController(
         _layers.OpenMenuWindow(window); // Menu Mode, same as the player's own Inventory window and a corpse window.
 
         _window = window;
-        mapViewState.SelectedItemStackInstanceId = stackInstanceId;
+        mapViewState.SelectedItemStackInstanceId = selectedStackInstanceId;
     }
 
     public void Close() => _window?.Close();
@@ -213,12 +238,12 @@ public sealed class ItemDetailsWindowController(
     public void UpdateComparedAgainst(IReadOnlyList<ItemDefinition> comparedAgainst)
     {
         if (_window is not { } window || CurrentDefinition is not { } definition || CurrentEntityId is not { } entityId ||
-            CurrentStackInstanceId is not { } stackInstanceId || inventoryWindowController.PlayerInventoryWindow is not { } playerWindow)
+            CurrentStackInstanceId is not { } stackInstanceId || _anchorWindow is not { } anchorWindow)
         {
             return;
         }
 
-        window.Configure(entityId, stackInstanceId, definition, playerWindow.ContentSize.X, comparedAgainst);
+        window.Configure(entityId, stackInstanceId, definition, anchorWindow.ContentSize.X, comparedAgainst);
     }
 
     private void HandleClosed(Element closedWindow)
@@ -226,6 +251,7 @@ public sealed class ItemDetailsWindowController(
         _layers.Remove(UiLayer.DynamicHud, closedWindow);
         _layers.CloseMenuWindow(closedWindow);
         _window = null;
+        _anchorWindow = null;
         mapViewState.SelectedItemStackInstanceId = null;
         CurrentDefinition = null;
         CurrentEntityId = null;

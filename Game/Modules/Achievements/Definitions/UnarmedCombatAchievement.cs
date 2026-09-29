@@ -1,4 +1,5 @@
-﻿using Game.World;
+﻿using Game.Modules.Lootboxes;
+using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
 
@@ -15,9 +16,9 @@ public sealed class UnarmedCombatAchievement : IAchievementDefinition
     public string Description =>
         "So. You just gonna waltz right into something called a “World Dungeon” and you’re not even going to bring a weapon? You’re either braver than you look, or you’re just an idiot. Good luck with that, Van Damme.";
 
-    public Lootbox? Lootbox => new(LootboxRarity.Bronze, "Weapon");
+    public LootboxReward? Lootbox => new(LootboxTypes.Weapon.Id, LootboxRarity.Bronze);
 
-    public string RewardText => "You've received a bronze weapon box!";
+    public string RewardText => "";
 
     public void RegisterTrigger(AchievementTriggerContext context) =>
         context.SubscribeUntilTriggered<EnteredDungeonEvent>();

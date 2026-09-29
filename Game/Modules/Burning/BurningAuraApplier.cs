@@ -73,6 +73,13 @@ public sealed class BurningAuraApplier(ComponentManager componentManager, MathUt
         BurningEffects.ApplyStack(componentManager, entityId, source, now, eventBus, playerQuery);
     }
 
+    /// <summary>Puts out every burn on entityId: the entity-scoped one and every body part's.</summary>
+    public void RemoveAllStacks(int entityId)
+    {
+        _entityTimers.Remove(entityId);
+        _bodyPartTimers.Remove(entityId);
+    }
+
     /// <summary>True if entityId's Burning grant should be body-part-scoped, out preferredType being the hazard's own BodyPartTargetRule.PreferredType (null means "no type preference, go straight to Bottommost").</summary>
     private bool TryResolveHazard(int entityId, ActionSource source, out BodyPartType? preferredType)
     {

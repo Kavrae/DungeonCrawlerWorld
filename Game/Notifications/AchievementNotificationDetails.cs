@@ -6,4 +6,5 @@ namespace Game.Notifications;
 /// referencing Presentation. LootboxLabel is null when the achievement carries no lootbox
 /// (an achievement always comes with 0 or 1, never more).
 /// </summary>
-public sealed record AchievementNotificationDetails(string RequirementText, string? LootboxLabel, string RewardText);
+/// <param name="AchievementId">The achievement this notification announces -- what closing it claims the loot box of (see AchievementLootboxClaims).</param>
+public sealed record AchievementNotificationDetails(Guid AchievementId, string RequirementText, string? LootboxLabel, string RewardText);

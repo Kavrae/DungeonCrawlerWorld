@@ -16,6 +16,7 @@ public sealed class CoreItemsModule : IGameModule
 
     private static readonly IReadOnlyList<Func<ItemDefinition>> Definitions = [
         HealthPotion.Build,
+        CurePoisonPotion.Build,
         ManaPotion.Build,
         HotkeyExpansionPotion.Build,
         DamagePotion.Build,

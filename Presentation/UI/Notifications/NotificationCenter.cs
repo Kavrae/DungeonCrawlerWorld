@@ -59,6 +59,9 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     /// </summary>
     public event Action<Window>? ActiveNotificationOpened;
 
+    /// <summary>Raised when the player closes a notification's popup for good: its Close button, "Close" or "Close All". Never raised by minimizing, which returns it to the unread queue.</summary>
+    public event Action<Notification>? NotificationDismissed;
+
     public void Initialize()
     {
         _folder = elementPoolService.CreateElement<Folder>(null, new ElementOptions
@@ -310,13 +313,21 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     private void OnActiveNotificationClosed(Element closedWindow)
     {
         var index = _activeNotifications.FindIndex(entry => entry.ActiveWindow == closedWindow);
+        Notification? closedNotification = null;
         if (index >= 0)
         {
+            closedNotification = _activeNotifications[index].Notification;
             _activeNotifications.RemoveAt(index);
         }
 
         layers.Remove(UiLayer.DynamicHud, closedWindow);
         layers.CloseMenuWindow(closedWindow); // No-op for a non-System notification, which was never opened as a menu window.
+
+        // Minimizing closes the popup too, but puts the notification back in its unread queue first.
+        if (closedNotification is not null && !UnreadListFor(closedNotification.Category).Contains(closedNotification))
+        {
+            NotificationDismissed?.Invoke(closedNotification);
+        }
 
         // Closing the last unread notification auto-tidies the HUD back down -- SetWindowDisplayMode
         // no-ops if the Folder is already Minimized, so this is safe to call unconditionally.
@@ -346,7 +357,13 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
             ? $"Lootbox: {lootboxLabel}."
             : "Lootbox: None.";
 
-        return $"{notification.Text} \n\n Requirement fulfilled: {achievement.RequirementText} \n\n {lootboxLine} \n\n Reward: {achievement.RewardText}";
+        // RewardText only explains an unusual reward, why a particular one was given, or why none was --
+        // an achievement that just grants its loot box has none, and gets no Reward line at all.
+        var rewardSection = string.IsNullOrWhiteSpace(achievement.RewardText)
+            ? string.Empty
+            : $" \n\n Reward: {achievement.RewardText}";
+
+        return $"{notification.Text} \n\n Requirement fulfilled: {achievement.RequirementText} \n\n {lootboxLine}{rewardSection}";
     }
 
     private List<Notification> UnreadListFor(NotificationCategory category) =>

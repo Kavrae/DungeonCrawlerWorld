@@ -297,7 +297,7 @@ public sealed class TradeWindow(
         InventoryQueries.CopyStacksForEntity(_stacks, sourceEntityId, stacks);
         foreach (var stack in stacks)
         {
-            InventoryActions.TryTransferStack(componentManager, sourceEntityId, destinationEntityId, stack.StackInstanceId, world);
+            InventoryActions.TryTransferStack(componentManager, itemCatalog, sourceEntityId, destinationEntityId, stack.StackInstanceId, world);
         }
     }
 
@@ -442,7 +442,7 @@ public sealed class TradeWindow(
         // picks TradeItemStackCell and the correct buy/sell pricing direction for this column -- see
         // InventoryGridContent's own doc comment on that parameter. Both columns are given the same
         // _tooltipController -- see its own doc comment for why that's safe now.
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, contextMenuController, entityId, filterTag: null, _tooltipController, static () => null, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, simulationClock, isShopSide));
+        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, contextMenuController, entityId, filterTag: null, _tooltipController, static () => null, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, static _ => { }, simulationClock, isShopSide));
         AddChild(gridWindow);
 
         var footerWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions

@@ -13,7 +13,8 @@ public static class InventoryActions
 
     /// <summary>
     /// Grants quantity of itemDefinitionId, stacking onto an existing matching stack if one
-    /// exists rather than always creating a new one -- this is the "identical items grouped with
+    /// exists rather than always creating a new one. Only a stack with no Override matches: one
+    /// with an Override is a different item that shares the id -- this is the "identical items grouped with
     /// a count" behavior. The single chokepoint every item grant goes through (starting kits,
     /// future loot drops), so it's also where InventoryGrant.EnsureInventoryComponentExists runs
     /// -- every caller gets the "gains an inventory on first item" behavior for free, the player
@@ -36,7 +37,7 @@ public static class InventoryActions
         var remaining = quantity;
         var lastStackInstanceId = 0u;
 
-        var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId, itemDefinitionId, static (stack, id) => stack.ItemDefinitionId == id);
+        var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId, itemDefinitionId, static (stack, id) => stack.ItemDefinitionId == id && stack.Override is null);
         if (matchedDenseIndex != -1)
         {
             var existingQuantity = stacks.GetReadonlyByDenseIndex(matchedDenseIndex).Quantity;
@@ -109,9 +110,12 @@ public static class InventoryActions
         a.SpriteName == b.SpriteName &&
         a.Glyph == b.Glyph &&
         a.GlyphColor == b.GlyphColor &&
+        a.SpriteTint == b.SpriteTint &&
         a.Description == b.Description &&
         a.Summary == b.Summary &&
         Equals(a.Activator, b.Activator) &&
+        Equals(a.Contents, b.Contents) &&
+        a.CanTrade == b.CanTrade &&
         a.Tags.SequenceEqual(b.Tags) &&
         a.Effects.SequenceEqual(b.Effects);
 
@@ -158,13 +162,15 @@ public static class InventoryActions
     /// one has an equivalent Override, respecting entityId's own effective cap (see
     /// GetEffectiveMaxStackSize) -- any quantity that would overflow it spills into additional new
     /// stacks rather than growing one stack past it.
+    /// Returns the StackInstanceId of whichever stack the last granted unit ended up in, as AddItem does.
     /// </summary>
-    public static void AddItemWithOverride(ComponentManager componentManager, int entityId, ItemDefinition effectiveDefinition, ushort quantity)
+    public static uint AddItemWithOverride(ComponentManager componentManager, int entityId, ItemDefinition effectiveDefinition, ushort quantity)
     {
         InventoryGrant.EnsureInventoryComponentExists(componentManager, entityId);
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         var effectiveCap = GetEffectiveMaxStackSize(componentManager, entityId);
         var remaining = quantity;
+        var lastStackInstanceId = 0u;
 
         var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId, effectiveDefinition,
             static (stack, definition) => !stack.IsDivergent && stack.Override is { } existing && AreEquivalentOverrides(existing, definition));
@@ -179,14 +185,20 @@ public static class InventoryActions
                 stacks.UpdateByDenseIndex(matchedDenseIndex, addNow, static (ref InventoryItemStackComponent stack, ushort add) => stack.Quantity += add);
                 remaining -= addNow;
             }
+
+            lastStackInstanceId = stacks.GetReadonlyByDenseIndex(matchedDenseIndex).StackInstanceId;
         }
 
         while (remaining > 0)
         {
             var chunk = (ushort)System.Math.Min(remaining, effectiveCap);
-            stacks.Add(entityId, new InventoryItemStackComponent(effectiveDefinition.Id, chunk, overrideDefinition: effectiveDefinition, isDivergent: false));
+            var newStack = new InventoryItemStackComponent(effectiveDefinition.Id, chunk, overrideDefinition: effectiveDefinition, isDivergent: false);
+            stacks.Add(entityId, newStack);
+            lastStackInstanceId = newStack.StackInstanceId;
             remaining -= chunk;
         }
+
+        return lastStackInstanceId;
     }
 
     /// <summary>
@@ -297,7 +309,8 @@ public static class InventoryActions
     /// entity are accepted for now). Refuses (returns false, no state changed) if source and
     /// destination are the same entity -- a drop back onto the grid it came from should never
     /// remove-then-re-add a stack it's already looking at -- or if the stack isn't found, or if the
-    /// destination is a non-player entity already at its stack cap (see InventoryCapacity).
+    /// destination is a non-player entity already at its stack cap (see InventoryCapacity), or if the
+    /// stack's item can't be traded (ItemDefinition.CanTrade -- a loot box never leaves its owner).
     ///
     /// AcquiredSequence is the one field NOT preserved verbatim: when destinationEntityId is
     /// the player (e.g. "Take" from a corpse/loot window), it's re-stamped to now -- since this
@@ -306,7 +319,7 @@ public static class InventoryActions
     /// came from. A transfer to any other entity (e.g. "Give" from the player, or between two
     /// non-player entities) leaves it untouched.
     /// </summary>
-    public static bool TryTransferStack(ComponentManager componentManager, int sourceEntityId, int destinationEntityId, uint stackInstanceId, IPlayerQuery playerQuery)
+    public static bool TryTransferStack(ComponentManager componentManager, ItemCatalog itemCatalog, int sourceEntityId, int destinationEntityId, uint stackInstanceId, IPlayerQuery playerQuery)
     {
         if (sourceEntityId == destinationEntityId)
         {
@@ -322,6 +335,11 @@ public static class InventoryActions
         }
 
         var snapshot = stacks.GetReadonlyByDenseIndex(sourceDenseIndex);
+        if (!CanTrade(itemCatalog, in snapshot))
+        {
+            return false;
+        }
+
         stacks.RemoveByDenseIndex(sourceDenseIndex);
 
         if (destinationEntityId == playerQuery.PlayerEntityId)
@@ -338,10 +356,10 @@ public static class InventoryActions
     /// The "Merged Stack" drag case: moves every stack sharing itemDefinitionId on sourceEntityId
     /// to destinationEntityId in one go, each keeping its own identity (see TryTransferStack
     /// above) -- all or nothing, refusing the whole batch (no state changed) if the destination
-    /// doesn't have room for every one of them, rather than transferring some and leaving the rest
-    /// behind.
+    /// doesn't have room for every one of them, or if any of them can't be traded, rather than
+    /// transferring some and leaving the rest behind.
     /// </summary>
-    public static bool TryTransferAllStacksOfItem(ComponentManager componentManager, int sourceEntityId, int destinationEntityId, Guid itemDefinitionId, IPlayerQuery playerQuery)
+    public static bool TryTransferAllStacksOfItem(ComponentManager componentManager, ItemCatalog itemCatalog, int sourceEntityId, int destinationEntityId, Guid itemDefinitionId, IPlayerQuery playerQuery)
     {
         if (sourceEntityId == destinationEntityId)
         {
@@ -354,16 +372,20 @@ public static class InventoryActions
         InventoryQueries.CopyStacksForEntity(stacks, sourceEntityId, matches);
         matches.RemoveAll(stack => stack.ItemDefinitionId != itemDefinitionId);
 
-        if (matches.Count == 0 || !InventoryCapacity.HasRoomForNewStacks(componentManager, destinationEntityId, playerQuery, matches.Count))
+        if (matches.Count == 0 || !InventoryCapacity.HasRoomForNewStacks(componentManager, destinationEntityId, playerQuery, matches.Count) || !matches.TrueForAll(stack => CanTrade(itemCatalog, in stack)))
         {
             return false;
         }
 
         foreach (var stack in matches)
         {
-            TryTransferStack(componentManager, sourceEntityId, destinationEntityId, stack.StackInstanceId, playerQuery);
+            TryTransferStack(componentManager, itemCatalog, sourceEntityId, destinationEntityId, stack.StackInstanceId, playerQuery);
         }
 
         return true;
     }
+
+    /// <summary>Whether stack's item may leave its owner's inventory; an item the catalog doesn't know carries no restriction.</summary>
+    private static bool CanTrade(ItemCatalog itemCatalog, in InventoryItemStackComponent stack) =>
+        !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition) || definition.CanTrade;
 }

@@ -1,5 +1,6 @@
 ﻿using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Lootboxes;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -17,7 +18,7 @@ public sealed class InertGasAchievement : IAchievementDefinition
 
     public string Description => "You paralyzed an incorporeal entity! I'm... not sure what that even means. There's no muscles or skeleton. No nervous system. What exactly did you paralyze? Ah fuck it, it works. It's sitting around doing nothing like a spooky cloud. Now what?";
 
-    public Lootbox? Lootbox => null;
+    public LootboxReward? Lootbox => new(LootboxTypes.Exorcist.Id, LootboxRarity.Bronze);
 
     public string RewardText => "I'm not even sure what to give you for this. I'll figure it out later.";
 

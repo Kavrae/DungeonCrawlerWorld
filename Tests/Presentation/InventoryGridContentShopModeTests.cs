@@ -66,7 +66,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, gridEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock());
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, gridEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -140,7 +140,7 @@ public sealed class InventoryGridContentShopModeTests
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 2);
         var shopStacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         InventoryQueries.TryGetStack(shopStacks, ShopEntityId, PotionItemId, out var boughtStack);
-        InventoryActions.TryTransferStack(componentManager, ShopEntityId, PlayerEntityId, boughtStack.StackInstanceId, playerQuery: TestPlayerQuery.NoPlayer);
+        InventoryActions.TryTransferStack(componentManager, new ItemCatalog(), ShopEntityId, PlayerEntityId, boughtStack.StackInstanceId, playerQuery: TestPlayerQuery.NoPlayer);
 
         grid.Update(new GameTime());
 
@@ -288,7 +288,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock());
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -493,7 +493,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, gridEntityId, filterTag: null, tooltipController, getSecondaryTargetEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, new SimulationClock(), tradeGridIsShopSide);
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, gridEntityId, filterTag: null, tooltipController, getSecondaryTargetEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, new SimulationClock(), tradeGridIsShopSide);
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -795,7 +795,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, ShopEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, simulationClock: new SimulationClock());
+        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, ShopEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

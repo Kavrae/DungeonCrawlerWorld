@@ -1,6 +1,5 @@
 using Engine.ECS.Systems;
 using Engine.Math;
-using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
@@ -65,7 +64,7 @@ public static class PlayerKit
 
         componentManager.TryUpdate(entityId, static (ref MovementComponent movement) => movement.MovementMode = MovementMode.PlayerControlled);
 
-        WandGrantEffects.Grant(componentManager, componentManager.GetPackedPool<AbilityScoresComponent>(), entityId, WandOfFireball.Build(), quantity: WandOfFireballStartingQuantity);
+        ItemGrants.Grant(componentManager, entityId, WandOfFireball.Build(), quantity: WandOfFireballStartingQuantity);
 
         // TEMPORARY -- exercises divergence in a field other than charges (see the per-slot item
         // divergence work): a single Wand of Fireball with Adjacent targeting instead of the

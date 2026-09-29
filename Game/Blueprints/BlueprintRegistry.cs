@@ -1,6 +1,7 @@
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
+using Game.Modules.Lootboxes;
 using Game.Spawning;
 
 namespace Game.Blueprints;
@@ -180,10 +181,12 @@ public sealed class BlueprintRegistry
         var appearance = new AppearanceBuilder();
         MapLayer? layer = null;
         Vector2Byte? size = null;
+        LootboxReward? lootbox = null;
 
         foreach (var partId in buildOrder)
         {
             var part = Get(partId);
+            lootbox = part.Lootbox ?? lootbox;
 
             if (part.Race is null || races.Count == 0)
             {
@@ -226,7 +229,7 @@ public sealed class BlueprintRegistry
             }
         }
 
-        return new ResolvedBlueprint(Get(id), [.. buildOrder], [.. races], [.. classes], [.. actions], [.. nonBlocking], appearance.Build(), layer ?? MapLayer.Ground, size ?? new Vector2Byte(1, 1));
+        return new ResolvedBlueprint(Get(id), [.. buildOrder], [.. races], [.. classes], [.. actions], [.. nonBlocking], appearance.Build(), layer ?? MapLayer.Ground, size ?? new Vector2Byte(1, 1), lootbox);
     }
 
     /// <summary>Appends id's includes depth-first, then id itself, skipping any already appended.</summary>

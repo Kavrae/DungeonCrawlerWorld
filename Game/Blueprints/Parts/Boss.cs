@@ -1,11 +1,12 @@
 using Engine.ECS.Systems;
 using Game.Modules.Health;
+using Game.Modules.Lootboxes;
 using Game.Modules.StatModifiers;
 using Game.World;
 
 namespace Game.Blueprints.Parts;
 
-/// <summary>Makes whatever it is built onto a boss: double its maximum health, and "Boss" after its name.</summary>
+/// <summary>Makes whatever it is built onto a boss: double its maximum health, "Boss" after its name, and a Bronze Boss loot box for the player who kills it.</summary>
 /// <remarks>A trait with no race or class of its own, included after the blueprint it strengthens (see GoblinForeman), so the health it doubles is already there.</remarks>
 public static class Boss
 {
@@ -18,7 +19,8 @@ public static class Boss
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
         Build = Build,
-        Appearance = new() { NameSuffix = Name }
+        Appearance = new() { NameSuffix = Name },
+        Lootbox = new LootboxReward(LootboxTypes.Boss.Id, LootboxRarity.Bronze),
     };
 
     private static void Build(BlueprintContext context)

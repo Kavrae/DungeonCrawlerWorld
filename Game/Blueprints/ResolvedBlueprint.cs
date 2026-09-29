@@ -1,6 +1,7 @@
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
+using Game.Modules.Lootboxes;
 
 namespace Game.Blueprints;
 
@@ -11,8 +12,9 @@ public sealed class ResolvedBlueprint
 {
     private readonly ActionGrant[] _actions;
 
-    internal ResolvedBlueprint(BlueprintDefinition definition, ushort[] buildOrder, ushort[] races, ushort[] classes, ActionGrant[] actions, NonBlockingKind[] nonBlocking, EntityAppearance appearance, MapLayer layer, Vector2Byte size)
+    internal ResolvedBlueprint(BlueprintDefinition definition, ushort[] buildOrder, ushort[] races, ushort[] classes, ActionGrant[] actions, NonBlockingKind[] nonBlocking, EntityAppearance appearance, MapLayer layer, Vector2Byte size, LootboxReward? lootbox)
     {
+        Lootbox = lootbox;
         Layer = layer;
         Size = size;
         Definition = definition;
@@ -48,6 +50,9 @@ public sealed class ResolvedBlueprint
 
     /// <summary>The footprint an entity of it spawns with unless the spawn names one, decided the same way as Layer; 1x1 when none does.</summary>
     public Vector2Byte Size { get; }
+
+    /// <summary>The loot box its killer is granted: the last definition in build order to declare one; null when none does.</summary>
+    public LootboxReward? Lootbox { get; }
 
     /// <summary>Whether it declares everything an entity needs to be drawn and named -- a trait (Boss, Tiny) doesn't, and is only ever built as part of something else.</summary>
     public bool IsSpawnable => Appearance.Missing.Count == 0;

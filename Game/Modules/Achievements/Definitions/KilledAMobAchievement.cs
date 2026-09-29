@@ -1,4 +1,5 @@
-﻿using Game.World;
+﻿using Game.Modules.Lootboxes;
+using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
 
@@ -14,7 +15,7 @@ public sealed class KilledAMobAchievement : IAchievementDefinition
 
     public string Description => "You're a murderer! He probably had a family!";
 
-    public Lootbox? Lootbox => null; //TODO grant the experience component
+    public LootboxReward? Lootbox => null; //TODO grant the experience component
 
     public string RewardText => "You can now gain experience. Get enough of it, and you might even go up a level.";
 

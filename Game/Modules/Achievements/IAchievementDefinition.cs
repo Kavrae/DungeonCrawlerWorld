@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Game.Modules.Lootboxes;
 
 namespace Game.Modules.Achievements;
 
@@ -18,10 +19,12 @@ public interface IAchievementDefinition
     /// <summary>The requirement that was fulfilled.</summary>
     string RequirementText { get; }
 
-    /// <summary>Null when this achievement carries no lootbox -- an achievement always comes with 0 or 1, never more.</summary>
-    Lootbox? Lootbox { get; }
+    /// <summary>The loot box this achievement grants, or null for none -- an achievement always comes with 0 or 1, never more.</summary>
+    /// <remarks>Granted when the player closes the achievement's notification, not when it unlocks -- see AchievementLootboxClaims.</remarks>
+    LootboxReward? Lootbox { get; }
 
-    /// <summary>The text describing the reward for earning the achievement.</summary>
+    /// <summary>Explains an unusual reward, why a particular reward was given, or why nothing was -- empty for an achievement that just grants its loot box.</summary>
+    /// <remarks>The notification shows a Reward line only when this isn't empty or whitespace.</remarks>
     string RewardText { get; }
 
     /// <summary>Registers the trigger for the achievement with the EventBus.</summary>

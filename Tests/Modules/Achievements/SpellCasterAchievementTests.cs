@@ -22,7 +22,7 @@ public sealed class SpellCasterAchievementTests
 
     private static (EcsContext EcsContext, EventBus EventBus, Game.World.World World) Build()
     {
-        var build = BuiltInTestModules.BuildModules([new AchievementModule(), new CoreActionsModule()]);
+        var build = BuiltInTestModules.BuildModules([new Game.Modules.Lootboxes.LootboxModule(), new AchievementModule(), new CoreActionsModule()]);
 
         return (build.EcsContext, build.Context.EventBus, build.World);
     }

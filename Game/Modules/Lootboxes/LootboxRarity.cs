@@ -1,4 +1,4 @@
-namespace Game.Modules.Achievements;
+namespace Game.Modules.Lootboxes;
 
 /// <summary>Represents the rarity of a lootbox.</summary>
 /// <remarks>Reward value scales with lootbox rarity</remarks>
