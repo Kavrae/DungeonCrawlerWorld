@@ -1,3 +1,4 @@
+using Engine.Diagnostics;
 using Engine.ECS.Components;
 using Engine.ECS.Entities;
 using Engine.Modules;
@@ -21,6 +22,7 @@ public sealed class SortedModules<TContext> : EcsBuildStage
     public RegisteredComponents<TContext> RegisterComponents()
     {
         MarkAdvanced();
+        using var stageScope = EngineHooks.DiagnosticScope("RegisterComponents");
 
         var componentManager = new ComponentManager(_state.InitialEntityCapacity, _state.InitialComponentCapacity);
         var entityManager = new EntityManager(componentManager, _state.InitialEntityCapacity);
@@ -28,7 +30,7 @@ public sealed class SortedModules<TContext> : EcsBuildStage
 
         foreach (var module in _state.SortedModules)
         {
-            using var _ = _state.StartupProfiler?.Phase($"RegisterComponents:{module.Name}");
+            using var modulePhaseScope = EngineHooks.DiagnosticScope("RegisterComponents", module.Name);
             module.RegisterComponents(registration);
         }
 

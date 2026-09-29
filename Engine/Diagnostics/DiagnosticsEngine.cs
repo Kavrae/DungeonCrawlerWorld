@@ -1,23 +1,24 @@
-using Engine.ECS.Components;
-using Engine.ECS.Entities;
+using Engine.ECS.Context;
 
 namespace Engine.Diagnostics;
 
 /// <summary>Facade over the diagnostics engine's individual feature trackers, each gated by DiagnosticsFeatures.</summary>
 /// <remarks>
 /// A feature's tracker field stays null when its flag isn't set in Features, so a disabled
-/// feature costs nothing beyond the flag check itself -- mirrors SystemManager.Profiler/
-/// EventBus.Profiler's own null-means-off idiom, just centralized here as the single place a
-/// composition root (GameLoop) needs to construct and wire.
+/// feature costs nothing beyond the flag check itself. Start subscribes the enabled features to
+/// EngineHooks and Dispose unsubscribes them; constructing one touches no process state. Every
+/// per-frame step -- the benchmark window, the frame's total cost, startup stability, sampling and
+/// reports -- runs from SystemManager's simulation frame hooks, so a host only calls EcsContext.Update.
 ///
 /// FrameBudget and Startup are constructible immediately (they need nothing but the feature
-/// flags), so the composition root should construct this as early as possible -- Startup's own
-/// clock, and its Phase("...") scopes around the composition root's own early steps, need to
-/// start before ComponentManager/EntityManager exist. Memory and LeakDetection need those, so
-/// they're deferred to AttachEcsContext, called once they're available.
+/// flags), so the composition root should construct and start this as early as possible --
+/// Startup's clock, and the EngineHooks.DiagnosticScopes it records until the first simulation frame, need to
+/// start before any build does. Memory and LeakDetection measure a session's
+/// pools, so their trackers are created when a session starts and dropped when it ends; a second
+/// session gets fresh ones.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class DiagnosticsEngine
+public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSessionListener, IDisposable
 {
     private static readonly TimeSpan ReportInterval = TimeSpan.FromSeconds(5);
 
@@ -25,19 +26,27 @@ public sealed class DiagnosticsEngine
     private readonly FrameBudgetTracker? _frameBudgetTracker;
     private readonly StartupProfiler? _startupProfiler;
     private readonly FrameRangeBenchmark? _benchmark;
+    private readonly IFrameCostRecorder? _frameCostRecorder;
+    private readonly List<IDisposable> _hookSubscriptions = [];
+    private readonly bool _writesPeriodicReports;
     private ComponentMemoryTracker? _componentMemoryTracker;
     private PoolMemoryReport? _poolMemoryReport;
     private LeakDetector? _leakDetector;
+    private EcsContext? _activeSession;
+    private IDisposable? _startupScopesSubscription;
 
     private DateTime _lastReportUtc = DateTime.MinValue;
+    private bool _isStarted;
 
     /// <param name="features">Which features to enable -- opt-in, defaults to None.</param>
     /// <param name="randomSeed">The session's simulation seed, stamped on every report -- see RandomSeed.</param>
     /// <param name="benchmarkFrameRange">Simulation frames to benchmark, or null for none -- see FrameRangeBenchmark. Independent of features: a benchmark records through the same instrumentation whether or not FrameBudget is also on.</param>
-    public DiagnosticsEngine(DiagnosticsFeatures features, int? randomSeed = null, BenchmarkFrameRange? benchmarkFrameRange = null)
+    /// <param name="writesPeriodicReports">False for a headless run: no periodic sampling, console ranking or latest.json, which would overwrite a windowed run's. Its reports are the benchmark's.</param>
+    public DiagnosticsEngine(DiagnosticsFeatures features, int? randomSeed = null, BenchmarkFrameRange? benchmarkFrameRange = null, bool writesPeriodicReports = true)
     {
         Features = features;
         RandomSeed = randomSeed;
+        _writesPeriodicReports = writesPeriodicReports;
 
         if (features.HasFlag(DiagnosticsFeatures.FrameBudget))
         {
@@ -49,7 +58,7 @@ public sealed class DiagnosticsEngine
             _benchmark = new FrameRangeBenchmark(range);
         }
 
-        FrameCostRecorder = (_frameBudgetTracker, _benchmark) switch
+        _frameCostRecorder = (_frameBudgetTracker, _benchmark) switch
         {
             ({ } tracker, { } benchmark) => new CompositeFrameCostRecorder(tracker, benchmark),
             ({ } tracker, null) => tracker,
@@ -73,20 +82,122 @@ public sealed class DiagnosticsEngine
     /// </summary>
     public int? RandomSeed { get; }
 
-    /// <summary>Null unless DiagnosticsFeatures.FrameBudget is enabled or a benchmark range was given -- wire into SystemManager.Profiler/EventBus.Profiler/ShellContext when non-null. Feeds both when both are on.</summary>
-    public IFrameCostRecorder? FrameCostRecorder { get; }
+    /// <summary>Subscribes every enabled feature to the EngineHooks channel it listens to.</summary>
+    /// <remarks>Frame costs are recorded while FrameBudget is on or a benchmark range was given, feeding both when both are. Simulation frames are heard whenever any feature is on or a benchmark range was given, sessions while Memory or LeakDetection is, and scopes while Startup is, until the first simulation frame.</remarks>
+    /// <exception cref="InvalidOperationException">This engine was already started, or another listener holds a channel it needs.</exception>
+    public void Start()
+    {
+        if (_isStarted)
+        {
+            throw new InvalidOperationException("DiagnosticsEngine was already started.");
+        }
+
+        _isStarted = true;
+
+        if (_frameCostRecorder is { } frameCostRecorder)
+        {
+            _hookSubscriptions.Add(EngineHooks.FrameCosts.Subscribe(frameCostRecorder));
+        }
+
+        if (Features != DiagnosticsFeatures.None || _benchmark is not null)
+        {
+            _hookSubscriptions.Add(EngineHooks.SimulationFrames.Subscribe(this));
+        }
+
+        if ((Features & (DiagnosticsFeatures.Memory | DiagnosticsFeatures.LeakDetection)) != DiagnosticsFeatures.None)
+        {
+            _hookSubscriptions.Add(EngineHooks.Sessions.Subscribe(this));
+        }
+
+        if (_startupProfiler is { } startupProfiler)
+        {
+            _startupScopesSubscription = EngineHooks.DiagnosticScopes.Subscribe(startupProfiler);
+        }
+    }
+
+    /// <summary>Unsubscribes from every EngineHooks channel Start subscribed to.</summary>
+    public void Dispose()
+    {
+        foreach (var hookSubscription in _hookSubscriptions)
+        {
+            hookSubscription.Dispose();
+        }
+
+        _hookSubscriptions.Clear();
+        EndStartupScopes();
+    }
+
+    /// <summary>Stops StartupProfiler recording scopes: what builds after the first simulation frame (a staging rebuild) is not startup.</summary>
+    private void EndStartupScopes()
+    {
+        _startupScopesSubscription?.Dispose();
+        _startupScopesSubscription = null;
+    }
 
     /// <summary>True once a benchmark range was given and its report has been written -- a headless run's signal to stop.</summary>
+    /// <remarks>Becomes true as frame EndFrame - 1 ends, so a host that updates until it is true simulates exactly the frames before EndFrame.</remarks>
     public bool IsBenchmarkComplete => _benchmark?.IsComplete ?? false;
 
-    /// <summary>
-    /// Call once per simulation frame, before that frame's EcsContext.Update, with the frame
-    /// number it is about to run. Drives FrameRangeBenchmark's window and writes its one-shot
-    /// report the moment the window closes. No-op without a benchmark range.
-    /// </summary>
-    /// <remarks>With Memory on, also drives PoolMemoryReport over the same range: its baseline copy is taken before the benchmark's clock starts, and its report written after the benchmark's.</remarks>
-    public void BeginSimulationFrame(long frameCount)
+    /// <summary>The single largest frame-cost contributor, for a live on-screen readout (see DebugWindowContent). Null unless FrameBudget is enabled or no full second has sampled yet.</summary>
+    public (string Name, double MillisecondsPerSecond)? TopFrameCostEntry =>
+        _frameBudgetTracker?.TopEntries is { Count: > 0 } entries ? entries[0] : null;
+
+    /// <summary>Creates Memory's and LeakDetection's trackers over the session's pools.</summary>
+    /// <exception cref="InvalidOperationException">Another session is still active -- one simulated session at a time.</exception>
+    void ISimulationSessionListener.SessionStarted(EcsContext session)
     {
+        if (_activeSession is not null)
+        {
+            throw new InvalidOperationException("A simulation session started while another is still active; end the first by disposing its EcsContext.");
+        }
+
+        _activeSession = session;
+        var componentManager = session.ComponentManager;
+        var entityManager = session.EntityManager;
+
+        if (Features.HasFlag(DiagnosticsFeatures.Memory))
+        {
+            _componentMemoryTracker = new ComponentMemoryTracker(componentManager);
+
+            if (_benchmark is { IsComplete: false })
+            {
+                _poolMemoryReport = new PoolMemoryReport(componentManager, entityManager);
+            }
+        }
+
+        if (Features.HasFlag(DiagnosticsFeatures.LeakDetection))
+        {
+            _leakDetector = new LeakDetector(entityManager, componentManager);
+        }
+    }
+
+    /// <summary>Drops the session's trackers, so nothing keeps measuring -- or holding -- pools that are going away.</summary>
+    /// <remarks>A pool memory report whose range opened but never closed is dropped, not written: it would claim the whole range.</remarks>
+    /// <exception cref="InvalidOperationException">session is not the active session.</exception>
+    void ISimulationSessionListener.SessionEnding(EcsContext session)
+    {
+        if (!ReferenceEquals(_activeSession, session))
+        {
+            throw new InvalidOperationException("A simulation session ended that is not the active one.");
+        }
+
+        if (_poolMemoryReport is { HasBaseline: true } && _benchmark is { IsComplete: false } benchmark)
+        {
+            Console.WriteLine($"[Memory] Session ended before frame {benchmark.Range.EndFrame}; no memory report written.");
+        }
+
+        _activeSession = null;
+        _componentMemoryTracker = null;
+        _poolMemoryReport = null;
+        _leakDetector = null;
+    }
+
+    /// <summary>Ends startup's scope recording at the first frame, and opens the benchmark range as its first frame starts.</summary>
+    /// <remarks>With Memory on, PoolMemoryReport's baseline copy is taken first, before the benchmark's clock starts.</remarks>
+    void ISimulationFrameListener.SimulationFrameStarting(long frameCount)
+    {
+        EndStartupScopes();
+
         if (_benchmark is not { IsComplete: false } benchmark)
         {
             return;
@@ -97,62 +208,18 @@ public sealed class DiagnosticsEngine
             poolMemoryReport.CaptureBaseline();
         }
 
-        benchmark.BeginSimulationFrame(frameCount);
-        if (benchmark.IsComplete)
-        {
-            var path = benchmark.WriteReport(_outputDirectory, RandomSeed);
-            Console.WriteLine($"[Benchmark] Frames {benchmark.Range.StartFrame}-{benchmark.Range.EndFrame} written to {path}");
-
-            if (_poolMemoryReport is { HasBaseline: true } completedMemoryReport)
-            {
-                var memoryPath = completedMemoryReport.WriteReport(_outputDirectory, RandomSeed, benchmark.Range);
-                Console.WriteLine($"[Memory] Frames {benchmark.Range.StartFrame}-{benchmark.Range.EndFrame} written to {memoryPath}");
-            }
-        }
-    }
-
-    /// <summary>Null unless DiagnosticsFeatures.Startup is enabled -- wrap the composition root's own early steps with `using var _ = diagnostics.StartupProfiler?.Phase("...")`, and thread it into Bootstrapper.Build/GameBootstrapper.Build for their own per-module phases.</summary>
-    public StartupProfiler? StartupProfiler => _startupProfiler;
-
-    /// <summary>The single largest frame-cost contributor, for a live on-screen readout (see DebugWindowContent). Null unless FrameBudget is enabled or no full second has sampled yet.</summary>
-    public (string Name, double MillisecondsPerSecond)? TopFrameCostEntry =>
-        _frameBudgetTracker?.TopEntries is { Count: > 0 } entries ? entries[0] : null;
-
-    /// <summary>
-    /// Constructs Memory/LeakDetection's trackers once ComponentManager/EntityManager exist --
-    /// they can't exist at construction time (see this class's own remarks). No-op for any flag
-    /// not set in Features, and safe to call more than once (only constructs a tracker the first
-    /// time).
-    /// </summary>
-    public void AttachEcsContext(ComponentManager componentManager, EntityManager entityManager)
-    {
-        if (Features.HasFlag(DiagnosticsFeatures.Memory) && _componentMemoryTracker is null)
-        {
-            _componentMemoryTracker = new ComponentMemoryTracker(componentManager);
-        }
-
-        if (Features.HasFlag(DiagnosticsFeatures.Memory) && _benchmark is not null && _poolMemoryReport is null)
-        {
-            _poolMemoryReport = new PoolMemoryReport(componentManager, entityManager);
-        }
-
-        if (Features.HasFlag(DiagnosticsFeatures.LeakDetection) && _leakDetector is null)
-        {
-            _leakDetector = new LeakDetector(entityManager, componentManager);
-        }
+        benchmark.SimulationFrameStarting(frameCount);
     }
 
     /// <summary>
-    /// Records one EcsContext.Update tick's elapsed cost under FrameCostCategory.Update, and --
-    /// while Startup is enabled and not yet stable -- feeds the same measured cost into
-    /// StartupProfiler's stability detection, auto-writing its one-shot report the moment it
-    /// becomes stable. One call, because both are facets of the same event (the composition
-    /// root's own aggregate per-tick simulation cost) -- see StartupProfiler.Tick's own doc
-    /// comment for why it specifically needs this measured cost, not a raw gap between calls.
+    /// Records the frame's whole cost as "GameLoop" / "EcsContext.Update (all systems)", feeds it to
+    /// StartupProfiler's stability detection until stable, closes the benchmark range after its last
+    /// frame, then samples and reports on the periodic cadence.
     /// </summary>
-    public void RecordSimulationTick(string groupName, string itemName, TimeSpan elapsed)
+    /// <remarks>StartupProfiler needs this measured cost rather than the gap between frames -- see StartupProfiler.Tick.</remarks>
+    void ISimulationFrameListener.SimulationFrameEnded(long frameCount, TimeSpan elapsed)
     {
-        FrameCostRecorder?.Record(FrameCostCategory.Update, groupName, itemName, elapsed);
+        _frameCostRecorder?.Record(FrameCostCategory.Update, "GameLoop", "EcsContext.Update (all systems)", elapsed);
 
         if (_startupProfiler is { IsStable: false } startupProfiler)
         {
@@ -162,17 +229,41 @@ public sealed class DiagnosticsEngine
                 startupProfiler.WriteReport(_outputDirectory);
             }
         }
+
+        if (_benchmark is { IsComplete: false } benchmark)
+        {
+            benchmark.SimulationFrameEnded(frameCount);
+            if (benchmark.IsComplete)
+            {
+                WriteBenchmarkReports(benchmark);
+            }
+        }
+
+        if (_writesPeriodicReports)
+        {
+            SampleAndReport();
+        }
+    }
+
+    private void WriteBenchmarkReports(FrameRangeBenchmark benchmark)
+    {
+        var path = benchmark.WriteReport(_outputDirectory, RandomSeed);
+        Console.WriteLine($"[Benchmark] Frames {benchmark.Range.StartFrame}-{benchmark.Range.EndFrame} written to {path}");
+
+        if (_poolMemoryReport is { HasBaseline: true } completedMemoryReport)
+        {
+            var memoryPath = completedMemoryReport.WriteReport(_outputDirectory, RandomSeed, benchmark.Range);
+            Console.WriteLine($"[Memory] Frames {benchmark.Range.StartFrame}-{benchmark.Range.EndFrame} written to {memoryPath}");
+        }
     }
 
     /// <summary>
     /// Drives every enabled feature's own throttled sampling, and -- on its own ~5s cadence,
-    /// independent of the caller's frame count -- writes Log/diagnostics/latest.json|txt and
-    /// prints the frame-cost ranking to the console. Call once per frame from the composition
-    /// root's Update; every decision about *when* to actually report lives here, not in the
-    /// caller, so a composition root (GameLoop or otherwise) just calls this and stays out of
-    /// the reporting business entirely.
+    /// independent of the frame count -- writes Log/diagnostics/latest.json|txt and prints the
+    /// frame-cost ranking to the console.
     /// </summary>
-    public void Tick()
+    /// <remarks>Runs as each simulation frame ends, so sampling and reports pause with the simulation.</remarks>
+    private void SampleAndReport()
     {
         _componentMemoryTracker?.Tick();
         _leakDetector?.Tick();

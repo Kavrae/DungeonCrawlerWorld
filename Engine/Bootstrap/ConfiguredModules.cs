@@ -1,3 +1,4 @@
+using Engine.Diagnostics;
 using Engine.ECS.Components;
 using Engine.ECS.Entities;
 using Engine.ECS.Systems;
@@ -35,13 +36,14 @@ public sealed class ConfiguredModules<TContext> : EcsBuildStage
     public RegisteredSystems RegisterSystems()
     {
         MarkAdvanced();
+        using var stageScope = EngineHooks.DiagnosticScope("RegisterSystems");
 
         var systemManager = new SystemManager();
         var registration = new SystemRegistration<TContext>(systemManager, ComponentManager, _state.Settings, Context);
 
         foreach (var module in _state.SortedModules)
         {
-            using var _ = _state.StartupProfiler?.Phase($"RegisterSystems:{module.Name}");
+            using var modulePhaseScope = EngineHooks.DiagnosticScope("RegisterSystems", module.Name);
             module.RegisterSystems(registration);
         }
 

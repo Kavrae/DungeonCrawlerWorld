@@ -36,46 +36,6 @@ Global), each split High/Medium/Low priority. Landed work lives in `IMPLEMENTATI
 
 ### High Priority
 
-#### Diagnostics wired through named engine hooks
-
-`DiagnosticsEngine` is constructed by the composition root before any session exists, and reaches
-the engine through a separate hand-wired path for each feature:
-- `StartupProfiler` is threaded as an optional parameter through `WorldSessionBootstrapper`,
-  `GameBootstrapper.Build` and `Bootstrapper.Build`, and every step wraps itself in
-  `startupProfiler?.Phase(...)`.
-- Memory and LeakDetection trackers are nullable until `AttachEcsContext` runs after the build.
-  `AttachEcsContext` only constructs a tracker the first time, so a second session in the same run
-  (new game or load from a menu) would keep measuring the first session's pools.
-- `SystemManager.Profiler` and `EventBus.Profiler` are settable null-means-off properties, set by
-  `WorldSessionBootstrapper`. The shell gets `FrameCostRecorder` through `LoadContent`.
-- `GameLoop` and `HeadlessBenchmark` each call `BeginSimulationFrame`, `RecordSimulationTick` and
-  `Tick` themselves, duplicating the frame protocol.
-
-Goal: the engine raises named hooks and diagnostics subscribes to them. Nothing threads a profiler
-through parameters, and no host repeats the frame protocol.
-- Build hooks from the staged bootstrapper (`EcsBuilder`'s stages): each stage and
-  each module's phase start/end. The startup profiler subscribes instead of being passed in.
-- Session hooks: a session's ECS created and torn down. Trackers attach per session and detach
-  when it ends.
-- Frame hooks: simulation frame begin/end around `SystemManager.Update`, raised by the engine rather
-  than by each host.
-- Diagnostics stays opt-in, costing nothing beyond a check when a feature is off.
-
-**Unreal Engine reference:** Unreal Insights is built this way. Engine code declares named trace
-channels (`UE_TRACE_CHANNEL`) and emits scoped events (`TRACE_CPUPROFILER_EVENT_SCOPE`,
-`SCOPED_NAMED_EVENT`) unconditionally; a channel that's off costs one branch. Which channels are on is
-chosen at launch (`-trace=cpu,frame,memory`) or at runtime, and the viewer subscribes to the stream --
-nothing passes a profiler object around. The frame boundary is emitted once by the engine loop, never
-by each host. Worth copying: channels named by feature, a scope helper that compiles to a check when
-off, and one engine-owned frame marker.
-
-**Godot reference:** Godot's debugger adds custom monitors: `Performance.add_custom_monitor("game/streamer_queue",
-callable)` registers a named value that the Monitors tab samples and graphs over time beside the
-engine's own (FPS, memory, object counts). A diagnostics hook for "register a named gauge" -- entity
-count, streamer queue depth, pool fill, gen-1 GC count -- sampled every frame and written to the
-report, would have made the gen-1 GC window-shift investigation ("Gen-1 GC frames during a window
-shift", Game) a graph instead of an inference.
-
 #### Class exceptions: runtime class grants
 
 NPC classes come from spawn rules and fit two fixed class slots. The player's don't: a first class on
@@ -108,6 +68,55 @@ class-selection UI, the advancement rules themselves, the residue roll. Ends wit
 a `phase-performance-testing` A/B.
 
 ### Medium Priority
+
+#### Leak detection aware of skeleton and built entities
+
+`LeakDetector` flags a pool whose instance count grows faster than `EntityManager.LivingEntityCount`.
+Since deferred builds, that one count mixes two populations: skeletons (every creature outside the
+simulated tiers holds only `EntityFactory.SkeletonComponentTypes`) and built entities (everything
+else). Promoting a neighborhood's skeletons on a window shift grows every built-only pool (health,
+inventory, movement, abilities...) by thousands while the living entity count barely moves -- exactly
+the shape of a leak. Evictions and cache drops do the reverse. So any walk across a neighborhood edge
+can produce false findings, and a real leak in a built-only pool hides inside that promotion noise.
+
+Goal: compare each pool against the population that can hold it.
+- Skeleton component types against every living entity; every other pool against built entities
+  only (living minus `CreatureSkeletons.Count`).
+- Engine knows neither concept. The game supplies them, the same injected-policy shape as
+  `SystemManager.SimulatedTierCount`: a population count per sample and a predicate for which pool
+  types every entity holds. It plugs in through the session hooks (`EcsContext.BeginSession`;
+  IMPLEMENTATION-NOTES "Diagnostics wired through named engine hooks"), and probably through the
+  named gauges entry below (a built-entity gauge is the same number).
+- `LeakSample` records both counts, and a finding names which population it was compared against.
+- Test: a promotion-shaped history (built-only pools jump with the built count, living count flat)
+  produces no finding; a built-only pool growing with the built count flat still does.
+
+#### Named diagnostics gauges
+
+Needs a plan. Builds on the `EngineHooks` session and frame hooks (IMPLEMENTATION-NOTES "Diagnostics wired
+through named engine hooks").
+
+Frame costs say what a frame spent; nothing records what the world *was* while it spent it. The
+"Gen-1 GC frames during a window shift" investigation (Game) had to infer GC timing, streamer queue
+depth and entity counts from per-system costs instead of reading them off a graph.
+
+Goal: engine and game code register a named value; diagnostics samples it and writes it out.
+- Gauges are per session: registered on the session's `EcsContext` and cleared when it is disposed,
+  so a closure over a session object (the streamer, a pool) can't outlive the session or be sampled
+  from a trial or staging build.
+- Registered where the value lives: entity count and pool fill (Engine), gen-0/1/2 collection counts
+  and heap size (Engine), streamer load/unload queue depth and pending worker plans
+  (`NeighborhoodStreamer`), skeleton/built creature counts (Game).
+- Sampled once per simulation frame on `FrameEnded`, only while a `Gauges` diagnostics feature is on
+  -- off costs nothing, since registration happens once at session start.
+- Written per benchmark range (min/max/mean per gauge plus the per-frame series in its own
+  `gauges-<timestamp>.json`), and the latest value in `latest.json` for a windowed run.
+- Open: whether a gauge can also be sampled mid-frame (inside the streamer's drain) or only at frame
+  end; whether the debug window shows any of them live.
+
+**Godot reference:** `Performance.add_custom_monitor("game/streamer_queue", callable)` registers a
+named value the debugger's Monitors tab samples and graphs beside the engine's own (FPS, memory,
+object counts).
 
 #### FrameEventBuffer double-buffering + event system cleanup
 

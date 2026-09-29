@@ -12,10 +12,9 @@ namespace Engine.Diagnostics;
 /// simulation frame numbers instead means a seeded run measures exactly the same frames of
 /// exactly the same simulation every time.
 ///
-/// BeginSimulationFrame(frameCount) is called once per simulation frame, before that frame's
-/// Update. Recording opens when frame StartFrame begins and closes when frame EndFrame begins,
-/// so it covers Update for frames [StartFrame, EndFrame) plus every Draw and shell Update in
-/// between. Update costs are the deterministic part. Draw costs per simulation frame still
+/// DiagnosticsEngine drives it from the simulation frame hooks. Recording opens when frame
+/// StartFrame starts and closes when frame EndFrame - 1 ends, so it covers Update for frames
+/// [StartFrame, EndFrame) plus every Draw and shell Update between them. Update costs are the deterministic part. Draw costs per simulation frame still
 /// depend on frame pacing -- a game falling behind runs several Updates per Draw -- which is
 /// what WallClockMilliseconds in the report is for: well above FrameCount / 60 seconds means
 /// the run fell behind.
@@ -42,28 +41,32 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
     /// <summary>True while the current simulation frame is inside Range.</summary>
     public bool IsRecording { get; private set; }
 
-    /// <summary>True once frame EndFrame has begun -- the totals are final.</summary>
+    /// <summary>True once frame EndFrame - 1 has ended -- the totals are final.</summary>
     public bool IsComplete { get; private set; }
 
-    /// <summary>Opens recording when frameCount reaches StartFrame and closes it at EndFrame.</summary>
-    public void BeginSimulationFrame(long frameCount)
+    /// <summary>Opens recording when a frame inside the range starts.</summary>
+    public void SimulationFrameStarting(long frameCount)
     {
-        if (IsComplete)
+        if (IsComplete || IsRecording || frameCount < Range.StartFrame || frameCount >= Range.EndFrame)
         {
             return;
         }
 
-        if (!IsRecording && frameCount >= Range.StartFrame && frameCount < Range.EndFrame)
+        IsRecording = true;
+        _recordingStartTimestamp = Stopwatch.GetTimestamp();
+    }
+
+    /// <summary>Closes recording once the range's last frame, EndFrame - 1, has ended.</summary>
+    public void SimulationFrameEnded(long frameCount)
+    {
+        if (!IsRecording || frameCount < Range.EndFrame - 1)
         {
-            IsRecording = true;
-            _recordingStartTimestamp = Stopwatch.GetTimestamp();
+            return;
         }
-        else if (IsRecording && frameCount >= Range.EndFrame)
-        {
-            IsRecording = false;
-            IsComplete = true;
-            _wallClockElapsed = Stopwatch.GetElapsedTime(_recordingStartTimestamp);
-        }
+
+        IsRecording = false;
+        IsComplete = true;
+        _wallClockElapsed = Stopwatch.GetElapsedTime(_recordingStartTimestamp);
     }
 
     public void Record(FrameCostCategory category, string groupName, string itemName, TimeSpan elapsed)

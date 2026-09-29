@@ -14,13 +14,14 @@ public sealed class FrameRangeBenchmarkTests
     private static double SystemTotal(FrameRangeBenchmark benchmark) =>
         benchmark.GetTotalMilliseconds(FrameCostCategory.Update, "SystemManager", "TestSystem");
 
-    /// <summary>Runs frames 1..lastFrame the way GameLoop does -- BeginSimulationFrame, then one Record for that frame's Update.</summary>
+    /// <summary>Runs frames 1..lastFrame the way SystemManager.Update drives it -- frame start, one Record for that frame's Update, frame end.</summary>
     private static void RunFrames(FrameRangeBenchmark benchmark, long lastFrame)
     {
         for (var frame = 1L; frame <= lastFrame; frame++)
         {
-            benchmark.BeginSimulationFrame(frame);
+            benchmark.SimulationFrameStarting(frame);
             RecordSystem(benchmark);
+            benchmark.SimulationFrameEnded(frame);
         }
     }
 
@@ -31,26 +32,45 @@ public sealed class FrameRangeBenchmarkTests
 
         RunFrames(benchmark, 30);
 
-        // Frames 10..14 -- five frames, one millisecond each. Frame 15 begins the close.
+        // Frames 10..14 -- five frames, one millisecond each. Frame 14 ending closes it.
         Assert.AreEqual(5, SystemTotal(benchmark), 1e-9);
     }
 
+    /// <summary>A headless run updates until the benchmark completes; that must be exactly the frames before EndFrame, or its fingerprint stops matching earlier builds'.</summary>
     [TestMethod]
-    public void BeginSimulationFrame_OpensAtStartAndCompletesAtEnd()
+    public void UpdatingUntilComplete_RunsEveryFrameBeforeEndFrame_AndNoMore()
+    {
+        var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(10, 14));
+        var lastFrameRun = 0L;
+
+        for (var frame = 1L; !benchmark.IsComplete; frame++)
+        {
+            benchmark.SimulationFrameStarting(frame);
+            benchmark.SimulationFrameEnded(frame);
+            lastFrameRun = frame;
+        }
+
+        Assert.AreEqual(13, lastFrameRun);
+    }
+
+    [TestMethod]
+    public void Frames_OpenAsTheFirstStarts_AndCompleteAsTheLastEnds()
     {
         var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(3, 5));
 
-        benchmark.BeginSimulationFrame(2);
+        benchmark.SimulationFrameStarting(2);
+        benchmark.SimulationFrameEnded(2);
         Assert.IsFalse(benchmark.IsRecording);
 
-        benchmark.BeginSimulationFrame(3);
+        benchmark.SimulationFrameStarting(3);
+        Assert.IsTrue(benchmark.IsRecording);
+        benchmark.SimulationFrameEnded(3);
         Assert.IsTrue(benchmark.IsRecording);
 
-        benchmark.BeginSimulationFrame(4);
-        Assert.IsTrue(benchmark.IsRecording);
+        benchmark.SimulationFrameStarting(4);
         Assert.IsFalse(benchmark.IsComplete);
 
-        benchmark.BeginSimulationFrame(5);
+        benchmark.SimulationFrameEnded(4);
         Assert.IsFalse(benchmark.IsRecording);
         Assert.IsTrue(benchmark.IsComplete);
     }
@@ -59,12 +79,14 @@ public sealed class FrameRangeBenchmarkTests
     [TestMethod]
     public void Record_CountsDrawsBetweenFramesInsideTheRange()
     {
-        var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(1, 2));
+        var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(1, 3));
 
-        benchmark.BeginSimulationFrame(1);
+        benchmark.SimulationFrameStarting(1);
+        benchmark.SimulationFrameEnded(1);
         benchmark.Record(FrameCostCategory.Draw, "GameLoop", "Shell.Draw", OneMillisecond);
         benchmark.Record(FrameCostCategory.Draw, "GameLoop", "Shell.Draw", OneMillisecond);
-        benchmark.BeginSimulationFrame(2);
+        benchmark.SimulationFrameStarting(2);
+        benchmark.SimulationFrameEnded(2);
         benchmark.Record(FrameCostCategory.Draw, "GameLoop", "Shell.Draw", OneMillisecond);
 
         Assert.AreEqual(2, benchmark.GetTotalMilliseconds(FrameCostCategory.Draw, "GameLoop", "Shell.Draw"), 1e-9);
@@ -72,13 +94,14 @@ public sealed class FrameRangeBenchmarkTests
 
     /// <summary>Once complete it stays complete: frame numbers coming round again (a new session) must not reopen it and blend a second workload in.</summary>
     [TestMethod]
-    public void BeginSimulationFrame_AfterComplete_NeverReopens()
+    public void AfterComplete_NeverReopens()
     {
         var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(1, 2));
         RunFrames(benchmark, 3);
 
-        benchmark.BeginSimulationFrame(1);
+        benchmark.SimulationFrameStarting(1);
         RecordSystem(benchmark);
+        benchmark.SimulationFrameEnded(1);
 
         Assert.IsTrue(benchmark.IsComplete);
         Assert.AreEqual(1, SystemTotal(benchmark), 1e-9);
@@ -90,9 +113,10 @@ public sealed class FrameRangeBenchmarkTests
         var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(10, 14));
         for (var frame = 1L; frame <= 20; frame++)
         {
-            benchmark.BeginSimulationFrame(frame);
+            benchmark.SimulationFrameStarting(frame);
             var elapsed = frame switch { 5 => 9.0, 12 => 5.0, _ => 1.0 };
             benchmark.Record(FrameCostCategory.Update, "SystemManager", "TestSystem", TimeSpan.FromMilliseconds(elapsed));
+            benchmark.SimulationFrameEnded(frame);
         }
 
         var directory = Path.Combine(Path.GetTempPath(), $"{nameof(FrameRangeBenchmarkTests)}-{Guid.NewGuid():N}");
@@ -168,26 +192,68 @@ public sealed class FrameRangeBenchmarkTests
 
     /// <summary>With both FrameBudget and a benchmark on, one Record reaches both -- the same instrumentation feeds latest.json and the benchmark.</summary>
     [TestMethod]
+    [DoNotParallelize]
     public void DiagnosticsEngine_WithFrameBudgetAndBenchmark_RecorderFeedsTheBenchmark()
     {
-        var engine = new DiagnosticsEngine(DiagnosticsFeatures.FrameBudget, randomSeed: 1, new BenchmarkFrameRange(1, 1000));
+        using var engine = new DiagnosticsEngine(DiagnosticsFeatures.FrameBudget, randomSeed: 1, new BenchmarkFrameRange(1, 1000));
+        engine.Start();
 
-        Assert.IsNotNull(engine.FrameCostRecorder);
-        Assert.IsNotInstanceOfType<FrameBudgetTracker>(engine.FrameCostRecorder);
-        Assert.IsNotInstanceOfType<FrameRangeBenchmark>(engine.FrameCostRecorder);
+        Assert.IsNotNull(EngineHooks.FrameCosts.Listener);
+        Assert.IsNotInstanceOfType<FrameBudgetTracker>(EngineHooks.FrameCosts.Listener);
+        Assert.IsNotInstanceOfType<FrameRangeBenchmark>(EngineHooks.FrameCosts.Listener);
     }
 
     [TestMethod]
+    [DoNotParallelize]
     public void DiagnosticsEngine_BenchmarkOnly_StillHasARecorder()
     {
-        var engine = new DiagnosticsEngine(DiagnosticsFeatures.None, randomSeed: 1, new BenchmarkFrameRange(1, 1000));
+        using var engine = new DiagnosticsEngine(DiagnosticsFeatures.None, randomSeed: 1, new BenchmarkFrameRange(1, 1000));
+        engine.Start();
 
-        Assert.IsInstanceOfType<FrameRangeBenchmark>(engine.FrameCostRecorder);
+        Assert.IsInstanceOfType<FrameRangeBenchmark>(EngineHooks.FrameCosts.Listener);
     }
 
     [TestMethod]
+    [DoNotParallelize]
     public void DiagnosticsEngine_Neither_HasNoRecorder()
     {
-        Assert.IsNull(new DiagnosticsEngine(DiagnosticsFeatures.None).FrameCostRecorder);
+        using var engine = new DiagnosticsEngine(DiagnosticsFeatures.None);
+        engine.Start();
+
+        Assert.IsNull(EngineHooks.FrameCosts.Listener);
+        Assert.IsNull(EngineHooks.SimulationFrames.Listener);
+    }
+
+    [TestMethod]
+    [DoNotParallelize]
+    public void DiagnosticsEngine_BenchmarkOnly_ListensToSimulationFrames()
+    {
+        using var engine = new DiagnosticsEngine(DiagnosticsFeatures.None, randomSeed: 1, new BenchmarkFrameRange(1, 1000));
+        engine.Start();
+
+        Assert.AreSame(engine, EngineHooks.SimulationFrames.Listener);
+    }
+
+    [TestMethod]
+    [DoNotParallelize]
+    public void DiagnosticsEngine_AnyFeature_ListensToSimulationFrames()
+    {
+        using var engine = new DiagnosticsEngine(DiagnosticsFeatures.LeakDetection);
+        engine.Start();
+
+        Assert.AreSame(engine, EngineHooks.SimulationFrames.Listener);
+    }
+
+    [TestMethod]
+    [DoNotParallelize]
+    public void DiagnosticsEngine_Dispose_ClearsEveryChannelItSubscribed()
+    {
+        var engine = new DiagnosticsEngine(DiagnosticsFeatures.FrameBudget);
+        engine.Start();
+
+        engine.Dispose();
+
+        Assert.IsNull(EngineHooks.FrameCosts.Listener);
+        Assert.IsNull(EngineHooks.SimulationFrames.Listener);
     }
 }

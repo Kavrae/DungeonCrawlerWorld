@@ -26,6 +26,9 @@ namespace DungeonCrawlerWorld;
 /// WorldSessionBootstrapper's own GameBootstrapper.Build call, and PlayerActivityLog must
 /// subscribe before CreatePlayer publishes the player's spawn EntityMovedEvent), not just several
 /// independently constructed services.
+///
+/// Disposing it ends the session: the EcsContext first (EngineHooks.Sessions hears it while the pools
+/// are intact), then the player activity log.
 /// </summary>
 public sealed record WorldSessionContext(
     World World,
@@ -47,4 +50,11 @@ public sealed record WorldSessionContext(
     Game.Spawning.CreatureSkeletons Skeletons,
     Game.Spawning.EntityFactory Factory,
     EntityTeleporter Teleporter,
-    ProcessingTierResolver TierResolver);
+    ProcessingTierResolver TierResolver) : IDisposable
+{
+    public void Dispose()
+    {
+        EcsContext.Dispose();
+        PlayerActivityLog.Dispose();
+    }
+}

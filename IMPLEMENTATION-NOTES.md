@@ -1610,3 +1610,73 @@ CLAUDE.md's ECS and Modding sections for the resulting rules.
   spread. Subscription order moved in two places, neither observable: `LocalTierRoster` now
   subscribes after every system; the factory's `EntityDestroying`/`TierChanging` handlers before
   every system (no system subscribes to either).
+
+### Diagnostics wired through named engine hooks
+
+Landed 2026-09-28 (planned in six phases; the plan file was deleted once this section held it). `DiagnosticsEngine` used to reach the engine
+by a separate hand-wired path per feature: a `StartupProfiler?` parameter through five build entry
+points, `SystemManager.Profiler`/`EventBus.Profiler` setters, a recorder passed to
+`ShellContext.LoadContent`, `AttachEcsContext` after the build, and a four-call frame protocol copied
+into `GameLoop` and `HeadlessBenchmark`. See CLAUDE.md's Diagnostics section for the resulting rules.
+
+- **Static channels, one listener each.** Unreal Insights' model: engine code emits unconditionally,
+  a channel nobody listens to costs a read and a branch. An injected hooks object was rejected because
+  it would have to be threaded to `EcsBuilder`, `SystemManager` and `EventBus` -- the thing being
+  removed. One listener per channel (no multicast on the hot path); `DiagnosticsEngine` fans out.
+  Subscribing tests are `[DoNotParallelize]` rather than the channels being `AsyncLocal`.
+- **`EngineHookChannel<TListener>`** replaced phase 1's property-plus-subscribe-method as soon as a
+  second channel arrived. Disposing a subscription clears the channel only if it still holds that
+  listener, so a stale subscription can't unhook its successor.
+- **Two ways to record a frame cost.** `EngineHooks.FrameCost(...)`, a disposable struct like
+  `DiagnosticScope`, at sites that run a few times a frame (`GameLoop`'s three rows, `ShellContext`'s
+  per-window update and draw); before it, `GameLoop` took timestamps even with nothing listening. An
+  explicit branch on `FrameCosts.Listener` in `SystemManager.Update` and `EventBus.Publish`: a wrapper
+  there would enter a try/finally and evaluate its arguments (the event's cached type name, a
+  dictionary lookup) on every system and every publish, even with diagnostics off.
+- **The session is declared, not inferred.** Every build makes an `EcsContext`, including mod trial
+  builds and the staging rebuild, so "an EcsContext was built" can't mean "a session started", and
+  "first `Update`" was rejected as an inference. The host calls `BeginSession()`. It marks the context
+  started only after the listener accepts it: the first version marked it before, so a rejected start
+  still emitted an ending on dispose (caught by a test).
+- **Benchmark closes as frame `EndFrame - 1` ends,** not as `EndFrame` begins, so a headless run that
+  updates until complete simulates the same frames as before and fingerprints still match older
+  builds. Windowed, the range loses the one shell Update/Draw after its last frame.
+- **Things that now pause with the simulation:** memory/leak sampling and the periodic console and
+  `latest.json` report (paused or menu mode), since they run off simulation frames. Headless passes
+  `writesPeriodicReports: false`, so it never overwrites a windowed `latest.json`.
+- **`PlayerActivityLog.BeginFrame` is gone.** The log stamps each line from the session's
+  `SimulationClock` and `DateTime.Now` when it writes it.
+- **New Draw row "GameLoop" / "SpriteBatch.End".** The frame's batch is `SpriteSortMode.Deferred`, so
+  the final `End()` flushes everything queued since the last render-state change (usually the top
+  layers). That flush was in no row before. Kept separate from Shell.Draw so Shell.Draw stays
+  comparable with older runs; the draw total is the two together.
+- **Startup report is nested.** `PhaseRecord.Depth`, phases in start order. `EcsBuilder` stages and
+  each module's phase, `ResolveBlueprints`, the staging build and each mod's `Trial:<type>` now show
+  up, where trial builds used to be one opaque "DryRunValidateMods" number. `StartupProfiler` stops
+  listening at the first simulation frame, so a runtime staging rebuild isn't counted as startup.
+- **A pool memory report whose range never closed is dropped** at session end with a console line,
+  not written -- it would claim the whole range.
+- **Out of scope, own TODO entries:** named gauges; leak detection that compares built-only pools
+  against built entities rather than every living entity.
+- **Verified unchanged (phase 6).** Baseline: `93075a5` (the commit before phase 1) exported with
+  `git archive` into gitignored `Log/b93` -- the scratchpad path broke Windows' 260-character limit on
+  the sprite folders -- and saved as `Log/phase-benchmarks/baseline-93075a5-{debug,release}`.
+  Seed 1, frames 600-3600, map 3072.
+  - Headless A/B, 5 runs a side interleaved: same world on both sides (fingerprint
+    `4A5360E840EEA660`), so the benchmark still simulates exactly the same frames. Debug
+    `EcsContext.Update` 3.510 -> 3.511 ms/frame (0%), Release 1.267 -> 1.248 (-1.5%, inside A's
+    spread); no system or `EventBus` row flagged in either. The cost with nothing listening can't be
+    measured this way (a benchmark is itself the listener); the emit sites swapped an instance
+    property read for a static field read, and the with-listener rows didn't move.
+  - Memory A/B (Release): identical -- pools 171.8 MB, live heap 969.5 MB, same allocation and
+    collection counts, no pool differing.
+  - Windowed (Debug): report rows and names unchanged apart from the new `SpriteBatch.End` Draw row
+    (0.026-0.048 ms/frame). Back-to-back pair: Update 4.75 vs 4.79, Shell.Draw 0.770 vs 0.760. Single
+    windowed runs swung 4.2-6.7 ms on Update across four runs, so only back-to-back pairs mean
+    anything; use the headless A/B for decisions.
+  - Startup: same top-level phases, all within ±4%; time to stable 14.4 s vs 12.6 s (one run each).
+    The report went from 100 flat to 195 nested phases. The first build to run (the staging build,
+    ~123 ms) pays the JIT warm-up; the session build's stages then take ~3 ms.
+  - **Found on the way:** both skill scripts matched a report by process id alone, and the memory
+    A/B's baseline run reused the pid of a six-day-old run, silently comparing against that stale
+    report. Both now accept only a file written after their own run started.

@@ -86,7 +86,6 @@ public static class GameBootstrapper
         MathUtility mathUtility,
         int initialEntityCapacity,
         int initialComponentCapacity,
-        StartupProfiler? startupProfiler = null,
         UniqueNumberAllocator? crawlerNumbers = null,
         ulong runtimeSpawnSeed = 0,
         IReadOnlyList<ISettingsSource>? settingsSources = null)
@@ -95,12 +94,12 @@ public static class GameBootstrapper
         var builtInModules = BuiltInModules();
 
         GameBuildPassResult staging;
-        using (startupProfiler?.Phase("BuildSpawnRecordRebuilderStaging"))
+        using (EngineHooks.DiagnosticScope("BuildSpawnRecordRebuilderStaging"))
         {
             staging = BuildSpawnRecordRebuilderStaging(builtInModules, validatedMods.Mods, settingsSources);
         }
 
-        var session = GameBuildPass.Run(builtInModules, validatedMods.Mods, map, mathUtility, settingsSources, initialEntityCapacity, initialComponentCapacity, startupProfiler, crawlerNumbers, runtimeSpawnSeed);
+        var session = GameBuildPass.Run(builtInModules, validatedMods.Mods, map, mathUtility, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, runtimeSpawnSeed);
         var ecsContext = session.EcsContext;
         var context = session.Context;
         var factory = session.Factory;

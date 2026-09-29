@@ -1,5 +1,6 @@
 ﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Spawning;
 using Game.Modules.Core.Components;
@@ -19,13 +20,13 @@ public sealed class PlayerActivityLog : IDisposable
     private readonly Game.World.World _world;
     private readonly EntityNaming _naming;
     private readonly StreamWriter _writer;
+    private readonly SimulationClock _simulationClock;
 
-    private int _currentFrameCount;
-    private DateTime _currentTimestamp;
-
-    public PlayerActivityLog(Game.World.World world, ComponentManager componentManager, EventBus eventBus, string logFilePath, BlueprintRegistry creatures)
+    /// <param name="simulationClock">The frame each line is stamped with.</param>
+    public PlayerActivityLog(Game.World.World world, ComponentManager componentManager, EventBus eventBus, SimulationClock simulationClock, string logFilePath, BlueprintRegistry creatures)
     {
         _world = world;
+        _simulationClock = simulationClock;
         _naming = EntityNaming.For(componentManager, creatures);
 
         var logDirectory = Path.GetDirectoryName(logFilePath);
@@ -40,17 +41,6 @@ public sealed class PlayerActivityLog : IDisposable
         eventBus.Subscribe<EntityDamagedEvent>(OnEntityDamaged);
         eventBus.Subscribe<EntityHealedEvent>(OnEntityHealed);
         eventBus.Subscribe<StatusEffectImmunityBlockedEvent>(OnStatusEffectImmunityBlocked);
-    }
-
-    /// <summary>
-    /// Called once per simulation frame, immediately before EcsContext.Update -- caches the
-    /// frame's identity so the event handlers below (fired synchronously during that Update
-    /// call) log against the right frame/time.
-    /// </summary>
-    public void BeginFrame(int frameCount, DateTime timestamp)
-    {
-        _currentFrameCount = frameCount;
-        _currentTimestamp = timestamp;
     }
 
     private void OnEntityMoved(EntityMovedEvent moved)
@@ -124,7 +114,7 @@ public sealed class PlayerActivityLog : IDisposable
             : source.ToString();
 
     private void Write(string message) =>
-        _writer.WriteLine($"[{_currentTimestamp:O}] [Frame {_currentFrameCount}] {message}");
+        _writer.WriteLine($"[{DateTime.Now:O}] [Frame {_simulationClock.CurrentFrame}] {message}");
 
     public void Dispose() => _writer.Dispose();
 }

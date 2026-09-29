@@ -1,3 +1,4 @@
+using Engine.Diagnostics;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Bootstrap;
@@ -139,6 +140,7 @@ public sealed class GameBootstrapperTests
     }
 
     [TestMethod]
+    [DoNotParallelize]
     public void Build_ModWithMatchingBuiltInId_ReplacesTheBuiltIn()
     {
         var directory = Directory.CreateTempSubdirectory();
@@ -147,7 +149,7 @@ public sealed class GameBootstrapperTests
             CopyModTo(directory.FullName, "Mods.TestFixtures");
             var result = BuildWithModsFrom(directory.FullName);
             var recorder = new SystemOrderRecorder();
-            result.EcsContext.SystemManager.Profiler = recorder;
+            using var frameCostSubscription = EngineHooks.FrameCosts.Subscribe(recorder);
             result.EcsContext.SystemManager.Update(new EngineTime(TimeSpan.Zero, TimeSpan.FromSeconds(1d / 60), false, 1));
 
             Assert.IsFalse(result.Failures.Any(failure => failure.Source.Contains("ReplacementHealthModule")));

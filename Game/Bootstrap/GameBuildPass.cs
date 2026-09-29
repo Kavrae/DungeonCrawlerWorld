@@ -41,14 +41,13 @@ public static class GameBuildPass
         IReadOnlyList<ISettingsSource> settingsSources,
         int initialEntityCapacity,
         int initialComponentCapacity,
-        StartupProfiler? startupProfiler = null,
         UniqueNumberAllocator? crawlerNumbers = null,
         ulong runtimeSpawnSeed = 0)
     {
         var modules = ModuleSet.Combine(builtInModules.CreateAll(), mods.CreateAll());
         var settings = SettingsCatalog.Declare(modules).Resolve(settingsSources);
 
-        var build = BuildModules(modules, settings.Values, map, mathUtility, initialEntityCapacity, initialComponentCapacity, startupProfiler, crawlerNumbers, runtimeSpawnSeed);
+        var build = BuildModules(modules, settings.Values, map, mathUtility, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, runtimeSpawnSeed);
         var ecsContext = build.EcsContext;
         var context = build.Context;
         var componentManager = ecsContext.ComponentManager;
@@ -85,11 +84,10 @@ public static class GameBuildPass
         MathUtility mathUtility,
         int initialEntityCapacity,
         int initialComponentCapacity,
-        StartupProfiler? startupProfiler = null,
         UniqueNumberAllocator? crawlerNumbers = null,
         ulong runtimeSpawnSeed = 0)
     {
-        var sortedModules = EcsBuilder.Begin(modules, settings, initialEntityCapacity, initialComponentCapacity, new EventBus(), startupProfiler: startupProfiler);
+        var sortedModules = EcsBuilder.Begin(modules, settings, initialEntityCapacity, initialComponentCapacity, new EventBus());
         var registeredComponents = sortedModules.RegisterComponents();
 
         ThrowIfMissingFoundation(registeredComponents.Modules);
@@ -107,7 +105,11 @@ public static class GameBuildPass
         var configuredModules = registeredComponents.Configure(gameModuleContext);
 
         // Resolved now, so a broken include fails the load (or a mod's dry run) rather than its first spawn.
-        gameModuleContext.Definitions.ResolveAll();
+        using (EngineHooks.DiagnosticScope("ResolveBlueprints"))
+        {
+            gameModuleContext.Definitions.ResolveAll();
+        }
+
         var registeredSystems = configuredModules.RegisterSystems();
         var ecsContext = registeredSystems.Complete();
 

@@ -133,17 +133,19 @@ function Invoke-BenchmarkRun {
 
     $stdoutPath = [System.IO.Path]::GetTempFileName()
     $stderrPath = [System.IO.Path]::GetTempFileName()
+    $startedAt = Get-Date
     $process = Start-Process -FilePath $Exe -ArgumentList $gameArguments -PassThru `
         -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
 
     $benchmarkFile = $null
     try {
-        # The game writes benchmark-<timestamp>-<pid>.json the moment frame EndFrame begins;
-        # matching on this process's pid means a stale file from an earlier run is never used.
+        # The game writes benchmark-<timestamp>-<pid>.json the moment frame EndFrame - 1 ends.
+        # Process ids are reused, so an older report can carry this run's pid; only a file written
+        # after this run started is its own.
         $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
         while ($true) {
             $benchmarkFile = Get-ChildItem -Path $DiagnosticsDirectory -Filter "benchmark-*-$($process.Id).json" -ErrorAction SilentlyContinue |
-                Select-Object -First 1
+                Where-Object { $_.LastWriteTime -ge $startedAt } | Select-Object -First 1
             if ($null -ne $benchmarkFile -and (-not $RunHeadless -or $process.HasExited)) { break }
 
             if ($process.HasExited -and $null -eq $benchmarkFile) {

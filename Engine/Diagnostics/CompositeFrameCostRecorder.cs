@@ -1,7 +1,7 @@
 namespace Engine.Diagnostics;
 
 /// <summary>Forwards every Record to two recorders, so FrameRangeBenchmark and FrameBudgetTracker can both observe the same instrumentation.</summary>
-/// <remarks>SystemManager, EventBus and ShellContext each hold a single IFrameCostRecorder; this keeps them unaware of how many consumers there are. See DiagnosticsEngine.FrameCostRecorder.</remarks>
+/// <remarks>EngineHooks.FrameCosts holds a single listener; this lets DiagnosticsEngine subscribe both through it.</remarks>
 /// <cleanupVersion>1</cleanupVersion>
 internal sealed class CompositeFrameCostRecorder(IFrameCostRecorder first, IFrameCostRecorder second) : IFrameCostRecorder
 {

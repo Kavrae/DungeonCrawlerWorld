@@ -1,4 +1,3 @@
-using Engine.Diagnostics;
 using Engine.Events;
 using Engine.Modules;
 using Engine.Settings;
@@ -21,9 +20,8 @@ public static class EcsBuilder
         SettingValues settings,
         int initialEntityCapacity,
         int initialComponentCapacity,
-        EventBus eventBus,
-        StartupProfiler? startupProfiler = null) =>
-        new(new EcsBuildState<TContext>(ModuleOrder.Sort(modules), settings, initialEntityCapacity, initialComponentCapacity, eventBus, startupProfiler));
+        EventBus eventBus) =>
+        new(new EcsBuildState<TContext>(ModuleOrder.Sort(modules), settings, initialEntityCapacity, initialComponentCapacity, eventBus));
 }
 
 /// <summary>What every stage of one build carries forward.</summary>
@@ -32,8 +30,7 @@ internal sealed record EcsBuildState<TContext>(
     SettingValues Settings,
     int InitialEntityCapacity,
     int InitialComponentCapacity,
-    EventBus EventBus,
-    StartupProfiler? StartupProfiler);
+    EventBus EventBus);
 
 /// <summary>A stage of an EcsBuilder build, which can be advanced to the next stage once.</summary>
 /// <cleanupVersion>1</cleanupVersion>

@@ -10,9 +10,6 @@ public sealed class SystemManager
     private readonly List<(ISystem System, byte CurrentStripe)> _systems = [];
     private readonly List<IFrameScoped> _frameScopedBuffers = [];
 
-    /// <summary>Opt-in per-system wall-clock cost tracking, recorded under FrameCostCategory.Update, group "SystemManager", item = each system's GetType().Name -- see FrameBudgetTracker's own doc comment. Null (the default) skips the Stopwatch calls entirely, so this costs nothing unless a caller (e.g. GameLoop, tracking down a gameplay demo's actual frame cost) wires one in.</summary>
-    public IFrameCostRecorder? Profiler { get; set; }
-
     /// <summary>
     /// How many processing tiers, from the lowest index up, are simulated for every
     /// <see cref="ITieredSystem"/>. Tiers at or past this are skipped entirely: their entities are
@@ -66,10 +63,28 @@ public sealed class SystemManager
         _frameScopedBuffers.Add(buffer);
     }
 
+    /// <summary>Runs every registered system once, in registration order.</summary>
+    /// <remarks>
+    /// The frame boundary for every host: EngineHooks.SimulationFrames hears the frame start before the
+    /// clock advances and its end after the frame-scoped buffers clear. While EngineHooks.FrameCosts has a
+    /// listener, each system's wall-clock cost is recorded under FrameCostCategory.Update, group
+    /// "SystemManager", item = the system's type name. That is a branch on the listener rather than an
+    /// EngineHooks.FrameCost wrapper, because it runs for every system every frame: with nothing listening
+    /// each system runs as a bare call, with no try/finally and no arguments evaluated.
+    /// </remarks>
     public void Update(EngineTime time)
     {
+        var simulationFrameListener = EngineHooks.SimulationFrames.Listener;
+        var frameStartTimestamp = 0L;
+        if (simulationFrameListener is not null)
+        {
+            simulationFrameListener.SimulationFrameStarting(time.FrameCount);
+            frameStartTimestamp = Stopwatch.GetTimestamp();
+        }
+
         Clock.Advance(time.FrameCount);
         IsUpdating = true;
+        var frameCostRecorder = EngineHooks.FrameCosts.Listener;
 
         try
         {
@@ -77,11 +92,11 @@ public sealed class SystemManager
             {
                 var (system, stripeIndex) = _systems[i];
 
-                if (Profiler is { } profiler)
+                if (frameCostRecorder is not null)
                 {
                     var start = Stopwatch.GetTimestamp();
                     Run(system, time, stripeIndex);
-                    profiler.Record(FrameCostCategory.Update, "SystemManager", system.GetType().Name, Stopwatch.GetElapsedTime(start));
+                    frameCostRecorder.Record(FrameCostCategory.Update, "SystemManager", system.GetType().Name, Stopwatch.GetElapsedTime(start));
                 }
                 else
                 {
@@ -100,6 +115,8 @@ public sealed class SystemManager
         {
             buffer.ClearFrame();
         }
+
+        simulationFrameListener?.SimulationFrameEnded(time.FrameCount, Stopwatch.GetElapsedTime(frameStartTimestamp));
     }
 
     /// <summary>True while Update is running systems -- the simulation's own reads and writes, as opposed to presentation or input between frames.</summary>

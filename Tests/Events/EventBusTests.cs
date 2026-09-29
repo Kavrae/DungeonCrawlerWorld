@@ -205,16 +205,18 @@ public sealed class EventBusTests
         Assert.AreEqual(2, everyCount);
     }
 
-    // Profiler-enabled dispatch is a separate code path from the default -- these cover its
+    // Dispatch with a FrameCosts listener is a separate code path from the default -- these cover its
     // functional correctness (still dispatches to the right handlers) rather than its timing
     // output, the same reason PerformanceCounter/FrameBudgetTracker themselves have no direct
     // tests: Snapshot/TopEntries only populate once a real wall-clock second has elapsed, which
     // isn't something to assert on in a fast unit test.
 
     [TestMethod]
-    public void Publish_WithProfilerSet_StillInvokesSubscriber()
+    [DoNotParallelize]
+    public void Publish_WithFrameCostsListener_StillInvokesSubscriber()
     {
-        var bus = new EventBus { Profiler = new FrameBudgetTracker() };
+        using var frameCostSubscription = EngineHooks.FrameCosts.Subscribe(new FrameBudgetTracker());
+        var bus = new EventBus();
         var received = -1;
         bus.Subscribe<TestEvent>(e => received = e.Value);
 
@@ -224,9 +226,11 @@ public sealed class EventBusTests
     }
 
     [TestMethod]
-    public void Publish_WithProfilerSet_InvokesEveryHandlerExactlyOnce()
+    [DoNotParallelize]
+    public void Publish_WithFrameCostsListener_InvokesEveryHandlerExactlyOnce()
     {
-        var bus = new EventBus { Profiler = new FrameBudgetTracker() };
+        using var frameCostSubscription = EngineHooks.FrameCosts.Subscribe(new FrameBudgetTracker());
+        var bus = new EventBus();
         var firstCount = 0;
         var secondCount = 0;
         bus.Subscribe<TestEvent>(_ => firstCount++);

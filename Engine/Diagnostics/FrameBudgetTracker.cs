@@ -12,8 +12,8 @@ namespace Engine.Diagnostics;
 /// label per entry, for callers (e.g. DebugWindowContent) that just want the single largest
 /// overall contributor.
 ///
-/// Intended as an opt-in diagnostic (see SystemManager.Profiler, EventBus.Profiler,
-/// ShellContext, and DiagnosticsEngine) for tracking frame budgets. Supersedes the old
+/// Intended as an opt-in diagnostic (see EngineHooks.FrameCosts, DiagnosticsEngine) for
+/// tracking frame budgets. Supersedes the old
 /// PhaseProfiler, whose flat string-keyed phases couldn't distinguish Update from Draw or say
 /// which system/window a phase belonged to.
 /// </remarks>

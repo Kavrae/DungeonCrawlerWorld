@@ -5,7 +5,7 @@ description: Run a live benchmark of DungeonCrawlerWorld's ECS systems using the
 
 # Phase performance testing
 
-The game's `--benchmark-frames=START-END` flag (see `Program.cs`, `Engine/Diagnostics/BenchmarkFrameRange.cs`) makes `FrameRangeBenchmark` total every instrumented cost -- each system in `SystemManager`, each `EventBus` event, each window's Update/Draw -- across simulation frames `[START, END)`, then write one `Log/diagnostics/benchmark-<timestamp>-<pid>.json` the moment frame END begins. This is the only way to see real per-system cost at the game's actual scale (`FloorBuilder.PopulateFloor` populates the same TestMapBuilder map `GameLoop.InitialEntityCapacity` is sized for) -- the checked-in `AbilityScorePerformanceTests` only measures two isolated code paths, not the whole system graph under load.
+The game's `--benchmark-frames=START-END` flag (see `Program.cs`, `Engine/Diagnostics/BenchmarkFrameRange.cs`) makes `FrameRangeBenchmark` total every instrumented cost -- each system in `SystemManager`, each `EventBus` event, each window's Update/Draw -- across simulation frames `[START, END)`, then write one `Log/diagnostics/benchmark-<timestamp>-<pid>.json` the moment frame END-1 ends. This is the only way to see real per-system cost at the game's actual scale (`FloorBuilder.PopulateFloor` populates the same TestMapBuilder map `GameLoop.InitialEntityCapacity` is sized for) -- the checked-in `AbilityScorePerformanceTests` only measures two isolated code paths, not the whole system graph under load.
 
 ## Why frames and a seed, not wall-clock samples
 
@@ -65,7 +65,7 @@ Shared defaults: `-Seed 1`, `-StartFrame 600` (frames before it are JIT warm-up 
 
 **Worst frame.** Every run also prints its slowest single `EcsContext.Update` frame (the report's `WorstMilliseconds`), which a per-frame average hides.
 
-The script refuses to start if a `DungeonCrawlerWorld` is already running (it may be someone's session, and two instances skew each other), matches each report to *its own* process id so a stale file can't be picked up, and checks the report's seed and range match what it asked for. If a windowed run times out with the window open, the game is probably paused or showing a blocking notification -- simulation frames only advance while `GameLoop.Update`'s pause/menu gate is open.
+The script refuses to start if a `DungeonCrawlerWorld` is already running (it may be someone's session, and two instances skew each other), matches each report to *its own* process id and to a file written after that run started (ids are reused, so the id alone once picked up a six-day-old report), and checks the report's seed and range match what it asked for. If a windowed run times out with the window open, the game is probably paused or showing a blocking notification -- simulation frames only advance while `GameLoop.Update`'s pause/menu gate is open.
 
 **Memory -- `Invoke-MemoryReport.ps1`.** When the question is memory rather than frame cost (pool sizes, what an entity holds, allocation during world build), run the memory report instead:
 

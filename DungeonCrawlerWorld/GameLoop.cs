@@ -6,7 +6,6 @@ using Engine.Utilities;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Bootstrap;
-using System.Diagnostics;
 
 namespace DungeonCrawlerWorld;
 
@@ -65,12 +64,13 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         _mapSizeOverride = mapSizeOverride;
         _settingsSources = settingsSources;
 
-        // Constructed here, not in Initialize(), so its FrameBudget/Startup trackers' clocks
-        // (and Startup's Phase("Module Load") wrap around WorldSessionBootstrapper.Build below)
-        // start as close to process start as this class can observe -- Initialize() itself is
-        // one of the things being timed. Memory/LeakDetection can't start this early (they need
-        // ComponentManager/EntityManager, which don't exist yet)
+        // Constructed and started here, not in Initialize(), so its FrameBudget/Startup trackers'
+        // clocks -- and the startup scopes it records, from Initialize's own down to each module's
+        // build phases -- start as close to process start as this class can observe; Initialize()
+        // itself is one of the things being timed. Memory/LeakDetection attach when the session
+        // begins.
         _diagnostics = new DiagnosticsEngine(diagnosticsFeatures, _randomSeed, benchmarkFrameRange);
+        _diagnostics.Start();
 
         //TODO : Make this configurable as a set size OR full screen calculation.
         _graphics = new GraphicsDeviceManager(this)
@@ -86,18 +86,18 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     {
         var modsDirectory = Path.Combine(AppContext.BaseDirectory, "Mods");
         var playerActivityLogFilePath = Path.Combine(FindProjectRoot(), "Log", "player-activity.log");
-        using (_diagnostics.StartupProfiler?.Phase("World Session Setup"))
+        using (EngineHooks.DiagnosticScope("World Session Setup"))
         {
-            _worldSession = WorldSessionBootstrapper.Build(FloorNumber, modsDirectory, InitialEntityCapacity, InitialComponentCapacity, MinCrawlerNumber, CrawlerNumberBits, playerActivityLogFilePath, _diagnostics, _randomSeed, _settingsSources, _mapSizeOverride);
+            _worldSession = WorldSessionBootstrapper.Build(FloorNumber, modsDirectory, InitialEntityCapacity, InitialComponentCapacity, MinCrawlerNumber, CrawlerNumberBits, playerActivityLogFilePath, _randomSeed, _settingsSources, _mapSizeOverride);
         }
 
-        using (_diagnostics.StartupProfiler?.Phase("Presentation Bootstrap"))
+        using (EngineHooks.DiagnosticScope("Presentation Bootstrap"))
         {
             _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts", "Spritesheets");
         }
 
         var screenSize = new Vector2(_graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
-        using (_diagnostics.StartupProfiler?.Phase("Window/Shell Setup"))
+        using (EngineHooks.DiagnosticScope("Window/Shell Setup"))
         {
             _shell = ShellBootstrapper.Build(_presentation, _worldSession, screenSize, _diagnostics);
         }
@@ -117,31 +117,25 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
         _presentation.LoadContent(GraphicsDevice, unitRectangle);
 
-        _shell.LoadContent(GraphicsDevice, _presentation.SpriteBatchRenderer.GetSpriteBatch(), unitRectangle, _diagnostics.FrameCostRecorder);
+        _shell.LoadContent(GraphicsDevice, _presentation.SpriteBatchRenderer.GetSpriteBatch(), unitRectangle);
 
         base.LoadContent();
     }
 
     protected override void Update(GameTime gameTime)
     {
-        _diagnostics.Tick();
-
         _shell.PreSimulationUpdate();
 
         if (!(_shell.MapWindow.IsPaused || _shell.Layers.IsMenuModeActive))
         {
             _frameCount++;
-            _worldSession.PlayerActivityLog.BeginFrame(_frameCount, DateTime.Now);
-            _diagnostics.BeginSimulationFrame(_frameCount);
-
-            var ecsUpdateStart = Stopwatch.GetTimestamp();
             _worldSession.EcsContext.Update(new EngineTime(gameTime.TotalGameTime, gameTime.ElapsedGameTime, gameTime.IsRunningSlowly, _frameCount));
-            _diagnostics.RecordSimulationTick("GameLoop", "EcsContext.Update (all systems)", Stopwatch.GetElapsedTime(ecsUpdateStart));
         }
 
-        var shellUpdateStart = Stopwatch.GetTimestamp();
-        _shell.Update(gameTime);
-        _diagnostics.FrameCostRecorder?.Record(FrameCostCategory.Update, "GameLoop", "Shell.Update", Stopwatch.GetElapsedTime(shellUpdateStart));
+        using (EngineHooks.FrameCost(FrameCostCategory.Update, "GameLoop", "Shell.Update"))
+        {
+            _shell.Update(gameTime);
+        }
 
         SyncAdminModeWindowTitle();
 
@@ -170,13 +164,28 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         _presentation.SpriteBatchRenderer.StartSpriteBatch();
         _presentation.ElementPoolService.ResetRenderState();
 
-        var shellDrawStart = Stopwatch.GetTimestamp();
-        _shell.Draw(gameTime);
-        _diagnostics.FrameCostRecorder?.Record(FrameCostCategory.Draw, "GameLoop", "Shell.Draw", Stopwatch.GetElapsedTime(shellDrawStart));
+        using (EngineHooks.FrameCost(FrameCostCategory.Draw, "GameLoop", "Shell.Draw"))
+        {
+            _shell.Draw(gameTime);
+        }
 
-        _presentation.SpriteBatchRenderer.EndSpriteBatch();
+        using (EngineHooks.FrameCost(FrameCostCategory.Draw, "GameLoop", "SpriteBatch.End"))
+        {
+            _presentation.SpriteBatchRenderer.EndSpriteBatch();
+        }
 
         base.Draw(gameTime);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _worldSession?.Dispose();
+            _diagnostics.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 
     internal static string FindProjectRoot()

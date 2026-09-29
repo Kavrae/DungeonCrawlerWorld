@@ -1,3 +1,4 @@
+using Engine.Diagnostics;
 using Engine.ECS.Components;
 using Engine.ECS.Entities;
 using Engine.Events;
@@ -34,10 +35,11 @@ public sealed class RegisteredComponents<TContext> : EcsBuildStage
     public ConfiguredModules<TContext> Configure(TContext context)
     {
         MarkAdvanced();
+        using var stageScope = EngineHooks.DiagnosticScope("Configure");
 
         foreach (var module in _state.SortedModules)
         {
-            using var _ = _state.StartupProfiler?.Phase($"Configure:{module.Name}");
+            using var modulePhaseScope = EngineHooks.DiagnosticScope("Configure", module.Name);
             module.Configure(context);
         }
 

@@ -18,12 +18,12 @@ namespace Game.Bootstrap;
 /// </remarks>
 public static class ModValidation
 {
-    public static ValidatedMods Validate(string modsDirectory, IReadOnlyList<ISettingsSource> settingsSources, StartupProfiler? startupProfiler = null)
+    public static ValidatedMods Validate(string modsDirectory, IReadOnlyList<ISettingsSource> settingsSources)
     {
         var builtInModules = GameBootstrapper.BuiltInModules();
 
         ModuleLoadResult<GameModuleContext> loadResult;
-        using (startupProfiler?.Phase("ModuleLoader.LoadFromDirectory"))
+        using (EngineHooks.DiagnosticScope("ModuleLoader.LoadFromDirectory"))
         {
             loadResult = ModuleLoader.LoadFromDirectory<GameModuleContext>(modsDirectory);
         }
@@ -31,10 +31,11 @@ public static class ModValidation
         var failures = new List<ModuleFailure>(loadResult.Failures);
         var survivors = new List<ModuleFactory<GameModuleContext>>();
 
-        using (startupProfiler?.Phase("DryRunValidateMods"))
+        using (EngineHooks.DiagnosticScope("DryRunValidateMods"))
         {
             foreach (var mod in loadResult.ModuleFactories)
             {
+                using var trialScope = EngineHooks.DiagnosticScope("Trial", mod.ModuleType.Name);
                 try
                 {
                     ThrowIfBreaksReplacementContract(builtInModules, mod, settingsSources);

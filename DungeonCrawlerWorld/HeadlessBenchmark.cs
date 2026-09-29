@@ -1,7 +1,5 @@
-using System.Diagnostics;
 using Engine.Diagnostics;
 using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
@@ -44,7 +42,8 @@ internal static class HeadlessBenchmark
     public static int Run(int randomSeed, BenchmarkFrameRange frameRange, IReadOnlyList<Engine.Settings.ISettingsSource> settingsSources, int? mapSizeOverride = null, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None)
     {
         using var timerResolution = WindowsTimerResolution.Request(milliseconds: 1);
-        var diagnostics = new DiagnosticsEngine(diagnosticsFeatures & DiagnosticsFeatures.Memory, randomSeed, frameRange);
+        using var diagnostics = new DiagnosticsEngine(diagnosticsFeatures & DiagnosticsFeatures.Memory, randomSeed, frameRange, writesPeriodicReports: false);
+        diagnostics.Start();
         var modsDirectory = Path.Combine(AppContext.BaseDirectory, "Mods");
 
         // Its own file, so benchmark runs never append to the real Log/player-activity.log.
@@ -59,7 +58,6 @@ internal static class HeadlessBenchmark
             GameLoop.MinCrawlerNumber,
             GameLoop.CrawlerNumberBits,
             activityLogPath,
-            diagnostics,
             randomSeed,
             settingsSources,
             mapSizeOverride);
@@ -68,20 +66,9 @@ internal static class HeadlessBenchmark
         {
             var frameDuration = TimeSpan.FromTicks(TimeSpan.TicksPerSecond / FramesPerSecond);
 
-            // Mirrors GameLoop.Update's simulation half, in the same order: frame number first,
-            // then the benchmark window, then the update itself.
-            for (var frame = 1; ; frame++)
+            for (var frame = 1; !diagnostics.IsBenchmarkComplete; frame++)
             {
-                session.PlayerActivityLog.BeginFrame(frame, DateTime.Now);
-                diagnostics.BeginSimulationFrame(frame);
-                if (diagnostics.IsBenchmarkComplete)
-                {
-                    break;
-                }
-
-                var start = Stopwatch.GetTimestamp();
                 session.EcsContext.Update(new EngineTime(frameDuration * frame, frameDuration, IsRunningSlowly: false, frame));
-                diagnostics.RecordSimulationTick("GameLoop", "EcsContext.Update (all systems)", Stopwatch.GetElapsedTime(start));
             }
 
             Console.WriteLine($"[Headless] Fingerprint {Fingerprint(session)}");
@@ -89,7 +76,7 @@ internal static class HeadlessBenchmark
         }
         finally
         {
-            session.PlayerActivityLog.Dispose();
+            session.Dispose();
             File.Delete(activityLogPath);
         }
     }

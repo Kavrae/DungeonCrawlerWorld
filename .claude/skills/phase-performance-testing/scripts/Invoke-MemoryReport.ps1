@@ -44,6 +44,9 @@ function Invoke-MemoryRun {
     $gameArguments = @("--headless", "--diagnostics=memory", "--seed=$Seed", "--benchmark-frames=$StartFrame-$EndFrame", "--map-size=$MapSize")
     $stdoutPath = [System.IO.Path]::GetTempFileName()
     $stderrPath = [System.IO.Path]::GetTempFileName()
+    # Process ids are reused, so an older report can carry this run's pid; only a file written
+    # after this run started is its own.
+    $startedAt = Get-Date
     $process = Start-Process -FilePath $Exe -ArgumentList $gameArguments -PassThru `
         -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
     # Windows PowerShell only reports ExitCode for a process whose handle was opened while it ran.
@@ -58,7 +61,8 @@ function Invoke-MemoryRun {
             throw "Headless memory run exited with code $($process.ExitCode). $(Get-Content -LiteralPath $stderrPath -Raw)"
         }
 
-        $file = Get-ChildItem -Path $DiagnosticsDirectory -Filter "memory-*-$($process.Id).json" -ErrorAction SilentlyContinue | Select-Object -First 1
+        $file = Get-ChildItem -Path $DiagnosticsDirectory -Filter "memory-*-$($process.Id).json" -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -ge $startedAt } | Select-Object -First 1
         if ($null -eq $file) {
             throw "Run pid $($process.Id) wrote no memory report -- does $Exe include PoolMemoryReport?"
         }

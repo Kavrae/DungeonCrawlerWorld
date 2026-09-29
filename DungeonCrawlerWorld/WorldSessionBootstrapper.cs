@@ -34,7 +34,6 @@ public static class WorldSessionBootstrapper
         int minCrawlerNumber,
         int crawlerNumberBits,
         string playerActivityLogFilePath,
-        DiagnosticsEngine diagnostics,
         int randomSeed,
         IReadOnlyList<ISettingsSource> settingsSources,
         int? mapSizeOverride = null)
@@ -47,21 +46,21 @@ public static class WorldSessionBootstrapper
         var neighborhoodRecords = new NeighborhoodRecords(mathUtility);
 
         ValidatedMods validatedMods;
-        using (diagnostics.StartupProfiler?.Phase("Mod Validation"))
+        using (EngineHooks.DiagnosticScope("Mod Validation"))
         {
-            validatedMods = ModValidation.Validate(modsDirectory, settingsSources, diagnostics.StartupProfiler);
+            validatedMods = ModValidation.Validate(modsDirectory, settingsSources);
         }
 
         Map map;
-        using (diagnostics.StartupProfiler?.Phase("World/Map Build"))
+        using (EngineHooks.DiagnosticScope("World/Map Build"))
         {
             map = FloorBuilder.CreateMap(floorNumber, mapSizeOverride);
         }
 
         GameBootstrapResult bootstrapResult;
-        using (diagnostics.StartupProfiler?.Phase("Module Load"))
+        using (EngineHooks.DiagnosticScope("Module Load"))
         {
-            bootstrapResult = GameBootstrapper.Build(validatedMods, map, mathUtility, initialEntityCapacity, initialComponentCapacity, diagnostics.StartupProfiler, crawlerNumberAllocator, runtimeSpawnSeed: (uint)randomSeed, settingsSources: settingsSources);
+            bootstrapResult = GameBootstrapper.Build(validatedMods, map, mathUtility, initialEntityCapacity, initialComponentCapacity, crawlerNumberAllocator, runtimeSpawnSeed: (uint)randomSeed, settingsSources: settingsSources);
         }
 
         var ecsContext = bootstrapResult.EcsContext;
@@ -70,9 +69,6 @@ public static class WorldSessionBootstrapper
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
         var reservedEntityIds = FloorBuilder.ReserveTradeOfferEntities(ecsContext);
 
-        diagnostics.AttachEcsContext(ecsContext.ComponentManager, ecsContext.EntityManager);
-        ecsContext.SystemManager.Profiler = diagnostics.FrameCostRecorder;
-        ecsContext.EventBus.Profiler = diagnostics.FrameCostRecorder;
 
         foreach (var failure in bootstrapResult.Failures)
         {
@@ -90,7 +86,7 @@ public static class WorldSessionBootstrapper
         // (see FloorBuilder.CreatePlayer's own comment on why both exist). Population itself
         // (PopulateFloor, just below) never publishes EntityMovedEvent this way -- only the
         // buffered path -- so subscribing this early doesn't log anything spurious.
-        var playerActivityLog = new PlayerActivityLog(world, ecsContext.ComponentManager, ecsContext.EventBus, playerActivityLogFilePath, bootstrapResult.Definitions);
+        var playerActivityLog = new PlayerActivityLog(world, ecsContext.ComponentManager, ecsContext.EventBus, ecsContext.SystemManager.Clock, playerActivityLogFilePath, bootstrapResult.Definitions);
         Console.WriteLine($"[PlayerActivityLog] Writing to {playerActivityLogFilePath}");
 
         // The tier reference is set to where the player is aimed at spawning BEFORE population, so
@@ -105,12 +101,12 @@ public static class WorldSessionBootstrapper
             tierResolver.SetWindowCenter(Game.TestMapBuilder.StartingCellX, Game.TestMapBuilder.StartingCellY);
         }
 
-        using (diagnostics.StartupProfiler?.Phase("Entity Population"))
+        using (EngineHooks.DiagnosticScope("Entity Population"))
         {
             FloorBuilder.PopulateFloor(world, ecsContext, neighborhoodRecords, bootstrapResult.Factory, bootstrapResult.Terrain, bootstrapResult.Definitions);
         }
 
-        using (diagnostics.StartupProfiler?.Phase("Player Spawn"))
+        using (EngineHooks.DiagnosticScope("Player Spawn"))
         {
             FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, bootstrapResult.Factory, bootstrapResult.Definitions, playerEntityId, tierResolver);
             world.PlayerEntityId = playerEntityId;
@@ -133,7 +129,7 @@ public static class WorldSessionBootstrapper
         // first shifts resized the largest pools mid-drain -- one 30-60 ms frame per shift.
         if (!world.Map.IsBounded)
         {
-            using (diagnostics.StartupProfiler?.Phase("Window Headroom"))
+            using (EngineHooks.DiagnosticScope("Window Headroom"))
             {
                 const int windowNeighborhoods = 9;
                 const int peakBuiltNeighborhoods = 3;
@@ -155,11 +151,13 @@ public static class WorldSessionBootstrapper
         // evicted have lost their built creatures, so the builds reuse the storage those free.
         tierResolver.PromotionsHeld = () => neighborhoodStreamer.IsEvictingBuiltCreatures;
 
-        using (diagnostics.StartupProfiler?.Phase("Heap Compaction"))
+        using (EngineHooks.DiagnosticScope("Heap Compaction"))
         {
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         }
+
+        ecsContext.BeginSession();
 
         return new WorldSessionContext(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, bootstrapResult.ActionCatalog, bootstrapResult.ItemCatalog, playerActivityLog, bootstrapResult.StatusEffectDisplays, reservedEntityIds, bootstrapResult.LocalTierRoster, bootstrapResult.Terrain, neighborhoodRecords, neighborhoodStreamer, bootstrapResult.Definitions, bootstrapResult.SpawnRecordRebuilder, bootstrapResult.Skeletons, bootstrapResult.Factory, bootstrapResult.Teleporter, bootstrapResult.ProcessingTierResolver);
     }

@@ -1,3 +1,4 @@
+using Engine.Diagnostics;
 using Engine.ECS.Systems;
 
 namespace Tests.ECS.Systems;
@@ -127,5 +128,26 @@ public sealed class SystemManagerTests
         systemManager.Update(default);
 
         CollectionAssert.AreEqual(new[] { "first", "a", "b" }, order);
+    }
+
+    private sealed class SimulationFrameRecorder(List<string> order, SimulationClock clock) : ISimulationFrameListener
+    {
+        public void SimulationFrameStarting(long frameCount) => order.Add($"starting {frameCount} at clock {clock.CurrentFrame}");
+
+        public void SimulationFrameEnded(long frameCount, TimeSpan elapsed) => order.Add($"ended {frameCount} at clock {clock.CurrentFrame}");
+    }
+
+    [TestMethod]
+    [DoNotParallelize]
+    public void Update_EmitsFrameStartBeforeTheClockAdvances_AndFrameEndAfterEverySystem()
+    {
+        var order = new List<string>();
+        var systemManager = new SystemManager();
+        systemManager.Register(new OrderRecordingSystem("system", order));
+        using var simulationFrameSubscription = EngineHooks.SimulationFrames.Subscribe(new SimulationFrameRecorder(order, systemManager.Clock));
+
+        systemManager.Update(new EngineTime(TimeSpan.Zero, TimeSpan.Zero, IsRunningSlowly: false, FrameCount: 7));
+
+        CollectionAssert.AreEqual(new[] { "starting 7 at clock 0", "system", "ended 7 at clock 7" }, order);
     }
 }

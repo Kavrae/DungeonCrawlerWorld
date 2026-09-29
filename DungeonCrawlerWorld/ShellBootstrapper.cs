@@ -26,7 +26,6 @@ using Presentation.UI.Looting;
 using Presentation.UI.Notifications;
 using Presentation.UI.Shops;
 using Presentation.UI.Trade;
-using System.Diagnostics;
 
 namespace DungeonCrawlerWorld;
 
@@ -603,14 +602,12 @@ public sealed record ShellContext(
     private bool _dimDrawn;
 
     /// <summary>
-    /// The render/diagnostics services every Update/Draw call needs -- captured once by
+    /// The render services every Update/Draw call needs -- captured once by
     /// LoadContent (see its own doc comment for why that's the right hook) rather than threaded
-    /// through every Update/Draw call, since all four are session-lifetime-stable in real usage:
+    /// through every Update/Draw call, since all three are session-lifetime-stable in real usage:
     /// GraphicsDevice never changes reference for this app; SpriteBatchRenderer hands back the
-    /// same single SpriteBatch instance on every call (see its own doc comment); the unit-pixel
-    /// Texture2D is created once in GameLoop.LoadContent; and DiagnosticsEngine.FrameCostRecorder
-    /// is backed by a field DiagnosticsEngine's own constructor sets once from the process's fixed
-    /// --diagnostics= flag and never reassigns. None of the four are ever expected to vary
+    /// same single SpriteBatch instance on every call (see its own doc comment); and the unit-pixel
+    /// Texture2D is created once in GameLoop.LoadContent. None of the three are ever expected to vary
     /// call-to-call the way e.g. GameTime or which layer is being drawn do.
     /// </summary>
     private GraphicsDevice _graphicsDevice = null!;
@@ -619,19 +616,16 @@ public sealed record ShellContext(
 
     private Texture2D _unitRectangle = null!;
 
-    private IFrameCostRecorder? _frameCostRecorder;
-
     /// <summary>
-    /// Captures the session-stable render/diagnostics services (see their own field doc comment)
+    /// Captures the session-stable render services (see their own field doc comment)
     /// and lets every window LoadContent, in that order -- called once, from GameLoop.LoadContent,
     /// after GraphicsDevice/unitRectangle/the shared SpriteBatch all already exist.
     /// </summary>
-    public void LoadContent(GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle, IFrameCostRecorder? frameCostRecorder)
+    public void LoadContent(GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle)
     {
         _graphicsDevice = graphicsDevice;
         _spriteBatch = spriteBatch;
         _unitRectangle = unitRectangle;
-        _frameCostRecorder = frameCostRecorder;
 
         foreach (var layer in UiLayerStack.LayersAscending())
         {
@@ -712,13 +706,7 @@ public sealed record ShellContext(
     {
         foreach (var window in windows.ToArray())
         {
-            if (_frameCostRecorder is { } recorder)
-            {
-                var start = Stopwatch.GetTimestamp();
-                window.Update(gameTime);
-                recorder.Record(FrameCostCategory.Update, tierName, window.GetType().Name, Stopwatch.GetElapsedTime(start));
-            }
-            else
+            using (EngineHooks.FrameCost(FrameCostCategory.Update, tierName, window.GetType().Name))
             {
                 window.Update(gameTime);
             }
@@ -752,13 +740,7 @@ public sealed record ShellContext(
 
     private void DrawWindow(Element window, GameTime gameTime, string tierName)
     {
-        if (_frameCostRecorder is { } recorder)
-        {
-            var start = Stopwatch.GetTimestamp();
-            window.Draw(gameTime);
-            recorder.Record(FrameCostCategory.Draw, tierName, window.GetType().Name, Stopwatch.GetElapsedTime(start));
-        }
-        else
+        using (EngineHooks.FrameCost(FrameCostCategory.Draw, tierName, window.GetType().Name))
         {
             window.Draw(gameTime);
         }

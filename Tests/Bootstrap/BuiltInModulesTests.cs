@@ -1,3 +1,4 @@
+using Engine.Diagnostics;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Engine.Modules;
@@ -87,12 +88,13 @@ public sealed class BuiltInModulesTests
     }
 
     [TestMethod]
+    [DoNotParallelize]
     public void BuiltInSystems_RunInThePinnedOrder()
     {
         var map = new Map(new Vector3Int(40, 40, 3));
         var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
         var recorder = new SystemOrderRecorder();
-        result.EcsContext.SystemManager.Profiler = recorder;
+        using var frameCostSubscription = EngineHooks.FrameCosts.Subscribe(recorder);
 
         result.EcsContext.SystemManager.Update(new EngineTime(TimeSpan.Zero, TimeSpan.FromSeconds(1d / 60), false, 1));
 

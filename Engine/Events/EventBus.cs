@@ -24,18 +24,6 @@ public sealed class EventBus
     /// </summary>
     private readonly Dictionary<Type, string> _eventTypeNames = [];
 
-    /// <summary>
-    /// Opt-in dispatch-cost tracking, recorded under FrameCostCategory.Update, group "EventBus",
-    /// item = the event's type name -- see FrameBudgetTracker's own doc comment. Immediate
-    /// (non-buffered) dispatch runs subscribers synchronously in-line with whatever called
-    /// Publish, so a system that publishes mid-Update (e.g. MovementSystem publishing
-    /// EntityMovedEvent) has every subscriber's cost nested inside that system's own
-    /// SystemManager.Profiler timing -- this records dispatch cost separately, so the two can be
-    /// told apart when tracking down a gameplay demo's actual frame cost. Null (the default)
-    /// skips the Stopwatch calls entirely.
-    /// </summary>
-    public IFrameCostRecorder? Profiler { get; set; }
-
     /// <summary>Subscribes to events of type T.</summary>
     /// <typeparam name="T">The type of the event.</typeparam>
     /// <param name="handler">The handler to invoke when an event of type T is published.</param>
@@ -93,7 +81,19 @@ public sealed class EventBus
     }
 
     /// <summary>Publishes an event of type T.</summary>
-    /// <remarks>Events of type <see cref="IBufferedEvent"/> are queued for later dispatch, while other events are dispatched immediately.</remarks>
+    /// <remarks>
+    /// Events of type <see cref="IBufferedEvent"/> are queued for later dispatch, while other events are dispatched immediately.
+    ///
+    /// While EngineHooks.FrameCosts has a listener, immediate dispatch cost is recorded under
+    /// FrameCostCategory.Update, group "EventBus", item = the event's type name. Immediate dispatch runs
+    /// subscribers in-line with whatever called Publish, so a system that publishes mid-Update (e.g.
+    /// MovementSystem publishing EntityMovedEvent) has every subscriber's cost nested inside that system's
+    /// own SystemManager entry -- this records it separately, so the two can be told apart.
+    ///
+    /// That is a branch on the listener rather than an EngineHooks.FrameCost wrapper, because Publish runs
+    /// thousands of times a frame: a wrapper would enter a try/finally and look up the event's cached type
+    /// name on every call, even with nothing listening, where this does neither.
+    /// </remarks>
     /// <typeparam name="T">The type of the event.</typeparam>
     /// <param name="eventData">The event data to publish.</param>
     public void Publish<T>(T eventData)
@@ -109,7 +109,7 @@ public sealed class EventBus
             return;
         }
 
-        if (Profiler is { } profiler)
+        if (EngineHooks.FrameCosts.Listener is { } frameCostRecorder)
         {
             if (!_eventTypeNames.TryGetValue(typeof(T), out var eventTypeName))
             {
@@ -119,7 +119,7 @@ public sealed class EventBus
 
             var start = Stopwatch.GetTimestamp();
             ((Action<T>)existing).Invoke(eventData);
-            profiler.Record(FrameCostCategory.Update, "EventBus", eventTypeName, Stopwatch.GetElapsedTime(start));
+            frameCostRecorder.Record(FrameCostCategory.Update, "EventBus", eventTypeName, Stopwatch.GetElapsedTime(start));
         }
         else
         {
