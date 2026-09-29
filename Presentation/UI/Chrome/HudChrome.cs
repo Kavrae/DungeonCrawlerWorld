@@ -17,7 +17,6 @@ public static class HudChrome
     /// DoubleTapWindowFrames already is.</summary>
     public static int HoverTooltipDelayFrames = GameTiming.FramesForSeconds(0.4f);
 
-    private const float DebugWindowHeight = 24f;
     private const float ActionLockGap = 8f;
     private const float ManaBarGap = 3f;
     private const float InspectionWindowGap = 8f;
@@ -27,8 +26,6 @@ public static class HudChrome
 
     public static Vector2 MapWindowPosition;
     public static Vector2 MapWindowSize;
-    public static Vector2 DebugWindowPosition;
-    public static Vector2 DebugWindowSize;
     public static Vector2 PlayerHealthBarPosition;
     public static Vector2 PlayerManaBarPosition;
     public static Vector2 ActionLockPosition;
@@ -47,10 +44,7 @@ public static class HudChrome
     public static void ResolveLayout(Vector2 screenSize)
     {
         MapWindowPosition = Vector2.Zero;
-        MapWindowSize = new Vector2(screenSize.X, screenSize.Y - DebugWindowHeight);
-
-        DebugWindowPosition = new Vector2(0, MapWindowSize.Y);
-        DebugWindowSize = new Vector2(MapWindowSize.X, DebugWindowHeight);
+        MapWindowSize = screenSize;
 
         PlayerHealthBarPosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - Margin.X, Margin.Y);
         PlayerManaBarPosition = new Vector2(screenSize.X - PlayerManaBarContent.Size.X - Margin.X, Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap);

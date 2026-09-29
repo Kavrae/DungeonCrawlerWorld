@@ -1628,8 +1628,8 @@ into `GameLoop` and `HeadlessBenchmark`. See CLAUDE.md's Diagnostics section for
   second channel arrived. Disposing a subscription clears the channel only if it still holds that
   listener, so a stale subscription can't unhook its successor.
 - **Two ways to record a frame cost.** `EngineHooks.FrameCost(...)`, a disposable struct like
-  `DiagnosticScope`, at sites that run a few times a frame (`GameLoop`'s three rows, `ShellContext`'s
-  per-window update and draw); before it, `GameLoop` took timestamps even with nothing listening. An
+  `DiagnosticScope`, at sites that run a few times a frame (`GameLoop`'s Shell.Update, Shell.Draw and
+  SpriteBatch.End rows; `ShellContext`'s per-window update and draw); before it, `GameLoop` took timestamps even with nothing listening. An
   explicit branch on `FrameCosts.Listener` in `SystemManager.Update` and `EventBus.Publish`: a wrapper
   there would enter a try/finally and evaluate its arguments (the event's cached type name, a
   dictionary lookup) on every system and every publish, even with diagnostics off.
@@ -1656,7 +1656,7 @@ into `GameLoop` and `HeadlessBenchmark`. See CLAUDE.md's Diagnostics section for
   listening at the first simulation frame, so a runtime staging rebuild isn't counted as startup.
 - **A pool memory report whose range never closed is dropped** at session end with a console line,
   not written -- it would claim the whole range.
-- **Out of scope, own TODO entries:** named gauges; leak detection that compares built-only pools
+- **Out of scope, own TODO entries (both landed -- see "Named diagnostics gauges, population-aware leak detection, the Diagnostics window"):** named gauges; leak detection that compares built-only pools
   against built entities rather than every living entity.
 - **Verified unchanged (phase 6).** Baseline: `93075a5` (the commit before phase 1) exported with
   `git archive` into gitignored `Log/b93` -- the scratchpad path broke Windows' 260-character limit on
@@ -1680,3 +1680,69 @@ into `GameLoop` and `HeadlessBenchmark`. See CLAUDE.md's Diagnostics section for
   - **Found on the way:** both skill scripts matched a report by process id alone, and the memory
     A/B's baseline run reused the pid of a six-day-old run, silently comparing against that stale
     report. Both now accept only a file written after their own run started.
+
+### Named diagnostics gauges, population-aware leak detection, the Diagnostics window
+
+Landed 2026-09-29 (planned in six phases; the plan file was deleted once this section held it). Frame
+costs said what a frame spent; nothing recorded what the world *was* while it spent it, so the "Gen-1
+GC frames during a window shift" investigation had to infer GC timing and streamer depth from which
+systems got expensive. See CLAUDE.md's Diagnostics section for the resulting rules.
+
+- **Registry on `EcsContext`, frozen at `BeginSession`, cleared on dispose.** Every build has one;
+  only a session reaches a listener, so a trial or staging build's gauges are never sampled. Frozen
+  so the tracker sizes its arrays once; cleared so closures over the streamer and pools don't outlive
+  the session. Registration is done by the composition site (`GameBuildPass.Run`,
+  `WorldSessionBootstrapper`) from read-only counters the owner exposes -- the streamer knows nothing
+  about diagnostics. Modules can't register gauges yet: `EcsContext` doesn't exist during
+  `RegisterSystems`; add a `SystemRegistration` hook with the first module that has one worth it.
+- **Two kinds.** `Cumulative` gauges are stored as their change per frame (from the value when the
+  tracker was built, not since launch), so "a gen-1 on frame 1843" reads directly; a mean of a raw
+  counter is meaningless. `Func<double>` for every value -- all are integers below 2^53 today.
+- **Frame-end sampling only**, after the frame's cost is recorded, so it never lands in a benchmark
+  row. Mid-frame sampling was rejected: it needs a second emit mechanism, and what it would show
+  (work done inside the frame) the streamer's cumulative gauges already give per frame. An
+  intra-frame peak, if ever needed, is an owner-kept high-water mark sampled at frame end.
+- **Aggregate pool gauges, not one per pool.** ~150 per-pool series would drown the report;
+  `PoolMemoryReport` has per-pool detail. A step in `Pools/EstimatedBytes` marks a resize.
+- **Zero allocation per sample** (`GaugeTracker`, `GaugeSeriesReport`, `GaugeHistory` -- tests assert
+  it): allocating inside the range would show in the `AllocatedBytes`/`Gen0` gauges being sampled.
+  Series and the 300-frame live ring are allocated in `SessionStarted`. The live ring exists
+  whenever Gauges is on, headless too (a few array writes per frame).
+- **Reports.** `gauges-<utc>-<pid>.json` is compact (192 KB for 3000 frames x 25 rows; indented
+  would put every value on its own line) plus a `.txt` of summaries; values rounded to 3 decimals
+  (`DiagnosticsReportRounding`) so float noise stays out of files. `latest.json` gets last/min/max
+  per 5 s interval -- the last value alone hides a spike between reports.
+- **`EntityPopulationPolicy`** is the game's split of living entities (the
+  `SystemManager.SimulatedTierCount` shape): "Built" = living minus skeletons, with skeleton
+  component types held by every entity. One count function backs both the policy and the
+  `Entities/Built` gauge. `LeakEvaluation` (extracted from `LeakDetector` so tests build histories
+  directly) compares a skeleton-type pool against living entities and every other pool against built
+  entities; the heap finding needs both flat, since the heap holds both. Without it, every walk
+  across a neighborhood edge flagged the built-only pools (a promotion grows them while the living
+  count stays flat) and a real leak in one hid inside that.
+- **Diagnostics window (F3)** replaces the 24 px strip under the map. Not a menu window: menu mode
+  pauses the simulation. That exposed a `UiLayerStack.Add` bug -- an element added during menu mode
+  was promoted to a menu window even when exempt, so it would have kept the game paused after the
+  menu windows it opened beside had closed. Exempt elements are no longer promoted (shared fix, not a
+  special case), and `UnmarkMenuModeExempt` gives a pooled window's exemption back on close. Text
+  refreshes 4x a second and the layout keeps its cursor in fields (a local-function closure
+  allocated per draw), so the window adds little to the allocation it shows.
+- **Found on the way: the benchmark's first frame was always its slowest** (8.8-12.4 ms vs a
+  4.0 ms median, Debug). The spike followed the range's start frame, not the simulation:
+  `FrameRangeBenchmark.Record` returned early before the range, so its first in-range call JIT-ed
+  the tuple-keyed dictionary path and grew both dictionaries from empty inside a measured frame.
+  `Record` now adds each entry from the first frame and adds time only inside the range, one
+  struct entry per row (one hash lookup instead of four); rows never recorded in range are left out.
+  First frame now 3.7-4.5 ms. Recording is slightly cheaper, so compare against baselines saved
+  after this change.
+- **Don't combine `memory` and `gauges` when reading allocation:** `PoolMemoryReport`'s baseline copy
+  happens at the range's first frame and lands in that frame's `AllocatedBytes`.
+- **Verified unchanged.** Baseline `e78544a` (the commit before phase 1) via `git archive` into
+  gitignored `Log/bhead`, saved as `Log/phase-benchmarks/baseline-e78544a-{debug,release}`. Seed 1,
+  frames 600-3600, map 3072, 5 runs a side, gauges off: same fingerprint (`4A5360E840EEA660`) on both
+  sides. Debug `EcsContext.Update` 4.309 -> 4.255 ms/frame (-1.2%); Release 1.447 -> 1.497 (+3.4%)
+  and on a repeat 1.452 -> 1.428 (-1.7%), so noise; no system flagged in any. Gauges on vs off
+  (Release, current build, 2 x 3 runs each, interleaved): `EcsContext.Update` 1.414-1.419 vs
+  1.435-1.452, wall clock ~4.3 s both, same fingerprint -- sampling cost is below what these runs
+  resolve. The windowed open-vs-closed Draw cost of the Diagnostics window was not measured (needs
+  F3 in a live window).

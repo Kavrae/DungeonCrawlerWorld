@@ -13,8 +13,8 @@ namespace Engine.Diagnostics;
 /// FrameBudget and Startup are constructible immediately (they need nothing but the feature
 /// flags), so the composition root should construct and start this as early as possible --
 /// Startup's clock, and the EngineHooks.DiagnosticScopes it records until the first simulation frame, need to
-/// start before any build does. Memory and LeakDetection measure a session's
-/// pools, so their trackers are created when a session starts and dropped when it ends; a second
+/// start before any build does. Memory, LeakDetection and Gauges measure a
+/// session, so their trackers are created when a session starts and dropped when it ends; a second
 /// session gets fresh ones.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
@@ -32,6 +32,9 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
     private ComponentMemoryTracker? _componentMemoryTracker;
     private PoolMemoryReport? _poolMemoryReport;
     private LeakDetector? _leakDetector;
+    private GaugeTracker? _gaugeTracker;
+    private GaugeSeriesReport? _gaugeSeriesReport;
+    private GaugeHistory? _gaugeHistory;
     private EcsContext? _activeSession;
     private IDisposable? _startupScopesSubscription;
 
@@ -83,7 +86,7 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
     public int? RandomSeed { get; }
 
     /// <summary>Subscribes every enabled feature to the EngineHooks channel it listens to.</summary>
-    /// <remarks>Frame costs are recorded while FrameBudget is on or a benchmark range was given, feeding both when both are. Simulation frames are heard whenever any feature is on or a benchmark range was given, sessions while Memory or LeakDetection is, and scopes while Startup is, until the first simulation frame.</remarks>
+    /// <remarks>Frame costs are recorded while FrameBudget is on or a benchmark range was given, feeding both when both are. Simulation frames are heard whenever any feature is on or a benchmark range was given, sessions while Memory, LeakDetection or Gauges is, and scopes while Startup is, until the first simulation frame.</remarks>
     /// <exception cref="InvalidOperationException">This engine was already started, or another listener holds a channel it needs.</exception>
     public void Start()
     {
@@ -104,7 +107,7 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
             _hookSubscriptions.Add(EngineHooks.SimulationFrames.Subscribe(this));
         }
 
-        if ((Features & (DiagnosticsFeatures.Memory | DiagnosticsFeatures.LeakDetection)) != DiagnosticsFeatures.None)
+        if ((Features & (DiagnosticsFeatures.Memory | DiagnosticsFeatures.LeakDetection | DiagnosticsFeatures.Gauges)) != DiagnosticsFeatures.None)
         {
             _hookSubscriptions.Add(EngineHooks.Sessions.Subscribe(this));
         }
@@ -138,11 +141,20 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
     /// <remarks>Becomes true as frame EndFrame - 1 ends, so a host that updates until it is true simulates exactly the frames before EndFrame.</remarks>
     public bool IsBenchmarkComplete => _benchmark?.IsComplete ?? false;
 
-    /// <summary>The single largest frame-cost contributor, for a live on-screen readout (see DebugWindowContent). Null unless FrameBudget is enabled or no full second has sampled yet.</summary>
+    /// <summary>The single largest frame-cost contributor, for a live on-screen readout (see DiagnosticsWindow). Null unless FrameBudget is enabled or no full second has sampled yet.</summary>
     public (string Name, double MillisecondsPerSecond)? TopFrameCostEntry =>
         _frameBudgetTracker?.TopEntries is { Count: > 0 } entries ? entries[0] : null;
 
-    /// <summary>Creates Memory's and LeakDetection's trackers over the session's pools.</summary>
+    /// <summary>The active session's gauges as last sampled; null unless Gauges is on and a session is active.</summary>
+    public GaugeTracker? Gauges => _gaugeTracker;
+
+    /// <summary>The active session's last GaugeHistory.HistoryFrameCount frames of gauges, for a live display; null unless Gauges is on and a session is active.</summary>
+    public GaugeHistory? LiveGauges => _gaugeHistory;
+
+    /// <summary>The leak detector's current findings; null unless LeakDetection is on and a session is active.</summary>
+    public IReadOnlyList<LeakFinding>? LeakFindings => _leakDetector?.Findings;
+
+    /// <summary>Creates Memory's and LeakDetection's trackers over the session's pools, and Gauges' over its gauges -- with a series report when a benchmark range has yet to open.</summary>
     /// <exception cref="InvalidOperationException">Another session is still active -- one simulated session at a time.</exception>
     void ISimulationSessionListener.SessionStarted(EcsContext session)
     {
@@ -167,12 +179,24 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
 
         if (Features.HasFlag(DiagnosticsFeatures.LeakDetection))
         {
-            _leakDetector = new LeakDetector(entityManager, componentManager);
+            _leakDetector = new LeakDetector(entityManager, componentManager, session.EntityPopulations);
+        }
+
+        if (Features.HasFlag(DiagnosticsFeatures.Gauges))
+        {
+            _gaugeTracker = new GaugeTracker([.. GaugeTracker.ProcessGauges, .. session.Gauges.Gauges]);
+
+            _gaugeHistory = new GaugeHistory(_gaugeTracker);
+
+            if (_benchmark is { IsComplete: false, IsRecording: false } benchmark)
+            {
+                _gaugeSeriesReport = new GaugeSeriesReport(_gaugeTracker, benchmark.Range);
+            }
         }
     }
 
     /// <summary>Drops the session's trackers, so nothing keeps measuring -- or holding -- pools that are going away.</summary>
-    /// <remarks>A pool memory report whose range opened but never closed is dropped, not written: it would claim the whole range.</remarks>
+    /// <remarks>A pool memory or gauge report whose range opened but never closed is dropped, not written: it would claim the whole range.</remarks>
     /// <exception cref="InvalidOperationException">session is not the active session.</exception>
     void ISimulationSessionListener.SessionEnding(EcsContext session)
     {
@@ -186,10 +210,18 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
             Console.WriteLine($"[Memory] Session ended before frame {benchmark.Range.EndFrame}; no memory report written.");
         }
 
+        if (_gaugeSeriesReport is { RecordedFrameCount: > 0, IsComplete: false } unfinishedGaugeSeriesReport)
+        {
+            Console.WriteLine($"[Gauges] Session ended before frame {unfinishedGaugeSeriesReport.Range.EndFrame}; no gauge report written.");
+        }
+
         _activeSession = null;
         _componentMemoryTracker = null;
         _poolMemoryReport = null;
         _leakDetector = null;
+        _gaugeTracker = null;
+        _gaugeSeriesReport = null;
+        _gaugeHistory = null;
     }
 
     /// <summary>Ends startup's scope recording at the first frame, and opens the benchmark range as its first frame starts.</summary>
@@ -212,14 +244,17 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
     }
 
     /// <summary>
-    /// Records the frame's whole cost as "GameLoop" / "EcsContext.Update (all systems)", feeds it to
-    /// StartupProfiler's stability detection until stable, closes the benchmark range after its last
+    /// Records the frame's whole cost as "GameLoop" / "EcsContext.Update (all systems)" and samples the gauges, feeds that cost
+    /// to StartupProfiler's stability detection until stable, closes the benchmark range after its last
     /// frame, then samples and reports on the periodic cadence.
     /// </summary>
     /// <remarks>StartupProfiler needs this measured cost rather than the gap between frames -- see StartupProfiler.Tick.</remarks>
     void ISimulationFrameListener.SimulationFrameEnded(long frameCount, TimeSpan elapsed)
     {
         _frameCostRecorder?.Record(FrameCostCategory.Update, "GameLoop", "EcsContext.Update (all systems)", elapsed);
+        _gaugeTracker?.Sample();
+        _gaugeSeriesReport?.Record(frameCount, elapsed);
+        _gaugeHistory?.Record(frameCount, elapsed);
 
         if (_startupProfiler is { IsStable: false } startupProfiler)
         {
@@ -255,6 +290,14 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
             var memoryPath = completedMemoryReport.WriteReport(_outputDirectory, RandomSeed, benchmark.Range);
             Console.WriteLine($"[Memory] Frames {benchmark.Range.StartFrame}-{benchmark.Range.EndFrame} written to {memoryPath}");
         }
+
+        if (_gaugeSeriesReport is { IsComplete: true } completedGaugeSeriesReport)
+        {
+            var gaugesPath = completedGaugeSeriesReport.WriteReport(_outputDirectory, RandomSeed);
+            Console.WriteLine($"[Gauges] Frames {benchmark.Range.StartFrame}-{benchmark.Range.EndFrame} written to {gaugesPath}");
+        }
+
+        _gaugeSeriesReport = null;
     }
 
     /// <summary>
@@ -280,7 +323,7 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
         WriteReports();
     }
 
-    /// <summary>Dumps the full last-second frame-cost ranking to the console -- a single on-screen "Top: X" readout (see DebugWindowContent) is enough to notice a hotspot while playing, but this keeps a fuller trail (the #2, #3, ... contributors too) for after a demo ends.</summary>
+    /// <summary>Dumps the full last-second frame-cost ranking to the console -- a single on-screen "Top: X" readout (see DiagnosticsWindow) is enough to notice a hotspot while playing, but this keeps a fuller trail (the #2, #3, ... contributors too) for after a demo ends.</summary>
     private void ReportFrameBudgetToConsole()
     {
         if (_frameBudgetTracker?.Snapshot is not { Count: > 0 } snapshot)
@@ -302,6 +345,6 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
             return;
         }
 
-        DiagnosticsReportWriter.Write(_outputDirectory, Features, RandomSeed, _frameBudgetTracker?.Snapshot, _componentMemoryTracker?.Snapshot, _leakDetector?.Findings);
+        DiagnosticsReportWriter.Write(_outputDirectory, Features, RandomSeed, _frameBudgetTracker?.Snapshot, _componentMemoryTracker?.Snapshot, _leakDetector?.Findings, _gaugeTracker?.TakeIntervalSummaries());
     }
 }

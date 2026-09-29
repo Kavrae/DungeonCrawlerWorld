@@ -133,6 +133,36 @@ public sealed class FrameRangeBenchmarkTests
     }
 
     [TestMethod]
+    public void WriteReport_LeavesOutAnEntryRecordedOnlyBeforeTheRange()
+    {
+        var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(10, 14));
+        for (var frame = 1L; frame <= 20; frame++)
+        {
+            benchmark.SimulationFrameStarting(frame);
+            if (frame < 10)
+            {
+                benchmark.Record(FrameCostCategory.Update, "EventBus", "EarlyEvent", TimeSpan.FromMilliseconds(1));
+            }
+
+            benchmark.Record(FrameCostCategory.Update, "SystemManager", "TestSystem", TimeSpan.FromMilliseconds(1));
+            benchmark.SimulationFrameEnded(frame);
+        }
+
+        var directory = Path.Combine(Path.GetTempPath(), $"{nameof(FrameRangeBenchmarkTests)}-{Guid.NewGuid():N}");
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(benchmark.WriteReport(directory, randomSeed: 7)));
+            var update = document.RootElement.GetProperty("Update");
+            Assert.IsFalse(update.TryGetProperty("EventBus", out _));
+            Assert.IsTrue(update.TryGetProperty("SystemManager", out _));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void WriteReport_WritesSeedRangeAndPerFrameCost()
     {
         var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(10, 14));

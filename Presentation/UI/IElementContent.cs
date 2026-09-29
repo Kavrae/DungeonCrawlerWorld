@@ -5,7 +5,7 @@ namespace Presentation.UI;
 
 /// <summary>
 /// What's drawn inside a window's content area, hosted via Window.SetContent instead of by
-/// subclassing Window and overriding DrawContent. DebugWindowContent, SelectionWindowContent,
+/// subclassing Window and overriding DrawContent. SelectionWindowContent
 /// and NotificationCenter's summary window are built against this; MapWindow and TextWindow
 /// instead subclass Window and override DrawContent directly, since their rendering is
 /// tightly coupled to their own state and gains nothing from the extra indirection.

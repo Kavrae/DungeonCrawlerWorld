@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace Engine.Diagnostics;
@@ -19,15 +20,17 @@ namespace Engine.Diagnostics;
 /// what WallClockMilliseconds in the report is for: well above FrameCount / 60 seconds means
 /// the run fell behind.
 ///
-/// Records outside the range cost one bool check.
+/// Before the range opens, Record still adds each entry it sees, with nothing recorded, so the first
+/// frame inside the range runs no code for the first time (JIT) and grows no dictionary -- either
+/// would land in that frame's cost. An entry never recorded inside the range is left out of the
+/// report. After the range, Record costs one bool check.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class FrameRangeBenchmark : IFrameCostRecorder
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    private readonly Dictionary<(FrameCostCategory Category, string GroupName, string ItemName), double> _totalMilliseconds = [];
-    private readonly Dictionary<(FrameCostCategory Category, string GroupName, string ItemName), double> _worstMilliseconds = [];
+    private readonly Dictionary<(FrameCostCategory Category, string GroupName, string ItemName), EntryTotals> _entryTotals = [];
     private long _recordingStartTimestamp;
     private TimeSpan _wallClockElapsed;
 
@@ -71,19 +74,25 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
 
     public void Record(FrameCostCategory category, string groupName, string itemName, TimeSpan elapsed)
     {
+        if (IsComplete)
+        {
+            return;
+        }
+
+        ref var entryTotals = ref CollectionsMarshal.GetValueRefOrAddDefault(_entryTotals, (category, groupName, itemName), out _);
         if (!IsRecording)
         {
             return;
         }
 
-        var key = (category, groupName, itemName);
-        _totalMilliseconds[key] = _totalMilliseconds.GetValueOrDefault(key) + elapsed.TotalMilliseconds;
-        _worstMilliseconds[key] = System.Math.Max(_worstMilliseconds.GetValueOrDefault(key), elapsed.TotalMilliseconds);
+        entryTotals.TotalMilliseconds += elapsed.TotalMilliseconds;
+        entryTotals.WorstMilliseconds = System.Math.Max(entryTotals.WorstMilliseconds, elapsed.TotalMilliseconds);
+        entryTotals.RecordCount++;
     }
 
     /// <summary>Total milliseconds recorded for one entry so far; 0 if it never recorded inside the range.</summary>
     public double GetTotalMilliseconds(FrameCostCategory category, string groupName, string itemName) =>
-        _totalMilliseconds.GetValueOrDefault((category, groupName, itemName));
+        _entryTotals.GetValueOrDefault((category, groupName, itemName)).TotalMilliseconds;
 
     /// <summary>Writes benchmark-&lt;timestamp&gt;-&lt;pid&gt;.json to outputDirectory and returns its path.</summary>
     /// <param name="randomSeed">The seed of the session measured -- two reports are only comparable when it matches.</param>
@@ -111,10 +120,9 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
     private Dictionary<string, List<BenchmarkItem>> GroupByCategory(FrameCostCategory category)
     {
         var groups = new Dictionary<string, List<BenchmarkItem>>();
-        foreach (var (key, totalMilliseconds) in _totalMilliseconds)
+        foreach (var ((entryCategory, groupName, itemName), entryTotals) in _entryTotals)
         {
-            var (entryCategory, groupName, itemName) = key;
-            if (entryCategory != category)
+            if (entryCategory != category || entryTotals.RecordCount == 0)
             {
                 continue;
             }
@@ -125,7 +133,7 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
                 groups[groupName] = items;
             }
 
-            items.Add(new BenchmarkItem(itemName, totalMilliseconds, totalMilliseconds / Range.FrameCount, _worstMilliseconds[key]));
+            items.Add(new BenchmarkItem(itemName, entryTotals.TotalMilliseconds, entryTotals.TotalMilliseconds / Range.FrameCount, entryTotals.WorstMilliseconds));
         }
 
         foreach (var items in groups.Values)
@@ -134,6 +142,13 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
         }
 
         return groups;
+    }
+
+    private struct EntryTotals
+    {
+        public double TotalMilliseconds;
+        public double WorstMilliseconds;
+        public int RecordCount;
     }
 
     private sealed record BenchmarkReport(

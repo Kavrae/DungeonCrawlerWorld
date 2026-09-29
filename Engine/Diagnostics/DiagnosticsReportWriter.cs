@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using static Engine.Diagnostics.DiagnosticsReportRounding;
 
 namespace Engine.Diagnostics;
 
@@ -20,7 +22,8 @@ internal static class DiagnosticsReportWriter
         int? randomSeed,
         IReadOnlyList<FrameCostEntry>? frameBudgetSnapshot,
         IReadOnlyList<ComponentMemoryEntry>? componentMemorySnapshot,
-        IReadOnlyList<LeakFinding>? leakFindings)
+        IReadOnlyList<LeakFinding>? leakFindings,
+        IReadOnlyList<GaugeIntervalSummary>? gaugeSummaries)
     {
         Directory.CreateDirectory(outputDirectory);
 
@@ -30,7 +33,8 @@ internal static class DiagnosticsReportWriter
             randomSeed,
             frameBudgetSnapshot is null ? null : BuildFrameBudgetSection(frameBudgetSnapshot),
             componentMemorySnapshot?.Select(static entry => new ComponentMemoryItem(entry.ComponentTypeName, entry.Count, entry.EstimatedBytes)).ToList(),
-            leakFindings?.Select(static finding => new LeakFindingItem(finding.Subject, finding.Detail, finding.GrowthRatio)).ToList());
+            leakFindings?.Select(static finding => new LeakFindingItem(finding.Subject, finding.Detail, finding.GrowthRatio)).ToList(),
+            gaugeSummaries?.Select(static summary => GaugeItem.From(summary)).ToList());
 
         File.WriteAllText(Path.Combine(outputDirectory, "latest.json"), JsonSerializer.Serialize(report, JsonOptions));
         File.WriteAllText(Path.Combine(outputDirectory, "latest.txt"), BuildTextSummary(report));
@@ -98,6 +102,17 @@ internal static class DiagnosticsReportWriter
             }
         }
 
+        if (report.Gauges is { Count: > 0 } gauges)
+        {
+            lines.Add("Gauges (since the previous report):");
+            foreach (var gauge in gauges)
+            {
+                lines.Add(gauge.Kind == nameof(GaugeKind.Cumulative)
+                    ? $"  {gauge.Group}/{gauge.Name}: total {FormatForReport(gauge.Total)}, max {FormatForReport(gauge.MaximumPerFrame)}/frame, {gauge.FramesNonzero:N0} frames nonzero"
+                    : $"  {gauge.Group}/{gauge.Name}: {FormatForReport(gauge.Last)} (min {FormatForReport(gauge.Minimum)}, max {FormatForReport(gauge.Maximum)})");
+            }
+        }
+
         return string.Join(Environment.NewLine, lines);
     }
 
@@ -119,7 +134,7 @@ internal static class DiagnosticsReportWriter
         }
     }
 
-    private sealed record DiagnosticsReport(DateTime TimestampUtc, string Features, int? RandomSeed, FrameBudgetSection? FrameBudget, List<ComponentMemoryItem>? Memory, List<LeakFindingItem>? Leaks);
+    private sealed record DiagnosticsReport(DateTime TimestampUtc, string Features, int? RandomSeed, FrameBudgetSection? FrameBudget, List<ComponentMemoryItem>? Memory, List<LeakFindingItem>? Leaks, List<GaugeItem>? Gauges);
 
     private sealed record FrameBudgetSection(Dictionary<string, List<FrameCostItem>> Update, Dictionary<string, List<FrameCostItem>> Draw);
 
@@ -128,4 +143,20 @@ internal static class DiagnosticsReportWriter
     private sealed record ComponentMemoryItem(string ComponentType, int Count, long EstimatedBytes);
 
     private sealed record LeakFindingItem(string Subject, string Detail, double GrowthRatio);
+
+    private sealed record GaugeItem(
+        string Group,
+        string Name,
+        string Kind,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? Last,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? Minimum,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? Maximum,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? Total,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? MaximumPerFrame,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? FramesNonzero)
+    {
+        public static GaugeItem From(GaugeIntervalSummary summary) => summary.Kind is GaugeKind.Cumulative
+            ? new GaugeItem(summary.GroupName, summary.GaugeName, summary.Kind.ToString(), null, null, null, RoundForReport(summary.Total), RoundForReport(summary.Maximum), summary.FramesNonzero)
+            : new GaugeItem(summary.GroupName, summary.GaugeName, summary.Kind.ToString(), RoundForReport(summary.Last), RoundForReport(summary.Minimum), RoundForReport(summary.Maximum), null, null, null);
+    }
 }

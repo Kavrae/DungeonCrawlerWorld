@@ -9,7 +9,7 @@ namespace Engine.Diagnostics;
 /// Snapshot exposes the last full second's per-entry totals, sorted descending by cost --
 /// DiagnosticsReportWriter regroups this flat list into "Update vs Draw, then per group" for
 /// file output. TopEntries exposes the same ranking collapsed to a single "GroupName.ItemName"
-/// label per entry, for callers (e.g. DebugWindowContent) that just want the single largest
+/// label per entry, for callers (e.g. DiagnosticsWindow) that just want the single largest
 /// overall contributor.
 ///
 /// Intended as an opt-in diagnostic (see EngineHooks.FrameCosts, DiagnosticsEngine) for

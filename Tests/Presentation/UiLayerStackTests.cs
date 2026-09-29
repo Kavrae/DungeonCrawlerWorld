@@ -93,6 +93,39 @@ public sealed class UiLayerStackTests
     }
 
     [TestMethod]
+    public void UnmarkMenuModeExempt_WithdrawsTheExemption()
+    {
+        var layers = new UiLayerStack();
+        var element = CreateWindow(CreateWindowService());
+        layers.MarkMenuModeExempt(element);
+
+        layers.UnmarkMenuModeExempt(element);
+
+        Assert.IsFalse(layers.IsMenuModeExempt(element));
+    }
+
+    [TestMethod]
+    public void Add_WhileMenuModeIsActive_PromotesAnOrdinaryElementButNotAnExemptOne()
+    {
+        var windowService = CreateWindowService();
+        var layers = new UiLayerStack();
+        var menuWindow = CreateWindow(windowService);
+        layers.Add(UiLayer.DynamicHud, menuWindow);
+        layers.OpenMenuWindow(menuWindow);
+        var ordinaryWindow = CreateWindow(windowService);
+        var exemptWindow = CreateWindow(windowService);
+        layers.MarkMenuModeExempt(exemptWindow);
+
+        layers.Add(UiLayer.DynamicHud, ordinaryWindow);
+        layers.Add(UiLayer.DynamicHud, exemptWindow);
+        layers.CloseMenuWindow(menuWindow);
+        layers.CloseMenuWindow(ordinaryWindow);
+
+        Assert.IsFalse(layers.IsMenuWindow(exemptWindow));
+        Assert.IsFalse(layers.IsMenuModeActive, "The exempt window must not hold menu mode open once the menu windows close.");
+    }
+
+    [TestMethod]
     public void TopmostAndBottommostMenuWindow_NoneOpen_ReturnNull()
     {
         var layers = new UiLayerStack();

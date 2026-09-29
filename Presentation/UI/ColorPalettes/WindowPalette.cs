@@ -90,4 +90,13 @@ internal static class WindowPalette
 
     /// <summary>Generic label text drawn on ControlBackground -- GridControl's count label, sort button, and toggle labels.</summary>
     public static Color ControlLabelTextColor = Color.White;
+
+    /// <summary>Diagnostics window: row text, group headings, the paused/warning/leak text, and its graphs' background, level line, per-frame bars and frame-budget line.</summary>
+    public static Color DiagnosticsText = Color.LightGray;
+    public static Color DiagnosticsGroupHeading = Color.Lerp(Color.White, Color.LightBlue, 0.5f);
+    public static Color DiagnosticsWarningText = Color.Orange;
+    public static Color DiagnosticsGraphBackground = new(25, 25, 25);
+    public static Color DiagnosticsLevelSeries = Color.LightGreen;
+    public static Color DiagnosticsEventSeries = Color.Orange;
+    public static Color DiagnosticsFrameBudgetLine = Color.Red * 0.7f;
 }

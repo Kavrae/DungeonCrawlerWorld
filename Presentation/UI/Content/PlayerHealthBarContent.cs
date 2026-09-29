@@ -19,7 +19,7 @@ namespace Presentation.UI.Content;
 /// Permanent top-right HUD readout for the player's health -- unlike MapWindow's per-entity
 /// tile bars (which hide at full health), this always renders since it's a persistent HUD
 /// element, not a transient overlay. Hosted via IWindowContent/SetContent (see
-/// ShellBootstrapper), the same pattern DebugWindowContent uses, rather than living inside
+/// ShellBootstrapper), the same pattern NotificationCenter's summary window uses, rather than living inside
 /// MapWindow -- it belongs to the HUD tier (screen-absolute coordinates), not the map's own
 /// local content-viewport space. Light grey full-width fill when the player has no
 /// SimpleHealthComponent at all -- reserved for a future temporarily/permanently-immortal player

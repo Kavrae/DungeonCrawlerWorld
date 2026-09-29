@@ -146,6 +146,7 @@ public static class WorldSessionBootstrapper
         var neighborhoodStreamer = new NeighborhoodStreamer(world, ecsContext.EntityManager, ecsContext.ComponentManager.GetDirectPool<Game.Modules.Core.Components.TransformComponent>(), ecsContext.EventBus, tierResolver, neighborhoodRecords,
             new Game.TestMapBuilder(ecsContext.EntityManager, bootstrapResult.Factory, bootstrapResult.Terrain, bootstrapResult.Definitions), bootstrapResult.Skeletons);
         ecsContext.SystemManager.RegisterFirst(neighborhoodStreamer);
+        RegisterStreamerGauges(ecsContext.Gauges, neighborhoodStreamer);
 
         // A window shift promotes the new centre's creature skeletons only once the neighborhoods it
         // evicted have lost their built creatures, so the builds reuse the storage those free.
@@ -160,5 +161,19 @@ public static class WorldSessionBootstrapper
         ecsContext.BeginSession();
 
         return new WorldSessionContext(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, bootstrapResult.ActionCatalog, bootstrapResult.ItemCatalog, playerActivityLog, bootstrapResult.StatusEffectDisplays, reservedEntityIds, bootstrapResult.LocalTierRoster, bootstrapResult.Terrain, neighborhoodRecords, neighborhoodStreamer, bootstrapResult.Definitions, bootstrapResult.SpawnRecordRebuilder, bootstrapResult.Skeletons, bootstrapResult.Factory, bootstrapResult.Teleporter, bootstrapResult.ProcessingTierResolver);
+    }
+
+    private static void RegisterStreamerGauges(GaugeRegistry gauges, NeighborhoodStreamer neighborhoodStreamer)
+    {
+        const string streamerGroupName = nameof(NeighborhoodStreamer);
+        gauges.Register(streamerGroupName, "LoadJobs", GaugeKind.Level, () => neighborhoodStreamer.LoadJobCount);
+        gauges.Register(streamerGroupName, "UnloadJobs", GaugeKind.Level, () => neighborhoodStreamer.UnloadJobCount);
+        gauges.Register(streamerGroupName, "RegenerateJobs", GaugeKind.Level, () => neighborhoodStreamer.RegenerateJobCount);
+        gauges.Register(streamerGroupName, "PlansAwaitingStart", GaugeKind.Level, () => neighborhoodStreamer.PlansAwaitingStartCount);
+        gauges.Register(streamerGroupName, "PlansRunning", GaugeKind.Level, () => neighborhoodStreamer.PlansRunningCount);
+        gauges.Register(streamerGroupName, "PlansReady", GaugeKind.Level, () => neighborhoodStreamer.PlansReadyCount);
+        gauges.Register(streamerGroupName, "BudgetUnitsSpent", GaugeKind.Cumulative, () => neighborhoodStreamer.TotalBudgetUnitsSpent);
+        gauges.Register(streamerGroupName, "EntitiesSpawned", GaugeKind.Cumulative, () => neighborhoodStreamer.TotalEntitiesSpawned);
+        gauges.Register(streamerGroupName, "EntitiesDestroyed", GaugeKind.Cumulative, () => neighborhoodStreamer.TotalEntitiesDestroyed);
     }
 }

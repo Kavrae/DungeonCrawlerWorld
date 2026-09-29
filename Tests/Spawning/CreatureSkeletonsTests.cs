@@ -141,6 +141,24 @@ public sealed class CreatureSkeletonsTests
     }
 
     [TestMethod]
+    public void EnsureBuilt_MovesTheCreatureFromTheSkeletonGaugeToTheBuiltOne()
+    {
+        var session = BuildSession();
+        var goblinId = FirstSkeletonOf(session, Goblin.Id);
+        var gauges = session.Ecs.Gauges.Gauges;
+        var builtGauge = gauges.Single(gauge => gauge is { GroupName: "Entities", GaugeName: "Built" });
+        var skeletonGauge = gauges.Single(gauge => gauge is { GroupName: "Creatures", GaugeName: "Skeletons" });
+        var builtBefore = builtGauge.Read();
+        var skeletonsBefore = skeletonGauge.Read();
+
+        session.Skeletons.EnsureBuilt(goblinId);
+
+        Assert.AreEqual((builtBefore + 1, skeletonsBefore - 1), (builtGauge.Read(), skeletonGauge.Read()));
+        Assert.AreEqual(session.Ecs.EntityManager.LivingEntityCount - session.Skeletons.Count, builtGauge.Read());
+        Assert.AreEqual(builtGauge.Read(), session.Ecs.EntityPopulations!.CountPartialPopulation());
+    }
+
+    [TestMethod]
     public void EnsureBuilt_BuildsTheBody_KeepsPlacement_AndRecordsTheSpawnMove()
     {
         var session = BuildSession();

@@ -11,5 +11,6 @@ public enum DiagnosticsFeatures
     Memory = 1 << 1,
     Startup = 1 << 2,
     LeakDetection = 1 << 3,
-    All = FrameBudget | Memory | Startup | LeakDetection,
+    Gauges = 1 << 4,
+    All = FrameBudget | Memory | Startup | LeakDetection | Gauges,
 }

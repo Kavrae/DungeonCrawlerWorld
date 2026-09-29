@@ -71,7 +71,22 @@ public static class GameBuildPass
 
         var localTierRoster = new LocalTierRoster(componentManager.GetPackedPool<MovementComponent>(), componentManager.GetDirectPool<ProcessingTierComponent>(), context.ProcessingTierEvents);
 
+        RegisterDiagnostics(ecsContext, factory.Skeletons, localTierRoster, context.ProcessingTierResolver);
+
         return new GameBuildPassResult(ecsContext, build.World, context, modules, settings, localTierRoster);
+    }
+
+    /// <summary>Gives diagnostics the skeleton/built split of living entities and the gauges for creature and tier counts.</summary>
+    private static void RegisterDiagnostics(EcsContext ecsContext, CreatureSkeletons skeletons, LocalTierRoster localTierRoster, ProcessingTierResolver tierResolver)
+    {
+        var entityManager = ecsContext.EntityManager;
+        int CountBuiltEntities() => entityManager.LivingEntityCount - skeletons.Count;
+
+        ecsContext.EntityPopulations = new EntityPopulationPolicy("Built", CountBuiltEntities, static componentType => EntityFactory.SkeletonComponentTypes.Contains(componentType));
+        ecsContext.Gauges.Register("Entities", "Built", GaugeKind.Level, () => CountBuiltEntities());
+        ecsContext.Gauges.Register("Creatures", "Skeletons", GaugeKind.Level, () => skeletons.Count);
+        ecsContext.Gauges.Register("ProcessingTier", "Local", GaugeKind.Level, () => localTierRoster.Count);
+        ecsContext.Gauges.Register("ProcessingTier", "PendingTransitionNeighborhoods", GaugeKind.Level, () => tierResolver.Transitions.PendingNeighborhoodCount);
     }
 
     /// <summary>Runs every phase of modules, and only those, over map: registers their registeredComponents, builds the World and the gameModuleContext from them, configures the modules, resolves the blueprint definitions they registered, and registers their systems.</summary>

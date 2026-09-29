@@ -12,7 +12,7 @@ public sealed class LeakDetectorTests
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
         var entityManager = new EntityManager(componentManager, initialCapacity: 10);
-        var detector = new LeakDetector(entityManager, componentManager);
+        var detector = new LeakDetector(entityManager, componentManager, populations: null);
 
         detector.Tick();
 
@@ -24,7 +24,7 @@ public sealed class LeakDetectorTests
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
         var entityManager = new EntityManager(componentManager, initialCapacity: 10);
-        var detector = new LeakDetector(entityManager, componentManager);
+        var detector = new LeakDetector(entityManager, componentManager, populations: null);
 
         detector.Tick();
 

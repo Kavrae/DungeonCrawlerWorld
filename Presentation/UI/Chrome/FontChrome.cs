@@ -14,7 +14,7 @@ public static class FontChrome
     /// <summary>Window's own title-bar text -- larger than DefaultFontSize since small title text read as illegible/oddly-hinted at 12px. Window's header height is measured directly off this font's own line height (see Window's OriginalSize/RecalculateMinimizedSize), so raising this alone grows the header to fit -- no separate header-height constant to keep in sync.</summary>
     public static int WindowTitleFontSize = 16;
 
-    public static int DebugWindowFontSize = 8;
+    public static int DiagnosticsWindowFontSize = 12;
     public static int PlayerHealthHoverFontSize = 10;
     public static int CursorTextFontSize = 14;
 

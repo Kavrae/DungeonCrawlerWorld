@@ -5,6 +5,17 @@ param(
     [Parameter(ParameterSetName = "Run")]
     [switch]$Headless,
 
+    # Also record every named gauge per frame (--diagnostics=gauges): GC collections and pauses,
+    # allocation, entity and pool counts, streamer queues. Prints each gauge's summary and the
+    # gauges on the slowest frames. Sampling runs after each frame's cost is measured, so the
+    # per-system rows stay comparable with runs made without it.
+    [Parameter(ParameterSetName = "Run")]
+    [switch]$Gauges,
+
+    # How many of the slowest frames -Gauges lists.
+    [Parameter(ParameterSetName = "Run")]
+    [int]$WorstFrameCount = 10,
+
     # Copy the current build aside as the "before" side of a later -Compare, then stop. Run it
     # after building the code you want to compare against, before making the change.
     [Parameter(ParameterSetName = "SaveBaseline", Mandatory)]
@@ -125,10 +136,14 @@ function Invoke-BenchmarkRun {
 
     $gameArguments = @("--seed=$Seed", "--benchmark-frames=$StartFrame-$EndFrame")
     $gameArguments += "--map-size=$MapSize"
+    $diagnosticsFeatures = @()
+    if (-not $RunHeadless) { $diagnosticsFeatures += "frame" }
+    if ($Gauges) { $diagnosticsFeatures += "gauges" }
+    if ($diagnosticsFeatures.Count -gt 0) {
+        $gameArguments = @("--diagnostics=$($diagnosticsFeatures -join ',')") + $gameArguments
+    }
     if ($RunHeadless) {
         $gameArguments = @("--headless") + $gameArguments
-    } else {
-        $gameArguments = @("--diagnostics=frame") + $gameArguments
     }
 
     $stdoutPath = [System.IO.Path]::GetTempFileName()
@@ -161,6 +176,24 @@ function Invoke-BenchmarkRun {
         # Written with a single File.WriteAllText; a short pause keeps a read from racing it.
         Start-Sleep -Milliseconds 300
         $report = Get-Content -LiteralPath $benchmarkFile.FullName -Raw | ConvertFrom-Json
+
+        # The gauge report is written right after the benchmark report, on the same frame.
+        $gaugeReport = $null
+        $gaugeFile = $null
+        if ($Gauges) {
+            while ($true) {
+                $gaugeFile = Get-ChildItem -Path $DiagnosticsDirectory -Filter "gauges-*-$($process.Id).json" -ErrorAction SilentlyContinue |
+                    Where-Object { $_.LastWriteTime -ge $startedAt } | Select-Object -First 1
+                if ($null -ne $gaugeFile) { break }
+                if ((Get-Date) -gt $deadline -or ($process.HasExited -and $null -eq $gaugeFile)) {
+                    throw "The run wrote its benchmark report but no gauge report. A build from before named gauges ignores --diagnostics=gauges."
+                }
+                Start-Sleep -Milliseconds 200
+            }
+
+            Start-Sleep -Milliseconds 300
+            $gaugeReport = Get-Content -LiteralPath $gaugeFile.FullName -Raw | ConvertFrom-Json
+        }
     }
     finally {
         if (-not $process.HasExited) {
@@ -191,6 +224,78 @@ function Invoke-BenchmarkRun {
         PerFrame        = $perFrame
         Fingerprint     = $fingerprint
         WorstFrameMs    = Get-WorstUpdateFrame -Report $report
+        GaugeReport     = $gaugeReport
+        GaugeFile       = if ($gaugeFile) { $gaugeFile.FullName } else { $null }
+    }
+}
+
+# Formats a gauge value by its name's unit suffix, as the Diagnostics window does.
+function Format-GaugeValue {
+    param([string]$GaugeName, [double]$Value)
+
+    if ($GaugeName.EndsWith("Bytes")) { return "{0:N1} MB" -f ($Value / 1MB) }
+    if ($GaugeName.EndsWith("Milliseconds")) { return "{0:N2} ms" -f $Value }
+    if ($Value -eq [math]::Floor($Value)) { return "{0:N0}" -f $Value }
+    return "{0:N2}" -f $Value
+}
+
+# Every gauge's summary over the range, then the slowest frames with what the gauges recorded on
+# each: every counter that moved that frame, and every level that changed from the frame before.
+function Write-GaugeReport {
+    param($GaugeReport, [string]$GaugeFile)
+
+    Write-Host "Gauges ($GaugeFile):"
+    foreach ($gauge in $GaugeReport.Gauges) {
+        $name = "$($gauge.Group)/$($gauge.Name)"
+        if ($gauge.Kind -eq "Cumulative") {
+            Write-Host ("  {0,-50} total {1}, max {2}/frame at {3}, {4:N0} frames nonzero" -f $name, (Format-GaugeValue $gauge.Name $gauge.Total), (Format-GaugeValue $gauge.Name $gauge.MaximumPerFrame), $gauge.MaximumFrame, $gauge.FramesNonzero)
+        } else {
+            Write-Host ("  {0,-50} mean {1} (min {2}, max {3} at {4})" -f $name, (Format-GaugeValue $gauge.Name $gauge.Mean), (Format-GaugeValue $gauge.Name $gauge.Minimum), (Format-GaugeValue $gauge.Name $gauge.Maximum), $gauge.MaximumFrame)
+        }
+    }
+
+    $frameCost = @($GaugeReport.Gauges | Where-Object { $_.Group -eq "Frame" -and $_.Name -eq "UpdateMilliseconds" })[0]
+    if ($null -eq $frameCost) { return }
+
+    # What a gauge did on a frame: a counter's value, a level's change from the frame before. It is
+    # listed on a slow frame only when that is unusual for it -- beyond its own 95th percentile
+    # across the range -- so a gauge that moves every frame (allocation, heap) shows only when it
+    # moves more than usual, and a rare one (a gen-1 collection) whenever it moves at all.
+    $gaugeMovements = @{}
+    $unusualMovementThresholds = @{}
+    foreach ($gauge in $GaugeReport.Gauges) {
+        if ($gauge.Group -eq "Frame") { continue }
+        $series = [double[]]@($gauge.Series)
+        $movements = [double[]]::new($series.Count)
+        for ($i = 0; $i -lt $series.Count; $i++) {
+            $movements[$i] = if ($gauge.Kind -eq "Cumulative") { $series[$i] } elseif ($i -gt 0) { $series[$i] - $series[$i - 1] } else { 0 }
+        }
+
+        $sortedMagnitudes = @($movements | ForEach-Object { [math]::Abs($_) } | Sort-Object)
+        $gaugeMovements["$($gauge.Group)/$($gauge.Name)"] = $movements
+        $unusualMovementThresholds["$($gauge.Group)/$($gauge.Name)"] = $sortedMagnitudes[[math]::Min($sortedMagnitudes.Count - 1, [math]::Floor($sortedMagnitudes.Count * 0.95))]
+    }
+
+    $frameCostSeries = @($frameCost.Series)
+    $worstFrameIndices = 0..($frameCostSeries.Count - 1) | Sort-Object { -$frameCostSeries[$_] } | Select-Object -First $WorstFrameCount
+    Write-Host ""
+    Write-Host "Slowest $WorstFrameCount frames, with every gauge that moved more than it usually does (a counter's value, a level's change):"
+    foreach ($frameIndex in $worstFrameIndices) {
+        $events = @()
+        foreach ($gauge in $GaugeReport.Gauges) {
+            if ($gauge.Group -eq "Frame") { continue }
+            $movement = $gaugeMovements["$($gauge.Group)/$($gauge.Name)"][$frameIndex]
+            if ($movement -eq 0 -or [math]::Abs($movement) -le $unusualMovementThresholds["$($gauge.Group)/$($gauge.Name)"]) { continue }
+
+            if ($gauge.Kind -eq "Cumulative") {
+                $events += "$($gauge.Name) $(Format-GaugeValue $gauge.Name $movement)"
+            } else {
+                $events += "$($gauge.Name) $(Format-GaugeValue $gauge.Name ([double]$gauge.Series[$frameIndex])) ($(if ($movement -gt 0) { '+' })$(Format-GaugeValue $gauge.Name $movement))"
+            }
+        }
+
+        $frame = [long]$GaugeReport.StartFrame + $frameIndex
+        Write-Host ("  frame {0,6}  {1,9}  {2}" -f $frame, (Format-GaugeValue "Milliseconds" $frameCostSeries[$frameIndex]), ($events -join ", "))
     }
 }
 
@@ -400,6 +505,14 @@ if ($Headless) {
 }
 Write-RunDetails -Runs $runs -Label $(if ($Headless) { "Headless" } else { "Windowed" })
 
+if ($Gauges) {
+    # One run's gauges stand for all: the same seed plays the same world, and only the timing
+    # and the GC's exact frames move between runs.
+    Write-Host ""
+    Write-GaugeReport -GaugeReport $runs[0].GaugeReport -GaugeFile $runs[0].GaugeFile
+    Write-Host ""
+}
+
 $summary = Get-Summary -Runs $runs
 $medians = [ordered]@{}
 foreach ($key in ($summary.Keys | Sort-Object { -$summary[$_].Median })) {
@@ -431,6 +544,7 @@ $result = [ordered]@{
     worstFrameMs          = @($runs | ForEach-Object { $_.WorstFrameMs })
     wallClockMilliseconds = @($runs | ForEach-Object { [math]::Round([double]$_.Report.WallClockMilliseconds, 1) })
     fellBehind            = $fellBehind
+    gaugeReports          = @($runs | Where-Object { $_.GaugeFile } | ForEach-Object { $_.GaugeFile })
     systems               = $medians
 }
 

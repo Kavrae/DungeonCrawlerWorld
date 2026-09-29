@@ -80,6 +80,9 @@ public sealed class UiLayerStack
     /// </summary>
     public void MarkMenuModeExempt(Element element) => _menuModeExemptElements.Add(element);
 
+    /// <summary>Withdraws element's menu-mode exemption -- for an exempt window that closes, so the pooled Element isn't still exempt when it's reused as a different window.</summary>
+    public void UnmarkMenuModeExempt(Element element) => _menuModeExemptElements.Remove(element);
+
     /// <summary>True if element was opted out of menu mode's blocking via MarkMenuModeExempt.</summary>
     public bool IsMenuModeExempt(Element element) => _menuModeExemptElements.Contains(element);
 
@@ -139,12 +142,15 @@ public sealed class UiLayerStack
     /// part of that same interaction, not something menu mode should then turn around and block/
     /// dim. Windows added before menu mode is ever active (the whole startup-time HUD build, plus
     /// each folder's own persistent tile/icon) are unaffected -- IsMenuModeActive is false then.
+    /// An element already marked menu-mode-exempt is never promoted: exempt means reachable during
+    /// menu mode without being a menu window, so it can't hold menu mode (and the simulation's
+    /// pause) open after the menu windows it opened beside have closed.
     /// </summary>
     public void Add(UiLayer layer, Element element)
     {
         _byLayer[layer].Add(element);
 
-        if (IsMenuModeActive)
+        if (IsMenuModeActive && !IsMenuModeExempt(element))
         {
             OpenMenuWindow(element);
         }

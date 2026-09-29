@@ -1,6 +1,6 @@
 namespace Engine.Diagnostics;
 
-/// <summary>Parses a "--diagnostics=frame,memory,startup,leak" (or "all"/"none") command-line argument into DiagnosticsFeatures.</summary>
+/// <summary>Parses a "--diagnostics=frame,memory,startup,leak,gauges" (or "all"/"none") command-line argument into DiagnosticsFeatures.</summary>
 /// <remarks>No matching argument, or an explicit "none", both mean None -- diagnostics stay opt-in by default. Unrecognized tokens are ignored rather than throwing, so a typo just leaves that one feature off instead of crashing the game at startup.</remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public static class DiagnosticsFeaturesParser
@@ -34,6 +34,7 @@ public static class DiagnosticsFeaturesParser
                 "memory" => DiagnosticsFeatures.Memory,
                 "startup" => DiagnosticsFeatures.Startup,
                 "leak" or "leakdetection" => DiagnosticsFeatures.LeakDetection,
+                "gauges" => DiagnosticsFeatures.Gauges,
                 _ => DiagnosticsFeatures.None,
             };
         }

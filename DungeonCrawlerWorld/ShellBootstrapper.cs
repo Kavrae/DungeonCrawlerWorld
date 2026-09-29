@@ -21,6 +21,7 @@ using Presentation.UI;
 using Presentation.UI.AbilityScores;
 using Presentation.UI.Chrome;
 using Presentation.UI.Content;
+using Presentation.UI.Diagnostics;
 using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
 using Presentation.UI.Notifications;
@@ -37,7 +38,7 @@ public static class ShellBootstrapper
     /// <param name="presentation"></param>
     /// <param name="worldSession">Bundles World/EcsContext/ActionCatalog/ItemCatalog/StatusEffectDisplays -- passed through as one object, not destructured at the call site, since GameLoop has exactly one caller and every field here already exists for GameLoop's own sake (see WorldSessionContext's own doc comment).</param>
     /// <param name="screenSize"></param>
-    /// <param name="diagnostics">Null when no diagnostics feature is enabled -- see DebugWindowContent's own doc comment.</param>
+    /// <param name="diagnostics">What the Diagnostics window (F3) reads its rates, gauges and leak findings from; null shows only what the window reads from the session itself.</param>
     /// <returns></returns>
     public static ShellContext Build(PresentationContext presentation, WorldSessionContext worldSession, Vector2 screenSize, DiagnosticsEngine? diagnostics = null)
     {
@@ -97,13 +98,14 @@ public static class ShellBootstrapper
         var tooltipController = new TooltipController();
         tooltipController.Initialize(presentation.ElementPoolService, uiLayers);
 
-        var mapWindow = BuildBaseWindows(presentation, ecsContext, diagnostics, uiLayers);
+        var mapWindow = BuildBaseWindows(presentation, uiLayers);
         var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, mapView, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, screenSize, mapViewState, uiLayers, worldSession);
         var (notificationCenter, healthController, inventoryController) = BuildDynamicHudWindows(presentation, world, ecsContext, mapWindow, contextMenuController, uiLayers, tooltipController);
         var hotbarController = BuildHotbarController(mapViewState, hotbarContent, actionTargetingController, tooltipController);
         BuildUserWindows(presentation, cursorTextContent, dragGhostContent, uiLayers);
 
         var abilityScoreController = BuildAbilityScoreWindowController(presentation, world, ecsContext, inventoryController, mapWindow, contextMenuController, uiLayers, tooltipController);
+        var diagnosticsController = BuildDiagnosticsWindowController(presentation, ecsContext, diagnostics, uiLayers);
         var secondaryInventoryController = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventoryController, contextMenuController, mapWindow, uiLayers, tooltipController);
         var shopWindowController = BuildShopWindowController(presentation, mapViewState, inventoryController, contextMenuController, mapWindow, uiLayers, tooltipController);
         var tradeWindowController = BuildTradeWindowController(presentation, inventoryController, shopWindowController, mapWindow, uiLayers, worldSession.ReservedEntityIds, tooltipController);
@@ -210,7 +212,7 @@ public static class ShellBootstrapper
 
         inventoryController.OnActivateRequested = (_, stackInstanceId) => actionTargetingController.ArmItemFromStack(stackInstanceId);
 
-        var inputController = new UiInputController(uiLayers, screenSize, componentManager, world, ecsContext.EventBus, hotbarController, contextMenuController, itemDetailsController, itemComparisonController, itemCatalog, mapViewState, healthController, inventoryController, abilityScoreController);
+        var inputController = new UiInputController(uiLayers, screenSize, componentManager, world, ecsContext.EventBus, hotbarController, contextMenuController, itemDetailsController, itemComparisonController, itemCatalog, mapViewState, healthController, inventoryController, abilityScoreController, diagnosticsController);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 
@@ -251,7 +253,7 @@ public static class ShellBootstrapper
 
     /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see UiInputController's own doc comment for what each of the four tiers means. MapWindow's own factory (and every other pooled type's) is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
     private static MapWindow BuildBaseWindows(
-        PresentationContext presentation, EcsContext ecsContext, DiagnosticsEngine? diagnostics, UiLayerStack layers)
+        PresentationContext presentation, UiLayerStack layers)
     {
         var mapWindow = presentation.ElementPoolService.CreateElement<MapWindow>(null, new ElementOptions
         {
@@ -272,20 +274,6 @@ public static class ShellBootstrapper
         });
         mapWindow.Initialize();
         layers.Add(UiLayer.Base, mapWindow);
-
-        var debugWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions
-            {
-                RelativePosition = HudChrome.DebugWindowPosition,
-                Size = HudChrome.DebugWindowSize,
-                DisplayMode = ElementDisplayMode.Fixed,
-            },
-            Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
-        });
-        debugWindow.SetContent(new DebugWindowContent(presentation.FontService, ecsContext.EntityManager, ecsContext.ComponentManager, diagnostics));
-        debugWindow.Initialize();
-        layers.Add(UiLayer.Base, debugWindow);
 
         return mapWindow;
     }
@@ -452,6 +440,16 @@ public static class ShellBootstrapper
         var abilityScoreController = new AbilityScoreWindowController(presentation.ElementPoolService, world, ecsContext.ComponentManager, inventory, mapWindow, contextMenuController, tooltipController);
         abilityScoreController.Initialize(layers);
         return abilityScoreController;
+    }
+
+    /// <summary>Registers the Diagnostics window's factory here rather than in ElementFactoryRegistry, since only this method has the DiagnosticsEngine it reads.</summary>
+    private static DiagnosticsWindowController BuildDiagnosticsWindowController(
+        PresentationContext presentation, EcsContext ecsContext, DiagnosticsEngine? diagnostics, UiLayerStack layers)
+    {
+        var elementPool = presentation.ElementPoolService;
+        elementPool.RegisterFactory<DiagnosticsWindow>(() => new DiagnosticsWindow(
+            presentation.FontService, elementPool, presentation.LabelRenderer, ecsContext.EntityManager, ecsContext.ComponentManager.GetPackedPool<MovementComponent>(), ecsContext.SystemManager.Clock, diagnostics));
+        return new DiagnosticsWindowController(elementPool, layers);
     }
 
     /// <summary>Constructs HotbarController -- its Armed Hotkey Summary popup is shown/hidden through the shared TooltipController (built once at the top of Build), not a window of its own. Needs mapViewState/hotbarContent (from BuildStaticHudWindows) and actionTargetingController (constructed at the top of Build, shared with MapWindow's own factory).</summary>

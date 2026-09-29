@@ -69,55 +69,6 @@ a `phase-performance-testing` A/B.
 
 ### Medium Priority
 
-#### Leak detection aware of skeleton and built entities
-
-`LeakDetector` flags a pool whose instance count grows faster than `EntityManager.LivingEntityCount`.
-Since deferred builds, that one count mixes two populations: skeletons (every creature outside the
-simulated tiers holds only `EntityFactory.SkeletonComponentTypes`) and built entities (everything
-else). Promoting a neighborhood's skeletons on a window shift grows every built-only pool (health,
-inventory, movement, abilities...) by thousands while the living entity count barely moves -- exactly
-the shape of a leak. Evictions and cache drops do the reverse. So any walk across a neighborhood edge
-can produce false findings, and a real leak in a built-only pool hides inside that promotion noise.
-
-Goal: compare each pool against the population that can hold it.
-- Skeleton component types against every living entity; every other pool against built entities
-  only (living minus `CreatureSkeletons.Count`).
-- Engine knows neither concept. The game supplies them, the same injected-policy shape as
-  `SystemManager.SimulatedTierCount`: a population count per sample and a predicate for which pool
-  types every entity holds. It plugs in through the session hooks (`EcsContext.BeginSession`;
-  IMPLEMENTATION-NOTES "Diagnostics wired through named engine hooks"), and probably through the
-  named gauges entry below (a built-entity gauge is the same number).
-- `LeakSample` records both counts, and a finding names which population it was compared against.
-- Test: a promotion-shaped history (built-only pools jump with the built count, living count flat)
-  produces no finding; a built-only pool growing with the built count flat still does.
-
-#### Named diagnostics gauges
-
-Needs a plan. Builds on the `EngineHooks` session and frame hooks (IMPLEMENTATION-NOTES "Diagnostics wired
-through named engine hooks").
-
-Frame costs say what a frame spent; nothing records what the world *was* while it spent it. The
-"Gen-1 GC frames during a window shift" investigation (Game) had to infer GC timing, streamer queue
-depth and entity counts from per-system costs instead of reading them off a graph.
-
-Goal: engine and game code register a named value; diagnostics samples it and writes it out.
-- Gauges are per session: registered on the session's `EcsContext` and cleared when it is disposed,
-  so a closure over a session object (the streamer, a pool) can't outlive the session or be sampled
-  from a trial or staging build.
-- Registered where the value lives: entity count and pool fill (Engine), gen-0/1/2 collection counts
-  and heap size (Engine), streamer load/unload queue depth and pending worker plans
-  (`NeighborhoodStreamer`), skeleton/built creature counts (Game).
-- Sampled once per simulation frame on `FrameEnded`, only while a `Gauges` diagnostics feature is on
-  -- off costs nothing, since registration happens once at session start.
-- Written per benchmark range (min/max/mean per gauge plus the per-frame series in its own
-  `gauges-<timestamp>.json`), and the latest value in `latest.json` for a windowed run.
-- Open: whether a gauge can also be sampled mid-frame (inside the streamer's drain) or only at frame
-  end; whether the debug window shows any of them live.
-
-**Godot reference:** `Performance.add_custom_monitor("game/streamer_queue", callable)` registers a
-named value the debugger's Monitors tab samples and graphs beside the engine's own (FPS, memory,
-object counts).
-
 #### FrameEventBuffer double-buffering + event system cleanup
 
 `FrameEventBuffer<T>` (`Engine/ECS/Systems/`) throws on a second same-cycle `Record` (a safety net, not
@@ -833,6 +784,8 @@ game has). Gen-1 frames during a shift run 12-17 ms, varying run to run; the ove
 mainly in the first shift of a session, while the population grows to its settled size. Measured by
 teleporting the player 70 tiles into the next column of neighborhoods at frames 700 and 1400 of a
 headless run (3 loads, then 3 loads plus 3 evictions); see "World scaling" in `IMPLEMENTATION-NOTES.md`.
+Named gauges now record GC collections, pause time, allocation, streamer queues and built/skeleton
+counts per frame: the benchmark skill's `-Gauges` lists them on the slowest frames.
 
 What's known:
 - **Pause cost tracks what population keeps.** Before the 7d allocation cuts, each gen-1 pause was

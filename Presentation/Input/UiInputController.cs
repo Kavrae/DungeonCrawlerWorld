@@ -13,6 +13,7 @@ using Presentation.Input.DragDrop;
 using Presentation.UI;
 using Presentation.UI.AbilityScores;
 using Presentation.UI.Content;
+using Presentation.UI.Diagnostics;
 using Presentation.UI.Inventory;
 using Presentation.UI.Shops;
 using Presentation.UI.Trade;
@@ -230,6 +231,7 @@ public sealed class UiInputController
 
     /// <summary>Backs the O hotkey -- see _healthWindowController's own doc comment.</summary>
     private readonly AbilityScoreWindowController? _abilityScoreWindowController;
+    private readonly DiagnosticsWindowController? _diagnosticsWindowController;
 
     /// <summary>Mouse position when the current hotbar-slot press started -- ResolveHotbarSlotClick only treats the release as a tap if it's within ContentDragTapThresholdPixels of this, the same tap-vs-drag distinction ResolveContentDrag already makes for content-drags.</summary>
     private Vector2 _hotbarPressMousePosition;
@@ -288,7 +290,7 @@ public sealed class UiInputController
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public UiInputController(UiLayerStack layers, Vector2 screenSize, ComponentManager componentManager, IPlayerQuery playerQuery, EventBus eventBus, HotbarController? hotbarController = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null, ItemCatalog? itemCatalog = null, MapViewState? mapViewState = null, HealthWindowController? healthWindowController = null, InventoryWindowController? inventoryWindowController = null, AbilityScoreWindowController? abilityScoreWindowController = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, ComponentManager componentManager, IPlayerQuery playerQuery, EventBus eventBus, HotbarController? hotbarController = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null, ItemCatalog? itemCatalog = null, MapViewState? mapViewState = null, HealthWindowController? healthWindowController = null, InventoryWindowController? inventoryWindowController = null, AbilityScoreWindowController? abilityScoreWindowController = null, DiagnosticsWindowController? diagnosticsWindowController = null)
     {
         _layers = layers;
         _screenSize = screenSize;
@@ -304,6 +306,7 @@ public sealed class UiInputController
         _healthWindowController = healthWindowController;
         _inventoryWindowController = inventoryWindowController;
         _abilityScoreWindowController = abilityScoreWindowController;
+        _diagnosticsWindowController = diagnosticsWindowController;
         _shopPool = componentManager.GetPackedPool<ShopComponent>();
         _dragDropResolvers = BuildDragDropResolvers();
 
@@ -581,7 +584,7 @@ public sealed class UiInputController
     }
 
     /// <summary>
-    /// U/I/O toggle the Health/Inventory/Ability Score windows -- unconditional/edge-triggered like
+    /// U/I/O toggle the Health/Inventory/Ability Score windows, and F3 the Diagnostics window -- unconditional/edge-triggered like
     /// Tab/Escape/F12 above (same IsKeyPressed helper, no menu-mode gating, since each button these
     /// mirror is already MarkMenuModeExempt), but gated on !IsTextBoxFocused first since (unlike
     /// Tab/Escape/F12) these are printable characters a focused TextBox should keep receiving as
@@ -607,6 +610,11 @@ public sealed class UiInputController
         if (IsKeyPressed(keyboardState, Keys.O))
         {
             _abilityScoreWindowController?.ToggleAbilityScoreWindow();
+        }
+
+        if (IsKeyPressed(keyboardState, Keys.F3))
+        {
+            _diagnosticsWindowController?.ToggleDiagnosticsWindow();
         }
     }
 

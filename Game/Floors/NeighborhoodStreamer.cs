@@ -140,6 +140,61 @@ public sealed class NeighborhoodStreamer : ISystem
     /// <summary>Whether any work is queued.</summary>
     public bool IsBusy => _jobs.Count > 0;
 
+    /// <summary>How many neighborhood loads are queued or under way.</summary>
+    public int LoadJobCount => CountJobs(JobKind.Load);
+
+    /// <summary>How many neighborhood unloads are queued or under way.</summary>
+    public int UnloadJobCount => CountJobs(JobKind.Unload);
+
+    /// <summary>How many neighborhood regenerations are queued or under way.</summary>
+    public int RegenerateJobCount => CountJobs(JobKind.Regenerate);
+
+    /// <summary>How many queued loads have a plan whose worker has not started yet.</summary>
+    public int PlansAwaitingStartCount => CountUnstartedJobPlans(static planningTask => planningTask.Status is TaskStatus.Created);
+
+    /// <summary>How many queued loads have a plan being worked on.</summary>
+    public int PlansRunningCount => CountUnstartedJobPlans(static planningTask => planningTask.Status is TaskStatus.WaitingToRun or TaskStatus.Running);
+
+    /// <summary>How many queued loads have a finished plan waiting for their job to start.</summary>
+    public int PlansReadyCount => CountUnstartedJobPlans(static planningTask => planningTask.IsCompleted);
+
+    /// <summary>Units of work spent since the streamer was created.</summary>
+    public long TotalBudgetUnitsSpent { get; private set; }
+
+    /// <summary>Entities a load has spawned since the streamer was created.</summary>
+    public long TotalEntitiesSpawned { get; private set; }
+
+    /// <summary>Entities an unload has destroyed since the streamer was created.</summary>
+    public long TotalEntitiesDestroyed { get; private set; }
+
+    private int CountJobs(JobKind kind)
+    {
+        var count = 0;
+        foreach (var job in _jobs)
+        {
+            if (job.Kind == kind)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private int CountUnstartedJobPlans(Func<Task<NeighborhoodPlan>, bool> isInStage)
+    {
+        var count = 0;
+        foreach (var job in _jobs)
+        {
+            if (!job.Started && job.PendingGeneration is { } pendingGeneration && !pendingGeneration.PlanningCancellation.IsCancellationRequested && isInStage(pendingGeneration.PlanningTask))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     /// <summary>Whether a neighborhood evicted from the window's cache still has built creatures (anything not a creature skeleton) waiting to be destroyed.</summary>
     /// <remarks>What a promotion should wait for: those are the creatures whose storage a promotion's builds reuse. The rest of an eviction -- its skeletons, its terrain -- frees nothing a build needs, so it doesn't hold anything up, and the streamer runs every eviction's built creatures ahead of its other work.</remarks>
     public bool IsEvictingBuiltCreatures => NextEvictionOfBuiltCreatures() >= 0;
@@ -236,6 +291,7 @@ public sealed class NeighborhoodStreamer : ISystem
             if (job.Work.MoveNext())
             {
                 budget -= job.Work.Current;
+                TotalBudgetUnitsSpent += job.Work.Current;
                 continue;
             }
 
@@ -383,6 +439,7 @@ public sealed class NeighborhoodStreamer : ISystem
                 else if (which is null || which(entityId))
                 {
                     _entityManager.DestroyEntity(entityId);
+                    TotalEntitiesDestroyed++;
                     _resolver.Forget(entityId);
                     destroyedAny = true;
                     yield return 1;
@@ -472,6 +529,7 @@ public sealed class NeighborhoodStreamer : ISystem
 
         foreach (var createdEntityCount in _builder.Spawn(neighborhoodPlan))
         {
+            TotalEntitiesSpawned += createdEntityCount;
             yield return System.Math.Max(1, createdEntityCount);
         }
     }

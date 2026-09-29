@@ -5,46 +5,19 @@ namespace Engine.Diagnostics;
 
 /// <summary>Throttled sampler of GC/entity/component-pool trends, flagging symptoms that often indicate a leak.</summary>
 /// <remarks>
-/// This is a heuristic indicator, not proof -- a flag here means "worth investigating with a real
-/// profiler (dotnet-gcdump, a memory snapshot diff)," not "confirmed leak." It compares the
-/// oldest and newest sample in a rolling history window: managed heap growing while live entity
-/// count stays flat/shrinking, or a component pool's instance count growing faster than the
-/// entity count around it (components not being removed when their owning entity is), are both
-/// symptoms real leaks tend to produce -- but so can legitimate warmup/caching behavior, so
-/// findings should be read as "look here," not "here's the bug."
-///
-/// A finding also needs the growth to continue into the second half of the window (middle sample
-/// to newest). Oldest-to-newest alone can't tell a leak from a pool filling up to its steady
-/// state: sampling starts before the first simulated frame, when every gameplay pool (timers,
-/// exposures, corpses) is empty or nearly so, and each fills over the first seconds of play. A
-/// pool that has reached its steady state stops growing; a leak keeps going.
-///
-/// One false-positive shape is structural, not just a threshold-tuning problem: event-marker
-/// components added once to an entity that already existed (e.g. DeadComponent on a kill,
-/// AchievementUnlockedComponent on an unlock) grow with *event* rate, not entity-count growth --
-/// a burst of kills/unlocks legitimately outpaces entity count the same way an actual leak would.
-/// MinimumInstanceCountForPoolFinding and the raised PoolOutpacesEntityGrowthThreshold below cut
-/// down the noisiest case (small pools, brief bursts), confirmed against a real ~75s session that
-/// flagged DeadComponent/AchievementUnlockedComponent/NonBlockingComponent growth from ordinary
-/// kills and achievement unlocks -- but they can't eliminate this category entirely, since a slow
-/// real leak in a marker-style component would look statistically identical over a long enough
-/// window. Findings still need a human read, not just a threshold pass.
+/// Keeps a rolling history of LeakSamples and re-evaluates it with LeakEvaluation after each sample --
+/// see LeakEvaluation for what counts as a symptom and why findings are only indicators.
 ///
 /// Sampling GC.GetTotalMemory/CollectionCount and enumerating ComponentManager.AllPools (same
 /// pattern as ComponentMemoryTracker) are each O(pools), not O(entity count), so a sample stays
 /// cheap regardless of world size -- but still heavier than a single Stopwatch bracket, so Tick
 /// only re-samples once SampleInterval has elapsed, not every frame.
 /// </remarks>
+/// <param name="populations">The session's population split, compared against by pool; null compares every pool against every living entity.</param>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class LeakDetector(EntityManager entityManager, ComponentManager componentManager)
+public sealed class LeakDetector(EntityManager entityManager, ComponentManager componentManager, EntityPopulationPolicy? populations)
 {
     private const int MaxHistorySamples = 12;
-    private const int MinimumSamplesForEvaluation = 6;
-    private const double HeapGrowthThreshold = 0.10;
-    private const double EntityCountFlatThreshold = 0.02;
-    private const double PoolOutpacesEntityGrowthThreshold = 0.50;
-    private const double RecentPoolGrowthThreshold = 0.10;
-    private const int MinimumInstanceCountForPoolFinding = 100;
 
     private static readonly TimeSpan SampleInterval = TimeSpan.FromSeconds(5);
 
@@ -70,12 +43,12 @@ public sealed class LeakDetector(EntityManager entityManager, ComponentManager c
 
         _lastSampleUtc = now;
 
-        var componentCounts = new Dictionary<string, int>();
+        var componentCounts = new Dictionary<Type, int>();
         foreach (var pool in componentManager.AllPools)
         {
             if (pool is IMemoryReportingComponentPool memoryReportingPool)
             {
-                componentCounts[pool.ComponentType.Name] = memoryReportingPool.Count;
+                componentCounts[pool.ComponentType] = memoryReportingPool.Count;
             }
         }
 
@@ -86,6 +59,7 @@ public sealed class LeakDetector(EntityManager entityManager, ComponentManager c
             GC.CollectionCount(1),
             GC.CollectionCount(2),
             entityManager.LivingEntityCount,
+            populations?.CountPartialPopulation(),
             componentCounts);
 
         if (_history.Count == MaxHistorySamples)
@@ -95,71 +69,6 @@ public sealed class LeakDetector(EntityManager entityManager, ComponentManager c
 
         _history.Add(sample);
 
-        Evaluate();
-    }
-
-    private void Evaluate()
-    {
-        _findings.Clear();
-
-        if (_history.Count < MinimumSamplesForEvaluation)
-        {
-            return;
-        }
-
-        var oldest = _history[0];
-        var middle = _history[_history.Count / 2];
-        var newest = _history[^1];
-
-        var entityGrowthRatio = GrowthRatio(oldest.LiveEntityCount, newest.LiveEntityCount);
-        var recentEntityGrowthRatio = GrowthRatio(middle.LiveEntityCount, newest.LiveEntityCount);
-
-        var heapGrowthRatio = GrowthRatio(oldest.TotalManagedBytes, newest.TotalManagedBytes);
-        var recentHeapGrowthRatio = GrowthRatio(middle.TotalManagedBytes, newest.TotalManagedBytes);
-        if (heapGrowthRatio > HeapGrowthThreshold && recentHeapGrowthRatio > 0 && entityGrowthRatio < EntityCountFlatThreshold)
-        {
-            _findings.Add(new LeakFinding(
-                "Managed Heap",
-                $"Managed heap grew {heapGrowthRatio:P0} over the last {_history.Count} samples while live entity count grew only {entityGrowthRatio:P0} ({oldest.LiveEntityCount:N0} -> {newest.LiveEntityCount:N0}).",
-                heapGrowthRatio));
-        }
-
-        foreach (var (componentTypeName, oldestCount) in oldest.ComponentCounts)
-        {
-            if (!newest.ComponentCounts.TryGetValue(componentTypeName, out var newestCount) || newestCount <= oldestCount)
-            {
-                continue;
-            }
-
-            if (newestCount < MinimumInstanceCountForPoolFinding)
-            {
-                continue;
-            }
-
-            var poolGrowthRatio = GrowthRatio(oldestCount, newestCount);
-            var recentPoolGrowthRatio = middle.ComponentCounts.TryGetValue(componentTypeName, out var middleCount)
-                ? GrowthRatio(middleCount, newestCount)
-                : poolGrowthRatio;
-            if (poolGrowthRatio - entityGrowthRatio > PoolOutpacesEntityGrowthThreshold
-                && recentPoolGrowthRatio - recentEntityGrowthRatio > RecentPoolGrowthThreshold)
-            {
-                _findings.Add(new LeakFinding(
-                    componentTypeName,
-                    $"{componentTypeName} pool grew {poolGrowthRatio:P0} ({oldestCount:N0} -> {newestCount:N0}) while live entity count grew {entityGrowthRatio:P0} -- components may not be getting removed when their owning entity is.",
-                    poolGrowthRatio - entityGrowthRatio));
-            }
-        }
-
-        _findings.Sort(static (a, b) => b.GrowthRatio.CompareTo(a.GrowthRatio));
-    }
-
-    private static double GrowthRatio(double oldValue, double newValue)
-    {
-        if (oldValue <= 0)
-        {
-            return newValue > 0 ? 1.0 : 0.0;
-        }
-
-        return (newValue - oldValue) / oldValue;
+        LeakEvaluation.Evaluate(_history, populations, _findings);
     }
 }

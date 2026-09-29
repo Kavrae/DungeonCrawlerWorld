@@ -132,6 +132,22 @@ public sealed class NeighborhoodStreamerTests
     }
 
     [TestMethod]
+    public void Regenerate_CountsItsJob_AndTheEntitiesItDestroysAndSpawns()
+    {
+        var session = Build();
+        var destroyedCount = EntitiesIn(session, 1, 0).Count;
+
+        Assert.IsTrue(session.Streamer.TryRequestRegenerate(1, 0));
+        Assert.AreEqual((1, 0, 0), (session.Streamer.RegenerateJobCount, session.Streamer.LoadJobCount, session.Streamer.UnloadJobCount));
+        RunUntilIdle(session);
+
+        Assert.AreEqual(0, session.Streamer.RegenerateJobCount);
+        Assert.AreEqual(destroyedCount, session.Streamer.TotalEntitiesDestroyed);
+        Assert.AreEqual(EntitiesIn(session, 1, 0).Count, session.Streamer.TotalEntitiesSpawned);
+        Assert.IsGreaterThan(0L, session.Streamer.TotalBudgetUnitsSpent);
+    }
+
+    [TestMethod]
     public void Regenerate_NoFrameGoesMoreThanARowOverItsBudget()
     {
         var session = Build(budgetPerFrame: 64);
@@ -305,6 +321,24 @@ public sealed class NeighborhoodStreamerTests
         var tiers = session.Ecs.ComponentManager.GetDirectPool<ProcessingTierComponent>();
         Assert.IsNotEmpty(EntitiesIn(session, 2, 0));
         Assert.IsTrue(EntitiesIn(session, 2, 0).All(entityId => tiers.GetReadonly(entityId).Tier == ProcessingTierLevel.Borough), "Born against the new centre.");
+    }
+
+    [TestMethod]
+    public void WindowShift_CountsTheLoadAndItsPlanThroughEachStage()
+    {
+        var session = BuildWindow();
+        var livingBefore = session.Ecs.EntityManager.LivingEntityCount;
+
+        ShiftTo(session, 1);
+        Assert.AreEqual((1, 1, 0, 0), (session.Streamer.LoadJobCount, session.Streamer.PlansAwaitingStartCount, session.Streamer.PlansRunningCount, session.Streamer.PlansReadyCount));
+
+        session.Streamer.Update(default, 0);
+        Assert.AreEqual(0, session.Streamer.PlansAwaitingStartCount);
+        Assert.AreEqual(1, session.Streamer.PlansRunningCount + session.Streamer.PlansReadyCount);
+
+        RunUntilIdle(session);
+        Assert.AreEqual((0, 0, 0, 0), (session.Streamer.LoadJobCount, session.Streamer.PlansAwaitingStartCount, session.Streamer.PlansRunningCount, session.Streamer.PlansReadyCount));
+        Assert.AreEqual(session.Ecs.EntityManager.LivingEntityCount - livingBefore, session.Streamer.TotalEntitiesSpawned);
     }
 
     /// <summary>A queued load starts exactly StartDelayFrames updates after it was queued -- not earlier, however fast its worker was, and not later, however slow: the main thread waits for the plan instead.</summary>
