@@ -1,6 +1,5 @@
 using Engine.ECS.Systems;
 using Game.Modules.AbilityScores;
-using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 
@@ -18,7 +17,7 @@ namespace Game.Modules.Actions.Effects;
 ///
 /// Deliberately does not move the caster: DodgeAction's targeting (SingleTarget + Metric.Chebyshev,
 /// Range 1) resolves to exactly one destination tile chosen at confirm time, and Presentation
-/// (PlayerInputBuffer) writes that step to MovementComponent.NextMapPosition once it sees this
+/// (PlayerCommands) writes that step to MovementComponent.NextMapPosition once it sees this
 /// activation's ActionActivatedEvent. DodgeAction's ReleasesActionLock frees the caster in the same
 /// frame, so MovementSystem takes the step on its next pass (or leaves the entity in place if the
 /// destination turns out occupied), with the same occupancy/wall validation normal movement has.

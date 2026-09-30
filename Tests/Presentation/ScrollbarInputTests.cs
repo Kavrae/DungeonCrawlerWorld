@@ -26,7 +26,7 @@ public sealed class ScrollbarInputTests
         {
             layers.Add(UiLayer.StaticHud, element);
         }
-        return new UiInputController(layers, LargeScreenSize, BuiltInTestComponents.RegisterAll(new Engine.ECS.Components.ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10)), TestPlayerQuery.NoPlayer, new Engine.Events.EventBus(), new Game.Modules.Inventory.ItemCatalog());
+        return TestUiInputController.Create(layers, LargeScreenSize, BuiltInTestComponents.RegisterAll(new Engine.ECS.Components.ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10)), TestPlayerQuery.NoPlayer, new Engine.Events.EventBus(), new Game.Modules.Inventory.ItemCatalog());
     }
 
     private static Window CreateColumn(ElementPoolService windowService, Element? parent, Vector2 relativePosition, Vector2 size)

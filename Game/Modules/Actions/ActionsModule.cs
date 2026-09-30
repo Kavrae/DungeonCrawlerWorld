@@ -77,7 +77,7 @@ public sealed class ActionsModule : IGameModule
         componentManager.RegisterMultiPool<ScrollMasteryComponent>(initialCapacity: 8);
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
         var context = registration.Context;
         var systemManager = registration.SystemManager;

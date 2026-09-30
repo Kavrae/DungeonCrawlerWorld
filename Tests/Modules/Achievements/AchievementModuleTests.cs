@@ -17,7 +17,7 @@ namespace Tests.Modules.Achievements;
 
 /// <summary>
 /// Exercises the built-in achievements end-to-end through the real AchievementModule (Configure
-/// then RegisterSystems, mirroring GameBootstrapper.Build's own ordering -- see
+/// then RegisterBehavior, mirroring GameBootstrapper.Build's own ordering -- see
 /// GameModuleIntegrationTests for the same pattern with other real modules) rather than
 /// against AchievementModule's internals directly. The Loner/UnarmedCombat tests below assign
 /// World.PlayerEntityId *before* publishing EnteredDungeonEvent, matching GameLoop's real ordering
@@ -368,5 +368,41 @@ public sealed class AchievementModuleTests
 
         Assert.AreEqual(AngelInvestorAchievementId, published!.Achievement!.AchievementId);
         Assert.AreEqual("Bronze Investor Box", published.Achievement.LootboxLabel);
+    }
+
+    private static int PlayerLootboxCount(EcsContext ecsContext, int playerEntityId) =>
+        ecsContext.ComponentManager.GetMultiPool<Game.Modules.Inventory.Components.InventoryItemStackComponent>().CountForEntity(playerEntityId);
+
+    private static (EcsContext EcsContext, EventBus EventBus, int PlayerEntityId) BuildWithAngelInvestorOwed()
+    {
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)));
+        var playerEntityId = build.EcsContext.EntityManager.CreateEntity();
+        build.World.PlayerEntityId = playerEntityId;
+        build.Context.EventBus.Publish(new Game.Modules.Shops.GoldGivenToShopEvent(playerEntityId, build.EcsContext.EntityManager.CreateEntity(), 50));
+
+        return (build.EcsContext, build.Context.EventBus, playerEntityId);
+    }
+
+    [TestMethod]
+    public void AchievementNotificationDismissed_GrantsTheOwedBoxToThePlayer()
+    {
+        var (ecsContext, eventBus, playerEntityId) = BuildWithAngelInvestorOwed();
+        Assert.AreEqual(0, PlayerLootboxCount(ecsContext, playerEntityId));
+
+        eventBus.Publish(new AchievementNotificationDismissedEvent(AngelInvestorAchievementId));
+
+        Assert.AreEqual(1, PlayerLootboxCount(ecsContext, playerEntityId));
+        Assert.AreEqual(0, ecsContext.ComponentManager.GetMultiPool<UnclaimedAchievementLootboxComponent>().CountForEntity(playerEntityId));
+    }
+
+    [TestMethod]
+    public void AchievementNotificationDismissed_Twice_GrantsTheBoxOnce()
+    {
+        var (ecsContext, eventBus, playerEntityId) = BuildWithAngelInvestorOwed();
+
+        eventBus.Publish(new AchievementNotificationDismissedEvent(AngelInvestorAchievementId));
+        eventBus.Publish(new AchievementNotificationDismissedEvent(AngelInvestorAchievementId));
+
+        Assert.AreEqual(1, PlayerLootboxCount(ecsContext, playerEntityId));
     }
 }

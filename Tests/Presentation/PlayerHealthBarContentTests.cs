@@ -1,12 +1,11 @@
-using Engine.ECS.Systems;
 using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Core.Components;
-using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -55,7 +54,7 @@ public sealed class PlayerHealthBarContentTests
             componentManager.Merge(PlayerEntityId, new SimpleHealthComponent(50, 100));
         }
 
-        var content = new PlayerHealthBarContent(world, componentManager, BodyPartTestWorld.PartsOf(componentManager), fontService, layers);
+        var content = new PlayerHealthBarContent(world, new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), BodyPartTestWorld.PartsOf(componentManager), new StatModifierView(componentManager), fontService, layers);
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
@@ -215,12 +214,12 @@ public sealed class PlayerHealthBarContentTests
         // A part sitting at its raw maximum (10/10 -- would read 100% by that measure) must still
         // read below 100% once a +50% MaximumHealth buff makes its true cap 15 -- regression for
         // the same bug ComplexHealthHeal/BodyPartSelection.PickLowestPercentage had.
-        var bodyParts = BodyPartTestWorld.WithParts(PlayerEntityId, ("Head", BodyPartType.Head, 10, 10, true)).BodyParts;
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
-        statModifiers.Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+        var bodyPartWorld = BodyPartTestWorld.WithParts(PlayerEntityId, ("Head", BodyPartType.Head, 10, 10, true));
+        var bodyParts = bodyPartWorld.BodyParts;
+        bodyPartWorld.Components.GetMultiPool<StatModifierComponent>().Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(5, 5, 1)), playerEntityId: PlayerEntityId);
-        var hoverContent = new PlayerHealthHoverContent(world, bodyParts, TestFonts.Shared, statModifiers);
+        var hoverContent = new PlayerHealthHoverContent(world, bodyParts, TestFonts.Shared, new StatModifierView(bodyPartWorld.Components));
 
         var rows = new List<PlayerHealthHoverContent.RowData>();
         hoverContent.BuildRows(rows);

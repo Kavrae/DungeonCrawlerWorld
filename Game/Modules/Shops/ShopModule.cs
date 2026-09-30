@@ -27,7 +27,7 @@ public sealed class ShopModule : IGameModule
         componentManager.RegisterMultiPool<ShopStockPreferenceComponent>();
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
     }
 }

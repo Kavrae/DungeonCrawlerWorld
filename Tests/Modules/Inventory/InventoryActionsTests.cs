@@ -660,4 +660,75 @@ public sealed class InventoryActionsTests
         Assert.IsTrue(ItemHotkeyBindingQueries.CanBind(CreateDefinition(Guid.NewGuid(), charges: 1)));
         Assert.IsFalse(ItemHotkeyBindingQueries.CanBind(CreateDefinition(Guid.NewGuid(), charges: 1) with { Tags = [Game.Modules.Tag.Lootbox] }));
     }
+
+    private static uint AddSeparateStack(ComponentManager manager, Guid itemId, ushort quantity)
+    {
+        var stack = new InventoryItemStackComponent(itemId, quantity);
+        manager.GetMultiPool<InventoryItemStackComponent>().Add(0, stack);
+        return stack.StackInstanceId;
+    }
+
+    [TestMethod]
+    public void MergeIntoEquivalentStack_EquivalentStack_MovesEveryUnitIntoTheExistingStackAndRemovesTheSource()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        var existingStackId = InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 2);
+        var arrivingStackId = AddSeparateStack(manager, itemId, quantity: 3);
+
+        var holdingStackId = InventoryActions.MergeIntoEquivalentStack(manager, entityId: 0, arrivingStackId);
+
+        var stacks = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(existingStackId, holdingStackId);
+        Assert.AreEqual(1, stacks.CountForEntity(0));
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(stacks, 0, existingStackId, out var merged));
+        Assert.AreEqual(5, merged.Quantity);
+    }
+
+    [TestMethod]
+    public void MergeIntoEquivalentStack_ExistingStackNearItsCap_LeavesTheRemainderInTheSource()
+    {
+        var manager = CreateRegisteredManager();
+        manager.Merge(0, new MaxStackSizeComponent(4));
+        var itemId = Guid.NewGuid();
+        var existingStackId = InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 3);
+        var arrivingStackId = AddSeparateStack(manager, itemId, quantity: 3);
+
+        var holdingStackId = InventoryActions.MergeIntoEquivalentStack(manager, entityId: 0, arrivingStackId);
+
+        var stacks = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(arrivingStackId, holdingStackId);
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(stacks, 0, existingStackId, out var existing));
+        Assert.AreEqual(4, existing.Quantity);
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(stacks, 0, arrivingStackId, out var remainder));
+        Assert.AreEqual(2, remainder.Quantity);
+    }
+
+    [TestMethod]
+    public void MergeIntoEquivalentStack_DifferentOverride_LeavesBothStacksAlone()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 2);
+        var arrivingStackId = InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 3), quantity: 1);
+
+        var holdingStackId = InventoryActions.MergeIntoEquivalentStack(manager, entityId: 0, arrivingStackId);
+
+        Assert.AreEqual(arrivingStackId, holdingStackId);
+        Assert.AreEqual(2, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
+
+    [TestMethod]
+    public void MergeIntoEquivalentStack_DisabledAgainstEnabled_LeavesBothStacksAlone()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 2);
+        var disabledStack = new InventoryItemStackComponent(itemId, 1, isDisabled: true);
+        manager.GetMultiPool<InventoryItemStackComponent>().Add(0, disabledStack);
+
+        InventoryActions.MergeIntoEquivalentStack(manager, entityId: 0, disabledStack.StackInstanceId);
+
+        Assert.AreEqual(2, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
 }

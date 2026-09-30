@@ -1,13 +1,5 @@
-using Engine.ECS.Context;
-using Game.Blueprints;
-using Game.Modules.Actions;
-using Game.Modules.Core.Components;
-using Game.Modules.Health;
-using Game.Modules.Inventory;
-using Game.Modules.StatusEffects;
-using Game.Terrain;
-using Game.Views;
-using Game.World;
+using Game.Admin;
+using Game.Bootstrap;
 using Presentation.Bootstrap;
 using Presentation.Fonts;
 using Presentation.Rendering;
@@ -27,24 +19,28 @@ public static class ElementFactoryRegistry
 {
     public static void RegisterAll(
         PresentationContext presentationContext,
-        EcsContext ecsContext,
-        ActionCatalog actionCatalog,
-        ItemCatalog itemCatalog,
-        StatusEffectDisplayRegistry statusEffectDisplays,
-        EntityBodyParts bodyParts,
-        BlueprintRegistry creatures,
-        World world,
-        TerrainRegistry terrain,
-        IMapViewQuery mapView,
-        MapViewState mapViewState,
-        MapCamera camera,
+        GameSession gameSession,
+        AdminTools adminTools,
+        ShellServices shellServices,
         ActionTargetingController actionTargetingController,
-        PlayerMovementController playerMovementController,
-        CursorTextContent cursorTextContent,
-        ContextMenuController contextMenuController)
+        PlayerMovementController playerMovementController)
     {
         var elementPool = presentationContext.ElementPoolService;
+        var mapViewState = shellServices.MapViewState;
+        var camera = shellServices.Camera;
+        var cursorTextContent = shellServices.CursorTextContent;
+        var contextMenuController = shellServices.ContextMenuController;
+        var ecsContext = gameSession.EcsContext;
         var componentManager = ecsContext.ComponentManager;
+        var world = gameSession.World;
+        var catalogs = gameSession.Catalogs;
+        var actionCatalog = catalogs.ActionCatalog;
+        var itemCatalog = catalogs.ItemCatalog;
+        var statusEffectDisplays = catalogs.StatusEffectDisplays;
+        var views = gameSession.Views;
+        var mapView = views.MapView;
+        var commands = gameSession.Commands;
+        var inventoryServices = new InventoryServices(itemCatalog, views.InventoryView, views.ShopView, views.CurrencyView, views.ActionStateView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands);
 
         // Supplies the fontService/elementPool/labelRenderer trio every plain registration repeats, so
         // each call site below only has to spell out its own type-specific extras.
@@ -61,15 +57,14 @@ public static class ElementFactoryRegistry
         // MapWindow's dependencies (the map view query, renderers) come from Game and Presentation
         // both, plus the map-specific services built alongside it -- too many type-specific extras
         // for the Register helper above to pull its weight.
-        var playerActionGate = new PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), world, ecsContext.SystemManager.Clock);
-        var mapTintGrid = new MapTintGrid(componentManager, world, terrain, ecsContext.EventBus);
-        var floatingTextController = new FloatingTextController(ecsContext.EventBus, ecsContext.SystemManager.Clock);
+        var mapTintGrid = new MapTintGrid(componentManager, world, catalogs.Terrain, ecsContext.EventBus);
+        var floatingTextController = new FloatingTextController(ecsContext.EventBus, gameSession.SimulationClock);
         var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, presentationContext.FontService, statusEffectDisplays, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer, presentationContext.LabelRenderer);
         elementPool.RegisterFactory<MapWindow>(() => new MapWindow(
             presentationContext.FontService,
             elementPool,
             mapView,
-            playerActionGate,
+            views.PlayerActionGate,
             mapViewState,
             mapTintGrid,
             ecsContext.EventBus,
@@ -82,13 +77,14 @@ public static class ElementFactoryRegistry
             playerMovementController,
             contextMenuController,
             floatingTextController,
-            floatingTextRenderer));
+            floatingTextRenderer,
+            new AdminContextMenuOptions(adminTools)));
 
         Register<Folder>((font, elements, glyph) => new Folder(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
 
         elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
             presentationContext.FontService, elementPool, presentationContext.LabelRenderer,
-            componentManager, itemCatalog, world, contextMenuController, mapViewState, ecsContext.EventBus, simulationClock: ecsContext.SystemManager.Clock));
+            inventoryServices, world, contextMenuController, mapViewState, simulationClock: gameSession.SimulationClock));
         Register<InventoryItemStackCell>((font, elements, glyph) => new InventoryItemStackCell(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
         Register<ShopItemStackCell>((font, elements, glyph) => new ShopItemStackCell(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
         Register<TradeItemStackCell>((font, elements, glyph) => new TradeItemStackCell(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
@@ -97,9 +93,9 @@ public static class ElementFactoryRegistry
         Register<Toggle>((font, elements, glyph) => new Toggle(font, elements, glyph));
 
         elementPool.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
-            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager, ecsContext.SystemManager.Clock));
+            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, views.AbilityScoreView, views.StatModifierView, gameSession.SimulationClock));
         elementPool.RegisterFactory<HealthWindow>(() => new HealthWindow(
-            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager, bodyParts, statusEffectDisplays, itemCatalog, ecsContext.SystemManager.Clock));
+            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, views.HealthView, views.StatModifierView, views.ActionStateView, views.EntityBodyParts, statusEffectDisplays, itemCatalog, gameSession.SimulationClock));
         Register<AbilityScoreColumnHeader>((font, elements, glyph) => new AbilityScoreColumnHeader(font, elements, glyph));
         Register<AbilityScoreModifierRow>((font, elements, glyph) => new AbilityScoreModifierRow(font, elements, glyph));
         Register<SeparatorBar>((font, elements, glyph) => new SeparatorBar(font, elements, glyph));
@@ -107,15 +103,13 @@ public static class ElementFactoryRegistry
         Register<Tooltip>((font, elements, glyph) => new Tooltip(font, elements, glyph));
 
         elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(
-            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState, ecsContext.EventBus,
-            simulationClock: ecsContext.SystemManager.Clock, creatures: creatures));
+            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, inventoryServices, world, contextMenuController, mapViewState,
+            simulationClock: gameSession.SimulationClock, entityNaming: views.EntityNaming, healthView: views.HealthView));
         elementPool.RegisterFactory<ShopWindow>(() => new ShopWindow(
-            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState, ecsContext.EventBus,
-            simulationClock: ecsContext.SystemManager.Clock, creatures: creatures));
+            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, inventoryServices, world, contextMenuController, mapViewState,
+            simulationClock: gameSession.SimulationClock, entityNaming: views.EntityNaming));
         elementPool.RegisterFactory<TradeWindow>(() => new TradeWindow(
-            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, componentManager,
-            itemCatalog, world, contextMenuController, mapViewState,
-            ecsContext.EventBus, simulationClock: ecsContext.SystemManager.Clock));
+            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, inventoryServices, world, contextMenuController, mapViewState, simulationClock: gameSession.SimulationClock));
         Register<EntityIconElement>((font, elements, glyph) => new EntityIconElement(
             font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer,
             mapView));

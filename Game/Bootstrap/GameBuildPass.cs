@@ -125,8 +125,8 @@ public static class GameBuildPass
             gameModuleContext.Definitions.ResolveAll();
         }
 
-        var registeredSystems = configuredModules.RegisterSystems();
-        var ecsContext = registeredSystems.Complete();
+        var registeredBehavior = configuredModules.RegisterBehavior();
+        var ecsContext = registeredBehavior.Complete();
 
         return new GameModuleBuild(ecsContext, world, gameModuleContext);
     }

@@ -1,8 +1,5 @@
-using Engine.ECS.Components.Stores;
-using Game.Modules.Inventory;
 using Game.Modules.Shops;
-using Game.Modules.Shops.Components;
-using Game.World;
+using Game.Views;
 using Presentation.Input.DragDrop;
 
 namespace Presentation.UI.Shops;
@@ -15,26 +12,26 @@ namespace Presentation.UI.Shops;
 /// never itself shop-registered, but a trade column's real shop-side counterpart is -- Trade gets
 /// first refusal on anything touching its own reserved entities).
 /// </summary>
-internal sealed class ShopDragDropResolver(PackedComponentPool<ShopComponent> shopPool, ItemCatalog itemCatalog, IPlayerQuery playerQuery) : IDragDropResolver
+internal sealed class ShopDragDropResolver(ShopView shopView, ShopCommands shopCommands) : IDragDropResolver
 {
     public bool TryResolve(in DragDropContext context)
     {
-        var originIsShop = shopPool.Has(context.OriginEntityId);
-        var destinationIsShop = shopPool.Has(context.DestinationEntityId);
+        var originIsShop = shopView.IsShop(context.OriginEntityId);
+        var destinationIsShop = shopView.IsShop(context.DestinationEntityId);
 
         if (context.ItemStackInstanceId is { } stackInstanceId)
         {
             if (originIsShop)
             {
                 // Dragged out of the shop's own grid, into the player's -- a purchase.
-                ShopActions.TryBuyFromShop(context.ComponentManager, itemCatalog, context.DestinationEntityId, context.OriginEntityId, stackInstanceId, playerQuery);
+                shopCommands.TryBuyFromShop(context.DestinationEntityId, context.OriginEntityId, stackInstanceId);
                 return true;
             }
 
             if (destinationIsShop)
             {
                 // Dragged out of the player's own grid, into the shop's -- a sale.
-                ShopActions.TrySellToShop(context.ComponentManager, itemCatalog, context.OriginEntityId, context.DestinationEntityId, stackInstanceId, playerQuery);
+                shopCommands.TrySellToShop(context.OriginEntityId, context.DestinationEntityId, stackInstanceId);
                 return true;
             }
 

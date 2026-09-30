@@ -7,7 +7,7 @@ namespace Presentation.UI.Trade;
 
 /// <summary>
 /// Opens the middle Trade Window alongside a shop. Wired by
-/// ShellBootstrapper to ShopWindowController.OnOpened/OnClosed (not called directly from
+/// ItemWindowCoordinator to ShopWindowController.OnOpened/OnClosed (not called directly from
 /// MapWindow.OnShopClicked) so this only ever opens when a shop genuinely finished opening a new
 /// window, and always closes in lockstep with it.
 ///
@@ -72,7 +72,7 @@ public sealed class TradeWindowController(
     private InventoryManagementWindow? _subscribedInventoryWindow;
     private CloseReason _pendingCloseReason = CloseReason.Direct;
 
-    /// <summary>The currently-open trade window's own bounds, Rectangle.Empty when none is open -- lets ItemDetailsWindowController.IsOutsideClick recognize a click landing inside the trade window as "still inside" (see ShellBootstrapper's own GetSecondaryInventoryWindowRectangle wiring), the same role ShopWindowController.Rectangle already plays for the shop window.</summary>
+    /// <summary>The currently-open trade window's own bounds, Rectangle.Empty when none is open -- lets ItemDetailsWindowController.IsOutsideClick recognize a click landing inside the trade window as "still inside" (see ItemWindowCoordinator's own GetSecondaryInventoryWindowRectangle wiring), the same role ShopWindowController.Rectangle already plays for the shop window.</summary>
     public Rectangle Rectangle => _window?.Rectangle ?? Rectangle.Empty;
 
     /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in either trade column" -- see ShopWindowController.OnItemSelected's own doc comment.</summary>

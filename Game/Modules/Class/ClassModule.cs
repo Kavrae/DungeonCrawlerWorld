@@ -23,7 +23,7 @@ public sealed class ClassModule : IGameModule
         componentManager.RegisterMultiPool<ClassMembershipComponent>(initialCapacity: 8);
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
 
         // No systems of its own -- see RaceModule for the same reasoning.

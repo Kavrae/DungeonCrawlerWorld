@@ -27,7 +27,7 @@ public sealed class DeathModule : IGameModule
         componentManager.RegisterPackedPool<LootedComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 32);
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
         var context = registration.Context;
         var systemManager = registration.SystemManager;

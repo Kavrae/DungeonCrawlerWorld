@@ -57,7 +57,7 @@ public sealed class GameBootstrapperTests
         File.Copy(sourcePath, destinationPath, overwrite: true);
     }
 
-    private static GameBootstrapResult BuildWithModsFrom(string modsDirectory) =>
+    private static GameSession BuildWithModsFrom(string modsDirectory) =>
         GameBootstrapper.Build(ModValidation.Validate(modsDirectory, []), new Map(new Vector3Int(5, 5, 1)), new MathUtility(), initialEntityCapacity: 100, initialComponentCapacity: 50);
 
     /// <summary>
@@ -88,7 +88,7 @@ public sealed class GameBootstrapperTests
         {
             var result = BuildWithModsFrom(directory.FullName);
 
-            Assert.IsEmpty(result.Failures);
+            Assert.IsEmpty(result.ModuleFailures);
             Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<SimpleHealthComponent>());
         }
         finally
@@ -106,7 +106,7 @@ public sealed class GameBootstrapperTests
             CopyModTo(directory.FullName, "Mods.ExampleMod");
             var result = BuildWithModsFrom(directory.FullName);
 
-            Assert.IsEmpty(result.Failures);
+            Assert.IsEmpty(result.ModuleFailures);
             // ExampleModule registers nothing observable -- its presence is proven by the
             // built-ins it rides alongside still registering correctly (no exception, no
             // failure reported), exactly what "join without disturbing anything" means for a
@@ -128,7 +128,7 @@ public sealed class GameBootstrapperTests
             CopyModTo(directory.FullName, "Mods.TestFixtures");
             var result = BuildWithModsFrom(directory.FullName);
 
-            Assert.AreEqual(1, result.Failures.Count(failure => failure.Source.Contains("ThrowingModule")));
+            Assert.AreEqual(1, result.ModuleFailures.Count(failure => failure.Source.Contains("ThrowingModule")));
             Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<ActionLockComponent>());
             var entityId = result.EcsContext.EntityManager.CreateEntity();
             Assert.AreEqual(0, entityId);
@@ -152,7 +152,7 @@ public sealed class GameBootstrapperTests
             using var frameCostSubscription = EngineHooks.FrameCosts.Subscribe(recorder);
             result.EcsContext.SystemManager.Update(new EngineTime(TimeSpan.Zero, TimeSpan.FromSeconds(1d / 60), false, 1));
 
-            Assert.IsFalse(result.Failures.Any(failure => failure.Source.Contains("ReplacementHealthModule")));
+            Assert.IsFalse(result.ModuleFailures.Any(failure => failure.Source.Contains("ReplacementHealthModule")));
             Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<SimpleHealthComponent>());
             Assert.DoesNotContain("SimpleHealthRegenSystem", recorder.SystemNames);
             Assert.DoesNotContain("ComplexHealthRegenSystem", recorder.SystemNames);
@@ -173,7 +173,7 @@ public sealed class GameBootstrapperTests
             CopyModTo(directory.FullName, "Mods.TestFixtures");
             var result = BuildWithModsFrom(directory.FullName);
 
-            var failure = result.Failures.Single(failure => failure.Source.Contains("IncompleteReplacementCurrencyModule"));
+            var failure = result.ModuleFailures.Single(failure => failure.Source.Contains("IncompleteReplacementCurrencyModule"));
             Assert.Contains("CurrencyComponent", failure.Exception.Message);
             Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<CurrencyComponent>());
         }

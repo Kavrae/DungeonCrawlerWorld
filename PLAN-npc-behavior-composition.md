@@ -24,7 +24,7 @@ What exists today:
   (`//TEMPORARY replace with a more generic mechanics`). That's the check the TODO entry is about:
   every new request type would need another pool injected and another `Has` here.
 - The check looks redundant today. `TestCombatBehaviorSystem` only decides when `NextMapPosition`
-  is null or already reached, and `PlayerInputBuffer` clears `NextMapPosition` when it writes an
+  is null or already reached, and `PlayerCommands` clears `NextMapPosition` when it writes an
   action or consumable, so nothing currently has both a step and an activation queued. It holds by
   convention, not by structure. Phase 1 confirms this with a test before removing anything.
 - `TestDummyAttackSystem` is a second decision system: a plain `ISystem` (stripe 1) that fires
@@ -75,10 +75,10 @@ compares it. `MovementSystem` gates on `IsBlocked(...) || IsTurnClaimed(...)`.
   later in the same frame.
 
 **C. One intent slot per entity (`EntityIntentComponent`, a union of Move / Action / Consumable)**
-that replaces the three request channels, like `PlayerInputBuffer`'s single slot or RimWorld's
+that replaces the three request channels, like `PlayerCommands`'s single slot or RimWorld's
 single current `Job`.
 - Pro: double-booking a turn becomes structurally impossible.
-- Con: rewrites `ActionActivationSystem`, `ConsumableActivationSystem`, `PlayerInputBuffer`,
+- Con: rewrites `ActionActivationSystem`, `ConsumableActivationSystem`, `PlayerCommands`,
   Dodge's step-on-activation and every test that queues a request. FreeCast has to coexist with a
   move, so it isn't really one slot anyway.
 
@@ -94,7 +94,7 @@ targetTiles, now)`. Each writes the pending component *and* claims the turn, so 
 to claim (the same reasoning as the timer wheels observing `ComponentChanged` so no caller has to
 remember to schedule).
 - Callers: `TestCombatBehaviorSystem` (later `NpcDecisionSystem`), `TestDummyAttackSystem` and
-  `PlayerInputBuffer`, which are the only three writers of the pending components today.
+  `PlayerCommands`, which are the only three writers of the pending components today.
 - FreeCast actions don't claim the turn: they don't wait for the lock, and a FreeCast plus a step on
   the same frame is legitimate. `IntentWriter.QueueAction` reads the action's timing category to
   decide.
@@ -447,7 +447,7 @@ Stop after each phase for in-game testing.
    pin down today's behavior before changing how it's guaranteed.
 2. `ActionLockComponent.TurnClaimedAtFrame`, `ActionLockGate.ClaimTurn`/`IsTurnClaimed`.
 3. `IntentWriter.QueueAction`/`QueueConsumable`. Route `TestCombatBehaviorSystem`,
-   `TestDummyAttackSystem` and `PlayerInputBuffer` through it.
+   `TestDummyAttackSystem` and `PlayerCommands` through it.
 4. `MovementSystem`: replace the pending-pool check with `IsTurnClaimed`, and drop the two
    constructor parameters and the `//TEMPORARY` comment.
 5. Tests: claim/expiry by frame, FreeCast doesn't claim, player activation claims, and existing

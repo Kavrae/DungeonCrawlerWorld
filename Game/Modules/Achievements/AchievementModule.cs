@@ -42,9 +42,6 @@ public sealed class AchievementModule : IGameModule
         new ObsessiveCollectorAchievement()
         ];
 
-    /// <summary>Shared with every AchievementTriggerContext this module hands out -- SubscribePolled appends to it, AchievementPollingSystem (registered below only if it ends up non-empty) drains it once per frame.</summary>
-    private readonly List<Func<bool>> _polledConditions = [];
-
     /// <summary>Sets the achievement data dependencies and registers all built-in achievements with the achievement catalog</summary>
     public void Configure(GameModuleContext context)
     {
@@ -67,16 +64,13 @@ public sealed class AchievementModule : IGameModule
         componentManager.RegisterMultiPool<UnclaimedAchievementLootboxComponent>(initialCapacity: Definitions.Count);
     }
 
+    /// <summary>Wires every achievement's trigger, the polling system the standing-state ones need, and the loot box claim.</summary>
     /// <remarks>
-    /// Almost every achievement trigger is a plain EventBus subscription, needing no per-frame work
-    /// of its own -- wired up here, with the systems, since Configure only fills what other modules
-    /// read (see IModule&lt;TContext&gt;.Configure). The one
-    /// exception: an achievement whose condition is a standing state rather than a discrete event
-    /// (see AchievementTriggerContext.SubscribePolled) needs an actual per-frame check, which is
-    /// what AchievementPollingSystem below is for -- only registered at all if at least one
-    /// achievement's RegisterTrigger actually called SubscribePolled.
+    /// Almost every trigger is a plain EventBus subscription. An achievement whose condition is a standing state rather
+    /// than an event (see AchievementTriggerContext.SubscribePolled) needs a per-frame check instead, so the triggers
+    /// register first and decide whether AchievementPollingSystem exists at all.
     /// </remarks>
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
         var context = registration.Context;
         var systemManager = registration.SystemManager;
@@ -85,16 +79,22 @@ public sealed class AchievementModule : IGameModule
         var unlockedAchievements = componentManager.GetMultiPool<AchievementUnlockedComponent>();
         var unclaimedLootboxes = componentManager.GetMultiPool<UnclaimedAchievementLootboxComponent>();
 
+        List<Func<bool>> polledConditions = [];
         foreach (var definition in Definitions)
         {
-            var triggerContext = new AchievementTriggerContext(context.EventBus, context.PlayerQuery, componentManager, context.Actions, context.Items, entityId => Unlock(definition, entityId, componentManager, unlockedAchievements, unclaimedLootboxes, context.Lootboxes, context.EventBus), _polledConditions);
+            var triggerContext = new AchievementTriggerContext(context.EventBus, context.PlayerQuery, componentManager, context.Actions, context.Items, entityId => Unlock(definition, entityId, componentManager, unlockedAchievements, unclaimedLootboxes, context.Lootboxes, context.EventBus), polledConditions);
             definition.RegisterTrigger(triggerContext);
         }
 
-        if (_polledConditions.Count > 0)
+        if (polledConditions.Count > 0)
         {
-            systemManager.Register(new AchievementPollingSystem(_polledConditions));
+            systemManager.Register(new AchievementPollingSystem(polledConditions));
         }
+
+        // An achievement's loot box is granted when the player closes its notification, not when it unlocks.
+        var achievementLootboxClaims = new AchievementLootboxClaims(componentManager, context.Lootboxes, context.EventBus);
+        context.EventBus.Subscribe<AchievementNotificationDismissedEvent>(dismissed =>
+            achievementLootboxClaims.TryClaim(context.PlayerQuery.PlayerEntityId, dismissed.AchievementId));
     }
 
     private static void Unlock(IAchievementDefinition definition, int entityId, ComponentManager componentManager, MultiComponentPool<AchievementUnlockedComponent> unlockedAchievements, MultiComponentPool<UnclaimedAchievementLootboxComponent> unclaimedLootboxes, LootboxCatalog lootboxCatalog, EventBus eventBus)

@@ -1,5 +1,5 @@
-using Engine.ECS.Systems;
 using Engine.ECS.Components;
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Floors;
 using Game.Modules;
@@ -66,7 +66,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, gridEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, gridEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -288,7 +288,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -493,7 +493,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, gridEntityId, filterTag: null, tooltipController, getSecondaryTargetEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, new SimulationClock(), tradeGridIsShopSide);
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, gridEntityId, filterTag: null, tooltipController, getSecondaryTargetEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, new SimulationClock(), tradeGridIsShopSide);
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -795,7 +795,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, ShopEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, ShopEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

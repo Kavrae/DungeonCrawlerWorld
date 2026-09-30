@@ -89,9 +89,8 @@ structural changes" (above), which removes the other reason for same-cycle recor
 #### Console variables and console commands
 
 Settings come only from the command line (`CommandLineSettingsSource`, the one `ISettingsSource`), are
-read once at startup, and can't be changed while the game runs. Admin/debug tools are separate
-hand-wired context-menu entries (see "Consolidate Admin Mode features out of the bootstrappers",
-Presentation). Add:
+read once at startup, and can't be changed while the game runs. Admin/debug tools are the command sets in
+`Game.Admin.AdminTools`, offered only through the map's context menu (`AdminContextMenuOptions`). Add:
 - **Console variables:** a `SettingDefinition` that opts in can be read and changed at runtime, with a
   change notification for the code that caches it. Every change records who set it, so a lower-priority
   source never overwrites a higher one (a config file never overwrites something typed at the console).
@@ -415,7 +414,7 @@ can't take the streamer in its constructor.
 Direction:
 - Build `NeighborhoodStreamer` inside the build pass, not the exe. After register-first, everything
   it needs (World, pools, EventBus, resolver, factory, terrain, definitions, a neighborhood-record
-  source) exists by `RegisterSystems`. It stays first in the frame, and
+  source) exists by `RegisterBehavior`. It stays first in the frame, and
   `BuiltInSystems_RunInThePinnedOrder` pins it.
 - Break the cycle with state that has one owner. Either the streamer pushes "evicting built
   creatures" into a small non-null gate created with the context and read by
@@ -2064,7 +2063,7 @@ Keys are hardcoded where they're handled: around 50 `Keys.*` checks across `UiIn
 `TextBox`. What a key means in which situation (typing in a text box, a context menu open, targeting,
 normal play) is decided by the order of those checks. Several items need one input layer: "Keybindings
 page on the options menu", "Targeted key-press routing instead of a full-keyboard scan", "Diagonal
-movement input timing", and the input buffer (`PlayerInputBuffer`), which is built by hand for movement
+movement input timing", and the input buffer (`PlayerCommands`), which is built by hand for movement
 and activations.
 - **Input actions:** named, typed actions (`Move` as a 2D vector, `Hotkey3`, `Dodge`, `ToggleInventory`,
   `Cancel`, `ToggleAdminMode`) that code binds to. Code never names a key.
@@ -2075,7 +2074,7 @@ and activations.
 - **Triggers:** when an action fires -- pressed, released, held for N frames, tapped (released within
   N frames), double-tapped, a chord (Shift+click) -- declared on the binding, not reimplemented per
   handler. Today's double-tap auto-target and re-press-confirms rules become triggers.
-- **Buffering:** `PlayerInputBuffer`'s newest-wins 0.25 s window becomes a property of an action,
+- **Buffering:** `PlayerCommands`'s newest-wins 0.25 s window becomes a property of an action,
   applying to any action that opts in, not just movement and activations.
 - **Rebinding:** bindings are data (defaults in `Content/`, user overrides persisted through "Data
   storage" and "Layered config files", Global). The keybindings page edits the user's layer, and
@@ -2093,7 +2092,7 @@ value (`Negate`, `Swizzle` -- how WASD becomes one 2D `Move` vector -- dead zone
 `Ongoing`, `Triggered`, `Completed`, `Canceled`). Rebinding is `UEnhancedInputUserSettings` with
 player-mappable key profiles (UE 5.1+), saved per user, each mapping named so a rebind survives changes
 to the default contexts. Unreal has no built-in input buffer; Souls-like Unreal games add one on top of
-the `Triggered` events, which is where `PlayerInputBuffer` would sit.
+the `Triggered` events, which is where `PlayerCommands` would sit.
 
 **Bevy reference:** core Bevy input is key-level only (`ButtonInput<KeyCode>` with `pressed` /
 `just_pressed` / `just_released`), like FNA's today. The action layer is the third-party
@@ -2147,29 +2146,6 @@ bracket pricing, where each unit's price depends on the shop's stock, so find it
 quantities against it rather than dividing by a unit price. Room is counted in stacks
 (`InventoryCapacity.HasRoomForNewStack`), so as much as fits means topping up existing stacks of
 the item to their max stack size, then filling free slots.
-
-#### Consolidate Admin Mode features out of the bootstrappers
-
-Admin Mode's pieces are wired one at a time, wherever each happened to need them:
-`ShellBootstrapper` hands `MapWindow` three separate admin dependencies (`NeighborhoodStreamer` for
-"Regenerate", a `BlueprintAdminCommands` it constructs itself for "Spawn here >"/"Apply >", and
-`EntityTeleporter` for "Teleport here"), and `GameLoop` keeps its own title-bar sync
-(`SyncAdminModeWindowTitle`). Each new admin tool adds another settable property and another
-bootstrapper line.
-
-Collect them into one admin collection (an `AdminTools`/`AdminCommands` object built once from the
-world session, holding the commands and anything they need) that the bootstrapper passes as a single
-dependency, with the context-menu groups built from it instead of from `MapWindow`'s own checks.
-Consider moving the title sync and the F12 toggle (`UiInputController`) alongside it. Out of scope:
-the scattered `GlobalState.IsAdminModeOn` reads that change what windows show (the hidden ability
-scores, admin inspection); those are display rules, not tools. The admin blueprint menus and
-"Teleport here" stay -- this only changes how they're wired.
-
-"Console variables and console commands" (Engine, Medium) gives the collection its shape: each admin
-tool is a registered command, the context menu is one way to invoke it and the console another, and
-a mod's admin tools register the same way. This follows Unreal's `UCheatManager`, where each cheat is
-a `UFUNCTION(Exec)` on one object that exists only in non-shipping builds, instantiated for the
-player controller, callable from the `~` console and from UI.
 
 #### Draw neighborhood borders and the Local radius in Admin Mode
 

@@ -40,7 +40,7 @@ public sealed class CoreActionsModule : IGameModule
         // No components of its own -- see class doc comment.
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
         // No systems of its own -- see class doc comment.
     }

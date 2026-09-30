@@ -33,13 +33,13 @@ public sealed class ShopWindowController(
     /// <summary>Settable late-bound callback for "the player chose Compare from this shop's own item context menu" -- see SecondaryInventoryWindowController.OnCompareRequested's own doc comment.</summary>
     public Action<int, uint>? OnCompareRequested { get; set; }
 
-    /// <summary>Settable late-bound callback fired with the target entity id right after a shop genuinely finishes opening a *new* window -- not on the toggle-closed or disabled-inventory early-return paths in OpenShop below. Wired by ShellBootstrapper to TradeWindowController.Open so the trade window opens exactly when, and only when, a real shop window did.</summary>
+    /// <summary>Settable late-bound callback fired with the target entity id right after a shop genuinely finishes opening a *new* window -- not on the toggle-closed or disabled-inventory early-return paths in OpenShop below. Wired by ItemWindowCoordinator to TradeWindowController.Open so the trade window opens exactly when, and only when, a real shop window did.</summary>
     public Action<int>? OnOpened { get; set; }
 
-    /// <summary>Settable late-bound callback fired at the end of TargetedWindowLifecycle's own HandleClosed, after every other cleanup -- wired by ShellBootstrapper to TradeWindowController's own close-and-unwind, so an open trade never survives its shop window closing (X, Escape, or opening a different shop).</summary>
+    /// <summary>Settable late-bound callback fired at the end of TargetedWindowLifecycle's own HandleClosed, after every other cleanup -- wired by ItemWindowCoordinator to TradeWindowController's own close-and-unwind, so an open trade never survives its shop window closing (X, Escape, or opening a different shop).</summary>
     public Action? OnClosed { get; set; }
 
-    /// <summary>Closes the currently-open shop window, if any -- a no-op otherwise. See SecondaryInventoryWindowController.CloseIfOpen's own doc comment for why ShellBootstrapper needs this (mutual exclusion with a corpse/container window).</summary>
+    /// <summary>Closes the currently-open shop window, if any -- a no-op otherwise. See SecondaryInventoryWindowController.CloseIfOpen's own doc comment for why ItemWindowCoordinator needs this (mutual exclusion with a corpse/container window).</summary>
     public void CloseIfOpen() => _slot.CloseIfOpen();
 
     /// <summary>Repositions the currently-open shop window, if any -- a no-op otherwise. Lets TradeWindowController re-anchor the shop window beside the trade window once the trade window's own final size is known without this controller needing to expose the Window instance itself.</summary>

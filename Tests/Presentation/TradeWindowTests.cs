@@ -1,5 +1,5 @@
-using Engine.ECS.Systems;
 using Engine.ECS.Components;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Floors;
@@ -77,7 +77,7 @@ public sealed class TradeWindowTests
         itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: 10));
         itemCatalog.Register(new ItemDefinition(GadgetItemId, "Test Gadget", null, "g", Color.White, Tags: [], Effects: [], GoldValue: 10));
 
-        windowService.RegisterFactory<TradeWindow>(() => new TradeWindow(fontService, windowService, labelRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState, eventBus ?? new EventBus(), simulationClock: new SimulationClock()));
+        windowService.RegisterFactory<TradeWindow>(() => new TradeWindow(fontService, windowService, labelRenderer, TestInventoryServices.Over(componentManager, itemCatalog, world, eventBus ?? new EventBus()), world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
@@ -370,6 +370,27 @@ public sealed class TradeWindowTests
         Assert.AreEqual(30, ReadGold(componentManager, PlayerEntityId), "The right footer's whole Gold balance moved to the real player.");
     }
 
+    [TestMethod]
+    public void Complete_AnItemThePlayerAlreadyHolds_MergesIntoThePlayersExistingStack()
+    {
+        var (window, componentManager, _) = Build();
+        var heldStackId = InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 2);
+        InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 50);
+        InventoryActions.AddItem(componentManager, TradeShopEntityId, PotionItemId, quantity: 1);
+        componentManager.Merge(TradePlayerEntityId, new CurrencyComponent(gold: 500, credits: 0));
+        window.Update(new GameTime());
+        Assert.IsTrue(FindButton(window, "Complete").Enabled, "Sanity check: 500G must cover one priced potion.");
+
+        ClickButton(FindButton(window, "Complete"));
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        var playerStacks = new List<InventoryItemStackComponent>();
+        InventoryQueries.CopyStacksForEntity(stacks, PlayerEntityId, playerStacks);
+        Assert.HasCount(1, playerStacks);
+        Assert.AreEqual(heldStackId, playerStacks[0].StackInstanceId);
+        Assert.AreEqual((ushort)3, playerStacks[0].Quantity);
+    }
+
     /// <summary>
     /// Confirmed live gap this closes: completing a trade that offers only player Gold (no items on
     /// either side) never published GoldGivenToShopEvent before CompleteTrade's player-to-shop Gold
@@ -500,13 +521,13 @@ public sealed class TradeWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 500), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        playerGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
+        playerGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
         playerGridWindow.Initialize();
 
         var layers = new UiLayerStack();
         layers.Add(UiLayer.DynamicHud, playerGridWindow);
         layers.Add(UiLayer.DynamicHud, tradeWindow);
-        var controller = new UiInputController(layers, new Vector2(2000, 2000), componentManager, world, new EventBus(), itemCatalog: itemCatalog, mapViewState: mapViewState);
+        var controller = TestUiInputController.Create(layers, new Vector2(2000, 2000), componentManager, world, new EventBus(), itemCatalog: itemCatalog, mapViewState: mapViewState);
 
         var cell = playerGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
         var pressPoint = cell.ContentRectangle.Center;
@@ -566,13 +587,13 @@ public sealed class TradeWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 500), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        playerGridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
+        playerGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
         playerGridWindow.Initialize();
 
         var layers = new UiLayerStack();
         layers.Add(UiLayer.DynamicHud, playerGridWindow);
         layers.Add(UiLayer.DynamicHud, tradeWindow);
-        var controller = new UiInputController(layers, new Vector2(2000, 2000), componentManager, world, new EventBus(), itemCatalog: itemCatalog, mapViewState: mapViewState);
+        var controller = TestUiInputController.Create(layers, new Vector2(2000, 2000), componentManager, world, new EventBus(), itemCatalog: itemCatalog, mapViewState: mapViewState);
 
         var cell = playerGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
         var pressPoint = cell.ContentRectangle.Center;

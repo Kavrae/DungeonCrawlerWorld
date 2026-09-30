@@ -55,7 +55,7 @@ public sealed class InventoryModule : IGameModule
         componentManager.RegisterPackedPool<InventoryComponent>(static (ref existing, incoming) => existing = incoming);
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
         var context = registration.Context;
         var systemManager = registration.SystemManager;

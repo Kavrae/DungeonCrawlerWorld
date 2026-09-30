@@ -1,13 +1,9 @@
-using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
-using Engine.Events;
 using FontStashSharp;
 using Game.Modules.Currency;
-using Game.Modules.Currency.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops;
-using Game.Modules.Shops.Components;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -16,6 +12,7 @@ using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
+using Presentation.UI.Inventory;
 
 namespace Presentation.UI.Trade;
 
@@ -38,15 +35,21 @@ public sealed class TradeWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
-    ComponentManager componentManager,
-    ItemCatalog itemCatalog,
+    InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    EventBus eventBus,
     Engine.ECS.Systems.SimulationClock simulationClock)
     : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
 {
+    private readonly ItemCatalog _itemCatalog = inventoryServices.ItemCatalog;
+    private readonly InventoryView _inventoryView = inventoryServices.InventoryView;
+    private readonly ShopView _shopView = inventoryServices.ShopView;
+    private readonly CurrencyView _currencyView = inventoryServices.CurrencyView;
+    private readonly InventoryCommands _inventoryCommands = inventoryServices.InventoryCommands;
+    private readonly ShopCommands _shopCommands = inventoryServices.ShopCommands;
+    private readonly CurrencyCommands _currencyCommands = inventoryServices.CurrencyCommands;
+
     /// <summary>2x10 -- the confirmed 20-stacks-per-side cap, arranged so every slot is visible with no scrolling required (see InventoryCapacity.MaxNonPlayerStackCount, which already enforces this same 20 for free).</summary>
     private const int GridColumns = 2;
 
@@ -93,9 +96,7 @@ public sealed class TradeWindow(
     /// </summary>
     private int _shopEntityId;
 
-    private readonly PackedComponentPool<ShopComponent> _shopPool = componentManager.GetPackedPool<ShopComponent>();
-    private readonly PackedComponentPool<CurrencyComponent> _currencyPool = componentManager.GetPackedPool<CurrencyComponent>();
-    private readonly MultiComponentPool<InventoryItemStackComponent> _stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+    private readonly List<InventoryItemStackComponent> _columnStacksScratch = [];
 
     /// <summary>The one shared TooltipController every hover-popup consumer in the app shows/hides through -- see its own doc comment. Both columns' own InventoryGridContent instances are given the same instance; each is already a distinct owner (see TooltipController.Show/Hide's own doc comment), so whichever column's Update happens to run second in a frame can never stomp the other's tooltip.</summary>
     private TooltipController _tooltipController = null!;
@@ -131,7 +132,7 @@ public sealed class TradeWindow(
     /// follows. onItemSelected/onCompareRequested mirror ShopWindow.Configure's own two callbacks
     /// (see ShopWindowController.OnItemSelected/OnCompareRequested's own doc comments) -- routed by
     /// TradeWindowController into the shared comparison-aware click dispatch every other inventory
-    /// grid already uses (ShellBootstrapper's own OnItemClicked), so a real item cell in either trade
+    /// grid already uses (ItemWindowCoordinator's own item-click dispatch), so a real item cell in either trade
     /// column can anchor or be added to Item Details Comparison exactly like any other grid's cell.
     /// </summary>
     public void Configure(int playerSideEntityId, int shopSideEntityId, int shopEntityId, TooltipController tooltipController, Action<int, uint> onItemSelected, Action<int, uint> onCompareRequested)
@@ -214,12 +215,12 @@ public sealed class TradeWindow(
     /// <summary>No item stacks and no Gold/Credits of any kind currently sitting in tradeEntityId's own column -- both Complete and Balance Offer stay disabled while both columns read this.</summary>
     private bool IsColumnEmpty(int tradeEntityId)
     {
-        if (_stacks.GetFirstDenseIndex(tradeEntityId) != -1)
+        if (_inventoryView.CountStacks(tradeEntityId) > 0)
         {
             return false;
         }
 
-        return !_currencyPool.TryGetReadonly(tradeEntityId, out var currency) || (currency.Gold == 0 && currency.Credits == 0);
+        return !_currencyView.TryGetCurrency(tradeEntityId, out var currency) || (currency.Gold == 0 && currency.Credits == 0);
     }
 
     /// <summary>
@@ -243,18 +244,18 @@ public sealed class TradeWindow(
     /// </summary>
     private int ComputeColumnValue(int tradeEntityId, bool isShopSide)
     {
-        if (!_shopPool.TryGetReadonly(_shopEntityId, out var shop))
+        if (!_shopView.TryGetShop(_shopEntityId, out var shop))
         {
             return 0;
         }
 
-        shop = ShopMarginPricing.ResolveEffectiveShop(componentManager, shop, world.PlayerEntityId);
+        shop = _shopView.ResolveEffectiveShop(shop, world.PlayerEntityId);
 
         var groupedQuantities = new Dictionary<Guid, (ItemDefinition Definition, int Quantity)>();
-        for (var denseIndex = _stacks.GetFirstDenseIndex(tradeEntityId); denseIndex != -1; denseIndex = _stacks.GetNextDenseIndex(denseIndex))
+        _inventoryView.CopyStacks(tradeEntityId, _columnStacksScratch);
+        foreach (var stack in _columnStacksScratch)
         {
-            var stack = _stacks.GetReadonlyByDenseIndex(denseIndex);
-            if (!InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition))
+            if (!InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var definition))
             {
                 continue;
             }
@@ -267,14 +268,14 @@ public sealed class TradeWindow(
         var total = 0;
         foreach (var (definition, quantity) in groupedQuantities.Values)
         {
-            var effectiveStock = InventoryGridContent.GetEffectiveShopStock(componentManager, mapViewState, _shopEntityId, definition.Id);
-            var preferredStockLevel = ShopStockPricing.GetPreferredStockLevel(componentManager, _shopEntityId, definition.Id);
+            var effectiveStock = InventoryGridContent.GetEffectiveShopStock(_shopView, mapViewState, _shopEntityId, definition.Id);
+            var preferredStockLevel = _shopView.GetPreferredStockLevel(_shopEntityId, definition.Id);
             total += isShopSide
                 ? ShopStockPricing.ComputeBulkBuyPrice(effectiveStock, preferredStockLevel, shop, definition, (ushort)quantity)
                 : ShopStockPricing.ComputeBulkSellPrice(effectiveStock, preferredStockLevel, shop, definition, (ushort)quantity);
         }
 
-        if (_currencyPool.TryGetReadonly(tradeEntityId, out var currency))
+        if (_currencyView.TryGetCurrency(tradeEntityId, out var currency))
         {
             total += currency.Gold;
         }
@@ -284,20 +285,25 @@ public sealed class TradeWindow(
 
     /// <summary>
     /// Moves every item stack currently in sourceEntityId's own inventory to destinationEntityId,
-    /// one InventoryActions.TryTransferStack call per stack (the same primitive every other
+    /// one InventoryCommands.TryTransferStack call per stack (the same primitive every other
     /// transfer in this feature already uses) -- what both CompleteTrade (swap) and
     /// ReturnEverythingToOwners (unwind) are built from. Copies the stack list first rather than
-    /// walking _stacks' own dense chain directly, since TryTransferStack removes from that same
+    /// walking the entity's stacks directly, since TryTransferStack removes from that same
     /// chain mid-walk -- the same "collect then act" shape InventoryActions.TryTransferAllStacksOfItem
-    /// already uses for an identical reason.
+    /// already uses for an identical reason. mergeIntoEquivalentStacks is true only for what the player
+    /// receives when a trade completes -- a purchase, like ShopActions.TryBuyFromShop -- never for the
+    /// unwind, which puts staged stacks back as they were.
     /// </summary>
-    private void TransferAllStacksTo(int sourceEntityId, int destinationEntityId)
+    private void TransferAllStacksTo(int sourceEntityId, int destinationEntityId, bool mergeIntoEquivalentStacks = false)
     {
         var stacks = new List<InventoryItemStackComponent>();
-        InventoryQueries.CopyStacksForEntity(_stacks, sourceEntityId, stacks);
+        _inventoryView.CopyStacks(sourceEntityId, stacks);
         foreach (var stack in stacks)
         {
-            InventoryActions.TryTransferStack(componentManager, itemCatalog, sourceEntityId, destinationEntityId, stack.StackInstanceId, world);
+            if (_inventoryCommands.TryTransferStack(sourceEntityId, destinationEntityId, stack.StackInstanceId) && mergeIntoEquivalentStacks)
+            {
+                _inventoryCommands.MergeIntoEquivalentStack(destinationEntityId, stack.StackInstanceId);
+            }
         }
     }
 
@@ -312,8 +318,8 @@ public sealed class TradeWindow(
     {
         TransferAllStacksTo(_playerSideEntityId, world.PlayerEntityId);
         TransferAllStacksTo(_shopSideEntityId, _shopEntityId);
-        CurrencyActions.TryTransfer(componentManager, _playerSideEntityId, world.PlayerEntityId, CurrencyType.Gold);
-        CurrencyActions.TryTransfer(componentManager, _shopSideEntityId, _shopEntityId, CurrencyType.Gold);
+        _currencyCommands.TryTransfer(_playerSideEntityId, world.PlayerEntityId, CurrencyType.Gold);
+        _currencyCommands.TryTransfer(_shopSideEntityId, _shopEntityId, CurrencyType.Gold);
     }
 
     /// <summary>
@@ -334,9 +340,9 @@ public sealed class TradeWindow(
     private void CompleteTrade()
     {
         TransferAllStacksTo(_playerSideEntityId, _shopEntityId);
-        TransferAllStacksTo(_shopSideEntityId, world.PlayerEntityId);
-        ShopActions.TryGiveCurrencyToShop(componentManager, eventBus, _playerSideEntityId, _shopEntityId, CurrencyType.Gold, eventPlayerEntityId: world.PlayerEntityId);
-        CurrencyActions.TryTransfer(componentManager, _shopSideEntityId, world.PlayerEntityId, CurrencyType.Gold);
+        TransferAllStacksTo(_shopSideEntityId, world.PlayerEntityId, mergeIntoEquivalentStacks: true);
+        _shopCommands.TryGiveCurrencyToShop(_playerSideEntityId, _shopEntityId, CurrencyType.Gold, eventPlayerEntityId: world.PlayerEntityId);
+        _currencyCommands.TryTransfer(_shopSideEntityId, world.PlayerEntityId, CurrencyType.Gold);
     }
 
     /// <summary>
@@ -356,8 +362,8 @@ public sealed class TradeWindow(
     /// </summary>
     private void BalanceOffer()
     {
-        CurrencyActions.TryTransfer(componentManager, _playerSideEntityId, world.PlayerEntityId, CurrencyType.Gold);
-        CurrencyActions.TryTransfer(componentManager, _shopSideEntityId, _shopEntityId, CurrencyType.Gold);
+        _currencyCommands.TryTransfer(_playerSideEntityId, world.PlayerEntityId, CurrencyType.Gold);
+        _currencyCommands.TryTransfer(_shopSideEntityId, _shopEntityId, CurrencyType.Gold);
 
         var playerValue = ComputeColumnValue(_playerSideEntityId, isShopSide: false);
         var shopValue = ComputeColumnValue(_shopSideEntityId, isShopSide: true);
@@ -365,21 +371,21 @@ public sealed class TradeWindow(
         if (shopValue > playerValue)
         {
             var deficit = shopValue - playerValue;
-            _currencyPool.TryGetReadonly(world.PlayerEntityId, out var realPlayerCurrency);
+            _currencyView.TryGetCurrency(world.PlayerEntityId, out var realPlayerCurrency);
             var moveAmount = System.Math.Min(deficit, realPlayerCurrency.Gold);
             if (moveAmount > 0)
             {
-                CurrencyActions.TryTransfer(componentManager, world.PlayerEntityId, _playerSideEntityId, CurrencyType.Gold, moveAmount);
+                _currencyCommands.TryTransfer(world.PlayerEntityId, _playerSideEntityId, CurrencyType.Gold, moveAmount);
             }
         }
         else if (playerValue > shopValue)
         {
             var deficit = playerValue - shopValue;
-            _currencyPool.TryGetReadonly(_shopEntityId, out var realShopCurrency);
+            _currencyView.TryGetCurrency(_shopEntityId, out var realShopCurrency);
             var moveAmount = System.Math.Min(deficit, realShopCurrency.Gold);
             if (moveAmount > 0)
             {
-                CurrencyActions.TryTransfer(componentManager, _shopEntityId, _shopSideEntityId, CurrencyType.Gold, moveAmount);
+                _currencyCommands.TryTransfer(_shopEntityId, _shopSideEntityId, CurrencyType.Gold, moveAmount);
             }
         }
     }
@@ -442,7 +448,7 @@ public sealed class TradeWindow(
         // picks TradeItemStackCell and the correct buy/sell pricing direction for this column -- see
         // InventoryGridContent's own doc comment on that parameter. Both columns are given the same
         // _tooltipController -- see its own doc comment for why that's safe now.
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, contextMenuController, entityId, filterTag: null, _tooltipController, static () => null, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, static _ => { }, simulationClock, isShopSide));
+        gridWindow.SetContent(new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, entityId, filterTag: null, _tooltipController, static () => null, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, static _ => { }, simulationClock, isShopSide));
         AddChild(gridWindow);
 
         var footerWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions
@@ -456,7 +462,7 @@ public sealed class TradeWindow(
         // showLabels: false -- "10 [sprite]", not "Gold : 10 [sprite]"; this column is too narrow
         // to spare the label (per the ask). textColor: white -- confirmed live look, matching the
         // trade grid's own transparent background just above.
-        footerWindow.SetContent(new CurrencyRowContent(entityId, componentManager, world, contextMenuController, ElementPoolService, static () => null, eventBus, showLabels: false, textColor: Color.White));
+        footerWindow.SetContent(new CurrencyRowContent(entityId, inventoryServices, world, contextMenuController, ElementPoolService, static () => null, showLabels: false, textColor: Color.White));
         AddChild(footerWindow);
     }
 
@@ -484,7 +490,7 @@ public sealed class TradeWindow(
         // paths cascade to the shop/inventory windows alike now, so this is no longer about that.
         _cancelButton.Clicked += _ => OnCancelClicked?.Invoke();
 
-        // CompleteTrade runs the swap here (this class owns componentManager/the entity ids), then
+        // CompleteTrade runs the swap here (this class owns the trade's entity ids), then
         // OnCompleteClicked lets TradeWindowController do the same "mark the reason, then Close()"
         // sequencing Cancel already uses -- see OnCompleteClicked's own doc comment for why the
         // reason matters (ReturnEverythingToOwners must NOT also run for this close).

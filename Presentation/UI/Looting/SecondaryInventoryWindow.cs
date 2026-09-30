@@ -1,16 +1,12 @@
-using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
 using Game.Spawning;
-using Game.Modules.Death.Components;
-using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
-using Game.Blueprints;
+using Presentation.UI.Inventory;
 
 namespace Presentation.UI.Looting;
 
@@ -43,14 +39,13 @@ public sealed class SecondaryInventoryWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
-    ComponentManager componentManager,
-    ItemCatalog itemCatalog,
+    InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    Engine.Events.EventBus eventBus,
     Engine.ECS.Systems.SimulationClock simulationClock,
-    BlueprintRegistry creatures)
+    EntityNaming entityNaming,
+    HealthView healthView)
     : Window(fontService, elementPoolService, labelRenderer)
 {
     private static readonly Vector2 IconSize = new(48, 48);
@@ -65,9 +60,6 @@ public sealed class SecondaryInventoryWindow(
 
     /// <summary>Wide enough for exactly GridColumns columns of InventoryGridContent.CellSize -- derived from CellSize/CellGap directly (rather than hand-duplicating those numbers, the landmine the 50%-cell-size bump exposed the first version of this constant to) -- comfortably mid-range of the width band that computes to exactly GridColumns, not right at its edge.</summary>
     private static readonly float GridWidth = GridColumns * (InventoryGridContent.CellSize.X + InventoryGridContent.CellGap) + 10f;
-
-    private readonly EntityNaming _naming = EntityNaming.For(componentManager, creatures);
-    private readonly PackedComponentPool<DeadComponent> _deadPool = componentManager.GetPackedPool<DeadComponent>();
 
     private int _entityId;
     private TooltipController _tooltipController = null!;
@@ -87,7 +79,7 @@ public sealed class SecondaryInventoryWindow(
         // self-referential shape BuildGrid's own InventoryGridContent uses -- this window *is*
         // the secondary target for as long as it exists, so its own currency row's context menu
         // only ever needs to offer "Take"/"Take All".
-        _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, ElementPoolService, () => _entityId, eventBus);
+        _currencyRowContent = new CurrencyRowContent(entityId, inventoryServices, world, contextMenuController, ElementPoolService, () => _entityId);
         SetFooterContent(_currencyRowContent, CurrencyRowContent.Height);
     }
 
@@ -119,7 +111,7 @@ public sealed class SecondaryInventoryWindow(
     /// </summary>
     private float ComputeGridHeight()
     {
-        var stackCount = componentManager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(_entityId);
+        var stackCount = inventoryServices.InventoryView.CountStacks(_entityId);
         var rows = System.Math.Max(MinimumGridRows, (int)System.Math.Ceiling(stackCount / (double)GridColumns));
         return rows * (InventoryGridContent.CellSize.Y + InventoryGridContent.CellGap);
     }
@@ -210,15 +202,15 @@ public sealed class SecondaryInventoryWindow(
         // once), so its own grid's Give/Take menu only ever needs to offer "Take," never query
         // anything external (contrast InventoryManagementWindow's own callback, which has to ask
         // whether a secondary window is open at all).
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, contextMenuController, _entityId, filterTag: null, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, static _ => { }, simulationClock: simulationClock)); // Activate is player-inventory-only (see InventoryGridContent.CanActivate) -- never reached for a corpse/container grid.
+        gridWindow.SetContent(new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, _entityId, filterTag: null, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, static _ => { }, simulationClock: simulationClock)); // Activate is player-inventory-only (see InventoryGridContent.CanActivate) -- never reached for a corpse/container grid.
         AddChild(gridWindow); // Initializes gridWindow, which in turn Initializes (and builds the cells of) its InventoryGridContent -- see Window.OnChildrenInitialized/AddChild's own doc comment on why Initialize is never called explicitly here.
     }
 
-    private string ResolveName(int entityId) => _naming.NameOf(entityId);
+    private string ResolveName(int entityId) => entityNaming.NameOf(entityId);
 
     private string ResolveKillerName()
     {
-        if (!_deadPool.Has(_entityId) || _deadPool.GetReadonly(_entityId).KilledBy is not { Kind: ActionSourceKind.Entity } killer)
+        if (!healthView.TryGetDeath(_entityId, out var death) || death.KilledBy is not { Kind: ActionSourceKind.Entity } killer)
         {
             return "Unknown";
         }
@@ -226,5 +218,5 @@ public sealed class SecondaryInventoryWindow(
         return killer.Identity.DisplayName;
     }
 
-    private long ResolveDiedAtFrame() => _deadPool.Has(_entityId) ? _deadPool.GetReadonly(_entityId).DiedAtFrame : 0;
+    private long ResolveDiedAtFrame() => healthView.TryGetDeath(_entityId, out var death) ? death.DiedAtFrame : 0;
 }

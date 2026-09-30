@@ -3,6 +3,7 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.Currency;
 using Game.Modules.Currency.Components;
+using Game.Modules.Inventory;
 using Game.Modules.Shops;
 using Game.Modules.Shops.Components;
 using Microsoft.Xna.Framework;
@@ -38,7 +39,7 @@ public sealed class CurrencyRowContentTests
         var contextMenuController = new ContextMenuController(windowService);
         contextMenuController.Initialize(new UiLayerStack());
 
-        var content = new CurrencyRowContent(EntityId, componentManager, world, contextMenuController, windowService, static () => null, new EventBus());
+        var content = new CurrencyRowContent(EntityId, TestInventoryServices.Over(componentManager, new ItemCatalog(), world, new EventBus()), world, contextMenuController, windowService, static () => null);
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -114,7 +115,7 @@ public sealed class CurrencyRowContentTests
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
 
-        var content = new CurrencyRowContent(rowEntityId, componentManager, world, contextMenuController, windowService, () => secondaryTargetEntityId, eventBus ?? new EventBus());
+        var content = new CurrencyRowContent(rowEntityId, TestInventoryServices.Over(componentManager, new ItemCatalog(), world, eventBus ?? new EventBus()), world, contextMenuController, windowService, () => secondaryTargetEntityId);
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

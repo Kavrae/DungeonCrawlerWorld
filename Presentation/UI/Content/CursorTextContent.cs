@@ -1,8 +1,8 @@
 using Engine.Utilities;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
+using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 
@@ -18,15 +18,8 @@ namespace Presentation.UI.Content;
 /// live mouse position rather than relative to any window's own bounds, and User is the topmost
 /// tier, so this always renders above whatever it's reporting on.
 /// </summary>
-public sealed class CursorTextContent(FontService fontService, LabelRenderer labelRenderer) : IElementContent
+public sealed class CursorTextContent(PointerState pointerState, FontService fontService, LabelRenderer labelRenderer) : IElementContent
 {
-    /// <summary>
-    /// How DrawContent finds the live cursor position -- assigned once ShellBootstrapper.Build
-    /// has constructed a real UiInputController, which happens after this class does (see that
-    /// method's own comment on why). Defaults to a no-op origin so an unwired instance (e.g. in a
-    /// test) never null-refs.
-    /// </summary>
-    public Func<Point> GetCursorPosition { get; set; } = static () => Point.Zero;
     /// <summary>Total time a message stays visible, including the fade -- roughly a standard toast duration.</summary>
     private static readonly int DisplayFrames = GameTiming.FramesForSeconds(1.0f);
 
@@ -94,7 +87,7 @@ public sealed class CursorTextContent(FontService fontService, LabelRenderer lab
     {
         if (_isPersistent)
         {
-            DrawAt(GetCursorPosition(), 1f);
+            DrawAt(pointerState.CursorPosition, 1f);
             return;
         }
 
@@ -104,7 +97,7 @@ public sealed class CursorTextContent(FontService fontService, LabelRenderer lab
         }
 
         var alpha = _remainingFrames < FadeFrames ? (float)_remainingFrames / FadeFrames : 1f;
-        DrawAt(GetCursorPosition(), alpha);
+        DrawAt(pointerState.CursorPosition, alpha);
     }
 
     private void DrawAt(Point mousePosition, float alpha)

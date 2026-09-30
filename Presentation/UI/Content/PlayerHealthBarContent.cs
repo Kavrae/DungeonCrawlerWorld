@@ -1,10 +1,8 @@
-using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Core.Components;
 using Game.Modules.Health;
-using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -32,7 +30,7 @@ namespace Presentation.UI.Content;
 /// Initialize, added to UiLayer.Tooltip), mirroring HotbarController's own _summaryWindow
 /// pattern.
 /// </remarks>
-public sealed class PlayerHealthBarContent(World world, ComponentManager componentManager, EntityBodyParts bodyParts, FontService fontService, UiLayerStack layers) : IElementContent
+public sealed class PlayerHealthBarContent(World world, HealthView healthView, EntityBodyParts bodyParts, StatModifierView statModifierView, FontService fontService, UiLayerStack layers) : IElementContent
 {
     public static readonly Vector2 Size = new(HudChrome.EntrySize.X * 4.5f, HudChrome.EntrySize.Y * 0.75f);
 
@@ -42,10 +40,7 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
     /// <summary>Popup sits directly below the bar (PopupAnchor.South) -- the bar sits in the top-right HUD corner, so North would risk clipping off the top of the screen.</summary>
     private static readonly Vector2 PopupGap = new(0, 2);
 
-    private readonly PackedComponentPool<SimpleHealthComponent> _healthPool = componentManager.GetPackedPool<SimpleHealthComponent>();
     private readonly EntityBodyParts _bodyParts = bodyParts;
-
-    private readonly MultiComponentPool<StatModifierComponent> _statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
 
     private Window _hostWindow = null!;
     private Window _hoverPopup = null!;
@@ -78,7 +73,7 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
             },
             Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, ShowTitle = false, CanUserFocus = false, CanUserClose = false },
         });
-        _hoverPopup.SetContent(new PlayerHealthHoverContent(world, _bodyParts, fontService, _statModifiers));
+        _hoverPopup.SetContent(new PlayerHealthHoverContent(world, _bodyParts, fontService, statModifierView));
         _hoverPopup.Initialize();
         layers.Add(UiLayer.Tooltip, _hoverPopup);
     }
@@ -98,7 +93,7 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
     internal void Update(MouseState mouseState, Rectangle screenBounds)
     {
         var playerEntityId = world.PlayerEntityId;
-        if (playerEntityId < 0 || !HealthQueries.TryGetTotals(_healthPool, _bodyParts, playerEntityId, out var currentHealth, out var maximumHealth) || maximumHealth <= 0)
+        if (playerEntityId < 0 || !healthView.TryGetTotals(playerEntityId, out var currentHealth, out var maximumHealth) || maximumHealth <= 0)
         {
             _hasHealth = false;
             _healthFraction = 1f;
@@ -106,7 +101,7 @@ public sealed class PlayerHealthBarContent(World world, ComponentManager compone
         else
         {
             _hasHealth = true;
-            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(_statModifiers, playerEntityId, StatModifierTarget.MaximumHealth, maximumHealth);
+            var effectiveMaximumHealth = statModifierView.GetEffectiveValue(playerEntityId, StatModifierTarget.MaximumHealth, maximumHealth);
             _healthFraction = effectiveMaximumHealth > 0
                 ? MathHelper.Clamp(currentHealth / effectiveMaximumHealth, 0f, 1f)
                 : 1f;

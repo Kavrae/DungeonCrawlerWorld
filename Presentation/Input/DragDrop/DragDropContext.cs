@@ -1,5 +1,3 @@
-using System;
-using Engine.ECS.Components;
 using Game.Modules.Currency;
 
 namespace Presentation.Input.DragDrop;
@@ -12,7 +10,6 @@ namespace Presentation.Input.DragDrop;
 /// _contentDrag* fields UiInputController captures at drag-start.
 /// </summary>
 internal readonly record struct DragDropContext(
-    ComponentManager ComponentManager,
     int OriginEntityId,
     int DestinationEntityId,
     uint? ItemStackInstanceId,

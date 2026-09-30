@@ -1,18 +1,16 @@
-using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Game.Modules;
-using Game.Modules.Core.Components;
-using Game.Modules.Currency.Components;
+
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops;
-using Game.Modules.Shops.Components;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using Presentation.UI.Inventory;
 
 namespace Presentation.UI.Content;
 
@@ -36,8 +34,7 @@ namespace Presentation.UI.Content;
 /// </summary>
 public sealed class InventoryGridContent(
     World world,
-    ComponentManager componentManager,
-    ItemCatalog itemCatalog,
+    InventoryServices inventoryServices,
     ElementPoolService elementPoolService,
     ContextMenuController contextMenuController,
     int entityId,
@@ -62,6 +59,14 @@ public sealed class InventoryGridContent(
     // below for every place this substitutes for the ordinary entity-id check.
     bool? tradeGridIsShopSide = null) : IElementContent, IInventoryDropTarget
 {
+    private readonly ItemCatalog _itemCatalog = inventoryServices.ItemCatalog;
+    private readonly InventoryView _inventoryView = inventoryServices.InventoryView;
+    private readonly ShopView _shopView = inventoryServices.ShopView;
+    private readonly CurrencyView _currencyView = inventoryServices.CurrencyView;
+    private readonly ActionStateView _actionStateView = inventoryServices.ActionStateView;
+    private readonly InventoryCommands _inventoryCommands = inventoryServices.InventoryCommands;
+    private readonly ShopCommands _shopCommands = inventoryServices.ShopCommands;
+
     /// <summary>50% larger than the original (24,24) for readability. internal, not private -- SecondaryInventoryWindow/ShopWindow both derive their own fixed grid width from this and CellGap rather than hand-duplicating the numbers (see their own doc comments on why that duplication was a landmine).</summary>
     public static readonly Vector2 CellSize = new(36, 36);
 
@@ -81,10 +86,6 @@ public sealed class InventoryGridContent(
 
     private static readonly Color UnfavorableStatusColor = Color.LightCoral;
 
-    private readonly MultiComponentPool<InventoryItemStackComponent> _stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
-    private readonly PackedComponentPool<ShopComponent> _shopPool = componentManager.GetPackedPool<ShopComponent>();
-    private readonly PackedComponentPool<CurrencyComponent> _currencyPool = componentManager.GetPackedPool<CurrencyComponent>();
-    private readonly PackedComponentPool<ActionLockComponent> _actionLockPool = componentManager.GetPackedPool<ActionLockComponent>();
     private readonly List<InventoryItemStackComponent> _reusableStacks = [];
     private readonly List<(InventoryItemStackComponent Stack, ItemDefinition Definition)> _reusableVisibleEntries = [];
     private readonly Dictionary<Guid, List<int>> _reusableGroupIndices = [];
@@ -261,7 +262,7 @@ public sealed class InventoryGridContent(
 
         _isShopMode = mapViewState.OpenShopEntityId is not null;
         RebuildCells();
-        _versionWatcher.HasChanged(_stacks.GetEntityVersion(entityId));
+        _versionWatcher.HasChanged(_inventoryView.GetVersion(entityId));
     }
 
     /// <summary>Whichever cell type/size is currently active -- ShopItemStackCell at 4x width while a shop is open (see MapViewState.OpenShopEntityId), plain InventoryItemStackCell at CellSize otherwise. Read by both this grid's own layout (RebuildCells/ComputeColumnCount) and, transiently, by whatever triggered the mode change.</summary>
@@ -299,12 +300,12 @@ public sealed class InventoryGridContent(
     /// a direct Buy All/Sell All (or a plain drag, bypassing the trade window entirely) actually
     /// charges.
     /// </summary>
-    internal static int GetEffectiveShopStock(ComponentManager componentManager, MapViewState mapViewState, int shopEntityId, Guid itemDefinitionId)
+    internal static int GetEffectiveShopStock(ShopView shopView, MapViewState mapViewState, int shopEntityId, Guid itemDefinitionId)
     {
-        var stock = ShopStockPricing.GetTotalStock(componentManager, shopEntityId, itemDefinitionId);
+        var stock = shopView.GetTotalStock(shopEntityId, itemDefinitionId);
         if (mapViewState.ReservedEntityIds?.TradeOfferShopEntityId is { } tradeShopEntityId && tradeShopEntityId != shopEntityId)
         {
-            stock += ShopStockPricing.GetTotalStock(componentManager, tradeShopEntityId, itemDefinitionId);
+            stock += shopView.GetTotalStock(tradeShopEntityId, itemDefinitionId);
         }
 
         return stock;
@@ -320,8 +321,8 @@ public sealed class InventoryGridContent(
     /// </summary>
     private int EffectiveStockForThisGrid(int shopEntityId, Guid itemDefinitionId) =>
         tradeGridIsShopSide is not null
-            ? GetEffectiveShopStock(componentManager, mapViewState, shopEntityId, itemDefinitionId)
-            : ShopStockPricing.GetTotalStock(componentManager, shopEntityId, itemDefinitionId);
+            ? GetEffectiveShopStock(_shopView, mapViewState, shopEntityId, itemDefinitionId)
+            : _shopView.GetTotalStock(shopEntityId, itemDefinitionId);
 
     public void Update(GameTime gameTime)
     {
@@ -331,7 +332,7 @@ public sealed class InventoryGridContent(
             _isShopMode = shopModeNow;
             RebuildCells();
         }
-        else if (_versionWatcher.HasChanged(_stacks.GetEntityVersion(entityId)))
+        else if (_versionWatcher.HasChanged(_inventoryView.GetVersion(entityId)))
         {
             RebuildCells();
         }
@@ -372,8 +373,8 @@ public sealed class InventoryGridContent(
             }
 
             if (cell.StackInstanceId is not { } stackInstanceId ||
-                !InventoryQueries.TryFindByStackInstanceId(_stacks, cell.EntityId, stackInstanceId, out var stack) ||
-                !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition))
+                !_inventoryView.TryGetStack(cell.EntityId, stackInstanceId, out var stack) ||
+                !InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var definition))
             {
                 cell.CompareState = CellCompareState.Ineligible;
                 continue;
@@ -411,7 +412,7 @@ public sealed class InventoryGridContent(
     /// </summary>
     private void UpdateShopEligibilityState(int shopEntityId)
     {
-        if (!_shopPool.TryGetReadonly(shopEntityId, out var shop))
+        if (!_shopView.TryGetShop(shopEntityId, out var shop))
         {
             foreach (var cell in _cells)
             {
@@ -422,17 +423,17 @@ public sealed class InventoryGridContent(
             return;
         }
 
-        shop = ShopMarginPricing.ResolveEffectiveShop(componentManager, shop, world.PlayerEntityId);
+        shop = _shopView.ResolveEffectiveShop(shop, world.PlayerEntityId);
 
         var isThisGridTheShop = IsThisGridTheShop(shopEntityId);
         var payerEntityId = isThisGridTheShop ? world.PlayerEntityId : shopEntityId;
-        _currencyPool.TryGetReadonly(payerEntityId, out var payerCurrency);
+        _currencyView.TryGetCurrency(payerEntityId, out var payerCurrency);
 
         foreach (var cell in _cells)
         {
             if (cell.StackInstanceId is not { } stackInstanceId ||
-                !InventoryQueries.TryFindByStackInstanceId(_stacks, cell.EntityId, stackInstanceId, out var stack) ||
-                !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition) ||
+                !_inventoryView.TryGetStack(cell.EntityId, stackInstanceId, out var stack) ||
+                !InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var definition) ||
                 !ShopActions.CanTrade(shop, definition))
             {
                 cell.ShopTradeEligible = false;
@@ -443,7 +444,7 @@ public sealed class InventoryGridContent(
             cell.CanStageInTrade = true;
 
             var effectiveStock = EffectiveStockForThisGrid(shopEntityId, definition.Id);
-            var preferredStockLevel = ShopStockPricing.GetPreferredStockLevel(componentManager, shopEntityId, definition.Id);
+            var preferredStockLevel = _shopView.GetPreferredStockLevel(shopEntityId, definition.Id);
             var totalPrice = isThisGridTheShop
                 ? ShopStockPricing.ComputeBulkBuyPrice(effectiveStock, preferredStockLevel, shop, definition, stack.Quantity)
                 : ShopStockPricing.ComputeBulkSellPrice(effectiveStock, preferredStockLevel, shop, definition, stack.Quantity);
@@ -488,9 +489,9 @@ public sealed class InventoryGridContent(
         ushort? stackQuantity = null;
         if (candidate.StackInstanceId is { } stackInstanceId)
         {
-            if (InventoryQueries.TryFindByStackInstanceId(_stacks, entityId, stackInstanceId, out var stack))
+            if (_inventoryView.TryGetStack(entityId, stackInstanceId, out var stack))
             {
-                InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out definition);
+                InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out definition);
                 stackQuantity = stack.Quantity;
             }
         }
@@ -499,7 +500,7 @@ public sealed class InventoryGridContent(
             // A merged cell (see CellEntry's own doc comment) has no single stack to resolve --
             // fall back to the plain catalog definition, the same "default" shape every member
             // shares the ItemDefinitionId of.
-            itemCatalog.TryGet(candidate.ItemDefinitionId, out definition);
+            _itemCatalog.TryGet(candidate.ItemDefinitionId, out definition);
         }
 
         if (definition is null)
@@ -548,12 +549,12 @@ public sealed class InventoryGridContent(
     /// </summary>
     private IReadOnlyList<TooltipRow>? ComputeHoverRows(ItemDefinition definition, ushort? stackQuantity)
     {
-        if (!_isShopMode || mapViewState.OpenShopEntityId is not { } shopEntityId || !_shopPool.TryGetReadonly(shopEntityId, out var shop))
+        if (!_isShopMode || mapViewState.OpenShopEntityId is not { } shopEntityId || !_shopView.TryGetShop(shopEntityId, out var shop))
         {
             return null;
         }
 
-        shop = ShopMarginPricing.ResolveEffectiveShop(componentManager, shop, world.PlayerEntityId);
+        shop = _shopView.ResolveEffectiveShop(shop, world.PlayerEntityId);
 
         var isThisGridTheShop = IsThisGridTheShop(shopEntityId);
         var neutralColor = WindowPalette.TitleTextColor; // The shared Tooltip's own default TextColor (see Tooltip.Build) -- no caller overrides it.
@@ -569,7 +570,7 @@ public sealed class InventoryGridContent(
             }
         }
 
-        var preferredStockLevel = ShopStockPricing.GetPreferredStockLevel(componentManager, shopEntityId, definition.Id);
+        var preferredStockLevel = _shopView.GetPreferredStockLevel(shopEntityId, definition.Id);
         var maxStock = definition.MaximumShopStock ?? ShopStockPricing.DefaultMaximumShopStock;
         var (e1, e2, e3, e4) = ShopStockPricing.GetBandEdges(preferredStockLevel, maxStock);
         var currentBand = ShopStockPricing.GetStockStatus(effectiveStock, e1, e2, e3, e4);
@@ -725,24 +726,24 @@ public sealed class InventoryGridContent(
     /// <summary>
     /// Player-owned, non-Merged-Stack, and the effective ItemDefinition carries an IActionActivator
     /// -- the same base eligibility ActionTargetingController.HandleItemSlotPress/ArmItemFromStack
-    /// check, duplicated here since this class already owns its own ComponentManager pool lookups
+    /// check, duplicated here since this class already reads the inventory itself
     /// independently. Deliberately ignores the global cooldown -- see IsPlayerActionLocked, checked
     /// separately so "Activate" stays visible-but-disabled on cooldown rather than disappearing.
     /// </summary>
     private bool CanActivate(int cellEntityId, uint stackInstanceId) =>
         cellEntityId == world.PlayerEntityId &&
-        InventoryQueries.TryFindByStackInstanceId(_stacks, world.PlayerEntityId, stackInstanceId, out var stack) &&
-        InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) &&
+        _inventoryView.TryGetStack(world.PlayerEntityId, stackInstanceId, out var stack) &&
+        InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var item) &&
         item.Activator is not null;
 
     /// <summary>A loot box in the player's own inventory: activating it opens every loot box the player holds, with no target to arm and no action lock to wait for.</summary>
     private bool IsPlayerLootbox(InventoryItemStackCell cell) =>
         cell.EntityId == world.PlayerEntityId &&
-        itemCatalog.TryGet(cell.ItemDefinitionId, out var definition) &&
+        _itemCatalog.TryGet(cell.ItemDefinitionId, out var definition) &&
         definition.Tags.Contains(Tag.Lootbox);
 
     /// <summary>Mirrors MapWindow's own "Inspect" context-menu option, the existing precedent for gating a UI action on the shared per-entity action lock (ActionLockGate.IsBlocked).</summary>
-    private bool IsPlayerActionLocked() => ActionLockGate.IsBlocked(_actionLockPool, world.PlayerEntityId, simulationClock.CurrentFrame);
+    private bool IsPlayerActionLocked() => _actionStateView.IsActionLocked(world.PlayerEntityId, simulationClock.CurrentFrame);
 
     /// <summary>
     /// "Activate" (arms the item exactly as an ordinary hotbar press would -- see
@@ -818,7 +819,7 @@ public sealed class InventoryGridContent(
             if (tradeTargetEntityId is { } tradeTarget)
             {
                 options.Add(new ContextMenuOption("Add to trade", null, Enabled: true, () =>
-                    InventoryActions.TryTransferStack(componentManager, itemCatalog, cell.EntityId, tradeTarget, stackInstanceId, world)));
+                    _inventoryCommands.TryTransferStack(cell.EntityId, tradeTarget, stackInstanceId)));
             }
         }
 
@@ -830,7 +831,7 @@ public sealed class InventoryGridContent(
             // "Buy All"), both moving Gold the opposite direction at the shop's own price. A
             // non-shop secondary target (a corpse/container) keeps the plain "Give"/"Take" labels --
             // there's no price to speak of, just a transfer.
-            var isShopSecondary = _shopPool.Has(secondaryTargetEntityId);
+            var isShopSecondary = _shopView.IsShop(secondaryTargetEntityId);
 
             if (cell.EntityId == world.PlayerEntityId && secondaryTargetEntityId != world.PlayerEntityId)
             {
@@ -838,11 +839,11 @@ public sealed class InventoryGridContent(
                 {
                     if (isShopSecondary)
                     {
-                        ShopActions.TrySellToShop(componentManager, itemCatalog, world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId, world);
+                        _shopCommands.TrySellToShop(world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId);
                     }
                     else
                     {
-                        InventoryActions.TryTransferStack(componentManager, itemCatalog, cell.EntityId, secondaryTargetEntityId, stackInstanceId, world);
+                        _inventoryCommands.TryTransferStack(cell.EntityId, secondaryTargetEntityId, stackInstanceId);
                     }
                 }));
             }
@@ -852,11 +853,11 @@ public sealed class InventoryGridContent(
                 {
                     if (isShopSecondary)
                     {
-                        ShopActions.TryBuyFromShop(componentManager, itemCatalog, world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId, world);
+                        _shopCommands.TryBuyFromShop(world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId);
                     }
                     else
                     {
-                        InventoryActions.TryTransferStack(componentManager, itemCatalog, cell.EntityId, world.PlayerEntityId, stackInstanceId, world);
+                        _inventoryCommands.TryTransferStack(cell.EntityId, world.PlayerEntityId, stackInstanceId);
                     }
                 }));
             }
@@ -883,7 +884,7 @@ public sealed class InventoryGridContent(
         var realOwnerEntityId = isTradeShopSide ? mapViewState.OpenShopEntityId : world.PlayerEntityId;
         if (realOwnerEntityId is { } destination)
         {
-            InventoryActions.TryTransferStack(componentManager, itemCatalog, cell.EntityId, destination, stackInstanceId, world);
+            _inventoryCommands.TryTransferStack(cell.EntityId, destination, stackInstanceId);
         }
     }
 
@@ -927,12 +928,12 @@ public sealed class InventoryGridContent(
         elementPoolService.CloseAllChildren(_hostWindow);
         _cells.Clear();
 
-        InventoryQueries.CopyStacksForEntity(_stacks, entityId, _reusableStacks);
+        _inventoryView.CopyStacks(entityId, _reusableStacks);
 
         _reusableVisibleEntries.Clear();
         foreach (var stack in _reusableStacks)
         {
-            if (!InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition))
+            if (!InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var definition))
             {
                 continue;
             }
@@ -1106,16 +1107,16 @@ public sealed class InventoryGridContent(
     /// </summary>
     private int ComputeShopTotalPrice(ItemDefinition definition, int quantity)
     {
-        if (mapViewState.OpenShopEntityId is not { } shopEntityId || !_shopPool.TryGetReadonly(shopEntityId, out var shop))
+        if (mapViewState.OpenShopEntityId is not { } shopEntityId || !_shopView.TryGetShop(shopEntityId, out var shop))
         {
             return 0;
         }
 
-        shop = ShopMarginPricing.ResolveEffectiveShop(componentManager, shop, world.PlayerEntityId);
+        shop = _shopView.ResolveEffectiveShop(shop, world.PlayerEntityId);
 
         var isThisGridTheShop = IsThisGridTheShop(shopEntityId);
         var effectiveStock = EffectiveStockForThisGrid(shopEntityId, definition.Id);
-        var preferredStockLevel = ShopStockPricing.GetPreferredStockLevel(componentManager, shopEntityId, definition.Id);
+        var preferredStockLevel = _shopView.GetPreferredStockLevel(shopEntityId, definition.Id);
         return isThisGridTheShop
             ? ShopStockPricing.ComputeBulkBuyPrice(effectiveStock, preferredStockLevel, shop, definition, (ushort)quantity)
             : ShopStockPricing.ComputeBulkSellPrice(effectiveStock, preferredStockLevel, shop, definition, (ushort)quantity);
@@ -1141,7 +1142,7 @@ public sealed class InventoryGridContent(
         // doc comment), which a bare shopEntityId-only lookup would undercount.
         var maximumShopStock = definition.MaximumShopStock ?? ShopStockPricing.DefaultMaximumShopStock;
         var effectiveStock = EffectiveStockForThisGrid(shopEntityId, definition.Id);
-        var preferredStockLevel = ShopStockPricing.GetPreferredStockLevel(componentManager, shopEntityId, definition.Id);
+        var preferredStockLevel = _shopView.GetPreferredStockLevel(shopEntityId, definition.Id);
         return ShopStockPricing.GetStockStatus(effectiveStock, preferredStockLevel, maximumShopStock);
     }
 

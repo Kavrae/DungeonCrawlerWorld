@@ -467,7 +467,7 @@ public sealed class MovementSystemTests
     }
 
     /// <summary>
-    /// Mirrors PlayerInputBuffer.Flush's validate-then-queue pattern (on-map + free-space
+    /// Mirrors PlayerCommands.Flush's validate-then-queue pattern (on-map + free-space
     /// check before ever setting NextMapPosition -- MovementSystem itself never decides a
     /// destination for any mode) applied to two independent entities, proving
     /// MovementMode.PlayerControlled isn't tied to any single global "the player":
@@ -731,7 +731,7 @@ public sealed class MovementSystemTests
         Assert.AreNotEqual(startPosition, transformPool.GetReadonly(0).Position);
     }
 
-    /// <summary>Standalone stand-in for PlayerInputBuffer.Flush's validate-then-queue logic, so this test can drive independent PlayerControlled entities without any MapWindow/input machinery.</summary>
+    /// <summary>Standalone stand-in for PlayerCommands.Flush's validate-then-queue logic, so this test can drive independent PlayerControlled entities without any MapWindow/input machinery.</summary>
     private static void QueuePlayerControlledMove(IMapQuery mapQuery, DirectComponentPool<TransformComponent> transformPool, PackedComponentPool<MovementComponent> movementPool, int entityId, Vector3Int delta)
     {
         if (!transformPool.TryGetReadonly(entityId, out var transformComponent) || !movementPool.TryGetReadonly(entityId, out var movementComponent))

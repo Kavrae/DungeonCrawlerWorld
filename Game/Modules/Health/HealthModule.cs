@@ -46,7 +46,7 @@ public sealed class HealthModule : IGameModule
         componentManager.RegisterPackedPool<BodyPartStateComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 20_000);
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
         var context = registration.Context;
         var systemManager = registration.SystemManager;

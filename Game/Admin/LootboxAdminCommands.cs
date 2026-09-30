@@ -1,7 +1,8 @@
 using Engine.ECS.Components;
 using Engine.Events;
+using Game.Modules.Lootboxes;
 
-namespace Game.Modules.Lootboxes;
+namespace Game.Admin;
 
 /// <summary>Admin Mode's "Grant loot box" command: any registered type, at any rarity, granted to an entity.</summary>
 /// <remarks>A debugging tool over LootboxActions.Grant, not a gameplay path. Types are read from the catalog each time they're asked for, so a mod's types appear too.</remarks>

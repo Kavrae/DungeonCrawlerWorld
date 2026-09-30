@@ -2,15 +2,14 @@ using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
-using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
+using Game.Views;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
 
@@ -18,7 +17,7 @@ namespace Tests.Presentation;
 
 /// <summary>
 /// A directional Dodge steps through MovementComponent.NextMapPosition, the path ordinary movement uses, and never
-/// moves the entity directly. PlayerInputBuffer writes the step only once the Dodge's ActionActivatedEvent arrives,
+/// moves the entity directly. PlayerCommands writes the step only once the Dodge's ActionActivatedEvent arrives,
 /// which ActivateDodge stands in for here -- these tests cover the Presentation side, not MovementSystem itself (see
 /// MovementSystemTests for that).
 /// </summary>
@@ -49,13 +48,14 @@ public sealed class ActionTargetingControllerDodgeTests
         var camera = new MapCamera(world);
         var clock = new SimulationClock();
         var eventBus = new EventBus();
-        var inputBuffer = new PlayerInputBuffer(
+        var playerCommands = new PlayerCommands(
             world,
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             clock,
             eventBus);
         var actionTargeting = new ActionTargetingController(
@@ -65,18 +65,14 @@ public sealed class ActionTargetingControllerDodgeTests
             new UiLayerStack(),
             actionCatalog,
             itemCatalog,
-            componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
-            componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
-            componentManager.GetMultiPool<InventoryItemStackComponent>(),
-            componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetPackedPool<ActionLockComponent>(),
-            inputBuffer,
-            componentManager.GetPackedPool<ManaComponent>(),
-            componentManager.GetPackedPool<AbilityScoresComponent>(), simulationClock: new SimulationClock());
+            new TransformView(componentManager),
+            new HotkeyBindingView(componentManager),
+            new InventoryView(componentManager, itemCatalog),
+            new ActionStateView(componentManager, localTierRoster: null),
+            new AbilityScoreView(componentManager),
+            playerCommands, simulationClock: new SimulationClock());
 
-        return (actionTargeting, mapViewState, componentManager, new PlayerMovementController(inputBuffer), clock, eventBus);
+        return (actionTargeting, mapViewState, componentManager, new PlayerMovementController(playerCommands), clock, eventBus);
     }
 
     /// <summary>What ActionActivationSystem does with a Dodge request that succeeds: consumes it and publishes the activation.</summary>

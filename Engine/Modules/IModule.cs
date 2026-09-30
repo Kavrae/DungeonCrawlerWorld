@@ -6,10 +6,10 @@ namespace Engine.Modules;
 /// <remarks>
 /// Other modules are named by Id, so a mod that replaces one by Id still satisfies everything that names
 /// it. Requires is about presence and RunsAfter/RunsBefore about system order, and neither implies the
-/// other: every component is registered before any module is configured or any system registered, so a
+/// other: every component is registered before any module is configured or any behavior registered, so a
 /// pool another module owns is available whatever the order. The phases run in this order, each for
 /// every module before the next starts: DeclareSettings, RegisterComponents, then
-/// <see cref="IModule{TContext}"/>'s Configure and RegisterSystems.
+/// <see cref="IModule{TContext}"/>'s Configure and RegisterBehavior.
 ///
 /// Implement <see cref="IModule{TContext}"/>, never this alone: the builder, the loader and
 /// replacement all work on the generic form. This non-generic base is what identity, ordering and
@@ -49,16 +49,21 @@ public interface IModule
     void RegisterComponents(ComponentRegistration registration);
 }
 
-/// <summary>A module configured with, and registering its systems against, a context of type TContext.</summary>
+/// <summary>A module configured with, and registering its behavior against, a context of type TContext.</summary>
 /// <remarks>The context is whatever the layer building the modules shares between them; Engine never looks inside it.</remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public interface IModule<TContext> : IModule
 {
-    /// <summary>Fills whatever the context shares that another module's RegisterSystems reads.</summary>
-    /// <remarks>Runs after every module's RegisterComponents and before any module's RegisterSystems.</remarks>
+    /// <summary>Fills whatever the context shares that another module's RegisterBehavior reads.</summary>
+    /// <remarks>Runs after every module's RegisterComponents and before any module's RegisterBehavior.</remarks>
     void Configure(TContext context)
     {
     }
 
-    void RegisterSystems(SystemRegistration<TContext> registration);
+    /// <summary>Wires everything this module runs: its systems, its event handlers, and any setup that decides which systems exist.</summary>
+    /// <remarks>
+    /// Runs after every module's Configure, so every catalog and registry the context shares is complete. Modules run it in
+    /// sorted order, which is both the order their systems run each frame and the order their handlers receive an event.
+    /// </remarks>
+    void RegisterBehavior(BehaviorRegistration<TContext> registration);
 }

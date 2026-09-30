@@ -3,7 +3,6 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules;
-using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
@@ -11,17 +10,17 @@ using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
 
-namespace Tests.Presentation;
+namespace Tests.Modules.Actions;
 
 [TestClass]
-public sealed class PlayerInputBufferTests
+public sealed class PlayerCommandsTests
 {
     private const int PlayerEntityId = 1;
     private const int LockEndsAtFrame = 60;
@@ -34,7 +33,7 @@ public sealed class PlayerInputBufferTests
     {
         public required ActionTargetingController ActionTargeting { get; init; }
         public required PlayerMovementController Movement { get; init; }
-        public required PlayerInputBuffer Buffer { get; init; }
+        public required PlayerCommands Buffer { get; init; }
         public required SimulationClock Clock { get; init; }
         public required ComponentManager ComponentManager { get; init; }
         public required EventBus EventBus { get; init; }
@@ -97,13 +96,14 @@ public sealed class PlayerInputBufferTests
 
         var clock = new SimulationClock();
         var eventBus = new EventBus();
-        var inputBuffer = new PlayerInputBuffer(
+        var playerCommands = new PlayerCommands(
             world,
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             clock,
             eventBus);
 
@@ -114,23 +114,19 @@ public sealed class PlayerInputBufferTests
             new UiLayerStack(),
             actionCatalog,
             new ItemCatalog(),
-            componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
-            componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
-            componentManager.GetMultiPool<InventoryItemStackComponent>(),
-            componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetPackedPool<ActionLockComponent>(),
-            inputBuffer,
-            componentManager.GetPackedPool<ManaComponent>(),
-            componentManager.GetPackedPool<AbilityScoresComponent>(),
+            new TransformView(componentManager),
+            new HotkeyBindingView(componentManager),
+            new InventoryView(componentManager, new ItemCatalog()),
+            new ActionStateView(componentManager, localTierRoster: null),
+            new AbilityScoreView(componentManager),
+            playerCommands,
             simulationClock: clock);
 
         return new Harness
         {
             ActionTargeting = actionTargeting,
-            Movement = new PlayerMovementController(inputBuffer),
-            Buffer = inputBuffer,
+            Movement = new PlayerMovementController(playerCommands),
+            Buffer = playerCommands,
             Clock = clock,
             ComponentManager = componentManager,
             EventBus = eventBus,
@@ -165,7 +161,7 @@ public sealed class PlayerInputBufferTests
     {
         var harness = Build();
 
-        harness.ConfirmSelfAction(LockEndsAtFrame - PlayerInputBuffer.ExpiryFrames);
+        harness.ConfirmSelfAction(LockEndsAtFrame - PlayerCommands.ExpiryFrames);
         harness.Frame(LockEndsAtFrame);
 
         Assert.IsFalse(harness.HasPendingAction);

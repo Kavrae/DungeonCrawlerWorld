@@ -15,5 +15,5 @@ public sealed class ExampleModule : IGameModule
 
     public void RegisterComponents(ComponentRegistration registration) { }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration) { }
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration) { }
 }

@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory.Components;
@@ -55,17 +56,18 @@ public sealed class PlayerMovementControllerTests
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: locked ? LockEndsAtFrame : 0u));
 
         var clock = new SimulationClock();
-        var inputBuffer = new PlayerInputBuffer(
+        var playerCommands = new PlayerCommands(
             world,
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             clock,
             new Engine.Events.EventBus());
 
-        return new Harness { Controller = new PlayerMovementController(inputBuffer), Clock = clock, ComponentManager = componentManager };
+        return new Harness { Controller = new PlayerMovementController(playerCommands), Clock = clock, ComponentManager = componentManager };
     }
 
     [TestMethod]
@@ -108,7 +110,7 @@ public sealed class PlayerMovementControllerTests
     public void Tap_ExpiresAfterTheBufferWindow()
     {
         var harness = Build();
-        var pressFrame = LockEndsAtFrame - PlayerInputBuffer.ExpiryFrames;
+        var pressFrame = LockEndsAtFrame - PlayerCommands.ExpiryFrames;
 
         harness.Frame(pressFrame, Keys.D);
         harness.Frame(pressFrame + 1);
@@ -121,7 +123,7 @@ public sealed class PlayerMovementControllerTests
     public void Tap_StillLiveOnTheLastFrameOfTheWindow_Flushes()
     {
         var harness = Build();
-        var pressFrame = LockEndsAtFrame - PlayerInputBuffer.ExpiryFrames + 1;
+        var pressFrame = LockEndsAtFrame - PlayerCommands.ExpiryFrames + 1;
 
         harness.Frame(pressFrame, Keys.D);
         harness.Frame(pressFrame + 1);

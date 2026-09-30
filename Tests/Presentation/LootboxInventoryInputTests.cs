@@ -72,7 +72,7 @@ public sealed class LootboxInventoryInputTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, windowService, contextMenuController, entityId, filterTag: null, tooltipController, () => CorpseEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, openRequests.Add, simulationClock: new SimulationClock()));
+            window.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, entityId, filterTag: null, tooltipController, () => CorpseEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, openRequests.Add, simulationClock: new SimulationClock()));
             window.Initialize();
             return window;
         }
@@ -84,7 +84,7 @@ public sealed class LootboxInventoryInputTests
             layers.Add(UiLayer.Base, window);
         }
 
-        var controller = new UiInputController(layers, new Vector2(2000, 2000), componentManager, world, new EventBus(), itemCatalog, contextMenuController: contextMenuController, mapViewState: mapViewState);
+        var controller = TestUiInputController.Create(layers, new Vector2(2000, 2000), componentManager, world, new EventBus(), itemCatalog, contextMenuController: contextMenuController, mapViewState: mapViewState);
         var lootboxCell = playerGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
 
         return new Harness(controller, playerGridWindow, corpseGridWindow, lootboxCell, componentManager, contextMenuController, openRequests);

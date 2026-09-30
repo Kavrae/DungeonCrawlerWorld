@@ -526,6 +526,10 @@ have to stand entirely on the coupling argument, with no performance story attac
 consumer needs. Pure refactor, no behaviour change, immediately reduces the coupling surface and
 makes the next stage's scope visible. ~10 call sites.
 
+**DONE 2026-09-29, differently**, by PLAN-shell-composition-cleanup.md: instead of narrower pools,
+consumers take per-session views (`GameSession.Views`) and command services (`GameSession.Commands`),
+so Presentation names no pool at all outside three exemptions.
+
 **Stage 2 -- `Game/Views/` for the map draw path only.** `IMapViewQuery` + `TileView` +
 `EntityVisualView`, consumed by `MapWindow`/`MapBackgroundCache`. Chosen first because it is the
 densest coupling (14 pool types in one class) and the hot path, so it validates both the ergonomics
@@ -555,6 +559,13 @@ residual anomaly" above. Nothing actionable came out of it; no code changed.
 performance motivation; do this only for the coupling, and only if Stages 1-2 proved the pattern
 pleasant to work with. ~517 Presentation tests are in scope here; expect this stage to dominate
 the total cost.
+
+**DONE 2026-09-29** (PLAN-shell-composition-cleanup.md Phase 5) for HUD windows, hotbar and every
+item window; inspection stays on the store. `PresentationStoreAccessArchitectureTests` bans
+`ComponentManager`/`EntityManager`/pools across all of Presentation, exempting `MapTintGrid`,
+`InspectionWindowContent` and `DiagnosticsWindow`. It allows component *values* (views return them),
+so Stage 5 would first need view structs for those -- mainly `InventoryItemStackComponent` and
+`StatModifierComponent`.
 
 **Stage 5 -- `Game.Views.csproj`.** Move the namespace out, drop Presentation's `Game` reference,
 delete the architecture test (the compiler now enforces it).

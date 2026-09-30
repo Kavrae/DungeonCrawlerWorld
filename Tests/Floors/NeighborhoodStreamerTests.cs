@@ -33,16 +33,16 @@ public sealed class NeighborhoodStreamerTests
         var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
         var world = result.World;
         var ecs = result.EcsContext;
-        result.ProcessingTierResolver.SetReferencePosition(Reference);
+        result.Internals.ProcessingTierResolver.SetReferencePosition(Reference);
 
         var records = new NeighborhoodRecords(mathUtility);
-        var factory = result.Factory;
-        FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Terrain, result.Definitions);
-        result.MovedEntities.ClearFrame();
+        var factory = result.Internals.Factory;
+        FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Catalogs.Terrain, result.Catalogs.Definitions);
+        result.Internals.MovedEntities.ClearFrame();
 
-        var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Terrain, result.Definitions);
-        var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, result.ProcessingTierResolver, records, builder, result.Skeletons) { BudgetPerFrame = budgetPerFrame };
-        return new Session(world, ecs, result.ProcessingTierResolver, streamer, result.MovedEntities, result.Definitions, result.Skeletons);
+        var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Catalogs.Terrain, result.Catalogs.Definitions);
+        var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, result.Internals.ProcessingTierResolver, records, builder, result.Internals.Skeletons) { BudgetPerFrame = budgetPerFrame };
+        return new Session(world, ecs, result.Internals.ProcessingTierResolver, streamer, result.Internals.MovedEntities, result.Catalogs.Definitions, result.Internals.Skeletons);
     }
 
     /// <summary>Pumps the streamer until it has nothing left to do, returning how many entities each frame created or destroyed.</summary>
@@ -284,18 +284,18 @@ public sealed class NeighborhoodStreamerTests
         var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
         var world = result.World;
         var ecs = result.EcsContext;
-        result.ProcessingTierResolver.SetReferencePosition(Reference);
-        result.ProcessingTierResolver.SetWindowCenter(0, 0);
+        result.Internals.ProcessingTierResolver.SetReferencePosition(Reference);
+        result.Internals.ProcessingTierResolver.SetWindowCenter(0, 0);
 
         var records = new NeighborhoodRecords(mathUtility);
-        var skeletons = result.Skeletons;
-        var factory = result.Factory;
-        FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Terrain, result.Definitions);
-        result.MovedEntities.ClearFrame();
+        var skeletons = result.Internals.Skeletons;
+        var factory = result.Internals.Factory;
+        FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Catalogs.Terrain, result.Catalogs.Definitions);
+        result.Internals.MovedEntities.ClearFrame();
 
-        var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Terrain, result.Definitions);
-        var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, result.ProcessingTierResolver, records, builder, skeletons);
-        return new Session(world, ecs, result.ProcessingTierResolver, streamer, result.MovedEntities, result.Definitions, skeletons);
+        var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Catalogs.Terrain, result.Catalogs.Definitions);
+        var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, result.Internals.ProcessingTierResolver, records, builder, skeletons);
+        return new Session(world, ecs, result.Internals.ProcessingTierResolver, streamer, result.Internals.MovedEntities, result.Catalogs.Definitions, skeletons);
     }
 
     /// <summary>Moves the player a neighborhood along and shifts the window there, the way ProcessingTierSystem does.</summary>

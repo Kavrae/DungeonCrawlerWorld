@@ -1,9 +1,7 @@
-using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
 using Game.Modules.Currency;
 using Game.Modules.Inventory;
 using Game.Modules.Shops;
-using Game.Modules.Shops.Components;
+using Game.Views;
 using Game.World;
 using Presentation.Input.DragDrop;
 
@@ -20,7 +18,7 @@ namespace Presentation.UI.Trade;
 /// Gold through its own, always-empty CurrencyComponent instead of the real player's or shop's --
 /// this resolver must get first refusal on anything touching its own reserved entities.
 /// </summary>
-internal sealed class TradeDragDropResolver(MapViewState mapViewState, PackedComponentPool<ShopComponent> shopPool, ItemCatalog itemCatalog, IPlayerQuery playerQuery) : IDragDropResolver
+internal sealed class TradeDragDropResolver(MapViewState mapViewState, ShopView shopView, InventoryCommands inventoryCommands, ShopCommands shopCommands, CurrencyCommands currencyCommands, IPlayerQuery playerQuery) : IDragDropResolver
 {
 
     /// <summary>True for either of the two reserved trade-offer entities -- false (never a false positive) whenever no trade window was ever wired, or entityId is any ordinary entity.</summary>
@@ -38,7 +36,7 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, PackedCom
 
         if (context.ItemStackInstanceId is { } stackInstanceId)
         {
-            ResolveItemDrag(context.ComponentManager, context.OriginEntityId, context.DestinationEntityId, stackInstanceId);
+            ResolveItemDrag(context.OriginEntityId, context.DestinationEntityId, stackInstanceId);
             return true;
         }
 
@@ -51,7 +49,7 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, PackedCom
 
         if (context.CurrencyType is { } currencyType)
         {
-            ResolveCurrencyDrag(context.ComponentManager, context.OriginEntityId, context.DestinationEntityId, currencyType);
+            ResolveCurrencyDrag(context.OriginEntityId, context.DestinationEntityId, currencyType);
             return true;
         }
 
@@ -62,10 +60,10 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, PackedCom
     /// Implements the trade window's drag-drop eligibility rules, one branch per origin/destination
     /// pairing.
     /// </summary>
-    private void ResolveItemDrag(ComponentManager componentManager, int originEntityId, int destinationEntityId, uint stackInstanceId)
+    private void ResolveItemDrag(int originEntityId, int destinationEntityId, uint stackInstanceId)
     {
-        var originIsShop = shopPool.Has(originEntityId);
-        var destinationIsShop = shopPool.Has(destinationEntityId);
+        var originIsShop = shopView.IsShop(originEntityId);
+        var destinationIsShop = shopView.IsShop(destinationEntityId);
         var isOriginTradePlayer = mapViewState.ReservedEntityIds?.TradeOfferPlayerEntityId == originEntityId;
         var isOriginTradeShop = mapViewState.ReservedEntityIds?.TradeOfferShopEntityId == originEntityId;
         var isDestinationTradePlayer = mapViewState.ReservedEntityIds?.TradeOfferPlayerEntityId == destinationEntityId;
@@ -90,7 +88,7 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, PackedCom
         // real transaction; force a plain transfer instead of TryBuyFromShop/TrySellToShop below.
         if ((originIsShop && isDestinationTradeShop) || (isOriginTradeShop && destinationIsShop))
         {
-            InventoryActions.TryTransferStack(componentManager, itemCatalog, originEntityId, destinationEntityId, stackInstanceId, playerQuery);
+            inventoryCommands.TryTransferStack(originEntityId, destinationEntityId, stackInstanceId);
             return;
         }
 
@@ -102,10 +100,10 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, PackedCom
         if (isOriginTradePlayer && destinationIsShop)
         {
             var realPlayerEntityId = playerQuery.PlayerEntityId;
-            if (InventoryActions.TryTransferStack(componentManager, itemCatalog, originEntityId, realPlayerEntityId, stackInstanceId, playerQuery) &&
-                !ShopActions.TrySellToShop(componentManager, itemCatalog, realPlayerEntityId, destinationEntityId, stackInstanceId, playerQuery))
+            if (inventoryCommands.TryTransferStack(originEntityId, realPlayerEntityId, stackInstanceId) &&
+                !shopCommands.TrySellToShop(realPlayerEntityId, destinationEntityId, stackInstanceId))
             {
-                InventoryActions.TryTransferStack(componentManager, itemCatalog, realPlayerEntityId, originEntityId, stackInstanceId, playerQuery);
+                inventoryCommands.TryTransferStack(realPlayerEntityId, originEntityId, stackInstanceId);
             }
 
             return;
@@ -119,10 +117,10 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, PackedCom
         // drag already does; undone if the purchase itself fails.
         if (isOriginTradeShop && mapViewState.OpenShopEntityId is { } realShopEntityId)
         {
-            if (InventoryActions.TryTransferStack(componentManager, itemCatalog, originEntityId, realShopEntityId, stackInstanceId, playerQuery) &&
-                !ShopActions.TryBuyFromShop(componentManager, itemCatalog, destinationEntityId, realShopEntityId, stackInstanceId, playerQuery))
+            if (inventoryCommands.TryTransferStack(originEntityId, realShopEntityId, stackInstanceId) &&
+                !shopCommands.TryBuyFromShop(destinationEntityId, realShopEntityId, stackInstanceId))
             {
-                InventoryActions.TryTransferStack(componentManager, itemCatalog, realShopEntityId, originEntityId, stackInstanceId, playerQuery);
+                inventoryCommands.TryTransferStack(realShopEntityId, originEntityId, stackInstanceId);
             }
 
             return;
@@ -141,7 +139,7 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, PackedCom
         // Whatever's left is a plain stage/unstage between a trade column and an ordinary, non-shop
         // inventory (Player Inventory <-> Trade: player column) -- no transaction, just a stack
         // moving between two entities' own InventoryItemStackComponent pools.
-        InventoryActions.TryTransferStack(componentManager, itemCatalog, originEntityId, destinationEntityId, stackInstanceId, playerQuery);
+        inventoryCommands.TryTransferStack(originEntityId, destinationEntityId, stackInstanceId);
     }
 
     /// <summary>
@@ -154,7 +152,7 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, PackedCom
     /// two columns" rule the item eligibility table already established, extended to currency for
     /// consistency even though no pricing forces it here.
     /// </summary>
-    private void ResolveCurrencyDrag(ComponentManager componentManager, int originEntityId, int destinationEntityId, CurrencyType currencyType)
+    private void ResolveCurrencyDrag(int originEntityId, int destinationEntityId, CurrencyType currencyType)
     {
         var isOriginTradePlayer = mapViewState.ReservedEntityIds?.TradeOfferPlayerEntityId == originEntityId;
         var isOriginTradeShop = mapViewState.ReservedEntityIds?.TradeOfferShopEntityId == originEntityId;
@@ -171,7 +169,7 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, PackedCom
 
         if (isPlayerStageUnstage || isShopStageUnstage)
         {
-            CurrencyActions.TryTransfer(componentManager, originEntityId, destinationEntityId, currencyType);
+            currencyCommands.TryTransfer(originEntityId, destinationEntityId, currencyType);
         }
     }
 }

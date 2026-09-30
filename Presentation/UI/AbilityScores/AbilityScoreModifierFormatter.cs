@@ -1,10 +1,8 @@
-using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Game.Modules.AbilityScores;
-using Game.Modules.AbilityScores.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
-using Presentation.UI;
+using Game.Views;
 
 namespace Presentation.UI.AbilityScores;
 
@@ -19,22 +17,14 @@ namespace Presentation.UI.AbilityScores;
 public static class AbilityScoreModifierFormatter
 {
     /// <param name="now">The current simulation frame -- each modifier stores an absolute expiry frame (StatModifierComponent.ExpiresAtFrame), so "how long is left" only exists relative to this.</param>
-    public static IReadOnlyList<ModifierDisplayLine> GetOrderedLines(ComponentManager componentManager, int entityId, AbilityScoreType type, long now)
+    public static IReadOnlyList<ModifierDisplayLine> GetOrderedLines(AbilityScoreView abilityScoreView, StatModifierView statModifierView, int entityId, AbilityScoreType type, long now)
     {
-        var lines = new List<ModifierDisplayLine> { new($"Base : {GetBaseValue(componentManager, entityId, type)}", Source: null, RemainingDurationFrames: null) };
+        var lines = new List<ModifierDisplayLine> { new($"Base : {GetBaseValue(abilityScoreView, entityId, type)}", Source: null, RemainingDurationFrames: null) };
 
         var target = AbilityScoreMath.ToStatModifierTarget(type);
-        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
-
         var modifiers = new List<StatModifierComponent>();
-        for (var denseIndex = statModifiers.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = statModifiers.GetNextDenseIndex(denseIndex))
-        {
-            var modifier = statModifiers.GetReadonlyByDenseIndex(denseIndex);
-            if (modifier.Target == target)
-            {
-                modifiers.Add(modifier);
-            }
-        }
+        statModifierView.CopyStatModifiers(entityId, modifiers);
+        modifiers.RemoveAll(modifier => modifier.Target != target);
 
         // OrderBy/ThenBy are stable, unlike List<T>.Sort -- ties (same Operation, same sign)
         // keep the dense-chain order they were found in, since no further ordering was specified.
@@ -50,8 +40,8 @@ public static class AbilityScoreModifierFormatter
         return lines;
     }
 
-    private static ushort GetBaseValue(ComponentManager componentManager, int entityId, AbilityScoreType type) =>
-        AbilityScoreQueries.TryGetComponent(componentManager.GetPackedPool<AbilityScoresComponent>(), entityId, type, out var component)
+    private static ushort GetBaseValue(AbilityScoreView abilityScoreView, int entityId, AbilityScoreType type) =>
+        abilityScoreView.TryGetAbilityScore(entityId, type, out var component)
             ? component.BaseValue
             : throw new InvalidOperationException($"No {type} ability score for entity {entityId}.");
 

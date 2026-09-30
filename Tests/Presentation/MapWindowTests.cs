@@ -1,5 +1,3 @@
-using Engine.ECS.Systems;
-using Game.Blueprints;
 using Engine.ECS.Components;
 using Engine.Events;
 using Engine.Math;
@@ -17,14 +15,12 @@ using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Shops.Components;
 using Game.Modules.StatusEffectAura.Components;
+using Game.Views;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI;
-using Presentation.UI.FloatingText;
-using Game.Modules.AbilityScores.Components;
-using Game.Modules.Mana.Components;
 
 namespace Tests.Presentation;
 
@@ -40,7 +36,7 @@ namespace Tests.Presentation;
 [DoNotParallelize]
 public sealed class MapWindowTests
 {
-    private const int PlayerEntityId = 1;
+    private const int PlayerEntityId = TestMapWindows.PlayerEntityId;
 
     /// <summary>Mirrors MapCamera.BaseTileSizePixels (Team zoom) -- kept as its own constant here so every tile-size-derived literal below is computed from one place instead of a second hand-copied magic number.</summary>
     private const int TileSizePixels = 36;
@@ -70,7 +66,7 @@ public sealed class MapWindowTests
     private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager) BuildMapWindowWithPlayer(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int playerPosition) =>
         BuildMapWindowCore(mapSizeX, mapSizeY, mapSizeZ, playerPosition);
 
-    /// <summary>Gives the player an ActionLockComponent that has already cleared -- PlayerInputBuffer only writes a command once ActionLockGate reads the player as free, and a missing component reads as locked.</summary>
+    /// <summary>Gives the player an ActionLockComponent that has already cleared -- PlayerCommands only writes a command once ActionLockGate reads the player as free, and a missing component reads as locked.</summary>
     private static void UnlockPlayer(ComponentManager componentManager) =>
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
@@ -94,75 +90,8 @@ public sealed class MapWindowTests
 
     private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager) BuildMapWindowCore(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int? playerPosition, ActionCatalog? actionCatalog = null, ItemCatalog? itemCatalog = null)
     {
-        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(mapSizeX, mapSizeY, mapSizeZ)));
-        var mapViewState = new MapViewState();
-        var fontService = TestFonts.Shared;
-        var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
-
-        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(100, 50));
-
-        if (playerPosition is { } position)
-        {
-            TestTransforms.Set(componentManager, PlayerEntityId, new TransformComponent(position, new Vector2Byte(1, 1)));
-            componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
-            // Fully unlocked -- these tests are about arm/target/confirm behavior, not the Expansion lock itself, so default to every slot being usable rather than incidentally locking out whichever slot a given test happens to bind to.
-            componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 20));
-            world.PlayerEntityId = PlayerEntityId;
-        }
-
-        var resolvedActionCatalog = actionCatalog ?? new ActionCatalog();
-        var resolvedItemCatalog = itemCatalog ?? new ItemCatalog();
-        var camera = new MapCamera(world);
-        var eventBus = new EventBus();
-        var inputBuffer = new PlayerInputBuffer(
-            world,
-            componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetPackedPool<MovementComponent>(),
-            componentManager.GetPackedPool<ActionLockComponent>(),
-            componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
-            new Engine.ECS.Systems.SimulationClock(),
-            eventBus);
-        var actionTargeting = new ActionTargetingController(
-            world,
-            mapViewState,
-            camera,
-            new UiLayerStack(),
-            resolvedActionCatalog,
-            resolvedItemCatalog,
-            componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
-            componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
-            componentManager.GetMultiPool<InventoryItemStackComponent>(),
-            componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetPackedPool<ActionLockComponent>(),
-            inputBuffer,
-            componentManager.GetPackedPool<ManaComponent>(),
-            componentManager.GetPackedPool<AbilityScoresComponent>(), simulationClock: new SimulationClock());
-        var playerMovement = new PlayerMovementController(inputBuffer);
-
-        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
-
-        var terrain = new Game.Terrain.TerrainRegistry();
-        var mapView = new Game.Views.MapViewQuery(world, componentManager, resolvedActionCatalog, terrain, creatures: new BlueprintRegistry(), new SimulationClock());
-        var playerActionGate = new Game.Views.PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), world, new Engine.ECS.Systems.SimulationClock());
-        var tintGrid = new MapTintGrid(componentManager, world, terrain, eventBus);
-
-        var floatingTextController = new FloatingTextController(eventBus, new SimulationClock());
-        var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, fontService, new Game.Modules.StatusEffects.StatusEffectDisplayRegistry(), new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new LabelRenderer());
-
-        windowService.RegisterFactory<MapWindow>(() => new MapWindow(
-            fontService, windowService, mapView, playerActionGate, mapViewState, tintGrid, eventBus, new TileRenderer(), new LabelRenderer(),
-            new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer));
-
-        var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { Size = new Vector2(1256, 776), DisplayMode = ElementDisplayMode.Fixed },
-        });
-        mapWindow.Initialize();
-
-        return (world, mapViewState, mapWindow, componentManager);
+        var harness = TestMapWindows.Create(mapSizeX, mapSizeY, mapSizeZ, playerPosition, actionCatalog, itemCatalog);
+        return (harness.World, harness.MapViewState, harness.MapWindow, harness.ComponentManager);
     }
 
     [TestMethod]
@@ -274,7 +203,7 @@ public sealed class MapWindowTests
 
     /// <summary>
     /// WASD moves the player character (through MovementComponent.NextMapPosition, like any
-    /// other entity -- see PlayerInputBuffer.Flush), not the camera. A fresh press moves
+    /// other entity -- see PlayerCommands.Flush), not the camera. A fresh press moves
     /// immediately (no initial delay), but the camera must not recenter until the queued move
     /// actually lands -- MovementSystem applies it later (possibly much later, if the player's
     /// action lock is still counting down from a previous move), and snapping the camera ahead
@@ -344,7 +273,7 @@ public sealed class MapWindowTests
         Assert.AreEqual(new Vector3Int(102, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition);
     }
 
-    /// <summary>MovementSystem's TryMoveToNextMapPosition never re-validates bounds/occupancy for MovementMode.PlayerControlled -- PlayerInputBuffer must reject an off-map candidate itself before ever writing NextMapPosition.</summary>
+    /// <summary>MovementSystem's TryMoveToNextMapPosition never re-validates bounds/occupancy for MovementMode.PlayerControlled -- PlayerCommands must reject an off-map candidate itself before ever writing NextMapPosition.</summary>
     [TestMethod]
     public void HandleHotkeys_PressingA_AtMapEdge_DoesNotQueueAnOffMapMove()
     {

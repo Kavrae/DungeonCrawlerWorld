@@ -1,62 +1,21 @@
-﻿using Engine.ECS.Context;
-using Engine.ECS.Systems;
-using Engine.Math;
+using Game.Admin;
+using Game.Bootstrap;
 using Game.Diagnostics;
 using Game.Floors;
-using Game.Modules.Actions;
-using Game.Modules.Inventory;
-using Game.Modules.ProcessingTier;
-using Game.Modules.StatusEffects;
-using Game.World;
 
 namespace DungeonCrawlerWorld;
 
-/// <summary>
-/// Bundles the world/simulation state GameLoop needs across Initialize/Update -- World, the ECS
-/// context modules run against, and the composition-root-owned pieces around them (MathUtility,
-/// the buffered EntityMovedEvent queue, the Crawler-number allocator, the player activity log).
-/// ActionCatalog/ItemCatalog ride along too even though GameLoop itself only ever hands them
-/// straight to ShellBootstrapper.Build -- absorbing WorldSessionBootstrapper's own
-/// GameBootstrapResult here means GameLoop never needs to keep that intermediate result around
-/// itself.
-///
-/// Mirrors PresentationContext/ShellContext's own shape (an immutable bundle produced by a single
-/// Build call) -- the one this one doesn't share with those two is that it's built from a real
-/// multi-step sequence with a genuine internal ordering constraint (the Map must exist before
-/// WorldSessionBootstrapper's own GameBootstrapper.Build call, and PlayerActivityLog must
-/// subscribe before CreatePlayer publishes the player's spawn EntityMovedEvent), not just several
-/// independently constructed services.
-///
-/// Disposing it ends the session: the EcsContext first (EngineHooks.Sessions hears it while the pools
-/// are intact), then the player activity log.
-/// </summary>
+/// <summary>The game session GameLoop simulates, plus the pieces around it that only this app owns.</summary>
+/// <remarks>Disposing it ends the session: the EcsContext first (EngineHooks.Sessions hears it while the pools are intact), then the player activity log.</remarks>
 public sealed record WorldSessionContext(
-    World World,
-    EcsContext EcsContext,
-    MathUtility MathUtility,
-    FrameEventBuffer<EntityMovedEvent> MovedEntities,
-    UniqueNumberAllocator CrawlerNumberAllocator,
-    ActionCatalog ActionCatalog,
-    ItemCatalog ItemCatalog,
-    Game.Modules.Lootboxes.LootboxCatalog LootboxCatalog,
-    Game.Modules.Lootboxes.LootboxOpener LootboxOpener,
+    GameSession GameSession,
     PlayerActivityLog PlayerActivityLog,
-    StatusEffectDisplayRegistry StatusEffectDisplays,
-    ReservedEntityIds ReservedEntityIds,
-    LocalTierRoster LocalTierRoster,
-    Game.Terrain.TerrainRegistry Terrain,
-    NeighborhoodRecords NeighborhoodRecords,
-    NeighborhoodStreamer NeighborhoodStreamer,
-    Game.Blueprints.BlueprintRegistry Definitions,
-    Game.Spawning.SpawnRecordRebuilder SpawnRecordRebuilder,
-    Game.Spawning.CreatureSkeletons Skeletons,
-    Game.Spawning.EntityFactory Factory,
-    EntityTeleporter Teleporter,
-    ProcessingTierResolver TierResolver) : IDisposable
+    AdminTools AdminTools,
+    ReservedEntityIds ReservedEntityIds) : IDisposable
 {
     public void Dispose()
     {
-        EcsContext.Dispose();
+        GameSession.EcsContext.Dispose();
         PlayerActivityLog.Dispose();
     }
 }

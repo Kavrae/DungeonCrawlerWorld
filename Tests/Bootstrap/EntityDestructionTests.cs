@@ -20,8 +20,8 @@ public sealed class EntityDestructionTests
         var map = new Map(new Vector3Int(40, 40, 3));
         var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
         var world = result.World;
-        result.ProcessingTierResolver.SetReferencePosition(new Vector3Int(1, 1, (int)MapLayer.Ground));
-        return (world, result.EcsContext, result.ProcessingTierResolver);
+        result.Internals.ProcessingTierResolver.SetReferencePosition(new Vector3Int(1, 1, (int)MapLayer.Ground));
+        return (world, result.EcsContext, result.Internals.ProcessingTierResolver);
     }
 
     [TestMethod]

@@ -1,10 +1,8 @@
-using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Utilities;
 using Game.Modules.AbilityScores;
-using Game.Modules.AbilityScores.Components;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
+using Game.Views;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
@@ -29,7 +27,7 @@ namespace Presentation.UI.AbilityScores;
 /// self-contained here rather than routed through UiInputController since nothing else needs to
 /// know about it.
 /// </summary>
-public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, ComponentManager componentManager, SimulationClock simulationClock)
+public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, AbilityScoreView abilityScoreView, StatModifierView statModifierView, SimulationClock simulationClock)
     : Window(fontService, elementPoolService, labelRenderer)
 {
     private const float HeaderHeight = 50f;
@@ -336,7 +334,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
         _columnHeaders[index].Configure(type, GetTotal(type), new Vector2(listWindow.CurrentSize.X, HeaderHeight));
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(componentManager, _entityId, type, simulationClock.CurrentFrame);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(abilityScoreView, statModifierView, _entityId, type, simulationClock.CurrentFrame);
         for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
         {
             if (NeedsSeparatorBefore(lines, lineIndex))
@@ -385,12 +383,12 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     }
 
     private ushort GetTotal(AbilityScoreType type) =>
-        AbilityScoreQueries.TryGetComponent(componentManager.GetPackedPool<AbilityScoresComponent>(), _entityId, type, out var component)
+        abilityScoreView.TryGetAbilityScore(_entityId, type, out var component)
             ? component.Total
             : throw new InvalidOperationException($"No {type} ability score for entity {_entityId}.");
 
-    private uint GetAbilityScoreVersion() => componentManager.GetPackedPool<AbilityScoresComponent>().GetVersion(_entityId);
+    private uint GetAbilityScoreVersion() => abilityScoreView.GetVersion(_entityId);
 
     private uint GetStatModifierVersion() =>
-        componentManager.GetMultiPool<StatModifierComponent>().GetEntityVersion(_entityId);
+        statModifierView.GetVersion(_entityId);
 }

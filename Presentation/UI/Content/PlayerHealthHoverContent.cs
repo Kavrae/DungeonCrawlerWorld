@@ -1,8 +1,7 @@
-using Engine.ECS.Components.Stores;
 using FontStashSharp;
 using Game.Modules.Health;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -28,7 +27,7 @@ public sealed class PlayerHealthHoverContent(
     World world,
     EntityBodyParts bodyParts,
     FontService fontService,
-    MultiComponentPool<StatModifierComponent> statModifiers) : IElementContent
+    StatModifierView statModifierView) : IElementContent
 {
     /// <summary>Up to 6 body parts -- the player is always the Human race today (see PlayerHealthBarContent's own doc comment), so this doesn't need to grow/shrink with the entity's actual part count.</summary>
     public const int MaxRowCount = 6;
@@ -90,7 +89,7 @@ public sealed class PlayerHealthHoverContent(
 
         foreach (var part in bodyParts.Parts(playerEntityId))
         {
-            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, playerEntityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+            var effectiveMaximumHealth = statModifierView.GetEffectiveValue(playerEntityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
             var partFraction = effectiveMaximumHealth > 0 ? MathHelper.Clamp(part.CurrentHealth / effectiveMaximumHealth, 0f, 1f) : 0f;
             destination.Add(new RowData(part.Name, partFraction, effectiveMaximumHealth > 0));
         }

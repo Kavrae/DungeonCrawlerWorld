@@ -1,7 +1,6 @@
-using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
+using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
@@ -20,7 +19,7 @@ namespace Presentation.UI.Inventory;
 /// </summary>
 public sealed class ItemComparisonController(
     ElementPoolService elementPoolService,
-    ComponentManager componentManager,
+    InventoryView inventoryView,
     ItemCatalog itemCatalog,
     InventoryWindowController inventoryWindowController,
     ContextMenuController contextMenuController,
@@ -31,8 +30,6 @@ public sealed class ItemComparisonController(
 {
     /// <summary>Shown at the cursor for as long as IsArmed -- see Arm/Disarm/ClearComparison.</summary>
     private const string SelectNextItemMessage = "Select next item...";
-
-    private readonly MultiComponentPool<InventoryItemStackComponent> _stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
 
     /// <summary>The additional compared items, anchor excluded -- index-aligned with _columns.</summary>
     private readonly List<(int EntityId, uint StackInstanceId)> _entries = [];
@@ -116,7 +113,7 @@ public sealed class ItemComparisonController(
         }
 
         if (mapViewState.CompareRequiredActivatorType is not { } requiredType ||
-            !InventoryQueries.TryFindByStackInstanceId(_stacks, entityId, stackId, out var stack) ||
+            !inventoryView.TryGetStack(entityId, stackId, out var stack) ||
             !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition) ||
             definition.Activator?.GetType() != requiredType)
         {
@@ -162,7 +159,7 @@ public sealed class ItemComparisonController(
         _entries.Clear();
     }
 
-    /// <summary>Called by ShellBootstrapper's own onItemSelected dispatcher before a normal (non-armed) click opens a different item in ItemDetailsWindowController -- clears any active comparison first if the newly-clicked item genuinely differs from whatever's currently the anchor. A no-op both when nothing is active and when the click just re-selects the item already shown.</summary>
+    /// <summary>Called by ItemWindowCoordinator's own item-click dispatcher before a normal (non-armed) click opens a different item in ItemDetailsWindowController -- clears any active comparison first if the newly-clicked item genuinely differs from whatever's currently the anchor. A no-op both when nothing is active and when the click just re-selects the item already shown.</summary>
     public void ClearIfAnchorChanging(int entityId, uint stackId)
     {
         if (_entries.Count == 0 && !IsArmed)
@@ -200,7 +197,7 @@ public sealed class ItemComparisonController(
         for (var i = _entries.Count - 1; i >= 0; i--)
         {
             var (entityId, stackId) = _entries[i];
-            if (!InventoryQueries.TryFindByStackInstanceId(_stacks, entityId, stackId, out var stack) ||
+            if (!inventoryView.TryGetStack(entityId, stackId, out var stack) ||
                 !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out _))
             {
                 _entries.RemoveAt(i);
@@ -216,7 +213,7 @@ public sealed class ItemComparisonController(
         var definitions = new List<ItemDefinition>(_entries.Count);
         foreach (var (entityId, stackId) in _entries)
         {
-            InventoryQueries.TryFindByStackInstanceId(_stacks, entityId, stackId, out var stack);
+            inventoryView.TryGetStack(entityId, stackId, out var stack);
             InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition);
             definitions.Add(definition);
         }

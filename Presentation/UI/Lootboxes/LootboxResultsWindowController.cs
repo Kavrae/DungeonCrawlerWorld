@@ -38,7 +38,7 @@ public sealed class LootboxResultsWindowController(
     /// <summary>What the open window currently shows, if anything.</summary>
     public LootboxResultsContent? Content { get; private set; }
 
-    /// <summary>Settable late-bound callback for "the player clicked a reward" -- wired by ShellBootstrapper to Item Details.</summary>
+    /// <summary>Settable late-bound callback for "the player clicked a reward" -- wired by ItemWindowCoordinator to Item Details.</summary>
     public Action<GrantedItem>? OnRewardClicked { get; set; }
 
     public void Initialize(UiLayerStack layers) => _layers = layers;

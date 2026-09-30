@@ -202,7 +202,10 @@ Stop after each phase for in-game testing.
 - An NPC's refused attempt blocks all its corpse looting for 30 s (per NPC, not per corpse). Revisit
   with the future NPC behavior composition work.
 - Currency counts toward the loot badge.
-- Looting merges into equivalent stacks (player and NPC); give/shop/trade transfers don't.
+- Looting merges into equivalent stacks (player and NPC); give/shop/trade transfers don't -- except that a
+  completed purchase (a shop buy, or a completed trade's shop column) merges into the player's equivalent
+  stack via `InventoryActions.MergeIntoEquivalentStack` (2026-09-29): a bought item the player already
+  carried otherwise became an unbindable Merged Stack cell.
 
 ## Comparison with industry practice
 

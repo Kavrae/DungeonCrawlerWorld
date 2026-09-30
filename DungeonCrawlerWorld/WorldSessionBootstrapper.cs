@@ -57,25 +57,25 @@ public static class WorldSessionBootstrapper
             map = FloorBuilder.CreateMap(floorNumber, mapSizeOverride);
         }
 
-        GameBootstrapResult bootstrapResult;
+        GameSession gameSession;
         using (EngineHooks.DiagnosticScope("Module Load"))
         {
-            bootstrapResult = GameBootstrapper.Build(validatedMods, map, mathUtility, initialEntityCapacity, initialComponentCapacity, crawlerNumberAllocator, runtimeSpawnSeed: (uint)randomSeed, settingsSources: settingsSources);
+            gameSession = GameBootstrapper.Build(validatedMods, map, mathUtility, initialEntityCapacity, initialComponentCapacity, crawlerNumberAllocator, runtimeSpawnSeed: (uint)randomSeed, settingsSources: settingsSources);
         }
 
-        var ecsContext = bootstrapResult.EcsContext;
-        var world = bootstrapResult.World;
+        var ecsContext = gameSession.EcsContext;
+        var world = gameSession.World;
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
         var reservedEntityIds = FloorBuilder.ReserveTradeOfferEntities(ecsContext);
 
 
-        foreach (var failure in bootstrapResult.Failures)
+        foreach (var failure in gameSession.ModuleFailures)
         {
             Console.Error.WriteLine($"[ModuleLoad] {failure.Source}: {failure.Exception}");
         }
 
-        foreach (var failure in bootstrapResult.SettingsFailures)
+        foreach (var failure in gameSession.SettingsFailures)
         {
             Console.Error.WriteLine($"[Settings] {failure.Source}: {failure.Setting}: {failure.Message}");
         }
@@ -86,7 +86,7 @@ public static class WorldSessionBootstrapper
         // (see FloorBuilder.CreatePlayer's own comment on why both exist). Population itself
         // (PopulateFloor, just below) never publishes EntityMovedEvent this way -- only the
         // buffered path -- so subscribing this early doesn't log anything spurious.
-        var playerActivityLog = new PlayerActivityLog(world, ecsContext.ComponentManager, ecsContext.EventBus, ecsContext.SystemManager.Clock, playerActivityLogFilePath, bootstrapResult.Definitions);
+        var playerActivityLog = new PlayerActivityLog(world, ecsContext.ComponentManager, ecsContext.EventBus, ecsContext.SystemManager.Clock, playerActivityLogFilePath, gameSession.Catalogs.Definitions);
         Console.WriteLine($"[PlayerActivityLog] Writing to {playerActivityLogFilePath}");
 
         // The tier reference is set to where the player is aimed at spawning BEFORE population, so
@@ -94,7 +94,7 @@ public static class WorldSessionBootstrapper
         // being tiered and then migrated. The player lands on the nearest free cell to this after
         // population; ProcessingTierSystem's first update treats any difference as an ordinary
         // player move and walks the Local boundary.
-        var tierResolver = bootstrapResult.ProcessingTierResolver;
+        var tierResolver = gameSession.Internals.ProcessingTierResolver;
         tierResolver.SetReferencePosition(FloorBuilder.PlayerSpawnOrigin());
         if (!world.Map.IsBounded)
         {
@@ -103,12 +103,12 @@ public static class WorldSessionBootstrapper
 
         using (EngineHooks.DiagnosticScope("Entity Population"))
         {
-            FloorBuilder.PopulateFloor(world, ecsContext, neighborhoodRecords, bootstrapResult.Factory, bootstrapResult.Terrain, bootstrapResult.Definitions);
+            FloorBuilder.PopulateFloor(world, ecsContext, neighborhoodRecords, gameSession.Internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Definitions);
         }
 
         using (EngineHooks.DiagnosticScope("Player Spawn"))
         {
-            FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, bootstrapResult.Factory, bootstrapResult.Definitions, playerEntityId, tierResolver);
+            FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, gameSession.Internals.Factory, gameSession.Catalogs.Definitions, playerEntityId, tierResolver);
             world.PlayerEntityId = playerEntityId;
 
             ecsContext.EventBus.Publish(new EnteredDungeonEvent());
@@ -144,7 +144,7 @@ public static class WorldSessionBootstrapper
         // First in the frame: its population records spawns into the moved-entities buffer the other
         // systems read later the same frame.
         var neighborhoodStreamer = new NeighborhoodStreamer(world, ecsContext.EntityManager, ecsContext.ComponentManager.GetDirectPool<Game.Modules.Core.Components.TransformComponent>(), ecsContext.EventBus, tierResolver, neighborhoodRecords,
-            new Game.TestMapBuilder(ecsContext.EntityManager, bootstrapResult.Factory, bootstrapResult.Terrain, bootstrapResult.Definitions), bootstrapResult.Skeletons);
+            new Game.TestMapBuilder(ecsContext.EntityManager, gameSession.Internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Definitions), gameSession.Internals.Skeletons);
         ecsContext.SystemManager.RegisterFirst(neighborhoodStreamer);
         RegisterStreamerGauges(ecsContext.Gauges, neighborhoodStreamer);
 
@@ -160,7 +160,7 @@ public static class WorldSessionBootstrapper
 
         ecsContext.BeginSession();
 
-        return new WorldSessionContext(world, ecsContext, mathUtility, bootstrapResult.MovedEntities, crawlerNumberAllocator, bootstrapResult.ActionCatalog, bootstrapResult.ItemCatalog, bootstrapResult.LootboxCatalog, bootstrapResult.LootboxOpener, playerActivityLog, bootstrapResult.StatusEffectDisplays, reservedEntityIds, bootstrapResult.LocalTierRoster, bootstrapResult.Terrain, neighborhoodRecords, neighborhoodStreamer, bootstrapResult.Definitions, bootstrapResult.SpawnRecordRebuilder, bootstrapResult.Skeletons, bootstrapResult.Factory, bootstrapResult.Teleporter, bootstrapResult.ProcessingTierResolver);
+        return new WorldSessionContext(gameSession, playerActivityLog, new Game.Admin.AdminTools(gameSession, neighborhoodStreamer), reservedEntityIds);
     }
 
     private static void RegisterStreamerGauges(GaugeRegistry gauges, NeighborhoodStreamer neighborhoodStreamer)

@@ -31,7 +31,7 @@ public sealed class RegisteredComponents<TContext> : EcsBuildStage
 
     public SettingValues Settings => _state.Settings;
 
-    /// <summary>Runs every module's Configure with context, which every module's RegisterSystems then receives.</summary>
+    /// <summary>Runs every module's Configure with context, which every module's RegisterBehavior then receives.</summary>
     public ConfiguredModules<TContext> Configure(TContext context)
     {
         MarkAdvanced();

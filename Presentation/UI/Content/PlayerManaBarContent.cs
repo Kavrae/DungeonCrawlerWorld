@@ -1,8 +1,5 @@
-using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
-using Game.Modules.Mana.Components;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
@@ -20,13 +17,9 @@ namespace Presentation.UI.Content;
 /// ability yet" (see ManaGrant.EnsureManaComponentExists), the same fallback treatment
 /// PlayerHealthBarContent gives a hypothetical SimpleHealthComponent-less player.
 /// </summary>
-public sealed class PlayerManaBarContent(World world, ComponentManager componentManager, FontService fontService) : IElementContent
+public sealed class PlayerManaBarContent(World world, ActionStateView actionStateView, StatModifierView statModifierView, FontService fontService) : IElementContent
 {
     public static readonly Vector2 Size = PlayerHealthBarContent.Size;
-
-    private readonly PackedComponentPool<ManaComponent> _manaPool = componentManager.GetPackedPool<ManaComponent>();
-
-    private readonly MultiComponentPool<StatModifierComponent> _statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
 
     private readonly ResourceBarValueText _valueText = new();
 
@@ -44,7 +37,7 @@ public sealed class PlayerManaBarContent(World world, ComponentManager component
     public void Update(GameTime gameTime)
     {
         var playerEntityId = world.PlayerEntityId;
-        if (playerEntityId < 0 || !_manaPool.TryGetReadonly(playerEntityId, out var mana) || mana.MaximumMana <= 0)
+        if (playerEntityId < 0 || !actionStateView.TryGetMana(playerEntityId, out var mana) || mana.MaximumMana <= 0)
         {
             _hasMana = false;
             _manaFraction = 1f;
@@ -52,7 +45,7 @@ public sealed class PlayerManaBarContent(World world, ComponentManager component
         }
 
         _hasMana = true;
-        var effectiveMaximumMana = StatModifierMath.GetEffectiveValue(_statModifiers, playerEntityId, StatModifierTarget.MaximumMana, mana.MaximumMana);
+        var effectiveMaximumMana = statModifierView.GetEffectiveValue(playerEntityId, StatModifierTarget.MaximumMana, mana.MaximumMana);
         _manaFraction = effectiveMaximumMana > 0
             ? MathHelper.Clamp(mana.CurrentMana / effectiveMaximumMana, 0f, 1f)
             : 1f;

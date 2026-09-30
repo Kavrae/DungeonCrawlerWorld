@@ -1,17 +1,10 @@
 ﻿using Engine.Diagnostics;
 using Engine.ECS.Context;
-using Game.Floors;
-using Game.Modules.AbilityScores.Components;
-using Game.Modules.Actions;
-using Game.Modules.Actions.Components;
-using Game.Modules.Core.Components;
-using Game.Modules.Health;
-using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
-using Game.Modules.Mana.Components;
+using Engine.Events;
+using Game.Bootstrap;
 using Game.Modules.Movement.Components;
-using Game.Modules.StatusEffects;
 using Game.Notifications;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -23,11 +16,7 @@ using Presentation.UI.Chrome;
 using Presentation.UI.Content;
 using Presentation.UI.Diagnostics;
 using Presentation.UI.Inventory;
-using Presentation.UI.Looting;
-using Presentation.UI.Lootboxes;
 using Presentation.UI.Notifications;
-using Presentation.UI.Shops;
-using Presentation.UI.Trade;
 
 namespace DungeonCrawlerWorld;
 
@@ -37,7 +26,7 @@ public static class ShellBootstrapper
 {
     /// <summary>Builds the game shell context.</summary>
     /// <param name="presentation"></param>
-    /// <param name="worldSession">Bundles World/EcsContext/ActionCatalog/ItemCatalog/StatusEffectDisplays -- passed through as one object, not destructured at the call site, since GameLoop has exactly one caller and every field here already exists for GameLoop's own sake (see WorldSessionContext's own doc comment).</param>
+    /// <param name="worldSession">The game session the shell shows, and the app-owned pieces around it.</param>
     /// <param name="screenSize"></param>
     /// <param name="diagnostics">What the Diagnostics window (F3) reads its rates, gauges and leak findings from; null shows only what the window reads from the session itself.</param>
     /// <returns></returns>
@@ -45,118 +34,59 @@ public static class ShellBootstrapper
     {
         HudChrome.ResolveLayout(screenSize);
 
-        var world = worldSession.World;
-        var ecsContext = worldSession.EcsContext;
-        var actionCatalog = worldSession.ActionCatalog;
-        var itemCatalog = worldSession.ItemCatalog;
-        var statusEffectDisplays = worldSession.StatusEffectDisplays;
+        var gameSession = worldSession.GameSession;
+        var world = gameSession.World;
+        var ecsContext = gameSession.EcsContext;
+        var catalogs = gameSession.Catalogs;
+        var views = gameSession.Views;
+        var commands = gameSession.Commands;
 
-        var uiLayers = new UiLayerStack();
-        var componentManager = ecsContext.ComponentManager;
-        var mapViewState = new MapViewState { ReservedEntityIds = worldSession.ReservedEntityIds };
-        var camera = new MapCamera(world);
-        var playerInputBuffer = new PlayerInputBuffer(
-            world,
-            componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetPackedPool<MovementComponent>(),
-            componentManager.GetPackedPool<ActionLockComponent>(),
-            componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
-            ecsContext.SystemManager.Clock,
-            ecsContext.EventBus);
+        var pointerState = new PointerState();
+        var shellServices = new ShellServices(
+            new UiLayerStack(),
+            new MapViewState { ReservedEntityIds = worldSession.ReservedEntityIds },
+            new MapCamera(world),
+            new ContextMenuController(presentation.ElementPoolService),
+            new TooltipController(),
+            pointerState,
+            new CursorTextContent(pointerState, presentation.FontService, presentation.LabelRenderer));
+        var uiLayers = shellServices.Layers;
+        var mapViewState = shellServices.MapViewState;
+        var contextMenuController = shellServices.ContextMenuController;
+        var tooltipController = shellServices.TooltipController;
+
         var actionTargetingController = new ActionTargetingController(
             world,
             mapViewState,
-            camera,
+            shellServices.Camera,
             uiLayers,
-            actionCatalog,
-            itemCatalog,
-            componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
-            componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
-            componentManager.GetMultiPool<InventoryItemStackComponent>(),
-            componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetPackedPool<ActionLockComponent>(),
-            playerInputBuffer,
-            componentManager.GetPackedPool<ManaComponent>(),
-            componentManager.GetPackedPool<AbilityScoresComponent>(),
-            ecsContext.SystemManager.Clock,
-            worldSession.LocalTierRoster);
-        var playerMovementController = new PlayerMovementController(playerInputBuffer);
+            catalogs.ActionCatalog,
+            catalogs.ItemCatalog,
+            views.TransformView,
+            views.HotkeyBindingView,
+            views.InventoryView,
+            views.ActionStateView,
+            views.AbilityScoreView,
+            commands.PlayerCommands,
+            gameSession.SimulationClock);
+        var playerMovementController = new PlayerMovementController(commands.PlayerCommands);
+        var dragGhostContent = new DragGhostContent(pointerState, world, catalogs.ActionCatalog, catalogs.ItemCatalog, views.InventoryView, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.LabelRenderer);
 
-        //TODO look at pulling these contents into a new context if it continues to grow.
-        var cursorTextContent = new CursorTextContent(presentation.FontService, presentation.LabelRenderer);
-        var dragGhostContent = new DragGhostContent(world, actionCatalog, itemCatalog, componentManager.GetMultiPool<InventoryItemStackComponent>(), presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.LabelRenderer);
-        var contextMenuController = new ContextMenuController(presentation.ElementPoolService);
-        var mapView = new Game.Views.MapViewQuery(world, componentManager, actionCatalog, worldSession.Terrain, worldSession.Definitions, ecsContext.SystemManager.Clock);
-        var bodyParts = EntityBodyParts.For(componentManager, worldSession.Definitions);
-
-        ElementFactoryRegistry.RegisterAll(presentation, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, bodyParts, worldSession.Definitions, world, worldSession.Terrain, mapView, mapViewState, camera, actionTargetingController, playerMovementController, cursorTextContent, contextMenuController);
+        ElementFactoryRegistry.RegisterAll(presentation, gameSession, worldSession.AdminTools, shellServices, actionTargetingController, playerMovementController);
 
         contextMenuController.Initialize(uiLayers);
-
-        var tooltipController = new TooltipController();
         tooltipController.Initialize(presentation.ElementPoolService, uiLayers);
 
         var mapWindow = BuildBaseWindows(presentation, uiLayers);
-        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, world, mapView, ecsContext, actionCatalog, itemCatalog, statusEffectDisplays, screenSize, mapViewState, uiLayers, worldSession);
-        var (notificationCenter, healthController, inventoryController) = BuildDynamicHudWindows(presentation, world, ecsContext, mapWindow, contextMenuController, uiLayers, tooltipController);
-        var hotbarController = BuildHotbarController(mapViewState, hotbarContent, actionTargetingController, tooltipController);
-        BuildUserWindows(presentation, cursorTextContent, dragGhostContent, uiLayers);
-
-        var abilityScoreController = BuildAbilityScoreWindowController(presentation, world, ecsContext, inventoryController, mapWindow, contextMenuController, uiLayers, tooltipController);
-        var diagnosticsController = BuildDiagnosticsWindowController(presentation, ecsContext, diagnostics, uiLayers);
-        var secondaryInventoryController = BuildSecondaryInventoryWindowController(presentation, ecsContext, inventoryController, contextMenuController, mapWindow, uiLayers, tooltipController);
-        var shopWindowController = BuildShopWindowController(presentation, mapViewState, inventoryController, contextMenuController, mapWindow, uiLayers, tooltipController);
-        var tradeWindowController = BuildTradeWindowController(presentation, inventoryController, shopWindowController, mapWindow, uiLayers, worldSession.ReservedEntityIds, tooltipController);
-        shopWindowController.OnOpened = tradeWindowController.Open;
-        shopWindowController.OnClosed = tradeWindowController.CloseForShopClosed;
-
-        // A corpse/container window and a shop window are never open together -- both cascade off
-        // the same player-inventory-window position (see WindowCascadePlacement.ComputePosition in
-        // OpenLoot/OpenShop), so two open at once would overlap. Opening either force-closes the
-        // other first.
-        mapWindow.OnCorpseClicked = entityId =>
-        {
-            shopWindowController.CloseIfOpen();
-            secondaryInventoryController.OpenLoot(entityId);
-        };
-        mapWindow.OnShopClicked = entityId =>
-        {
-            secondaryInventoryController.CloseIfOpen();
-            shopWindowController.OpenShop(entityId);
-        };
-
-        // OpenTargetEntityId is null on whichever of the two ISN'T currently open (mutual
-        // exclusion above guarantees at most one ever is), so this is never ambiguous.
-        inventoryController.GetSecondaryTargetEntityId = () => secondaryInventoryController.OpenTargetEntityId ?? shopWindowController.OpenTargetEntityId;
+        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, gameSession, screenSize, mapViewState, uiLayers);
         mapWindow.OnInspectionOpened = () => inspectionWindow.SetDisplayMode(ElementDisplayMode.Fixed);
+        var (notificationCenter, healthController) = BuildDynamicHudWindows(presentation, world, ecsContext.EventBus, contextMenuController, uiLayers);
+        var itemWindows = new ItemWindowCoordinator(presentation.ElementPoolService, shellServices, world, mapWindow, actionTargetingController, views.InventoryView, catalogs.ItemCatalog, catalogs.LootboxCatalog, commands.LootCommands, commands.LootboxCommands, worldSession.ReservedEntityIds);
+        var hotbarController = BuildHotbarController(mapViewState, hotbarContent, actionTargetingController, tooltipController);
+        BuildUserWindows(presentation, shellServices.CursorTextContent, dragGhostContent, uiLayers);
 
-        var itemDetailsController = new ItemDetailsWindowController(presentation.ElementPoolService, componentManager, itemCatalog, inventoryController, contextMenuController, mapViewState, mapWindow);
-        itemDetailsController.Initialize(uiLayers);
-        itemDetailsController.GetSecondaryInventoryWindowRectangle = () => secondaryInventoryController.Rectangle != Rectangle.Empty ? secondaryInventoryController.Rectangle : shopWindowController.Rectangle;
-
-        // Separate from the fallback above (not folded into it) -- the trade window opens
-        // alongside the shop window, not instead of it, so both need to be independently
-        // recognized as "inside" at once. See GetTradeWindowRectangle's own doc comment for the
-        // live bug this fixes.
-        itemDetailsController.GetTradeWindowRectangle = () => tradeWindowController.Rectangle;
-
-        mapWindow.NeighborhoodStreamer = worldSession.NeighborhoodStreamer;
-        mapWindow.BlueprintAdmin = new Game.Spawning.BlueprintAdminCommands(worldSession.Factory, worldSession.Definitions);
-        mapWindow.LootboxAdmin = new Game.Modules.Lootboxes.LootboxAdminCommands(componentManager, worldSession.LootboxCatalog, ecsContext.EventBus);
-
-        // An achievement's loot box is granted when the player closes its notification, not when it unlocks.
-        var achievementLootboxClaims = new Game.Modules.Achievements.AchievementLootboxClaims(componentManager, worldSession.LootboxCatalog, ecsContext.EventBus);
-        notificationCenter.NotificationDismissed += notification =>
-        {
-            if (notification.Achievement is { } achievement)
-            {
-                achievementLootboxClaims.TryClaim(world.PlayerEntityId, achievement.AchievementId);
-            }
-        };
-        mapWindow.Teleporter = worldSession.Teleporter;
+        var abilityScoreController = BuildAbilityScoreWindowController(presentation, world, views.InventoryView, itemWindows.Inventory, mapWindow, contextMenuController, uiLayers, tooltipController);
+        var diagnosticsController = BuildDiagnosticsWindowController(presentation, ecsContext, diagnostics, uiLayers);
 
         // A destroyed entity's id is reused straight away, so nothing on screen may keep pointing at
         // it: whatever it was selected in, or open for, lets go before the id means someone else.
@@ -167,90 +97,10 @@ public static class ShellBootstrapper
                 mapViewState.InspectedEntityId = -1;
             }
 
-            if (mapViewState.OpenShopEntityId == entityId)
-            {
-                mapViewState.OpenShopEntityId = null;
-            }
-
-            if (secondaryInventoryController.OpenTargetEntityId == entityId)
-            {
-                secondaryInventoryController.CloseIfOpen();
-            }
-
-            if (shopWindowController.OpenTargetEntityId == entityId)
-            {
-                shopWindowController.CloseIfOpen();
-            }
-
-            if (itemDetailsController.CurrentEntityId == entityId)
-            {
-                itemDetailsController.Close();
-            }
+            itemWindows.ReleaseEntity(entityId);
         };
 
-        // Built after ItemDetailsWindowController (whose single pane it always uses as the
-        // comparison's own anchor -- see ItemComparisonController.Arm) -- one-directional
-        // reference, no construction cycle, the same shape SecondaryInventoryWindowController
-        // already has on InventoryWindowController.
-        var itemComparisonController = new ItemComparisonController(presentation.ElementPoolService, componentManager, itemCatalog, inventoryController, contextMenuController, mapWindow, mapViewState, itemDetailsController, cursorTextContent);
-        itemComparisonController.Initialize(uiLayers);
-        itemDetailsController.GetComparisonColumnRectangles = () => itemComparisonController.ColumnRectangles;
-        itemDetailsController.OnClosed = itemComparisonController.ClearComparison;
-        itemDetailsController.OnCompareRequested = itemComparisonController.Arm; // The anchor pane's own Compare title button -- the second entry point into the same arm flow the "Compare" context-menu option already uses.
-        inventoryController.OnCompareRequested = itemComparisonController.Arm;
-        secondaryInventoryController.OnCompareRequested = itemComparisonController.Arm;
-        shopWindowController.OnCompareRequested = itemComparisonController.Arm;
-
-        // Every grid's own "a real single-stack item cell was clicked" callback now branches
-        // on whether Item Details Comparison is currently armed, instead of always opening the
-        // Item Details pane directly -- see ItemComparisonController.IsArmed/AddOrToggle.
-        void OnItemClicked(int entityId, uint stackInstanceId)
-        {
-            if (itemComparisonController.IsArmed)
-            {
-                itemComparisonController.AddOrToggle(entityId, stackInstanceId);
-            }
-            else
-            {
-                itemComparisonController.ClearIfAnchorChanging(entityId, stackInstanceId);
-                itemDetailsController.Open(entityId, stackInstanceId);
-            }
-        }
-
-        inventoryController.OnItemSelected = OnItemClicked;
-        secondaryInventoryController.OnItemSelected = OnItemClicked;
-        shopWindowController.OnItemSelected = OnItemClicked;
-        tradeWindowController.OnItemSelected = OnItemClicked;
-
-        inventoryController.OnActivateRequested = (_, stackInstanceId) => actionTargetingController.ArmItemFromStack(stackInstanceId);
-        var lootboxResultsController = new LootboxResultsWindowController(presentation.ElementPoolService, worldSession.LootboxCatalog, itemCatalog, tooltipController, contextMenuController, inventoryController, mapWindow, world);
-        lootboxResultsController.Initialize(uiLayers);
-        itemDetailsController.GetLootboxResultsWindowRectangle = () => lootboxResultsController.Rectangle;
-        inventoryController.OnOpenLootboxesRequested = entityId => lootboxResultsController.Show(worldSession.LootboxOpener.OpenAll(entityId));
-
-        // A reward opens Item Details beside the results window: on the stack it landed in while
-        // that still exists, otherwise read-only from its definition.
-        var inventoryStacks = componentManager.GetMultiPool<Game.Modules.Inventory.Components.InventoryItemStackComponent>();
-        lootboxResultsController.OnRewardClicked = reward =>
-        {
-            if (lootboxResultsController.Window is not { } resultsWindow)
-            {
-                return;
-            }
-
-            var playerEntityId = world.PlayerEntityId;
-            itemComparisonController.ClearIfAnchorChanging(playerEntityId, reward.StackInstanceId);
-            if (Game.Modules.Inventory.InventoryQueries.TryFindByStackInstanceId(inventoryStacks, playerEntityId, reward.StackInstanceId, out _))
-            {
-                itemDetailsController.Open(playerEntityId, reward.StackInstanceId, resultsWindow);
-            }
-            else if (itemCatalog.TryGet(reward.ItemDefinitionId, out var rewardDefinition))
-            {
-                itemDetailsController.OpenDefinition(playerEntityId, rewardDefinition, resultsWindow);
-            }
-        };
-
-        var inputController = new UiInputController(uiLayers, screenSize, componentManager, world, ecsContext.EventBus, itemCatalog, hotbarController, contextMenuController, itemDetailsController, itemComparisonController, mapViewState, healthController, inventoryController, abilityScoreController, diagnosticsController);
+        var inputController = new UiInputController(uiLayers, screenSize, pointerState, views.ShopView, world, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, hotbarController, contextMenuController, itemWindows.ItemDetails, itemWindows.ItemComparison, mapViewState, healthController, itemWindows.Inventory, abilityScoreController, diagnosticsController);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 
@@ -258,20 +108,6 @@ public static class ShellBootstrapper
         // while a TextBox (search box, Quest Composer, ...) is focused and receiving the space
         // character as ordinary typed text.
         mapWindow.IsTextInputFocused = () => inputController.IsTextBoxFocused;
-
-        // cursorTextContent/dragGhostContent were built before inputController existed (see
-        // above) -- these two delegate assignments are what actually connects them to live input
-        // state, the same late-binding shape IsTextInputFocused above already uses.
-        cursorTextContent.GetCursorPosition = () => inputController.CurrentMousePosition;
-        dragGhostContent.GetState = () => new DragGhostState(
-            inputController.ContentDragGhostVisible,
-            inputController.ContentDragItemStackInstanceId,
-            inputController.ContentDragMergedItemDefinitionId,
-            inputController.ContentDragActionId,
-            inputController.ContentDragCurrencyType,
-            inputController.ContentDragOriginEntityId,
-            inputController.ContentDragSourceSize,
-            inputController.CurrentMousePosition);
 
         // A notification popping up (fresh, or promoted from the unread queue) takes focus --
         // see NotificationCenter.ActiveNotificationOpened.
@@ -286,7 +122,7 @@ public static class ShellBootstrapper
         // not Base/StaticHUD.
         questTriggerWindow.Clicked += _ => inputController.FocusElement(OpenQuestComposer(presentation.ElementPoolService, notificationCenter, uiLayers));
 
-        return new ShellContext(mapWindow, notificationCenter, inventoryController, abilityScoreController, uiLayers, inputController);
+        return new ShellContext(mapWindow, notificationCenter, itemWindows.Inventory, abilityScoreController, uiLayers, inputController);
     }
 
     /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see UiInputController's own doc comment for what each of the four tiers means. MapWindow's own factory (and every other pooled type's) is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
@@ -318,8 +154,14 @@ public static class ShellBootstrapper
 
     /// <summary>StaticHUD tier: the player health bar, action lock, status effects, InspectionWindow, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent and inspectionWindow are returned too, for BuildHotbarController and Build's own OnInspectionOpened wiring respectively.</summary>
     private static (TextWindow QuestTriggerWindow, HotbarContent HotbarContent, InspectionWindow InspectionWindow) BuildStaticHudWindows(
-        PresentationContext presentation, World world, Game.Views.IMapViewQuery mapView, EcsContext ecsContext, ActionCatalog actionCatalog, ItemCatalog itemCatalog, StatusEffectDisplayRegistry statusEffectDisplays, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers, WorldSessionContext worldSession)
+        PresentationContext presentation, GameSession gameSession, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers)
     {
+        var world = gameSession.World;
+        var ecsContext = gameSession.EcsContext;
+        var catalogs = gameSession.Catalogs;
+        var mapView = gameSession.Views.MapView;
+        var simulationClock = gameSession.SimulationClock;
+
         var playerHealthBarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
@@ -332,7 +174,7 @@ public static class ShellBootstrapper
             // BorderSize left at the default (1,1) -- a thinner outset reads as a subtle bevel rather than a heavy frame.
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        playerHealthBarWindow.SetContent(new PlayerHealthBarContent(world, ecsContext.ComponentManager, EntityBodyParts.For(ecsContext.ComponentManager, worldSession.Definitions), presentation.FontService, layers));
+        playerHealthBarWindow.SetContent(new PlayerHealthBarContent(world, gameSession.Views.HealthView, gameSession.Views.EntityBodyParts, gameSession.Views.StatModifierView, presentation.FontService, layers));
         playerHealthBarWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerHealthBarWindow);
 
@@ -347,7 +189,7 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        playerManaBarWindow.SetContent(new PlayerManaBarContent(world, ecsContext.ComponentManager, presentation.FontService));
+        playerManaBarWindow.SetContent(new PlayerManaBarContent(world, gameSession.Views.ActionStateView, gameSession.Views.StatModifierView, presentation.FontService));
         playerManaBarWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerManaBarWindow);
 
@@ -362,7 +204,7 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        actionLockWindow.SetContent(new ActionLockContent(world, ecsContext.ComponentManager, mapView, presentation.FontService, ecsContext.SystemManager.Clock));
+        actionLockWindow.SetContent(new ActionLockContent(world, gameSession.Views.ActionStateView, mapView, presentation.FontService, simulationClock));
         actionLockWindow.Initialize();
         layers.Add(UiLayer.StaticHud, actionLockWindow);
 
@@ -377,7 +219,7 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = false, CanUserFocus = false },
         });
-        playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, ecsContext.ComponentManager, itemCatalog, presentation.FontService, statusEffectDisplays, ecsContext.SystemManager.Clock));
+        playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, gameSession.Views.ActionStateView, catalogs.ItemCatalog, presentation.FontService, catalogs.StatusEffectDisplays, simulationClock));
         playerStatusEffectsWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerStatusEffectsWindow);
 
@@ -403,7 +245,7 @@ public static class ShellBootstrapper
                 CanUserScrollVertical = true,
             },
         });
-        inspectionWindow.SetContent(new InspectionWindowContent(world, mapView, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, presentation.ElementPoolService, worldSession.Definitions, worldSession.SpawnRecordRebuilder, worldSession.Skeletons));
+        inspectionWindow.SetContent(new InspectionWindowContent(world, mapView, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, presentation.ElementPoolService, catalogs.Definitions, gameSession.Internals.SpawnRecordRebuilder, gameSession.Internals.Skeletons));
         inspectionWindow.Initialize();
         layers.Add(UiLayer.StaticHud, inspectionWindow);
 
@@ -412,7 +254,7 @@ public static class ShellBootstrapper
         // player's currently-unlocked Expansion slot count, so it's constructed first and its own
         // Size read to size/position this window -- see HotbarContent.RefreshLayoutIfChanged for
         // how it keeps itself bottom-anchored/horizontally-centered as that Size changes later.
-        var hotbarContent = new HotbarContent(world, mapViewState, ecsContext.ComponentManager, ecsContext.EventBus, actionCatalog, itemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize, ecsContext.SystemManager.Clock, EntityActions.For(ecsContext.ComponentManager, actionCatalog, worldSession.Definitions));
+        var hotbarContent = new HotbarContent(world, mapViewState, gameSession.Views.HotkeyBindingView, gameSession.Views.InventoryView, gameSession.Views.ActionStateView, gameSession.Commands.HotkeyBindingCommands, catalogs.ActionCatalog, catalogs.ItemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize, simulationClock, gameSession.Views.EntityActions);
         var hotbarSize = hotbarContent.Size;
         var hotbarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
@@ -450,32 +292,23 @@ public static class ShellBootstrapper
         return (questTriggerWindow, hotbarContent, inspectionWindow);
     }
 
-    /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and InventoryWindowController does the same for its own button+window (both add to UiLayer.DynamicHud specifically; hover popups instead show/hide through the one shared TooltipController -- see its own doc comment) -- see UiLayer's own doc comment for what each tier means. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too. Every pooled type either of these creates is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
-    private static (NotificationCenter NotificationCenter, HealthWindowController Health, InventoryWindowController Inventory) BuildDynamicHudWindows(PresentationContext presentation, World world, EcsContext ecsContext, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers, TooltipController tooltipController)
+    /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and HealthWindowController its own button+window (both add to UiLayer.DynamicHud specifically) -- see UiLayer's own doc comment for what each tier means. The inventory button follows from ItemWindowCoordinator, built right after, so it keeps its place beneath the health button. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too.</summary>
+    private static (NotificationCenter NotificationCenter, HealthWindowController Health) BuildDynamicHudWindows(PresentationContext presentation, World world, EventBus eventBus, ContextMenuController contextMenuController, UiLayerStack layers)
     {
-        var notificationCenter = new NotificationCenter(presentation.ElementPoolService, ecsContext.EventBus, layers, contextMenuController);
+        var notificationCenter = new NotificationCenter(presentation.ElementPoolService, eventBus, layers, contextMenuController);
         notificationCenter.Initialize();
 
-        // Built before InventoryWindowController, which reads this abilityScoreController's own
-        // ButtonPosition/ButtonSize (static fields, resolved independently of construction order)
-        // to sit its own button directly beneath this one -- see InventoryChrome.ButtonPosition's
-        // own doc comment. No actual construction-order dependency between the two controllers;
-        // built in this order simply because it reads naturally top-to-bottom.
         var health = new HealthWindowController(presentation.ElementPoolService, world);
         health.Initialize(layers);
 
-        var inventory = new InventoryWindowController(
-            presentation.ElementPoolService, world, ecsContext.ComponentManager, mapWindow, contextMenuController, tooltipController);
-        inventory.Initialize(layers);
-
-        return (notificationCenter, health, inventory);
+        return (notificationCenter, health);
     }
 
     /// <summary>Built after InventoryWindowController (whose PlayerInventoryWindow accessor this abilityScoreController reads to cascade its own window beside a live Inventory window -- see AbilityScoreWindowController.CreateAbilityScoreWindow) and MapWindow.</summary>
     private static AbilityScoreWindowController BuildAbilityScoreWindowController(
-        PresentationContext presentation, World world, EcsContext ecsContext, InventoryWindowController inventory, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers, TooltipController tooltipController)
+        PresentationContext presentation, World world, InventoryView inventoryView, InventoryWindowController inventory, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers, TooltipController tooltipController)
     {
-        var abilityScoreController = new AbilityScoreWindowController(presentation.ElementPoolService, world, ecsContext.ComponentManager, inventory, mapWindow, contextMenuController, tooltipController);
+        var abilityScoreController = new AbilityScoreWindowController(presentation.ElementPoolService, world, inventoryView, inventory, mapWindow, contextMenuController, tooltipController);
         abilityScoreController.Initialize(layers);
         return abilityScoreController;
     }
@@ -495,34 +328,7 @@ public static class ShellBootstrapper
         MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting, TooltipController tooltipController) =>
         new(mapViewState, hotbarContent, actionTargeting, tooltipController);
 
-    /// <summary>Built after InventoryWindowController (which it reuses the player's own inventoryController window through, see PlayerInventoryWindow/OpenInventoryWindow) and after MapWindow exists (whose OnCorpseClicked Build wires to this abilityScoreController's OpenLoot right after this call returns).</summary>
-    private static SecondaryInventoryWindowController BuildSecondaryInventoryWindowController(
-        PresentationContext presentation, EcsContext ecsContext, InventoryWindowController inventory, ContextMenuController contextMenuController, MapWindow mapWindow, UiLayerStack layers, TooltipController tooltipController)
-    {
-        var controller = new SecondaryInventoryWindowController(presentation.ElementPoolService, ecsContext.ComponentManager, inventory, contextMenuController, mapWindow, tooltipController);
-        controller.Initialize(layers);
-        return controller;
-    }
-
-    /// <summary>Same construction shape as BuildSecondaryInventoryWindowController above -- built after InventoryWindowController and MapWindow for the same reasons.</summary>
-    private static ShopWindowController BuildShopWindowController(
-        PresentationContext presentation, MapViewState mapViewState, InventoryWindowController inventory, ContextMenuController contextMenuController, MapWindow mapWindow, UiLayerStack layers, TooltipController tooltipController)
-    {
-        var controller = new ShopWindowController(presentation.ElementPoolService, mapViewState, inventory, contextMenuController, mapWindow, tooltipController);
-        controller.Initialize(layers);
-        return controller;
-    }
-
-    /// <summary>Built after ShopWindowController (which it re-anchors, see ShopWindowController.SetPosition) and InventoryWindowController. Wiring to ShopWindowController.OnOpened/OnClosed happens in Build itself, right after both controllers exist.</summary>
-    private static TradeWindowController BuildTradeWindowController(
-        PresentationContext presentation, InventoryWindowController inventory, ShopWindowController shopWindowController, MapWindow mapWindow, UiLayerStack layers, ReservedEntityIds reservedEntityIds, TooltipController tooltipController)
-    {
-        var controller = new TradeWindowController(presentation.ElementPoolService, inventory, shopWindowController, mapWindow, reservedEntityIds.TradeOfferPlayerEntityId, reservedEntityIds.TradeOfferShopEntityId, tooltipController);
-        controller.Initialize(layers);
-        return controller;
-    }
-
-    /// <summary>User tier: hosts cursorTextContent/dragGhostContent (built at the top of Build, before UiInputController exists -- see Build's own comment) -- see UiLayer's own doc comment for what this tier is for.</summary>
+    /// <summary>User tier: hosts cursorTextContent/dragGhostContent, both drawn at the pointer through PointerState -- see UiLayer's own doc comment for what this tier is for.</summary>
     private static void BuildUserWindows(PresentationContext presentation, CursorTextContent cursorTextContent, DragGhostContent dragGhostContent, UiLayerStack layers)
     {
         // Zero-size and fully transparent -- DragGhostContent draws directly at the live mouse

@@ -6,11 +6,11 @@ using Engine.Events;
 
 namespace Engine.Bootstrap;
 
-/// <summary>A build whose every module's systems are registered, for the caller's own finishing steps before it completes.</summary>
+/// <summary>A build whose every module's behavior -- systems and event handlers -- is registered, for the caller's own finishing steps before it completes.</summary>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class RegisteredSystems : EcsBuildStage
+public sealed class RegisteredBehavior : EcsBuildStage
 {
-    internal RegisteredSystems(EntityManager entityManager, ComponentManager componentManager, SystemManager systemManager, EventBus eventBus)
+    internal RegisteredBehavior(EntityManager entityManager, ComponentManager componentManager, SystemManager systemManager, EventBus eventBus)
     {
         EntityManager = entityManager;
         ComponentManager = componentManager;

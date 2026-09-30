@@ -16,9 +16,9 @@ public sealed class EntityTeleporterTests
 {
     private const int Rows = 24;
 
-    private sealed record Session(Game.World.World World, EcsContext Ecs, GameBootstrapResult Result, int PlayerEntityId)
+    private sealed record Session(Game.World.World World, EcsContext Ecs, GameSession Result, int PlayerEntityId)
     {
-        public EntityTeleporter Teleporter => Result.Teleporter;
+        public EntityTeleporter Teleporter => Result.Internals.Teleporter;
 
         public Vector3Int PositionOf(int entityId) => Ecs.ComponentManager.GetDirectPool<TransformComponent>().GetReadonly(entityId).Position;
     }
@@ -31,15 +31,15 @@ public sealed class EntityTeleporterTests
         var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24));
         var world = result.World;
         var ecs = result.EcsContext;
-        var resolver = result.ProcessingTierResolver;
+        var resolver = result.Internals.ProcessingTierResolver;
         resolver.SetReferencePosition(FloorBuilder.PlayerSpawnOrigin());
         resolver.SetWindowCenter(0, 0);
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecs);
-        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(mathUtility), result.Factory, result.Terrain, result.Definitions);
-        FloorBuilder.CreatePlayer(world, ecs, mathUtility, result.Factory, result.Definitions, playerEntityId, resolver);
+        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(mathUtility), result.Internals.Factory, result.Catalogs.Terrain, result.Catalogs.Definitions);
+        FloorBuilder.CreatePlayer(world, ecs, mathUtility, result.Internals.Factory, result.Catalogs.Definitions, playerEntityId, resolver);
         world.PlayerEntityId = playerEntityId;
-        result.MovedEntities.ClearFrame();
+        result.Internals.MovedEntities.ClearFrame();
 
         return new Session(world, ecs, result, playerEntityId);
     }
@@ -80,7 +80,7 @@ public sealed class EntityTeleporterTests
 
         session.Teleporter.TryTeleport(session.PlayerEntityId, destination);
 
-        CollectionAssert.Contains(session.Result.MovedEntities.Items.ToList(), new EntityMovedEvent(session.PlayerEntityId, origin, destination, new Vector2Byte(1, 1)));
+        CollectionAssert.Contains(session.Result.Internals.MovedEntities.Items.ToList(), new EntityMovedEvent(session.PlayerEntityId, origin, destination, new Vector2Byte(1, 1)));
     }
 
     [TestMethod]
@@ -94,7 +94,7 @@ public sealed class EntityTeleporterTests
 
         Assert.AreEqual(origin, session.PositionOf(session.PlayerEntityId));
         Assert.AreEqual(session.PlayerEntityId, session.World.GetEntityIdAt(origin));
-        Assert.IsEmpty(session.Result.MovedEntities.Items);
+        Assert.IsEmpty(session.Result.Internals.MovedEntities.Items);
     }
 
     [TestMethod]
@@ -138,14 +138,14 @@ public sealed class EntityTeleporterTests
 
         Assert.IsTrue(session.Teleporter.TryTeleport(skeleton, FreeCellNear(session, position.X + 3, position.Y)));
 
-        Assert.IsFalse(session.Result.Skeletons.IsSkeleton(skeleton));
+        Assert.IsFalse(session.Result.Internals.Skeletons.IsSkeleton(skeleton));
     }
 
     [TestMethod]
     public void TryTeleport_IntoTheNextNeighborhood_ShiftsTheWindowAndTheShiftSettles()
     {
         var session = BuildSession();
-        var resolver = session.Result.ProcessingTierResolver;
+        var resolver = session.Result.Internals.ProcessingTierResolver;
 
         session.Teleporter.TryTeleport(session.PlayerEntityId, FreeCellNear(session, Neighborhoods.OriginOf(1) + 200, 5));
         RunFrames(session, 1);
@@ -183,7 +183,7 @@ public sealed class EntityTeleporterTests
         var transforms = session.Ecs.ComponentManager.GetDirectPool<TransformComponent>();
         for (var entityId = 0; entityId < transforms.Capacity; entityId++)
         {
-            if (session.Result.Skeletons.IsSkeleton(entityId))
+            if (session.Result.Internals.Skeletons.IsSkeleton(entityId))
             {
                 return entityId;
             }

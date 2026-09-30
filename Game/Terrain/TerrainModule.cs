@@ -16,7 +16,7 @@ public sealed class TerrainModule : IGameModule
     {
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
     }
 }

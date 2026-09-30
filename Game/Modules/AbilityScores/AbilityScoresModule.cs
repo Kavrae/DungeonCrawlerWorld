@@ -30,7 +30,7 @@ public sealed class AbilityScoresModule : IGameModule
         componentManager.RegisterPackedPool<AbilityScoresComponent>(static (ref existing, incoming) => existing.MergeFrom(incoming), initialCapacity: 80_000);
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
         var context = registration.Context;
         var componentManager = registration.ComponentManager;

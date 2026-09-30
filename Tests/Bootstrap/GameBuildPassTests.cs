@@ -22,7 +22,7 @@ public sealed class GameBuildPassTests
 
         public void Configure(GameModuleContext context) => ConfiguredWith = context;
 
-        public void RegisterSystems(SystemRegistration<GameModuleContext> registration) => SystemsRegisteredWith = registration.Context;
+        public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration) => SystemsRegisteredWith = registration.Context;
     }
 
     private static GameBuildPassResult Run(params ModuleFactory<GameModuleContext>[] mods) =>
@@ -94,6 +94,6 @@ public sealed class GameBuildPassTests
 
         Assert.AreNotSame(first.World, second.World);
         Assert.AreNotSame(first.EcsContext.EventBus, second.EcsContext.EventBus);
-        Assert.AreNotSame(first.Definitions, second.Definitions);
+        Assert.AreNotSame(first.Catalogs.Definitions, second.Catalogs.Definitions);
     }
 }

@@ -28,7 +28,7 @@ namespace Game.Modules.NpcBehavior.Systems;
 /// own before this system replaced it (see MovementSystem's own doc comment on why it's purely
 /// reactive now). Queuing a heal or an attack clears the entity's step (NextMapPosition), and this
 /// runs before MovementSystem every frame (NpcBehaviorModule runs before MovementModule), so the
-/// entity doesn't also move that frame -- the same rule PlayerInputBuffer follows for the player.
+/// entity doesn't also move that frame -- the same rule PlayerCommands follows for the player.
 ///
 /// Not goblin-specific by name or by filter, despite currently only being exercised by Goblins
 /// (the only race with both QuickAttack/PowerAttack and, per Goblin's starting-kit change,

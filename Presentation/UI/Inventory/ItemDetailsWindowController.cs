@@ -1,7 +1,6 @@
-using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
+using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.UI.ColorPalettes;
 
@@ -11,7 +10,7 @@ namespace Presentation.UI.Inventory;
 /// Owns the single, persistent Item Details window -- shows whatever item stack was last clicked
 /// in either the player's own inventory grid or an open secondary/corpse grid (see
 /// InventoryWindowController.OnItemSelected/SecondaryInventoryWindowController.OnItemSelected,
-/// both wired here by ShellBootstrapper). Clicking a different item updates this same window in
+/// both wired here by ItemWindowCoordinator). Clicking a different item updates this same window in
 /// place rather than opening a second one -- mirrors SecondaryInventoryWindowController's own
 /// "one target at a time" shape, but for item selection instead of a loot target. Always opens
 /// next to the player's own InventoryManagementWindow (InventoryWindowController.PlayerInventoryWindow),
@@ -24,14 +23,13 @@ namespace Presentation.UI.Inventory;
 /// </summary>
 public sealed class ItemDetailsWindowController(
     ElementPoolService elementPoolService,
-    ComponentManager componentManager,
+    InventoryView inventoryView,
     ItemCatalog itemCatalog,
     InventoryWindowController inventoryWindowController,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
     MapWindow mapWindow)
 {
-    private readonly MultiComponentPool<InventoryItemStackComponent> _stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
 
     private UiLayerStack _layers = null!;
     private ItemDetailsWindow? _window;
@@ -51,12 +49,12 @@ public sealed class ItemDetailsWindowController(
 
     public uint? CurrentStackInstanceId { get; private set; }
 
-    /// <summary>Settable late-bound query for the currently-open secondary/corpse-or-shop inventory window's own bounds, if any -- wired by ShellBootstrapper to SecondaryInventoryWindowController.Rectangle/ShopWindowController.Rectangle once those controllers exist (built after this one -- same construction-order reason InventoryWindowController.GetSecondaryTargetEntityId is wired the same way). A single Func is safe here because a corpse/container window and a shop window are never open together (see ShellBootstrapper's own mutual-exclusion comment) -- unlike the trade window below, which IS open at the same time as the shop, so it needs its own independent hook rather than sharing this one. Rectangle.Empty (never "inside"), not null, when nothing is open or this is never wired (e.g. test setups).</summary>
+    /// <summary>Settable late-bound query for the currently-open secondary/corpse-or-shop inventory window's own bounds, if any -- wired by ItemWindowCoordinator to SecondaryInventoryWindowController.Rectangle/ShopWindowController.Rectangle once those controllers exist (built after this one -- same construction-order reason InventoryWindowController.GetSecondaryTargetEntityId is wired the same way). A single Func is safe here because a corpse/container window and a shop window are never open together (see ItemWindowCoordinator's own mutual-exclusion comment) -- unlike the trade window below, which IS open at the same time as the shop, so it needs its own independent hook rather than sharing this one. Rectangle.Empty (never "inside"), not null, when nothing is open or this is never wired (e.g. test setups).</summary>
     public Func<Rectangle>? GetSecondaryInventoryWindowRectangle { get; set; }
 
     /// <summary>
     /// Settable late-bound query for the currently-open Trade window's own bounds, if any -- wired
-    /// by ShellBootstrapper to TradeWindowController.Rectangle. Deliberately separate from
+    /// by ItemWindowCoordinator to TradeWindowController.Rectangle. Deliberately separate from
     /// GetSecondaryInventoryWindowRectangle above, not folded into the same fallback chain: the
     /// trade window and the shop window are open simultaneously (TradeWindowController.Open runs
     /// off ShopWindowController.OnOpened), so a single "pick whichever one's open" Func would hide
@@ -66,16 +64,16 @@ public sealed class ItemDetailsWindowController(
     /// </summary>
     public Func<Rectangle>? GetTradeWindowRectangle { get; set; }
 
-    /// <summary>Settable late-bound query for the loot box results window's bounds -- wired by ShellBootstrapper to LootboxResultsWindowController.Rectangle. Its own hook, like GetTradeWindowRectangle, since it can be open alongside any of the others.</summary>
+    /// <summary>Settable late-bound query for the loot box results window's bounds -- wired by ItemWindowCoordinator to LootboxResultsWindowController.Rectangle. Its own hook, like GetTradeWindowRectangle, since it can be open alongside any of the others.</summary>
     public Func<Rectangle>? GetLootboxResultsWindowRectangle { get; set; }
 
     /// <summary>Settable late-bound query for every currently-open Item Details Comparison column's own bounds -- without this, a click on a comparison column would look "outside" this window and wrongly close it, since IsOutsideClick has no other way to know those windows exist.</summary>
     public Func<IReadOnlyList<Rectangle>>? GetComparisonColumnRectangles { get; set; }
 
-    /// <summary>Settable late-bound notification fired when this window closes -- wired by ShellBootstrapper to ItemComparisonController.ClearComparison, since a stale comparison against an item that's no longer even shown doesn't make sense.</summary>
+    /// <summary>Settable late-bound notification fired when this window closes -- wired by ItemWindowCoordinator to ItemComparisonController.ClearComparison, since a stale comparison against an item that's no longer even shown doesn't make sense.</summary>
     public Action? OnClosed { get; set; }
 
-    /// <summary>Settable late-bound callback for the anchor window's own "Compare" title button -- wired by ShellBootstrapper to ItemComparisonController.Arm once that controller exists (built after this one). Threaded into the window itself (see ItemDetailsWindow.OnCompareRequested) via a wrapper lambda, not the property's own current value captured once, so re-assignment ordering can never matter.</summary>
+    /// <summary>Settable late-bound callback for the anchor window's own "Compare" title button -- wired by ItemWindowCoordinator to ItemComparisonController.Arm once that controller exists (built after this one). Threaded into the window itself (see ItemDetailsWindow.OnCompareRequested) via a wrapper lambda, not the property's own current value captured once, so re-assignment ordering can never matter.</summary>
     public Action<int, uint>? OnCompareRequested { get; set; }
 
     public void Initialize(UiLayerStack layers) => _layers = layers;
@@ -140,7 +138,7 @@ public sealed class ItemDetailsWindowController(
     /// <param name="anchorWindow">The window to dock beside if this opens the window; null for the player's own Inventory window.</param>
     public void Open(int entityId, uint stackInstanceId, Window? anchorWindow = null)
     {
-        if (!InventoryQueries.TryFindByStackInstanceId(_stacks, entityId, stackInstanceId, out var stack) ||
+        if (!inventoryView.TryGetStack(entityId, stackInstanceId, out var stack) ||
             !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition))
         {
             return;

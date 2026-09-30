@@ -30,7 +30,7 @@ public sealed class StatModifiersModule : IGameModule
             existing.NextTickFrame = System.Math.Min(existing.NextTickFrame, incoming.NextTickFrame));
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
         var context = registration.Context;
         var systemManager = registration.SystemManager;

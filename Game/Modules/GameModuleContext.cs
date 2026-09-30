@@ -20,7 +20,7 @@ using Game.World;
 
 namespace Game.Modules;
 
-/// <summary>Everything a module's Configure and RegisterSystems can reach, shared across every module in one build.</summary>
+/// <summary>Everything a module's Configure and RegisterBehavior can reach, shared across every module in one build.</summary>
 /// <remarks>
 /// Built once every component is registered and before any module is configured, so every member is
 /// complete from construction: the objects that read pools are given them here. That makes the context
@@ -97,7 +97,7 @@ public sealed class GameModuleContext
 
     /// <summary>
     /// Filled during Configure by every effect module -- see StatusEffectAuraApplierRegistry's own doc
-    /// comment for why registering here (during Configure) rather than in RegisterSystems is what makes
+    /// comment for why registering here (during Configure) rather than in RegisterBehavior is what makes
     /// ordering safe.
     /// </summary>
     public StatusEffectAuraApplierRegistry StatusEffectAuraAppliers { get; } = new();

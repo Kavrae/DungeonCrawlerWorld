@@ -119,6 +119,57 @@ public static class InventoryActions
         a.Tags.SequenceEqual(b.Tags) &&
         a.Effects.SequenceEqual(b.Effects);
 
+    /// <summary>Whether two stacks hold interchangeable units: the same item, the same Override (or neither has one), and the same divergence and disabled state.</summary>
+    private static bool AreEquivalentStacks(in InventoryItemStackComponent first, in InventoryItemStackComponent second) =>
+        first.ItemDefinitionId == second.ItemDefinitionId &&
+        first.IsDivergent == second.IsDivergent &&
+        first.IsDisabled == second.IsDisabled &&
+        (first.Override, second.Override) switch
+        {
+            (null, null) => true,
+            ({ } firstOverride, { } secondOverride) => AreEquivalentOverrides(firstOverride, secondOverride),
+            _ => false,
+        };
+
+    /// <summary>Moves stack stackInstanceId's units into another stack entityId already holds with interchangeable units, as many as that stack's cap allows, removing stackInstanceId once it's empty.</summary>
+    /// <remarks>
+    /// The stack merged into keeps its identity -- StackInstanceId and AcquiredSequence -- so a hotkey bound to it stays
+    /// bound. Whatever doesn't fit stays in stackInstanceId's own stack. A no-op when entityId doesn't hold
+    /// stackInstanceId or holds nothing interchangeable with room. Returns the StackInstanceId now holding the last of
+    /// the moved units: the stack merged into, or stackInstanceId itself when anything was left behind.
+    /// </remarks>
+    public static uint MergeIntoEquivalentStack(ComponentManager componentManager, int entityId, uint stackInstanceId)
+    {
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        var sourceDenseIndex = FindMatchingDenseIndex(stacks, entityId, stackInstanceId, static (stack, id) => stack.StackInstanceId == id);
+        if (sourceDenseIndex == -1)
+        {
+            return stackInstanceId;
+        }
+
+        var source = stacks.GetReadonlyByDenseIndex(sourceDenseIndex);
+        var effectiveCap = GetEffectiveMaxStackSize(componentManager, entityId);
+        var targetDenseIndex = FindMatchingDenseIndex(stacks, entityId, (Source: source, Cap: effectiveCap),
+            static (stack, state) => stack.StackInstanceId != state.Source.StackInstanceId && stack.Quantity < state.Cap && AreEquivalentStacks(in stack, in state.Source));
+        if (targetDenseIndex == -1)
+        {
+            return stackInstanceId;
+        }
+
+        var target = stacks.GetReadonlyByDenseIndex(targetDenseIndex);
+        var moved = (ushort)System.Math.Min(source.Quantity, effectiveCap - target.Quantity);
+        stacks.UpdateByDenseIndex(targetDenseIndex, moved, static (ref InventoryItemStackComponent stack, ushort add) => stack.Quantity += add);
+
+        if (moved == source.Quantity)
+        {
+            stacks.RemoveByDenseIndex(sourceDenseIndex);
+            return target.StackInstanceId;
+        }
+
+        stacks.UpdateByDenseIndex(sourceDenseIndex, moved, static (ref InventoryItemStackComponent stack, ushort taken) => stack.Quantity -= taken);
+        return stackInstanceId;
+    }
+
     /// <summary>
     /// Manual dense-index walk over entityId's own chain, stopping at the first component matching
     /// predicate -- the same "no id-indexed direct lookup, so scan by hand" shape

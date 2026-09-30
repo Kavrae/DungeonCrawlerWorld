@@ -63,6 +63,7 @@ public sealed class MapWindow : Window
     private readonly ActionTargetingController _actionTargeting;
     private readonly PlayerMovementController _playerMovement;
     private readonly ContextMenuController _contextMenuController;
+    private readonly AdminContextMenuOptions _adminContextMenuOptions;
     private readonly MapBackgroundCache _backgroundCache;
     private readonly FloatingTextController _floatingTextController;
     private readonly FloatingTextRenderer _floatingTextRenderer;
@@ -131,27 +132,14 @@ public sealed class MapWindow : Window
     /// Invoked with a corpse's entity id when the player selects "Loot" from its right-click
     /// context menu (see TryOpenEntityContextMenuAt). Settable rather than a constructor
     /// dependency for the same reason IsTextInputFocused above is: the real listener
-    /// (SecondaryInventoryWindowController) is built after MapWindow -- see ShellBootstrapper.
-    /// Build's own ordering notes. Null (before that wiring runs, and in tests that construct a
-    /// MapWindow directly) means right-clicking a corpse opens no context menu at all, rather
-    /// than one with a "Loot" option that does nothing.
+    /// (ItemWindowCoordinator.OpenLoot) is built after MapWindow. Null (before that wiring runs,
+    /// and in tests that construct a MapWindow directly) means right-clicking a corpse opens no
+    /// context menu at all, rather than one with a "Loot" option that does nothing.
     /// </summary>
     public Action<int>? OnCorpseClicked { get; set; }
 
-    /// <summary>Invoked with a shop's entity id when the player selects "Shop" from its right-click context menu (see AddEntityGroup) -- same settable-delegate shape as OnCorpseClicked, wired by ShellBootstrapper to ShopWindowController.OpenShop.</summary>
+    /// <summary>Invoked with a shop's entity id when the player selects "Shop" from its right-click context menu (see AddEntityGroup) -- same settable-delegate shape as OnCorpseClicked, wired by ItemWindowCoordinator to its OpenShop.</summary>
     public Action<int>? OnShopClicked { get; set; }
-
-    /// <summary>What Admin Mode's "Regenerate" context-menu option drives -- wired by ShellBootstrapper; null offers no such option.</summary>
-    public Game.Floors.NeighborhoodStreamer? NeighborhoodStreamer { get; set; }
-
-    /// <summary>What Admin Mode's "Spawn here" and "Apply" context-menu options drive -- wired by ShellBootstrapper; null offers neither.</summary>
-    public Game.Spawning.BlueprintAdminCommands? BlueprintAdmin { get; set; }
-
-    /// <summary>What Admin Mode's "Grant loot box" context-menu option drives -- wired by ShellBootstrapper; null offers none.</summary>
-    public Game.Modules.Lootboxes.LootboxAdminCommands? LootboxAdmin { get; set; }
-
-    /// <summary>What Admin Mode's "Teleport here" context-menu option drives -- wired by ShellBootstrapper; null offers no such option.</summary>
-    public Game.World.EntityTeleporter? Teleporter { get; set; }
 
     /// <summary>
     /// Invoked whenever a map-tile click sets Basic inspection (see SelectMapNodes) or the
@@ -190,7 +178,8 @@ public sealed class MapWindow : Window
         PlayerMovementController playerMovement,
         ContextMenuController contextMenuController,
         FloatingTextController floatingTextController,
-        FloatingTextRenderer floatingTextRenderer) : base(fontService, elementPoolService, labelRenderer)
+        FloatingTextRenderer floatingTextRenderer,
+        AdminContextMenuOptions adminContextMenuOptions) : base(fontService, elementPoolService, labelRenderer)
     {
         _mapView = mapView;
         _playerActionGate = playerActionGate;
@@ -204,6 +193,7 @@ public sealed class MapWindow : Window
         _actionTargeting = actionTargeting;
         _playerMovement = playerMovement;
         _contextMenuController = contextMenuController;
+        _adminContextMenuOptions = adminContextMenuOptions;
         _tintGrid = tintGrid;
         _backgroundCache = new MapBackgroundCache(mapView, mapViewState, _camera);
         _floatingTextController = floatingTextController;
@@ -1261,35 +1251,15 @@ public sealed class MapWindow : Window
             options.Add(ContextMenuOption.Header(terrain.Name));
         }
 
-        if (GlobalState.IsAdminModeOn && NeighborhoodStreamer is { } streamer)
+        if (GlobalState.IsAdminModeOn)
         {
-            AddNeighborhoodGroup(options, streamer, Neighborhoods.CellOf(mapPosition.X), Neighborhoods.CellOf(mapPosition.Y));
-        }
-
-        if (GlobalState.IsAdminModeOn && BlueprintAdmin is { } admin)
-        {
-            options.Add(ContextMenuOption.Opening("Spawn here", SpawnChoices(admin, tilePosition)));
-        }
-
-        if (GlobalState.IsAdminModeOn && Teleporter is { } teleporter)
-        {
-            var playerEntityId = _mapView.PlayerEntityId;
-            options.Add(new ContextMenuOption("Teleport here", null, teleporter.CanTeleport(playerEntityId, tilePosition), () => teleporter.TryTeleport(playerEntityId, tilePosition)));
+            _adminContextMenuOptions.AddTileOptions(options, tilePosition);
         }
 
         if (options.Count > 0)
         {
             _contextMenuController.Open(new Vector2(mousePosition.X, mousePosition.Y), options);
         }
-    }
-
-    /// <summary>Admin Mode's group for the neighborhood under the cursor: a header naming it, then "Regenerate" -- disabled with the reason when the streamer refuses.</summary>
-    private static void AddNeighborhoodGroup(List<ContextMenuOption> options, Game.Floors.NeighborhoodStreamer streamer, int cellX, int cellY)
-    {
-        options.Add(ContextMenuOption.Header($"Neighborhood ({cellX}, {cellY}): x {Neighborhoods.OriginOf(cellX)}..{Neighborhoods.OriginOf(cellX + 1) - 1}, y {Neighborhoods.OriginOf(cellY)}..{Neighborhoods.OriginOf(cellY + 1) - 1}"));
-
-        var canRegenerate = streamer.CanRegenerate(cellX, cellY, out var reason);
-        options.Add(new ContextMenuOption(canRegenerate ? "Regenerate" : $"Regenerate ({reason})", null, canRegenerate, () => streamer.TryRequestRegenerate(cellX, cellY)));
     }
 
     /// <summary>Appends one occupant's own group to the tile's stacked menu -- a read-only name header, then whatever options it offers.</summary>
@@ -1325,30 +1295,11 @@ public sealed class MapWindow : Window
 
         options.Add(new ContextMenuOption("Inspect", null, !_playerActionGate.IsLocked, () => InspectEntity(entityId)));
 
-        if (GlobalState.IsAdminModeOn && BlueprintAdmin is { } admin)
+        if (GlobalState.IsAdminModeOn)
         {
-            options.Add(ContextMenuOption.Opening("Apply", ApplyChoices(admin, entityId)));
-        }
-
-        if (GlobalState.IsAdminModeOn && LootboxAdmin is { } lootboxAdmin)
-        {
-            options.Add(ContextMenuOption.Opening("Grant loot box", LootboxTypeChoices(lootboxAdmin, entityId)));
+            _adminContextMenuOptions.AddEntityOptions(options, entityId);
         }
     }
-
-    /// <summary>Admin Mode's "Grant loot box" submenu: every loot box type, each opening a submenu of rarities that grants one box of it to entityId.</summary>
-    private static List<ContextMenuOption> LootboxTypeChoices(Game.Modules.Lootboxes.LootboxAdminCommands lootboxAdmin, int entityId) =>
-        [.. lootboxAdmin.Types().Select(type => ContextMenuOption.Opening(type.Name,
-            [.. Enum.GetValues<Game.Modules.Lootboxes.LootboxRarity>().Select(rarity =>
-                new ContextMenuOption(rarity.ToString(), null, true, () => lootboxAdmin.Grant(entityId, type.Id, rarity)))]))];
-
-    /// <summary>Admin Mode's "Spawn here" submenu: every spawnable blueprint, spawned on the tile and layer the menu was opened on.</summary>
-    private static List<ContextMenuOption> SpawnChoices(Game.Spawning.BlueprintAdminCommands admin, Vector3Int tilePosition) =>
-        [.. admin.Spawnable().Select(choice => new ContextMenuOption(choice.Name, null, true, () => admin.Spawn(choice.BlueprintId, tilePosition)))];
-
-    /// <summary>Admin Mode's "Apply" submenu: every blueprint that can be built onto an existing entity, applied to entityId.</summary>
-    private static List<ContextMenuOption> ApplyChoices(Game.Spawning.BlueprintAdminCommands admin, int entityId) =>
-        [.. admin.Applicable().Select(choice => new ContextMenuOption(choice.Name, null, true, () => admin.Apply(entityId, choice.BlueprintId)))];
 
     /// <summary>Details/Admin inspection's actual activation -- sets Detail or Admin mode (GlobalState.IsAdminModeOn) on the shared entityId (see MapViewState.InspectedEntityId), starts the global cooldown (the same shared ActionLockComponent lock movement/melee/consumables already use), and un-minimizes InspectionWindow. Only ever reached via the "Inspect" ContextMenuOption above, which already gates on the cooldown being clear -- no redundant re-check here, matching how "Loot" above trusts its own Enabled gate instead of re-checking adjacency.</summary>
     private void InspectEntity(int entityId)

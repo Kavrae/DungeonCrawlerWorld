@@ -1,7 +1,5 @@
-using Engine.Events;
 using Game.Modules.Inventory;
 using Game.Modules.Shops;
-using Game.World;
 
 namespace Presentation.Input.DragDrop;
 
@@ -11,25 +9,25 @@ namespace Presentation.Input.DragDrop;
 /// feature-specific resolver (Trade, Shop) has already declined the drag. Not itself a "feature"
 /// opting in, unlike ShopDragDropResolver/TradeDragDropResolver.
 /// </summary>
-internal sealed class PlainInventoryDragDropResolver(ItemCatalog itemCatalog, IPlayerQuery playerQuery, EventBus eventBus) : IDragDropResolver
+internal sealed class PlainInventoryDragDropResolver(InventoryCommands inventoryCommands, ShopCommands shopCommands) : IDragDropResolver
 {
     public bool TryResolve(in DragDropContext context)
     {
         if (context.ItemStackInstanceId is { } stackInstanceId)
         {
-            InventoryActions.TryTransferStack(context.ComponentManager, itemCatalog, context.OriginEntityId, context.DestinationEntityId, stackInstanceId, playerQuery);
+            inventoryCommands.TryTransferStack(context.OriginEntityId, context.DestinationEntityId, stackInstanceId);
         }
         else if (context.MergedItemDefinitionId is { } itemDefinitionId)
         {
-            InventoryActions.TryTransferAllStacksOfItem(context.ComponentManager, itemCatalog, context.OriginEntityId, context.DestinationEntityId, itemDefinitionId, playerQuery);
+            inventoryCommands.TryTransferAllStacksOfItem(context.OriginEntityId, context.DestinationEntityId, itemDefinitionId);
         }
         else if (context.CurrencyType is { } currencyType)
         {
-            // Unconditional -- ShopActions.TryGiveCurrencyToShop already checks internally whether
+            // Unconditional -- TryGiveCurrencyToShop already checks internally whether
             // the destination is shop-registered before publishing GoldGivenToShopEvent, so this
             // one call degrades to a plain transfer when it isn't. ShopDragDropResolver has already
             // claimed and refused any shop-*origin* currency drag before this resolver ever runs.
-            ShopActions.TryGiveCurrencyToShop(context.ComponentManager, eventBus, context.OriginEntityId, context.DestinationEntityId, currencyType);
+            shopCommands.TryGiveCurrencyToShop(context.OriginEntityId, context.DestinationEntityId, currencyType);
         }
 
         return true;

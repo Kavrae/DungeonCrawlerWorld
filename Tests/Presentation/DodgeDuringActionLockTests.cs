@@ -9,13 +9,12 @@ using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
 using Game.Spawning;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
-using Game.Modules.AbilityScores.Components;
 
 namespace Tests.Presentation;
 
@@ -73,21 +72,22 @@ public sealed class DodgeDuringActionLockTests
         var world = result.World;
         var ecs = result.EcsContext;
         var components = ecs.ComponentManager;
-        result.ProcessingTierResolver.SetReferencePosition(Start);
+        result.Internals.ProcessingTierResolver.SetReferencePosition(Start);
 
         var playerEntityId = ecs.EntityManager.CreateEntity();
-        result.ProcessingTierResolver.PinLocalAndNotify(playerEntityId);
-        result.Factory.Spawn(SpawnRequest.At(result.Definitions.GetId(Player.Id), Start) with { Seed = 1, ReservedEntityId = playerEntityId });
+        result.Internals.ProcessingTierResolver.PinLocalAndNotify(playerEntityId);
+        result.Internals.Factory.Spawn(SpawnRequest.At(result.Catalogs.Definitions.GetId(Player.Id), Start) with { Seed = 1, ReservedEntityId = playerEntityId });
         world.PlayerEntityId = playerEntityId;
 
         var clock = ecs.SystemManager.Clock;
-        var inputBuffer = new PlayerInputBuffer(
+        var playerCommands = new PlayerCommands(
             world,
             components.GetDirectPool<TransformComponent>(),
             components.GetPackedPool<MovementComponent>(),
             components.GetPackedPool<ActionLockComponent>(),
             components.GetPackedPool<PendingActionActivationComponent>(),
             components.GetPackedPool<PendingConsumableActivationComponent>(),
+            components.GetPackedPool<PendingDelayedActionComponent>(),
             clock,
             ecs.EventBus);
 
@@ -96,25 +96,21 @@ public sealed class DodgeDuringActionLockTests
             new MapViewState(),
             new MapCamera(world),
             new UiLayerStack(),
-            result.ActionCatalog,
-            result.ItemCatalog,
-            components.GetDirectPool<TransformComponent>(),
-            components.GetMultiPool<ActionHotkeyBindingComponent>(),
-            components.GetMultiPool<ItemHotkeyBindingComponent>(),
-            components.GetMultiPool<InventoryItemStackComponent>(),
-            components.GetPackedPool<HotkeyExpansionUnlockComponent>(),
-            components.GetPackedPool<PendingDelayedActionComponent>(),
-            components.GetPackedPool<ActionLockComponent>(),
-            inputBuffer,
-            components.GetPackedPool<ManaComponent>(),
-            components.GetPackedPool<AbilityScoresComponent>(),
+            result.Catalogs.ActionCatalog,
+            result.Catalogs.ItemCatalog,
+            new TransformView(components),
+            new HotkeyBindingView(components),
+            new InventoryView(components, result.Catalogs.ItemCatalog),
+            new ActionStateView(components, localTierRoster: null),
+            new AbilityScoreView(components),
+            playerCommands,
             simulationClock: clock);
 
         return new Harness
         {
             Ecs = ecs,
             PlayerEntityId = playerEntityId,
-            Movement = new PlayerMovementController(inputBuffer),
+            Movement = new PlayerMovementController(playerCommands),
             ActionTargeting = actionTargeting,
         };
     }

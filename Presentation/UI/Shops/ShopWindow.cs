@@ -1,15 +1,12 @@
-using Engine.ECS.Components;
 using Game.Spawning;
-using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
+using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
-using Game.Blueprints;
 
 namespace Presentation.UI.Shops;
 
@@ -29,14 +26,12 @@ public sealed class ShopWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
-    ComponentManager componentManager,
-    ItemCatalog itemCatalog,
+    InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    Engine.Events.EventBus eventBus,
     Engine.ECS.Systems.SimulationClock simulationClock,
-    BlueprintRegistry creatures)
+    EntityNaming entityNaming)
     : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
 {
     private static readonly Vector2 IconSize = new(48, 48);
@@ -51,8 +46,6 @@ public sealed class ShopWindow(
 
     /// <summary>Wide enough for exactly GridColumns columns of the shop-mode cell width -- see SecondaryInventoryWindow.GridWidth's own doc comment for why this derives from InventoryGridContent's own constants rather than hand-duplicating them.</summary>
     private static readonly float GridWidth = GridColumns * (InventoryGridContent.CellSize.X * InventoryGridContent.ShopCellWidthMultiplier + InventoryGridContent.CellGap) + 10f;
-
-    private readonly EntityNaming _naming = EntityNaming.For(componentManager, creatures);
 
     private int _entityId;
     private TooltipController _tooltipController = null!;
@@ -73,7 +66,7 @@ public sealed class ShopWindow(
         // OpenShop, which never has more than one open at once), so its own currency row's
         // context menu only ever offers "Take"/"Take All" -- both suppressed for a shop (see
         // CurrencyRowContent.BuildCurrencyContextMenu's own ShopComponent check).
-        _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, ElementPoolService, () => _entityId, eventBus);
+        _currencyRowContent = new CurrencyRowContent(entityId, inventoryServices, world, contextMenuController, ElementPoolService, () => _entityId);
         SetFooterContent(_currencyRowContent, CurrencyRowContent.Height);
     }
 
@@ -109,7 +102,7 @@ public sealed class ShopWindow(
 
     private float ComputeGridHeight()
     {
-        var stackCount = componentManager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(_entityId);
+        var stackCount = inventoryServices.InventoryView.CountStacks(_entityId);
         var rows = System.Math.Max(MinimumGridRows, (int)System.Math.Ceiling(stackCount / (double)GridColumns));
         return rows * (InventoryGridContent.CellSize.Y + InventoryGridContent.CellGap);
     }
@@ -174,9 +167,9 @@ public sealed class ShopWindow(
         // See SecondaryInventoryWindow.BuildGrid's own doc comment -- same flush-content fix for the same clipped-bottom-row bug.
         gridWindow.ContentPadding = Vector2.Zero;
 
-        gridWindow.SetContent(new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, contextMenuController, _entityId, filterTag: null, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, static _ => { }, simulationClock: simulationClock)); // Activate is player-inventory-only (see InventoryGridContent.CanActivate) -- never reached for a shop's own grid.
+        gridWindow.SetContent(new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, _entityId, filterTag: null, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, static _ => { }, simulationClock: simulationClock)); // Activate is player-inventory-only (see InventoryGridContent.CanActivate) -- never reached for a shop's own grid.
         AddChild(gridWindow);
     }
 
-    private (string Name, string Description) ResolveDisplayText(int entityId) => (_naming.NameOf(entityId), _naming.DescriptionOf(entityId));
+    private (string Name, string Description) ResolveDisplayText(int entityId) => (entityNaming.NameOf(entityId), entityNaming.DescriptionOf(entityId));
 }

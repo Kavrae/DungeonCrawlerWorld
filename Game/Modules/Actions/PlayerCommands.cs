@@ -10,7 +10,7 @@ using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.World;
 
-namespace Presentation.UI;
+namespace Game.Modules.Actions;
 
 /// <summary>Holds the player's one pending command until the action lock clears, and is the only writer of the player's step and activation requests.</summary>
 /// <remarks>
@@ -36,7 +36,7 @@ namespace Presentation.UI;
 /// With nothing buffered, the held direction is written instead, but only while the player is at rest and has no
 /// activation request pending -- holding a key is not a new command, so it never replaces one.
 /// </remarks>
-public sealed class PlayerInputBuffer
+public sealed class PlayerCommands
 {
     public static readonly ushort ExpiryFrames = GameTiming.FramesForSeconds(0.25f);
 
@@ -48,12 +48,13 @@ public sealed class PlayerInputBuffer
         Consumable,
     }
 
-    private readonly World _world;
+    private readonly World.World _world;
     private readonly DirectComponentPool<TransformComponent> _transformPool;
     private readonly PackedComponentPool<MovementComponent> _movementPool;
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly PackedComponentPool<PendingActionActivationComponent> _pendingActions;
     private readonly PackedComponentPool<PendingConsumableActivationComponent> _pendingConsumables;
+    private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
     private readonly SimulationClock _simulationClock;
 
     private CommandKind _kind;
@@ -66,13 +67,14 @@ public sealed class PlayerInputBuffer
 
     private (Guid ActionId, Vector3Int Destination)? _pendingActivationStep;
 
-    public PlayerInputBuffer(
-        World world,
+    public PlayerCommands(
+        World.World world,
         DirectComponentPool<TransformComponent> transformPool,
         PackedComponentPool<MovementComponent> movementPool,
         PackedComponentPool<ActionLockComponent> actionLocks,
         PackedComponentPool<PendingActionActivationComponent> pendingActions,
         PackedComponentPool<PendingConsumableActivationComponent> pendingConsumables,
+        PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
         SimulationClock simulationClock,
         EventBus eventBus)
     {
@@ -82,6 +84,7 @@ public sealed class PlayerInputBuffer
         _actionLocks = actionLocks;
         _pendingActions = pendingActions;
         _pendingConsumables = pendingConsumables;
+        _pendingDelayedActions = pendingDelayedActions;
         _simulationClock = simulationClock;
 
         eventBus.Subscribe<ActionActivatedEvent>(OnActionActivated);
@@ -134,6 +137,10 @@ public sealed class PlayerInputBuffer
         _stepOnActivation = null;
         return hadCommand;
     }
+
+    /// <summary>Cancels the player's windup and releases the action lock it held. Returns whether the player was winding up.</summary>
+    public bool TryCancelWindup(long now) =>
+        WindupCancel.TryCancel(_pendingDelayedActions, _actionLocks, _world.PlayerEntityId, now, releaseLock: true);
 
     /// <summary>Writes the buffered command, or else the held direction, into the game once the player's action lock has cleared.</summary>
     public void Flush(Vector3Int heldDirection)

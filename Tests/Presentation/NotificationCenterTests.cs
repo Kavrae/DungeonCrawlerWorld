@@ -37,12 +37,12 @@ public sealed class NotificationCenterTests
         return windowService;
     }
 
-    private static NotificationCenter CreateNotificationCenter(ElementPoolService windowService, UiLayerStack layers)
+    private static NotificationCenter CreateNotificationCenter(ElementPoolService windowService, UiLayerStack layers, EventBus? eventBus = null)
     {
         var contextMenuController = new ContextMenuController(windowService);
         contextMenuController.Initialize(layers);
 
-        var notificationCenter = new NotificationCenter(windowService, new EventBus(), layers, contextMenuController);
+        var notificationCenter = new NotificationCenter(windowService, eventBus ?? new EventBus(), layers, contextMenuController);
         notificationCenter.Initialize();
         return notificationCenter;
     }
@@ -497,77 +497,90 @@ public sealed class NotificationCenterTests
         StringAssert.Contains(activePopup.OriginalText, "Lootbox: None.");
     }
 
-    private static List<Notification> RecordDismissals(NotificationCenter notificationCenter)
+    private static (NotificationCenter NotificationCenter, List<Guid> DismissedAchievementIds) CreateNotificationCenterRecordingDismissals(ElementPoolService windowService, UiLayerStack layers)
     {
-        var dismissed = new List<Notification>();
-        notificationCenter.NotificationDismissed += dismissed.Add;
-        return dismissed;
+        var eventBus = new EventBus();
+        var dismissedAchievementIds = new List<Guid>();
+        eventBus.Subscribe<AchievementNotificationDismissedEvent>(dismissed => dismissedAchievementIds.Add(dismissed.AchievementId));
+        return (CreateNotificationCenter(windowService, layers, eventBus), dismissedAchievementIds);
     }
 
+    private static AchievementNotificationDetails AchievementDetails() =>
+        new(AchievementId: Guid.NewGuid(), RequirementText: "Unlocked it.", LootboxLabel: "Bronze Adventurer Box", RewardText: "A box.");
+
     [TestMethod]
-    public void ClickingCloseButton_RaisesNotificationDismissedWithThatNotification()
+    public void ClickingCloseButton_OnAnAchievement_PublishesItsDismissal()
     {
         var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
         var layers = new UiLayerStack();
-        var notificationCenter = CreateNotificationCenter(windowService, layers);
-        var dismissed = RecordDismissals(notificationCenter);
-        var notificationId = notificationCenter.AddNotification(NotificationCategory.Achievement, "Unlocked", showImmediately: true);
+        var (notificationCenter, dismissedAchievementIds) = CreateNotificationCenterRecordingDismissals(windowService, layers);
+        var achievement = AchievementDetails();
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "Unlocked", showImmediately: true, achievement: achievement);
 
         var popup = capturedPopups.Single(window => window.TitleButtons.Count > 0);
         Assert.IsTrue(ClickDynamicHud(layers, popup.TitleButtons[0].Rectangle.Center));
 
-        Assert.HasCount(1, dismissed);
-        Assert.AreEqual(notificationId, dismissed[0].Id);
+        CollectionAssert.AreEqual(new[] { achievement.AchievementId }, dismissedAchievementIds);
     }
 
     [TestMethod]
-    public void ClickingMinimizeButton_DoesNotRaiseNotificationDismissed_UntilItIsReopenedAndClosed()
+    public void ClosingANotificationWithoutAchievementDetails_PublishesNothing()
+    {
+        var (notificationCenter, dismissedAchievementIds) = CreateNotificationCenterRecordingDismissals(CreateWindowService(), new UiLayerStack());
+        var notificationId = notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: true);
+
+        Assert.IsTrue(notificationCenter.CloseNotification(notificationId));
+
+        Assert.IsEmpty(dismissedAchievementIds);
+    }
+
+    [TestMethod]
+    public void ClickingMinimizeButton_DoesNotPublishTheDismissal_UntilItIsReopenedAndClosed()
     {
         var (windowService, capturedPopups) = CreateWindowServiceCapturingTextWindows();
         var layers = new UiLayerStack();
-        var notificationCenter = CreateNotificationCenter(windowService, layers);
-        var dismissed = RecordDismissals(notificationCenter);
-        var notificationId = notificationCenter.AddNotification(NotificationCategory.Achievement, "Unlocked", showImmediately: true);
+        var (notificationCenter, dismissedAchievementIds) = CreateNotificationCenterRecordingDismissals(windowService, layers);
+        var achievement = AchievementDetails();
+        var notificationId = notificationCenter.AddNotification(NotificationCategory.Achievement, "Unlocked", showImmediately: true, achievement: achievement);
 
         var popup = capturedPopups.Single(window => window.TitleButtons.Count > 0);
         Assert.HasCount(2, popup.TitleButtons);
         Assert.IsTrue(ClickDynamicHud(layers, popup.TitleButtons[1].Rectangle.Center));
 
-        Assert.IsEmpty(dismissed);
+        Assert.IsEmpty(dismissedAchievementIds);
         Assert.IsFalse(notificationCenter.CloseNotification(notificationId));
 
         notificationCenter.OpenNextNotification(NotificationCategory.Achievement);
         Assert.IsTrue(notificationCenter.CloseNotification(notificationId));
 
-        Assert.HasCount(1, dismissed);
-        Assert.AreEqual(notificationId, dismissed[0].Id);
+        CollectionAssert.AreEqual(new[] { achievement.AchievementId }, dismissedAchievementIds);
     }
 
     [TestMethod]
-    public void MinimizeAllNotifications_DoesNotRaiseNotificationDismissed()
+    public void MinimizeAllNotifications_DoesNotPublishDismissals()
     {
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), new UiLayerStack());
-        var dismissed = RecordDismissals(notificationCenter);
-        notificationCenter.AddNotification(NotificationCategory.Achievement, "First", showImmediately: true);
-        notificationCenter.AddNotification(NotificationCategory.Achievement, "Second", showImmediately: true);
+        var (notificationCenter, dismissedAchievementIds) = CreateNotificationCenterRecordingDismissals(CreateWindowService(), new UiLayerStack());
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "First", showImmediately: true, achievement: AchievementDetails());
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "Second", showImmediately: true, achievement: AchievementDetails());
 
         notificationCenter.MinimizeAllNotifications();
 
-        Assert.IsEmpty(dismissed);
+        Assert.IsEmpty(dismissedAchievementIds);
     }
 
     [TestMethod]
-    public void CloseAllNotifications_RaisesNotificationDismissedForEveryActiveNotification()
+    public void CloseAllNotifications_PublishesADismissalForEveryActiveAchievement()
     {
-        var notificationCenter = CreateNotificationCenter(CreateWindowService(), new UiLayerStack());
-        var dismissed = RecordDismissals(notificationCenter);
-        var firstId = notificationCenter.AddNotification(NotificationCategory.Achievement, "First", showImmediately: true);
-        var secondId = notificationCenter.AddNotification(NotificationCategory.Achievement, "Second", showImmediately: true);
-        notificationCenter.AddNotification(NotificationCategory.Achievement, "Queued", showImmediately: false);
+        var (notificationCenter, dismissedAchievementIds) = CreateNotificationCenterRecordingDismissals(CreateWindowService(), new UiLayerStack());
+        var first = AchievementDetails();
+        var second = AchievementDetails();
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "First", showImmediately: true, achievement: first);
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "Second", showImmediately: true, achievement: second);
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "Queued", showImmediately: false, achievement: AchievementDetails());
 
         notificationCenter.CloseAllNotifications();
 
-        CollectionAssert.AreEquivalent(new[] { firstId, secondId }, dismissed.Select(notification => notification.Id).ToArray());
+        CollectionAssert.AreEquivalent(new[] { first.AchievementId, second.AchievementId }, dismissedAchievementIds);
     }
 
     [TestMethod]

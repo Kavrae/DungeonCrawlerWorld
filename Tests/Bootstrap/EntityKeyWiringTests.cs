@@ -20,7 +20,7 @@ public sealed class EntityKeyWiringTests
         var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
         var world = result.World;
         var ecs = result.EcsContext;
-        result.ProcessingTierResolver.SetReferencePosition(new Vector3Int(10, 10, (int)MapLayer.Ground));
+        result.Internals.ProcessingTierResolver.SetReferencePosition(new Vector3Int(10, 10, (int)MapLayer.Ground));
 
         var casterId = PlaceAt(world, ecs, result, new Vector3Int(10, 10, (int)MapLayer.Ground));
         world.PlayerEntityId = casterId;
@@ -40,9 +40,9 @@ public sealed class EntityKeyWiringTests
         Assert.AreEqual(ecs.EntityManager.Keys.GetKey(casterId), damageSource.Value.Key);
     }
 
-    private static int PlaceAt(Game.World.World world, Engine.ECS.Context.EcsContext ecs, GameBootstrapResult result, Vector3Int position)
+    private static int PlaceAt(Game.World.World world, Engine.ECS.Context.EcsContext ecs, GameSession result, Vector3Int position)
     {
-        var entityId = result.ProcessingTierResolver.CreateEntityAt(ecs.EntityManager, position);
+        var entityId = result.Internals.ProcessingTierResolver.CreateEntityAt(ecs.EntityManager, position);
         ecs.ComponentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
         world.PlaceEntityOnMap(entityId, position, ref ecs.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId));
         return entityId;

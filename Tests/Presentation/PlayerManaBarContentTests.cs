@@ -4,6 +4,7 @@ using Engine.Math;
 using Game.Modules.Mana.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Rendering;
@@ -30,7 +31,7 @@ public sealed class PlayerManaBarContentTests
             componentManager.Merge(PlayerEntityId, playerMana);
         }
 
-        var content = new PlayerManaBarContent(world, componentManager, fontService);
+        var content = new PlayerManaBarContent(world, new ActionStateView(componentManager, localTierRoster: null), new StatModifierView(componentManager), fontService);
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions

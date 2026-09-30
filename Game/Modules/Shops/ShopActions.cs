@@ -1,5 +1,4 @@
 using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Game.Modules.Currency;
 using Game.Modules.Currency.Components;
@@ -40,6 +39,9 @@ public static class ShopActions
     /// transfer; if the item transfer still fails afterward (defense in depth -- shouldn't happen
     /// given the capacity check above), the currency is rolled back rather than leaving Gold moved
     /// with no item to show for it.
+    /// A bought stack merges into an equivalent stack the player already holds (see
+    /// InventoryActions.MergeIntoEquivalentStack), so buying more of something the player carries
+    /// tops up that stack instead of leaving two the inventory grid would show as one Merged Stack.
     /// </summary>
     public static bool TryBuyFromShop(ComponentManager componentManager, ItemCatalog itemCatalog, int playerEntityId, int shopEntityId, uint stackInstanceId, IPlayerQuery playerQuery)
     {
@@ -77,6 +79,8 @@ public static class ShopActions
             CurrencyActions.TryTransfer(componentManager, shopEntityId, playerEntityId, CurrencyType.Gold, totalPrice);
             return false;
         }
+
+        InventoryActions.MergeIntoEquivalentStack(componentManager, playerEntityId, stackInstanceId);
 
         return true;
     }

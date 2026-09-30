@@ -21,7 +21,7 @@ public sealed class RaceModule : IGameModule
         }, initialCapacity: 80_000);
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
 
         // No systems of its own -- Race is narrative/display data today, consulted by

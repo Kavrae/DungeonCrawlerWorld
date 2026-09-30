@@ -47,7 +47,7 @@ public sealed class ParalysisModule : IGameModule
         componentManager.RegisterPackedPool<ParalysisTimerComponent>(static (ref existing, incoming) => { });
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
         var systemManager = registration.SystemManager;
         var componentManager = registration.ComponentManager;

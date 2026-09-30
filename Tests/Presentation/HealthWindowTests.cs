@@ -1,11 +1,10 @@
 using Engine.ECS.Systems;
+using Game.Views;
 ﻿using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
 using Game.Modules;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
-using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Definitions;
@@ -35,25 +34,16 @@ public sealed class HealthWindowTests
 {
     private const int EntityId = 0;
 
-    private static PackedComponentPool<SimpleHealthComponent> CreateHealthPool() =>
-        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
-
-    private static MultiComponentPool<StatModifierComponent> CreateMaximumHealthBuffPool(float magnitude)
-    {
-        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
-        statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: true, magnitude: magnitude, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
-        return statModifiers;
-    }
+    private static void BuildBodyPartRows(List<HealthWindow.BodyPartRow> rows, BodyPartTestWorld bodyPartWorld) =>
+        HealthWindow.BuildBodyPartRows(rows, EntityId, new HealthView(bodyPartWorld.Components, bodyPartWorld.BodyParts), bodyPartWorld.BodyParts, new StatModifierView(bodyPartWorld.Components));
 
     [TestMethod]
     public void BuildBodyPartRows_ComplexFixture_OneRowPerBodyPart()
     {
-        var healthPool = CreateHealthPool();
-        var bodyParts = BodyPartTestWorld.WithParts(EntityId, ("Head", BodyPartType.Head, 10, 10, true), ("Torso", BodyPartType.Torso, 15, 20, true), ("Left Arm", BodyPartType.Arm, 8, 8, false), ("Right Arm", BodyPartType.Arm, 8, 8, false), ("Left Leg", BodyPartType.Leg, 4, 9, false), ("Right Leg", BodyPartType.Leg, 9, 9, false)).BodyParts;
+        var bodyPartWorld = BodyPartTestWorld.WithParts(EntityId, ("Head", BodyPartType.Head, 10, 10, true), ("Torso", BodyPartType.Torso, 15, 20, true), ("Left Arm", BodyPartType.Arm, 8, 8, false), ("Right Arm", BodyPartType.Arm, 8, 8, false), ("Left Leg", BodyPartType.Leg, 4, 9, false), ("Right Leg", BodyPartType.Leg, 9, 9, false));
 
         List<HealthWindow.BodyPartRow> rows = [];
-        HealthWindow.BuildBodyPartRows(rows, EntityId, healthPool, bodyParts, statModifiers: EmptyPools.Multi<StatModifierComponent>());
+        BuildBodyPartRows(rows, bodyPartWorld);
 
         Assert.HasCount(6, rows);
         var torsoRow = rows.Single(row => row.Name == "Torso");
@@ -67,12 +57,12 @@ public sealed class HealthWindowTests
         // A part sitting at its raw maximum (10/10) must still read below that once a +50%
         // MaximumHealth buff makes its true cap 15 -- regression for the same bug
         // ComplexHealthHeal/BodyPartSelection/PlayerHealthHoverContent had.
-        var healthPool = CreateHealthPool();
-        var bodyParts = BodyPartTestWorld.WithParts(EntityId, ("Head", BodyPartType.Head, 10, 10, true)).BodyParts;
-        var statModifiers = CreateMaximumHealthBuffPool(0.5f);
+        var bodyPartWorld = BodyPartTestWorld.WithParts(EntityId, ("Head", BodyPartType.Head, 10, 10, true));
+        bodyPartWorld.Components.GetMultiPool<StatModifierComponent>().Add(EntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         List<HealthWindow.BodyPartRow> rows = [];
-        HealthWindow.BuildBodyPartRows(rows, EntityId, healthPool, bodyParts, statModifiers);
+        BuildBodyPartRows(rows, bodyPartWorld);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual(10f, rows[0].CurrentHealth);
@@ -82,12 +72,11 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void BuildBodyPartRows_SimpleHealthFixture_OneRowNamedHP()
     {
-        var healthPool = CreateHealthPool();
-        healthPool.Add(EntityId, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
-        var bodyParts = new BodyPartTestWorld().BodyParts;
+        var bodyPartWorld = new BodyPartTestWorld();
+        bodyPartWorld.Components.Merge(EntityId, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
 
         List<HealthWindow.BodyPartRow> rows = [];
-        HealthWindow.BuildBodyPartRows(rows, EntityId, healthPool, bodyParts, statModifiers: EmptyPools.Multi<StatModifierComponent>());
+        BuildBodyPartRows(rows, bodyPartWorld);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual("HP", rows[0].Name);
@@ -122,7 +111,7 @@ public sealed class HealthWindowTests
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
 
-        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(componentManager), componentManager, now: 0);
+        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(componentManager), now: 0);
 
         Assert.IsEmpty(rows);
     }
@@ -136,7 +125,7 @@ public sealed class HealthWindowTests
 
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
-        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(componentManager), componentManager, now: 0);
+        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(componentManager), now: 0);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual(StatusEffectType.Poison, rows[0].Type);
@@ -153,7 +142,7 @@ public sealed class HealthWindowTests
 
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
-        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(componentManager), componentManager, now: 0);
+        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(componentManager), now: 0);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual(StatusEffectType.Burning, rows[0].Type);
@@ -170,7 +159,7 @@ public sealed class HealthWindowTests
 
         List<HealthWindow.StatusEffectRow> rows = [];
         List<StatusEffectType> scratch = [];
-        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(componentManager), componentManager, now: 0);
+        HealthWindow.BuildStatusEffectRows(rows, scratch, EntityId, CreateStatusEffectDisplayRegistry(componentManager), now: 0);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual(StatusEffectType.Paralysis, rows[0].Type);
@@ -222,11 +211,11 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void TryGetBodyPartBurningLine_PartHasActiveBodyPartScopedBurn_ReturnsFormattedLine()
     {
-        var bodyPartBurningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(entityCapacity: 10, initialCapacity: 4);
+        var bodyPartBurningTimers = new List<BodyPartBurningTimerComponent>();
         // FramesUntilNextTick 45 + (StackCount 2 - 1) * TickIntervalFrames 60 = 105 frames = 1.75s -> ceil to 2 -- same formula the entity-scoped BurningTimerComponent display uses.
-        bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, nextTickFrame: 45, ActionSource.Admin));
+        bodyPartBurningTimers.Add(new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, nextTickFrame: 45, ActionSource.Admin));
 
-        var found = HealthWindow.TryGetBodyPartBurningLine(bodyPartBurningTimers, EntityId, partId: 1, now: 0, out var text, out _);
+        var found = HealthWindow.TryGetBodyPartBurningLine(bodyPartBurningTimers, partId: 1, now: 0, out var text, out _);
 
         Assert.IsTrue(found);
         Assert.Contains("2s", text);
@@ -236,17 +225,14 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void TryGetBodyPartBurningLine_DifferentPartOnFire_ThisPartReturnsFalse()
     {
-        var bodyPartBurningTimers = new MultiComponentPool<BodyPartBurningTimerComponent>(entityCapacity: 10, initialCapacity: 4);
-        bodyPartBurningTimers.Add(EntityId, new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, nextTickFrame: 45, ActionSource.Admin));
+        var bodyPartBurningTimers = new List<BodyPartBurningTimerComponent>();
+        bodyPartBurningTimers.Add(new BodyPartBurningTimerComponent(partId: 1, stackCount: 2, nextTickFrame: 45, ActionSource.Admin));
 
-        var found = HealthWindow.TryGetBodyPartBurningLine(bodyPartBurningTimers, EntityId, partId: 0, now: 0, out var text, out _);
+        var found = HealthWindow.TryGetBodyPartBurningLine(bodyPartBurningTimers, partId: 0, now: 0, out var text, out _);
 
         Assert.IsFalse(found);
         Assert.AreEqual(string.Empty, text);
     }
-
-    private static PackedComponentPool<PotionCooldownComponent> CreatePotionCooldownPool() =>
-        new(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
     private static ItemCatalog CreateItemCatalogWithHealthPotion()
     {
@@ -258,9 +244,9 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void TryGetPotionCooldownLine_NoActiveCooldown_ReturnsFalse()
     {
-        var potionCooldowns = CreatePotionCooldownPool();
+        PotionCooldownComponent? potionCooldown = null;
 
-        var found = HealthWindow.TryGetPotionCooldownLine(potionCooldowns, CreateItemCatalogWithHealthPotion(), EntityId, now: 0, out _, out _);
+        var found = HealthWindow.TryGetPotionCooldownLine(potionCooldown, CreateItemCatalogWithHealthPotion(), now: 0, out _, out _);
 
         Assert.IsFalse(found);
     }
@@ -268,10 +254,10 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void TryGetPotionCooldownLine_FramesRemainingZero_ReturnsFalse()
     {
-        var potionCooldowns = CreatePotionCooldownPool();
-        potionCooldowns.Add(EntityId, new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 0));
+        PotionCooldownComponent? potionCooldown = null;
+        potionCooldown = new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 0);
 
-        var found = HealthWindow.TryGetPotionCooldownLine(potionCooldowns, CreateItemCatalogWithHealthPotion(), EntityId, now: 0, out _, out _);
+        var found = HealthWindow.TryGetPotionCooldownLine(potionCooldown, CreateItemCatalogWithHealthPotion(), now: 0, out _, out _);
 
         Assert.IsFalse(found);
     }
@@ -279,11 +265,11 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void TryGetPotionCooldownLine_ActiveCooldown_ReturnsFormattedLine()
     {
-        var potionCooldowns = CreatePotionCooldownPool();
+        PotionCooldownComponent? potionCooldown = null;
         // 121 frames = 2.017s -> ceil to 3, same PotionCooldownEffects.RemainingSeconds rounding PlayerStatusEffectsContent already relies on.
-        potionCooldowns.Add(EntityId, new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 121));
+        potionCooldown = new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 121);
 
-        var found = HealthWindow.TryGetPotionCooldownLine(potionCooldowns, CreateItemCatalogWithHealthPotion(), EntityId, now: 0, out var text, out var color);
+        var found = HealthWindow.TryGetPotionCooldownLine(potionCooldown, CreateItemCatalogWithHealthPotion(), now: 0, out var text, out var color);
 
         Assert.IsTrue(found);
         Assert.AreEqual("h Potion Cooldown: 3s", text);
@@ -293,26 +279,25 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void TryGetPotionCooldownLine_HealthPotionNotInCatalog_UsesFallbackGlyphAndColor()
     {
-        var potionCooldowns = CreatePotionCooldownPool();
-        potionCooldowns.Add(EntityId, new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 60));
+        PotionCooldownComponent? potionCooldown = null;
+        potionCooldown = new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 60);
 
-        var found = HealthWindow.TryGetPotionCooldownLine(potionCooldowns, new ItemCatalog(), EntityId, now: 0, out var text, out var color);
+        var found = HealthWindow.TryGetPotionCooldownLine(potionCooldown, new ItemCatalog(), now: 0, out var text, out var color);
 
         Assert.IsTrue(found);
         Assert.AreEqual("? Potion Cooldown: 1s", text);
         Assert.AreEqual(Color.White, color);
     }
 
-    private static MultiComponentPool<StatModifierComponent> CreateStatModifiersPool() =>
-        new(entityCapacity: 10, initialCapacity: 4);
+    private static List<StatModifierComponent> CreateStatModifiers() => [];
 
     [TestMethod]
     public void BuildModifierRows_NoActiveModifiers_Empty()
     {
-        var statModifiers = CreateStatModifiersPool();
+        var statModifiers = CreateStatModifiers();
         List<HealthWindow.ModifierRow> rows = [];
 
-        HealthWindow.BuildModifierRows(rows, EntityId, statModifiers, StatModifierPolarity.Buff, now: 0);
+        HealthWindow.BuildModifierRows(rows, statModifiers, StatModifierPolarity.Buff, now: 0);
 
         Assert.IsEmpty(rows);
     }
@@ -320,13 +305,13 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void BuildModifierRows_TimedBuffActive_RemainingSecondsMatchesFrames()
     {
-        var statModifiers = CreateStatModifiersPool();
+        var statModifiers = CreateStatModifiers();
         // 121 frames = 2.017s -> ceil to 3.
-        statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+        statModifiers.Add(new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: 0.5f, expiresAtFrame: 121, ActionSource.Admin));
 
         List<HealthWindow.ModifierRow> rows = [];
-        HealthWindow.BuildModifierRows(rows, EntityId, statModifiers, StatModifierPolarity.Buff, now: 0);
+        HealthWindow.BuildModifierRows(rows, statModifiers, StatModifierPolarity.Buff, now: 0);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual(StatModifierTarget.MaximumHealth, rows[0].Target);
@@ -339,12 +324,12 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void BuildModifierRows_PermanentDebuffActive_RemainingSecondsIsNull()
     {
-        var statModifiers = CreateStatModifiersPool();
-        statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.MovementLockFrames, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
+        var statModifiers = CreateStatModifiers();
+        statModifiers.Add(new StatModifierComponent(StatModifierTarget.MovementLockFrames, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
             canModify: true, magnitude: 10f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         List<HealthWindow.ModifierRow> rows = [];
-        HealthWindow.BuildModifierRows(rows, EntityId, statModifiers, StatModifierPolarity.Debuff, now: 0);
+        HealthWindow.BuildModifierRows(rows, statModifiers, StatModifierPolarity.Debuff, now: 0);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual(StatModifierPolarity.Debuff, rows[0].Polarity);
@@ -354,14 +339,14 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void BuildModifierRows_TwoBuffsOnSameTarget_BothListedAsSeparateRows()
     {
-        var statModifiers = CreateStatModifiersPool();
-        statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
+        var statModifiers = CreateStatModifiers();
+        statModifiers.Add(new StatModifierComponent(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: 5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
-        statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
+        statModifiers.Add(new StatModifierComponent(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: 2f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         List<HealthWindow.ModifierRow> rows = [];
-        HealthWindow.BuildModifierRows(rows, EntityId, statModifiers, StatModifierPolarity.Buff, now: 0);
+        HealthWindow.BuildModifierRows(rows, statModifiers, StatModifierPolarity.Buff, now: 0);
 
         Assert.HasCount(2, rows);
     }
@@ -369,12 +354,12 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void BuildModifierRows_WrongPolarity_Excluded()
     {
-        var statModifiers = CreateStatModifiersPool();
-        statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
+        var statModifiers = CreateStatModifiers();
+        statModifiers.Add(new StatModifierComponent(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
             canModify: true, magnitude: 2f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         List<HealthWindow.ModifierRow> rows = [];
-        HealthWindow.BuildModifierRows(rows, EntityId, statModifiers, StatModifierPolarity.Buff, now: 0);
+        HealthWindow.BuildModifierRows(rows, statModifiers, StatModifierPolarity.Buff, now: 0);
 
         Assert.IsEmpty(rows);
     }
@@ -384,12 +369,12 @@ public sealed class HealthWindowTests
     {
         // Strength/Intelligence/etc. modifiers are AbilityScoreWindow's own territory (see
         // AbilityScoreModifierFormatter) -- HealthWindow must not duplicate them.
-        var statModifiers = CreateStatModifiersPool();
-        statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.Strength, StatModifierOperation.Additive, StatModifierPolarity.Buff,
+        var statModifiers = CreateStatModifiers();
+        statModifiers.Add(new StatModifierComponent(StatModifierTarget.Strength, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: 3f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
         List<HealthWindow.ModifierRow> rows = [];
-        HealthWindow.BuildModifierRows(rows, EntityId, statModifiers, StatModifierPolarity.Buff, now: 0);
+        HealthWindow.BuildModifierRows(rows, statModifiers, StatModifierPolarity.Buff, now: 0);
 
         Assert.IsEmpty(rows);
     }
@@ -397,12 +382,12 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void BuildModifierRows_ConditionTagPresent_CarriedOntoTheRow()
     {
-        var statModifiers = CreateStatModifiersPool();
-        statModifiers.Add(EntityId, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+        var statModifiers = CreateStatModifiers();
+        statModifiers.Add(new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin, conditionTag: Tag.Poison));
 
         List<HealthWindow.ModifierRow> rows = [];
-        HealthWindow.BuildModifierRows(rows, EntityId, statModifiers, StatModifierPolarity.Buff, now: 0);
+        HealthWindow.BuildModifierRows(rows, statModifiers, StatModifierPolarity.Buff, now: 0);
 
         Assert.HasCount(1, rows);
         Assert.AreEqual(Tag.Poison, rows[0].ConditionTag);
@@ -612,16 +597,15 @@ public sealed class HealthWindowTests
         Assert.AreEqual("x2.4 Movement Penalty", HealthWindow.FormatModifierRow(row));
     }
 
-    private static MultiComponentPool<StatusEffectImmunityComponent> CreateImmunitiesPool() =>
-        new(entityCapacity: 10, initialCapacity: 4);
+    private static List<StatusEffectImmunityComponent> CreateImmunities() => [];
 
     [TestMethod]
     public void BuildImmunityRows_NoActiveImmunities_Empty()
     {
-        var immunities = CreateImmunitiesPool();
+        var immunities = CreateImmunities();
         List<HealthWindow.ImmunityRow> rows = [];
 
-        HealthWindow.BuildImmunityRows(rows, EntityId, immunities, now: 0);
+        HealthWindow.BuildImmunityRows(rows, immunities, now: 0);
 
         Assert.IsEmpty(rows);
     }
@@ -630,12 +614,12 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void BuildImmunityRows_TwoActiveImmunities_OneRowEach()
     {
-        var immunities = CreateImmunitiesPool();
-        immunities.Add(EntityId, new StatusEffectImmunityComponent(StatusEffectType.Burning, expiresAtFrame: 36_000));
-        immunities.Add(EntityId, new StatusEffectImmunityComponent(StatusEffectType.Poison, expiresAtFrame: 36_000));
+        var immunities = CreateImmunities();
+        immunities.Add(new StatusEffectImmunityComponent(StatusEffectType.Burning, expiresAtFrame: 36_000));
+        immunities.Add(new StatusEffectImmunityComponent(StatusEffectType.Poison, expiresAtFrame: 36_000));
 
         List<HealthWindow.ImmunityRow> rows = [];
-        HealthWindow.BuildImmunityRows(rows, EntityId, immunities, now: 0);
+        HealthWindow.BuildImmunityRows(rows, immunities, now: 0);
 
         Assert.HasCount(2, rows);
     }
@@ -643,11 +627,11 @@ public sealed class HealthWindowTests
     [TestMethod]
     public void BuildImmunityRows_PermanentImmunity_RemainingSecondsIsNull()
     {
-        var immunities = CreateImmunitiesPool();
-        immunities.Add(EntityId, new StatusEffectImmunityComponent(StatusEffectType.Paralysis, expiresAtFrame: FrameDeadline.Never));
+        var immunities = CreateImmunities();
+        immunities.Add(new StatusEffectImmunityComponent(StatusEffectType.Paralysis, expiresAtFrame: FrameDeadline.Never));
 
         List<HealthWindow.ImmunityRow> rows = [];
-        HealthWindow.BuildImmunityRows(rows, EntityId, immunities, now: 0);
+        HealthWindow.BuildImmunityRows(rows, immunities, now: 0);
 
         Assert.HasCount(1, rows);
         Assert.IsNull(rows[0].RemainingSeconds);

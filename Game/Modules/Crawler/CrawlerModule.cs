@@ -19,7 +19,7 @@ public sealed class CrawlerModule : IGameModule
         componentManager.RegisterPackedPool<CrawlerComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 4_000);
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
         // No systems of its own
     }

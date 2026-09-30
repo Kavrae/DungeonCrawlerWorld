@@ -20,8 +20,8 @@ namespace Tests.Modules.Achievements;
 /// Exercises the base-ability-score milestone achievements (BigMuscles, Unbreakable, ShanghaiKid,
 /// RevengeOfTheNerds, KillerQueen, MinMaxer) end-to-end through the real AchievementModule,
 /// mirroring AchievementModuleTests' own Build pattern. AbilityScoresModule declares a dependency
-/// on StatModifiersModule, whose own RegisterSystems needs ProcessingTierComponent
-/// (ProcessingTierModule), whose own RegisterSystems needs TransformComponent/MovementComponent
+/// on StatModifiersModule, whose own RegisterBehavior needs ProcessingTierComponent
+/// (ProcessingTierModule), whose own RegisterBehavior needs TransformComponent/MovementComponent
 /// (CoreModule/MovementModule) -- so the full chain has to be built, same reasoning as
 /// InertGasAchievementTests' own Build pattern (see its doc comment).
 /// </summary>

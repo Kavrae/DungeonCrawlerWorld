@@ -1,11 +1,9 @@
-using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
-using Engine.Events;
 using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Currency;
 using Game.Modules.Inventory;
-using Game.Modules.Shops.Components;
+using Game.Modules.Shops;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -184,17 +182,22 @@ public sealed class UiInputController
     /// <summary>Owns the Armed Hotkey Summary window's arm/preview/hover state machine -- see its own doc comment. Null in test setups that don't build one (e.g. UiInputControllerTests' own harness), in which case hotbar-slot press/release/hover handling is simply skipped.</summary>
     private readonly HotbarController? _hotbarController;
 
-    /// <summary>Builds the DragDropContext handed to _dragDropResolvers.</summary>
-    private readonly ComponentManager _componentManager;
-
-    /// <summary>See _componentManager -- passed to PlainInventoryDragDropResolver/ShopDragDropResolver/TradeDragDropResolver, which pass it straight through to InventoryActions' capacity check for a non-player transfer destination.</summary>
+    /// <summary>Who the player is, for the trade resolver and for telling a drag out of the player's own inventory apart from one out of someone else's.</summary>
     private readonly IPlayerQuery _playerQuery;
 
-    /// <summary>Resolves a dragged stack's item for every drag-drop resolver: the shop's and trade's buy/sell step, and whether the item can be traded at all (InventoryActions.TryTransferStack).</summary>
-    private readonly ItemCatalog _itemCatalog;
+    /// <summary>Every drag-drop resolver's item moves.</summary>
+    private readonly InventoryCommands _inventoryCommands;
 
-    /// <summary>Derived from _componentManager, not a separate constructor parameter.</summary>
-    private readonly PackedComponentPool<ShopComponent> _shopPool;
+    /// <summary>The shop and trade resolvers' buy/sell step, and a currency drag given to a shop (the "Angel Investor" trigger CurrencyRowContent's Give/Give All also routes through).</summary>
+    private readonly ShopCommands _shopCommands;
+
+    /// <summary>The trade resolver's currency stage/unstage.</summary>
+    private readonly CurrencyCommands _currencyCommands;
+
+    private readonly ShopView _shopView;
+
+    /// <summary>Rewritten at the end of every Update -- see PointerState.</summary>
+    private readonly PointerState _pointerState;
 
     /// <summary>
     /// Every feature's own drag-drop resolution strategy, tried in this fixed priority order by
@@ -210,9 +213,6 @@ public sealed class UiInputController
 
     /// <summary>Needed only to check MapViewState.OpenShopEntityId -- while a shop is open, TryStartContentDrag refuses to pick up a cell InventoryGridContent has already marked CellCompareState.Ineligible (see InventoryGridContent.UpdateShopEligibilityState), the same "can't drag what you can't trade" gate BuildItemContextMenu applies to Give/Take. Null in test setups that don't wire one, in which case a content-drag never reads as shop-gated.</summary>
     private readonly MapViewState? _mapViewState;
-
-    /// <summary>Needed only so PlainInventoryDragDropResolver's direct currency drag dropped onto a shop can publish GoldGivenToShopEvent through ShopActions.TryGiveCurrencyToShop -- the same "Angel Investor" trigger CurrencyRowContent's own Give/Give All already routes through.</summary>
-    private readonly EventBus _eventBus;
 
     /// <summary>Owns the single shared ContextMenu popup -- null in test setups that don't build one, in which case right-click context menus simply never open and an already-open one (there can't be, without this) never needs dismissing.</summary>
     private readonly ContextMenuController? _contextMenuController;
@@ -290,24 +290,25 @@ public sealed class UiInputController
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public UiInputController(UiLayerStack layers, Vector2 screenSize, ComponentManager componentManager, IPlayerQuery playerQuery, EventBus eventBus, ItemCatalog itemCatalog, HotbarController? hotbarController = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null, MapViewState? mapViewState = null, HealthWindowController? healthWindowController = null, InventoryWindowController? inventoryWindowController = null, AbilityScoreWindowController? abilityScoreWindowController = null, DiagnosticsWindowController? diagnosticsWindowController = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, PointerState pointerState, ShopView shopView, IPlayerQuery playerQuery, InventoryCommands inventoryCommands, ShopCommands shopCommands, CurrencyCommands currencyCommands, HotbarController? hotbarController = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null, MapViewState? mapViewState = null, HealthWindowController? healthWindowController = null, InventoryWindowController? inventoryWindowController = null, AbilityScoreWindowController? abilityScoreWindowController = null, DiagnosticsWindowController? diagnosticsWindowController = null)
     {
         _layers = layers;
         _screenSize = screenSize;
+        _pointerState = pointerState;
         _hotbarController = hotbarController;
-        _componentManager = componentManager;
         _playerQuery = playerQuery;
+        _inventoryCommands = inventoryCommands;
+        _shopCommands = shopCommands;
+        _currencyCommands = currencyCommands;
         _contextMenuController = contextMenuController;
         _itemDetailsWindowController = itemDetailsWindowController;
         _itemComparisonController = itemComparisonController;
-        _itemCatalog = itemCatalog;
         _mapViewState = mapViewState;
-        _eventBus = eventBus;
         _healthWindowController = healthWindowController;
         _inventoryWindowController = inventoryWindowController;
         _abilityScoreWindowController = abilityScoreWindowController;
         _diagnosticsWindowController = diagnosticsWindowController;
-        _shopPool = componentManager.GetPackedPool<ShopComponent>();
+        _shopView = shopView;
         _dragDropResolvers = BuildDragDropResolvers();
 
         // Subscribing is safe to do unconditionally and permanently -- SDL simply never raises
@@ -327,12 +328,12 @@ public sealed class UiInputController
 
         if (_mapViewState is not null)
         {
-            resolvers.Add(new TradeDragDropResolver(_mapViewState, _shopPool, _itemCatalog, _playerQuery));
+            resolvers.Add(new TradeDragDropResolver(_mapViewState, _shopView, _inventoryCommands, _shopCommands, _currencyCommands, _playerQuery));
         }
 
-        resolvers.Add(new ShopDragDropResolver(_shopPool, _itemCatalog, _playerQuery));
+        resolvers.Add(new ShopDragDropResolver(_shopView, _shopCommands));
 
-        resolvers.Add(new PlainInventoryDragDropResolver(_itemCatalog, _playerQuery, _eventBus));
+        resolvers.Add(new PlainInventoryDragDropResolver(_inventoryCommands, _shopCommands));
 
         return resolvers;
     }
@@ -420,30 +421,15 @@ public sealed class UiInputController
     /// <summary>The last cursor UpdateCursor set (or the initial Arrow default, if it's never had reason to change) -- lets tests assert on cursor selection without depending on real OS cursor state.</summary>
     internal MouseCursor CurrentCursor { get; private set; } = MouseCursor.Arrow;
 
-    /// <summary>The item currently being content-dragged, if any -- see _contentDragItemStackInstanceId's own doc comment. Public (unlike most of this class's internals) so ShellBootstrapper -- a different assembly -- can wire it into DragGhostContent.GetState, the same reasoning IsTextBoxFocused's own doc comment gives.</summary>
-    public uint? ContentDragItemStackInstanceId => _contentDragItemStackInstanceId;
-
-    /// <summary>The Merged Stack cell's own ItemDefinitionId currently being content-dragged, if any -- see _contentDragMergedItemDefinitionId's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
-    public Guid? ContentDragMergedItemDefinitionId => _contentDragMergedItemDefinitionId;
-
-    /// <summary>The action currently being content-dragged, if any -- see _contentDragActionId's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
-    public Guid? ContentDragActionId => _contentDragActionId;
-
-    /// <summary>Which currency is currently being content-dragged, if any -- see _contentDragCurrencyType's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
-    public CurrencyType? ContentDragCurrencyType => _contentDragCurrencyType;
-
-    /// <summary>The entity ContentDragItemStackInstanceId/ContentDragMergedItemDefinitionId's stack actually belongs to, if the drag started on an InventoryItemStackCell -- see _contentDragOriginEntityId's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above -- DragGhostContent needs this to resolve a corpse-originated drag's icon, not just the player's own inventory.</summary>
-    public int? ContentDragOriginEntityId => _contentDragOriginEntityId;
-
-    /// <summary>Whether DragGhostContent should actually draw the ghost right now -- true once a content-drag payload has been held for ContentDragGhostDelayFrames. See that constant's own doc comment for why this delay exists. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
-    public bool ContentDragGhostVisible =>
+    /// <summary>Whether DragGhostContent should draw the ghost right now -- true once a content-drag payload has been held for ContentDragGhostDelayFrames. See that constant's own doc comment for why this delay exists.</summary>
+    private bool ContentDragGhostVisible =>
         (_contentDragItemStackInstanceId is not null || _contentDragMergedItemDefinitionId is not null || _contentDragActionId is not null || _contentDragCurrencyType is not null) && _contentDragHeldFrames >= ContentDragGhostDelayFrames;
 
-    /// <summary>See _contentDragSourceSize's own doc comment. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
-    public Vector2 ContentDragSourceSize => _contentDragSourceSize;
+    /// <summary>See _contentDragSourceSize's own doc comment.</summary>
+    internal Vector2 ContentDragSourceSize => _contentDragSourceSize;
 
-    /// <summary>Current mouse screen position, refreshed at the top of every Update call -- paired with ContentDragItemStackInstanceId for the same ghost-sprite use, and with CursorTextContent.GetCursorPosition. Public for the same reason as ContentDragItemStackInstanceId above.</summary>
-    public Point CurrentMousePosition { get; private set; }
+    /// <summary>Current mouse screen position, refreshed at the top of every Update call and published through PointerState at its end.</summary>
+    private Point CurrentMousePosition { get; set; }
 
     public void Update() => Update(Keyboard.GetState(), Mouse.GetState());
 
@@ -519,6 +505,17 @@ public sealed class UiInputController
 
         _previousKeyboardState = keyboardState;
         _previousMouseState = mouseState;
+
+        _pointerState.CursorPosition = CurrentMousePosition;
+        _pointerState.ContentDrag = new DragGhostState(
+            ContentDragGhostVisible,
+            _contentDragItemStackInstanceId,
+            _contentDragMergedItemDefinitionId,
+            _contentDragActionId,
+            _contentDragCurrencyType,
+            _contentDragOriginEntityId,
+            _contentDragSourceSize,
+            CurrentMousePosition);
     }
 
     /// <summary>
@@ -967,7 +964,7 @@ public sealed class UiInputController
         // (Give) is unaffected either way, since that's the drop TARGET, not the drag's own origin
         // element.
         else if (_activeInteraction.Element is CurrencyElement currencyElement &&
-            (!_shopPool.Has(currencyElement.EntityId) || currencyElement.EntityId == _mapViewState?.OpenShopEntityId))
+            (!_shopView.IsShop(currencyElement.EntityId) || currencyElement.EntityId == _mapViewState?.OpenShopEntityId))
         {
             _contentDragCurrencyType = currencyElement.Type;
             _contentDragOriginEntityId = currencyElement.EntityId;
@@ -1246,7 +1243,7 @@ public sealed class UiInputController
                 // UiInputController accumulating every feature's rules inline. This method's own job
                 // stays gesture recognition + hit-testing + dispatch, the same shape it already uses
                 // for hotbar binding just below.
-                var context = new DragDropContext(_componentManager, originEntityId, destinationEntityId, _contentDragItemStackInstanceId, _contentDragMergedItemDefinitionId, _contentDragCurrencyType);
+                var context = new DragDropContext(originEntityId, destinationEntityId, _contentDragItemStackInstanceId, _contentDragMergedItemDefinitionId, _contentDragCurrencyType);
                 foreach (var resolver in _dragDropResolvers)
                 {
                     if (resolver.TryResolve(context))

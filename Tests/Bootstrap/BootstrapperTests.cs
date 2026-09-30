@@ -27,7 +27,7 @@ public sealed class BootstrapperTests
         public IReadOnlyList<Guid> RunsBefore { get; init; } = [];
         public void RegisterComponents(ComponentRegistration registration) => log.Add($"{name}:components");
         public void Configure(TestBuildContext context) => log.Add($"{name}:configure:{context.Name}");
-        public void RegisterSystems(SystemRegistration<TestBuildContext> registration) => log.Add($"{name}:systems:{registration.Context.Name}");
+        public void RegisterBehavior(BehaviorRegistration<TestBuildContext> registration) => log.Add($"{name}:systems:{registration.Context.Name}");
     }
 
     private sealed class CoreTestModule(List<string> log) : LoggingModule("Core", CoreId, log);
@@ -50,14 +50,14 @@ public sealed class BootstrapperTests
 
         public void RegisterComponents(ComponentRegistration registration) => log.Add($"components:{registration.Settings.Get(CoreCapacity)}");
 
-        public void RegisterSystems(SystemRegistration<TestBuildContext> registration) => log.Add($"systems:{registration.Settings.Get(CoreCapacity)}");
+        public void RegisterBehavior(BehaviorRegistration<TestBuildContext> registration) => log.Add($"systems:{registration.Settings.Get(CoreCapacity)}");
     }
 
     private static EcsContext Build(IReadOnlyList<IModule<TestBuildContext>> modules, SettingValues? settings = null) =>
         EcsBuilder.Begin(modules, settings ?? SettingValues.None, 10, 10, new EventBus())
             .RegisterComponents()
             .Configure(new TestBuildContext("shared"))
-            .RegisterSystems()
+            .RegisterBehavior()
             .Complete();
 
     private static List<string> SystemsOrder(List<string> log) =>
@@ -251,17 +251,17 @@ public sealed class BootstrapperTests
         var configuredModules = registeredComponents.Configure(new TestBuildContext("first"));
         Assert.ThrowsExactly<InvalidOperationException>(() => registeredComponents.Configure(new TestBuildContext("second")));
 
-        var registeredSystems = configuredModules.RegisterSystems();
-        Assert.ThrowsExactly<InvalidOperationException>(() => configuredModules.RegisterSystems());
+        var registeredBehavior = configuredModules.RegisterBehavior();
+        Assert.ThrowsExactly<InvalidOperationException>(() => configuredModules.RegisterBehavior());
 
-        registeredSystems.Complete();
-        Assert.ThrowsExactly<InvalidOperationException>(() => registeredSystems.Complete());
+        registeredBehavior.Complete();
+        Assert.ThrowsExactly<InvalidOperationException>(() => registeredBehavior.Complete());
 
         CollectionAssert.AreEqual(new[] { "Core:components", "Core:configure:first", "Core:systems:first" }, log);
     }
 
     [TestMethod]
-    public void ResolvedSettings_ReachRegisterComponentsAndRegisterSystems()
+    public void ResolvedSettings_ReachRegisterComponentsAndRegisterBehavior()
     {
         var log = new List<string>();
         IReadOnlyList<IModule<TestBuildContext>> modules = [new SettingReadingModule(log)];

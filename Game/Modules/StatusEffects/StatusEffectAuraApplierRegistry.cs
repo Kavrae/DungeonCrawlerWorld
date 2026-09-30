@@ -3,9 +3,9 @@ namespace Game.Modules.StatusEffects;
 /// <summary>
 /// Collects each concrete status-effect module's own IStatusEffectAuraApplier during
 /// IGameModule.Configure. Every IGameModule's Configure call completes before any
-/// RegisterSystems runs (see EcsBuilder: every module's Configure, then every module's
-/// RegisterSystems), so by the time StatusEffectAuraSystem is constructed (in
-/// StatusEffectAuraModule.RegisterSystems), every effect registered here -- regardless of
+/// RegisterBehavior runs (see EcsBuilder: every module's Configure, then every module's
+/// RegisterBehavior), so by the time StatusEffectAuraSystem is constructed (in
+/// StatusEffectAuraModule.RegisterBehavior), every effect registered here -- regardless of
 /// Configure call order -- is available. This is what lets StatusEffectAuraModule depend only
 /// on StatusEffectsModule again, instead of a concrete effect module: it never needs to know
 /// which effects exist, only that whichever ones registered themselves can be looked up by

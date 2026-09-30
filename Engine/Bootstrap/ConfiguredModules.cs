@@ -8,7 +8,7 @@ using Engine.Settings;
 
 namespace Engine.Bootstrap;
 
-/// <summary>A build whose every module is configured, and no system registered yet.</summary>
+/// <summary>A build whose every module is configured, and no behavior registered yet.</summary>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class ConfiguredModules<TContext> : EcsBuildStage
 {
@@ -32,21 +32,21 @@ public sealed class ConfiguredModules<TContext> : EcsBuildStage
 
     public TContext Context { get; }
 
-    /// <summary>Creates the system manager and runs every module's RegisterSystems, in sorted order -- the order the systems run each frame.</summary>
-    public RegisteredSystems RegisterSystems()
+    /// <summary>Creates the system manager and runs every module's RegisterBehavior, in sorted order -- the order the systems run each frame and handlers receive events.</summary>
+    public RegisteredBehavior RegisterBehavior()
     {
         MarkAdvanced();
-        using var stageScope = EngineHooks.DiagnosticScope("RegisterSystems");
+        using var stageScope = EngineHooks.DiagnosticScope("RegisterBehavior");
 
         var systemManager = new SystemManager();
-        var registration = new SystemRegistration<TContext>(systemManager, ComponentManager, _state.Settings, Context);
+        var registration = new BehaviorRegistration<TContext>(systemManager, ComponentManager, _state.Settings, Context);
 
         foreach (var module in _state.SortedModules)
         {
-            using var modulePhaseScope = EngineHooks.DiagnosticScope("RegisterSystems", module.Name);
-            module.RegisterSystems(registration);
+            using var modulePhaseScope = EngineHooks.DiagnosticScope("RegisterBehavior", module.Name);
+            module.RegisterBehavior(registration);
         }
 
-        return new RegisteredSystems(EntityManager, ComponentManager, systemManager, _state.EventBus);
+        return new RegisteredBehavior(EntityManager, ComponentManager, systemManager, _state.EventBus);
     }
 }

@@ -29,7 +29,7 @@ public sealed class SpawnRecordRebuilderTests
 
     private sealed record Creature(List<string> Components, List<string> Stacks, List<string> Modifiers);
 
-    private static GameBootstrapResult Bootstrap(Map map, UniqueNumberAllocator? crawlerNumbers = null) =>
+    private static GameSession Bootstrap(Map map, UniqueNumberAllocator? crawlerNumbers = null) =>
         GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
 
     private static Creature Read(ComponentManager componentManager, int entityId, params Type[] excluded)
@@ -55,10 +55,10 @@ public sealed class SpawnRecordRebuilderTests
             modifiers.Select(static modifier => $"{modifier.Target} {modifier.Operation} {modifier.Polarity} {modifier.Magnitude} {modifier.ExpiresAtFrame} {modifier.Source.Kind}").Order(StringComparer.Ordinal).ToList());
     }
 
-    private static Creature RebuildDefaults(GameBootstrapResult result, SpawnRecordComponent record, params Type[] excluded)
+    private static Creature RebuildDefaults(GameSession result, SpawnRecordComponent record, params Type[] excluded)
     {
         Creature? rebuilt = null;
-        result.SpawnRecordRebuilder.Rebuild(record, (componentManager, entityId) => rebuilt = Read(componentManager, entityId, excluded));
+        result.Internals.SpawnRecordRebuilder.Rebuild(record, (componentManager, entityId) => rebuilt = Read(componentManager, entityId, excluded));
         return rebuilt!;
     }
 
@@ -69,17 +69,17 @@ public sealed class SpawnRecordRebuilderTests
         CollectionAssert.AreEqual(expected.Modifiers, actual.Modifiers);
     }
 
-    private static ushort Blueprint(GameBootstrapResult result, params Guid[] parts) =>
+    private static ushort Blueprint(GameSession result, params Guid[] parts) =>
         parts.Length == 1
-            ? result.Definitions.GetId(parts[0])
-            : result.Definitions.Register(new BlueprintDefinition(Guid.NewGuid(), "Test composite") { Includes = parts });
+            ? result.Catalogs.Definitions.GetId(parts[0])
+            : result.Catalogs.Definitions.Register(new BlueprintDefinition(Guid.NewGuid(), "Test composite") { Includes = parts });
 
     [TestMethod]
     public void Rebuild_ReproducesEveryBlueprintBuiltComponent_ForEachRace()
     {
         var result = Bootstrap(new Map(new Vector3Int(20, 20, 3)));
         var ecs = result.EcsContext;
-        var builder = new EntityBuilder(result.Definitions, ecs.EntityManager.Keys);
+        var builder = new EntityBuilder(result.Catalogs.Definitions, ecs.EntityManager.Keys);
 
         foreach (var race in new[] { Goblin.Id, Fairy.Id, Ghost.Id, Human.Id })
         {
@@ -102,7 +102,7 @@ public sealed class SpawnRecordRebuilderTests
         var ecs = result.EcsContext;
         var entityId = ecs.EntityManager.CreateEntity();
         var blueprintId = Blueprint(result, Goblin.Id);
-        new EntityBuilder(result.Definitions, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, blueprintId, seed: 1, now: 0);
+        new EntityBuilder(result.Catalogs.Definitions, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, blueprintId, seed: 1, now: 0);
         var creature = Read(ecs.ComponentManager, entityId);
 
         var others = Enumerable.Range(2, 10).Select(seed => RebuildDefaults(result, new SpawnRecordComponent(blueprintId, (uint)seed)));
@@ -119,7 +119,7 @@ public sealed class SpawnRecordRebuilderTests
         var entityId = ecs.EntityManager.CreateEntity();
         var blueprintId = Blueprint(result, Goblin.Id, Engineer.Id, Tank.Id);
 
-        new EntityBuilder(result.Definitions, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, blueprintId, seed: 99, now: 0);
+        new EntityBuilder(result.Catalogs.Definitions, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, blueprintId, seed: 99, now: 0);
 
         AssertSame(Read(ecs.ComponentManager, entityId), RebuildDefaults(result, new SpawnRecordComponent(blueprintId, 99)));
     }
@@ -131,7 +131,7 @@ public sealed class SpawnRecordRebuilderTests
         var ecs = result.EcsContext;
         var entityId = ecs.EntityManager.CreateEntity();
 
-        new EntityBuilder(result.Definitions, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, Blueprint(result, Goblin.Id, Engineer.Id), seed: 1, now: 0);
+        new EntityBuilder(result.Catalogs.Definitions, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, Blueprint(result, Goblin.Id, Engineer.Id), seed: 1, now: 0);
 
         // Goblin's 54-frame lock, then Engineer's 10% reduction on top of it.
         Assert.AreEqual((ushort)48, ecs.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId).StandardLockFrames);
@@ -145,7 +145,7 @@ public sealed class SpawnRecordRebuilderTests
         var entityId = ecs.EntityManager.CreateEntity();
         var blueprintId = Blueprint(result, Fairy.Id);
 
-        new EntityBuilder(result.Definitions, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, blueprintId, seed: 1234, now: 0);
+        new EntityBuilder(result.Catalogs.Definitions, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, blueprintId, seed: 1234, now: 0);
 
         Assert.AreEqual(new SpawnRecordComponent(blueprintId, 1234), ecs.ComponentManager.GetDirectPool<SpawnRecordComponent>().GetReadonly(entityId));
     }
@@ -155,7 +155,7 @@ public sealed class SpawnRecordRebuilderTests
     {
         var result = Bootstrap(new Map(new Vector3Int(20, 20, 3)));
         var ecs = result.EcsContext;
-        var builder = new EntityBuilder(result.Definitions, ecs.EntityManager.Keys);
+        var builder = new EntityBuilder(result.Catalogs.Definitions, ecs.EntityManager.Keys);
         var blueprintId = Blueprint(result, Goblin.Id);
 
         var loadouts = Enumerable.Range(0, 20).Select(seed =>
@@ -175,8 +175,8 @@ public sealed class SpawnRecordRebuilderTests
         var record = new SpawnRecordComponent(Blueprint(result, Goblin.Id, Tank.Id), 5);
         var stagingIds = new List<int>();
 
-        result.SpawnRecordRebuilder.Rebuild(record, (_, entityId) => stagingIds.Add(entityId));
-        result.SpawnRecordRebuilder.Rebuild(record, (componentManager, entityId) =>
+        result.Internals.SpawnRecordRebuilder.Rebuild(record, (_, entityId) => stagingIds.Add(entityId));
+        result.Internals.SpawnRecordRebuilder.Rebuild(record, (componentManager, entityId) =>
         {
             stagingIds.Add(entityId);
             Assert.IsTrue(componentManager.GetDirectPool<SpawnRecordComponent>().Has(entityId));
@@ -194,7 +194,7 @@ public sealed class SpawnRecordRebuilderTests
         var result = Bootstrap(new Map(new Vector3Int(60, 60, 3)), new UniqueNumberAllocator(1, 1, 24));
         var world = result.World;
         var ecs = result.EcsContext;
-        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(mathUtility), result.Factory, result.Terrain, result.Definitions);
+        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(mathUtility), result.Internals.Factory, result.Catalogs.Terrain, result.Catalogs.Definitions);
 
         var spawnRecords = ecs.ComponentManager.GetDirectPool<SpawnRecordComponent>();
         var checkedCount = 0;

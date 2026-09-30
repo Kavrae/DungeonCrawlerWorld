@@ -59,9 +59,6 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     /// </summary>
     public event Action<Window>? ActiveNotificationOpened;
 
-    /// <summary>Raised when the player closes a notification's popup for good: its Close button, "Close" or "Close All". Never raised by minimizing, which returns it to the unread queue.</summary>
-    public event Action<Notification>? NotificationDismissed;
-
     public void Initialize()
     {
         _folder = elementPoolService.CreateElement<Folder>(null, new ElementOptions
@@ -324,9 +321,9 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         layers.CloseMenuWindow(closedWindow); // No-op for a non-System notification, which was never opened as a menu window.
 
         // Minimizing closes the popup too, but puts the notification back in its unread queue first.
-        if (closedNotification is not null && !UnreadListFor(closedNotification.Category).Contains(closedNotification))
+        if (closedNotification?.Achievement is { } achievement && !UnreadListFor(closedNotification.Category).Contains(closedNotification))
         {
-            NotificationDismissed?.Invoke(closedNotification);
+            eventBus.Publish(new AchievementNotificationDismissedEvent(achievement.AchievementId));
         }
 
         // Closing the last unread notification auto-tidies the HUD back down -- SetWindowDisplayMode

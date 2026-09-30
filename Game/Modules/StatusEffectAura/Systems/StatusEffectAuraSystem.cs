@@ -204,7 +204,7 @@ public sealed class StatusEffectAuraSystem : ISystem
 
     /// <summary>
     /// Scatters every currently-registered source on first real use (not the constructor):
-    /// StatusEffectAuraModule.RegisterSystems runs during the session's GameBuildPass, which is
+    /// StatusEffectAuraModule.RegisterBehavior runs during the session's GameBuildPass, which is
     /// before FloorBuilder.PopulateFloor places any terrain (e.g. Lava) -- so no
     /// StatusEffectAuraSourceComponent exists yet at construction time. By the time the first
     /// EntityMovedEvent/Update fires, population has finished.

@@ -1,7 +1,8 @@
 using Engine.Math;
 using Game.Blueprints;
+using Game.Spawning;
 
-namespace Game.Spawning;
+namespace Game.Admin;
 
 /// <summary>A blueprint an admin command can name: its registry id and what to call it.</summary>
 /// <cleanupVersion>1</cleanupVersion>

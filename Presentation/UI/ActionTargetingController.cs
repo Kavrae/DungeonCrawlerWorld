@@ -1,18 +1,15 @@
-using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules;
 using Game.Modules.AbilityScores;
-using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
-using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.ProcessingTier;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -34,18 +31,13 @@ public sealed class ActionTargetingController(
     UiLayerStack uiLayers,
     ActionCatalog actionCatalog,
     ItemCatalog itemCatalog,
-    DirectComponentPool<TransformComponent> transformPool,
-    MultiComponentPool<ActionHotkeyBindingComponent> actionHotkeyBindings,
-    MultiComponentPool<ItemHotkeyBindingComponent> itemHotkeyBindings,
-    MultiComponentPool<InventoryItemStackComponent> inventoryStacks,
-    PackedComponentPool<HotkeyExpansionUnlockComponent> hotkeyExpansionUnlocks,
-    PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
-    PackedComponentPool<ActionLockComponent> actionLocks,
-    PlayerInputBuffer inputBuffer,
-    PackedComponentPool<ManaComponent> manaPool,
-    PackedComponentPool<AbilityScoresComponent> abilityScores,
-    SimulationClock simulationClock,
-    LocalTierRoster? localTierRoster = null)
+    TransformView transformView,
+    HotkeyBindingView hotkeyBindingView,
+    InventoryView inventoryView,
+    ActionStateView actionStateView,
+    AbilityScoreView abilityScoreView,
+    PlayerCommands playerCommands,
+    SimulationClock simulationClock)
 {
 
     /// <summary>A second press of the same slot within this many frames of the first is a double-tap (auto-target the closest candidate, see HandleHotkeySlotPress), as opposed to a slower second press (confirm against the cursor, same as a click). Reads UiInputController's own shared click/double-click window rather than an independently tuned value, so mouse double-click and keyboard double-tap always agree.</summary>
@@ -92,109 +84,43 @@ public sealed class ActionTargetingController(
 
     /// <summary>The player's own pending Delayed action's already-resolved target tiles, or null if there is none.</summary>
     /// <remarks>
-    /// A live pool lookup, not a cached/refreshed-per-Update field -- unlike TargetableTiles
+    /// A live lookup, not a cached/refreshed-per-Update field -- unlike TargetableTiles
     /// (an actual scatter computation worth skipping on unchanged frames), this is a single
-    /// TryGetReadonly, cheap enough to just recompute on every read. See MapWindow.
+    /// view lookup, cheap enough to just recompute on every read. See MapWindow.
     /// DrawTargetingHighlights' own doc comment for why this is the fallback highlight once
     /// TargetableTiles/HoveredFootprint themselves are cleared: once a Delayed ability is
     /// actually queued, Disarm already clears both (there's nothing left to aim), but the player
     /// benefits from still seeing exactly which tiles are about to be hit once the windup ends.
     /// </remarks>
     internal Vector3Int[]? PendingDelayedActionTargetTiles =>
-        pendingDelayedActions.TryGetReadonly(world.PlayerEntityId, out var pending) ? pending.TargetTiles : null;
+        actionStateView.TryGetPendingDelayedAction(world.PlayerEntityId, out var pending) ? pending.TargetTiles : null;
 
-    /// <summary>Reused across AllPendingDelayedActionTargets calls -- see that method's own doc comment for why it can't be a plain iterator (yield return can't cross a ReadOnlySpan-typed local, and PackedComponentPool.EntityIds/Components are both spans).</summary>
+    private readonly List<(int EntityId, PendingDelayedActionComponent Pending)> _localPendingDelayedActionsScratch = [];
+
     private readonly List<(int EntityId, Vector3Int[] TargetTiles, bool IsDodgeable)> _pendingDelayedActionTargetsBuffer = [];
 
     /// <summary>
-    /// Every entity (player included) currently mid-windup on a Delayed action AND within Local
-    /// processing tier (or the player, always included regardless of tier -- see below), with its
-    /// already-resolved target tiles and whether that action is Dodgeable -- generalizes
-    /// PendingDelayedActionTargetTiles beyond just the player so MapWindow can telegraph an
-    /// enemy's incoming attack too (red/yellow, see CombatTargetPalette), not only the player's own
-    /// (dark green).
+    /// Every entity mid-windup on a Delayed action within the Local tier (the player always), with its already-resolved
+    /// target tiles and whether that action is Dodgeable -- so MapWindow can telegraph an enemy's incoming attack
+    /// (red/yellow, see CombatTargetPalette) as well as the player's own (dark green).
     /// </summary>
     /// <remarks>
-    /// Iterates the SMALL side. "The number of entities ever mid-windup at once is small and
-    /// bounded" (this method's own original assumption) turned out false at this game's real
-    /// population scale: a live diagnostics capture showed over 10,000 concurrently-pending
-    /// entities map-wide. Walking pendingDelayedActions' own dense arrays and rejecting each non-Local
-    /// entity therefore cost ~10,000 scattered ProcessingTierComponent reads on EVERY Draw call --
-    /// paid in full whether or not anything was actually on screen, and by far the largest single
-    /// per-frame cost in MapWindow's draw path.
-    ///
-    /// LocalTierRoster inverts that: Local is a Chebyshev radius of 80 on the player's own Z, so
-    /// it holds on the order of a thousand entities against that pool's tens of thousands. Probing
-    /// pendingDelayedActions.TryGetReadonly per roster member is the same kind of lookup, just
-    /// roughly an order of magnitude fewer of them, and it drops the separate tier read entirely
-    /// (roster membership IS the tier answer). See LocalTierRoster's own doc comment for why that
-    /// needs a different shape from the TieredEntityStripeSet every consuming *system* uses.
-    ///
-    /// localTierRoster is optional (null in test fixtures that don't wire it, e.g. MapWindowTests/
-    /// ActionTargetingControllerDodgeTests/HotbarControllerTests) -- null means "no tier data
-    /// available," so every pending entity passes via the full-pool fallback below, matching this
-    /// method's own pre-tier-filtering behavior exactly. That is a safe default rather than a
-    /// silent behavior change for callers that never asked for tier scoping.
-    ///
-    /// The player is always included regardless of tier -- it's the camera anchor, always relevant,
-    /// and cheap to add unconditionally. It is also the one entity the roster genuinely might not
-    /// hold: roster membership follows ProcessingTierSystem's own MovementComponent-driven
-    /// population, and nothing guarantees the player's own tier is ever recomputed relative to
-    /// itself.
-    ///
-    /// Reads the catalog definition directly rather than resolving a per-instance Override:
-    /// ActionOverrideEffects.OverrideFlatDamage (the only Override producer today) never touches
-    /// Tags, so the catalog's own Tags are always correct here regardless of any per-race damage
-    /// override.
+    /// Which windups count as Local is ActionStateView.CopyLocalPendingDelayedActions'. Reads the catalog definition
+    /// directly rather than resolving a per-instance Override: ActionOverrideEffects.OverrideFlatDamage (the only
+    /// Override producer today) never touches Tags, so the catalog's own Tags are always correct here.
     /// </remarks>
     public IReadOnlyList<(int EntityId, Vector3Int[] TargetTiles, bool IsDodgeable)> AllPendingDelayedActionTargets()
     {
+        actionStateView.CopyLocalPendingDelayedActions(world.PlayerEntityId, _localPendingDelayedActionsScratch);
+
         _pendingDelayedActionTargetsBuffer.Clear();
-
-        var playerEntityId = world.PlayerEntityId;
-
-        // Walk whichever population is actually smaller this frame, since which one that is
-        // genuinely flips: mid-brawl the pending pool runs to five figures against a roster of
-        // ~1,000, but during quiet exploration almost nothing is winding up and the pending pool
-        // is nearly empty. Both directions produce identical output; only the probe count differs.
-        if (localTierRoster is null || pendingDelayedActions.Count <= localTierRoster.Count)
+        foreach (var (entityId, pending) in _localPendingDelayedActionsScratch)
         {
-            var entityIds = pendingDelayedActions.EntityIds;
-            var components = pendingDelayedActions.Components;
-            for (var denseIndex = 0; denseIndex < pendingDelayedActions.Count; denseIndex++)
-            {
-                var entityId = entityIds[denseIndex];
-                if (entityId == playerEntityId || localTierRoster is null || localTierRoster.IsLocal(entityId))
-                {
-                    AddPendingTarget(entityId, components[denseIndex]);
-                }
-            }
-
-            return _pendingDelayedActionTargetsBuffer;
-        }
-
-        if (pendingDelayedActions.TryGetReadonly(playerEntityId, out var playerPending))
-        {
-            AddPendingTarget(playerEntityId, playerPending);
-        }
-
-        foreach (var entityId in localTierRoster.LocalEntityIds)
-        {
-            // The player is already added above, unconditionally -- skip it here so a player that
-            // IS in the roster doesn't get telegraphed twice.
-            if (entityId != playerEntityId && pendingDelayedActions.TryGetReadonly(entityId, out var pending))
-            {
-                AddPendingTarget(entityId, pending);
-            }
+            var isDodgeable = actionCatalog.TryGet(pending.ActionId, out var action) && action.Tags.Contains(Tag.Dodgeable);
+            _pendingDelayedActionTargetsBuffer.Add((entityId, pending.TargetTiles, isDodgeable));
         }
 
         return _pendingDelayedActionTargetsBuffer;
-    }
-
-    private void AddPendingTarget(int entityId, PendingDelayedActionComponent pending)
-    {
-        var isDodgeable = actionCatalog.TryGet(pending.ActionId, out var action) && action.Tags.Contains(Tag.Dodgeable);
-        _pendingDelayedActionTargetsBuffer.Add((entityId, pending.TargetTiles, isDodgeable));
     }
 
     /// <summary>Advances the double-tap frame clock -- called once per MapWindow.Update, before anything else this class does that frame.</summary>
@@ -218,7 +144,7 @@ public sealed class ActionTargetingController(
         _hoveredFootprintBuffer.Clear();
         _hoveredFootprintSet.Clear();
 
-        if (!TryGetArmedTargeting(out var targeting) || !transformPool.TryGetReadonly(world.PlayerEntityId, out var playerTransform))
+        if (!TryGetArmedTargeting(out var targeting) || !transformView.TryGetTransform(world.PlayerEntityId, out var playerTransform))
         {
             mapViewState.HoveredTile = null;
             return;
@@ -250,7 +176,7 @@ public sealed class ActionTargetingController(
     public void TryConfirmActivation(Point mousePosition, Vector2 contentAbsolutePosition)
     {
         if (!camera.TryGetHoveredMapPosition(mousePosition, contentAbsolutePosition, out var clickedColumnRow) ||
-            !transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
+            !transformView.TryGetTransform(world.PlayerEntityId, out var transform))
         {
             return;
         }
@@ -279,7 +205,7 @@ public sealed class ActionTargetingController(
     /// </summary>
     private void TryConfirmActivationAtTile(Vector3Int targetTile)
     {
-        if (!TryGetArmedTargeting(out var targeting) || !transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
+        if (!TryGetArmedTargeting(out var targeting) || !transformView.TryGetTransform(world.PlayerEntityId, out var transform))
         {
             return;
         }
@@ -291,7 +217,7 @@ public sealed class ActionTargetingController(
 
         if (targetTile == transform.Position &&
             mapViewState.ArmedItemStackInstanceId is { } armedStackInstanceId &&
-            InventoryQueries.TryFindByStackInstanceId(inventoryStacks, world.PlayerEntityId, armedStackInstanceId, out var armedStack) &&
+            inventoryView.TryGetStack(world.PlayerEntityId, armedStackInstanceId, out var armedStack) &&
             InventoryQueries.TryResolveEffectiveItem(itemCatalog, in armedStack, out var item) &&
             item.Tags.Contains(Tag.Self))
         {
@@ -307,7 +233,7 @@ public sealed class ActionTargetingController(
 
     /// <summary>
     /// Cancels an armed action/item (right-click tap or Escape), or, if nothing is armed, drops
-    /// the command PlayerInputBuffer is holding, or, if there is none, cancels a Delayed action's
+    /// the command PlayerCommands is holding, or, if there is none, cancels a Delayed action's
     /// in-progress windup instead (WindupCancel, releasing the shared ActionLock) so cancelling
     /// frees the entity immediately rather than still waiting out the full wind-up with no
     /// effect at the end -- see PendingDelayedActionComponent's own doc comment. Returns whether
@@ -323,12 +249,12 @@ public sealed class ActionTargetingController(
             return true;
         }
 
-        if (inputBuffer.Clear())
+        if (playerCommands.Clear())
         {
             return true;
         }
 
-        return WindupCancel.TryCancel(pendingDelayedActions, actionLocks, world.PlayerEntityId, simulationClock.CurrentFrame, releaseLock: true);
+        return playerCommands.TryCancelWindup(simulationClock.CurrentFrame);
     }
 
     /// <summary>
@@ -360,7 +286,7 @@ public sealed class ActionTargetingController(
     /// </summary>
     public void TryClaimDodgeDirectionalKey(KeyboardState keyboardState, KeyboardState previousKeyboardState, HashSet<Keys> claimedKeys)
     {
-        if (mapViewState.ArmedActionId != DodgeAction.Id || !transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
+        if (mapViewState.ArmedActionId != DodgeAction.Id || !transformView.TryGetTransform(world.PlayerEntityId, out var transform))
         {
             return;
         }
@@ -413,13 +339,13 @@ public sealed class ActionTargetingController(
             _frameCounter - lastPressFrame <= DoubleTapWindowFrames;
         _lastHotkeyPressFrameBySlot[slot] = _frameCounter;
 
-        if (ActionHotkeyBindingQueries.TryGet(actionHotkeyBindings, world.PlayerEntityId, slot, out var actionId))
+        if (hotkeyBindingView.TryGetBoundAction(world.PlayerEntityId, slot, out var actionId))
         {
             HandleActionSlotPress(slot, actionId, isDoubleTap);
             return;
         }
 
-        if (ItemHotkeyBindingQueries.TryGet(itemHotkeyBindings, world.PlayerEntityId, slot, out var stackInstanceId))
+        if (hotkeyBindingView.TryGetBoundItem(world.PlayerEntityId, slot, out var stackInstanceId))
         {
             HandleItemSlotPress(slot, stackInstanceId, isDoubleTap);
         }
@@ -434,7 +360,7 @@ public sealed class ActionTargetingController(
     /// </summary>
     private bool IsSlotLocked(HotkeySlot slot)
     {
-        var unlockedSlots = hotkeyExpansionUnlocks.TryGetReadonly(world.PlayerEntityId, out var unlock) ? unlock.UnlockedSlotCount : (short)0;
+        hotkeyBindingView.TryGetUnlockedExpansionSlots(world.PlayerEntityId, out var unlockedSlots);
         return HotkeySlotLayout.IsLocked(slot, unlockedSlots);
     }
 
@@ -481,7 +407,7 @@ public sealed class ActionTargetingController(
         if (mapViewState.ArmedSlot == slot)
         {
             if (actionCatalog.TryGet(actionId, out var armedAction) && armedAction.Tags.Contains(Tag.Self) &&
-                transformPool.TryGetReadonly(world.PlayerEntityId, out var selfTransform))
+                transformView.TryGetTransform(world.PlayerEntityId, out var selfTransform))
             {
                 TryConfirmActivationAtTile(selfTransform.Position);
                 return;
@@ -515,7 +441,7 @@ public sealed class ActionTargetingController(
     /// </summary>
     private void HandleItemSlotPress(HotkeySlot slot, uint stackInstanceId, bool isDoubleTap)
     {
-        if (!InventoryQueries.TryFindByStackInstanceId(inventoryStacks, world.PlayerEntityId, stackInstanceId, out var stack) ||
+        if (!inventoryView.TryGetStack(world.PlayerEntityId, stackInstanceId, out var stack) ||
             !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
             item.Activator is null)
         {
@@ -557,7 +483,7 @@ public sealed class ActionTargetingController(
         mapViewState.ArmedSlot = slot;
         _targetableTilesOrigin = null; // Forces RefreshTargetableTiles below to (re)compute regardless of any stale origin left over from a previous arm.
 
-        if (actionCatalog.TryGet(actionId, out var action) && transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
+        if (actionCatalog.TryGet(actionId, out var action) && transformView.TryGetTransform(world.PlayerEntityId, out var transform))
         {
             RefreshTargetableTiles(action.Activator.Targeting, transform.Position, transform.Size);
         }
@@ -573,7 +499,7 @@ public sealed class ActionTargetingController(
         mapViewState.ArmedSlot = slot;
         _targetableTilesOrigin = null;
 
-        if (TryGetArmedTargeting(out var targeting) && transformPool.TryGetReadonly(world.PlayerEntityId, out var transform))
+        if (TryGetArmedTargeting(out var targeting) && transformView.TryGetTransform(world.PlayerEntityId, out var transform))
         {
             RefreshTargetableTiles(targeting, transform.Position, transform.Size);
         }
@@ -592,7 +518,7 @@ public sealed class ActionTargetingController(
     /// </summary>
     public void ArmItemFromStack(uint stackInstanceId)
     {
-        if (!InventoryQueries.TryFindByStackInstanceId(inventoryStacks, world.PlayerEntityId, stackInstanceId, out var stack) ||
+        if (!inventoryView.TryGetStack(world.PlayerEntityId, stackInstanceId, out var stack) ||
             !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
             item.Activator is null)
         {
@@ -625,7 +551,7 @@ public sealed class ActionTargetingController(
             return true;
         }
 
-        return manaPool.TryGetReadonly(entityId, out var mana) && mana.CurrentMana >= manaCost;
+        return actionStateView.TryGetMana(entityId, out var mana) && mana.CurrentMana >= manaCost;
     }
 
     /// <summary>
@@ -649,7 +575,7 @@ public sealed class ActionTargetingController(
         }
 
         if (mapViewState.ArmedItemStackInstanceId is { } stackInstanceId &&
-            InventoryQueries.TryFindByStackInstanceId(inventoryStacks, world.PlayerEntityId, stackInstanceId, out var stack) &&
+            inventoryView.TryGetStack(world.PlayerEntityId, stackInstanceId, out var stack) &&
             InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) &&
             item.Activator is { } activator)
         {
@@ -664,7 +590,7 @@ public sealed class ActionTargetingController(
     /// <summary>Scales baseTargeting's Range/AreaSize by the player's own Intelligence -- see ScrollScalingEffects's own doc comment. No-op (returns baseTargeting unchanged) when the player has no Intelligence score, the same "1.0 multiplier" fallback ScrollScalingEffects.ComputeScaleMultiplier itself defaults to.</summary>
     private TargetingSpec ScaleScrollTargeting(TargetingSpec baseTargeting)
     {
-        if (!AbilityScoreQueries.TryGetComponent(abilityScores, world.PlayerEntityId, AbilityScoreType.Intelligence, out var intelligence))
+        if (!abilityScoreView.TryGetAbilityScore(world.PlayerEntityId, AbilityScoreType.Intelligence, out var intelligence))
         {
             return baseTargeting;
         }
@@ -765,7 +691,7 @@ public sealed class ActionTargetingController(
     /// </summary>
     private void TryActivateWithAutoTarget(int entityId, Guid actionId)
     {
-        if (!actionCatalog.TryGet(actionId, out var action) || !transformPool.TryGetReadonly(entityId, out var transform))
+        if (!actionCatalog.TryGet(actionId, out var action) || !transformView.TryGetTransform(entityId, out var transform))
         {
             return;
         }
@@ -815,7 +741,7 @@ public sealed class ActionTargetingController(
     /// <summary>The double-tap path for a Potion -- always the caster's own tile, no candidate search at all (contrast TryActivateWithAutoTarget's action equivalent).</summary>
     private void TryActivateItemOnSelf(int entityId, uint stackInstanceId)
     {
-        if (!transformPool.TryGetReadonly(entityId, out var transform))
+        if (!transformView.TryGetTransform(entityId, out var transform))
         {
             return;
         }
@@ -823,7 +749,7 @@ public sealed class ActionTargetingController(
         QueueConsumableActivation(stackInstanceId, [transform.Position]);
     }
 
-    /// <summary>Presentation only ever queues an activation request -- ActionActivationSystem is the only thing that applies gameplay effects. Mirrors PlayerInputBuffer's own queue-and-let-a-system-consume pattern for movement. Closes every closable window here too (not just in ArmAction) -- this is also reachable straight from a double-tap auto-target (TryActivateWithAutoTarget), which skips arming entirely, so it's the only chokepoint that catches that path. Placed after the early-return above so a no-op (no valid target) never spuriously closes anything.</summary>
+    /// <summary>Presentation only ever queues an activation request -- ActionActivationSystem is the only thing that applies gameplay effects. Mirrors PlayerCommands's own queue-and-let-a-system-consume pattern for movement. Closes every closable window here too (not just in ArmAction) -- this is also reachable straight from a double-tap auto-target (TryActivateWithAutoTarget), which skips arming entirely, so it's the only chokepoint that catches that path. Placed after the early-return above so a no-op (no valid target) never spuriously closes anything.</summary>
     private void QueueActionActivation(int entityId, Guid actionId, List<Vector3Int> targetTiles)
     {
         if (targetTiles.Count == 0)
@@ -834,7 +760,7 @@ public sealed class ActionTargetingController(
         var effectTargetTiles = targetTiles.ToArray();
         Vector3Int? stepOnActivation = null;
 
-        if (actionId == DodgeAction.Id && transformPool.TryGetReadonly(entityId, out var casterTransform))
+        if (actionId == DodgeAction.Id && transformView.TryGetTransform(entityId, out var casterTransform))
         {
             // DodgeActivation's own effect (DodgingComponent) always applies to the caster, not to
             // "whoever occupies the resolved target tile" -- for a directional dodge that tile is the
@@ -850,13 +776,13 @@ public sealed class ActionTargetingController(
         uiLayers.CloseAllClosableWindows();
 
         var waitsForLock = !actionCatalog.TryGet(actionId, out var action) || action.Activator.Timing.Category != ActionTimingCategory.FreeCast;
-        inputBuffer.QueueAction(actionId, effectTargetTiles, waitsForLock, stepOnActivation);
+        playerCommands.QueueAction(actionId, effectTargetTiles, waitsForLock, stepOnActivation);
     }
 
     /// <summary>The tile a Dodge resolved to <paramref name="targetTiles"/> steps to, or null for a Dodge in place.</summary>
     /// <remarks>
     /// Dodge's own targeting (SingleTarget + Metric.Chebyshev, Range 1) resolves to exactly one tile -- self, or one
-    /// adjacent tile. The step goes through PlayerInputBuffer to MovementComponent.NextMapPosition, the same path
+    /// adjacent tile. The step goes through PlayerCommands to MovementComponent.NextMapPosition, the same path
     /// ordinary movement uses, never World.MoveEntity: that only updates Map's occupancy index, not
     /// TransformComponent.Position, and would leave the two out of step. MovementSystem's own occupancy/wall/diagonal
     /// validation keeps the caster in place if the tile turns out occupied.
@@ -874,7 +800,7 @@ public sealed class ActionTargetingController(
 
         uiLayers.CloseAllClosableWindows();
 
-        inputBuffer.QueueConsumable(stackInstanceId, targetTiles.ToArray());
+        playerCommands.QueueConsumable(stackInstanceId, targetTiles.ToArray());
     }
 
     /// <summary>Dispatches a confirmed click activation to whichever of {action, item} MapViewState currently has armed -- see TryConfirmActivation, the only caller.</summary>

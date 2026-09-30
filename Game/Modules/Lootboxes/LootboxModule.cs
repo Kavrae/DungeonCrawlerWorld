@@ -28,7 +28,7 @@ public sealed class LootboxModule : IGameModule
     {
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
         var context = registration.Context;
         var componentManager = registration.ComponentManager;

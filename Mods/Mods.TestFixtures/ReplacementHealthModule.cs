@@ -27,5 +27,5 @@ public sealed class ReplacementHealthModule : IGameModule
         componentManager.RegisterPackedPool<BodyPartStateComponent>(static (ref existing, incoming) => existing = incoming);
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration) { }
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration) { }
 }

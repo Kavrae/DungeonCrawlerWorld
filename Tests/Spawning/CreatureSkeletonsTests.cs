@@ -18,9 +18,9 @@ public sealed class CreatureSkeletonsTests
 {
     private const int Rows = 24;
 
-    private sealed record Session(Game.World.World World, EcsContext Ecs, GameBootstrapResult Result, int PlayerEntityId)
+    private sealed record Session(Game.World.World World, EcsContext Ecs, GameSession Result, int PlayerEntityId)
     {
-        public CreatureSkeletons Skeletons => Result.Skeletons;
+        public CreatureSkeletons Skeletons => Result.Internals.Skeletons;
     }
 
     /// <summary>Three neighborhoods side by side (-1, 0, 1), the window centred on 0 with the player in it: neighborhood 0 is simulated, -1 and 1 are Borough.</summary>
@@ -31,15 +31,15 @@ public sealed class CreatureSkeletonsTests
         var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers ?? new UniqueNumberAllocator(1, 1, 24));
         var world = result.World;
         var ecs = result.EcsContext;
-        var resolver = result.ProcessingTierResolver;
+        var resolver = result.Internals.ProcessingTierResolver;
         resolver.SetReferencePosition(FloorBuilder.PlayerSpawnOrigin());
         resolver.SetWindowCenter(0, 0);
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecs);
-        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(mathUtility), result.Factory, result.Terrain, result.Definitions);
-        FloorBuilder.CreatePlayer(world, ecs, mathUtility, result.Factory, result.Definitions, playerEntityId, resolver);
+        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(mathUtility), result.Internals.Factory, result.Catalogs.Terrain, result.Catalogs.Definitions);
+        FloorBuilder.CreatePlayer(world, ecs, mathUtility, result.Internals.Factory, result.Catalogs.Definitions, playerEntityId, resolver);
         world.PlayerEntityId = playerEntityId;
-        result.MovedEntities.ClearFrame();
+        result.Internals.MovedEntities.ClearFrame();
 
         return new Session(world, ecs, result, playerEntityId);
     }
@@ -53,7 +53,7 @@ public sealed class CreatureSkeletonsTests
         for (var entityId = 0; entityId < spawnRecords.Capacity; entityId++)
         {
             if (spawnRecords.Has(entityId)
-                && session.Result.Definitions.Resolve(spawnRecords.GetReadonly(entityId).BlueprintId).Races.Count > 0
+                && session.Result.Catalogs.Definitions.Resolve(spawnRecords.GetReadonly(entityId).BlueprintId).Races.Count > 0
                 && Neighborhoods.CellOf(transforms.GetReadonly(entityId).Position.X) == cellX)
             {
                 creatures.Add(entityId);
@@ -72,13 +72,13 @@ public sealed class CreatureSkeletonsTests
 
     private static int FirstSkeletonOf(Session session, Guid raceId)
     {
-        var raceSlot = session.Result.Definitions.Races.GetId(raceId);
+        var raceSlot = session.Result.Catalogs.Definitions.Races.GetId(raceId);
         var spawnRecords = session.Ecs.ComponentManager.GetDirectPool<SpawnRecordComponent>();
         return CreaturesIn(session, 1).First(entityId => session.Skeletons.IsSkeleton(entityId) && spawnRecords.GetReadonly(entityId).BlueprintId == raceSlot);
     }
 
     private static void MovePlayerTo(Session session, Vector3Int position) =>
-        Assert.IsTrue(session.Result.Teleporter.TryTeleport(session.PlayerEntityId, FloorBuilder.FindFreeGroundCellNear(session.World, position)));
+        Assert.IsTrue(session.Result.Internals.Teleporter.TryTeleport(session.PlayerEntityId, FloorBuilder.FindFreeGroundCellNear(session.World, position)));
 
     private static void RunFrames(Session session, int count)
     {
@@ -165,7 +165,7 @@ public sealed class CreatureSkeletonsTests
         var goblinId = FirstSkeletonOf(session, Goblin.Id);
         var transforms = session.Ecs.ComponentManager.GetDirectPool<TransformComponent>();
         var before = transforms.GetReadonly(goblinId);
-        _ = session.Result.MovedEntities.Items; // This frame's readers have run, as they have by the tier transition drain.
+        _ = session.Result.Internals.MovedEntities.Items; // This frame's readers have run, as they have by the tier transition drain.
 
         Assert.IsTrue(session.Skeletons.EnsureBuilt(goblinId));
 
@@ -175,11 +175,11 @@ public sealed class CreatureSkeletonsTests
         Assert.AreEqual(before, transforms.GetReadonly(goblinId));
         Assert.IsFalse(session.Skeletons.EnsureBuilt(goblinId), "Building is one-way and happens once.");
 
-        Assert.IsFalse(session.Result.MovedEntities.Items.ToArray().Any(moved => moved.EntityId == goblinId), "Too late for this frame's readers.");
+        Assert.IsFalse(session.Result.Internals.MovedEntities.Items.ToArray().Any(moved => moved.EntityId == goblinId), "Too late for this frame's readers.");
 
-        session.Result.MovedEntities.ClearFrame();
-        session.Result.Factory.SpawnMoves!.Update(default, 0);
-        Assert.IsTrue(session.Result.MovedEntities.Items.ToArray().Any(moved => moved.EntityId == goblinId && moved.NewPosition == before.Position));
+        session.Result.Internals.MovedEntities.ClearFrame();
+        session.Result.Internals.Factory.SpawnMoves!.Update(default, 0);
+        Assert.IsTrue(session.Result.Internals.MovedEntities.Items.ToArray().Any(moved => moved.EntityId == goblinId && moved.NewPosition == before.Position));
     }
 
     /// <summary>Applying a blueprint is a gameplay write, so an unbuilt creature is built first -- the class lands on a whole creature, not on a skeleton the build would later overwrite.</summary>
@@ -188,9 +188,9 @@ public sealed class CreatureSkeletonsTests
     {
         var session = BuildSession();
         var goblinId = FirstSkeletonOf(session, Goblin.Id);
-        var engineerId = session.Result.Definitions.GetId(Game.Blueprints.Classes.Engineer.Id);
+        var engineerId = session.Result.Catalogs.Definitions.GetId(Game.Blueprints.Classes.Engineer.Id);
 
-        session.Result.Factory.Apply(goblinId, engineerId);
+        session.Result.Internals.Factory.Apply(goblinId, engineerId);
 
         Assert.IsFalse(session.Skeletons.IsSkeleton(goblinId));
         Assert.IsTrue(session.Ecs.ComponentManager.GetPackedPool<Game.Modules.Class.Components.ClassSlotsComponent>().GetReadonly(goblinId).Has(engineerId));
@@ -219,7 +219,7 @@ public sealed class CreatureSkeletonsTests
 
         session.Skeletons.EnsureBuilt(crawlerId);
         var number = crawlers.GetReadonly(crawlerId).CrawlerNumber;
-        session.Result.Factory.Apply(crawlerId, session.Result.Definitions.GetId(Game.Blueprints.Classes.Engineer.Id));
+        session.Result.Internals.Factory.Apply(crawlerId, session.Result.Catalogs.Definitions.GetId(Game.Blueprints.Classes.Engineer.Id));
 
         Assert.AreEqual(number, crawlers.GetReadonly(crawlerId).CrawlerNumber);
     }
@@ -255,7 +255,7 @@ public sealed class CreatureSkeletonsTests
         var record = session.Ecs.ComponentManager.GetDirectPool<SpawnRecordComponent>().GetReadonly(UnbuiltCrawlers(session).First());
         var hasNumber = true;
 
-        session.Result.SpawnRecordRebuilder.Rebuild(record, (componentManager, entityId) =>
+        session.Result.Internals.SpawnRecordRebuilder.Rebuild(record, (componentManager, entityId) =>
             hasNumber = componentManager.GetPackedPool<Game.Modules.Crawler.Components.CrawlerComponent>().Has(entityId));
 
         Assert.IsFalse(hasNumber);
@@ -278,21 +278,21 @@ public sealed class CreatureSkeletonsTests
     {
         var session = BuildSession();
         var goblinId = FirstSkeletonOf(session, Goblin.Id);
-        _ = session.Result.MovedEntities.Items;
+        _ = session.Result.Internals.MovedEntities.Items;
         session.Skeletons.EnsureBuilt(goblinId);
 
         session.Ecs.EntityManager.DestroyEntity(goblinId);
-        session.Result.MovedEntities.ClearFrame();
-        session.Result.Factory.SpawnMoves!.Update(default, 0);
+        session.Result.Internals.MovedEntities.ClearFrame();
+        session.Result.Internals.Factory.SpawnMoves!.Update(default, 0);
 
-        Assert.IsFalse(session.Result.MovedEntities.Items.ToArray().Any(moved => moved.EntityId == goblinId));
+        Assert.IsFalse(session.Result.Internals.MovedEntities.Items.ToArray().Any(moved => moved.EntityId == goblinId));
     }
 
     [TestMethod]
     public void Skeleton_DrawsAndIsNamedExactlyAsItWillBeOnceBuilt()
     {
         var session = BuildSession();
-        var mapView = new MapViewQuery(session.World, session.Ecs.ComponentManager, session.Result.ActionCatalog, session.Result.Terrain, session.Result.Definitions, session.Ecs.SystemManager.Clock);
+        var mapView = new MapViewQuery(session.World, session.Ecs.ComponentManager, session.Result.Catalogs.ActionCatalog, session.Result.Catalogs.Terrain, session.Result.Catalogs.Definitions, session.Ecs.SystemManager.Clock);
 
         foreach (var raceId in new[] { Goblin.Id, Fairy.Id, Ghost.Id })
         {

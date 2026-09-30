@@ -27,7 +27,7 @@ public sealed class ProcessingTierModule : IGameModule
     public void RegisterComponents(ComponentRegistration registration) =>
         registration.ComponentManager.RegisterDirectPool<ProcessingTierComponent>(static (ref existing, incoming) => existing = incoming);
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
         var context = registration.Context;
         var transforms = registration.ComponentManager.GetDirectPool<TransformComponent>();

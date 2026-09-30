@@ -7,7 +7,7 @@ namespace Engine.Bootstrap;
 /// <summary>Builds an EcsContext from a module set, one phase at a time.</summary>
 /// <remarks>
 /// Each phase is a method on the stage before it and returns the next stage, so the phases can only run
-/// in order: <see cref="Begin"/> → RegisterComponents → Configure → RegisterSystems → Complete. Each
+/// in order: <see cref="Begin"/> → RegisterComponents → Configure → RegisterBehavior → Complete. Each
 /// runs the phase for every module, in sorted order, before returning. A stage can be advanced once.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>

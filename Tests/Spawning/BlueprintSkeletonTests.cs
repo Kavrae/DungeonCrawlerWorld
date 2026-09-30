@@ -22,19 +22,19 @@ public sealed class BlueprintSkeletonTests
             .Order(StringComparer.Ordinal)];
     }
 
-    private static GameBootstrapResult Bootstrap() =>
+    private static GameSession Bootstrap() =>
         GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 1_000, initialComponentCapacity: 100);
 
     /// <summary>Builds blueprintId's skeleton, gives it a footprint no blueprint declares (so even a same-sized transform merge would show), then builds the rest and reports whether any skeleton component changed.</summary>
-    private static bool WritesASkeletonComponent(GameBootstrapResult result, ushort blueprintId)
+    private static bool WritesASkeletonComponent(GameSession result, ushort blueprintId)
     {
         var ecs = result.EcsContext;
         var entityId = ecs.EntityManager.CreateEntity();
-        result.Factory.BuildSkeleton(ecs.ComponentManager, entityId, blueprintId, seed: 1);
+        result.Internals.Factory.BuildSkeleton(ecs.ComponentManager, entityId, blueprintId, seed: 1);
         ecs.ComponentManager.GetDirectPool<TransformComponent>().TrySet(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(7, 5)));
         var skeleton = SkeletonComponentsOf(ecs.ComponentManager, entityId);
 
-        result.Factory.BuildComplete(ecs.ComponentManager, entityId, blueprintId, seed: 1, now: 0);
+        result.Internals.Factory.BuildComplete(ecs.ComponentManager, entityId, blueprintId, seed: 1, now: 0);
 
         var changed = !skeleton.SequenceEqual(SkeletonComponentsOf(ecs.ComponentManager, entityId));
         ecs.EntityManager.DestroyEntity(entityId);
@@ -48,11 +48,11 @@ public sealed class BlueprintSkeletonTests
         var result = Bootstrap();
         var offenders = new List<string>();
 
-        for (var id = (ushort)1; id <= result.Definitions.Count; id++)
+        for (var id = (ushort)1; id <= result.Catalogs.Definitions.Count; id++)
         {
             if (WritesASkeletonComponent(result, id))
             {
-                offenders.Add(result.Definitions.Get(id).Name);
+                offenders.Add(result.Catalogs.Definitions.Get(id).Name);
             }
         }
 
@@ -64,7 +64,7 @@ public sealed class BlueprintSkeletonTests
     public void ABuildStepThatWritesATransform_IsCaught()
     {
         var result = Bootstrap();
-        var offenderId = result.Definitions.Register(new Game.Blueprints.BlueprintDefinition(Guid.NewGuid(), "Offender")
+        var offenderId = result.Catalogs.Definitions.Register(new Game.Blueprints.BlueprintDefinition(Guid.NewGuid(), "Offender")
         {
             Build = static context => context.ComponentManager.Merge(context.EntityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1))),
         });
@@ -79,7 +79,7 @@ public sealed class BlueprintSkeletonTests
         var ecs = result.EcsContext;
         var entityId = ecs.EntityManager.CreateEntity();
 
-        result.Factory.BuildSkeleton(ecs.ComponentManager, entityId, result.Definitions.GetId(Game.Blueprints.Composites.GoblinForeman.Id), seed: 1);
+        result.Internals.Factory.BuildSkeleton(ecs.ComponentManager, entityId, result.Catalogs.Definitions.GetId(Game.Blueprints.Composites.GoblinForeman.Id), seed: 1);
 
         var transform = ecs.ComponentManager.GetDirectPool<TransformComponent>().GetReadonly(entityId);
         Assert.AreEqual(TransformComponent.UnplacedOn(MapLayer.Ground), transform.Position);

@@ -1,20 +1,20 @@
-using Engine.ECS.Components.Stores;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
 using Game.Modules.Currency;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
+using Game.Sprites;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
+using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
-using Game.Sprites;
 
 namespace Presentation.UI.Content;
 
 /// <summary>
-/// The live content-drag state DragGhostContent needs to draw a frame -- see DragGhostContent.GetState.
+/// The live content-drag state DragGhostContent needs to draw a frame -- see PointerState.ContentDrag.
 /// Bundles what UiInputController's own content-drag fields expose (ContentDragGhostVisible,
 /// ContentDragItemStackInstanceId, ContentDragMergedItemDefinitionId, ContentDragActionId,
 /// ContentDragCurrencyType, ContentDragOriginEntityId, ContentDragSourceSize, CurrentMousePosition) into one snapshot
@@ -35,27 +35,20 @@ public readonly record struct DragGhostState(bool Visible, uint? ItemStackInstan
 /// element's own on-screen size (see DragGhostState.SourceSize) -- rather than one fixed size for
 /// every drag, so the ghost doesn't visibly jump in scale relative to wherever it was picked up
 /// from. Hosted in a minimal (zero-size, fully transparent) User-tier Window -- see
-/// ShellBootstrapper.Build -- since everything this draws is positioned directly at the live
+/// ShellBootstrapper.BuildUserWindows -- since everything this draws is positioned directly at the live
 /// mouse position, not relative to any window's own bounds.
 /// </summary>
 public sealed class DragGhostContent(
+    PointerState pointerState,
     World world,
     ActionCatalog actionCatalog,
     ItemCatalog itemCatalog,
-    MultiComponentPool<InventoryItemStackComponent> inventoryStacks,
+    InventoryView inventoryView,
     FontService fontService,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
     LabelRenderer labelRenderer) : IElementContent
 {
-    /// <summary>
-    /// How DrawContent finds the live content-drag state -- assigned once ShellBootstrapper.Build
-    /// has constructed a real UiInputController, which happens after this class does (see that
-    /// method's own comment on why). Defaults to a not-visible state so an unwired instance (e.g.
-    /// in a test) never null-refs and simply never draws.
-    /// </summary>
-    public Func<DragGhostState> GetState { get; set; } = static () => default;
-
     private Window _hostWindow = null!;
 
     public void Initialize(Window hostWindow) => _hostWindow = hostWindow;
@@ -64,7 +57,7 @@ public sealed class DragGhostContent(
 
     public void DrawContent(GameTime gameTime)
     {
-        var state = GetState();
+        var state = pointerState.ContentDrag;
         if (!state.Visible)
         {
             return;
@@ -75,7 +68,7 @@ public sealed class DragGhostContent(
         Color glyphColor;
 
         if (state.ItemStackInstanceId is { } stackInstanceId &&
-            InventoryQueries.TryFindByStackInstanceId(inventoryStacks, state.OriginEntityId ?? world.PlayerEntityId, stackInstanceId, out var stack) &&
+            inventoryView.TryGetStack(state.OriginEntityId ?? world.PlayerEntityId, stackInstanceId, out var stack) &&
             InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item))
         {
             (spriteName, glyph, glyphColor) = (item.SpriteName, item.Glyph, item.GlyphColor);

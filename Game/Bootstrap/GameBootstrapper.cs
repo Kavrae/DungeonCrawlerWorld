@@ -82,7 +82,7 @@ public static class GameBootstrapper
         ModuleFactory<GameModuleContext>.For<ShopModule>(),
     ];
 
-    public static GameBootstrapResult Build(
+    public static GameSession Build(
         ValidatedMods validatedMods,
         Map map,
         MathUtility mathUtility,
@@ -102,12 +102,8 @@ public static class GameBootstrapper
         }
 
         var session = GameBuildPass.Run(builtInModules, validatedMods.Mods, map, mathUtility, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, runtimeSpawnSeed);
-        var ecsContext = session.EcsContext;
-        var context = session.Context;
-        var factory = session.Factory;
-        var skeletons = factory.Skeletons;
-
-        return new GameBootstrapResult(ecsContext, session.World, validatedMods.Failures, session.Settings.Values, session.Settings.Failures, context.Actions, context.MovedEntities, context.Items, context.Lootboxes, context.LootboxOpener, context.StatusEffectDisplays, session.LocalTierRoster, context.ProcessingTierResolver, context.Terrain, context.Definitions, new SpawnRecordRebuilder(staging.EcsContext, new EntityBuilder(context.Definitions, staging.EcsContext.EntityManager.Keys)), skeletons, factory, CreateTeleporter(session.World, ecsContext, factory, skeletons));
+        var spawnRecordRebuilder = new SpawnRecordRebuilder(staging.EcsContext, new EntityBuilder(session.Context.Definitions, staging.EcsContext.EntityManager.Keys));
+        return new GameSession(session, validatedMods.Failures, spawnRecordRebuilder, CreateTeleporter(session.World, session.EcsContext, session.Factory, session.Factory.Skeletons));
     }
 
     private static EntityTeleporter CreateTeleporter(World.World world, EcsContext ecsContext, EntityFactory factory, CreatureSkeletons skeletons)

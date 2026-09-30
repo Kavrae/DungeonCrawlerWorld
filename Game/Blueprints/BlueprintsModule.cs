@@ -75,7 +75,7 @@ public sealed class BlueprintsModule : IGameModule
         componentManager.RegisterMultiPool<AppliedBlueprintComponent>(initialCapacity: 16);
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
     }
 }

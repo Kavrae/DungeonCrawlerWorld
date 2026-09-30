@@ -86,7 +86,7 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
   unaffected, since its target tile is always the caster's own current, occupied tile). Fixed with two
   changes: `ActionTargetingController.QueueActionActivation` now stores the caster's own *current*
   tile as `PendingActionActivationComponent.TargetTiles` for Dodge specifically (guaranteed occupied),
-  while the step's destination travels separately (`PlayerInputBuffer`, see "Input buffering, instant
+  while the step's destination travels separately (`PlayerCommands`, see "Input buffering, instant
   Dodge, and Stagger"); and
   `DodgeActivation.Apply` now reads/writes `context.SourceEntityId` instead of `context.TargetEntityId`
   so the grant always lands on the actual caster even if another entity happens to share that tile
@@ -96,7 +96,7 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
   `SingleTarget`-only). `DodgeAction`'s own targeting -- `SingleTarget` + `Metric.Chebyshev` + `Range: 1`
   -- is "pick exactly one tile out of the caster's own 3x3 block," resolved at confirm time by
   `ActionTargetingController`, whose step goes through `MovementComponent.NextMapPosition` -- the exact
-  same path ordinary WASD movement uses, written by `PlayerInputBuffer` -- rather than being applied
+  same path ordinary WASD movement uses, written by `PlayerCommands` -- rather than being applied
   directly. Two confirmed bugs both came from an earlier version that called
   `World.MoveEntity` directly instead: (1) `World.MoveEntity`/`MoveEntityUnchecked` only ever update
   `Map`'s own occupancy index, never the mover's `TransformComponent.Position` (that's the caller's own
@@ -437,6 +437,13 @@ Builds on the Currency/container and loot currency work above.
   kit does. Any future UI built on top of grouped grid cells should check whether its own
   per-cell action needs a real `StackInstanceId` before assuming a merged cell is just a cosmetic
   concern.
+- A completed purchase merges: `ShopActions.TryBuyFromShop` and a completed trade's shop column run
+  `InventoryActions.MergeIntoEquivalentStack` on what the player receives, topping up an equivalent
+  stack (same item, Override, divergence and disabled state, up to the player's cap) instead of
+  leaving a second one. Found live: buying a potion the starting kit already had made a Merged Stack
+  cell the hotbar couldn't bind. The stack merged into keeps its `StackInstanceId` (hotkeys stay
+  bound) and `AcquiredSequence` (so topping up doesn't read as "New"). Staging into or out of the
+  trade window never merges -- a staged stack needs its own id to move back.
 
 ### Toggle poison aura ability -- item side
 
@@ -554,7 +561,7 @@ Replaced the "New user input cancels buffered input" TODO. Model follows action-
 buffer with a short expiry; held movement sampled, taps buffered; dodge cancels windups; hitstun clears the
 buffer). Decisions, so they aren't re-asked:
 
-- `Presentation/UI/PlayerInputBuffer` is the only writer of the player's `NextMapPosition`,
+- `Game.Modules.Actions.PlayerCommands` is the only writer of the player's `NextMapPosition`,
   `PendingActionActivationComponent` and `PendingConsumableActivationComponent`. One slot (move / action /
   consumable), newest wins, `ExpiryFrames` = 0.25s on the simulation clock (pausing doesn't age it; tune after
   more play). Written only once `ActionLockGate` reads the player as free; a command queued while free is
@@ -578,7 +585,7 @@ buffer). Decisions, so they aren't re-asked:
 - Stagger = cancelling a buffered action. `Tag.Staggering` (PowerAttack only; keep it rare) makes
   `ActionEffectResolver.Apply` publish `EntityStaggeredEvent` per target hit, after the dodge skip and never
   for the source. `ActionsModule` cancels the target's windup and **keeps** its lock (the windup's time is
-  lost -- that cost is what justifies windup attacks' power); `PlayerInputBuffer` clears its slot. A pending
+  lost -- that cost is what justifies windup attacks' power); `PlayerCommands` clears its slot. A pending
   Dodge step survives a Stagger, and held movement isn't staggered (a deliberate choice for now: a key held
   through a Stagger still steps once the lock clears). `WindupCancel.TryCancel(..., releaseLock)`
   is the one cancel path for Escape (release), Dodge (release) and Stagger (keep). Unrelated to
@@ -1056,7 +1063,7 @@ gone; what replaced them is in `CLAUDE.md`'s Blueprints section. Six phases, eac
   every `Configure`. Adding to a stripe set mid-iteration is safe (a system iterates a span over the
   bucket's current array), so no deferral was needed there.
 - **Admin tools, kept.** Admin Mode's map context menu has "Spawn here >" and "Apply >"
-  (`BlueprintAdminCommands`). `ContextMenu` gained submenus for them (`ContextMenuOption.Opening`),
+  (`Game.Admin.BlueprintAdminCommands`, one of `AdminTools`' command sets). `ContextMenu` gained submenus for them (`ContextMenuOption.Opening`),
   swapped in on the menu's next update rather than inside the click, which would recycle the row being
   clicked. The user asked to keep these as a standing test tool.
 - **`IBlueprint` is gone.** Every blueprint is a static class holding `Id`, `Name` and its `Definition`;
@@ -1200,9 +1207,11 @@ record in Achievements.
 - **Achievements** (`IAchievementDefinition.Lootbox`): unlocking records an
   `UnclaimedAchievementLootboxComponent` (achievement id + reward as declared) -- game state, not UI.
   The box is granted only when the player closes that notification for good:
-  `NotificationCenter.NotificationDismissed` fires for Close, "Close" and "Close All", never for
+  `NotificationCenter` publishes `AchievementNotificationDismissedEvent` (immediate, not buffered -- the
+  simulation doesn't drain while paused or in menu mode) for Close, "Close" and "Close All", never for
   minimize (the Closed handler tells them apart because minimizing re-queues the notification as unread
-  first). `AchievementLootboxClaims.TryClaim` removes the record then grants, so it can't grant twice.
+  first). `AchievementModule` subscribes and claims for the player; `AchievementLootboxClaims.TryClaim`
+  removes the record then grants, so it can't grant twice.
   A minimized or never-opened notification never pays out -- no timeout, no fallback.
   Boxes: AngelInvestor Bronze Investor, Archivist Bronze Librarian, DrinkingProblem Bronze Alchemist
   (set contents: 2 Health Potions, 2 Cure Poison Potions), EarlyAdopter Silver Adventurer, EmptyPockets
@@ -1213,7 +1222,7 @@ record in Achievements.
 - **Bosses**: `BlueprintDefinition.Lootbox` is a facet, resolved like the others (the last part in
   build order to declare one wins; `ResolvedBlueprint.Lootbox`). The `Boss` trait declares Bronze Boss,
   so the Goblin Foreman and anything Boss is applied to pay out. `BossLootboxAwarder` (subscribed to
-  `EntityDiedEvent` in `LootboxModule.RegisterSystems`) grants the box when the killing blow's source is
+  `EntityDiedEvent` in `LootboxModule.RegisterBehavior`) grants the box when the killing blow's source is
   the player: the most recently applied part with a box wins, else the spawn blueprint's. It reads
   definitions, never components, so a boss that died unbuilt still pays out. One box per death, player
   killing blow only -- confirmed as intended. Kill credit for a status-effect tick goes to whoever
@@ -1668,7 +1677,7 @@ after") became three Id-keyed lists; see CLAUDE.md's Modding section for the rul
   from the ~1 s before a burn's first tick, since every tick resets the part's regen lockout for
   10 s. Burning now resets the lockout at ignition too, and Health's check is gone.
 - **A queued activation clears the step.** Whatever queues an action or consumable activation also
-  clears the entity's `NextMapPosition` in the same write (`PlayerInputBuffer`,
+  clears the entity's `NextMapPosition` in the same write (`PlayerCommands`,
   `TestCombatBehaviorSystem.ClearStep`), so `MovementSystem` no longer reads either activation pool.
   NpcBehavior still runs before Movement, or the step would be taken before it is cleared.
 - **Latent bugs the stricter signatures exposed.** `BurningSystem`/`PoisonSystem` passed no dead
@@ -1693,18 +1702,18 @@ flag); tests had to repeat the wiring by hand, and missing a step only failed at
 CLAUDE.md's ECS and Modding sections for the resulting rules.
 
 - **Register first.** The sequence is DeclareSettings → RegisterComponents → Configure →
-  RegisterSystems. Chosen over a post-registration bind hook and over handles (Forge's
+  RegisterBehavior. Chosen over a post-registration bind hook and over handles (Forge's
   `RegistryObject` shape) because it removes the gap instead of bridging it -- the shape of Forge's
   registry events, Factorio's data stage and Bevy's `build()`. No built-in `RegisterComponents`
   depended on `Configure`, so nothing had to move for it.
 - **Staged Engine builder, named for states.** `EcsBuilder.Begin` → `SortedModules` →
-  `RegisteredComponents` → `ConfiguredModules` → `RegisteredSystems`: each type is what is already
+  `RegisteredComponents` → `ConfiguredModules` → `RegisteredBehavior`: each type is what is already
   true, its methods the transitions; each stage advances once. Chosen over one `Build` call with a
   callback in the middle.
-- **Engine owns every phase, generic over the context.** `IModule<TContext>`; `RegisterSystems`
-  gets the context in `SystemRegistration<TContext>`, which removed ~100 `= null!` fields modules
+- **Engine owns every phase, generic over the context.** `IModule<TContext>`; `RegisterBehavior`
+  gets the context in `BehaviorRegistration<TContext>`, which removed ~100 `= null!` fields modules
   carried from `Configure`. `Configure` still exists as its own phase: catalogs and registries
-  another module's `RegisterSystems` reads (aura appliers, actions, blueprints before `ResolveAll`)
+  another module's `RegisterBehavior` reads (aura appliers, actions, blueprints before `ResolveAll`)
   must be complete before any system is built.
 - **Foundation modules.** The context is built from Core's, ProcessingTier's and Blueprints' pools,
   so every build contains them (`GameModuleContext.FoundationModuleIds`). ProcessingTier's
@@ -1815,7 +1824,7 @@ systems got expensive. See CLAUDE.md's Diagnostics section for the resulting rul
   the session. Registration is done by the composition site (`GameBuildPass.Run`,
   `WorldSessionBootstrapper`) from read-only counters the owner exposes -- the streamer knows nothing
   about diagnostics. Modules can't register gauges yet: `EcsContext` doesn't exist during
-  `RegisterSystems`; add a `SystemRegistration` hook with the first module that has one worth it.
+  `RegisterBehavior`; add a `BehaviorRegistration` hook with the first module that has one worth it.
 - **Two kinds.** `Cumulative` gauges are stored as their change per frame (from the value when the
   tracker was built, not since launch), so "a gen-1 on frame 1843" reads directly; a mean of a raw
   counter is meaningless. `Func<double>` for every value -- all are integers below 2^53 today.
@@ -1867,3 +1876,53 @@ systems got expensive. See CLAUDE.md's Diagnostics section for the resulting rul
   1.435-1.452, wall clock ~4.3 s both, same fingerprint -- sampling cost is below what these runs
   resolve. The windowed open-vs-closed Draw cost of the Diagnostics window was not measured (needs
   F3 in a live window).
+
+### Shell composition cleanup: GameSession, views, commands, and the item-window coordinator
+
+Landed 2026-09-29 in six phases (PLAN-shell-composition-cleanup.md). `ShellBootstrapper.Build` had
+grown to ~250 lines of game rules, window-to-window wiring and admin setters, and constructor lists
+kept growing because Game's API was static functions taking `ComponentManager` plus catalogs, bus and
+player, so every UI element that read or acted carried all of them. See CLAUDE.md's Layers and
+Presentation sections for the resulting rules. Headless seed-1 fingerprint unchanged
+(`93B326D0E3582C70`) across every phase.
+
+- **`GameSession` replaces `GameBootstrapResult`**, built by name from the build's `GameModuleContext`
+  -- three positional bundles (context, bootstrap result, world session) had re-listed the same fields.
+  `GameModuleContext` isn't exposed: it carries build-phase surface (registries still being filled,
+  `MathUtility`, `EntityMoveSync`). `WorldSessionContext` dropped from 22 fields to 4.
+- **Achievement loot-box claims live in `AchievementModule`**, fired by an immediate (not buffered)
+  `AchievementNotificationDismissedEvent`: buffered events drain in the simulation, which doesn't run
+  while paused or in menu mode, so a buffered claim could miss an inventory opened straight away.
+- **`AdminTools`** (`Game.Admin`) holds every Admin Mode command set; `MapWindow` takes
+  `AdminContextMenuOptions` as a required dependency instead of four nullable setters. The F12 toggle,
+  the title sync and `GlobalState.IsAdminModeOn` display reads were left where they were.
+- **Commands and views are per-session instance services over the static rules**, which stay the
+  implementation because systems call them with their own pools; a service method is the static call
+  with its pools bound, not a shim. Services are built by `GameBootstrapper` from built-in pools, not
+  module-registered -- a module-registered service (a mod replacing `ShopCommands`) can come later
+  without changing callers. `PlayerInputBuffer` moved into Game as `PlayerCommands` (it holds gameplay
+  input rules: expiry, stagger drop, dodge steps); `HotbarContent`'s binding rules moved into
+  `HotkeyBindingCommands`, except the Expansion-slot lock, which stays a Presentation drop-target rule.
+- **Presentation types take the specific services they use**, except composition points: the item
+  windows, grid and currency row share `InventoryServices` (seven services each otherwise), and
+  `ShellServices` goes only to `ElementFactoryRegistry` and `ItemWindowCoordinator`. Tests build them
+  with `TestInventoryServices.Over` and `TestUiInputController.Create` (the old argument lists).
+- **The architecture test bans the store, not component values.** Banning `*Component` values would
+  have needed stand-in structs across most of Presentation; views return component copies (a stack,
+  a modifier). It scans the whole Presentation assembly, not a list, so new code can't regress;
+  `MapTintGrid`, `InspectionWindowContent` and `DiagnosticsWindow` are exempt by name.
+- **Two writes found while moving reads:** the loot window wrote `LootedComponent` directly (now
+  `LootCommands.MarkLooted`), and Escape cancelled a windup with raw pools (now
+  `PlayerCommands.TryCancelWindup(now)`).
+- **`ItemWindowCoordinator`** (Presentation) builds the item-window controllers and holds the rules
+  between them; it had no tests while it lived in the exe. `ItemWindowCoordinatorTests` drive it
+  through `MapWindow`'s loot/shop click entry points, a grid's item click and `ReleaseEntity`, using
+  `TestMapWindows` (the `MapWindow` builder, moved out of `MapWindowTests`). A `PresentationContext`
+  needs a GraphicsDevice (`SpriteBatch`), so tests can't reuse `ElementFactoryRegistry`; they register
+  the element factories they need.
+- **`PointerState`** replaced the late-bound `Func`s that fed cursor text and the drag ghost, and the
+  public drag properties `UiInputController` exposed only for them.
+- **Found live in between: a bought item the player already carried couldn't be put on the hotbar.**
+  A purchase moved the shop's stack verbatim, the grid folded the two stacks into a Merged Stack cell
+  with no single `StackInstanceId`, and the hotbar refuses those. See "Shops" for the fix (completed
+  purchases merge).

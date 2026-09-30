@@ -1,11 +1,10 @@
-using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using FontStashSharp;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Definitions;
 using Game.Modules.StatusEffects;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -30,7 +29,7 @@ namespace Presentation.UI.Content;
 /// stack count.
 /// </summary>
 /// <param name="simulationClock">"CurrentFrame" for the potion cooldown's remaining seconds -- it stores an absolute deadline.</param>
-public sealed class PlayerStatusEffectsContent(World world, ComponentManager componentManager, ItemCatalog itemCatalog, FontService fontService, StatusEffectDisplayRegistry statusEffectDisplays, SimulationClock simulationClock) : IElementContent
+public sealed class PlayerStatusEffectsContent(World world, ActionStateView actionStateView, ItemCatalog itemCatalog, FontService fontService, StatusEffectDisplayRegistry statusEffectDisplays, SimulationClock simulationClock) : IElementContent
 {
 
     public static readonly Vector2 Size = new(PlayerHealthBarContent.Size.X, HudChrome.EntrySize.Y / 2f * 1.5f);
@@ -39,7 +38,6 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
 
     private const float CountdownTextGap = 1f;
 
-    private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns = componentManager.GetPackedPool<PotionCooldownComponent>();
     private readonly LabelRenderer _labelRenderer = new();
     private readonly List<StatusEffectType> _activeEffectTypes = [];
 
@@ -86,7 +84,7 @@ public sealed class PlayerStatusEffectsContent(World world, ComponentManager com
             }
         }
 
-        _potionCooldownFramesRemaining = _potionCooldowns.TryGetReadonly(playerEntityId, out var potionCooldown)
+        _potionCooldownFramesRemaining = actionStateView.TryGetPotionCooldown(playerEntityId, out var potionCooldown)
             ? PotionCooldownEffects.FramesRemaining(potionCooldown, simulationClock.CurrentFrame)
             : 0;
         _hasPotionCooldown = _potionCooldownFramesRemaining > 0;

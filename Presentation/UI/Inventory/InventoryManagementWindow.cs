@@ -1,8 +1,7 @@
-using Engine.ECS.Components;
-using Engine.Events;
 using Game.Modules;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Shops;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
@@ -41,12 +40,10 @@ public sealed class InventoryManagementWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
-    ComponentManager componentManager,
-    ItemCatalog itemCatalog,
+    InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    EventBus eventBus,
     Engine.ECS.Systems.SimulationClock simulationClock) : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
 {
     private TabbedContent _tabbedContent = null!;
@@ -73,10 +70,10 @@ public sealed class InventoryManagementWindow(
         _onActivateRequested = onActivateRequested;
         _onOpenLootboxesRequested = onOpenLootboxesRequested;
 
-        var tagCounts = InventoryTagQueries.GetTagCounts(componentManager, itemCatalog, entityId);
+        var tagCounts = inventoryServices.InventoryView.GetTagCounts(entityId);
         _currentTags = ToTagSet(tagCounts);
         _tabbedContent = new TabbedContent(BuildTabDefinitions(tagCounts), ElementPoolService, FontService, WindowPalette.PanelBackgroundColor);
-        _currencyRowContent = new CurrencyRowContent(entityId, componentManager, world, contextMenuController, ElementPoolService, _getSecondaryTargetEntityId, eventBus);
+        _currencyRowContent = new CurrencyRowContent(entityId, inventoryServices, world, contextMenuController, ElementPoolService, _getSecondaryTargetEntityId);
         SetContent(_tabbedContent);
         SetFooterContent(_currencyRowContent, CurrencyRowContent.Height);
 
@@ -98,7 +95,7 @@ public sealed class InventoryManagementWindow(
             return;
         }
 
-        var tagCounts = InventoryTagQueries.GetTagCounts(componentManager, itemCatalog, _entityId);
+        var tagCounts = inventoryServices.InventoryView.GetTagCounts(_entityId);
         var newTags = ToTagSet(tagCounts);
         if (newTags.SetEquals(_currentTags))
         {
@@ -120,7 +117,7 @@ public sealed class InventoryManagementWindow(
         return tags;
     }
 
-    private uint CurrentInventoryVersion() => componentManager.GetMultiPool<InventoryItemStackComponent>().GetEntityVersion(_entityId);
+    private uint CurrentInventoryVersion() => inventoryServices.InventoryView.GetVersion(_entityId);
 
     private List<TabbedContent.TabDefinition> BuildTabDefinitions(List<(Tag Tag, int Count)> tagCounts)
     {
@@ -139,7 +136,7 @@ public sealed class InventoryManagementWindow(
 
     private InventoryTabContent CreateTabContent(Tag? filterTag)
     {
-        var gridContent = new InventoryGridContent(world, componentManager, itemCatalog, ElementPoolService, contextMenuController, _entityId, filterTag, _tooltipController, _getSecondaryTargetEntityId, mapViewState, _onItemSelected, _onCompareRequested, _onActivateRequested, _onOpenLootboxesRequested, simulationClock: simulationClock);
+        var gridContent = new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, _entityId, filterTag, _tooltipController, _getSecondaryTargetEntityId, mapViewState, _onItemSelected, _onCompareRequested, _onActivateRequested, _onOpenLootboxesRequested, simulationClock: simulationClock);
         return new InventoryTabContent(ElementPoolService, gridContent);
     }
 }

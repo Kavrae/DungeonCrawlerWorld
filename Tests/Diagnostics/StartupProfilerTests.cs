@@ -48,11 +48,11 @@ public sealed class StartupProfilerTests
         RecordScope(profiler, new DiagnosticScope("Module Load"), inside: () =>
         {
             RecordScope(profiler, new DiagnosticScope("Configure"), inside: () => RecordScope(profiler, new DiagnosticScope("Configure", "HealthModule")));
-            RecordScope(profiler, new DiagnosticScope("RegisterSystems"));
+            RecordScope(profiler, new DiagnosticScope("RegisterBehavior"));
         });
 
         CollectionAssert.AreEqual(
-            new[] { ("Module Load", 0), ("Configure", 1), ("Configure:HealthModule", 2), ("RegisterSystems", 1) },
+            new[] { ("Module Load", 0), ("Configure", 1), ("Configure:HealthModule", 2), ("RegisterBehavior", 1) },
             profiler.Phases.Select(phase => (phase.Name, phase.Depth)).ToArray());
     }
 
@@ -122,7 +122,7 @@ public sealed class StartupProfilerTests
         }
 
         var stages = profiler.Phases.Where(phase => phase.Depth == 0).Select(phase => phase.Name).ToArray();
-        CollectionAssert.AreEqual(new[] { "RegisterComponents", "Configure", "ResolveBlueprints", "RegisterSystems" }, stages);
+        CollectionAssert.AreEqual(new[] { "RegisterComponents", "Configure", "ResolveBlueprints", "RegisterBehavior" }, stages);
 
         var registerComponentsIndex = profiler.Phases.ToList().FindIndex(phase => phase.Name == "RegisterComponents");
         var modulePhases = profiler.Phases.Skip(registerComponentsIndex + 1).TakeWhile(phase => phase.Depth == 1).ToList();

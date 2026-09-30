@@ -68,7 +68,7 @@ internal static class HeadlessBenchmark
 
             for (var frame = 1; !diagnostics.IsBenchmarkComplete; frame++)
             {
-                session.EcsContext.Update(new EngineTime(frameDuration * frame, frameDuration, IsRunningSlowly: false, frame));
+                session.GameSession.EcsContext.Update(new EngineTime(frameDuration * frame, frameDuration, IsRunningSlowly: false, frame));
             }
 
             Console.WriteLine($"[Headless] Fingerprint {Fingerprint(session)}");
@@ -114,10 +114,10 @@ internal static class HeadlessBenchmark
     /// </summary>
     private static string Fingerprint(WorldSessionContext session)
     {
-        var componentManager = session.EcsContext.ComponentManager;
+        var componentManager = session.GameSession.EcsContext.ComponentManager;
         var hash = new StableHash();
 
-        hash.Add(session.EcsContext.EntityManager.LivingEntityCount);
+        hash.Add(session.GameSession.EcsContext.EntityManager.LivingEntityCount);
 
         foreach (var pool in componentManager.AllPools
             .OfType<IMemoryReportingComponentPool>()

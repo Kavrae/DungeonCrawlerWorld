@@ -77,7 +77,7 @@ public sealed class CoreModule : IGameModule
     /// here; the lock is a deadline now (see ActionLockComponent), so nothing has to visit an
     /// entity for it to become unlocked.
     /// </summary>
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
     }
 }

@@ -336,4 +336,22 @@ public sealed class ShopActionsTests
         // so 20 * 0.90 = 18 -- not the raw 16 a Charisma-1 player would receive.
         Assert.AreEqual(18, manager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold);
     }
+
+    [TestMethod]
+    public void TryBuyFromShop_PlayerAlreadyHoldsTheItem_TopsUpTheExistingStackSoItsHotkeyStaysBound()
+    {
+        var (manager, catalog) = BuildManager();
+        manager.Merge(ShopEntityId, PotionOnlyShop);
+        manager.Merge(ShopEntityId, new CurrencyComponent(gold: 0, credits: 0));
+        manager.Merge(PlayerEntityId, new CurrencyComponent(gold: 1000, credits: 0));
+        var heldStackId = InventoryActions.AddItem(manager, PlayerEntityId, PotionItemId, quantity: 2);
+        var shopStackId = InventoryActions.AddItem(manager, ShopEntityId, PotionItemId, quantity: 3);
+
+        Assert.IsTrue(ShopActions.TryBuyFromShop(manager, catalog, PlayerEntityId, ShopEntityId, shopStackId, TestPlayerQuery.NoPlayer));
+
+        var stacks = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(1, stacks.CountForEntity(PlayerEntityId));
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(stacks, PlayerEntityId, heldStackId, out var heldStack));
+        Assert.AreEqual((ushort)5, heldStack.Quantity);
+    }
 }

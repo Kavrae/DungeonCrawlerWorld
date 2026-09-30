@@ -1,16 +1,12 @@
-using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
-using Engine.Events;
 using FontStashSharp;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Mana.Components;
 using Game.Sprites;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -46,8 +42,10 @@ namespace Presentation.UI.Content;
 public sealed class HotbarContent(
     World world,
     MapViewState mapViewState,
-    ComponentManager componentManager,
-    EventBus eventBus,
+    HotkeyBindingView hotkeyBindingView,
+    InventoryView inventoryView,
+    ActionStateView actionStateView,
+    HotkeyBindingCommands hotkeyBindingCommands,
     ActionCatalog actionCatalog,
     ItemCatalog itemCatalog,
     FontService fontService,
@@ -88,14 +86,6 @@ public sealed class HotbarContent(
     /// </summary>
     public bool IsAcceptingDrag { get; set; }
 
-    private readonly MultiComponentPool<ActionHotkeyBindingComponent> _actionHotkeyBindings = componentManager.GetMultiPool<ActionHotkeyBindingComponent>();
-    private readonly MultiComponentPool<ItemHotkeyBindingComponent> _itemHotkeyBindings = componentManager.GetMultiPool<ItemHotkeyBindingComponent>();
-    private readonly MultiComponentPool<ActionInstanceComponent> _actionInstances = componentManager.GetMultiPool<ActionInstanceComponent>();
-    private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
-    private readonly PackedComponentPool<ActionLockComponent> _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
-    private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns = componentManager.GetPackedPool<PotionCooldownComponent>();
-    private readonly PackedComponentPool<ManaComponent> _mana = componentManager.GetPackedPool<ManaComponent>();
-    private readonly PackedComponentPool<HotkeyExpansionUnlockComponent> _hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
     private readonly RadialFillRenderer _radialFill = new(new LabelRenderer(), spriteSheetService, spriteRenderer);
 
     private Window _hostWindow = null!;
@@ -106,11 +96,11 @@ public sealed class HotbarContent(
     /// <summary>Whether each slot is currently active (usable) -- refreshed once per Update (see RefreshSlotActiveStates), not recomputed during Draw. Deciding *whether* a slot is disabled (locked, unaffordable, out of stock) is state/game logic; Draw only ever asks "is this slot active" and independently decides how that reads visually (see AlphaFor) -- the two are deliberately kept separate rather than DrawActionSlot/DrawItemSlot each computing and returning their own alpha for the rest of DrawSlot to reuse.</summary>
     private readonly Dictionary<HotkeySlot, bool> _slotActiveStates = [];
 
-    /// <summary>Read directly from the pool at construction (not deferred to Initialize/Update) specifically so ShellBootstrapper can read a correct Size immediately after `new HotbarContent(...)`, before the host Window -- which needs that Size to construct itself -- exists at all. Field initializers can't reference another instance field (only the primary constructor's own parameters), hence re-resolving the pool from componentManager here rather than reusing _hotkeyExpansionUnlocks.</summary>
-    private short _unlockedExpansionSlots = GetUnlockedExpansionSlots(componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(), world.PlayerEntityId);
+    /// <summary>Read at construction (not deferred to Initialize/Update) specifically so ShellBootstrapper can read a correct Size immediately after `new HotbarContent(...)`, before the host Window -- which needs that Size to construct itself -- exists at all. Field initializers can't reference another instance field (only the primary constructor's own parameters), hence re-resolving the pool from componentManager here rather than reusing _hotkeyExpansionUnlocks.</summary>
+    private short _unlockedExpansionSlots = GetUnlockedExpansionSlots(hotkeyBindingView, world.PlayerEntityId);
 
-    private int _lastLayoutRowsVisible = GetExpansionRowsVisible(GetUnlockedExpansionSlots(componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(), world.PlayerEntityId));
-    private int _lastLayoutPagesVisible = GetExpansionPagesVisible(GetUnlockedExpansionSlots(componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(), world.PlayerEntityId));
+    private int _lastLayoutRowsVisible = GetExpansionRowsVisible(GetUnlockedExpansionSlots(hotkeyBindingView, world.PlayerEntityId));
+    private int _lastLayoutPagesVisible = GetExpansionPagesVisible(GetUnlockedExpansionSlots(hotkeyBindingView, world.PlayerEntityId));
 
     /// <summary>The bar's current total bounding size -- depends on how many Expansion rows/pages are currently revealed, so unlike most HUD content's Size this is an instance property, not a static constant.</summary>
     public Vector2 Size => ComputeSize(GetExpansionRowsVisible(_unlockedExpansionSlots), GetExpansionPagesVisible(_unlockedExpansionSlots));
@@ -148,8 +138,8 @@ public sealed class HotbarContent(
         unlockedSlots > HotbarChrome.SlotsPerExpansionPage ? HotbarChrome.MaxExpansionPages : 1;
 
     /// <summary>playerEntityId can still be World's unset sentinel (-1) here -- ShellBootstrapper constructs this class (and reads its Size) before GameLoop's first Update actually spawns the player (see FloorBuilder.CreatePlayer), so a negative id must fall back the same as "no component" rather than indexing the pool with it.</summary>
-    private static short GetUnlockedExpansionSlots(PackedComponentPool<HotkeyExpansionUnlockComponent> hotkeyExpansionUnlocks, int playerEntityId) =>
-        playerEntityId >= 0 && hotkeyExpansionUnlocks.TryGetReadonly(playerEntityId, out var unlock) ? unlock.UnlockedSlotCount : DefaultUnlockedExpansionSlots;
+    private static short GetUnlockedExpansionSlots(HotkeyBindingView hotkeyBindingView, int playerEntityId) =>
+        playerEntityId >= 0 && hotkeyBindingView.TryGetUnlockedExpansionSlots(playerEntityId, out var unlockedSlotCount) ? unlockedSlotCount : DefaultUnlockedExpansionSlots;
 
     public void Initialize(Window hostWindow)
     {
@@ -161,7 +151,7 @@ public sealed class HotbarContent(
 
     public void Update(GameTime gameTime)
     {
-        _unlockedExpansionSlots = GetUnlockedExpansionSlots(_hotkeyExpansionUnlocks, world.PlayerEntityId);
+        _unlockedExpansionSlots = GetUnlockedExpansionSlots(hotkeyBindingView, world.PlayerEntityId);
         RefreshLayoutIfChanged();
         RefreshSlotActiveStates();
     }
@@ -196,12 +186,12 @@ public sealed class HotbarContent(
             return false;
         }
 
-        if (ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out var action))
+        if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out var action))
         {
             return HasEnoughMana(playerEntityId, action);
         }
 
-        if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out _))
+        if (hotkeyBindingView.TryGetBoundItem(playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out _))
         {
             return item.Activator is not null;
         }
@@ -315,11 +305,11 @@ public sealed class HotbarContent(
 
     /// <summary>The item stack (if any) currently bound to slot -- UiInputController's content-drag path reads this at press time to capture the payload of a drag starting on an already-bound hotbar slot.</summary>
     internal bool TryGetBoundItemStackInstanceId(HotkeySlot slot, out uint stackInstanceId) =>
-        ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, world.PlayerEntityId, slot, out stackInstanceId);
+        hotkeyBindingView.TryGetBoundItem(world.PlayerEntityId, slot, out stackInstanceId);
 
     /// <summary>The action (if any) currently bound to slot -- same drag-payload-capture role as TryGetBoundItemId, for a drag starting on an already-bound action slot.</summary>
     internal bool TryGetBoundActionId(HotkeySlot slot, out Guid actionId) =>
-        ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, world.PlayerEntityId, slot, out actionId);
+        hotkeyBindingView.TryGetBoundAction(world.PlayerEntityId, slot, out actionId);
 
     /// <summary>slot's bound action/item resolved to a title+summary pair, for the Armed Hotkey
     /// Summary window -- false if the slot has no binding. Summary, not Description: a short,
@@ -330,7 +320,7 @@ public sealed class HotbarContent(
     {
         var playerEntityId = world.PlayerEntityId;
 
-        if (ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, playerEntityId, slot, out var actionId) &&
+        if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) &&
             actionCatalog.TryGet(actionId, out var action))
         {
             title = action.Name;
@@ -338,7 +328,7 @@ public sealed class HotbarContent(
             return true;
         }
 
-        if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var stackInstanceId) &&
+        if (hotkeyBindingView.TryGetBoundItem(playerEntityId, slot, out var stackInstanceId) &&
             TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out _))
         {
             title = item.Name;
@@ -366,19 +356,8 @@ public sealed class HotbarContent(
         return Rectangle.Empty;
     }
 
-    /// <summary>
-    /// Writes (or overwrites) slot's item binding -- clears any existing action or item binding
-    /// on that slot first, since a slot binds to at most one of {action, item} at a time (see
-    /// IHotkeySlotBinding's own doc comment). Does not touch the inventory stack itself: binding
-    /// is a reference, not a transfer (see ItemHotkeyBindingComponent's own doc comment). The
-    /// real assignment path, driven by UiInputController's content-drag drop resolution. A
-    /// not-yet-unlocked Expansion slot, or an item that can never be bound (ItemHotkeyBindingQueries.
-    /// CanBind -- a loot box), silently refuses the binding -- it isn't a valid drop
-    /// target (see this class's own doc comment on the disabled-alpha treatment) -- rather than
-    /// UiInputController needing its own separate lock-awareness. Publishes ItemHotkeyBoundEvent
-    /// -- ArchivistAchievement's trigger -- deliberately not raised by PlayerKit's own
-    /// hardcoded starting binds, which are spawn-time setup, not a player action.
-    /// </summary>
+    /// <summary>Binds slot to the player's stack stackInstanceId -- the drag-and-drop assignment path UiInputController's drop resolution drives.</summary>
+    /// <remarks>A not-yet-unlocked Expansion slot is refused here, since it isn't a valid drop target (see the disabled-alpha treatment above); every other binding rule -- clearing the slot, refusing an unbindable item, publishing ItemHotkeyBoundEvent -- is HotkeyBindingCommands.TryBindItem's.</remarks>
     internal void BindItem(HotkeySlot slot, uint stackInstanceId)
     {
         if (IsSlotLocked(slot))
@@ -386,28 +365,13 @@ public sealed class HotbarContent(
             return;
         }
 
-        var playerEntityId = world.PlayerEntityId;
-        if (InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, playerEntityId, stackInstanceId, out var boundStack) &&
-            InventoryQueries.TryResolveEffectiveItem(itemCatalog, in boundStack, out var boundItem) &&
-            !ItemHotkeyBindingQueries.CanBind(boundItem))
-        {
-            return;
-        }
-
-        ClearSlotBinding(playerEntityId, slot);
-        _itemHotkeyBindings.Add(playerEntityId, new ItemHotkeyBindingComponent(slot, stackInstanceId));
-
-        if (InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, playerEntityId, stackInstanceId, out var stack))
-        {
-            eventBus.Publish(new ItemHotkeyBoundEvent(playerEntityId, slot, stack.ItemDefinitionId));
-        }
+        hotkeyBindingCommands.TryBindItem(world.PlayerEntityId, slot, stackInstanceId);
     }
 
     /// <summary>Removes slot's item binding, if any -- dragging a bound item off the hotbar entirely (see UiInputController's content-drag path).</summary>
-    internal void UnbindItemSlot(HotkeySlot slot) =>
-        ItemHotkeyBindingQueries.Unbind(_itemHotkeyBindings, world.PlayerEntityId, slot);
+    internal void UnbindItemSlot(HotkeySlot slot) => hotkeyBindingCommands.UnbindItem(world.PlayerEntityId, slot);
 
-    /// <summary>Writes (or overwrites) slot's action binding -- mirrors BindItem exactly (clears any existing binding of either kind first, refuses a locked slot, publishes ActionHotkeyBoundEvent), for the same click-and-drag path now covering actions too.</summary>
+    /// <summary>Writes (or overwrites) slot's action binding -- mirrors BindItem exactly (refuses a locked slot here, the rest is HotkeyBindingCommands.BindAction's), for the same click-and-drag path now covering actions too.</summary>
     internal void BindAction(HotkeySlot slot, Guid actionId)
     {
         if (IsSlotLocked(slot))
@@ -415,15 +379,11 @@ public sealed class HotbarContent(
             return;
         }
 
-        var playerEntityId = world.PlayerEntityId;
-        ClearSlotBinding(playerEntityId, slot);
-        _actionHotkeyBindings.Add(playerEntityId, new ActionHotkeyBindingComponent(slot, actionId));
-        eventBus.Publish(new ActionHotkeyBoundEvent(playerEntityId, slot, actionId));
+        hotkeyBindingCommands.BindAction(world.PlayerEntityId, slot, actionId);
     }
 
     /// <summary>Removes slot's action binding, if any -- mirrors UnbindItemSlot for a bound action dragged off the hotbar entirely.</summary>
-    internal void UnbindActionSlot(HotkeySlot slot) =>
-        ActionHotkeyBindingQueries.Unbind(_actionHotkeyBindings, world.PlayerEntityId, slot);
+    internal void UnbindActionSlot(HotkeySlot slot) => hotkeyBindingCommands.UnbindAction(world.PlayerEntityId, slot);
 
     /// <summary>
     /// Resolves a completed content-drag drop in one call -- unbinds originSlot first (if the
@@ -471,13 +431,6 @@ public sealed class HotbarContent(
         }
     }
 
-    /// <summary>Shared by BindItem/BindAction -- a slot binds to at most one of {action, item} at a time (see IHotkeySlotBinding's own doc comment), so writing a new binding of either kind always clears both pools for that slot first.</summary>
-    private void ClearSlotBinding(int playerEntityId, HotkeySlot slot)
-    {
-        ActionHotkeyBindingQueries.Unbind(_actionHotkeyBindings, playerEntityId, slot);
-        ItemHotkeyBindingQueries.Unbind(_itemHotkeyBindings, playerEntityId, slot);
-    }
-
     /// <summary>Delegates to HotkeySlotLayout.IsLocked -- shared with ActionTargetingController's own activation gate, so rendering and activation can't disagree about which slots are actually usable.</summary>
     private bool IsSlotLocked(HotkeySlot slot) => HotkeySlotLayout.IsLocked(slot, _unlockedExpansionSlots);
 
@@ -504,11 +457,11 @@ public sealed class HotbarContent(
         var isActive = _slotActiveStates.GetValueOrDefault(slot, true);
         var alpha = AlphaFor(isActive);
 
-        if (ActionHotkeyBindingQueries.TryGet(_actionHotkeyBindings, playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out var action))
+        if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out var action))
         {
             DrawSlotVisual(spriteBatch, unitRectangle, bounds, contentBounds, BuildActionVisual(playerEntityId, action, isActive), alpha);
         }
-        else if (ItemHotkeyBindingQueries.TryGet(_itemHotkeyBindings, playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out var stack))
+        else if (hotkeyBindingView.TryGetBoundItem(playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out var stack))
         {
             DrawSlotVisual(spriteBatch, unitRectangle, bounds, contentBounds, BuildItemVisual(playerEntityId, item, stack, isActive), alpha);
 
@@ -565,7 +518,7 @@ public sealed class HotbarContent(
     private bool HasEnoughMana(int playerEntityId, ActionDefinition action)
     {
         var manaCost = SpellActivator.ManaCostOf(action.Activator);
-        return manaCost <= 0 || (_mana.TryGetReadonly(playerEntityId, out var mana) && mana.CurrentMana >= manaCost);
+        return manaCost <= 0 || (actionStateView.TryGetMana(playerEntityId, out var mana) && mana.CurrentMana >= manaCost);
     }
 
     /// <summary>
@@ -578,7 +531,7 @@ public sealed class HotbarContent(
     /// </summary>
     private bool TryResolveBoundItem(int playerEntityId, uint stackInstanceId, out ItemDefinition item, out InventoryItemStackComponent stack)
     {
-        if (!InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, playerEntityId, stackInstanceId, out stack))
+        if (!inventoryView.TryGetStack(playerEntityId, stackInstanceId, out stack))
         {
             item = null!;
             return false;
@@ -604,7 +557,7 @@ public sealed class HotbarContent(
     {
         var quantity = stack.Quantity;
 
-        var cooldownFramesRemaining = item.Activator is PotionActivator && _potionCooldowns.TryGetReadonly(playerEntityId, out var cooldown)
+        var cooldownFramesRemaining = item.Activator is PotionActivator && actionStateView.TryGetPotionCooldown(playerEntityId, out var cooldown)
             ? PotionCooldownEffects.FramesRemaining(cooldown, simulationClock.CurrentFrame)
             : 0;
         var countdownSeconds = cooldownFramesRemaining > 0
@@ -718,7 +671,7 @@ public sealed class HotbarContent(
         }
 
         if (action.Activator.Timing.Category != ActionTimingCategory.FreeCast &&
-            _actionLocks.TryGetReadonly(playerEntityId, out var actionLock) &&
+            actionStateView.TryGetActionLock(playerEntityId, out var actionLock) &&
             actionLock.CurrentLockTotalFrames > 0)
         {
             return (float)ActionLockGate.FramesRemaining(actionLock, simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames;
@@ -737,7 +690,7 @@ public sealed class HotbarContent(
     /// </summary>
     private float ComputeItemFillPercentage(int playerEntityId)
     {
-        if (_actionLocks.TryGetReadonly(playerEntityId, out var actionLock) && actionLock.CurrentLockTotalFrames > 0)
+        if (actionStateView.TryGetActionLock(playerEntityId, out var actionLock) && actionLock.CurrentLockTotalFrames > 0)
         {
             return (float)ActionLockGate.FramesRemaining(actionLock, simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames;
         }

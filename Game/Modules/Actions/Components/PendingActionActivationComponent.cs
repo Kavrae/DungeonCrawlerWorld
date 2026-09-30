@@ -6,7 +6,7 @@ namespace Game.Modules.Actions.Components;
 /// Written by Presentation when the player confirms a targeted action activation (left-click
 /// on a valid tile, or a no-target activation) -- Presentation only ever queues this request;
 /// ActionActivationSystem is the only thing that actually applies gameplay effects, mirroring
-/// how PlayerInputBuffer.Flush queues a move for MovementSystem to apply rather than
+/// how PlayerCommands.Flush queues a move for MovementSystem to apply rather than
 /// mutating gameplay state directly. Consumed (removed) the same frame
 /// ActionActivationSystem processes it, whether or not the activation actually goes through
 /// (e.g. blocked by the shared ActionLock or an on-cooldown FreeCast) -- a one-shot request,

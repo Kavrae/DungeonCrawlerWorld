@@ -1,9 +1,10 @@
 using Engine.Math;
+using Game.Modules.Actions;
 using Microsoft.Xna.Framework.Input;
 
 namespace Presentation.UI;
 
-/// <summary>Turns the player's WASD input into moves for PlayerInputBuffer.</summary>
+/// <summary>Turns the player's WASD input into moves for PlayerCommands.</summary>
 /// <remarks>
 /// A freshly pressed movement key buffers a move in the direction of every movement key held this frame, so a tap
 /// is kept after the key is released. Every frame, the held direction is also handed to the buffer's flush, which
@@ -13,7 +14,7 @@ namespace Presentation.UI;
 /// confirm in ActionTargetingController.TryClaimDodgeDirectionalKey). A claimed key is neither a press nor held
 /// for this frame, so any future handler can intercept a movement key without this class knowing why.
 /// </remarks>
-public sealed class PlayerMovementController(PlayerInputBuffer inputBuffer)
+public sealed class PlayerMovementController(PlayerCommands playerCommands)
 {
     private static readonly (Keys Key, Vector3Int Direction)[] MovementKeys =
     [
@@ -40,9 +41,9 @@ public sealed class PlayerMovementController(PlayerInputBuffer inputBuffer)
 
         if (isFreshPress)
         {
-            inputBuffer.QueueMove(heldDirection);
+            playerCommands.QueueMove(heldDirection);
         }
 
-        inputBuffer.Flush(heldDirection);
+        playerCommands.Flush(heldDirection);
     }
 }

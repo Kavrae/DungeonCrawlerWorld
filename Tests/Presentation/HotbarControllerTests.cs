@@ -1,5 +1,5 @@
-using Engine.ECS.Systems;
 using Engine.ECS.Components;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Actions;
@@ -8,14 +8,13 @@ using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
+using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
-using Game.Modules.AbilityScores.Components;
 
 namespace Tests.Presentation;
 
@@ -66,28 +65,25 @@ public sealed class HotbarControllerTests
             new UiLayerStack(),
             actionCatalog,
             itemCatalog,
-            componentManager.GetDirectPool<TransformComponent>(),
-            componentManager.GetMultiPool<ActionHotkeyBindingComponent>(),
-            componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
-            componentManager.GetMultiPool<InventoryItemStackComponent>(),
-            componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetPackedPool<ActionLockComponent>(),
-            new PlayerInputBuffer(
+            new TransformView(componentManager),
+            new HotkeyBindingView(componentManager),
+            new InventoryView(componentManager, itemCatalog),
+            new ActionStateView(componentManager, localTierRoster: null),
+            new AbilityScoreView(componentManager),
+            new PlayerCommands(
                 world,
                 componentManager.GetDirectPool<TransformComponent>(),
                 componentManager.GetPackedPool<MovementComponent>(),
                 componentManager.GetPackedPool<ActionLockComponent>(),
                 componentManager.GetPackedPool<PendingActionActivationComponent>(),
                 componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+                componentManager.GetPackedPool<PendingDelayedActionComponent>(),
                 new Engine.ECS.Systems.SimulationClock(),
                 new EventBus()),
-            componentManager.GetPackedPool<ManaComponent>(),
-            componentManager.GetPackedPool<AbilityScoresComponent>(),
             simulationClock: new SimulationClock());
 
         var fontService = TestFonts.Shared;
-        var hotbarContent = new HotbarContent(world, mapViewState, componentManager, new EventBus(), actionCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
+        var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), new ActionStateView(componentManager, localTierRoster: null), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting, new TooltipController());
 
         return (hotbarController, mapViewState, componentManager);

@@ -1,6 +1,5 @@
-using Engine.ECS.Systems;
 using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
@@ -11,6 +10,7 @@ using Game.Modules.Paralysis.Components;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
 using Game.Modules.StatusEffects;
+using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
@@ -54,7 +54,7 @@ public sealed class HealthWindowControllerTests
 
         var itemCatalog = new ItemCatalog();
 
-        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, labelRenderer, componentManager, BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog, simulationClock: new SimulationClock()));
+        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, labelRenderer, new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), new StatModifierView(componentManager), new ActionStateView(componentManager, localTierRoster: null), BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog, simulationClock: new SimulationClock()));
         pool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, pool, labelRenderer));
         pool.RegisterFactory<FractionBarElement>(() => new FractionBarElement(fontService, pool, labelRenderer));
 

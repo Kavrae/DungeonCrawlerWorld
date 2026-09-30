@@ -1,10 +1,10 @@
+using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
-using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
+using Game.Modules.Shops;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
@@ -58,7 +58,7 @@ public sealed class InventoryManagementWindowTests
         var mapViewState = new MapViewState();
 
         windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            fontService, windowService, labelRenderer, componentManager, itemCatalog, world, contextMenuController, mapViewState, new EventBus(), simulationClock: new SimulationClock()));
+            fontService, windowService, labelRenderer, TestInventoryServices.Over(componentManager, itemCatalog, world, new EventBus()), world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());

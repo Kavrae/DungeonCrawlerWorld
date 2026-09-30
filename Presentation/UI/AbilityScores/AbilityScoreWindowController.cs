@@ -1,7 +1,7 @@
-using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.UI.Chrome;
@@ -23,13 +23,12 @@ namespace Presentation.UI.AbilityScores;
 public sealed class AbilityScoreWindowController(
     ElementPoolService elementPoolService,
     World world,
-    ComponentManager componentManager,
+    InventoryView inventoryView,
     InventoryWindowController inventory,
     MapWindow mapWindow,
     ContextMenuController contextMenuController,
     TooltipController tooltipController)
 {
-    private readonly PackedComponentPool<InventoryDisabledComponent> _disabledPool = componentManager.GetPackedPool<InventoryDisabledComponent>();
 
     private Button _button = null!;
     private WindowLifecycle<AbilityScoreWindow> _slot = null!;
@@ -64,7 +63,7 @@ public sealed class AbilityScoreWindowController(
     public void Update() =>
         _button.Enabled = !IsInventoryDisabled();
 
-    private bool IsInventoryDisabled() => InventoryQueries.IsInventoryDisabled(_disabledPool, world.PlayerEntityId);
+    private bool IsInventoryDisabled() => inventoryView.IsInventoryDisabled(world.PlayerEntityId);
 
     /// <summary>
     /// Anchored to the live Inventory window's own Rectangle when it's open, so this follows

@@ -18,5 +18,5 @@ public sealed class ThrowingModule : IGameModule
     public void RegisterComponents(ComponentRegistration registration) =>
         throw new InvalidOperationException("Intentional failure for GameBootstrapper dry-run testing.");
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration) { }
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration) { }
 }

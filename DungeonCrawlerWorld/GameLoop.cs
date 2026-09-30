@@ -129,7 +129,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         if (!(_shell.MapWindow.IsPaused || _shell.Layers.IsMenuModeActive))
         {
             _frameCount++;
-            _worldSession.EcsContext.Update(new EngineTime(gameTime.TotalGameTime, gameTime.ElapsedGameTime, gameTime.IsRunningSlowly, _frameCount));
+            _worldSession.GameSession.EcsContext.Update(new EngineTime(gameTime.TotalGameTime, gameTime.ElapsedGameTime, gameTime.IsRunningSlowly, _frameCount));
         }
 
         using (EngineHooks.FrameCost(FrameCostCategory.Update, "GameLoop", "Shell.Update"))

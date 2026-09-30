@@ -1,4 +1,3 @@
-using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using FontStashSharp;
@@ -13,14 +12,13 @@ using Presentation.UI.Chrome;
 namespace Presentation.UI.Content;
 
 /// <param name="simulationClock">"CurrentFrame" for the lock's remaining frames -- the lock is a deadline (see ActionLockGate).</param>
-public sealed class ActionLockContent(World world, ComponentManager componentManager, IMapViewQuery mapView, FontService fontService, SimulationClock simulationClock) : IElementContent
+public sealed class ActionLockContent(World world, ActionStateView actionStateView, IMapViewQuery mapView, FontService fontService, SimulationClock simulationClock) : IElementContent
 {
 
     public static readonly Vector2 Size = new(HudChrome.EntrySize.Y * 1.5f, HudChrome.EntrySize.Y * 1.5f);
 
     private const int ContentInset = 2;
 
-    private readonly PackedComponentPool<ActionLockComponent> _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
     private readonly RadialFillRenderer _radialFill = new(new LabelRenderer());
 
     private Window _hostWindow = null!;
@@ -41,7 +39,7 @@ public sealed class ActionLockContent(World world, ComponentManager componentMan
     public void Update(GameTime gameTime)
     {
         var playerEntityId = world.PlayerEntityId;
-        if (playerEntityId < 0 || !_actionLocks.TryGetReadonly(playerEntityId, out var actionLock) || !mapView.TryGetVisual(playerEntityId, out var visual))
+        if (playerEntityId < 0 || !actionStateView.TryGetActionLock(playerEntityId, out var actionLock) || !mapView.TryGetVisual(playerEntityId, out var visual))
         {
             _hasActionLock = false;
             return;

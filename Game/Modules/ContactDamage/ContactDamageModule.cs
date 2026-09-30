@@ -43,7 +43,7 @@ public sealed class ContactDamageModule : IGameModule
         componentManager.RegisterPackedPool<ContactDamageExposureComponent>(static (ref existing, incoming) => { });
     }
 
-    public void RegisterSystems(SystemRegistration<GameModuleContext> registration)
+    public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
     {
         var context = registration.Context;
         var systemManager = registration.SystemManager;
