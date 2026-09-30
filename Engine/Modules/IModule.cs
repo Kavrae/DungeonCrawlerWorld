@@ -1,4 +1,5 @@
 using Engine.Settings;
+using Engine.Tags;
 
 namespace Engine.Modules;
 
@@ -8,7 +9,7 @@ namespace Engine.Modules;
 /// it. Requires is about presence and RunsAfter/RunsBefore about system order, and neither implies the
 /// other: every component is registered before any module is configured or any behavior registered, so a
 /// pool another module owns is available whatever the order. The phases run in this order, each for
-/// every module before the next starts: DeclareSettings, RegisterComponents, then
+/// every module before the next starts: DeclareSettings and DeclareTags, RegisterComponents, then
 /// <see cref="IModule{TContext}"/>'s Configure and RegisterBehavior.
 ///
 /// Implement <see cref="IModule{TContext}"/>, never this alone: the builder, the loader and
@@ -43,6 +44,12 @@ public interface IModule
     /// <summary>Declares every setting this module reads, with its default.</summary>
     /// <remarks>Runs before any other phase, with no pools yet. A module that declares settings must have a non-empty Id.</remarks>
     void DeclareSettings(SettingsDeclarations settings)
+    {
+    }
+
+    /// <summary>Declares every gameplay tag this module's content uses, with any display names.</summary>
+    /// <remarks>Runs with DeclareSettings, before any other phase, with no pools yet.</remarks>
+    void DeclareTags(GameplayTagDeclarations tags)
     {
     }
 

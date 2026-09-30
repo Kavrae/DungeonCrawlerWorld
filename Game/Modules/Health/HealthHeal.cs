@@ -1,6 +1,7 @@
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tags;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -46,7 +47,7 @@ public static class HealthHeal
         HealCategory healCategory,
         float flatAmount = 0f,
         int? sourceEntityId = null,
-        IReadOnlyList<Tag>? activatorTags = null,
+        GameplayTagSet activatorTags = default,
         BodyPartTargetMode targetMode = BodyPartTargetMode.All,
         BodyPartTargetRule? targetRule = null,
         MathUtility? mathUtility = null,
@@ -89,7 +90,7 @@ public static class HealthHeal
         IPlayerQuery playerQuery,
         float flatAmount,
         int? sourceEntityId,
-        IReadOnlyList<Tag>? activatorTags,
+        GameplayTagSet activatorTags,
         BodyPartTargetMode targetMode,
         BodyPartTargetRule? targetRule,
         MathUtility? mathUtility,
@@ -128,7 +129,7 @@ public static class HealthHeal
     }
 
     /// <summary>flat + percent*effectiveMaxHealth, then OutgoingHealing (sourceEntityId, if known) then IncomingHealing (targetEntityId) -- shared by the Simple path above and every ComplexHealthHeal path, so a body-parts entity gets the exact same modifier chain as a Simple one.</summary>
-    internal static float ComputeAmount(MultiComponentPool<StatModifierComponent> statModifiers, int? sourceEntityId, int targetEntityId, IReadOnlyList<Tag>? activatorTags, float percentOfMaxHealth, float flatAmount, float effectiveMaxHealth)
+    internal static float ComputeAmount(MultiComponentPool<StatModifierComponent> statModifiers, int? sourceEntityId, int targetEntityId, GameplayTagSet activatorTags, float percentOfMaxHealth, float flatAmount, float effectiveMaxHealth)
     {
         var amount = flatAmount + percentOfMaxHealth * effectiveMaxHealth;
 

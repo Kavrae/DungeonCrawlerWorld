@@ -40,7 +40,7 @@ public static class ElementFactoryRegistry
         var views = gameSession.Views;
         var mapView = views.MapView;
         var commands = gameSession.Commands;
-        var inventoryServices = new InventoryServices(itemCatalog, views.InventoryView, views.ShopView, views.CurrencyView, views.ActionStateView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands);
+        var inventoryServices = new InventoryServices(itemCatalog, views.InventoryView, views.ShopView, views.CurrencyView, views.ActionStateView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, catalogs.GameplayTags);
 
         // Supplies the fontService/elementPool/labelRenderer trio every plain registration repeats, so
         // each call site below only has to spell out its own type-specific extras.
@@ -95,7 +95,7 @@ public static class ElementFactoryRegistry
         elementPool.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
             presentationContext.FontService, elementPool, presentationContext.LabelRenderer, views.AbilityScoreView, views.StatModifierView, gameSession.SimulationClock));
         elementPool.RegisterFactory<HealthWindow>(() => new HealthWindow(
-            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, views.HealthView, views.StatModifierView, views.ActionStateView, views.EntityBodyParts, statusEffectDisplays, itemCatalog, gameSession.SimulationClock));
+            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, views.HealthView, views.StatModifierView, views.ActionStateView, views.EntityBodyParts, statusEffectDisplays, itemCatalog, catalogs.GameplayTags, gameSession.SimulationClock));
         Register<AbilityScoreColumnHeader>((font, elements, glyph) => new AbilityScoreColumnHeader(font, elements, glyph));
         Register<AbilityScoreModifierRow>((font, elements, glyph) => new AbilityScoreModifierRow(font, elements, glyph));
         Register<SeparatorBar>((font, elements, glyph) => new SeparatorBar(font, elements, glyph));
@@ -115,7 +115,7 @@ public static class ElementFactoryRegistry
             mapView));
 
         Register<InspectionWindow>((font, elements, glyph) => new InspectionWindow(font, elements, glyph, mapViewState));
-        Register<ItemDetailsWindow>((font, elements, glyph) => new ItemDetailsWindow(font, elements, glyph, actionCatalog));
+        Register<ItemDetailsWindow>((font, elements, glyph) => new ItemDetailsWindow(font, elements, glyph, actionCatalog, catalogs.GameplayTags));
         Register<ItemIconElement>((font, elements, glyph) => new ItemIconElement(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
         Register<CurrencyElement>((font, elements, glyph) => new CurrencyElement(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
         Register<TargetShapePreviewElement>((font, elements, glyph) => new TargetShapePreviewElement(font, elements, glyph));

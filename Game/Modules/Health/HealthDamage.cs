@@ -1,6 +1,7 @@
 ﻿using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tags;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
@@ -43,7 +44,7 @@ public static class HealthDamage
         FloatingTextFeed floatingTextFeed,
         DamageCategory damageCategory,
         BodyPartTargetRule? targetRule = null,
-        IReadOnlyList<Tag>? damageTags = null,
+        GameplayTagSet damageTags = default,
         BodyPartTargetMode targetMode = BodyPartTargetMode.SingleTarget,
         bool isCritical = false)
     {
