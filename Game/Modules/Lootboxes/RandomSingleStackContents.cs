@@ -1,5 +1,6 @@
 using Engine.Math;
 using Game.Modules.Inventory;
+using Game.Tags;
 
 namespace Game.Modules.Lootboxes;
 
@@ -22,7 +23,7 @@ public sealed record RandomSingleStackContents : IItemContents
         var candidateItemIds = new List<Guid>();
         foreach (var definition in itemCatalog.Definitions)
         {
-            if (definition.Contents is null && definition.CanTrade && !definition.Tags.Contains(Tag.Lootbox))
+            if (definition.Contents is null && definition.CanTrade && !definition.Tags.Has(GameTags.ItemLootbox))
             {
                 candidateItemIds.Add(definition.Id);
             }

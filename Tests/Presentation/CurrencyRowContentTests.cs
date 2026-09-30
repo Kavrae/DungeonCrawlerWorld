@@ -134,7 +134,7 @@ public sealed class CurrencyRowContentTests
     public void RightClickPlayerRow_SecondaryTargetIsShop_OffersOnlyGiveAllNotGiveOrTake()
     {
         var (goldElement, componentManager, contextMenuController) = BuildForGiveTake(PlayerEntityId, ShopEntityId);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
 
         goldElement.OnRightClicked!.Invoke(Point.Zero);
 
@@ -150,7 +150,7 @@ public sealed class CurrencyRowContentTests
     public void RightClickShopRow_SecondaryTargetIsItself_OffersNoOptionsAtAll()
     {
         var (shopGoldElement, componentManager, contextMenuController) = BuildForGiveTake(ShopEntityId, ShopEntityId);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
 
         shopGoldElement.OnRightClicked!.Invoke(Point.Zero);
 
@@ -163,7 +163,7 @@ public sealed class CurrencyRowContentTests
         var eventBus = new EventBus();
         var (goldElement, componentManager, contextMenuController) = BuildForGiveTake(PlayerEntityId, ShopEntityId, eventBus);
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 42, credits: 0));
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
 
         GoldGivenToShopEvent? published = null;
         eventBus.Subscribe<GoldGivenToShopEvent>(e => published = e);

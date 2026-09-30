@@ -33,7 +33,7 @@ public static class ShopMarginPricing
 
     /// <summary>
     /// The ShopComponent every real trade/display should price against instead of the raw one read
-    /// off the shop entity -- same AllowedTags, BuyMultiplier/SellMultiplier narrowed by
+    /// off the shop entity -- same AcceptedItems, BuyMultiplier/SellMultiplier narrowed by
     /// buyerOrSellerEntityId's own Charisma. Falls back to Charisma's own minimum (1, no reduction)
     /// if the entity has none.
     /// </summary>
@@ -50,6 +50,6 @@ public static class ShopMarginPricing
             return shop;
         }
 
-        return new ShopComponent(shop.AllowedTags, ApplyMarginReduction(shop.BuyMultiplier, reductionFraction), ApplyMarginReduction(shop.SellMultiplier, reductionFraction));
+        return new ShopComponent(shop.AcceptedItems, ApplyMarginReduction(shop.BuyMultiplier, reductionFraction), ApplyMarginReduction(shop.SellMultiplier, reductionFraction));
     }
 }

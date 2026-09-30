@@ -7,6 +7,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Inventory.Definitions;
 using Game.Modules.Lootboxes;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Tests.Modules.Lootboxes;
@@ -16,8 +17,8 @@ public sealed class LootboxOpenerTests
 {
     private const int PlayerEntityId = 0;
 
-    private static readonly ItemDefinition Potion = new(Guid.NewGuid(), "Potion", SpriteName: null, Glyph: "p", Color.White, Tags: [Tag.Potion], Effects: []);
-    private static readonly ItemDefinition Scroll = new(Guid.NewGuid(), "Scroll", SpriteName: null, Glyph: "s", Color.White, Tags: [Tag.Scroll], Effects: []);
+    private static readonly ItemDefinition Potion = new(Guid.NewGuid(), "Potion", SpriteName: null, Glyph: "p", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: []);
+    private static readonly ItemDefinition Scroll = new(Guid.NewGuid(), "Scroll", SpriteName: null, Glyph: "s", Color.White, Tags: [GameTags.ItemConsumableScroll], Effects: []);
 
     private sealed record Setup(ComponentManager ComponentManager, ItemCatalog ItemCatalog, LootboxCatalog LootboxCatalog, EventBus EventBus)
     {

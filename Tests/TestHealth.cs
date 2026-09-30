@@ -1,6 +1,7 @@
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tags;
 using Game.Modules;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
@@ -27,7 +28,7 @@ internal static class TestHealth
         MathUtility? mathUtility = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         BodyPartTargetRule? targetRule = null,
-        IReadOnlyList<Tag>? damageTags = null,
+        GameplayTagSet damageTags = default,
         BodyPartTargetMode targetMode = BodyPartTargetMode.SingleTarget,
         FloatingTextFeed? floatingTextFeed = null,
         DamageCategory damageCategory = DamageCategory.Direct) =>
@@ -48,7 +49,7 @@ internal static class TestHealth
         EntityBodyParts? bodyParts = null,
         float flatAmount = 0f,
         int? sourceEntityId = null,
-        IReadOnlyList<Tag>? activatorTags = null,
+        GameplayTagSet activatorTags = default,
         BodyPartTargetMode targetMode = BodyPartTargetMode.All,
         BodyPartTargetRule? targetRule = null,
         MathUtility? mathUtility = null,
@@ -72,7 +73,7 @@ internal static class TestHealth
         float flatAmount = 0f,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         int? sourceEntityId = null,
-        IReadOnlyList<Tag>? activatorTags = null,
+        GameplayTagSet activatorTags = default,
         EventBus? eventBus = null,
         IPlayerQuery? playerQuery = null,
         string healType = "Heal") =>

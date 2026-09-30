@@ -1396,7 +1396,9 @@ types, so a future Magic Menu gets them free. Frame counts always shown as secon
 
 ### Inventory tabs/search/sort/GridControl/Toggle
 
-- Auto-generated per-tag tabs (`InventoryTagQueries`), sorted by stack count then alphabetical.
+- Auto-generated per-category tabs (`InventoryTagQueries.GetItemCategoryCounts`): one per `Item.*` tag
+  a held stack has, parents included (a potion is under Consumable and Potion), sorted by stack count
+  then display name. Other tags (Self, Healing, Fire, Magic) are never tabs; see "Gameplay tags".
   `TabbedContent` supports scrollable, runtime-rebuildable tabs. User-reordering and a custom-tag
   trailing tab still open (see TODO.md).
 - `InventoryGridContent.SortOrder`/`NameFilter`/`HideDisabled`, driven by `GridControl` -- a fully
@@ -1926,3 +1928,42 @@ Presentation sections for the resulting rules. Headless seed-1 fingerprint uncha
   A purchase moved the shop's stack verbatim, the grid folded the two stacks into a Merged Stack cell
   with no single `StackInstanceId`, and the hotbar refuses those. See "Shops" for the fix (completed
   purchases merge).
+
+### Gameplay tags
+
+Replaced the flat `Tag` enum (the plan, now deleted, landed in four phases on 2026-09-30).
+
+- **Engine (`Engine/Tags/`):** `GameplayTag` is a 2-byte handle to a dot-separated name; the parent is
+  the name minus its last segment. `GameplayTagNames` is the process-wide intern table (names and
+  parents only -- which tags a build accepts is its `GameplayTagRegistry`). **Ids follow intern order,
+  which follows static-initialization order, so they differ between runs: never order, save or persist
+  by id.** Sort by name; save by name.
+- **`GameplayTagSet`** wraps one immutable `ushort[]` (8 B), keeps the order tags were given (never id
+  order), de-duplicates, and has no size cap. Build sets once (a definition, a static field), never per
+  frame; queries allocate nothing. `Has` is parent-aware, `HasExact` isn't. `GameplayTagQuery` (all /
+  any / none) is a shared immutable instance on definitions and shared data, never a per-entity value.
+- **Registration:** `IModule.DeclareTags`, run by `GameBuildPass.BuildModules` before
+  `RegisterComponents`; declaring a tag declares its parents. The built-in vocabulary is
+  `Game/Tags/GameTags.cs`, declared by `CoreModule` so a tag shared between modules never forces a
+  `Requires`. `ContentTagValidation` (after Configure, beside `ResolveAll`) throws on an action or item
+  -- or one of its `StatModifierGrant` conditions -- using an undeclared tag, so a mod with a typo fails
+  its dry run (`UndeclaredTagItemModule` fixture).
+- **Combine, don't nest:** a tag has a parent only if every child always is that parent
+  (`Delivery.Melee.Unarmed`). A property that applies to unrelated things is top-level and combined:
+  `Magic` goes with anything, `Damage.*` is only the damage type. A fireball hit is `Damage.Fire` +
+  `Magic`, a torch hit `Damage.Fire`, Magic Missile `Damage.Energy` + `Magic`; "magical fire only" is a
+  query, not a tag.
+- **Implied tags:** `IActionActivator.ImpliedTags` (Spell → `Action.Spell` + `Magic`, Scroll →
+  `Item.Consumable.Scroll` + `Magic`, Potion → `Item.Consumable.Potion`, Wand → `Item.Wand` + `Magic`)
+  are unioned in by `ActionDefinition`/`ItemDefinition` at construction, so every copy of a definition
+  carries them, including ones never registered in a catalog. A `with` that swaps the activator kind
+  keeps the old kind's implied tags. A mastered scroll's spell drops the scroll's `Item.*` tags.
+- **Consumers:** `StatModifierComponent.ConditionTag` is a `GameplayTag` (`None` = unconditional),
+  matched parent-aware -- a `Damage.Fire` resistance covers any `Damage.Fire.*`, the melee penalty and
+  lockout cover Unarmed. `ShopComponent.AcceptedItems` is a shared `GameplayTagQuery?` (null = any).
+  Presentation shows `GameplayTagRegistry.GetDisplayName` (declared name, else last segment); the
+  registry reaches it through `GameCatalogs.GameplayTags`, `InventoryServices`, and the Health / Item
+  Details windows' constructors.
+- **Cost:** headless A/B against the enum build (2026-09-30, seed 1, frames 600-3600): same world
+  fingerprint, no system beyond noise; `ComplexHealthRegenSystem` -0.3%, `SimpleHealthRegenSystem`
+  -0.4%, `EcsContext.Update` -0.3%.

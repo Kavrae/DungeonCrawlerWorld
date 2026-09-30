@@ -4,6 +4,7 @@ using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Shops;
 using Game.Modules.Shops.Components;
+using Game.Tags;
 
 namespace Tests.Modules.Shops;
 
@@ -12,7 +13,7 @@ public sealed class ShopMarginPricingTests
 {
     private const int PlayerEntityId = 0;
 
-    private static readonly ShopComponent GeneralShop = new(allowedTags: null, buyMultiplier: 1.20f, sellMultiplier: 0.80f);
+    private static readonly ShopComponent GeneralShop = new(acceptedItems: null, buyMultiplier: 1.20f, sellMultiplier: 0.80f);
 
     [TestMethod]
     public void ComputeMarginReductionFraction_Charisma1_ReturnsZero() =>
@@ -70,16 +71,16 @@ public sealed class ShopMarginPricingTests
     }
 
     [TestMethod]
-    public void ResolveEffectiveShop_Charisma300_HalvesTheMarginAndPreservesAllowedTags()
+    public void ResolveEffectiveShop_Charisma300_HalvesTheMarginAndPreservesAcceptedItems()
     {
         var manager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 4, initialComponentCapacity: 4));
         manager.GetPackedPool<AbilityScoresComponent>().Add(PlayerEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Charisma, baseValue: 300, total: 300));
 
-        var potionShop = new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.20f, sellMultiplier: 0.80f);
+        var potionShop = new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.20f, sellMultiplier: 0.80f);
         var effectiveShop = ShopMarginPricing.ResolveEffectiveShop(manager, potionShop, PlayerEntityId);
 
         Assert.AreEqual(1.10f, effectiveShop.BuyMultiplier, delta: 0.0001f);
         Assert.AreEqual(0.90f, effectiveShop.SellMultiplier, delta: 0.0001f);
-        CollectionAssert.AreEqual(new[] { Tag.Potion }, (System.Collections.ICollection)effectiveShop.AllowedTags!);
+        Assert.AreSame(potionShop.AcceptedItems, effectiveShop.AcceptedItems);
     }
 }

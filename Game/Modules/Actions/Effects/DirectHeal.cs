@@ -9,7 +9,7 @@ namespace Game.Modules.Actions.Effects;
 /// own shape and order of operations:
 /// 1. Base amount: FlatAmount + PercentOfMaxHealth * the target's own modifier-effective max
 ///    health (HealthQueries.TryGetEffectiveMaximum); no-op if &lt;= 0.
-/// 2. Add the caster's ability-score tag bonus (AbilityScoreTagBonus -- e.g. a Tag.Wisdom-tagged
+/// 2. Add the caster's ability-score tag bonus (AbilityScoreTagBonus -- e.g. a GameTags.StatsAbilityScoreWisdom-tagged
 ///    heal spell would add the caster's own Wisdom total). No built-in heal is tagged with an
 ///    ability score today, so this is currently always a 0 bonus -- kept for the same future
 ///    symmetry DirectDamage already has, not because anything uses it yet.

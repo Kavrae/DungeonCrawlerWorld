@@ -12,6 +12,7 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Game.World;
 using Game.Blueprints;
 using Game.Modules.Mana.Components;
@@ -35,7 +36,7 @@ namespace Game.Modules.Actions;
 /// stays a resolver-level check rather than a new ActionEffectContext field every IActionEffectEntry
 /// would otherwise need to know about. See DodgingComponent's own doc comment.
 ///
-/// A Tag.Staggering action publishes EntityStaggeredEvent for each target it hit other than its
+/// A GameTags.TraitStaggering action publishes EntityStaggeredEvent for each target it hit other than its
 /// source -- after the dodge skip, so a dodged hit never staggers.
 /// </summary>
 public static class ActionEffectResolver
@@ -90,8 +91,8 @@ public static class ActionEffectResolver
             Definitions: creatures,
             FloatingTextFeed: floatingTextFeed);
 
-        var isDodgeable = action.Tags.Contains(Tag.Dodgeable);
-        var isStaggering = action.Tags.Contains(Tag.Staggering);
+        var isDodgeable = action.Tags.Has(GameTags.TraitDodgeable);
+        var isStaggering = action.Tags.Has(GameTags.TraitStaggering);
 
         HashSet<int>? resolvedTargetIds = targetTiles.Count > 1 ? [] : null;
 

@@ -1,6 +1,7 @@
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tags;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
@@ -39,7 +40,7 @@ public static class ComplexHealthDamage
         PackedComponentPool<DeadComponent> deadEntities,
         long now,
         BodyPartTargetRule? targetRule = null,
-        IReadOnlyList<Tag>? damageTags = null,
+        GameplayTagSet damageTags = default,
         BodyPartTargetMode targetMode = BodyPartTargetMode.SingleTarget)
     {
         var partId = targetMode == BodyPartTargetMode.LowestPercentage
@@ -87,7 +88,7 @@ public static class ComplexHealthDamage
         MultiComponentPool<StatModifierComponent> statModifiers,
         PackedComponentPool<DeadComponent> deadEntities,
         long now,
-        IReadOnlyList<Tag>? damageTags = null)
+        GameplayTagSet damageTags = default)
     {
         var partCount = bodyParts.Count(entityId);
 

@@ -15,6 +15,7 @@ using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Shops.Components;
 using Game.Modules.StatusEffectAura.Components;
+using Game.Tags;
 using Game.Views;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -1083,7 +1084,7 @@ public sealed class MapWindowTests
         var transform = new TransformComponent(position, new Vector2Byte(1, 1));
         componentManager.Merge(ShopEntityId, transform);
         world.PlaceEntityOnMap(ShopEntityId, position, ref transform);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
     }
 
     [TestMethod]
@@ -1245,11 +1246,11 @@ public sealed class MapWindowTests
 
     private static void RegisterTestPotion(ItemCatalog itemCatalog) =>
         itemCatalog.Register(new ItemDefinition(
-            TestPotionId, "Test Potion", null, "p", Color.Green, Tags: [Tag.Self],
+            TestPotionId, "Test Potion", null, "p", Color.Green, Tags: [GameTags.TargetingSelf],
             Effects: [new ActionEffect([new DirectHeal(0.5f)])],
             Activator: new PotionActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
-    /// <summary>Same PotionActivator/Burst shape as RegisterTestPotion, but deliberately untagged Self -- covers the double-tap shortcut now being keyed off Tag.Self rather than any particular IActionActivator kind.</summary>
+    /// <summary>Same PotionActivator/Burst shape as RegisterTestPotion, but deliberately untagged Self -- covers the double-tap shortcut now being keyed off GameTags.TargetingSelf rather than any particular IActionActivator kind.</summary>
     private static void RegisterTestNonSelfPotion(ItemCatalog itemCatalog) =>
         itemCatalog.Register(new ItemDefinition(
             TestNonSelfPotionId, "Test Non-Self Potion", null, "p", Color.Green, Tags: [],
@@ -1386,7 +1387,7 @@ public sealed class MapWindowTests
         Assert.IsNull(mapViewState.ArmedItemStackInstanceId, "The first press of the pair armed this slot -- once the double-tap fires, it shouldn't be left stale-armed.");
     }
 
-    /// <summary>The double-tap self-cast shortcut is keyed off Tag.Self, not any particular IActionActivator kind -- a Potion item that isn't tagged Self (e.g. today's Health/Mana Potion before this fix) no longer gets it, and instead just arms normally like any other slot.</summary>
+    /// <summary>The double-tap self-cast shortcut is keyed off GameTags.TargetingSelf, not any particular IActionActivator kind -- a Potion item that isn't tagged Self (e.g. today's Health/Mana Potion before this fix) no longer gets it, and instead just arms normally like any other slot.</summary>
     [TestMethod]
     public void HandleHotkeys_DoubleTapNonSelfPotionSlot_ArmsInsteadOfSelfActivating()
     {
@@ -1398,7 +1399,7 @@ public sealed class MapWindowTests
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
-        Assert.IsFalse(componentManager.GetPackedPool<PendingConsumableActivationComponent>().Has(PlayerEntityId), "No self-cast shortcut without Tag.Self -- a second rapid press just confirms against the cursor, which has no hovered tile here, so nothing should queue.");
+        Assert.IsFalse(componentManager.GetPackedPool<PendingConsumableActivationComponent>().Has(PlayerEntityId), "No self-cast shortcut without GameTags.TargetingSelf -- a second rapid press just confirms against the cursor, which has no hovered tile here, so nothing should queue.");
         Assert.AreEqual(stackInstanceId, mapViewState.ArmedItemStackInstanceId, "Still armed -- the second press had nothing to confirm against.");
     }
 

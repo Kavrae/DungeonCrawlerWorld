@@ -1,6 +1,7 @@
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Lootboxes;
+using Game.Tags;
 using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
@@ -42,7 +43,7 @@ public sealed class ArchivistAchievement : IAchievementDefinition
         {
             var binding = bindings.GetReadonlyByDenseIndex(denseIndex);
             if (InventoryQueries.TryFindByStackInstanceId(stacks, playerEntityId, binding.StackInstanceId, out var stack) &&
-                context.Items.TryGet(stack.ItemDefinitionId, out var item) && item.Tags.Contains(Tag.Scroll))
+                context.Items.TryGet(stack.ItemDefinitionId, out var item) && item.Tags.Has(GameTags.ItemConsumableScroll))
             {
                 distinctScrollIds.Add(stack.ItemDefinitionId);
             }

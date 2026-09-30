@@ -2,6 +2,7 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tags;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Burning.Components;
@@ -9,6 +10,7 @@ using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Game.World;
 
 namespace Game.Modules.Burning.Systems;
@@ -28,8 +30,8 @@ namespace Game.Modules.Burning.Systems;
 /// </remarks>
 public sealed class BodyPartBurningSystem : ISystem
 {
-    /// <summary>Passed as StatModifierMath.GetEffectiveValue's activeTags below -- lets a ConditionTag: Tag.Fire-scoped IncomingDamage modifier reduce burning damage specifically, the same as BurningSystem's own entity-scoped tick. Cached once rather than allocated fresh per tick.</summary>
-    private static readonly Tag[] BurningDamageTags = [Tag.Fire];
+    /// <summary>Passed as StatModifierMath.GetEffectiveValue's activeTags below -- lets a ConditionTag: GameTags.DamageFire-scoped IncomingDamage modifier reduce burning damage specifically, the same as BurningSystem's own entity-scoped tick. Cached once rather than allocated fresh per tick.</summary>
+    private static readonly GameplayTagSet BurningDamageTags = [GameTags.DamageFire];
 
     /// <summary>Every frame; the wheel only touches parts actually due.</summary>
     public byte StripeCount => 1;

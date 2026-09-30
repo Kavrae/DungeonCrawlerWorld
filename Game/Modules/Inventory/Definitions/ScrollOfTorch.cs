@@ -4,6 +4,7 @@ using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Inventory.Definitions;
@@ -36,7 +37,7 @@ public static class ScrollOfTorch
 
     public static ItemDefinition Build() => new(
         Id, "Scroll of Torch", "Scroll", "t", Color.White,
-        Tags: [Tag.Scroll, Tag.Consumable, Tag.Self],
+        Tags: [GameTags.TargetingSelf],
         Effects: [new ActionEffect([new AuraSourceGrant(StatusEffectType.Light, AuraAndGlowStrength, Color.White, DurationFrames: BaseFramesRemaining)])],
         Description: "A scroll that marks an area with a bright, temporary light.",
         Summary: "Marks the target area with a temporary torch light.",

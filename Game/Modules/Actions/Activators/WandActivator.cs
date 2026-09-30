@@ -1,4 +1,6 @@
 using Engine.Math;
+using Engine.Tags;
+using Game.Tags;
 
 namespace Game.Modules.Actions.Activators;
 
@@ -17,4 +19,9 @@ namespace Game.Modules.Actions.Activators;
 /// <param name="Timing">The timing specification for the wand.</param>
 /// <param name="Charges">Uses remaining on this specific wand.</param>
 /// <param name="MaxCharges">The charge count this wand started with when granted.</param>
-public sealed record WandActivator(TargetingSpec Targeting, ActionTiming Timing, ushort Charges, ushort MaxCharges) : IActionActivator;
+public sealed record WandActivator(TargetingSpec Targeting, ActionTiming Timing, ushort Charges, ushort MaxCharges) : IActionActivator
+{
+    private static readonly GameplayTagSet WandImpliedTags = [GameTags.ItemWand, GameTags.Magic];
+
+    public GameplayTagSet ImpliedTags => WandImpliedTags;
+}

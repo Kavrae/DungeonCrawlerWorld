@@ -9,6 +9,7 @@ using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
+using Game.Tags;
 using Game.Views;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
@@ -176,7 +177,7 @@ public sealed class ActionTargetingControllerDodgeTests
     /// exactly what QuickAttack/PowerAttack/ToxicStrike/MagicMissile want (auto-attack the nearest
     /// enemy), but Dodge's own reachable 3x3 block is normally all-empty, so that filter found no
     /// candidate, did nothing, and the caller's own "now that it fired, disarm" cleanup then made
-    /// the double-tap look like a cancel. A Tag.Self action must always auto-target the caster's own
+    /// the double-tap look like a cancel. A GameTags.TargetingSelf action must always auto-target the caster's own
     /// tile instead, the same rule the single-press re-confirm path already gives it.
     /// </summary>
     [TestMethod]

@@ -1,6 +1,7 @@
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tags;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -43,7 +44,7 @@ public static class ComplexHealthHeal
         EventBus eventBus,
         IPlayerQuery playerQuery,
         int? sourceEntityId = null,
-        IReadOnlyList<Tag>? activatorTags = null,
+        GameplayTagSet activatorTags = default,
         string healType = "Heal")
     {
         var partCount = bodyParts.Count(entityId);
@@ -72,7 +73,7 @@ public static class ComplexHealthHeal
         float flatAmount,
         MultiComponentPool<StatModifierComponent> statModifiers,
         int? sourceEntityId,
-        IReadOnlyList<Tag>? activatorTags,
+        GameplayTagSet activatorTags,
         BodyPartTargetRule? targetRule,
         BodyPartTargetMode targetMode,
         MathUtility? mathUtility,

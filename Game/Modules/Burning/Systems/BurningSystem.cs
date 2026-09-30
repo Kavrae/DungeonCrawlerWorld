@@ -2,11 +2,13 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tags;
 using Game.Modules.Burning.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Game.World;
 using Game.Modules.Death.Components;
 
@@ -25,8 +27,8 @@ namespace Game.Modules.Burning.Systems;
 /// </remarks>
 public sealed class BurningSystem : ISystem
 {
-    /// <summary>Passed as HealthDamage.Apply's damageTags on every tick -- lets a ConditionTag: Tag.Fire-scoped IncomingDamage modifier reduce burning damage specifically. Cached once rather than allocated fresh per tick.</summary>
-    private static readonly Tag[] BurningDamageTags = [Tag.Fire];
+    /// <summary>Passed as HealthDamage.Apply's damageTags on every tick -- lets a ConditionTag: GameTags.DamageFire-scoped IncomingDamage modifier reduce burning damage specifically. Cached once rather than allocated fresh per tick.</summary>
+    private static readonly GameplayTagSet BurningDamageTags = [GameTags.DamageFire];
 
     /// <summary>Every frame; the wheel only touches burns actually due.</summary>
     public byte StripeCount => 1;

@@ -4,6 +4,7 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Engine.Settings;
+using Engine.Tags;
 using Engine.Utilities;
 using Game.Blueprints;
 using Game.Modules.Achievements;
@@ -43,6 +44,7 @@ public sealed class GameModuleContext
         EntityManager entityManager,
         EventBus eventBus,
         SettingValues settings,
+        GameplayTagRegistry gameplayTags,
         MathUtility mathUtility,
         UniqueNumberAllocator? crawlerNumbers = null,
         ulong runtimeSpawnSeed = 0)
@@ -54,6 +56,7 @@ public sealed class GameModuleContext
         EntityManager = entityManager;
         EventBus = eventBus;
         Settings = settings;
+        GameplayTags = gameplayTags;
         MathUtility = mathUtility;
         EntityKeys = entityManager.Keys;
         Terrain = world.Terrain;
@@ -92,6 +95,9 @@ public sealed class GameModuleContext
 
     /// <summary>Every setting this build's modules declared, resolved.</summary>
     public SettingValues Settings { get; }
+
+    /// <summary>Every gameplay tag this build's modules declared, and each one's display name.</summary>
+    public GameplayTagRegistry GameplayTags { get; }
 
     public MathUtility MathUtility { get; }
 

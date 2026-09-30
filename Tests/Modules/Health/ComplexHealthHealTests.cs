@@ -138,7 +138,7 @@ public sealed class ComplexHealthHealTests
     {
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 90, 100, true), ("Leg", BodyPartType.Leg, 20, 100, false)).BodyParts;
 
-        ComplexHealthHeal.ApplyToSinglePart(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.1f, flatAmount: 0f, statModifiers: EmptyPools.Multi<StatModifierComponent>(), sourceEntityId: null, activatorTags: null, targetRule: null, targetMode: BodyPartTargetMode.LowestPercentage, mathUtility: null, now: 0, eventBus: new EventBus(), playerQuery: TestPlayerQuery.NoPlayer);
+        ComplexHealthHeal.ApplyToSinglePart(bodyParts, CreateHealthPool(), 0, percentOfMaxHealth: 0.1f, flatAmount: 0f, statModifiers: EmptyPools.Multi<StatModifierComponent>(), sourceEntityId: null, activatorTags: default, targetRule: null, targetMode: BodyPartTargetMode.LowestPercentage, mathUtility: null, now: 0, eventBus: new EventBus(), playerQuery: TestPlayerQuery.NoPlayer);
 
         // Total = 10% of the overall max (100+100=200) = 20, applied entirely to the Leg (lowest percentage).
         var parts = PartsByName(bodyParts, 0);

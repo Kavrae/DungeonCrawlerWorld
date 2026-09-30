@@ -1,4 +1,5 @@
 using Engine.ECS.Components.Stores;
+using Engine.Tags;
 using Game.Modules.StatModifiers.Components;
 
 namespace Game.Modules.StatModifiers;
@@ -13,9 +14,9 @@ public static class StatModifierMath
     /// <param name="entityId">The ID of the entity.</param>
     /// <param name="target">The target stat.</param>
     /// <param name="baseValue">The base value of the stat.</param>
-    /// <param name="activeTags">The current activation's own Tags (e.g. ActionEffectContext.ActivatorTags) -- a modifier with a non-null ConditionTag only contributes when activeTags contains it; null (the default) means only unconditional modifiers apply.</param>
+    /// <param name="activeTags">The current activation's own Tags (e.g. ActionEffectContext.ActivatorTags) -- a modifier with a ConditionTag only contributes when activeTags has it (parent-aware); empty (the default) means only unconditional modifiers apply.</param>
     /// <returns>The effective value of the stat.</returns>
-    public static float GetEffectiveValue(MultiComponentPool<StatModifierComponent> pool, int entityId, StatModifierTarget target, float baseValue, IReadOnlyList<Tag>? activeTags = null)
+    public static float GetEffectiveValue(MultiComponentPool<StatModifierComponent> pool, int entityId, StatModifierTarget target, float baseValue, GameplayTagSet activeTags = default)
     {
         var additiveSum = 0f;
         var multiplicativeSum = 0f;
@@ -28,7 +29,7 @@ public static class StatModifierMath
                 continue;
             }
 
-            if (modifier.ConditionTag is { } conditionTag && (activeTags is null || !activeTags.Contains(conditionTag)))
+            if (!modifier.ConditionTag.IsNone && !activeTags.Has(modifier.ConditionTag))
             {
                 continue;
             }
@@ -59,7 +60,7 @@ public static class StatModifierMath
     /// <param name="pairs">Each target stat and its base value.</param>
     /// <param name="destination">Receives each pairs entry's effective value, at the same index.</param>
     /// <param name="activeTags">Same meaning as GetEffectiveValue's own activeTags parameter, applied uniformly across every pair.</param>
-    public static void GetEffectiveValues(MultiComponentPool<StatModifierComponent> pool, int entityId, ReadOnlySpan<(StatModifierTarget Target, float BaseValue)> pairs, Span<float> destination, IReadOnlyList<Tag>? activeTags = null)
+    public static void GetEffectiveValues(MultiComponentPool<StatModifierComponent> pool, int entityId, ReadOnlySpan<(StatModifierTarget Target, float BaseValue)> pairs, Span<float> destination, GameplayTagSet activeTags = default)
     {
         ArgumentOutOfRangeException.ThrowIfNotEqual(pairs.Length, destination.Length);
 
@@ -70,7 +71,7 @@ public static class StatModifierMath
         {
             ref readonly var modifier = ref pool.GetReadonlyByDenseIndex(denseIndex);
 
-            if (modifier.ConditionTag is { } conditionTag && (activeTags is null || !activeTags.Contains(conditionTag)))
+            if (!modifier.ConditionTag.IsNone && !activeTags.Has(modifier.ConditionTag))
             {
                 continue;
             }
@@ -120,7 +121,7 @@ public static class StatModifierMath
         for (var denseIndex = pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
         {
             ref readonly var modifier = ref pool.GetReadonlyByDenseIndex(denseIndex);
-            if (modifier.Target != target || modifier.ConditionTag is not null)
+            if (modifier.Target != target || !modifier.ConditionTag.IsNone)
             {
                 continue;
             }

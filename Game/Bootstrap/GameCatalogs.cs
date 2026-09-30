@@ -1,3 +1,4 @@
+using Engine.Tags;
 using Game.Blueprints;
 using Game.Modules;
 using Game.Modules.Achievements;
@@ -24,6 +25,9 @@ public sealed class GameCatalogs(GameModuleContext context)
     public StatusEffectDisplayRegistry StatusEffectDisplays { get; } = context.StatusEffectDisplays;
 
     public TerrainRegistry Terrain { get; } = context.Terrain;
+
+    /// <summary>Every gameplay tag this session's modules declared, and each one's display name.</summary>
+    public GameplayTagRegistry GameplayTags { get; } = context.GameplayTags;
 
     /// <summary>Every blueprint definition, by session-local id and by Guid.</summary>
     public BlueprintRegistry Definitions { get; } = context.Definitions;

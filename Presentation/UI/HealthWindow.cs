@@ -1,8 +1,7 @@
-using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
+using Engine.Tags;
 using Engine.Utilities;
 using FontStashSharp;
-using Game.Modules;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Burning;
@@ -56,6 +55,7 @@ public sealed class HealthWindow(
     EntityBodyParts bodyParts,
     StatusEffectDisplayRegistry statusEffectDisplays,
     ItemCatalog itemCatalog,
+    GameplayTagRegistry gameplayTags,
     SimulationClock simulationClock)
     : Window(fontService, elementPoolService, labelRenderer)
 {
@@ -369,7 +369,7 @@ public sealed class HealthWindow(
 
         foreach (var row in _buffRows)
         {
-            _buffRowWindows.Add(AddTextRow(parent, FormatModifierRow(row), GetModifierColor(row.Polarity)));
+            _buffRowWindows.Add(AddTextRow(parent, FormatModifierRow(row, gameplayTags), GetModifierColor(row.Polarity)));
         }
 
         foreach (var row in _immunityRows)
@@ -391,7 +391,7 @@ public sealed class HealthWindow(
 
         foreach (var row in _debuffRows)
         {
-            _debuffRowWindows.Add(AddTextRow(parent, FormatModifierRow(row), GetModifierColor(row.Polarity)));
+            _debuffRowWindows.Add(AddTextRow(parent, FormatModifierRow(row, gameplayTags), GetModifierColor(row.Polarity)));
         }
     }
 
@@ -464,14 +464,14 @@ public sealed class HealthWindow(
         var buffCount = System.Math.Min(_buffRows.Count, _buffRowWindows.Count);
         for (var index = 0; index < buffCount; index++)
         {
-            _buffRowWindows[index].UpdateText(FormatModifierRow(_buffRows[index]));
+            _buffRowWindows[index].UpdateText(FormatModifierRow(_buffRows[index], gameplayTags));
         }
 
         BuildModifierRows(_debuffRows, ReadStatModifiers(), StatModifierPolarity.Debuff, CurrentFrame);
         var debuffCount = System.Math.Min(_debuffRows.Count, _debuffRowWindows.Count);
         for (var index = 0; index < debuffCount; index++)
         {
-            _debuffRowWindows[index].UpdateText(FormatModifierRow(_debuffRows[index]));
+            _debuffRowWindows[index].UpdateText(FormatModifierRow(_debuffRows[index], gameplayTags));
         }
 
         BuildImmunityRows(_immunityRows, ReadStatusEffectImmunities(), CurrentFrame);
@@ -608,7 +608,7 @@ public sealed class HealthWindow(
     /// Several Target/Operation combinations have their own named, human-readable form instead of
     /// the generic sign+magnitude+enum-name fallback: Multiplicative IncomingDamage reads as a
     /// percentage-based Resistance/Vulnerability (e.g. ResistanceTestPotion's own
-    /// ConditionTag: Tag.Poison grant -- "50% Poison Resistance" instead of "x-0.5 IncomingDamage");
+    /// ConditionTag: GameTags.DamagePoison grant -- "50% Poison Resistance" instead of "x-0.5 IncomingDamage");
     /// OutgoingDamage (either operation) as "Damage" -- Additive flat ("+2 Damage"/"-1 Damage",
     /// e.g. PlayerKit's own buff), Multiplicative as a percentage ("-50% Damage", e.g.
     /// BodyPartEffectsSystem's own Arm/Hand-damage melee debuff); Multiplicative MaximumHealth the
@@ -620,51 +620,51 @@ public sealed class HealthWindow(
     /// sign convention (Additive Buff/Debuff = +/-, Multiplicative Buff/Debuff = x/÷) so it still
     /// reads the same way a debug dump of the same component does.
     /// </summary>
-    internal static string FormatModifierRow(ModifierRow row)
+    internal static string FormatModifierRow(ModifierRow row, GameplayTagRegistry gameplayTags)
     {
         if (row.Target == StatModifierTarget.IncomingDamage && row.Operation == StatModifierOperation.Multiplicative)
         {
-            return FormatIncomingDamageResistance(row);
+            return FormatIncomingDamageResistance(row, gameplayTags);
         }
 
         if (row.Target == StatModifierTarget.OutgoingDamage)
         {
             // Additive (e.g. PlayerKit's own flat OutgoingDamage buff) reads as a flat
             // "+2 Damage"; Multiplicative (e.g. BodyPartEffectsSystem's own Melee-tagged Arm/Hand-
-            // damage debuff, ConditionTag: Tag.Melee -- "-100% Melee Damage") reads as a percentage
+            // damage debuff, ConditionTag: GameTags.DeliveryMelee -- "-100% Melee Damage") reads as a percentage
             // instead, same "Damage" wording either way -- same dual-mode split MaximumHealth/Health
             // uses below.
             return row.Operation == StatModifierOperation.Additive
-                ? FormatSignedFlatValue(row.Magnitude, "Damage", row.ConditionTag, row.RemainingSeconds)
-                : FormatSignedPercentage(row.Magnitude, "Damage", row.ConditionTag, row.RemainingSeconds);
+                ? FormatSignedFlatValue(row.Magnitude, "Damage", row.ConditionTag, row.RemainingSeconds, gameplayTags)
+                : FormatSignedPercentage(row.Magnitude, "Damage", row.ConditionTag, row.RemainingSeconds, gameplayTags);
         }
 
         if (row.Target == StatModifierTarget.MaximumHealth && row.Operation == StatModifierOperation.Multiplicative)
         {
-            return FormatSignedPercentage(row.Magnitude, "Health", row.ConditionTag, row.RemainingSeconds);
+            return FormatSignedPercentage(row.Magnitude, "Health", row.ConditionTag, row.RemainingSeconds, gameplayTags);
         }
 
         if (row.Target == StatModifierTarget.MovementLockFrames)
         {
-            return FormatMovementPenalty(row);
+            return FormatMovementPenalty(row, gameplayTags);
         }
 
         var sign = row.Operation == StatModifierOperation.Additive
             ? row.Polarity == StatModifierPolarity.Buff ? '+' : '-'
             : row.Polarity == StatModifierPolarity.Buff ? 'x' : '÷';
 
-        var text = $"{sign}{FormatMagnitude(row.Magnitude)} {WithTagPrefix(row.ConditionTag, row.Target.ToString())}";
+        var text = $"{sign}{FormatMagnitude(row.Magnitude)} {WithTagPrefix(row.ConditionTag, row.Target.ToString(), gameplayTags)}";
         return row.RemainingSeconds is { } seconds ? $"{text}: {FormatRemainingDuration(seconds)}" : text;
     }
 
-    /// <summary>Prepends "{Tag} " to subject when a modifier is scoped to a specific ConditionTag (e.g. "Melee Damage" for a Tag.Melee-scoped OutgoingDamage change) -- an untagged modifier applies broadly and needs no such qualifier.</summary>
-    private static string WithTagPrefix(Tag? conditionTag, string subject) => conditionTag is { } tag ? $"{tag} {subject}" : subject;
+    /// <summary>Prepends the condition tag's display name to subject when a modifier is scoped to a specific ConditionTag (e.g. "Melee Damage" for a GameTags.DeliveryMelee-scoped OutgoingDamage change) -- an untagged modifier applies broadly and needs no such qualifier.</summary>
+    private static string WithTagPrefix(GameplayTag conditionTag, string subject, GameplayTagRegistry gameplayTags) => conditionTag.IsNone ? subject : $"{gameplayTags.GetDisplayName(conditionTag)} {subject}";
 
     /// <summary>A negative magnitude is a reduction ("Resistance," reads as a Buff); positive is an increase ("Vulnerability," reads as a Debuff) -- keyed off the magnitude's own sign rather than Polarity, since Polarity is just the same fact restated for coloring. ConditionTag names which damage type it applies to (Poison, Fire, ...); an untagged modifier applies to all incoming damage, labeled generically as "Damage."</summary>
-    private static string FormatIncomingDamageResistance(ModifierRow row)
+    private static string FormatIncomingDamageResistance(ModifierRow row, GameplayTagRegistry gameplayTags)
     {
         var percentage = (int)System.MathF.Round(System.MathF.Abs(row.Magnitude) * 100f);
-        var subject = row.ConditionTag is { } tag ? tag.ToString() : "Damage";
+        var subject = row.ConditionTag.IsNone ? "Damage" : gameplayTags.GetDisplayName(row.ConditionTag);
         var label = row.Magnitude < 0 ? "Resistance" : "Vulnerability";
 
         var text = $"{percentage}% {subject} {label}";
@@ -672,19 +672,19 @@ public sealed class HealthWindow(
     }
 
     /// <summary>A flat "+N Subject"/"-N Subject" reading (or "+N Tag Subject" when conditionTag is set, e.g. "-1 Melee Damage") -- sign taken from the magnitude's own value (matching how content actually encodes a reduction as a negative number, e.g. a -1 Additive OutgoingDamage grant) rather than recomputed from Operation/Polarity, same reasoning as FormatIncomingDamageResistance's own sign.</summary>
-    private static string FormatSignedFlatValue(float magnitude, string subject, Tag? conditionTag, int? remainingSeconds)
+    private static string FormatSignedFlatValue(float magnitude, string subject, GameplayTag conditionTag, int? remainingSeconds, GameplayTagRegistry gameplayTags)
     {
         var sign = magnitude >= 0 ? "+" : "";
-        var text = $"{sign}{FormatMagnitude(magnitude)} {WithTagPrefix(conditionTag, subject)}";
+        var text = $"{sign}{FormatMagnitude(magnitude)} {WithTagPrefix(conditionTag, subject, gameplayTags)}";
         return remainingSeconds is { } seconds ? $"{text}: {FormatRemainingDuration(seconds)}" : text;
     }
 
-    /// <summary>Same shape as FormatSignedFlatValue, but for a Multiplicative modifier whose magnitude is a fraction added to 1 (see StatModifierMath.CalculateTotal) -- converted to the percentage a player actually reads it as, e.g. magnitude 0.5 -> "+50%", or magnitude -1 with conditionTag Tag.Melee -> "-100% Melee Damage".</summary>
-    private static string FormatSignedPercentage(float magnitude, string subject, Tag? conditionTag, int? remainingSeconds)
+    /// <summary>Same shape as FormatSignedFlatValue, but for a Multiplicative modifier whose magnitude is a fraction added to 1 (see StatModifierMath.CalculateTotal) -- converted to the percentage a player actually reads it as, e.g. magnitude 0.5 -> "+50%", or magnitude -1 with conditionTag GameTags.DeliveryMelee -> "-100% Melee Damage".</summary>
+    private static string FormatSignedPercentage(float magnitude, string subject, GameplayTag conditionTag, int? remainingSeconds, GameplayTagRegistry gameplayTags)
     {
         var percentage = (int)System.MathF.Round(magnitude * 100f);
         var sign = percentage >= 0 ? "+" : "";
-        var text = $"{sign}{percentage}% {WithTagPrefix(conditionTag, subject)}";
+        var text = $"{sign}{percentage}% {WithTagPrefix(conditionTag, subject, gameplayTags)}";
         return remainingSeconds is { } seconds ? $"{text}: {FormatRemainingDuration(seconds)}" : text;
     }
 
@@ -700,13 +700,13 @@ public sealed class HealthWindow(
     /// says this is bad, so there's no separate "bonus" wording for a hypothetical future speed-up
     /// grant -- add one if/when non-penalty content actually exists (see TODO.md's Dexterity item).
     /// </summary>
-    private static string FormatMovementPenalty(ModifierRow row)
+    private static string FormatMovementPenalty(ModifierRow row, GameplayTagRegistry gameplayTags)
     {
         var sign = row.Operation == StatModifierOperation.Multiplicative
             ? "x"
             : row.Magnitude >= 0 ? "+" : "";
 
-        var text = $"{sign}{FormatMagnitude(row.Magnitude)} {WithTagPrefix(row.ConditionTag, "Movement Penalty")}";
+        var text = $"{sign}{FormatMagnitude(row.Magnitude)} {WithTagPrefix(row.ConditionTag, "Movement Penalty", gameplayTags)}";
         return row.RemainingSeconds is { } seconds ? $"{text}: {FormatRemainingDuration(seconds)}" : text;
     }
 
@@ -728,7 +728,7 @@ public sealed class HealthWindow(
         return row.RemainingSeconds is { } seconds ? $"{text}: {FormatRemainingDuration(seconds)}" : text;
     }
 
-    /// <summary>Matches the elemental vocabulary FormatIncomingDamageResistance already reads a ConditionTag through (Tag.Fire/Tag.Poison) rather than StatusEffectType's own enum name -- Burning immunity and Fire resistance describe the same damage type, so both should say "Fire," not one saying "Burning" and the other "Fire." Every other type has no separate elemental-tag identity, so its own enum name already reads correctly (Poison, Paralysis).</summary>
+    /// <summary>Matches the elemental vocabulary FormatIncomingDamageResistance already reads a ConditionTag through (GameTags.DamageFire/GameTags.DamagePoison) rather than StatusEffectType's own enum name -- Burning immunity and Fire resistance describe the same damage type, so both should say "Fire," not one saying "Burning" and the other "Fire." Every other type has no separate elemental-tag identity, so its own enum name already reads correctly (Poison, Paralysis).</summary>
     private static string GetImmunityDisplayName(StatusEffectType effectType) => effectType switch
     {
         StatusEffectType.Burning => "Fire",
@@ -739,10 +739,10 @@ public sealed class HealthWindow(
 
     internal readonly record struct StatusEffectRow(StatusEffectType Type, int? RemainingSeconds, int StackCount);
 
-    internal readonly record struct ModifierRow(StatModifierTarget Target, StatModifierOperation Operation, StatModifierPolarity Polarity, float Magnitude, Tag? ConditionTag, int? RemainingSeconds);
+    internal readonly record struct ModifierRow(StatModifierTarget Target, StatModifierOperation Operation, StatModifierPolarity Polarity, float Magnitude, GameplayTag ConditionTag, int? RemainingSeconds);
 
     /// <summary>Identity used only to detect a modifier appearing/disappearing (see Update's own comment on why RemainingSeconds is excluded here -- ticking down every frame would otherwise look like a structural change every frame).</summary>
-    private readonly record struct ModifierSignature(StatModifierTarget Target, StatModifierOperation Operation, StatModifierPolarity Polarity, float Magnitude, Tag? ConditionTag, ActionSource Source);
+    private readonly record struct ModifierSignature(StatModifierTarget Target, StatModifierOperation Operation, StatModifierPolarity Polarity, float Magnitude, GameplayTag ConditionTag, ActionSource Source);
 
     internal readonly record struct ImmunityRow(StatusEffectType EffectType, int? RemainingSeconds);
 

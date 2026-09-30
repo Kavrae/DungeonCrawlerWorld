@@ -1,6 +1,7 @@
 ﻿using Game.Modules.Inventory;
 using Game.Modules.Inventory.Definitions;
 using Game.Modules.Lootboxes;
+using Game.Tags;
 using Game.World;
 
 namespace Game.Modules.Achievements.Definitions;
@@ -28,5 +29,5 @@ public sealed class SpellCasterAchievement : IAchievementDefinition
         context.SubscribeUntilUnlocked<ActionActivatedEvent>(activated =>
             activated.EntityId == context.PlayerQuery!.PlayerEntityId
             && context.Actions.TryGet(activated.ActionId, out var action)
-            && action.Tags.Contains(Tag.Spell));
+            && action.Tags.Has(GameTags.ActionSpell));
 }

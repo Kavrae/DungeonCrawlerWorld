@@ -1,3 +1,4 @@
+using Engine.Tags;
 using Game.Modules.Currency;
 using Game.Modules.Inventory;
 using Game.Modules.Shops;
@@ -15,4 +16,5 @@ public sealed record InventoryServices(
     ActionStateView ActionStateView,
     InventoryCommands InventoryCommands,
     ShopCommands ShopCommands,
-    CurrencyCommands CurrencyCommands);
+    CurrencyCommands CurrencyCommands,
+    GameplayTagRegistry GameplayTags);

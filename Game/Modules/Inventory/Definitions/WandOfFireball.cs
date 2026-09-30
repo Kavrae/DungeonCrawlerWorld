@@ -3,6 +3,7 @@ using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Inventory.Definitions;
@@ -27,7 +28,7 @@ public static class WandOfFireball
 
     public static ItemDefinition Build() => new(
         Id, "Wand of Fireball", "Wand", "w", Color.OrangeRed,
-        Tags: [Tag.Ranged, Tag.Wand, Tag.Consumable, Tag.Fire],
+        Tags: [GameTags.DeliveryRanged, GameTags.ItemConsumable, GameTags.DamageFire],
         Effects: [new ActionEffect([new DirectDamage(MinDamage, MaxDamage), new StatusEffectGrant(StatusEffectType.Burning, StackCount: BurningStacks)])],
         Description: "A wand that hurls a bursting ball of fire, scorching everything caught in its blast and leaving them burning.",
         Summary: "Deals fire damage in a burst and inflicts Burning.",

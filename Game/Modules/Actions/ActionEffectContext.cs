@@ -3,6 +3,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tags;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions.Components;
 using Game.Modules.Death.Components;
@@ -43,7 +44,7 @@ public sealed record ActionEffectContext(
     ComponentManager ComponentManager,
     EntityKeys EntityKeys,
     string ActivatorName,
-    IReadOnlyList<Tag> ActivatorTags,
+    GameplayTagSet ActivatorTags,
     long Now,
     MultiComponentPool<StatModifierComponent> StatModifiers,
     PackedComponentPool<AbilityScoresComponent> AbilityScores,

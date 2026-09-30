@@ -1,6 +1,7 @@
 using Game.Modules;
 using Game.Modules.Inventory;
 using Game.Modules.Lootboxes;
+using Game.Tags;
 
 namespace Tests.Modules.Lootboxes;
 
@@ -60,7 +61,7 @@ public sealed class LootboxCatalogTests
         var definition = lootboxCatalog.GetOrCreateItem(new LootboxKind(LootboxTypes.Alchemist.Id, LootboxRarity.Gold));
 
         Assert.AreEqual("Gold Alchemist Box", definition.Name);
-        CollectionAssert.AreEqual(new[] { Tag.Lootbox }, definition.Tags.ToArray());
+        Assert.AreEqual<Engine.Tags.GameplayTagSet>([GameTags.ItemLootbox], definition.Tags);
         Assert.AreEqual(RandomSingleStackContents.Instance, definition.Contents);
     }
 

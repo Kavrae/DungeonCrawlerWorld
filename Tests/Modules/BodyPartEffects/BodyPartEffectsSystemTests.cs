@@ -1,5 +1,6 @@
 using Engine.ECS.Components.Stores;
 using Game.Modules;
+using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.BodyPartEffects.Systems;
 using Game.Modules.Health;
@@ -8,6 +9,7 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Tags;
 
 namespace Tests.Modules.BodyPartEffects;
 
@@ -152,8 +154,20 @@ public sealed class BodyPartEffectsSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.OutgoingDamage, 100f, [Tag.Melee]), 0.01f, "50% HP arm -> 0.5x melee damage.");
-        Assert.AreEqual(100f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.OutgoingDamage, 100f), 0.01f, "Untouched without Tag.Melee in the active tags -- this grant is melee-conditional.");
+        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.OutgoingDamage, 100f, [GameTags.DeliveryMelee]), 0.01f, "50% HP arm -> 0.5x melee damage.");
+        Assert.AreEqual(100f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.OutgoingDamage, 100f), 0.01f, "Untouched without GameTags.DeliveryMelee in the active tags -- this grant is melee-conditional.");
+    }
+
+    [TestMethod]
+    public void Update_OneDamagedArm_PenalizesAnUnarmedAttack()
+    {
+        var world = BodyPartTestWorld.WithParts(0, ("Left Arm", BodyPartType.Arm, 50, 100, false));
+        var statModifiers = CreateStatModifiersPool();
+        var system = TestSystems.BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.OutgoingDamage, 100f, QuickAttackAction.Build().Tags), 0.01f, "Delivery.Melee.Unarmed is Delivery.Melee.");
     }
 
     [TestMethod]
@@ -165,7 +179,7 @@ public sealed class BodyPartEffectsSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(25f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.OutgoingDamage, 100f, [Tag.Melee]), 0.01f, "0.5 * 0.5 = 0.25x, not 0.5x.");
+        Assert.AreEqual(25f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.OutgoingDamage, 100f, [GameTags.DeliveryMelee]), 0.01f, "0.5 * 0.5 = 0.25x, not 0.5x.");
     }
 
     [TestMethod]

@@ -20,7 +20,7 @@ namespace Game.Modules.Actions.Effects;
 /// 1. Base amount: a MinFlatDamage..MaxFlatDamage roll + PercentageDamage * target's effective max health.
 /// 2. Add the caster's ability-score tag bonus (AbilityScoreTagBonus).
 /// 3. Scale through the caster's OutgoingDamage stat modifiers -- a modifier scoped to e.g.
-///    Tag.Melee via StatModifierComponent.ConditionTag only contributes when the activating
+///    GameTags.DeliveryMelee via StatModifierComponent.ConditionTag only contributes when the activating
 ///    action/item actually carries that tag (context.ActivatorTags, passed through here); this is
 ///    also how BodyPartEffectsSystem's own Arm/Hand penalty now works, no longer a dedicated
 ///    MeleeOutgoingDamage target.

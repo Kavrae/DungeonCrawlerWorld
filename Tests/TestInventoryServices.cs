@@ -21,5 +21,6 @@ internal static class TestInventoryServices
             new ActionStateView(componentManager, localTierRoster: null),
             new InventoryCommands(componentManager, itemCatalog, playerQuery),
             new ShopCommands(componentManager, itemCatalog, eventBus ?? new EventBus(), playerQuery),
-            new CurrencyCommands(componentManager));
+            new CurrencyCommands(componentManager),
+            TestGameplayTags.BuiltIn);
 }

@@ -1,6 +1,7 @@
-using Engine.ECS.Systems;
+﻿using Engine.ECS.Systems;
+using Game.Tags;
 using Game.Views;
-﻿using Engine.ECS.Components;
+using Engine.ECS.Components;
 using Game.Modules;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Burning;
@@ -384,217 +385,217 @@ public sealed class HealthWindowTests
     {
         var statModifiers = CreateStatModifiers();
         statModifiers.Add(new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin, conditionTag: Tag.Poison));
+            canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin, conditionTag: GameTags.DamagePoison));
 
         List<HealthWindow.ModifierRow> rows = [];
         HealthWindow.BuildModifierRows(rows, statModifiers, StatModifierPolarity.Buff, now: 0);
 
         Assert.HasCount(1, rows);
-        Assert.AreEqual(Tag.Poison, rows[0].ConditionTag);
+        Assert.AreEqual(GameTags.DamagePoison, rows[0].ConditionTag);
     }
 
-    /// <summary>Matches ResistanceTestPotion's own real grant (Game/Modules/Inventory/Definitions/ResistanceTestPotion.cs) -- Multiplicative IncomingDamage, ConditionTag: Tag.Poison, Magnitude -0.5, 10-minute duration.</summary>
+    /// <summary>Matches ResistanceTestPotion's own real grant (Game/Modules/Inventory/Definitions/ResistanceTestPotion.cs) -- Multiplicative IncomingDamage, ConditionTag: GameTags.DamagePoison, Magnitude -0.5, 10-minute duration.</summary>
     [TestMethod]
     public void FormatModifierRow_TaggedIncomingDamageReduction_ReadsAsNamedResistance()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.5f, ConditionTag: Tag.Poison, RemainingSeconds: 600);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.5f, ConditionTag: GameTags.DamagePoison, RemainingSeconds: 600);
 
-        Assert.AreEqual("50% Poison Resistance: 10min", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("50% Poison Resistance: 10min", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_SeventyFivePercentReduction_ReadsAsSeventyFivePercent()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.75f, ConditionTag: Tag.Poison, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.75f, ConditionTag: GameTags.DamagePoison, RemainingSeconds: null);
 
-        Assert.AreEqual("75% Poison Resistance", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("75% Poison Resistance", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_UntaggedIncomingDamageReduction_LabelsSubjectAsDamage()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.3f, ConditionTag: null, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.3f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("30% Damage Resistance", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("30% Damage Resistance", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_PositiveIncomingDamageMultiplier_ReadsAsVulnerability()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: 0.25f, ConditionTag: Tag.Fire, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: 0.25f, ConditionTag: GameTags.DamageFire, RemainingSeconds: null);
 
-        Assert.AreEqual("25% Fire Vulnerability", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("25% Fire Vulnerability", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_DurationUnderSixtySeconds_StaysInSeconds()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.5f, ConditionTag: Tag.Poison, RemainingSeconds: 45);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.5f, ConditionTag: GameTags.DamagePoison, RemainingSeconds: 45);
 
-        Assert.AreEqual("50% Poison Resistance: 45s", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("50% Poison Resistance: 45s", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_DurationExactlySixtySeconds_SwitchesToMinutes()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.5f, ConditionTag: Tag.Poison, RemainingSeconds: 60);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.5f, ConditionTag: GameTags.DamagePoison, RemainingSeconds: 60);
 
-        Assert.AreEqual("50% Poison Resistance: 1min", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("50% Poison Resistance: 1min", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_NoSpecialCaseForTarget_UsesGenericFallback()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.CritChance, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 5f, ConditionTag: null, RemainingSeconds: 120);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.CritChance, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 5f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: 120);
 
-        Assert.AreEqual("+5 CritChance: 2min", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("+5 CritChance: 2min", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_AdditiveOutgoingDamageBuff_ReadsAsPlusDamage()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 2f, ConditionTag: null, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 2f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("+2 Damage", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("+2 Damage", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_AdditiveOutgoingDamageDebuff_ReadsAsMinusDamage()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Debuff, Magnitude: -1f, ConditionTag: null, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Debuff, Magnitude: -1f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("-1 Damage", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("-1 Damage", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
-    /// <summary>Matches BodyPartEffectsSystem's own real grant shape (Multiplicative, Debuff, ConditionTag: Tag.Melee) -- the actual in-game "OutgoingDamage debuff" that used to fall through to the generic "÷0.5 OutgoingDamage" form instead of reading as "Melee Damage" like the Additive buff's own "Damage" wording, with its ConditionTag included.</summary>
+    /// <summary>Matches BodyPartEffectsSystem's own real grant shape (Multiplicative, Debuff, ConditionTag: GameTags.DeliveryMelee) -- the actual in-game "OutgoingDamage debuff" that used to fall through to the generic "÷0.5 OutgoingDamage" form instead of reading as "Melee Damage" like the Additive buff's own "Damage" wording, with its ConditionTag included.</summary>
     [TestMethod]
     public void FormatModifierRow_MultiplicativeOutgoingDamageDebuff_ReadsAsMinusPercentMeleeDamage()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: -0.5f, ConditionTag: Tag.Melee, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: -0.5f, ConditionTag: GameTags.DeliveryMelee, RemainingSeconds: null);
 
-        Assert.AreEqual("-50% Melee Damage", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("-50% Melee Damage", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_MultiplicativeOutgoingDamageBuff_ReadsAsPlusPercentDamage()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: 0.25f, ConditionTag: null, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: 0.25f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("+25% Damage", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("+25% Damage", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
-    /// <summary>Exact example from the request: BodyPartEffectsSystem's own fully-disabled-Arms/Hands case (combinedMultiplier 0 -> magnitude -1, a full -100% melee damage debuff), ConditionTag: Tag.Melee.</summary>
+    /// <summary>Exact example from the request: BodyPartEffectsSystem's own fully-disabled-Arms/Hands case (combinedMultiplier 0 -> magnitude -1, a full -100% melee damage debuff), ConditionTag: GameTags.DeliveryMelee.</summary>
     [TestMethod]
     public void FormatModifierRow_FullyDisabledMeleeDamage_ReadsAsMinusOneHundredPercentMeleeDamage()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: -1f, ConditionTag: Tag.Melee, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: -1f, ConditionTag: GameTags.DeliveryMelee, RemainingSeconds: null);
 
-        Assert.AreEqual("-100% Melee Damage", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("-100% Melee Damage", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_AdditiveOutgoingDamageWithConditionTag_IncludesTag()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 2f, ConditionTag: Tag.Melee, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 2f, ConditionTag: GameTags.DeliveryMelee, RemainingSeconds: null);
 
-        Assert.AreEqual("+2 Melee Damage", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("+2 Melee Damage", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_MaximumHealthWithConditionTag_IncludesTag()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: 0.5f, ConditionTag: Tag.Fire, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: 0.5f, ConditionTag: GameTags.DamageFire, RemainingSeconds: null);
 
-        Assert.AreEqual("+50% Fire Health", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("+50% Fire Health", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_MovementPenaltyWithConditionTag_IncludesTag()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.MovementLockFrames, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: 10f, ConditionTag: Tag.Melee, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.MovementLockFrames, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: 10f, ConditionTag: GameTags.DeliveryMelee, RemainingSeconds: null);
 
-        Assert.AreEqual("x10 Melee Movement Penalty", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("x10 Melee Movement Penalty", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_GenericFallbackWithConditionTag_IncludesTag()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.CritChance, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 5f, ConditionTag: Tag.Melee, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.CritChance, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 5f, ConditionTag: GameTags.DeliveryMelee, RemainingSeconds: null);
 
-        Assert.AreEqual("+5 Melee CritChance", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("+5 Melee CritChance", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_NoConditionTag_NoTagPrefix()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.CritChance, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 5f, ConditionTag: null, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.CritChance, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 5f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("+5 CritChance", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("+5 CritChance", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_MultiplicativeMaximumHealthBuff_ReadsAsPlusPercentHealth()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: 0.5f, ConditionTag: null, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: 0.5f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("+50% Health", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("+50% Health", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_MultiplicativeMaximumHealthDebuff_ReadsAsMinusPercentHealth()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: -0.25f, ConditionTag: null, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: -0.25f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("-25% Health", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("-25% Health", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     /// <summary>Matches BodyPartEffectsSystem's own real grant shape (Multiplicative, Debuff).</summary>
     [TestMethod]
     public void FormatModifierRow_MultiplicativeMovementLockFrames_ReadsAsMovementPenaltyWithLiteralMultiplier()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.MovementLockFrames, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: 10f, ConditionTag: null, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.MovementLockFrames, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: 10f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("x10 Movement Penalty", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("x10 Movement Penalty", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_AdditiveMovementLockFrames_UsesSignedMagnitudeNotMultiplier()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.MovementLockFrames, StatModifierOperation.Additive, StatModifierPolarity.Debuff, Magnitude: 5f, ConditionTag: null, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.MovementLockFrames, StatModifierOperation.Additive, StatModifierPolarity.Debuff, Magnitude: 5f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("+5 Movement Penalty", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("+5 Movement Penalty", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_FlatMagnitudeWithManyDecimals_RoundsToOneDecimalPlace()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 2.3333333f, ConditionTag: null, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 2.3333333f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("+2.3 Damage", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("+2.3 Damage", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_FlatMagnitudeIsWholeNumber_NoTrailingDecimal()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 2f, ConditionTag: null, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 2f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("+2 Damage", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("+2 Damage", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_GenericFallbackMagnitudeWithDecimals_RoundsToOneDecimalPlace()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.CritChance, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 0.16666667f, ConditionTag: null, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.CritChance, StatModifierOperation.Additive, StatModifierPolarity.Buff, Magnitude: 0.16666667f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("+0.2 CritChance", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("+0.2 CritChance", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     [TestMethod]
     public void FormatModifierRow_MovementPenaltyMagnitudeWithDecimals_RoundsToOneDecimalPlace()
     {
-        var row = new HealthWindow.ModifierRow(StatModifierTarget.MovementLockFrames, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: 2.449f, ConditionTag: null, RemainingSeconds: null);
+        var row = new HealthWindow.ModifierRow(StatModifierTarget.MovementLockFrames, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, Magnitude: 2.449f, ConditionTag: Engine.Tags.GameplayTag.None, RemainingSeconds: null);
 
-        Assert.AreEqual("x2.4 Movement Penalty", HealthWindow.FormatModifierRow(row));
+        Assert.AreEqual("x2.4 Movement Penalty", HealthWindow.FormatModifierRow(row, TestGameplayTags.BuiltIn));
     }
 
     private static List<StatusEffectImmunityComponent> CreateImmunities() => [];

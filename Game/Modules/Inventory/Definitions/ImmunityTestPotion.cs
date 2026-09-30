@@ -4,6 +4,7 @@ using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Inventory.Definitions;
@@ -18,7 +19,7 @@ public static class ImmunityTestPotion
 
     public static ItemDefinition Build() => new(
         Id, "Vial of Warding", "HealthPotion", "w", Color.Cyan,
-        Tags: [Tag.Potion, Tag.Consumable, Tag.Self],
+        Tags: [GameTags.TargetingSelf],
         Effects: [new ActionEffect([
             new StatusEffectImmunityGrant(StatusEffectType.Burning, DurationFrames),
             new StatusEffectImmunityGrant(StatusEffectType.Poison, DurationFrames),

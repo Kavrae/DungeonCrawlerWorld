@@ -1,3 +1,4 @@
+using Engine.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Actions;
@@ -18,9 +19,9 @@ public sealed record ActionDefinition(
     string? SpriteName,
     string Glyph,
     Color GlyphColor,
-    IReadOnlyList<Tag> Tags,
+    GameplayTagSet Tags,
     IReadOnlyList<ActionEffect> Effects,
     IActionActivator Activator,
     string Description = "",
     string Summary = "")
-    : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Tags, Effects, Description, Summary);
+    : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Tags.Union(Activator.ImpliedTags), Effects, Description, Summary);

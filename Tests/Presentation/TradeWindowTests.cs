@@ -9,6 +9,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops;
 using Game.Modules.Shops.Components;
+using Game.Tags;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
@@ -50,7 +51,7 @@ public sealed class TradeWindowTests
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20));
 
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(PotionItemId, PreferredStockLevel));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 0, credits: 0));
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 0, credits: 0));
@@ -74,7 +75,7 @@ public sealed class TradeWindowTests
         componentManager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(GadgetItemId, PreferredStockLevel));
 
         var itemCatalog = new ItemCatalog();
-        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: 10));
+        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], GoldValue: 10));
         itemCatalog.Register(new ItemDefinition(GadgetItemId, "Test Gadget", null, "g", Color.White, Tags: [], Effects: [], GoldValue: 10));
 
         windowService.RegisterFactory<TradeWindow>(() => new TradeWindow(fontService, windowService, labelRenderer, TestInventoryServices.Over(componentManager, itemCatalog, world, eventBus ?? new EventBus()), world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
@@ -507,7 +508,7 @@ public sealed class TradeWindowTests
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
         var itemCatalog = new ItemCatalog();
-        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: 10));
+        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], GoldValue: 10));
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
 
         var tooltipController = new TooltipController();
@@ -521,7 +522,7 @@ public sealed class TradeWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 500), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        playerGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
+        playerGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
         playerGridWindow.Initialize();
 
         var layers = new UiLayerStack();
@@ -575,7 +576,7 @@ public sealed class TradeWindowTests
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
         var itemCatalog = new ItemCatalog();
-        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: 10));
+        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], GoldValue: 10));
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
 
         var tooltipController = new TooltipController();
@@ -587,7 +588,7 @@ public sealed class TradeWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 500), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        playerGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
+        playerGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
         playerGridWindow.Initialize();
 
         var layers = new UiLayerStack();

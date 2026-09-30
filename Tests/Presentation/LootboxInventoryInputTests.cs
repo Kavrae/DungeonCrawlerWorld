@@ -72,7 +72,7 @@ public sealed class LootboxInventoryInputTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, entityId, filterTag: null, tooltipController, () => CorpseEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, openRequests.Add, simulationClock: new SimulationClock()));
+            window.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, entityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, () => CorpseEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, openRequests.Add, simulationClock: new SimulationClock()));
             window.Initialize();
             return window;
         }

@@ -1,3 +1,4 @@
+using Engine.Tags;
 using FontStashSharp;
 using Game.Modules.Currency;
 using Game.Modules.Inventory;
@@ -448,7 +449,7 @@ public sealed class TradeWindow(
         // picks TradeItemStackCell and the correct buy/sell pricing direction for this column -- see
         // InventoryGridContent's own doc comment on that parameter. Both columns are given the same
         // _tooltipController -- see its own doc comment for why that's safe now.
-        gridWindow.SetContent(new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, entityId, filterTag: null, _tooltipController, static () => null, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, static _ => { }, simulationClock, isShopSide));
+        gridWindow.SetContent(new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, entityId, filterTag: GameplayTag.None, _tooltipController, static () => null, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, static _ => { }, simulationClock, isShopSide));
         AddChild(gridWindow);
 
         var footerWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions

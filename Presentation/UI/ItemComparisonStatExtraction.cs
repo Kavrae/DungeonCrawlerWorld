@@ -1,4 +1,5 @@
 using Engine.Math;
+using Engine.Tags;
 using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
@@ -19,9 +20,9 @@ namespace Presentation.UI;
 /// </summary>
 public static class ItemComparisonStatExtraction
 {
-    public static IReadOnlyList<ItemComparisonStat> Extract(ItemDefinition definition, ActionCatalog actionCatalog)
+    public static IReadOnlyList<ItemComparisonStat> Extract(ItemDefinition definition, ActionCatalog actionCatalog, GameplayTagRegistry gameplayTags)
     {
-        var stats = new List<ItemComparisonStat>(ExtractEffectStats(definition));
+        var stats = new List<ItemComparisonStat>(ExtractEffectStats(definition, gameplayTags));
 
         if (definition.Activator is { } activator)
         {
@@ -32,7 +33,7 @@ public static class ItemComparisonStatExtraction
     }
 
     /// <summary>Just the Effects-section half -- ItemDetailsWindow.BuildEffectsSection's own line source, since Effects and Activation render as separate sections with their own headers.</summary>
-    public static IReadOnlyList<ItemComparisonStat> ExtractEffectStats(ItemDefinition definition)
+    public static IReadOnlyList<ItemComparisonStat> ExtractEffectStats(ItemDefinition definition, GameplayTagRegistry gameplayTags)
     {
         var stats = new List<ItemComparisonStat>();
 
@@ -40,16 +41,16 @@ public static class ItemComparisonStatExtraction
         {
             foreach (var entry in effect.Entries)
             {
-                stats.Add(ExtractEffectStat(entry));
+                stats.Add(ExtractEffectStat(entry, gameplayTags));
             }
         }
 
         return stats;
     }
 
-    private static ItemComparisonStat ExtractEffectStat(IActionEffectEntry entry)
+    private static ItemComparisonStat ExtractEffectStat(IActionEffectEntry entry, GameplayTagRegistry gameplayTags)
     {
-        var displayText = ActionEffectFormatting.FormatEntry(entry);
+        var displayText = ActionEffectFormatting.FormatEntry(entry, gameplayTags);
 
         return entry switch
         {

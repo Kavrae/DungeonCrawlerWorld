@@ -118,32 +118,6 @@ systems are a good shape for commands: `world.register_system(spawn_here)` retur
 system. A console command would be a registered one-shot system plus parsed arguments, so commands
 and systems share one way of reaching pools.
 
-#### Hierarchical gameplay tags
-
-`Tag` (`Game/Modules/Tag.cs`) is a flat `byte` enum shared by abilities and items. It can't express a
-parent/child relationship (`Damage.Fire.Lava` is also `Damage.Fire` and `Damage`), a mod can't add a
-tag, and nothing keeps a tag in step with what it describes ("Tag.Spell can drift out of sync", Game).
-Build a generic tag facility in Engine:
-- Tags are dot-separated names registered at startup (by modules and mods), interned to small integer
-  ids. Each id knows its parents, so "has `Damage.Fire`" matches `Damage.Fire.Lava`, with an exact
-  match available when a check needs it.
-- A tag container: a small fixed-size set of ids with has-any/has-all/has-none and parent-aware
-  queries. It must be allocation-free and cheap enough for component fields.
-- A tag query: a reusable expression ("any of these, none of those") stored on a definition, used for
-  "this effect requires the target have X and not Y" or "this immunity blocks anything tagged Z".
-- Consumers once it exists: damage types ("Damage types", Game), immunities and status-effect
-  requirements, inventory tabs (today's per-`Tag` tabs), Gameplay Cues (Game), and achievement
-  criteria.
-
-**Unreal Engine reference:** `FGameplayTag` / `FGameplayTagContainer` / `FGameplayTagQuery`
-(GameplayTags module). Tags are registered in `DefaultGameplayTags.ini`, in data tables or natively
-(`UE_DEFINE_GAMEPLAY_TAG`), and live in one tree owned by `UGameplayTagsManager`. `HasTag` matches
-parents; `HasTagExact` doesn't. Containers cache their parent tags so a parent-aware check is a set
-lookup rather than a tree walk. Unreal's containers are `TArray`-backed and allocate, which is fine for
-actors but not here -- use a fixed-capacity inline set instead. Also note Unreal's tag redirects
-(`GameplayTagRedirects` in config): a renamed tag keeps loading from old saves and data, the same
-problem "Data storage" (Global) raises for mod content.
-
 #### Relationships -- links between entities that maintain both sides
 
 Every link from one entity to another is a one-way `EntityKey` in a component (`ActionSource`,
@@ -398,6 +372,31 @@ primitive. Companion to the Game/Presentation equipment items below.
 ## Game
 
 ### High Priority
+
+#### Disable actions that destroyed body parts make unusable, and show why
+
+With both arms destroyed, Quick Attack and Power Attack can still be armed and activated from the
+hotbar; they just do nothing. `ActionActivationSystem` refuses a `Delivery.Melee` action for an entity
+holding `MeleeDisabledComponent` (every Arm/Hand disabled, granted by `BodyPartEffectsSystem`), but it
+refuses silently, after the player has already chosen and aimed it. The hotbar only dims an action it
+can't afford (`HotbarContent.HasEnoughMana`), so nothing tells the player the action is unavailable or
+why. That breaks the "remove unexpected actions" principle: the click looks accepted and does nothing.
+
+Direction:
+- **One usability rule in Game**, read by both sides: a query (on `ActionStateView`, backed by a static
+  `*Queries` the system also calls) that answers whether an entity can use an action or item now and,
+  if not, a reason. Reasons today: not enough mana, melee disabled (every Arm/Hand destroyed), and
+  whatever else the activation path already refuses. `ActionActivationSystem` keeps refusing through the
+  same rule, so the display and the outcome can't disagree.
+- **Disabled means not armable:** the hotbar dims a disabled action or item the way it dims an
+  unaffordable one, and pressing its key, clicking it or double-clicking it does nothing, with the
+  disabled cursor rather than arming.
+- **A "Deactivated Reason" in the tooltip** of every disabled action and item -- hotbar slot summary,
+  inventory item, Item Details -- in plain words ("Both arms are destroyed", "Not enough mana").
+- Movement already has the same shape (`MovementDisabledComponent` from destroyed legs/feet); if
+  movement gets a player-visible indicator, it should read from the same reason vocabulary.
+- Tests drive the real input path (`UiInputController`/`ActionTargetingController`), not direct calls:
+  a disabled slot must not arm.
 
 #### ProcessingTierResolver.PromotionsHeld set after the session is assembled
 
@@ -938,8 +937,8 @@ through a `UGameplayEffect` spec, and an effect that needs both sides runs a
 e.g. the caster's Strength when the fireball launched) or live (value on application). That choice is
 worth making explicit per effect entry here, since a Delayed action resolves seconds after it was
 cast. Each effect also carries tag requirements (`ApplicationTagRequirements`, source/target tag
-requirements on modifiers), so "only while the target is Burning" is data, not code -- see
-"Hierarchical gameplay tags" (Engine). Damage usually goes through a *meta attribute* (`IncomingDamage`):
+requirements on modifiers), so "only while the target is Burning" is data, not code -- the tag facility
+for that exists (`GameplayTagQuery`, IMPLEMENTATION-NOTES "Gameplay tags"). Damage usually goes through a *meta attribute* (`IncomingDamage`):
 the execution writes a raw number, and one place (`PostGameplayEffectExecute`) applies shields,
 resistances and Health. That corresponds to `HealthDamage.Apply` being the one chokepoint.
 
@@ -987,7 +986,7 @@ nearest shop that buys potions" or "a corpse I have rights to loot". Add a small
 heard need gameplay to announce *that something happened* without Game knowing how Presentation will
 show it. Floating text (`IMPLEMENTATION-NOTES.md`, "Floating Text") already works this way for damage
 taken, but through its own event. Generalize it:
-- A cue is a tag (see "Hierarchical gameplay tags", Engine) plus a small payload: where (entity or
+- A cue is a `GameplayTag` (`Cue.*`, IMPLEMENTATION-NOTES "Gameplay tags") plus a small payload: where (entity or
   tile), who caused it, a magnitude, and whether it's a one-shot or a start/stop pair (a Burning loop
   starts when the status is added and stops when it's removed).
 - Game raises cues from the chokepoints that already exist (`HealthDamage`, status effect grant and
@@ -1106,6 +1105,42 @@ game-over screen, a floor's contents on a floor transition). Bevy has no run-lev
 system sets and run conditions" (Engine), where "in state X" is a run condition.
 
 ### Low Priority
+
+#### Player-selected healing priority
+
+Complex-health healing always goes to the lowest body part: HP regen (`ComplexHealthRegenSystem`) and
+`LowestPercentage` heals both pick through `BodyPartSelection.PickLowestPercentage`, which skips
+regen-locked and full parts and breaks ties by body-plan order, with no preference for Vital parts. The
+player can't steer it, so a regen tick can go to a scratched foot while the torso is one hit from death.
+
+Let the player choose a healing priority in the Health window. It decides which part every regen tick
+and every single-part heal not aimed at a specific part goes to. Heals that split evenly across every
+part (`BodyPartTargetMode.All`) and heals aimed at a part bypass it.
+- **Vital First (default):** heal Vital parts (lowest % first) until every Vital part is full, then fall
+  back to Lowest First for the rest. The same as Custom with the Vital parts selected automatically.
+- **Lowest First:** the part with the lowest %. Ties go to a Vital part, then to the first in body-plan
+  order.
+- **Custom:** the player selects one or more parts. Heal those by Lowest First until they're all full,
+  then everything else by Lowest First.
+
+Direction:
+- **Game owns the rule.** One selection method in `BodyPartSelection` takes the entity's priority and
+  replaces `PickLowestPercentage` at every single-part heal and regen call site, so a spell and a regen
+  tick can't disagree. Parts that are regen-locked out (Burning's lockout) or full are skipped at every
+  step, as today, so a locked prioritized part falls through to the next.
+- **Stored per entity:** a small Packed component holding the mode and, for Custom, the selected part ids
+  (a bitmask over the body plan -- part ids are stable for the entity's lifetime). An entity without one
+  uses Vital First. The player sets it through a command (`HealthCommands` or `PlayerCommands`), and the
+  Health window reads it through `HealthView`.
+- **Health window:** a mode selector, and an icon on every body-part row whose part is prioritized for
+  healing -- the Vital parts under Vital First, the selected parts under Custom, none under Lowest
+  First. Under Custom, clicking a part's icon area toggles it.
+- **NPCs use Vital First too.** Every Complex-health entity without the component gets it, so NPC regen
+  and heals change from today's Lowest First with no Vital preference. NPCs never hold the component
+  unless something sets it.
+- **An aimed heal keeps its target.** A single-part heal that names a part (`SingleTarget` with a
+  `BodyPartTargetRule`) goes where it's aimed; the priority only decides where an unaimed heal goes.
+- Custom with nothing selected behaves as Lowest First.
 
 #### Organize blueprints, and replace testing composites with long-term ones
 
@@ -1501,13 +1536,18 @@ Constitution->potion-cooldown. Needs an `ActionEffect` duration field as a real 
 
 #### Damage types
 
-No concept exists -- every hit is undifferentiated. Starting set: Magic, Blunt, Explosive, Slashing.
+Only Burning (`Damage.Fire`), Poison (`Damage.Poison`), the Fireball wand (`Damage.Fire`) and Magic
+Missile (`Damage.Energy`) carry a damage type; every other hit is undifferentiated. Starting set to
+add: Blunt, Explosive, Slashing.
 
-Model damage types as hierarchical tags ("Hierarchical gameplay tags", Engine) rather than an enum:
-`Damage.Physical.Blunt`, `Damage.Magic.Fire`, so a resistance to `Damage.Magic` covers every magic
-subtype and a mod adds `Damage.Magic.Void` without touching Game. Resistances and vulnerabilities are
-stat modifiers conditioned on a tag, applied in the Incoming pass ("Add source and target modifier
-checks for all actions", Medium).
+Damage types are `Damage.*` gameplay tags (IMPLEMENTATION-NOTES "Gameplay tags"), and follow its
+combine-don't-nest rule: `Damage.*` names only what the hit is made of (`Damage.Blunt`,
+`Damage.Slashing`, `Damage.Fire`), and magic is the separate top-level `Magic` tag carried alongside --
+a fireball is `Damage.Fire` + `Magic`, a torch `Damage.Fire`. So there is no `Damage.Magic`; a
+"magic resistance" conditions on `Magic`, a fire resistance on `Damage.Fire`, and a mod adds
+`Damage.Void` without touching Game. A grouping that really is always-true can still nest
+(`Damage.Fire.Lava`). Resistances and vulnerabilities are stat modifiers conditioned on a tag, applied
+in the Incoming pass ("Add source and target modifier checks for all actions", Medium).
 
 **Unreal Engine reference:** Unreal's old `UDamageType` classes (passed to `ApplyDamage`) were one class
 per type with no hierarchy or data; GAS projects replaced them with damage-type gameplay tags on the
@@ -1711,18 +1751,6 @@ its dependency lands). `BigMusclesAchievement`/`UnbreakableAchievement`/`Shangha
 `AbilityScoreBaseValueChangedEvent`, which nothing publishes yet (no level-up/permanent-boost system) --
 all six also currently reward a placeholder "upgrade choice" with no upgrade-choice system to back it.
 
-#### Tag.Spell can drift out of sync with the actions it describes
-
-Hand-authored, independent of `IActionActivator` -- nothing enforces it, and `SpellCasterAchievement`
-trusts it alone. Either drop `Tag.Spell` and key off `action.Activator is SpellActivator` directly, or
-keep it as an independent classification but have `SpellActivator`/its registration apply it
-automatically so a definition can't forget it.
-
-"Hierarchical gameplay tags" (Engine) is the general fix: tags become registered, parent-aware names
-(`Action.Spell.Fire`), and a spell activator grants `Action.Spell` automatically. Unreal's GAS does the
-same: an ability's `AbilityTags` are declared on the ability class itself, so the classification can't
-live somewhere separate from what it describes.
-
 #### Boundary-aware ProcessingTierSystem recompute
 
 `ProcessingTierSystem` recomputes every movement-capable entity's tier once per its own stripe turn
@@ -1840,8 +1868,9 @@ back when empty and unfocused. Pure presentation change.
 
 #### Inventory tab reordering + custom-tag trailing tab
 
-Dynamic per-tag tabs landed (`IMPLEMENTATION-NOTES.md`). Still open: user-reordering the default sort,
-and a trailing "+" tab for custom user-created tags.
+Per-category tabs landed (one per `Item.*` tag, IMPLEMENTATION-NOTES "Inventory tabs"). Still open:
+user-reordering the default sort, and a trailing "+" tab for custom user-created tags -- a user tag
+would be a player-owned grouping, not a `GameplayTag`, since those are declared by modules at startup.
 
 #### Item weight (definition-only) and race weight ranges
 
@@ -2290,7 +2319,7 @@ are the standard model.
 
 Spell-equivalent of the inventory menu, mirroring `InventoryWindowController`'s Button+pooled-Window+
 `TabbedContent` pattern. "Known spells" isn't a tracked concept -- just a `MultiComponentPool<ActionInstanceComponent>`
-query filtered by `Tag.Spell` (same drift risk as Tag.Spell above).
+query filtered by `Action.Spell`, which `SpellActivator` implies, so it can't drift from what the action is.
 
 #### Comprehensive control-selection feature
 

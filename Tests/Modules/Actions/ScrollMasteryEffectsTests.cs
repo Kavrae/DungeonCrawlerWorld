@@ -6,6 +6,7 @@ using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Inventory;
+using Game.Tags;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -23,7 +24,7 @@ public sealed class ScrollMasteryEffectsTests
 
         var scroll = new ItemDefinition(
             Guid.NewGuid(), "Test Scroll", "Scroll", "s", Color.White,
-            Tags: [Tag.Scroll, Tag.Consumable],
+            Tags: [GameTags.ItemConsumableScroll, GameTags.ItemConsumable],
             Effects: [ActionEffect.None],
             Activator: new ScrollActivator(new TargetingSpec(TargetShape.Adjacent, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, 30, null), SpellId));
 
@@ -124,5 +125,21 @@ public sealed class ScrollMasteryEffectsTests
 
         Assert.IsFalse(HasActionInstance(componentManager, EntityId, SpellId));
         Assert.IsFalse(HasActionInstance(componentManager, EntityId, otherSpellId));
+    }
+
+    [TestMethod]
+    public void RecordUsage_ReachesThreshold_SynthesizedSpellIsASpell_NotAnItem()
+    {
+        var (componentManager, eventBus, actionCatalog, scroll) = Build();
+
+        for (var i = 0; i < ScrollMasteryEffects.MasteryThreshold; i++)
+        {
+            ScrollMasteryEffects.RecordUsage(componentManager, eventBus, actionCatalog, scroll, EntityId, SpellId);
+        }
+
+        Assert.IsTrue(actionCatalog.TryGet(SpellId, out var spell));
+        Assert.IsTrue(spell.Tags.HasExact(GameTags.ActionSpell));
+        Assert.IsTrue(spell.Tags.HasExact(GameTags.Magic));
+        Assert.IsFalse(spell.Tags.Has(GameTags.Item), $"A spell is not an item, but has {spell.Tags}.");
     }
 }

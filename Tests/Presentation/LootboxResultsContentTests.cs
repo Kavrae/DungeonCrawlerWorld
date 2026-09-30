@@ -4,6 +4,7 @@ using Game.Modules;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Lootboxes;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Input;
@@ -24,8 +25,8 @@ public sealed class LootboxResultsContentTests
 
     private static readonly KeyboardState NoKeys = new();
 
-    private static readonly ItemDefinition Potion = new(Guid.NewGuid(), "Potion", SpriteName: null, Glyph: "p", Color.White, Tags: [Tag.Potion], Effects: [], Summary: "Drink it.");
-    private static readonly ItemDefinition Scroll = new(Guid.NewGuid(), "Scroll", SpriteName: null, Glyph: "s", Color.White, Tags: [Tag.Scroll], Effects: []);
+    private static readonly ItemDefinition Potion = new(Guid.NewGuid(), "Potion", SpriteName: null, Glyph: "p", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], Summary: "Drink it.");
+    private static readonly ItemDefinition Scroll = new(Guid.NewGuid(), "Scroll", SpriteName: null, Glyph: "s", Color.White, Tags: [GameTags.ItemConsumableScroll], Effects: []);
 
     private static MouseState MouseAt(Point point, ButtonState leftButton) =>
         new(point.X, point.Y, 0, leftButton, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
@@ -91,7 +92,7 @@ public sealed class LootboxResultsContentTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(600, 0), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        corpseGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, CorpseEntityId, filterTag: null, tooltipController, static () => null, new MapViewState(), static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new Engine.ECS.Systems.SimulationClock()));
+        corpseGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, CorpseEntityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, static () => null, new MapViewState(), static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new Engine.ECS.Systems.SimulationClock()));
         corpseGridWindow.Initialize();
         layers.Add(UiLayer.Base, corpseGridWindow);
 

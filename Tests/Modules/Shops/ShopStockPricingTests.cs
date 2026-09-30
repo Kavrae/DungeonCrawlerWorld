@@ -4,6 +4,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops;
 using Game.Modules.Shops.Components;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Tests.Modules.Shops;
@@ -22,7 +23,7 @@ public sealed class ShopStockPricingTests
     }
 
     private static ItemDefinition CreateItem(int goldValue = 10, int? maximumShopStock = null) =>
-        new(ItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: goldValue, MaximumShopStock: maximumShopStock);
+        new(ItemId, "Test Potion", null, "p", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], GoldValue: goldValue, MaximumShopStock: maximumShopStock);
 
     [TestMethod]
     public void GetTotalStock_SumsAcrossSeveralPhysicalStacksOfTheSameItem()
@@ -117,7 +118,7 @@ public sealed class ShopStockPricingTests
         manager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(ItemId, preferredStockLevel: 50));
         manager.GetMultiPool<InventoryItemStackComponent>().Add(ShopEntityId, new InventoryItemStackComponent(ItemId, quantity: 50));
 
-        var shop = new ShopComponent(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
+        var shop = new ShopComponent(acceptedItems: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
         var item = CreateItem(goldValue: 10);
 
         Assert.AreEqual(11, ShopStockPricing.ComputeBulkBuyPrice(manager, ShopEntityId, shop, item, quantity: 1));
@@ -133,7 +134,7 @@ public sealed class ShopStockPricingTests
         // walks stock 65, 64 (both still Overstocked, 8G each) then 63 (crosses into Normal, 11G).
         manager.GetMultiPool<InventoryItemStackComponent>().Add(ShopEntityId, new InventoryItemStackComponent(ItemId, quantity: 65));
 
-        var shop = new ShopComponent(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
+        var shop = new ShopComponent(acceptedItems: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
         var item = CreateItem(goldValue: 10);
 
         Assert.AreEqual(2 * 8 + 1 * 11, ShopStockPricing.ComputeBulkBuyPrice(manager, ShopEntityId, shop, item, quantity: 3));
@@ -155,7 +156,7 @@ public sealed class ShopStockPricingTests
         manager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(ItemId, preferredStockLevel: 50));
         manager.GetMultiPool<InventoryItemStackComponent>().Add(ShopEntityId, new InventoryItemStackComponent(ItemId, quantity: 5));
 
-        var shop = new ShopComponent(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
+        var shop = new ShopComponent(acceptedItems: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
         var item = CreateItem(goldValue: 10);
 
         // Ground truth: the stack is still physically on the shop entity, so the entity-based
@@ -183,7 +184,7 @@ public sealed class ShopStockPricingTests
             (System.Collections.ICollection)ShopStockPricing.GetAllBands());
     }
 
-    private static readonly ShopComponent StandardShop = new(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
+    private static readonly ShopComponent StandardShop = new(acceptedItems: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
 
     [TestMethod]
     [DataRow(StockStatus.Desperate, 16)]
@@ -217,7 +218,7 @@ public sealed class ShopStockPricingTests
         // never come out equal, or a same-shop buy-then-sell-back round trip breaks even instead of
         // losing.
         var item = CreateItem(goldValue: 10);
-        var nearlyCollapsedShop = new ShopComponent(allowedTags: null, buyMultiplier: 1.02f, sellMultiplier: 0.98f);
+        var nearlyCollapsedShop = new ShopComponent(acceptedItems: null, buyMultiplier: 1.02f, sellMultiplier: 0.98f);
 
         Assert.AreEqual(11, ShopStockPricing.GetBandPricePerUnit(item, nearlyCollapsedShop, StockStatus.Normal, isBuyPrice: true));
         Assert.AreEqual(9, ShopStockPricing.GetBandPricePerUnit(item, nearlyCollapsedShop, StockStatus.Normal, isBuyPrice: false));
@@ -230,7 +231,7 @@ public sealed class ShopStockPricingTests
         // and SellMultiplier both exactly 1.0 -- e.g. max Charisma plus a maxed future shopping
         // skill) would price both sides at exactly GoldValue; the tie-break must still separate them.
         var item = CreateItem(goldValue: 1_000_000);
-        var fullyCollapsedShop = new ShopComponent(allowedTags: null, buyMultiplier: 1.0f, sellMultiplier: 1.0f);
+        var fullyCollapsedShop = new ShopComponent(acceptedItems: null, buyMultiplier: 1.0f, sellMultiplier: 1.0f);
 
         Assert.AreEqual(1_000_001, ShopStockPricing.GetBandPricePerUnit(item, fullyCollapsedShop, StockStatus.Normal, isBuyPrice: true));
         Assert.AreEqual(999_999, ShopStockPricing.GetBandPricePerUnit(item, fullyCollapsedShop, StockStatus.Normal, isBuyPrice: false));
@@ -248,7 +249,7 @@ public sealed class ShopStockPricingTests
         // applies the same multiplier to both sides). The tie-break must reach every one of them --
         // buy and sell must never come out equal regardless of which band a trade happens to be in.
         var item = CreateItem(goldValue: 10);
-        var fullyCollapsedShop = new ShopComponent(allowedTags: null, buyMultiplier: 1.0f, sellMultiplier: 1.0f);
+        var fullyCollapsedShop = new ShopComponent(acceptedItems: null, buyMultiplier: 1.0f, sellMultiplier: 1.0f);
 
         var buyPrice = ShopStockPricing.GetBandPricePerUnit(item, fullyCollapsedShop, band, isBuyPrice: true);
         var sellPrice = ShopStockPricing.GetBandPricePerUnit(item, fullyCollapsedShop, band, isBuyPrice: false);
@@ -266,7 +267,7 @@ public sealed class ShopStockPricingTests
         // buying walks stock high-to-low, so Overstocked (65, 64) is crossed before Normal (63).
         manager.GetMultiPool<InventoryItemStackComponent>().Add(ShopEntityId, new InventoryItemStackComponent(ItemId, quantity: 65));
 
-        var shop = new ShopComponent(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
+        var shop = new ShopComponent(acceptedItems: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
         var item = CreateItem(goldValue: 10);
 
         var breakdown = ShopStockPricing.ComputeBulkBuyBreakdown(manager, ShopEntityId, shop, item, quantity: 3);
@@ -285,7 +286,7 @@ public sealed class ShopStockPricingTests
         // 64, 65 (crosses into Overstocked, 7G each) -- selling walks stock low-to-high.
         manager.GetMultiPool<InventoryItemStackComponent>().Add(ShopEntityId, new InventoryItemStackComponent(ItemId, quantity: 61));
 
-        var shop = new ShopComponent(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
+        var shop = new ShopComponent(acceptedItems: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
         var item = CreateItem(goldValue: 10);
 
         var breakdown = ShopStockPricing.ComputeBulkSellBreakdown(manager, ShopEntityId, shop, item, quantity: 5);
@@ -302,7 +303,7 @@ public sealed class ShopStockPricingTests
         manager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(ItemId, preferredStockLevel: 50));
         manager.GetMultiPool<InventoryItemStackComponent>().Add(ShopEntityId, new InventoryItemStackComponent(ItemId, quantity: 999));
 
-        var shop = new ShopComponent(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
+        var shop = new ShopComponent(acceptedItems: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
         var item = CreateItem(goldValue: 10);
 
         var breakdown = ShopStockPricing.ComputeBulkBuyBreakdown(manager, ShopEntityId, shop, item, quantity: 999);
@@ -323,7 +324,7 @@ public sealed class ShopStockPricingTests
     {
         var manager = BuildManager();
         manager.GetMultiPool<InventoryItemStackComponent>().Add(ShopEntityId, new InventoryItemStackComponent(ItemId, quantity: 50));
-        var shop = new ShopComponent(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
+        var shop = new ShopComponent(acceptedItems: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
         var item = CreateItem(goldValue: 10);
 
         Assert.AreEqual(0, ShopStockPricing.ComputeBulkBuyPrice(manager, ShopEntityId, shop, item, quantity: 0));
@@ -363,7 +364,7 @@ public sealed class ShopStockPricingTests
         // Even a razor-thin spread (0.505 vs 0.495 -- the kind of near-parity a maxed-out future
         // Charisma/skill discount might approach) must never flip this into a profit -- the proof
         // never depended on the curve being continuous, and banding doesn't change that.
-        var shop = new ShopComponent(allowedTags: null, buyMultiplier: 0.505f, sellMultiplier: 0.495f);
+        var shop = new ShopComponent(acceptedItems: null, buyMultiplier: 0.505f, sellMultiplier: 0.495f);
         var item = CreateItem(goldValue: 10);
 
         var buyCost = ShopStockPricing.ComputeBulkBuyPrice(manager, ShopEntityId, shop, item, quantity: 999);
@@ -380,7 +381,7 @@ public sealed class ShopStockPricingTests
         manager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(ItemId, preferredStockLevel: 50));
         SetStock(manager, ShopEntityId, ItemId, 999);
 
-        var shop = new ShopComponent(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
+        var shop = new ShopComponent(acceptedItems: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f);
         var item = CreateItem(goldValue: 10);
 
         var buyCost = ShopStockPricing.ComputeBulkBuyPrice(manager, ShopEntityId, shop, item, quantity: 999);

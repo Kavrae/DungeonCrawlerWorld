@@ -2,6 +2,7 @@ using Engine.Math;
 using Engine.Utilities;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Actions.Definitions.DirectActions;
@@ -30,7 +31,7 @@ public static class DodgeAction
 
     public static ActionDefinition Build() => new(
         Id, "Dodge", "Dodge", "d", Color.LightGreen,
-        Tags: [Tag.Self],
+        Tags: [GameTags.TargetingSelf],
         Effects: [new ActionEffect([new DodgeActivation()])],
         Activator: new DirectAction(
             new TargetingSpec(TargetShape.SingleTarget, Range: 1, Metric: DistanceMetric.Chebyshev),

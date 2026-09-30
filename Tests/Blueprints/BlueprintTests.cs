@@ -45,6 +45,7 @@ using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
+using Game.Tags;
 using Game.World;
 
 namespace Tests.Blueprints;
@@ -155,7 +156,9 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ContainerComponent>().Has(entityId), "PotionShop must still compose in the Shop shell.");
 
         var shop = ecsContext.ComponentManager.GetPackedPool<ShopComponent>().GetReadonly(entityId);
-        CollectionAssert.AreEqual(new[] { Tag.Potion }, shop.AllowedTags?.ToArray());
+        Assert.IsNotNull(shop.AcceptedItems);
+        Assert.IsTrue(shop.AcceptedItems.Matches([GameTags.ItemConsumablePotion]));
+        Assert.IsFalse(shop.AcceptedItems.Matches([GameTags.ItemConsumableScroll]));
         Assert.AreEqual(1.10f, shop.BuyMultiplier);
         Assert.AreEqual(0.90f, shop.SellMultiplier);
 
@@ -188,7 +191,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ContainerComponent>().Has(entityId), "GeneralShop must still compose in the Shop shell.");
 
         var shop = ecsContext.ComponentManager.GetPackedPool<ShopComponent>().GetReadonly(entityId);
-        Assert.IsNull(shop.AllowedTags, "General Shop must trade any tag.");
+        Assert.IsNull(shop.AcceptedItems, "General Shop must trade any tag.");
         Assert.AreEqual(1.20f, shop.BuyMultiplier);
         Assert.AreEqual(0.80f, shop.SellMultiplier);
 

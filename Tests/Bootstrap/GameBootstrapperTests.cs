@@ -15,7 +15,7 @@ namespace Tests.Bootstrap;
 /// Tests.csproj's build-order-only references) but never directly referenced -- these tests
 /// only ever reach mod types through ModuleLoader's reflection path, the same way a real mod
 /// dropped in Mods/ would be found. The adversarial fixtures (a throwing module, a complete and an
-/// incomplete built-in replacement) live in the separate Mods.TestFixtures project rather than
+/// incomplete built-in replacement, an item with an undeclared tag) live in the separate Mods.TestFixtures project rather than
 /// inside Mods.ExampleMod itself -- Mods.ExampleMod is the plan's shippable "one trivial
 /// IModule" verification fixture, and copying it into a real game's Mods/ must not also switch
 /// off health regeneration.
@@ -176,6 +176,25 @@ public sealed class GameBootstrapperTests
             var failure = result.ModuleFailures.Single(failure => failure.Source.Contains("IncompleteReplacementCurrencyModule"));
             Assert.Contains("CurrencyComponent", failure.Exception.Message);
             Assert.IsTrue(result.EcsContext.ComponentManager.IsRegistered<CurrencyComponent>());
+        }
+        finally
+        {
+            TryDeleteDirectory(directory.FullName);
+        }
+    }
+
+    [TestMethod]
+    public void Build_ModWhoseItemUsesAnUndeclaredTag_IsExcludedNamingTheTag()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            CopyModTo(directory.FullName, "Mods.TestFixtures");
+            var result = BuildWithModsFrom(directory.FullName);
+
+            var failure = result.ModuleFailures.Single(failure => failure.Source.Contains("UndeclaredTagItemModule"));
+            Assert.Contains("TestFixtures.NeverDeclared", failure.Exception.Message);
+            Assert.IsFalse(result.Catalogs.ItemCatalog.TryGet(new Guid("e6f2a017-4b3d-4a1e-9c72-000000000005"), out _));
         }
         finally
         {

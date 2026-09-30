@@ -14,7 +14,7 @@ namespace Game.Modules.BodyPartEffects;
 /// <summary>
 /// Owns the two marker components (MovementDisabledComponent/MeleeDisabledComponent) and the
 /// system that keeps them, plus StatModifierTarget.MovementLockFrames/OutgoingDamage (the latter
-/// scoped to Tag.Melee via StatModifierComponent.ConditionTag), in sync with an entity's own body-part condition -- see
+/// scoped to GameTags.DeliveryMelee via StatModifierComponent.ConditionTag), in sync with an entity's own body-part condition -- see
 /// BodyPartEffectsSystem's own doc comment for the full design. Requires HealthModule for
 /// BodyPartStateComponent. An entity set with no Complex-health race never populates it, so
 /// BodyPartEffectsSystem's stripe set stays empty.

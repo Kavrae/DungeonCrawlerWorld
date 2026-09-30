@@ -1,4 +1,5 @@
 using Engine.Math;
+using Engine.Tags;
 using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Effects;
@@ -17,18 +18,18 @@ namespace Presentation.UI;
 /// </summary>
 public static class ActionEffectFormatting
 {
-    public static string FormatEntry(IActionEffectEntry entry) => entry switch
+    public static string FormatEntry(IActionEffectEntry entry, GameplayTagRegistry gameplayTags) => entry switch
     {
         DirectDamage damage => FormatDirectDamage(damage),
         DirectHeal heal => FormatDirectHeal(heal),
         DirectManaRestore mana => $"Restores {mana.Fraction:P0} of max mana",
         StatusEffectGrant status => $"Applies {status.StackCount} stack{(status.StackCount == 1 ? "" : "s")} of {status.Type}",
         StatusEffectImmunityGrant immunity => $"{immunity.Type} Immunity",
-        StatModifierGrant modifier when IsDamageReduction(modifier) => FormatDamageReduction(modifier),
+        StatModifierGrant modifier when IsDamageReduction(modifier) => FormatDamageReduction(modifier, gameplayTags),
         StatModifierGrant modifier => FormatStatModifierGrant(modifier),
         AuraSourceGrant aura => FormatAuraSourceGrant(aura),
         HotkeyExpansionGrant expansion => $"Unlocks {expansion.Slots} additional hotkey slot{(expansion.Slots == 1 ? "" : "s")}",
-        ChainedEffect chained => FormatChainedEffect(chained),
+        ChainedEffect chained => FormatChainedEffect(chained, gameplayTags),
         _ => entry.GetType().Name,
     };
 
@@ -46,10 +47,10 @@ public static class ActionEffectFormatting
     private static bool IsDamageReduction(StatModifierGrant modifier) =>
         modifier.Target == StatModifierTarget.IncomingDamage && modifier.Operation == StatModifierOperation.Multiplicative && modifier.Magnitude < 0;
 
-    /// <summary>ConditionTag prefixed when present (e.g. "Fire Damage Reduction : 50%") -- unscoped IncomingDamage reductions (ConditionTag null) apply to every damage source, so the tag prefix would be misleading there.</summary>
-    private static string FormatDamageReduction(StatModifierGrant modifier)
+    /// <summary>ConditionTag prefixed when present (e.g. "Fire Damage Reduction : 50%") -- unscoped IncomingDamage reductions (ConditionTag None) apply to every damage source, so the tag prefix would be misleading there.</summary>
+    private static string FormatDamageReduction(StatModifierGrant modifier, GameplayTagRegistry gameplayTags)
     {
-        var tagPrefix = modifier.ConditionTag is { } tag ? $"{tag} " : string.Empty;
+        var tagPrefix = modifier.ConditionTag.IsNone ? string.Empty : $"{gameplayTags.GetDisplayName(modifier.ConditionTag)} ";
         return $"{tagPrefix}Damage Reduction : {-modifier.Magnitude:P0}";
     }
 
@@ -66,14 +67,14 @@ public static class ActionEffectFormatting
     private static string FormatAuraSourceGrant(AuraSourceGrant aura) =>
         $"Grants a {aura.StatusEffectType} aura (radius {DistanceFalloff.MaxRadius(aura.AuraAndGlowStrength)}) -- {FormatDurationFrames(aura.DurationFrames)}";
 
-    private static string FormatChainedEffect(ChainedEffect chained)
+    private static string FormatChainedEffect(ChainedEffect chained, GameplayTagRegistry gameplayTags)
     {
         var nestedLines = new List<string>();
         foreach (var triggeredEffect in chained.TriggeredEffects)
         {
             foreach (var nestedEntry in triggeredEffect.Entries)
             {
-                nestedLines.Add(FormatEntry(nestedEntry));
+                nestedLines.Add(FormatEntry(nestedEntry, gameplayTags));
             }
         }
 

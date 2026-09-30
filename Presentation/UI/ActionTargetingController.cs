@@ -1,14 +1,12 @@
 using Engine.ECS.Systems;
 using Engine.Math;
-using Game.Modules;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Inventory;
-using Game.Modules.Mana.Components;
-using Game.Modules.ProcessingTier;
+using Game.Tags;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -116,7 +114,7 @@ public sealed class ActionTargetingController(
         _pendingDelayedActionTargetsBuffer.Clear();
         foreach (var (entityId, pending) in _localPendingDelayedActionsScratch)
         {
-            var isDodgeable = actionCatalog.TryGet(pending.ActionId, out var action) && action.Tags.Contains(Tag.Dodgeable);
+            var isDodgeable = actionCatalog.TryGet(pending.ActionId, out var action) && action.Tags.Has(GameTags.TraitDodgeable);
             _pendingDelayedActionTargetsBuffer.Add((entityId, pending.TargetTiles, isDodgeable));
         }
 
@@ -195,7 +193,7 @@ public sealed class ActionTargetingController(
     /// {action, item} is armed from MapViewState itself rather than taking either id as a
     /// parameter -- mirrors CancelArmedOrPendingAction, which already does the same.
     ///
-    /// A Tag.Self item specifically gets one more special case: clicking your own tile confirms
+    /// A GameTags.TargetingSelf item specifically gets one more special case: clicking your own tile confirms
     /// as a self-only activation (see TryActivateItemOnSelf) rather than resolving the real Burst
     /// shape centered on yourself -- otherwise a manual click on your own tile would splash onto
     /// your neighbors while double-tapping the same slot (also self-targeted) wouldn't, two
@@ -219,7 +217,7 @@ public sealed class ActionTargetingController(
             mapViewState.ArmedItemStackInstanceId is { } armedStackInstanceId &&
             inventoryView.TryGetStack(world.PlayerEntityId, armedStackInstanceId, out var armedStack) &&
             InventoryQueries.TryResolveEffectiveItem(itemCatalog, in armedStack, out var item) &&
-            item.Tags.Contains(Tag.Self))
+            item.Tags.Has(GameTags.TargetingSelf))
         {
             TryActivateItemOnSelf(world.PlayerEntityId, armedStackInstanceId);
             Disarm();
@@ -369,9 +367,9 @@ public sealed class ActionTargetingController(
     /// double-tap within DoubleTapWindowFrames skips arming entirely and immediately activates
     /// against an auto-picked target (see TryActivateWithAutoTarget); a slower re-press confirms
     /// against wherever the cursor currently is (see TryConfirmActivationAtTile), the same as a
-    /// click would -- except a Tag.Self action (Heal, Dodge) always confirms on the caster's own
+    /// click would -- except a GameTags.TargetingSelf action (Heal, Dodge) always confirms on the caster's own
     /// tile via the same key instead, regardless of where the cursor happens to be hovering (the
-    /// same "same key always means self" shortcut HandleItemSlotPress already gives a Tag.Self
+    /// same "same key always means self" shortcut HandleItemSlotPress already gives a GameTags.TargetingSelf
     /// item's double-tap; a plain re-press of a Self-shaped action's own TargetableTiles would
     /// otherwise only ever contain its own tile, so a re-press only ever confirmed by coincidence
     /// of the cursor already hovering exactly there). Cancelling an armed slot is right-click/
@@ -406,7 +404,7 @@ public sealed class ActionTargetingController(
 
         if (mapViewState.ArmedSlot == slot)
         {
-            if (actionCatalog.TryGet(actionId, out var armedAction) && armedAction.Tags.Contains(Tag.Self) &&
+            if (actionCatalog.TryGet(actionId, out var armedAction) && armedAction.Tags.Has(GameTags.TargetingSelf) &&
                 transformView.TryGetTransform(world.PlayerEntityId, out var selfTransform))
             {
                 TryConfirmActivationAtTile(selfTransform.Position);
@@ -430,12 +428,12 @@ public sealed class ActionTargetingController(
     /// InventoryItemStackComponent's "no instance means empty" convention, the same one
     /// InventoryActions.ConsumeItem relies on), is inert, the same no-op an unbound slot already
     /// is -- HotbarContent greys it out the same way, so "can't be armed" and "looks unusable"
-    /// stay in sync. Any item tagged Tag.Self (Health/Mana/Hotkey Expansion Potion today) has its
+    /// stay in sync. Any item tagged GameTags.TargetingSelf (Health/Mana/Hotkey Expansion Potion today) has its
     /// double-tap always activate on the caster's own tile (TryActivateItemOnSelf), skipping
     /// arm/target entirely -- "double-tap always uses it on the user," regardless of what's
     /// currently armed. Keyed off the tag rather than any particular IActionActivator kind, so a
     /// future non-Potion self-only item (e.g. a bandage) gets the same shortcut just by carrying
-    /// Tag.Self. A non-double-tap re-press of an already-armed slot confirms against the cursor
+    /// GameTags.TargetingSelf. A non-double-tap re-press of an already-armed slot confirms against the cursor
     /// instead (see TryConfirmActivationAtTile) -- same rhythm as HandleActionSlotPress,
     /// cancelling is right-click/Escape's job now.
     /// </summary>
@@ -448,7 +446,7 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        if (isDoubleTap && item.Tags.Contains(Tag.Self))
+        if (isDoubleTap && item.Tags.Has(GameTags.TargetingSelf))
         {
             TryActivateItemOnSelf(world.PlayerEntityId, stackInstanceId);
 
@@ -640,7 +638,7 @@ public sealed class ActionTargetingController(
     /// (for double-tap's candidate pool), so the two never drift out of sync with each other. Also
     /// what makes a manual click on the caster's own tile resolve at all for an Adjacent | Self item
     /// (e.g. Scroll of Healing) -- TargetableTiles has to actually contain that tile before
-    /// TryConfirmActivationAtTile's Tag.Self special case (or the general resolve path) is ever
+    /// TryConfirmActivationAtTile's GameTags.TargetingSelf special case (or the general resolve path) is ever
     /// reached.
     /// </summary>
     private void ComputeTargetableTiles(Vector3Int attackerPosition, Vector2Byte attackerSize, TargetingSpec targeting, List<Vector3Int> buffer)
@@ -668,7 +666,7 @@ public sealed class ActionTargetingController(
 
     /// <summary>
     /// Resolves and queues a full action activation with no manual click-confirm at all -- the
-    /// double-tap path. A Tag.Self action (Heal, Dodge) always confirms on the caster's own tile,
+    /// double-tap path. A GameTags.TargetingSelf action (Heal, Dodge) always confirms on the caster's own tile,
     /// full stop -- same rule HandleActionSlotPress's single-press re-confirm already gives them,
     /// applied here too. This matters for an action like Dodge whose Shape is SingleTarget (not
     /// cursor-independent): without this check it fell through to the occupied-tile hunt below,
@@ -701,7 +699,7 @@ public sealed class ActionTargetingController(
         var bounds = world.Map.Bounds;
         var targeting = action.Activator.Targeting;
 
-        if (action.Tags.Contains(Tag.Self))
+        if (action.Tags.Has(GameTags.TargetingSelf))
         {
             _candidateTilesBuffer.Clear();
             _candidateTilesBuffer.Add(attackerPosition);

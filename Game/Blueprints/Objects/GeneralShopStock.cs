@@ -45,7 +45,7 @@ public static class GeneralShopStock
         var componentManager = context.ComponentManager;
         var entityId = context.EntityId;
 
-        componentManager.Merge(entityId, new ShopComponent(allowedTags: null, BuyMultiplier, SellMultiplier));
+        componentManager.Merge(entityId, new ShopComponent(acceptedItems: null, BuyMultiplier, SellMultiplier));
         ShopStock.GrantRandomStock(componentManager, entityId, context.Rolls, Stock);
     }
 }

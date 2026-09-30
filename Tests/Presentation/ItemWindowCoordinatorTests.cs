@@ -13,6 +13,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Lootboxes;
 using Game.Modules.Shops.Components;
 using Game.Spawning;
+using Game.Tags;
 using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.Input;
@@ -45,7 +46,7 @@ public sealed class ItemWindowCoordinatorTests
     {
         var itemCatalog = new ItemCatalog();
         itemCatalog.Register(new ItemDefinition(
-            PotionItemId, "Test Potion", null, "p", Color.Green, Tags: [Tag.Potion, Tag.Self],
+            PotionItemId, "Test Potion", null, "p", Color.Green, Tags: [GameTags.ItemConsumablePotion, GameTags.TargetingSelf],
             Effects: [new ActionEffect([new DirectHeal(0.5f)])],
             Activator: new PotionActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
@@ -55,7 +56,7 @@ public sealed class ItemWindowCoordinatorTests
         var mapViewState = mapHarness.MapViewState;
         mapViewState.ReservedEntityIds = new ReservedEntityIds(TradeOfferPlayerEntityId, TradeOfferShopEntityId);
 
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         foreach (var entityId in new[] { PlayerEntityId, ShopEntityId, TradeOfferPlayerEntityId, TradeOfferShopEntityId })
         {
             componentManager.Merge(entityId, new CurrencyComponent(gold: 0, credits: 0));
@@ -98,7 +99,7 @@ public sealed class ItemWindowCoordinatorTests
         elementPool.RegisterFactory<ItemIconElement>(() => new ItemIconElement(fontService, elementPool, labelRenderer, spriteSheetService, spriteRenderer));
         elementPool.RegisterFactory<TargetShapePreviewElement>(() => new TargetShapePreviewElement(fontService, elementPool, labelRenderer));
         elementPool.RegisterFactory<EntityIconElement>(() => new EntityIconElement(fontService, elementPool, labelRenderer, spriteSheetService, spriteRenderer, mapView));
-        elementPool.RegisterFactory<ItemDetailsWindow>(() => new ItemDetailsWindow(fontService, elementPool, labelRenderer, new ActionCatalog()));
+        elementPool.RegisterFactory<ItemDetailsWindow>(() => new ItemDetailsWindow(fontService, elementPool, labelRenderer, new ActionCatalog(), TestGameplayTags.BuiltIn));
         elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(fontService, elementPool, labelRenderer, inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
         elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(fontService, elementPool, labelRenderer, inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming, healthView: healthView));
         elementPool.RegisterFactory<ShopWindow>(() => new ShopWindow(fontService, elementPool, labelRenderer, inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming));

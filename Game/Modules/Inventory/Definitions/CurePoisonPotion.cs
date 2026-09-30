@@ -4,6 +4,7 @@ using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Inventory.Definitions;
@@ -19,7 +20,7 @@ public static class CurePoisonPotion
 
     public static ItemDefinition Build() => new(
         Id, "Cure Poison Potion", "HealthPotion", "c", Color.LimeGreen,
-        Tags: [Tag.Potion, Tag.Consumable, Tag.Healing, Tag.Self],
+        Tags: [GameTags.EffectHealing, GameTags.TargetingSelf],
         Effects: [new ActionEffect([
             new StatusEffectRemoval(StatusEffectType.Poison),
             new StatusEffectImmunityGrant(StatusEffectType.Poison, ImmunityDurationFrames),

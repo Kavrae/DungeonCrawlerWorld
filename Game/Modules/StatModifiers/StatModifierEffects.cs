@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Tags;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
 
@@ -18,7 +19,7 @@ public static class StatModifierEffects
         float magnitude,
         uint expiresAtFrame,
         ActionSource source,
-        Tag? conditionTag = null) =>
+        GameplayTag conditionTag = default) =>
         componentManager.GetMultiPool<StatModifierComponent>().Add(entityId, new StatModifierComponent(
             target, operation, polarity, canModify, magnitude, expiresAtFrame, source, conditionTag));
 }

@@ -1,5 +1,6 @@
 using Engine.Modules;
 using Game.Modules.Inventory;
+using Game.Tags;
 
 namespace Game.Modules.Lootboxes;
 
@@ -59,7 +60,7 @@ public sealed class LootboxCatalog(ItemCatalog itemCatalog) : Catalog<LootboxTyp
             type.SpriteName ?? DefaultSpriteName,
             type.Glyph ?? DefaultGlyph,
             LootboxRarityColors.For(kind.Rarity),
-            Tags: [Tag.Lootbox],
+            Tags: [GameTags.ItemLootbox],
             Effects: [],
             Description: $"A {kind.Rarity} {type.Name} loot box. Opening any loot box opens every loot box you're holding.",
             Summary: "Open to receive its rewards.",

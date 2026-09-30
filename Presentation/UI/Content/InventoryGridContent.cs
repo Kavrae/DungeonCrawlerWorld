@@ -1,9 +1,9 @@
 using Engine.ECS.Systems;
-using Game.Modules;
-
+using Engine.Tags;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops;
+using Game.Tags;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -16,7 +16,7 @@ namespace Presentation.UI.Content;
 
 /// <summary>
 /// Grid of item-stack icons for one entity's inventory, optionally filtered to stacks whose item
-/// carries filterTag (null shows every stack -- the "All" tab) -- one InventoryItemStackCell per
+/// has filterTag (GameplayTag.None shows every stack -- the "All" tab) -- one InventoryItemStackCell per
 /// stack, no empty filler cells, wraps to hostWindow's width and scrolls vertically without limit
 /// (the host tab body window already has CanUserScrollVertical -- see TabbedContent). Sorted
 /// alphabetically by item name by default (SortOrder), further narrowed by NameFilter (a
@@ -38,7 +38,7 @@ public sealed class InventoryGridContent(
     ElementPoolService elementPoolService,
     ContextMenuController contextMenuController,
     int entityId,
-    Tag? filterTag,
+    GameplayTag filterTag,
     TooltipController tooltipController,
     Func<int?> getSecondaryTargetEntityId,
     MapViewState mapViewState,
@@ -740,7 +740,7 @@ public sealed class InventoryGridContent(
     private bool IsPlayerLootbox(InventoryItemStackCell cell) =>
         cell.EntityId == world.PlayerEntityId &&
         _itemCatalog.TryGet(cell.ItemDefinitionId, out var definition) &&
-        definition.Tags.Contains(Tag.Lootbox);
+        definition.Tags.Has(GameTags.ItemLootbox);
 
     /// <summary>Mirrors MapWindow's own "Inspect" context-menu option, the existing precedent for gating a UI action on the shared per-entity action lock (ActionLockGate.IsBlocked).</summary>
     private bool IsPlayerActionLocked() => _actionStateView.IsActionLocked(world.PlayerEntityId, simulationClock.CurrentFrame);
@@ -938,7 +938,7 @@ public sealed class InventoryGridContent(
                 continue;
             }
 
-            if (filterTag is { } tag && !definition.Tags.Contains(tag))
+            if (!filterTag.IsNone && !definition.Tags.Has(filterTag))
             {
                 continue;
             }

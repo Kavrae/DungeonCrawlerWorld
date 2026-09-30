@@ -19,9 +19,9 @@ namespace Game.Modules.Shops;
 /// </summary>
 public static class ShopActions
 {
-    /// <summary>AllowedTags null means the shop trades any item (General Shop); otherwise the item must carry at least one matching tag (Potion Shop). An item that can't be traded at all (ItemDefinition.CanTrade) is never tradeable with any shop.</summary>
+    /// <summary>AcceptedItems null means the shop trades any item (General Shop); otherwise the item's tags must match it (Potion Shop). An item that can't be traded at all (ItemDefinition.CanTrade) is never tradeable with any shop.</summary>
     public static bool CanTrade(ShopComponent shop, ItemDefinition item) =>
-        item.CanTrade && (shop.AllowedTags is null || item.Tags.Any(shop.AllowedTags.Contains));
+        item.CanTrade && (shop.AcceptedItems?.Matches(item.Tags) ?? true);
 
     /// <summary>The flat, stock-*un*aware base price: GoldValue marked up by the shop's BuyMultiplier, no ShopStockPricing curve applied. What a trade actually charges is ShopStockPricing.ComputeBulkBuyPrice below -- this stays as the simple "Normal band" reference value.</summary>
     public static int ComputeBuyPrice(ShopComponent shop, ItemDefinition item) => (int)MathF.Round(item.GoldValue * shop.BuyMultiplier);
@@ -34,7 +34,7 @@ public static class ShopActions
     /// ComputeBulkBuyPrice's total Gold (per-unit "bracket" pricing off the shop's own current
     /// stock of the item, not a flat price times quantity).
     /// Fails with no state changed if the shop entity has no ShopComponent, the stack isn't found
-    /// on the shop, the item's tags don't match the shop's AllowedTags, the player has no room for
+    /// on the shop, the item's tags don't match the shop's AcceptedItems, the player has no room for
     /// a new stack, or the player can't afford it. The currency transfer commits before the item
     /// transfer; if the item transfer still fails afterward (defense in depth -- shouldn't happen
     /// given the capacity check above), the currency is rolled back rather than leaving Gold moved
@@ -89,7 +89,7 @@ public static class ShopActions
     /// Player sells one exact stack out of their own inventory to the shop for ShopStockPricing.
     /// ComputeBulkSellPrice's total Gold. Fails with no state changed if the shop entity has no
     /// ShopComponent, the stack isn't found on the player, the item's tags don't match the shop's
-    /// AllowedTags, the shop is already at its ItemDefinition.MaximumShopStock cap for this item (a
+    /// AcceptedItems, the shop is already at its ItemDefinition.MaximumShopStock cap for this item (a
     /// hard sell-cap, not just a price floor), the shop has
     /// no room for a new stack, or the shop can't afford it. Same commit-then-verify-then-rollback-
     /// on-failure shape as TryBuyFromShop, roles reversed.

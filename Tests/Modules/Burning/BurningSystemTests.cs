@@ -10,6 +10,7 @@ using Game.Modules.Burning.Systems;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Tags;
 using Game.World;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
@@ -115,7 +116,7 @@ public sealed class BurningSystemTests
         timers.Add(0, new BurningTimerComponent(nextTickFrame: 1, stackCount: 10, ActionSource.Admin));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin, Tag.Fire));
+            canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin, GameTags.DamageFire));
         var system = CreateSystem(timers, health, statModifiers: statModifiers);
 
         system.Update(Frame(1), 0);

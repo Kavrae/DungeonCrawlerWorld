@@ -1,6 +1,6 @@
-using Engine.ECS.Systems;
+﻿using Engine.ECS.Systems;
 using Game.Views;
-﻿using Engine.ECS.Components;
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
@@ -2493,7 +2493,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, resolvedOnItemSelected, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
+            window.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, entityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, static () => null, mapViewState, resolvedOnItemSelected, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
             window.Initialize();
             return window;
         }
@@ -2599,8 +2599,8 @@ public sealed class UiInputControllerTests
     /// TryStartContentDrag (refuses to even pick up an Ineligible cell) and ResolveContentDrag
     /// (routes through ShopActions.TrySellToShop/TryBuyFromShop instead of a plain transfer).
     /// mapViewState.OpenShopEntityId is set to shopEntityId, mirroring what ShopWindowController.
-    /// OpenShop does for real. potionItemId carries Tag.Potion (tradeable with an allowedTags:
-    /// [Tag.Potion] shop); toolItemId does not (always Ineligible against that same shop).
+    /// OpenShop does for real. potionItemId carries GameTags.ItemConsumablePotion (tradeable with an allowedTags:
+    /// [GameTags.ItemConsumablePotion] shop); toolItemId does not (always Ineligible against that same shop).
     /// </summary>
     private static (Window PlayerGridWindow, Window ShopGridWindow, ComponentManager ComponentManager, MapViewState MapViewState, ItemCatalog ItemCatalog, Guid PotionItemId, Guid ToolItemId, int PlayerEntityId, int ShopEntityId) BuildShopDragHarness()
     {
@@ -2612,12 +2612,12 @@ public sealed class UiInputControllerTests
         var potionItemId = Guid.NewGuid();
         var toolItemId = Guid.NewGuid();
         var itemCatalog = new ItemCatalog();
-        itemCatalog.Register(new ItemDefinition(potionItemId, "Test Potion", null, "p", Color.White, Tags: [Game.Modules.Tag.Potion], Effects: [], GoldValue: 10));
-        itemCatalog.Register(new ItemDefinition(toolItemId, "Test Tool", null, "t", Color.White, Tags: [Game.Modules.Tag.Tool], Effects: [], GoldValue: 10));
+        itemCatalog.Register(new ItemDefinition(potionItemId, "Test Potion", null, "p", Color.White, Tags: [Game.Tags.GameTags.ItemConsumablePotion], Effects: [], GoldValue: 10));
+        itemCatalog.Register(new ItemDefinition(toolItemId, "Test Tool", null, "t", Color.White, Tags: [], Effects: [], GoldValue: 10));
         InventoryActions.AddItem(componentManager, playerEntityId, potionItemId, quantity: 1);
         InventoryActions.AddItem(componentManager, playerEntityId, toolItemId, quantity: 1);
 
-        componentManager.Merge(shopEntityId, new Game.Modules.Shops.Components.ShopComponent(allowedTags: [Game.Modules.Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(shopEntityId, new Game.Modules.Shops.Components.ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([Game.Tags.GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         // PreferredStockLevel 0 keeps a single-unit sale starting from the shop's own 0 stock inside
         // ShopStockPricing's Normal band (see its own doc comment on the preferredStockLevel-0 edge
         // case) -- otherwise the default fallback preferred level would read this as Understocked
@@ -2649,7 +2649,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
+            window.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, entityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
             window.Initialize();
             return window;
         }
@@ -2760,12 +2760,12 @@ public sealed class UiInputControllerTests
 
         var potionItemId = Guid.NewGuid();
         var itemCatalog = new ItemCatalog();
-        itemCatalog.Register(new ItemDefinition(potionItemId, "Test Potion", null, "p", Color.White, Tags: [Game.Modules.Tag.Potion], Effects: [], GoldValue: 10));
+        itemCatalog.Register(new ItemDefinition(potionItemId, "Test Potion", null, "p", Color.White, Tags: [Game.Tags.GameTags.ItemConsumablePotion], Effects: [], GoldValue: 10));
 
         InventoryActions.AddItem(componentManager, tradePlayerEntityId, potionItemId, quantity: 1);
         InventoryActions.AddItem(componentManager, tradeShopEntityId, potionItemId, quantity: 1);
 
-        componentManager.Merge(shopEntityId, new Game.Modules.Shops.Components.ShopComponent(allowedTags: [Game.Modules.Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(shopEntityId, new Game.Modules.Shops.Components.ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([Game.Tags.GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.GetMultiPool<Game.Modules.Shops.Components.ShopStockPreferenceComponent>().Add(shopEntityId, new Game.Modules.Shops.Components.ShopStockPreferenceComponent(potionItemId, preferredStockLevel: 0));
         componentManager.Merge(shopEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 1000, credits: 0));
         componentManager.Merge(playerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 1000, credits: 0));
@@ -2797,7 +2797,7 @@ public sealed class UiInputControllerTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, entityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, new SimulationClock(), tradeGridIsShopSide));
+            window.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, entityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, new SimulationClock(), tradeGridIsShopSide));
             window.Initialize();
             return window;
         }
@@ -3088,7 +3088,7 @@ public sealed class UiInputControllerTests
 
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20));
 
-        componentManager.Merge(shopEntityId, new Game.Modules.Shops.Components.ShopComponent(allowedTags: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(shopEntityId, new Game.Modules.Shops.Components.ShopComponent(acceptedItems: null, buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(playerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 0, credits: 0));
         componentManager.Merge(shopEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 0, credits: 0));
         componentManager.Merge(tradePlayerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 0, credits: 0));
@@ -3315,7 +3315,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        sourceGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, sourceEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
+        sourceGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, sourceEntityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
         sourceGridWindow.Initialize();
         var cell = sourceGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
 

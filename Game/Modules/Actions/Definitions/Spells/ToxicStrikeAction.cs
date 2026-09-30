@@ -2,6 +2,7 @@ using Engine.Math;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Actions.Definitions.Spells;
@@ -13,7 +14,7 @@ public static class ToxicStrikeAction
 
     public static ActionDefinition Build() => new(
         Id, "Toxic Strike", null, "t", Color.Purple,
-        Tags: [Tag.Ranged, Tag.Attack, Tag.Spell],
+        Tags: [GameTags.DeliveryRanged, GameTags.ActionAttack],
         Effects: [new ActionEffect([
             new StatusEffectGrant(StatusEffectType.Poison, StackCount: 10),
             new StatusEffectGrant(StatusEffectType.Burning, StackCount: 6),

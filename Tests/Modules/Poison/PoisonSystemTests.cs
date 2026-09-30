@@ -10,6 +10,7 @@ using Game.Modules.Poison.Components;
 using Game.Modules.Poison.Systems;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Tags;
 using Game.World;
 
 namespace Tests.Modules.Poison;
@@ -205,7 +206,7 @@ public sealed class PoisonSystemTests
         timers.Add(0, new PoisonTimerComponent(1, stackCount: 10, remainingDurationTicks: 5, ActionSource.Admin));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin, Tag.Poison));
+            canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin, GameTags.DamagePoison));
         var system = TestSystems.PoisonSystem(timers, health, new EventBus(), new TestPlayerQuery(0), new MathUtility(), statModifiers);
 
         system.Update(Frame(1), 0);

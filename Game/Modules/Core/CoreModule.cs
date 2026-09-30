@@ -1,6 +1,8 @@
 using Engine.Math;
 using Engine.Modules;
+using Engine.Tags;
 using Game.Modules.Core.Components;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Core;
@@ -12,6 +14,16 @@ public sealed class CoreModule : IGameModule
     public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000001");
 
     public Guid Id => ModuleId;
+
+    /// <summary>Declares every built-in gameplay tag.</summary>
+    /// <remarks>Declared here, on a module every build has, rather than by each module that uses a tag: a tag shared between modules would otherwise make one require the other.</remarks>
+    public void DeclareTags(GameplayTagDeclarations tags)
+    {
+        foreach (var tag in GameTags.All)
+        {
+            tags.Declare(tag);
+        }
+    }
 
     /// <summary>Nothing to configure -- kept because IGameModule requires it, and because Core is still a game module by every other measure.</summary>
     public void Configure(GameModuleContext context)

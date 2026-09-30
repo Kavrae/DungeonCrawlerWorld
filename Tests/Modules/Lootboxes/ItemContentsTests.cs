@@ -1,7 +1,9 @@
 using Engine.Math;
+using Engine.Tags;
 using Game.Modules;
 using Game.Modules.Inventory;
 using Game.Modules.Lootboxes;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Tests.Modules.Lootboxes;
@@ -9,13 +11,13 @@ namespace Tests.Modules.Lootboxes;
 [TestClass]
 public sealed class ItemContentsTests
 {
-    private static ItemDefinition Item(string name, params Tag[] tags) =>
-        new(Guid.NewGuid(), name, SpriteName: null, Glyph: "?", Color.White, Tags: tags, Effects: []);
+    private static ItemDefinition Item(string name, params GameplayTag[] tags) =>
+        new(Guid.NewGuid(), name, SpriteName: null, Glyph: "?", Color.White, Tags: GameplayTagSet.Create(tags), Effects: []);
 
     private static ItemCatalog CatalogWithPlainItemsAndABox(out ItemDefinition[] plainItems)
     {
         var itemCatalog = new ItemCatalog();
-        plainItems = [Item("Potion", Tag.Potion), Item("Scroll", Tag.Scroll), Item("Wand", Tag.Wand)];
+        plainItems = [Item("Potion", GameTags.ItemConsumablePotion), Item("Scroll", GameTags.ItemConsumableScroll), Item("Wand", GameTags.ItemWand)];
         foreach (var item in plainItems)
         {
             itemCatalog.Register(item);

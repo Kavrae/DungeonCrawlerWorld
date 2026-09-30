@@ -4,6 +4,7 @@ using Engine.Events;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Inventory;
+using Game.Tags;
 using Game.World;
 
 namespace Game.Modules.Actions;
@@ -60,14 +61,15 @@ public static class ScrollMasteryEffects
         eventBus.Publish(new ScrollMasteredEvent(entityId, spellId));
     }
 
-    /// <summary>ManaCost: 0 is a placeholder -- see MasteryThreshold's own doc comment for the same power-scaling TODO.</summary>
+    /// <summary>The spell a mastered scroll becomes: the scroll's content, with its Item tags dropped (the SpellActivator adds Action.Spell and Magic).</summary>
+    /// <remarks>ManaCost: 0 is a placeholder -- see MasteryThreshold's own doc comment for the same power-scaling TODO.</remarks>
     private static ActionDefinition SynthesizeSpellFromScroll(ItemDefinition scroll, Guid spellId) => new(
         Id: spellId,
         Name: scroll.Name,
         SpriteName: scroll.SpriteName,
         Glyph: scroll.Glyph,
         GlyphColor: scroll.GlyphColor,
-        Tags: scroll.Tags,
+        Tags: scroll.Tags.WithoutDescendantsOf(GameTags.Item),
         Effects: scroll.Effects,
         Activator: new SpellActivator(scroll.Activator!.Targeting, scroll.Activator.Timing, ManaCost: 0),
         Description: scroll.Description,

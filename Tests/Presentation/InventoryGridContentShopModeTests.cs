@@ -10,6 +10,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops;
 using Game.Modules.Shops.Components;
+using Game.Tags;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
@@ -60,13 +61,13 @@ public sealed class InventoryGridContentShopModeTests
         var itemCatalog = new ItemCatalog();
         // Activator: TestPotionActivator -- lets tests arm Item Details Comparison against this item
         // (MapViewState.CompareRequiredActivatorType) alongside shop mode, see the coexistence test below.
-        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], Activator: TestPotionActivator, GoldValue: PotionValue));
-        itemCatalog.Register(new ItemDefinition(ToolItemId, "Test Tool", null, "t", Color.White, Tags: [Tag.Tool], Effects: [], GoldValue: ToolValue));
+        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], Activator: TestPotionActivator, GoldValue: PotionValue));
+        itemCatalog.Register(new ItemDefinition(ToolItemId, "Test Tool", null, "t", Color.White, Tags: [], Effects: [], GoldValue: ToolValue));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, gridEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, gridEntityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -96,7 +97,7 @@ public sealed class InventoryGridContentShopModeTests
     {
         var (grid, hostWindow, componentManager, mapViewState) = Build(PlayerEntityId);
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 3);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -127,7 +128,7 @@ public sealed class InventoryGridContentShopModeTests
     {
         var (grid, hostWindow, componentManager, mapViewState) = Build(PlayerEntityId);
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 5); // the player's own "starting kit" stack
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -155,7 +156,7 @@ public sealed class InventoryGridContentShopModeTests
     {
         var (grid, hostWindow, componentManager, mapViewState) = Build(PlayerEntityId);
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -175,7 +176,7 @@ public sealed class InventoryGridContentShopModeTests
         var (grid, hostWindow, componentManager, mapViewState) = Build(PlayerEntityId);
         InventoryActions.AddItem(componentManager, PlayerEntityId, ToolItemId, quantity: 1);
         // Potion-only shop -- a Tool-tagged item can never be sold to it, regardless of Gold.
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -190,7 +191,7 @@ public sealed class InventoryGridContentShopModeTests
     {
         var (grid, hostWindow, componentManager, mapViewState) = Build(PlayerEntityId);
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 2);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -212,7 +213,7 @@ public sealed class InventoryGridContentShopModeTests
         var (grid, hostWindow, componentManager, mapViewState) = Build(PlayerEntityId);
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1); // shop-eligible (Potion tag, shop can afford), comparison-eligible (Activator matches).
         InventoryActions.AddItem(componentManager, PlayerEntityId, ToolItemId, quantity: 1); // shop-ineligible (wrong tag), comparison-ineligible (no Activator).
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -226,7 +227,7 @@ public sealed class InventoryGridContentShopModeTests
         Assert.IsTrue(potionCell.ShopTradeEligible, "Potion is tag-matched and affordable -- shop eligibility must still work with Compare armed.");
         Assert.AreEqual(CellCompareState.Eligible, potionCell.CompareState, "Potion's Activator matches the armed comparison type.");
 
-        Assert.IsFalse(toolCell.ShopTradeEligible, "Tool doesn't match the shop's AllowedTags.");
+        Assert.IsFalse(toolCell.ShopTradeEligible, "Tool doesn't match the shop's AcceptedItems.");
         Assert.AreEqual(CellCompareState.Ineligible, toolCell.CompareState, "Tool has no Activator at all, so it can never match the armed comparison type.");
     }
 
@@ -235,7 +236,7 @@ public sealed class InventoryGridContentShopModeTests
     {
         var (grid, hostWindow, componentManager, mapViewState) = Build(ShopEntityId);
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 5); // 5 * ceil(10*1.10)=11 => 55G, player can't afford
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 5, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -274,21 +275,21 @@ public sealed class InventoryGridContentShopModeTests
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
 
         var itemCatalog = new ItemCatalog();
-        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue));
+        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], GoldValue: PotionValue));
 
         // Everything set up BEFORE Initialize -- item already in the player's inventory, shop
         // already able to afford it, and OpenShopEntityId already pointing at it -- the exact
         // "shop window opens showing stock the player can already afford" shape, not a rebuild
         // triggered later by an Update call.
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
         var mapViewState = new MapViewState { OpenShopEntityId = ShopEntityId };
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -309,7 +310,7 @@ public sealed class InventoryGridContentShopModeTests
     {
         var (grid, hostWindow, componentManager, mapViewState) = Build(ShopEntityId);
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 1);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 100, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -326,7 +327,7 @@ public sealed class InventoryGridContentShopModeTests
         // No ShopStockPreferenceComponent recorded -- falls back to ShopStockPricing.DefaultPreferredStockLevel
         // (20), whose 5-band edges are (10, 15, 25, 30); 12 sits in the Understocked band [10, 14].
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 12);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 100, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -346,7 +347,7 @@ public sealed class InventoryGridContentShopModeTests
         var (grid, hostWindow, componentManager, mapViewState) = Build(ShopEntityId);
         // Default preferred level 20 -> edges (10, 15, 25, 30); 1 sits below the Desperate edge (10).
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 1);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 100, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -364,7 +365,7 @@ public sealed class InventoryGridContentShopModeTests
         var (grid, hostWindow, componentManager, mapViewState) = Build(ShopEntityId);
         // Default preferred level 20 -> edges (10, 15, 25, 30); 30 sits at the Overstocked band's own upper edge.
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 30);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 1000, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -383,7 +384,7 @@ public sealed class InventoryGridContentShopModeTests
         var (grid, hostWindow, componentManager, mapViewState) = Build(ShopEntityId);
         // Default preferred level 20 -> edges (10, 15, 25, 30); 999 sits well past the Flooded edge (30).
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 999);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 10000, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -401,7 +402,7 @@ public sealed class InventoryGridContentShopModeTests
         var (grid, hostWindow, componentManager, mapViewState) = Build(ShopEntityId);
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 1);
         componentManager.GetMultiPool<ShopStockPreferenceComponent>().Add(ShopEntityId, new ShopStockPreferenceComponent(PotionItemId, preferredStockLevel: 1));
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 100, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -423,7 +424,7 @@ public sealed class InventoryGridContentShopModeTests
         var (grid, hostWindow, componentManager, mapViewState) = Build(PlayerEntityId);
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 12); // shop itself is understocked (default preferred 20 -> edges 10/15/25/30)
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -445,7 +446,7 @@ public sealed class InventoryGridContentShopModeTests
         var (grid, hostWindow, componentManager, mapViewState) = Build(PlayerEntityId);
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 30); // shop itself is overstocked
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
 
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -487,13 +488,13 @@ public sealed class InventoryGridContentShopModeTests
         var mapViewState = new MapViewState();
 
         var itemCatalog = new ItemCatalog();
-        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue));
-        itemCatalog.Register(new ItemDefinition(ToolItemId, "Test Tool", null, "t", Color.White, Tags: [Tag.Tool], Effects: [], GoldValue: ToolValue));
+        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], GoldValue: PotionValue));
+        itemCatalog.Register(new ItemDefinition(ToolItemId, "Test Tool", null, "t", Color.White, Tags: [], Effects: [], GoldValue: ToolValue));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, gridEntityId, filterTag: null, tooltipController, getSecondaryTargetEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, new SimulationClock(), tradeGridIsShopSide);
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, gridEntityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, getSecondaryTargetEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, new SimulationClock(), tradeGridIsShopSide);
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -515,7 +516,7 @@ public sealed class InventoryGridContentShopModeTests
     {
         var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(PlayerEntityId, () => ShopEntityId);
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
         mapViewState.OpenShopEntityId = ShopEntityId;
         grid.Update(new GameTime());
@@ -533,7 +534,7 @@ public sealed class InventoryGridContentShopModeTests
     {
         var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(ShopEntityId, () => ShopEntityId);
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 1);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 1000, credits: 0));
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -569,7 +570,7 @@ public sealed class InventoryGridContentShopModeTests
         const int tradePlayerEntityId = 50;
         var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(PlayerEntityId, () => null);
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
         mapViewState.OpenShopEntityId = ShopEntityId;
         mapViewState.ReservedEntityIds = new ReservedEntityIds(tradePlayerEntityId, -1);
@@ -603,7 +604,7 @@ public sealed class InventoryGridContentShopModeTests
         const int tradePlayerEntityId = 50;
         var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(PlayerEntityId, () => null);
         InventoryActions.AddItem(componentManager, PlayerEntityId, PotionItemId, quantity: 1);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
         mapViewState.OpenShopEntityId = ShopEntityId;
         mapViewState.ReservedEntityIds = new ReservedEntityIds(tradePlayerEntityId, -1);
@@ -632,7 +633,7 @@ public sealed class InventoryGridContentShopModeTests
         const int tradeShopEntityId = 51;
         var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(ShopEntityId, () => null);
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 1);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 1000, credits: 0));
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -666,7 +667,7 @@ public sealed class InventoryGridContentShopModeTests
         const int tradeShopEntityId = 51;
         var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(ShopEntityId, () => ShopEntityId);
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 1);
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 0, credits: 0));
         mapViewState.OpenShopEntityId = ShopEntityId;
@@ -790,12 +791,12 @@ public sealed class InventoryGridContentShopModeTests
         var mapViewState = new MapViewState();
 
         var itemCatalog = new ItemCatalog();
-        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue));
+        itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], GoldValue: PotionValue));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, ShopEntityId, filterTag: null, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, ShopEntityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -810,7 +811,7 @@ public sealed class InventoryGridContentShopModeTests
         InventoryActions.AddItem(componentManager, ShopEntityId, PotionItemId, quantity: 5); // still physically on the shop
         InventoryActions.AddItem(componentManager, tradeShopEntityId, PotionItemId, quantity: 5); // staged in the trade window's shop-side column
 
-        componentManager.Merge(ShopEntityId, new ShopComponent(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f));
+        componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f));
         componentManager.Merge(ShopEntityId, new CurrencyComponent(gold: 0, credits: 0));
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 1000, credits: 0));
 

@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Tags;
 
 namespace Game.Modules.Lootboxes;
 
@@ -45,7 +46,7 @@ public sealed class LootboxOpener(ComponentManager componentManager, LootboxCata
         foreach (var stack in heldStacks)
         {
             if (!InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition) ||
-                !definition.Tags.Contains(Tag.Lootbox) ||
+                !definition.Tags.Has(GameTags.ItemLootbox) ||
                 !lootboxCatalog.TryGetKind(stack.ItemDefinitionId, out var kind))
             {
                 continue;

@@ -1,4 +1,5 @@
 using Engine.ECS.Systems;
+using Engine.Tags;
 using Game.World;
 
 namespace Game.Modules.StatModifiers.Components;
@@ -19,9 +20,10 @@ namespace Game.Modules.StatModifiers.Components;
 /// the field.
 ///
 /// ConditionTag gates this modifier on the current activation's own Tags (ActionEffectContext.
-/// ActivatorTags/ItemDefinition.Tags) rather than always being active -- null means unconditional
-/// (every existing modifier). See StatModifierMath.GetEffectiveValue's activeTags parameter,
-/// the single place this is consumed.
+/// ActivatorTags/ItemDefinition.Tags) rather than always being active -- GameplayTag.None means
+/// unconditional (most modifiers). Matching is parent-aware: a Damage.Fire condition applies to an
+/// activation tagged with any Damage.Fire descendant. See StatModifierMath.GetEffectiveValue's
+/// activeTags parameter, the single place this is consumed.
 /// </summary>
 /// <remarks>
 /// Not itself a timer-wheel timer: an entity's modifiers share one per-entity timer
@@ -37,7 +39,7 @@ public struct StatModifierComponent(
     float magnitude,
     uint expiresAtFrame,
     ActionSource source,
-    Tag? conditionTag = null)
+    GameplayTag conditionTag = default)
 {
     public StatModifierTarget Target { get; } = target;
     public StatModifierOperation Operation { get; } = operation;
@@ -48,7 +50,7 @@ public struct StatModifierComponent(
     /// <summary>FrameDeadline.Never means "never expires" -- StatModifierExpirySystem never schedules a modifier at this value, so an entity holding only permanent modifiers costs nothing.</summary>
     public uint ExpiresAtFrame { get; } = expiresAtFrame;
     public ActionSource Source { get; } = source;
-    public Tag? ConditionTag { get; } = conditionTag;
+    public GameplayTag ConditionTag { get; } = conditionTag;
 
-    public override readonly string ToString() => $"Target : {Target}\nSource : {Source}\nOperation : {(Operation == StatModifierOperation.Additive ? Polarity == StatModifierPolarity.Buff ? '+' : '-' : Polarity == StatModifierPolarity.Buff ? 'x' : '÷')}{Magnitude}\nCanModify : {CanModify}\nExpiresAtFrame : {(ExpiresAtFrame == FrameDeadline.Never ? "Permanent" : ExpiresAtFrame.ToString())}\nConditionTag : {(ConditionTag is { } tag ? tag.ToString() : "None")}";
+    public override readonly string ToString() => $"Target : {Target}\nSource : {Source}\nOperation : {(Operation == StatModifierOperation.Additive ? Polarity == StatModifierPolarity.Buff ? '+' : '-' : Polarity == StatModifierPolarity.Buff ? 'x' : '÷')}{Magnitude}\nCanModify : {CanModify}\nExpiresAtFrame : {(ExpiresAtFrame == FrameDeadline.Never ? "Permanent" : ExpiresAtFrame.ToString())}\nConditionTag : {ConditionTag}";
 }

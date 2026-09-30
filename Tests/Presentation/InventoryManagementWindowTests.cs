@@ -5,6 +5,7 @@ using Engine.Math;
 using Game.Modules;
 using Game.Modules.Inventory;
 using Game.Modules.Shops;
+using Game.Tags;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
@@ -36,9 +37,9 @@ public sealed class InventoryManagementWindowTests
         var secondItemId = Guid.NewGuid();
         var scrollItemId = Guid.NewGuid();
         var itemCatalog = new ItemCatalog();
-        itemCatalog.Register(new ItemDefinition(firstItemId, "Potion A", null, "a", Color.White, Tags: [Tag.Potion], Effects: []));
-        itemCatalog.Register(new ItemDefinition(secondItemId, "Potion B", null, "b", Color.White, Tags: [Tag.Potion], Effects: []));
-        itemCatalog.Register(new ItemDefinition(scrollItemId, "Scroll", null, "s", Color.White, Tags: [Tag.Scroll], Effects: []));
+        itemCatalog.Register(new ItemDefinition(firstItemId, "Potion A", null, "a", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: []));
+        itemCatalog.Register(new ItemDefinition(secondItemId, "Potion B", null, "b", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: []));
+        itemCatalog.Register(new ItemDefinition(scrollItemId, "Scroll", null, "s", Color.White, Tags: [GameTags.ItemConsumableScroll], Effects: []));
         InventoryActions.AddItem(componentManager, EntityId, firstItemId, quantity: 1);
 
         var fontService = TestFonts.Shared;
@@ -184,7 +185,7 @@ public sealed class InventoryManagementWindowTests
     {
         var (window, componentManager, _, secondItemId, _) = Build();
 
-        var tabTile = FindTabTile(window, Tag.Potion.ToString());
+        var tabTile = FindTabTile(window, TestGameplayTags.BuiltIn.GetDisplayName(GameTags.ItemConsumablePotion));
         Assert.IsNotNull(tabTile, "Expected a Potion tab to exist for the item granted in Build.");
         tabTile!.HandleClick(tabTile.ContentRectangle.Center);
 
@@ -213,8 +214,34 @@ public sealed class InventoryManagementWindowTests
         InventoryActions.AddItem(componentManager, EntityId, scrollItemId, quantity: 1);
         window.Update(new GameTime());
 
-        Assert.IsNotNull(FindTabTile(window, Tag.Potion.ToString()), "The pre-existing Potion tab should still exist.");
-        Assert.IsNotNull(FindTabTile(window, Tag.Scroll.ToString()), "A newly-represented tag should get its own tab once the tab list actually changes.");
+        Assert.IsNotNull(FindTabTile(window, TestGameplayTags.BuiltIn.GetDisplayName(GameTags.ItemConsumablePotion)), "The pre-existing Potion tab should still exist.");
+        Assert.IsNotNull(FindTabTile(window, TestGameplayTags.BuiltIn.GetDisplayName(GameTags.ItemConsumableScroll)), "A newly-represented tag should get its own tab once the tab list actually changes.");
+    }
+
+    [TestMethod]
+    public void Tabs_AreItemCategories_IncludingTheirParents()
+    {
+        var (window, componentManager, _, _, scrollItemId) = Build();
+        InventoryActions.AddItem(componentManager, EntityId, scrollItemId, quantity: 1);
+        window.Update(new GameTime());
+
+        Assert.IsNotNull(FindTabTile(window, "Consumable"), "Potions and scrolls are both Consumable.");
+        Assert.IsNotNull(FindTabTile(window, "Potion"));
+        Assert.IsNotNull(FindTabTile(window, "Scroll"));
+    }
+
+    [TestMethod]
+    public void TheConsumableTab_ShowsPotionsAndScrolls()
+    {
+        var (window, componentManager, _, _, scrollItemId) = Build();
+        InventoryActions.AddItem(componentManager, EntityId, scrollItemId, quantity: 1);
+        window.Update(new GameTime());
+
+        var consumableTab = FindTabTile(window, "Consumable")!;
+        consumableTab.HandleClick(consumableTab.ContentRectangle.Center);
+        window.Update(new GameTime());
+
+        Assert.HasCount(2, GetOrderedCells(window));
     }
 
     [TestMethod]
@@ -244,7 +271,7 @@ public sealed class InventoryManagementWindowTests
         // merged cell sorts by, not either member's Quantity or the group's oldest timestamp.
         var (window, componentManager, firstItemId, secondItemId, _) = Build();
         Thread.Sleep(5);
-        var secondItemDefinition = new ItemDefinition(secondItemId, "Potion B", null, "b", Color.White, Tags: [Tag.Potion], Effects: []);
+        var secondItemDefinition = new ItemDefinition(secondItemId, "Potion B", null, "b", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: []);
         InventoryActions.AddDivergentItem(componentManager, EntityId, secondItemDefinition with { Description = "batch 1" });
         Thread.Sleep(5);
         InventoryActions.AddDivergentItem(componentManager, EntityId, secondItemDefinition with { Description = "batch 2" });

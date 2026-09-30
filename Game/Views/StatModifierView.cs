@@ -1,6 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
-using Game.Modules;
+using Engine.Tags;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 
@@ -25,6 +25,6 @@ public sealed class StatModifierView(ComponentManager componentManager)
     public uint GetVersion(int entityId) => _statModifiers.GetEntityVersion(entityId);
 
     /// <inheritdoc cref="StatModifierMath.GetEffectiveValue"/>
-    public float GetEffectiveValue(int entityId, StatModifierTarget target, float baseValue, IReadOnlyList<Tag>? activeTags = null) =>
+    public float GetEffectiveValue(int entityId, StatModifierTarget target, float baseValue, GameplayTagSet activeTags = default) =>
         StatModifierMath.GetEffectiveValue(_statModifiers, entityId, target, baseValue, activeTags);
 }

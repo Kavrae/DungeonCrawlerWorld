@@ -1,3 +1,4 @@
+using Engine.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Actions;
@@ -14,13 +15,18 @@ namespace Game.Modules.Actions;
 /// triggered effect can reuse the same list/vocabulary without needing to fake a Targeting/Timing
 /// it doesn't have just to qualify as an activator.
 /// </summary>
+/// <remarks>
+/// Tags holds the tags a definition declares plus whatever its activator implies (see
+/// IActionActivator.ImpliedTags): ActionDefinition and ItemDefinition add those at construction. A
+/// with-expression that swaps the activator for another kind therefore keeps the old kind's implied tags.
+/// </remarks>
 public abstract record ActivatableDefinition(
     Guid Id,
     string Name,
     string? SpriteName,
     string Glyph,
     Color GlyphColor,
-    IReadOnlyList<Tag> Tags,
+    GameplayTagSet Tags,
     IReadOnlyList<ActionEffect> Effects,
     string Description = "",
     string Summary = "");

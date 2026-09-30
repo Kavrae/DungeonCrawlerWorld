@@ -338,7 +338,7 @@ public sealed class MapViewQueryTests
     {
         var fixture = new Fixture();
         fixture.Components.Merge(5, new DisplayTextComponent("Potion Shop", ""));
-        fixture.Components.Merge(5, new ShopComponent(allowedTags: null, buyMultiplier: 1f, sellMultiplier: 1f));
+        fixture.Components.Merge(5, new ShopComponent(acceptedItems: null, buyMultiplier: 1f, sellMultiplier: 1f));
         fixture.Components.Merge(5, new ContainerComponent());
         fixture.Components.Merge(5, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
 

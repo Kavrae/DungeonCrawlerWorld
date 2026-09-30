@@ -1,24 +1,37 @@
 using Engine.ECS.Components.Stores;
+using Engine.Tags;
 using Game.Modules.AbilityScores.Components;
+using Game.Tags;
 
 namespace Game.Modules.AbilityScores;
 
 /// <summary>
-/// Sums the caster's own Total for every ability score whose matching Tag the given tag list
+/// Sums the caster's own Total for every ability score whose Stats.AbilityScore tag the given tag list
 /// carries -- generic by design, not specific to any one activator: an ability tagged
-/// Tag.Strength and a future damaging consumable tagged the same way both get the identical
-/// bonus through this one path. Relocated from AbilityEffectResolver's private
+/// GameTags.StatsAbilityScoreStrength and a future damaging consumable tagged the same way both get the
+/// identical bonus through this one path. Relocated from AbilityEffectResolver's private
 /// ComputeAbilityScoreBonus/MapTagToAbilityScore, now usable by any DirectDamage regardless
 /// of which activator kind carries it.
 /// </summary>
 public static class AbilityScoreTagBonus
 {
-    public static ushort Compute(int sourceEntityId, IReadOnlyList<Tag> tags, PackedComponentPool<AbilityScoresComponent> abilityScores)
+    private static readonly (GameplayTag Tag, AbilityScoreType ScoreType)[] AbilityScoreTagScores =
+    [
+        (GameTags.StatsAbilityScoreStrength, AbilityScoreType.Strength),
+        (GameTags.StatsAbilityScoreIntelligence, AbilityScoreType.Intelligence),
+        (GameTags.StatsAbilityScoreConstitution, AbilityScoreType.Constitution),
+        (GameTags.StatsAbilityScoreDexterity, AbilityScoreType.Dexterity),
+        (GameTags.StatsAbilityScoreCharisma, AbilityScoreType.Charisma),
+        (GameTags.StatsAbilityScoreLuck, AbilityScoreType.Luck),
+        (GameTags.StatsAbilityScoreWisdom, AbilityScoreType.Wisdom),
+    ];
+
+    public static ushort Compute(int sourceEntityId, GameplayTagSet tags, PackedComponentPool<AbilityScoresComponent> abilityScores)
     {
         ushort bonus = 0;
         foreach (var tag in tags)
         {
-            if (MapTagToAbilityScore(tag) is { } scoreType &&
+            if (TryMapTagToAbilityScore(tag, out var scoreType) &&
                 AbilityScoreQueries.TryGetComponent(abilityScores, sourceEntityId, scoreType, out var score))
             {
                 bonus += score.Total;
@@ -28,15 +41,21 @@ public static class AbilityScoreTagBonus
         return bonus;
     }
 
-    private static AbilityScoreType? MapTagToAbilityScore(Tag tag) => tag switch
+    private static bool TryMapTagToAbilityScore(GameplayTag tag, out AbilityScoreType scoreType)
     {
-        Tag.Strength => AbilityScoreType.Strength,
-        Tag.Intelligence => AbilityScoreType.Intelligence,
-        Tag.Constitution => AbilityScoreType.Constitution,
-        Tag.Dexterity => AbilityScoreType.Dexterity,
-        Tag.Charisma => AbilityScoreType.Charisma,
-        Tag.Luck => AbilityScoreType.Luck,
-        Tag.Wisdom => AbilityScoreType.Wisdom,
-        _ => null,
-    };
+        if (tag.IsSelfOrDescendantOf(GameTags.StatsAbilityScore))
+        {
+            foreach (var (abilityScoreTag, abilityScoreType) in AbilityScoreTagScores)
+            {
+                if (tag == abilityScoreTag)
+                {
+                    scoreType = abilityScoreType;
+                    return true;
+                }
+            }
+        }
+
+        scoreType = default;
+        return false;
+    }
 }

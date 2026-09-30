@@ -54,7 +54,7 @@ public sealed class HealthWindowControllerTests
 
         var itemCatalog = new ItemCatalog();
 
-        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, labelRenderer, new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), new StatModifierView(componentManager), new ActionStateView(componentManager, localTierRoster: null), BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog, simulationClock: new SimulationClock()));
+        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, labelRenderer, new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), new StatModifierView(componentManager), new ActionStateView(componentManager, localTierRoster: null), BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog, TestGameplayTags.BuiltIn, simulationClock: new SimulationClock()));
         pool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, pool, labelRenderer));
         pool.RegisterFactory<FractionBarElement>(() => new FractionBarElement(fontService, pool, labelRenderer));
 

@@ -1,4 +1,6 @@
 using Engine.Math;
+using Engine.Tags;
+using Game.Tags;
 
 namespace Game.Modules.Actions.Activators;
 
@@ -9,6 +11,10 @@ namespace Game.Modules.Actions.Activators;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed record SpellActivator(TargetingSpec Targeting, ActionTiming Timing, ushort ManaCost = 0) : IActionActivator
 {
+    private static readonly GameplayTagSet SpellImpliedTags = [GameTags.ActionSpell, GameTags.Magic];
+
+    public GameplayTagSet ImpliedTags => SpellImpliedTags;
+
     /// <summary>Returns activator's ManaCost if it's a SpellActivator, 0 otherwise -- the single place every "is this affordable" check reads mana cost from, so a DirectAction/PotionActivator never needs its own always-zero stand-in field.</summary>
     public static ushort ManaCostOf(IActionActivator activator) => activator is SpellActivator spell ? spell.ManaCost : (ushort)0;
 }

@@ -1,4 +1,6 @@
 using Engine.Math;
+using Engine.Tags;
+using Game.Tags;
 
 namespace Game.Modules.Actions.Activators;
 
@@ -7,4 +9,9 @@ namespace Game.Modules.Actions.Activators;
 /// <param name="Timing">The timing specification for the scroll.</param>
 /// <param name="SpellId">The ID of the spell this scroll represents.</param>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed record ScrollActivator(TargetingSpec Targeting, ActionTiming Timing, Guid SpellId) : IActionActivator;
+public sealed record ScrollActivator(TargetingSpec Targeting, ActionTiming Timing, Guid SpellId) : IActionActivator
+{
+    private static readonly GameplayTagSet ScrollImpliedTags = [GameTags.ItemConsumableScroll, GameTags.Magic];
+
+    public GameplayTagSet ImpliedTags => ScrollImpliedTags;
+}

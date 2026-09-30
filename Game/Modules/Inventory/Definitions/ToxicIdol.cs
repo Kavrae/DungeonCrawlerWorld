@@ -3,6 +3,7 @@ using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Inventory.Definitions;
@@ -25,7 +26,7 @@ public static class ToxicIdol
 
     public static ItemDefinition Build() => new(
         Id, "Toxic Idol", "HealthPotion", "i", Color.DarkGreen,
-        Tags: [Tag.Potion, Tag.Consumable, Tag.Self],
+        Tags: [GameTags.TargetingSelf],
         Effects: [new ActionEffect([new AuraSourceGrant(StatusEffectType.Poison, AuraAndGlowStrength, Color.DarkGreen)])],
         Description: "A squat stone idol weeping a slow green ichor. Holding it active keeps you wreathed in a spreading toxic cloud -- useful for softening a crowd, less so for standing still in one.",
         Summary: "Toggles a Poison aura (range 4) around you.",

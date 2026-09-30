@@ -3,6 +3,7 @@ using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Inventory.Definitions;
@@ -13,7 +14,7 @@ public static class ToxicPotion
 
     public static ItemDefinition Build() => new(
         Id, "Toxic Flask", "HealthPotion", "x", Color.Purple,
-        Tags: [Tag.Potion, Tag.Consumable],
+        Tags: [],
         Effects: [new ActionEffect([
             new StatusEffectGrant(StatusEffectType.Poison, StackCount: 5),
             new StatusEffectGrant(StatusEffectType.Burning, StackCount: 3),

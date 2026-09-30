@@ -5,6 +5,7 @@ using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
 using Engine.Settings;
+using Engine.Tags;
 using Game.Modules;
 using Game.Modules.Core.Components;
 using Game.Modules.Movement.Components;
@@ -13,6 +14,7 @@ using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffectAura;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Spawning;
+using Game.Tags;
 using Game.Terrain;
 using Game.World;
 
@@ -89,7 +91,7 @@ public static class GameBuildPass
         ecsContext.Gauges.Register("ProcessingTier", "PendingTransitionNeighborhoods", GaugeKind.Level, () => tierResolver.Transitions.PendingNeighborhoodCount);
     }
 
-    /// <summary>Runs every phase of modules, and only those, over map: registers their registeredComponents, builds the World and the gameModuleContext from them, configures the modules, resolves the blueprint definitions they registered, and registers their systems.</summary>
+    /// <summary>Runs every phase of modules, and only those, over map: declares their gameplay tags, registers their registeredComponents, builds the World and the gameModuleContext from them, configures the modules, resolves the blueprint definitions they registered, checks their content's tags are declared, and registers their systems.</summary>
     /// <remarks>The module build alone, with none of Run's game wiring -- for a module set that isn't a whole game (a test of a few modules). It must still contain every one of GameModuleContext.FoundationModuleIds.</remarks>
     /// <exception cref="InvalidOperationException">modules lacks a foundation module, or fails EcsBuilder's own checks.</exception>
     public static GameModuleBuild BuildModules(
@@ -102,6 +104,7 @@ public static class GameBuildPass
         UniqueNumberAllocator? crawlerNumbers = null,
         ulong runtimeSpawnSeed = 0)
     {
+        var gameplayTags = GameplayTagRegistry.Declare(modules);
         var sortedModules = EcsBuilder.Begin(modules, settings, initialEntityCapacity, initialComponentCapacity, new EventBus());
         var registeredComponents = sortedModules.RegisterComponents();
 
@@ -115,7 +118,7 @@ public static class GameBuildPass
             registeredComponents.EventBus,
             registeredComponents.EntityManager.Keys,
             new TerrainRegistry());
-        var gameModuleContext = new GameModuleContext(world, componentManager, registeredComponents.EntityManager, registeredComponents.EventBus, settings, mathUtility, crawlerNumbers, runtimeSpawnSeed);
+        var gameModuleContext = new GameModuleContext(world, componentManager, registeredComponents.EntityManager, registeredComponents.EventBus, settings, gameplayTags, mathUtility, crawlerNumbers, runtimeSpawnSeed);
 
         var configuredModules = registeredComponents.Configure(gameModuleContext);
 
@@ -124,6 +127,8 @@ public static class GameBuildPass
         {
             gameModuleContext.Definitions.ResolveAll();
         }
+
+        ContentTagValidation.EnsureDeclared(gameModuleContext);
 
         var registeredBehavior = configuredModules.RegisterBehavior();
         var ecsContext = registeredBehavior.Complete();

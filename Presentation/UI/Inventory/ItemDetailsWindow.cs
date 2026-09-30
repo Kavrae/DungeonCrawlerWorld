@@ -1,4 +1,5 @@
 using Engine.Math;
+using Engine.Tags;
 using FontStashSharp;
 using Game.Modules.Actions;
 using Game.Modules.Inventory;
@@ -51,7 +52,8 @@ public sealed class ItemDetailsWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
-    ActionCatalog actionCatalog)
+    ActionCatalog actionCatalog,
+    GameplayTagRegistry gameplayTags)
     : Window(fontService, elementPoolService, labelRenderer)
 {
     /// <summary>The stack id Configure is given for an item shown from its definition alone (a loot box reward whose stack is gone) -- there's no stack to compare, so Compare does nothing.</summary>
@@ -174,7 +176,7 @@ public sealed class ItemDetailsWindow(
         _otherItemsStats.Clear();
         foreach (var other in _comparedAgainst)
         {
-            _otherItemsStats.Add(ItemComparisonStatExtraction.Extract(other, actionCatalog));
+            _otherItemsStats.Add(ItemComparisonStatExtraction.Extract(other, actionCatalog, gameplayTags));
         }
 
         // _contentWidth is the target OUTER width this window should end up matching (see this
@@ -204,7 +206,18 @@ public sealed class ItemDetailsWindow(
         BuildValueRow(_definition.GoldValue, width);
 
         BuildDivider(width);
-        BuildWrappingTextLine(width, string.Join(", ", _definition.Tags));
+        BuildWrappingTextLine(width, FormatTagDisplayNames(_definition.Tags));
+    }
+
+    private string FormatTagDisplayNames(GameplayTagSet tags)
+    {
+        var displayNames = new List<string>(tags.Count);
+        foreach (var tag in tags)
+        {
+            displayNames.Add(gameplayTags.GetDisplayName(tag));
+        }
+
+        return string.Join(", ", displayNames);
     }
 
     /// <summary>Item's base Gold worth (see ItemDefinition.GoldValue's own doc comment) -- same icon+text row shape BuildNameRow uses, but with a fixed RowHeight text line (no doubled name font) and the Currency-Gold sprite/glyph instead of the item's own.</summary>
@@ -293,7 +306,7 @@ public sealed class ItemDetailsWindow(
 
     private void BuildEffectsSection(ItemDefinition definition, float width)
     {
-        var stats = ItemComparisonStatExtraction.ExtractEffectStats(definition);
+        var stats = ItemComparisonStatExtraction.ExtractEffectStats(definition, gameplayTags);
         foreach (var stat in stats)
         {
             BuildFixedTextLine(width, stat.DisplayText, ResolveLineColor(stat));

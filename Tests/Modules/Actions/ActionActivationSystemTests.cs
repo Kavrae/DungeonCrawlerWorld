@@ -1,3 +1,6 @@
+using Game.Modules.Actions.Definitions.DirectActions;
+using Engine.Tags;
+using Game.Tags;
 using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
@@ -481,9 +484,16 @@ public sealed class ActionActivationSystemTests
         Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId));
     }
 
-    /// <summary>BodyPartEffectsSystem's own hard block (every Arm/Hand simultaneously disabled) -- a Tag.Melee action must be refused outright, distinct from every other gate above which all use the shared ActionLock/cooldown/mana machinery.</summary>
+    /// <summary>BodyPartEffectsSystem's own hard block (every Arm/Hand simultaneously disabled) -- a GameTags.DeliveryMelee action must be refused outright, distinct from every other gate above which all use the shared ActionLock/cooldown/mana machinery.</summary>
     [TestMethod]
-    public void Immediate_MeleeTaggedAction_MeleeDisabled_DoesNothingButStillConsumesRequest()
+    public void Immediate_MeleeTaggedAction_MeleeDisabled_DoesNothingButStillConsumesRequest() =>
+        AssertMeleeDisabledRefuses([GameTags.DeliveryMelee, GameTags.ActionAttack]);
+
+    [TestMethod]
+    public void Immediate_UnarmedTaggedAction_MeleeDisabled_IsRefusedToo() =>
+        AssertMeleeDisabledRefuses(QuickAttackAction.Build().Tags);
+
+    private static void AssertMeleeDisabledRefuses(GameplayTagSet actionTags)
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
@@ -493,7 +503,7 @@ public sealed class ActionActivationSystemTests
         var meleeActionId = new Guid("88888888-8888-8888-8888-888888888888");
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(
-            meleeActionId, "Test Punch", null, "#", default, [Tag.Melee, Tag.Attack],
+            meleeActionId, "Test Punch", null, "#", default, actionTags,
             [new ActionEffect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
             new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
 

@@ -18,6 +18,7 @@ using Game.Modules.Mana.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Game.World;
 using Game.Blueprints;
 
@@ -161,9 +162,9 @@ public sealed class ActionActivationSystem : ISystem
             }
 
             // Every Arm/Hand this entity has is simultaneously disabled (BodyPartEffectsSystem's
-            // own hard block) -- a Tag.Melee action can't
+            // own hard block) -- a GameTags.DeliveryMelee action can't
             // be swung at all, not just at a heavily-reduced MeleeOutgoingDamage.
-            if (action.Tags.Contains(Tag.Melee) && _meleeDisabled.Has(entityId))
+            if (action.Tags.Has(GameTags.DeliveryMelee) && _meleeDisabled.Has(entityId))
             {
                 continue;
             }

@@ -2,11 +2,13 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tags;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Game.World;
 using Game.Modules.Death.Components;
 
@@ -26,8 +28,8 @@ public sealed class PoisonSystem : ISystem
     /// <summary>Every frame; the wheel only touches poisonings actually due.</summary>
     public byte StripeCount => 1;
 
-    /// <summary>Passed as HealthDamage.Apply's damageTags on every tick -- lets a ConditionTag: Tag.Poison-scoped IncomingDamage modifier reduce poison damage specifically. Cached once rather than allocated fresh per tick.</summary>
-    private static readonly Tag[] PoisonDamageTags = [Tag.Poison];
+    /// <summary>Passed as HealthDamage.Apply's damageTags on every tick -- lets a ConditionTag: GameTags.DamagePoison-scoped IncomingDamage modifier reduce poison damage specifically. Cached once rather than allocated fresh per tick.</summary>
+    private static readonly GameplayTagSet PoisonDamageTags = [GameTags.DamagePoison];
 
     private readonly PackedComponentPool<PoisonTimerComponent> _timers;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;

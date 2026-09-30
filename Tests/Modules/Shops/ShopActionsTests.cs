@@ -8,6 +8,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops;
 using Game.Modules.Shops.Components;
+using Game.Tags;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -27,24 +28,24 @@ public sealed class ShopActionsTests
     private static readonly Guid CappedItemId = Guid.NewGuid();
     private static readonly Guid UntradeableItemId = Guid.NewGuid();
 
-    private static readonly ShopComponent PotionOnlyShop = new(allowedTags: [Tag.Potion], buyMultiplier: 1.10f, sellMultiplier: 0.90f);
-    private static readonly ShopComponent GeneralShop = new(allowedTags: null, buyMultiplier: 1.20f, sellMultiplier: 0.80f);
+    private static readonly ShopComponent PotionOnlyShop = new(acceptedItems: Engine.Tags.GameplayTagQuery.Any([GameTags.ItemConsumablePotion]), buyMultiplier: 1.10f, sellMultiplier: 0.90f);
+    private static readonly ShopComponent GeneralShop = new(acceptedItems: null, buyMultiplier: 1.20f, sellMultiplier: 0.80f);
 
     private static (ComponentManager Manager, ItemCatalog Catalog) BuildManager()
     {
         var manager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 8));
 
         var catalog = new ItemCatalog();
-        catalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue));
-        catalog.Register(new ItemDefinition(ToolItemId, "Test Tool", null, "t", Color.White, Tags: [Tag.Tool], Effects: [], GoldValue: ToolValue));
-        catalog.Register(new ItemDefinition(CappedItemId, "Test Capped Potion", null, "c", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue, MaximumShopStock: 5));
-        catalog.Register(new ItemDefinition(UntradeableItemId, "Test Untradeable Potion", null, "u", Color.White, Tags: [Tag.Potion], Effects: [], GoldValue: PotionValue, CanTrade: false));
+        catalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], GoldValue: PotionValue));
+        catalog.Register(new ItemDefinition(ToolItemId, "Test Tool", null, "t", Color.White, Tags: [], Effects: [], GoldValue: ToolValue));
+        catalog.Register(new ItemDefinition(CappedItemId, "Test Capped Potion", null, "c", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], GoldValue: PotionValue, MaximumShopStock: 5));
+        catalog.Register(new ItemDefinition(UntradeableItemId, "Test Untradeable Potion", null, "u", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], GoldValue: PotionValue, CanTrade: false));
 
         return (manager, catalog);
     }
 
     [TestMethod]
-    public void CanTrade_AllowedTagsNull_AnyItemMatches()
+    public void CanTrade_AcceptedItemsNull_AnyItemMatches()
     {
         var (_, catalog) = BuildManager();
         catalog.TryGet(ToolItemId, out var tool);

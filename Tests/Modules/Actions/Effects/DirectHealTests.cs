@@ -4,6 +4,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tags;
 using Game.Modules;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
@@ -13,6 +14,7 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Tags;
 using Game.World;
 
 namespace Tests.Modules.Actions.Effects;
@@ -24,7 +26,7 @@ public sealed class DirectHealTests
     private const int SourceEntityId = 1;
     private const int TargetEntityId = 2;
 
-    private static (ComponentManager ComponentManager, ActionEffectContext Context) Build(IReadOnlyList<Tag> activatorTags, ushort currentHealth = 50, ushort maximumHealth = 100, PackedComponentPool<AbilityScoresComponent>? abilityScores = null)
+    private static (ComponentManager ComponentManager, ActionEffectContext Context) Build(GameplayTagSet activatorTags, ushort currentHealth = 50, ushort maximumHealth = 100, PackedComponentPool<AbilityScoresComponent>? abilityScores = null)
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
 
@@ -47,7 +49,7 @@ public sealed class DirectHealTests
         return (componentManager, context);
     }
 
-    private static (ComponentManager ComponentManager, ActionEffectContext Context) BuildComplex(IReadOnlyList<Tag> activatorTags, params (string Name, BodyPartType Type, float Current, ushort Max, bool Vital)[] parts)
+    private static (ComponentManager ComponentManager, ActionEffectContext Context) BuildComplex(GameplayTagSet activatorTags, params (string Name, BodyPartType Type, float Current, ushort Max, bool Vital)[] parts)
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
 
@@ -72,7 +74,7 @@ public sealed class DirectHealTests
     [TestMethod]
     public void Apply_PercentOfMaxHealth_AddsFlatAndPercentTogether()
     {
-        var (componentManager, context) = Build([Tag.Healing]);
+        var (componentManager, context) = Build([GameTags.EffectHealing]);
 
         new DirectHeal(PercentOfMaxHealth: 0.2f, FlatAmount: 10f).Apply(context);
 
@@ -82,7 +84,7 @@ public sealed class DirectHealTests
     [TestMethod]
     public void Apply_OutgoingHealingBuff_IncreasesHealGiven()
     {
-        var (componentManager, context) = Build([Tag.Healing]);
+        var (componentManager, context) = Build([GameTags.EffectHealing]);
         componentManager.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
             StatModifierTarget.OutgoingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.05f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(SourceEntityId)));
 
@@ -94,7 +96,7 @@ public sealed class DirectHealTests
     [TestMethod]
     public void Apply_IncomingHealingBuff_IncreasesHealReceived()
     {
-        var (componentManager, context) = Build([Tag.Healing]);
+        var (componentManager, context) = Build([GameTags.EffectHealing]);
         componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
             StatModifierTarget.IncomingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.20f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId)));
 
@@ -108,7 +110,7 @@ public sealed class DirectHealTests
     {
         var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
         abilityScores.Add(SourceEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Wisdom, baseValue: 15, total: 15));
-        var (componentManager, context) = Build([Tag.Healing, Tag.Wisdom], abilityScores: abilityScores);
+        var (componentManager, context) = Build([GameTags.EffectHealing, GameTags.StatsAbilityScoreWisdom], abilityScores: abilityScores);
 
         new DirectHeal(PercentOfMaxHealth: 0f, FlatAmount: 10f).Apply(context);
 
@@ -119,7 +121,7 @@ public sealed class DirectHealTests
     public void Apply_BodyPartTargetModeLowestPercentage_HealsOnlyTheMostDamagedPart()
     {
         var (componentManager, context) = BuildComplex(
-            [Tag.Healing],
+            [GameTags.EffectHealing],
             ("Head", BodyPartType.Head, 90, 100, true),
             ("Leg", BodyPartType.Leg, 20, 100, false));
 

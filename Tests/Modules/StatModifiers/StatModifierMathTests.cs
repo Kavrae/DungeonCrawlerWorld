@@ -1,7 +1,10 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
+using Engine.Tags;
+using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Tags;
 using Game.World;
 
 namespace Tests.Modules.StatModifiers;
@@ -122,5 +125,47 @@ public sealed class StatModifierMathTests
 
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() =>
             StatModifierMath.GetEffectiveValues(pool, 0, [(StatModifierTarget.HealthRegen, 10f), (StatModifierTarget.MaximumHealth, 200f)], destination));
+    }
+
+    private static readonly GameplayTag LavaDamage = GameplayTag.Get("Damage.Fire.StatModifierMathTestsLava");
+
+    private static StatModifierComponent HalvedIncomingDamage(GameplayTag conditionTag) =>
+        new(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, -0.5f, FrameDeadline.Never, ActionSource.Admin, conditionTag);
+
+    [TestMethod]
+    public void AFireConditionedModifier_AppliesToFireAndItsDescendants_WithOrWithoutMagic()
+    {
+        var pool = CreatePool();
+        pool.Add(0, HalvedIncomingDamage(GameTags.DamageFire));
+
+        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(pool, 0, StatModifierTarget.IncomingDamage, 100f, [GameTags.DamageFire]), "A torch's plain fire.");
+        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(pool, 0, StatModifierTarget.IncomingDamage, 100f, [GameTags.DamageFire, GameTags.Magic]), "A fireball's magical fire.");
+        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(pool, 0, StatModifierTarget.IncomingDamage, 100f, [LavaDamage]), "A child of Damage.Fire.");
+        Assert.AreEqual(100f, StatModifierMath.GetEffectiveValue(pool, 0, StatModifierTarget.IncomingDamage, 100f, [GameTags.DamagePoison]));
+        Assert.AreEqual(100f, StatModifierMath.GetEffectiveValue(pool, 0, StatModifierTarget.IncomingDamage, 100f));
+    }
+
+    [TestMethod]
+    public void AMagicConditionedModifier_AppliesToMagicalFire_ButNotPlainFire()
+    {
+        var pool = CreatePool();
+        pool.Add(0, HalvedIncomingDamage(GameTags.Magic));
+
+        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(pool, 0, StatModifierTarget.IncomingDamage, 100f, [GameTags.DamageFire, GameTags.Magic]), "A fireball.");
+        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(pool, 0, StatModifierTarget.IncomingDamage, 100f, MagicMissileAction.Build().Tags), "Magic Missile: Damage.Energy + Magic.");
+        Assert.AreEqual(100f, StatModifierMath.GetEffectiveValue(pool, 0, StatModifierTarget.IncomingDamage, 100f, [GameTags.DamageFire]), "A torch.");
+    }
+
+    [TestMethod]
+    public void AConditionedModifier_IsLeftOutOfTheUnconditionalSums()
+    {
+        var pool = CreatePool();
+        pool.Add(0, HalvedIncomingDamage(GameTags.DamageFire));
+        pool.Add(0, Modifier(StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, 3f));
+
+        StatModifierMath.GetSums(pool, 0, StatModifierTarget.IncomingDamage, out var additiveSum, out var multiplicativeSum);
+
+        Assert.AreEqual(3f, additiveSum);
+        Assert.AreEqual(0f, multiplicativeSum);
     }
 }

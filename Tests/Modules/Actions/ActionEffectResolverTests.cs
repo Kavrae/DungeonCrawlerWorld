@@ -16,6 +16,7 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Game.World;
 
 namespace Tests.Modules.Actions;
@@ -165,7 +166,7 @@ public sealed class ActionEffectResolverTests
     }
 
     private static readonly ActionDefinition StrengthTaggedAction = new(
-        Guid.NewGuid(), "Test Strength Attack", null, "#", default, [Tag.Strength],
+        Guid.NewGuid(), "Test Strength Attack", null, "#", default, [GameTags.StatsAbilityScoreStrength],
         Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
 
@@ -302,7 +303,7 @@ public sealed class ActionEffectResolverTests
     }
 
     private static readonly ActionDefinition DodgeableAction = new(
-        Guid.NewGuid(), "Test Dodgeable Attack", null, "#", default, [Tag.Dodgeable],
+        Guid.NewGuid(), "Test Dodgeable Attack", null, "#", default, [GameTags.TraitDodgeable],
         Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
 
@@ -380,7 +381,7 @@ public sealed class ActionEffectResolverTests
         Assert.IsLessThan(100f, health.GetReadonly(BlockingTargetEntityId).CurrentHealth);
     }
 
-    private static readonly ActionDefinition StaggeringAction = Action with { Id = Guid.NewGuid(), Tags = [Tag.Staggering, Tag.Dodgeable] };
+    private static readonly ActionDefinition StaggeringAction = Action with { Id = Guid.NewGuid(), Tags = [GameTags.TraitStaggering, GameTags.TraitDodgeable] };
 
     private static List<int> RecordStaggers(EventBus eventBus)
     {

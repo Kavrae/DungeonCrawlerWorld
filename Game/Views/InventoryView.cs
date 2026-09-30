@@ -1,6 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
-using Game.Modules;
+using Engine.Tags;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 
@@ -29,6 +29,6 @@ public sealed class InventoryView(ComponentManager componentManager, ItemCatalog
     /// <inheritdoc cref="InventoryQueries.IsInventoryDisabled"/>
     public bool IsInventoryDisabled(int entityId) => InventoryQueries.IsInventoryDisabled(_disabled, entityId);
 
-    /// <inheritdoc cref="InventoryTagQueries.GetTagCounts"/>
-    public List<(Tag Tag, int Count)> GetTagCounts(int entityId) => InventoryTagQueries.GetTagCounts(componentManager, itemCatalog, entityId);
+    /// <inheritdoc cref="InventoryTagQueries.GetItemCategoryCounts"/>
+    public List<(GameplayTag Tag, int Count)> GetItemCategoryCounts(int entityId, GameplayTagRegistry gameplayTags) => InventoryTagQueries.GetItemCategoryCounts(componentManager, itemCatalog, gameplayTags, entityId);
 }

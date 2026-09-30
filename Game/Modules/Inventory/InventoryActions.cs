@@ -99,7 +99,7 @@ public static class InventoryActions
 
     /// <summary>
     /// Structural equality for two divergence Overrides -- ItemDefinition's auto-generated record
-    /// equality isn't reliable here, since its Tags/Effects list-typed fields compare by reference,
+    /// equality isn't reliable here, since its Effects list-typed field compares by reference,
     /// not content, and two independently-`with`-derived definitions won't reliably share the same
     /// list reference. Used to decide whether a new unit can merge into an existing stack rather
     /// than needing its own.
@@ -116,7 +116,7 @@ public static class InventoryActions
         Equals(a.Activator, b.Activator) &&
         Equals(a.Contents, b.Contents) &&
         a.CanTrade == b.CanTrade &&
-        a.Tags.SequenceEqual(b.Tags) &&
+        a.Tags == b.Tags &&
         a.Effects.SequenceEqual(b.Effects);
 
     /// <summary>Whether two stacks hold interchangeable units: the same item, the same Override (or neither has one), and the same divergence and disabled state.</summary>

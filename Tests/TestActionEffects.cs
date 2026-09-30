@@ -3,6 +3,7 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tags;
 using Game.Blueprints;
 using Game.Modules;
 using Game.Modules.AbilityScores.Components;
@@ -70,7 +71,7 @@ internal static class TestActionEffects
         ComponentManager ComponentManager,
         EntityKeys EntityKeys,
         string ActivatorName,
-        IReadOnlyList<Tag> ActivatorTags,
+        GameplayTagSet ActivatorTags,
         long Now,
         MultiComponentPool<StatModifierComponent>? StatModifiers = null,
         PackedComponentPool<AbilityScoresComponent>? AbilityScores = null,

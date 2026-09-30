@@ -134,7 +134,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
 
     /// <summary>
     /// Shop mode only, set alongside ShopTradeEligible by InventoryGridContent.UpdateShopEligibilityState
-    /// -- true whenever this item's tags actually match the open shop's own AllowedTags
+    /// -- true whenever this item's tags actually match the open shop's own AcceptedItems
     /// (ShopActions.CanTrade), regardless of whether the paying side can currently afford it. An
     /// unaffordable-but-tradeable item still reads ShopTradeEligible false (greyed out, still blocked
     /// from a direct buy/sell -- ShopActions.TryBuyFromShop/TrySellToShop's own affordability check

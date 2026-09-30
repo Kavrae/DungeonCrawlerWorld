@@ -4,6 +4,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tags;
 using Game.Modules;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Effects;
@@ -11,11 +12,12 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Tags;
 using Game.World;
 
 namespace Tests.Modules.Actions.Effects;
 
-/// <summary>Covers DirectDamage's OutgoingDamage pass, including a Tag.Melee-conditional modifier (StatModifierComponent.ConditionTag) -- the generic mechanism BodyPartEffectsSystem's own Arm/Hand penalty now uses.</summary>
+/// <summary>Covers DirectDamage's OutgoingDamage pass, including a GameTags.DeliveryMelee-conditional modifier (StatModifierComponent.ConditionTag) -- the generic mechanism BodyPartEffectsSystem's own Arm/Hand penalty now uses.</summary>
 [TestClass]
 public sealed class DirectDamageTests
 {
@@ -28,7 +30,7 @@ public sealed class DirectDamageTests
         public override double NextDouble() => 1.0;
     }
 
-    private static (ComponentManager ComponentManager, ActionEffectContext Context) Build(IReadOnlyList<Tag> activatorTags)
+    private static (ComponentManager ComponentManager, ActionEffectContext Context) Build(GameplayTagSet activatorTags)
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
 
@@ -51,7 +53,7 @@ public sealed class DirectDamageTests
     }
 
     /// <summary>Complex-health counterpart to Build -- a body-parts pool instead of SimpleHealthComponent, for BodyPartTargetMode.All/LowestPercentage coverage.</summary>
-    private static (ComponentManager ComponentManager, ActionEffectContext Context) BuildComplex(IReadOnlyList<Tag> activatorTags, params (string Name, BodyPartType Type, float Current, ushort Max, bool Vital)[] parts)
+    private static (ComponentManager ComponentManager, ActionEffectContext Context) BuildComplex(GameplayTagSet activatorTags, params (string Name, BodyPartType Type, float Current, ushort Max, bool Vital)[] parts)
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
 
@@ -76,7 +78,7 @@ public sealed class DirectDamageTests
     [TestMethod]
     public void Apply_PercentOfMaxHealth_AddsFlatAndPercentTogether()
     {
-        var (componentManager, context) = Build([Tag.Attack]);
+        var (componentManager, context) = Build([GameTags.ActionAttack]);
 
         new DirectDamage(MinFlatDamage: 10, MaxFlatDamage: 10, PercentageDamage: 0.2f).Apply(context);
 
@@ -86,15 +88,15 @@ public sealed class DirectDamageTests
     [TestMethod]
     public void Apply_OutgoingDamageMeleeConditionalBuff_IncreasesMeleeDamageOnly()
     {
-        var (melee, meleeContext) = Build([Tag.Melee, Tag.Attack]);
+        var (melee, meleeContext) = Build([GameTags.DeliveryMelee, GameTags.ActionAttack]);
         melee.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
-            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.10f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(SourceEntityId), Tag.Melee));
+            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.10f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(SourceEntityId), GameTags.DeliveryMelee));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(meleeContext);
         Assert.AreEqual(78f, melee.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "20 * 1.10 = 22 melee damage.");
 
-        var (spell, spellContext) = Build([Tag.Spell, Tag.Attack]);
+        var (spell, spellContext) = Build([GameTags.ActionSpell, GameTags.ActionAttack]);
         spell.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
-            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.10f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(SourceEntityId), Tag.Melee));
+            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.10f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(SourceEntityId), GameTags.DeliveryMelee));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(spellContext);
         Assert.AreEqual(80f, spell.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "A non-melee action must be untouched by the melee-only buff -- full 20 damage.");
     }
@@ -102,15 +104,15 @@ public sealed class DirectDamageTests
     [TestMethod]
     public void Apply_IncomingDamageMeleeConditionalDebuff_ReducesMeleeDamageOnly()
     {
-        var (melee, meleeContext) = Build([Tag.Melee, Tag.Attack]);
+        var (melee, meleeContext) = Build([GameTags.DeliveryMelee, GameTags.ActionAttack]);
         melee.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.30f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId), Tag.Melee));
+            StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.30f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId), GameTags.DeliveryMelee));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(meleeContext);
         Assert.AreEqual(86f, melee.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "20 * 0.70 = 14 melee damage taken.");
 
-        var (spell, spellContext) = Build([Tag.Spell, Tag.Attack]);
+        var (spell, spellContext) = Build([GameTags.ActionSpell, GameTags.ActionAttack]);
         spell.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
-            StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.30f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId), Tag.Melee));
+            StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.30f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId), GameTags.DeliveryMelee));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(spellContext);
         Assert.AreEqual(80f, spell.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "A non-melee hit must take the melee-only reduction's full, unreduced 20 damage.");
     }
@@ -118,13 +120,13 @@ public sealed class DirectDamageTests
     [TestMethod]
     public void Apply_IncomingDamageUnconditionalDebuff_ReducesDamageRegardlessOfTags()
     {
-        var (melee, meleeContext) = Build([Tag.Melee, Tag.Attack]);
+        var (melee, meleeContext) = Build([GameTags.DeliveryMelee, GameTags.ActionAttack]);
         melee.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
             StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.05f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId)));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(meleeContext);
         Assert.AreEqual(81f, melee.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "20 * 0.95 = 19 melee damage taken.");
 
-        var (spell, spellContext) = Build([Tag.Spell, Tag.Attack]);
+        var (spell, spellContext) = Build([GameTags.ActionSpell, GameTags.ActionAttack]);
         spell.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
             StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.05f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId)));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(spellContext);
@@ -135,7 +137,7 @@ public sealed class DirectDamageTests
     public void Apply_BodyPartTargetModeAll_SplitsTotalEvenlyAcrossParts()
     {
         var (componentManager, context) = BuildComplex(
-            [Tag.Attack],
+            [GameTags.ActionAttack],
             ("Head", BodyPartType.Head, 40, 40, true),
             ("Torso", BodyPartType.Torso, 60, 60, true));
 
@@ -149,10 +151,10 @@ public sealed class DirectDamageTests
     [TestMethod]
     public void Apply_MeleeTagWithConditionalOutgoingDamageDebuff_ReducesDamage()
     {
-        var (componentManager, context) = Build([Tag.Melee, Tag.Attack]);
-        // -50% multiplicative debuff scoped to Tag.Melee -- the same shape BodyPartEffectsSystem grants for a damaged arm.
+        var (componentManager, context) = Build([GameTags.DeliveryMelee, GameTags.ActionAttack]);
+        // -50% multiplicative debuff scoped to GameTags.DeliveryMelee -- the same shape BodyPartEffectsSystem grants for a damaged arm.
         componentManager.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
-            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(SourceEntityId), Tag.Melee));
+            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(SourceEntityId), GameTags.DeliveryMelee));
 
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(context);
 
@@ -162,13 +164,13 @@ public sealed class DirectDamageTests
     [TestMethod]
     public void Apply_NoMeleeTag_MeleeConditionalOutgoingDamageDebuffHasNoEffect()
     {
-        var (componentManager, context) = Build([Tag.Spell, Tag.Attack]);
+        var (componentManager, context) = Build([GameTags.ActionSpell, GameTags.ActionAttack]);
         componentManager.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
-            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(SourceEntityId), Tag.Melee));
+            StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(SourceEntityId), GameTags.DeliveryMelee));
 
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(context);
 
-        Assert.AreEqual(80f, componentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "A non-melee action's damage must be untouched by a Tag.Melee-conditional modifier -- full 20 damage.");
+        Assert.AreEqual(80f, componentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "A non-melee action's damage must be untouched by a GameTags.DeliveryMelee-conditional modifier -- full 20 damage.");
     }
 
     private sealed class AlwaysCritRandom : Random

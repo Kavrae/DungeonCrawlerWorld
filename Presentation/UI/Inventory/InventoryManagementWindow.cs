@@ -1,7 +1,4 @@
-using Game.Modules;
-using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
-using Game.Modules.Shops;
+using Engine.Tags;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
@@ -13,11 +10,11 @@ namespace Presentation.UI.Inventory;
 
 /// <summary>
 /// The player-facing inventory view: a TabbedContent showing InventoryTabContent (GridControl's
-/// count/sort/hide-disabled/search row above an InventoryGridContent), one tab per tag currently
-/// carried by the entity's inventory (plus a leading "All" tab) -- see
-/// InventoryTagQueries.GetTagCounts. Re-derives the tab list whenever the *set* of tags
-/// represented changes (a tag gaining or losing its last carrier), not on every inventory version
-/// bump -- GetTagCounts sorts by count descending, so a version bump that only changes a stack's
+/// count/sort/hide-disabled/search row above an InventoryGridContent), one tab per item category
+/// (Item.* tag) the entity's inventory holds (plus a leading "All" tab) -- see
+/// InventoryTagQueries.GetItemCategoryCounts. Re-derives the tab list whenever the *set* of categories
+/// represented changes (a category gaining or losing its last stack), not on every inventory version
+/// bump -- GetItemCategoryCounts sorts by count descending, so a version bump that only changes a stack's
 /// Quantity (no tag gained/lost) can still reorder tagCounts, and TabbedContent.SetTabs always
 /// rebuilds every tab's InventoryTabContent/InventoryGridContent/GridControl from scratch even
 /// when it preserves the active tab's own selection by label -- discarding that tab's sort order/
@@ -57,7 +54,7 @@ public sealed class InventoryManagementWindow(
     private Action<int, uint> _onActivateRequested = static (_, _) => { };
     private Action<int> _onOpenLootboxesRequested = static _ => { };
     private readonly VersionWatcher _tagVersionWatcher = new();
-    private HashSet<Tag> _currentTags = [];
+    private HashSet<GameplayTag> _currentTags = [];
 
     /// <summary>Builds this window's content for entityId's inventory. Must be called after CreateElement but before Initialize (see Window.SetContent's own doc comment) -- a fresh TabbedContent per open, since entityId varies across opens of a pooled/reused window instance. tooltipController is the one shared instance every hover-popup consumer in the app shows/hides through (see TooltipController's own doc comment) -- not a child of this window, see Tooltip's own doc comment for why a nested child can't work here. getSecondaryTargetEntityId lets each grid's own item context menu (see InventoryGridContent.BuildItemContextMenu) ask "is a secondary/corpse window currently open, and for whom" without this window needing a direct SecondaryInventoryWindowController reference -- see InventoryWindowController.GetSecondaryTargetEntityId, the actual settable source this is expected to be wired to. onItemSelected/onCompareRequested/onActivateRequested mirror that same settable-delegate shape for ItemDetailsWindowController.Open/ItemComparisonController.Arm/closing this window + ActionTargetingController.ArmItemFromStack -- see InventoryWindowController.OnItemSelected/OnCompareRequested/OnActivateRequested. onOpenLootboxesRequested is Activate on a loot box, which opens every loot box the entity holds -- see InventoryWindowController.OnOpenLootboxesRequested.</summary>
     public void Configure(int entityId, TooltipController tooltipController, Func<int?> getSecondaryTargetEntityId, Action<int, uint> onItemSelected, Action<int, uint> onCompareRequested, Action<int, uint> onActivateRequested, Action<int> onOpenLootboxesRequested)
@@ -70,7 +67,7 @@ public sealed class InventoryManagementWindow(
         _onActivateRequested = onActivateRequested;
         _onOpenLootboxesRequested = onOpenLootboxesRequested;
 
-        var tagCounts = inventoryServices.InventoryView.GetTagCounts(entityId);
+        var tagCounts = inventoryServices.InventoryView.GetItemCategoryCounts(entityId, inventoryServices.GameplayTags);
         _currentTags = ToTagSet(tagCounts);
         _tabbedContent = new TabbedContent(BuildTabDefinitions(tagCounts), ElementPoolService, FontService, WindowPalette.PanelBackgroundColor);
         _currencyRowContent = new CurrencyRowContent(entityId, inventoryServices, world, contextMenuController, ElementPoolService, _getSecondaryTargetEntityId);
@@ -95,7 +92,7 @@ public sealed class InventoryManagementWindow(
             return;
         }
 
-        var tagCounts = inventoryServices.InventoryView.GetTagCounts(_entityId);
+        var tagCounts = inventoryServices.InventoryView.GetItemCategoryCounts(_entityId, inventoryServices.GameplayTags);
         var newTags = ToTagSet(tagCounts);
         if (newTags.SetEquals(_currentTags))
         {
@@ -106,9 +103,9 @@ public sealed class InventoryManagementWindow(
         _tabbedContent.SetTabs(BuildTabDefinitions(tagCounts));
     }
 
-    private static HashSet<Tag> ToTagSet(List<(Tag Tag, int Count)> tagCounts)
+    private static HashSet<GameplayTag> ToTagSet(List<(GameplayTag Tag, int Count)> tagCounts)
     {
-        var tags = new HashSet<Tag>(tagCounts.Count);
+        var tags = new HashSet<GameplayTag>(tagCounts.Count);
         foreach (var (tag, _) in tagCounts)
         {
             tags.Add(tag);
@@ -119,22 +116,22 @@ public sealed class InventoryManagementWindow(
 
     private uint CurrentInventoryVersion() => inventoryServices.InventoryView.GetVersion(_entityId);
 
-    private List<TabbedContent.TabDefinition> BuildTabDefinitions(List<(Tag Tag, int Count)> tagCounts)
+    private List<TabbedContent.TabDefinition> BuildTabDefinitions(List<(GameplayTag Tag, int Count)> tagCounts)
     {
         var definitions = new List<TabbedContent.TabDefinition>(tagCounts.Count + 1)
         {
-            new("All", CreateTabContent(null)),
+            new("All", CreateTabContent(GameplayTag.None)),
         };
 
         foreach (var (tag, _) in tagCounts)
         {
-            definitions.Add(new TabbedContent.TabDefinition(tag.ToString(), CreateTabContent(tag)));
+            definitions.Add(new TabbedContent.TabDefinition(inventoryServices.GameplayTags.GetDisplayName(tag), CreateTabContent(tag)));
         }
 
         return definitions;
     }
 
-    private InventoryTabContent CreateTabContent(Tag? filterTag)
+    private InventoryTabContent CreateTabContent(GameplayTag filterTag)
     {
         var gridContent = new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, _entityId, filterTag, _tooltipController, _getSecondaryTargetEntityId, mapViewState, _onItemSelected, _onCompareRequested, _onActivateRequested, _onOpenLootboxesRequested, simulationClock: simulationClock);
         return new InventoryTabContent(ElementPoolService, gridContent);

@@ -16,7 +16,7 @@ public enum StatModifierTarget : byte
     /// <summary>Mirrors HealthRegen -- layers on top of ManaRegenSystem's live-computed (Intelligence-derived) base regen amount. Unused by any built-in content today; kept for symmetry so equipment/buffs have the same seam Health already gets.</summary>
     ManaRegen,
 
-    /// <summary>Damage an entity receives, consumed at HealthDamage.Apply -- the single chokepoint for every damage source (abilities, Burning, Poison, contact hazards) -- so a reduction here applies uniformly regardless of what dealt the damage. A modifier can scope itself to e.g. Tag.Melee via StatModifierComponent.ConditionTag rather than needing its own dedicated target (see that field's own doc comment) -- this is how the former, now-removed MeleeOutgoingDamage/melee-only-incoming special cases are expressed today.</summary>
+    /// <summary>Damage an entity receives, consumed at HealthDamage.Apply -- the single chokepoint for every damage source (abilities, Burning, Poison, contact hazards) -- so a reduction here applies uniformly regardless of what dealt the damage. A modifier can scope itself to e.g. GameTags.DeliveryMelee via StatModifierComponent.ConditionTag rather than needing its own dedicated target (see that field's own doc comment) -- this is how the former, now-removed MeleeOutgoingDamage/melee-only-incoming special cases are expressed today.</summary>
     IncomingDamage,
 
     /// <summary>Chance (0..1) DirectDamage rolls a crit, consumed via StatModifierMath.GetEffectiveValue against CritMath.BaseCritChance. Lets equipment/buffs (e.g. a stacking, self-granted "Double Tap" modifier) raise a caster's own crit chance the same generic way anything already modifies OutgoingDamage.</summary>
@@ -28,7 +28,7 @@ public enum StatModifierTarget : byte
     /// <summary>ActionLockComponent.StandardLockFrames' modifier seam -- consumed by MovementSystem.TryMoveToNextMapPosition. BodyPartEffectsSystem grants a multiplicative debuff here as an entity's own Leg/Foot body parts take damage; nothing else grants it yet, but it's an ordinary target like any other -- a future Dexterity/equipment consumer could layer on top the same way.</summary>
     MovementLockFrames,
 
-    /// <summary>Heal amount a caster/source gives out, consumed at HealthHeal.Apply before IncomingHealing -- the healing counterpart to OutgoingDamage. A melee-only lifesteal-style heal buff would use ConditionTag: Tag.Melee here rather than a dedicated target.</summary>
+    /// <summary>Heal amount a caster/source gives out, consumed at HealthHeal.Apply before IncomingHealing -- the healing counterpart to OutgoingDamage. A melee-only lifesteal-style heal buff would use ConditionTag: GameTags.DeliveryMelee here rather than a dedicated target.</summary>
     OutgoingHealing,
 
     /// <summary>Heal amount an entity receives, consumed at HealthHeal.Apply -- the healing counterpart to IncomingDamage, applying uniformly to every heal source unless scoped via ConditionTag.</summary>

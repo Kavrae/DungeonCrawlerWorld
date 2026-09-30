@@ -11,6 +11,7 @@ using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
+using Game.Tags;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -87,7 +88,7 @@ public sealed class PlayerCommandsTests
 
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(
-            SelfActionId, "Test Self Action", null, "*", Color.White, [Tag.Self],
+            SelfActionId, "Test Self Action", null, "*", Color.White, [GameTags.TargetingSelf],
             Effects: [ActionEffect.None],
             Activator: new SpellActivator(
                 new TargetingSpec(TargetShape.Self, Range: 0),

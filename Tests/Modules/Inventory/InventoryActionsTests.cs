@@ -658,7 +658,7 @@ public sealed class InventoryActionsTests
     public void ItemHotkeyBindingQueries_CanBind_IsFalseOnlyForALootbox()
     {
         Assert.IsTrue(ItemHotkeyBindingQueries.CanBind(CreateDefinition(Guid.NewGuid(), charges: 1)));
-        Assert.IsFalse(ItemHotkeyBindingQueries.CanBind(CreateDefinition(Guid.NewGuid(), charges: 1) with { Tags = [Game.Modules.Tag.Lootbox] }));
+        Assert.IsFalse(ItemHotkeyBindingQueries.CanBind(CreateDefinition(Guid.NewGuid(), charges: 1) with { Tags = [Game.Tags.GameTags.ItemLootbox] }));
     }
 
     private static uint AddSeparateStack(ComponentManager manager, Guid itemId, ushort quantity)

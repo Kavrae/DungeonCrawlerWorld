@@ -1,5 +1,6 @@
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Tags;
 using Game.Modules.StatModifiers;
 using Game.World;
 
@@ -28,7 +29,7 @@ public sealed record StatModifierGrant(
     bool CanModify,
     float Magnitude,
     ushort? DurationFrames,
-    Tag? ConditionTag = null) : IActionEffectEntry
+    GameplayTag ConditionTag = default) : IActionEffectEntry
 {
     public void Apply(ActionEffectContext context)
     {

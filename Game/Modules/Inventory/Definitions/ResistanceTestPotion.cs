@@ -4,6 +4,7 @@ using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
 using Game.Modules.StatModifiers;
+using Game.Tags;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Inventory.Definitions;
@@ -20,12 +21,12 @@ public static class ResistanceTestPotion
 
     public static ItemDefinition Build() => new(
         Id, "Draught of Insulation", "HealthPotion", "r", Color.Goldenrod,
-        Tags: [Tag.Potion, Tag.Consumable, Tag.Self],
+        Tags: [GameTags.TargetingSelf],
         Effects: [new ActionEffect([
             new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-                CanModify: false, Magnitude: DamageReduction, DurationFrames: DurationFrames, ConditionTag: Tag.Fire),
+                CanModify: false, Magnitude: DamageReduction, DurationFrames: DurationFrames, ConditionTag: GameTags.DamageFire),
             new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-                CanModify: false, Magnitude: DamageReduction, DurationFrames: DurationFrames, ConditionTag: Tag.Poison),
+                CanModify: false, Magnitude: DamageReduction, DurationFrames: DurationFrames, ConditionTag: GameTags.DamagePoison),
         ])],
         Description: "A thick, insulating draught that dulls the sting of fire and venom alike, though only for a while.",
         Summary: "Reduces Burning and Poison damage taken by 50% for 10 minutes.",

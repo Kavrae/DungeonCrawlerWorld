@@ -1,3 +1,4 @@
+using Engine.Tags;
 using Game.Modules.Actions;
 using Microsoft.Xna.Framework;
 
@@ -9,7 +10,7 @@ namespace Game.Modules.Inventory;
 /// <param name="SpriteName">The name of the sprite representing the item. Falls back to the Glyph if not provided.</param>
 /// <param name="Glyph">The fallback character used to represent the item in the UI.</param>
 /// <param name="GlyphColor">The color of the item's glyph.</param>
-/// <param name="Tags">An optional list of tags associated with the item.</param>
+/// <param name="Tags">The item's own tags; its activator's implied tags are added to them.</param>
 /// <param name="Effects">An optional list of effects triggered by the item.</param>
 /// <param name="Description">The full description of the item.</param>
 /// <param name="Summary">A brief summary of the item.</param>
@@ -27,7 +28,7 @@ public sealed record ItemDefinition(
     string? SpriteName,
     string Glyph,
     Color GlyphColor,
-    IReadOnlyList<Tag> Tags,
+    GameplayTagSet Tags,
     IReadOnlyList<ActionEffect> Effects,
     string Description = "",
     string Summary = "",
@@ -37,4 +38,4 @@ public sealed record ItemDefinition(
     IItemContents? Contents = null,
     bool CanTrade = true,
     Color? SpriteTint = null)
-    : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Tags, Effects, Description, Summary);
+    : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Activator is null ? Tags : Tags.Union(Activator.ImpliedTags), Effects, Description, Summary);
