@@ -65,6 +65,7 @@ public sealed class PlayerMovementControllerTests
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             clock,
+            TestActionStateViews.EntityActions(componentManager),
             new Engine.Events.EventBus());
 
         return new Harness { Controller = new PlayerMovementController(playerCommands), Clock = clock, ComponentManager = componentManager };

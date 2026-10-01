@@ -373,31 +373,6 @@ primitive. Companion to the Game/Presentation equipment items below.
 
 ### High Priority
 
-#### Disable actions that destroyed body parts make unusable, and show why
-
-With both arms destroyed, Quick Attack and Power Attack can still be armed and activated from the
-hotbar; they just do nothing. `ActionActivationSystem` refuses a `Delivery.Melee` action for an entity
-holding `MeleeDisabledComponent` (every Arm/Hand disabled, granted by `BodyPartEffectsSystem`), but it
-refuses silently, after the player has already chosen and aimed it. The hotbar only dims an action it
-can't afford (`HotbarContent.HasEnoughMana`), so nothing tells the player the action is unavailable or
-why. That breaks the "remove unexpected actions" principle: the click looks accepted and does nothing.
-
-Direction:
-- **One usability rule in Game**, read by both sides: a query (on `ActionStateView`, backed by a static
-  `*Queries` the system also calls) that answers whether an entity can use an action or item now and,
-  if not, a reason. Reasons today: not enough mana, melee disabled (every Arm/Hand destroyed), and
-  whatever else the activation path already refuses. `ActionActivationSystem` keeps refusing through the
-  same rule, so the display and the outcome can't disagree.
-- **Disabled means not armable:** the hotbar dims a disabled action or item the way it dims an
-  unaffordable one, and pressing its key, clicking it or double-clicking it does nothing, with the
-  disabled cursor rather than arming.
-- **A "Deactivated Reason" in the tooltip** of every disabled action and item -- hotbar slot summary,
-  inventory item, Item Details -- in plain words ("Both arms are destroyed", "Not enough mana").
-- Movement already has the same shape (`MovementDisabledComponent` from destroyed legs/feet); if
-  movement gets a player-visible indicator, it should read from the same reason vocabulary.
-- Tests drive the real input path (`UiInputController`/`ActionTargetingController`), not direct calls:
-  a disabled slot must not arm.
-
 #### ProcessingTierResolver.PromotionsHeld set after the session is assembled
 
 `ProcessingTierResolver.PromotionsHeld` is a settable `Func<bool>?`. `WorldSessionBootstrapper` sets
@@ -773,6 +748,41 @@ source definition. Godot TileSets can carry occluder shapes per tile (occlusion 
 a "blocks sight" and "blocks light" flag on `TerrainDefinition` (beside `BlocksMovement`), read by both.
 
 ### Medium Priority
+
+#### Body part disablement that lasts -- injury states, and thresholds instead of 0 HP
+
+A body part is disabled only while its `CurrentHealth` is exactly 0 (`BodyPartStateComponent.IsDisabled`,
+set in `EntityBodyParts` when a part hits 0 and cleared the instant any heal or regen tick raises it).
+Passive regen (`ComplexHealthRegenSystem`) starts again as soon as the regen lockout ends, so a destroyed
+arm or leg is usable again a few frames later. `BodyPartEffectsSystem` also only re-scores an entity once
+a second (`StripeCount` = frames per second), so the `MeleeDisabledComponent`/`MovementDisabledComponent`
+hard blocks often never appear at all, and the disabled-action work (IMPLEMENTATION-NOTES.md "Disabled actions") has almost
+nothing to show. Destroying a limb should matter.
+
+Re-plan it from the state model up:
+- **Split "disabled" into injury states**, each with its own rule for healing, e.g.:
+  - *Impaired* -- below a threshold, heals normally.
+  - *Disabled* -- at 0, passive regen paused for a while (longer than the current lockout).
+  - *Broken/Crippled* -- passive regen can't lift it out of the state; an active heal or a specific item
+    (splint, bandage, healing potion tier) is needed.
+  - *Severed/Destroyed* -- nothing heals it; needs regeneration magic or a resurrection-tier effect.
+  How a part enters each state (overkill damage beyond 0, damage type -- crushing breaks, slashing
+  severs, a crit, a status effect like Paralysis V2 above) is part of the design. Health owns the states;
+  other features read them through Health's API (Poison/Burning are the model, CLAUDE.md "Modding").
+- **Stop actions at thresholds, not only at 0 HP.** An action's requirement is a percentage or a state
+  per body part type, so a badly damaged arm can refuse Power Attack before it refuses Quick Attack. This
+  folds into "Melee actions should declare which body parts perform them" (Low Priority) and the
+  disabled-action reasons (`ActivationBlocker`), whose melee text becomes body-plan specific then.
+- **Score on change, not on a timer.** The hard-block markers (and the penalties) should update when a
+  part's state changes, not once a second, so a block and its tooltip appear the frame the arm breaks.
+- Keep regen and heal paths going through one state check (`ComplexHealthHeal`, `ComplexHealthRegenSystem`,
+  `BodyPartSelection` already skip lockouts together), so a spell, a potion and a regen tick agree on
+  what can be healed. "Player-selected healing priority" (Low Priority) must skip parts that can't be healed.
+- Presentation: the Health window shows each part's state, and the HUD/tooltips name it.
+
+Open questions: how many states, and whether they're a ladder (each worse than the last) or independent
+flags; whether Simple-health entities get any of it; how a state interacts with Maximum Health changes
+(`MaximumHealthShift`).
 
 #### Gen-1 GC frames during a window shift
 
@@ -1493,6 +1503,11 @@ specific limb yet). Once Equipment exists, `IActionActivator`/`ActionEffect` sho
 declare which `BodyPartType`(s) perform it (a two-handed weapon needing both Hands; an offhand punch
 caring about one arm) -- `BodyPartEffectsSystem` would then key its penalty off the acting part(s), not
 a blanket aggregate.
+
+The same declaration replaces `ActivationQueries.GetBlocker`'s hard-wired "`Delivery.Melee` + every
+Arm/Hand disabled" rule (IMPLEMENTATION-NOTES.md "Disabled actions"): an action is blocked when the parts
+it needs are, and `ActivationBlockerText`'s melee reason ("No usable arms or hands") becomes body-plan
+specific, naming the entity's own parts ("Right hand is broken").
 
 #### Enchantment
 

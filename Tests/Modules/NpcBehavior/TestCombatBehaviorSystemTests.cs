@@ -5,6 +5,7 @@ using Game.Blueprints.Races;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
+using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
@@ -95,7 +96,8 @@ public sealed class TestCombatBehaviorSystemTests
         PackedComponentPool<PendingConsumableActivationComponent> PendingConsumableActivations,
         PackedComponentPool<DeadComponent> DeadEntities,
         DirectComponentPool<ProcessingTierComponent> ProcessingTiers,
-        MathUtility MathUtility);
+        MathUtility MathUtility,
+        PackedComponentPool<MeleeDisabledComponent> MeleeDisabled);
 
     private static Fixture Build(MathUtility? mathUtility = null)
     {
@@ -116,6 +118,7 @@ public sealed class TestCombatBehaviorSystemTests
         var pendingActivations = new PackedComponentPool<PendingActionActivationComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var pendingConsumableActivations = new PackedComponentPool<PendingConsumableActivationComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
+        var meleeDisabled = new PackedComponentPool<MeleeDisabledComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var mapQuery = new FakeMapQuery();
         var math = mathUtility ?? new MathUtility();
 
@@ -133,9 +136,9 @@ public sealed class TestCombatBehaviorSystemTests
 
         var system = TestSystems.TestCombatBehaviorSystem(
             movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actions, raceSlots,
-            pendingActivations, pendingConsumableActivations, mapQuery, math, processingTiers, new ProcessingTierEvents(), deadEntities);
+            pendingActivations, pendingConsumableActivations, mapQuery, math, processingTiers, new ProcessingTierEvents(), deadEntities, meleeDisabled: meleeDisabled);
 
-        return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, bodyParts, bodyPartWorld, inventoryStacks, actionInstances, raceSlots, pendingActivations, pendingConsumableActivations, deadEntities, processingTiers, math);
+        return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, bodyParts, bodyPartWorld, inventoryStacks, actionInstances, raceSlots, pendingActivations, pendingConsumableActivations, deadEntities, processingTiers, math, meleeDisabled);
     }
 
     /// <summary>Grants both QuickAttack and PowerAttack, matching every real race blueprint's paired grant -- TryDecideMeleeAttack gates on QuickAttack's presence but randomly picks either for the actual attack.</summary>
@@ -243,6 +246,20 @@ public sealed class TestCombatBehaviorSystemTests
         Assert.HasCount(8, pending.TargetTiles, "The whole resolved Adjacent footprint is queued, not just the occupied tile -- ActionEffectResolver sorts out who's actually there.");
         CollectionAssert.Contains(pending.TargetTiles, AdjacentTile);
         CollectionAssert.DoesNotContain(pending.TargetTiles, GoblinPosition);
+    }
+
+    [TestMethod]
+    public void Update_MeleeDisabledAdjacentToPlayer_QueuesNoAttack()
+    {
+        var fixture = Build();
+        PlaceGoblin(fixture, GoblinEntityId);
+        fixture.MeleeDisabled.Add(GoblinEntityId, new MeleeDisabledComponent());
+        fixture.RaceSlots.Add(PlayerEntityId, new RaceSlotsComponent(HumanRace));
+        fixture.MapQuery.SetBlockingOccupant(AdjacentTile, PlayerEntityId);
+
+        fixture.System.Update(default, 0);
+
+        Assert.IsFalse(fixture.PendingActivations.Has(GoblinEntityId));
     }
 
     [TestMethod]

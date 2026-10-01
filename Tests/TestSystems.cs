@@ -253,6 +253,7 @@ internal static class TestSystems
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
         PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
         StatusEffectAuraApplierRegistry? statusEffectAppliers = null,
+        PackedComponentPool<MeleeDisabledComponent>? meleeDisabled = null,
         IPlayerQuery? playerQuery = null,
         MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         MultiComponentPool<ItemHotkeyBindingComponent>? itemHotkeyBindings = null,
@@ -264,6 +265,7 @@ internal static class TestSystems
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
             mana ?? EmptyPools.Packed<ManaComponent>(),
+            meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>(),
             hotkeyExpansionUnlocks ?? EmptyPools.Packed<HotkeyExpansionUnlockComponent>(),
             abilityScores ?? EmptyPools.Packed<AbilityScoresComponent>(),
             auraSources ?? EmptyPools.Multi<StatusEffectAuraSourceComponent>(),
@@ -288,9 +290,13 @@ internal static class TestSystems
         MathUtility mathUtility,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
-        PackedComponentPool<DeadComponent>? deadEntities = null) =>
+        PackedComponentPool<DeadComponent>? deadEntities = null,
+        PackedComponentPool<ManaComponent>? mana = null,
+        PackedComponentPool<MeleeDisabledComponent>? meleeDisabled = null) =>
         new(movementPool, transformPool, actionLocks, health, bodyParts, inventoryStacks, actions, raceSlots, pendingActivations, pendingConsumableActivations, mapQuery, mathUtility, processingTiers, processingTierEvents,
-            deadEntities ?? EmptyPools.Packed<DeadComponent>());
+            deadEntities ?? EmptyPools.Packed<DeadComponent>(),
+            mana ?? EmptyPools.Packed<ManaComponent>(),
+            meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>());
 
     public static DeathSystem DeathSystem(
         PackedComponentPool<DeadComponent> deadEntities,

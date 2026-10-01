@@ -4,6 +4,8 @@ using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
+using Game.Modules.BodyPartEffects;
+using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death;
@@ -30,7 +32,7 @@ public sealed class InventoryModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [ActionsModule.ModuleId, CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, StatusEffectAuraModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId];
+    public IReadOnlyList<Guid> Requires { get; } = [ActionsModule.ModuleId, CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, BodyPartEffectsModule.ModuleId, StatusEffectAuraModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId];
 
     public void RegisterComponents(ComponentRegistration registration)
     {
@@ -85,6 +87,7 @@ public sealed class InventoryModule : IGameModule
             statModifiers,
             deadEntities,
             mana,
+            componentManager.GetPackedPool<MeleeDisabledComponent>(),
             hotkeyExpansionUnlocks,
             abilityScores,
             auraSources,

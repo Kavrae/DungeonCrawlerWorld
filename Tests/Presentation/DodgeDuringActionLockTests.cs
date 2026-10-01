@@ -89,6 +89,7 @@ public sealed class DodgeDuringActionLockTests
             components.GetPackedPool<PendingConsumableActivationComponent>(),
             components.GetPackedPool<PendingDelayedActionComponent>(),
             clock,
+            EntityActions.For(components, result.Catalogs.ActionCatalog, result.Catalogs.Definitions),
             ecs.EventBus);
 
         var actionTargeting = new ActionTargetingController(
@@ -101,7 +102,7 @@ public sealed class DodgeDuringActionLockTests
             new TransformView(components),
             new HotkeyBindingView(components),
             new InventoryView(components, result.Catalogs.ItemCatalog),
-            new ActionStateView(components, localTierRoster: null),
+            new ActionStateView(components, EntityActions.For(components, result.Catalogs.ActionCatalog, result.Catalogs.Definitions), result.Catalogs.ItemCatalog, localTierRoster: null),
             new AbilityScoreView(components),
             playerCommands,
             simulationClock: clock);

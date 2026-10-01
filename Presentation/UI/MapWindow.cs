@@ -348,6 +348,9 @@ public sealed class MapWindow : Window
     /// <summary>Read-only view of the armed ability's current hit-footprint -- see ActionTargetingController.HoveredFootprint.</summary>
     internal IReadOnlyList<Vector3Int> HoveredFootprint => _actionTargeting.HoveredFootprint;
 
+    /// <inheritdoc cref="ActionTargetingController.IsArmedConfirmRefused"/>
+    internal bool IsArmedConfirmRefused => _actionTargeting.IsArmedConfirmRefused;
+
     private bool TryGetPlayerPosition(out Vector3Int position)
     {
         var found = _mapView.TryGetOccupant(_mapView.PlayerEntityId, out var player);

@@ -18,7 +18,6 @@ using Game.Modules.Mana.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffectAura.Components;
 using Game.Modules.StatusEffects;
-using Game.Tags;
 using Game.World;
 using Game.Blueprints;
 
@@ -155,19 +154,12 @@ public sealed class ActionActivationSystem : ISystem
                 continue;
             }
 
-            var manaCost = SpellActivator.ManaCostOf(action.Activator);
-            if (!HasEnoughMana(entityId, manaCost))
+            if (ActivationQueries.GetBlocker(entityId, action.Activator, action.Tags, _mana, _meleeDisabled) != ActivationBlocker.None)
             {
                 continue;
             }
 
-            // Every Arm/Hand this entity has is simultaneously disabled (BodyPartEffectsSystem's
-            // own hard block) -- a GameTags.DeliveryMelee action can't
-            // be swung at all, not just at a heavily-reduced MeleeOutgoingDamage.
-            if (action.Tags.Has(GameTags.DeliveryMelee) && _meleeDisabled.Has(entityId))
-            {
-                continue;
-            }
+            var manaCost = SpellActivator.ManaCostOf(action.Activator);
 
             var activationWasSuccessful = false;
             switch (action.Activator.Timing.Category)
@@ -232,17 +224,6 @@ public sealed class ActionActivationSystem : ISystem
     {
         ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _mana, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures, _floatingTextFeed);
         return true;
-    }
-
-    /// <summary>A ManaCost &lt;= 0 (the default) always passes, even with no ManaComponent pool registered at all -- most actions (e.g. Punch) never touch mana.</summary>
-    private bool HasEnoughMana(int entityId, ushort manaCost)
-    {
-        if (manaCost <= 0)
-        {
-            return true;
-        }
-
-        return _mana.TryGetReadonly(entityId, out var mana) && mana.CurrentMana >= manaCost;
     }
 
     private void SpendManaIfAny(int entityId, ushort manaCost)

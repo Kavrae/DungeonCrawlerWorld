@@ -121,8 +121,53 @@ public sealed class ActionTargetingController(
         return _pendingDelayedActionTargetsBuffer;
     }
 
-    /// <summary>Advances the double-tap frame clock -- called once per MapWindow.Update, before anything else this class does that frame.</summary>
-    public void Tick() => _frameCounter++;
+    /// <summary>Advances the double-tap frame clock, and disarms whatever is armed once the player can no longer use it -- called once per MapWindow.Update, before anything else this class does that frame.</summary>
+    /// <remarks>An armed action whose arms are destroyed mid-aim, or whose mana a hit drains, would otherwise stay armed with nothing a confirm could do.</remarks>
+    public void Tick()
+    {
+        _frameCounter++;
+
+        if (IsArmedBlocked())
+        {
+            Disarm();
+        }
+    }
+
+    private bool IsArmedBlocked()
+    {
+        if (mapViewState.ArmedActionId is { } armedActionId)
+        {
+            return actionStateView.GetActionBlocker(world.PlayerEntityId, armedActionId) != ActivationBlocker.None;
+        }
+
+        if (mapViewState.ArmedItemStackInstanceId is { } armedStackInstanceId)
+        {
+            return actionStateView.GetItemBlocker(world.PlayerEntityId, armedStackInstanceId) != ActivationBlocker.None;
+        }
+
+        return false;
+    }
+
+    /// <summary>Something is armed and a confirm of it would be refused right now (see CanConfirmArmed) -- what UiInputController shows the disabled cursor over the map for.</summary>
+    internal bool IsArmedConfirmRefused =>
+        (mapViewState.ArmedActionId is not null || mapViewState.ArmedItemStackInstanceId is not null) && !CanConfirmArmed();
+
+    /// <summary>Whether a confirm of whatever is armed would be accepted now: it isn't blocked, and PlayerCommands would queue it (ready before the input buffer expires).</summary>
+    /// <remarks>A refused confirm leaves the action armed, so the player can confirm again once it's ready.</remarks>
+    private bool CanConfirmArmed()
+    {
+        if (IsArmedBlocked())
+        {
+            return false;
+        }
+
+        if (mapViewState.ArmedActionId is { } armedActionId)
+        {
+            return playerCommands.CanQueueAction(armedActionId);
+        }
+
+        return mapViewState.ArmedItemStackInstanceId is null || playerCommands.CanQueueConsumable();
+    }
 
     /// <summary>
     /// While an action or item is armed, tracks which map tile the mouse is currently over (on
@@ -209,6 +254,11 @@ public sealed class ActionTargetingController(
         }
 
         if (mapViewState.TargetableTiles is not { } targetableTiles || !targetableTiles.Contains(targetTile))
+        {
+            return;
+        }
+
+        if (!CanConfirmArmed())
         {
             return;
         }
@@ -375,20 +425,27 @@ public sealed class ActionTargetingController(
     /// of the cursor already hovering exactly there). Cancelling an armed slot is right-click/
     /// Escape's job now (see CancelArmedOrPendingAction) -- re-pressing the same key always means
     /// "go," not "nevermind."
-    /// An action the player can't currently afford (see HasEnoughMana) is inert, the same no-op
-    /// an unbound slot already is -- HotbarContent greys it out the same way (see its own
-    /// isUsable check), so "can't be armed" and "looks unusable" stay in sync, mirroring
-    /// HandleItemSlotPress's identical treatment of an unusable item slot.
+    /// An action the player can't use right now (ActionStateView.GetActionBlocker -- not enough
+    /// mana, melee disabled) is inert, the same no-op an unbound slot already is -- HotbarContent
+    /// greys it out through the same query, so "can't be armed" and "looks unusable" stay in sync,
+    /// mirroring HandleItemSlotPress's identical treatment of an unusable item slot. A double-tap
+    /// that PlayerCommands wouldn't queue (not ready before the input buffer expires) fires nothing
+    /// and leaves the slot armed from its first press.
     /// </summary>
     private void HandleActionSlotPress(HotkeySlot slot, Guid actionId, bool isDoubleTap)
     {
-        if (!HasEnoughMana(world.PlayerEntityId, actionId))
+        if (actionStateView.GetActionBlocker(world.PlayerEntityId, actionId) != ActivationBlocker.None)
         {
             return;
         }
 
         if (isDoubleTap)
         {
+            if (!playerCommands.CanQueueAction(actionId))
+            {
+                return;
+            }
+
             TryActivateWithAutoTarget(world.PlayerEntityId, actionId);
 
             // The pair's first press (a moment ago, within the double-tap window) armed this
@@ -423,8 +480,8 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// A bound item with no Activator (e.g. an Equipment/Tool item with no activated
-    /// action yet), or with no remaining stock (the player's stack was fully consumed -- see
+    /// A bound item the player can't use right now (ActionStateView.GetItemBlocker -- e.g. an
+    /// Equipment/Tool item with no activated action yet), or with no remaining stock (the player's stack was fully consumed -- see
     /// InventoryItemStackComponent's "no instance means empty" convention, the same one
     /// InventoryActions.ConsumeItem relies on), is inert, the same no-op an unbound slot already
     /// is -- HotbarContent greys it out the same way, so "can't be armed" and "looks unusable"
@@ -441,13 +498,18 @@ public sealed class ActionTargetingController(
     {
         if (!inventoryView.TryGetStack(world.PlayerEntityId, stackInstanceId, out var stack) ||
             !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
-            item.Activator is null)
+            actionStateView.GetItemBlocker(world.PlayerEntityId, stackInstanceId) != ActivationBlocker.None)
         {
             return;
         }
 
         if (isDoubleTap && item.Tags.Has(GameTags.TargetingSelf))
         {
+            if (!playerCommands.CanQueueConsumable())
+            {
+                return;
+            }
+
             TryActivateItemOnSelf(world.PlayerEntityId, stackInstanceId);
 
             if (mapViewState.ArmedSlot == slot)
@@ -517,8 +579,8 @@ public sealed class ActionTargetingController(
     public void ArmItemFromStack(uint stackInstanceId)
     {
         if (!inventoryView.TryGetStack(world.PlayerEntityId, stackInstanceId, out var stack) ||
-            !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
-            item.Activator is null)
+            !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out _) ||
+            actionStateView.GetItemBlocker(world.PlayerEntityId, stackInstanceId) != ActivationBlocker.None)
         {
             return;
         }
@@ -533,23 +595,6 @@ public sealed class ActionTargetingController(
         mapViewState.ArmedSlot = null;
         mapViewState.TargetableTiles = null;
         _targetableTilesOrigin = null;
-    }
-
-    /// <summary>Mirrors ActionActivationSystem's own gate (see its own doc comment) -- a zero-cost action (or an unknown actionId, left for the actual activation attempt to reject) always passes, even with no ManaComponent pool wired in.</summary>
-    private bool HasEnoughMana(int entityId, Guid actionId)
-    {
-        if (!actionCatalog.TryGet(actionId, out var action))
-        {
-            return true;
-        }
-
-        var manaCost = SpellActivator.ManaCostOf(action.Activator);
-        if (manaCost <= 0)
-        {
-            return true;
-        }
-
-        return actionStateView.TryGetMana(entityId, out var mana) && mana.CurrentMana >= manaCost;
     }
 
     /// <summary>
@@ -773,8 +818,7 @@ public sealed class ActionTargetingController(
 
         uiLayers.CloseAllClosableWindows();
 
-        var waitsForLock = !actionCatalog.TryGet(actionId, out var action) || action.Activator.Timing.Category != ActionTimingCategory.FreeCast;
-        playerCommands.QueueAction(actionId, effectTargetTiles, waitsForLock, stepOnActivation);
+        playerCommands.QueueAction(actionId, effectTargetTiles, stepOnActivation);
     }
 
     /// <summary>The tile a Dodge resolved to <paramref name="targetTiles"/> steps to, or null for a Dodge in place.</summary>

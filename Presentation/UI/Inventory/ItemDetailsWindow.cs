@@ -3,6 +3,8 @@ using Engine.Tags;
 using FontStashSharp;
 using Game.Modules.Actions;
 using Game.Modules.Inventory;
+using Game.Views;
+using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
@@ -53,7 +55,9 @@ public sealed class ItemDetailsWindow(
     ElementPoolService elementPoolService,
     LabelRenderer labelRenderer,
     ActionCatalog actionCatalog,
-    GameplayTagRegistry gameplayTags)
+    GameplayTagRegistry gameplayTags,
+    ActionStateView actionStateView,
+    IPlayerQuery playerQuery)
     : Window(fontService, elementPoolService, labelRenderer)
 {
     /// <summary>The stack id Configure is given for an item shown from its definition alone (a loot box reward whose stack is gone) -- there's no stack to compare, so Compare does nothing.</summary>
@@ -93,6 +97,7 @@ public sealed class ItemDetailsWindow(
     private bool _childrenReady;
     private int _currentEntityId;
     private uint _currentStackInstanceId;
+    private ActivationBlocker _displayedBlocker;
 
     /// <summary>Settable late-bound callback for this window's own "Compare" title button, if it has one -- see this class's own Initialize override for why only some instances do. Wired by whichever controller creates this instance (ItemDetailsWindowController for the anchor pane; ItemComparisonController deliberately never sets this for its own comparison columns) *before* calling Initialize.</summary>
     public Action<int, uint>? OnCompareRequested { get; set; }
@@ -156,6 +161,23 @@ public sealed class ItemDetailsWindow(
         }
     }
 
+    /// <summary>Rebuilds when the reason the player can't use the shown item appears, changes or clears -- arms destroyed, mana spent -- while the window stays open.</summary>
+    public override void Update(GameTime gameTime)
+    {
+        base.Update(gameTime);
+
+        if (_childrenReady && _definition is not null && ComputeBlocker() != _displayedBlocker)
+        {
+            Rebuild();
+        }
+    }
+
+    /// <summary>Why the player can't use the shown stack right now -- only for the player's own activatable stack; a shop's or a corpse's item isn't the player's to use yet.</summary>
+    private ActivationBlocker ComputeBlocker() =>
+        _definition?.Activator is not null && _currentStackInstanceId != NoStackInstanceId && _currentEntityId == playerQuery.PlayerEntityId
+            ? actionStateView.GetItemBlocker(_currentEntityId, _currentStackInstanceId)
+            : ActivationBlocker.None;
+
     protected override void OnChildrenInitialized()
     {
         base.OnChildrenInitialized();
@@ -187,6 +209,13 @@ public sealed class ItemDetailsWindow(
         var width = _contentWidth - ContentPadding.X * 2;
 
         BuildNameRow(_definition, width);
+
+        _displayedBlocker = ComputeBlocker();
+        if (_displayedBlocker != ActivationBlocker.None)
+        {
+            BuildFixedTextLine(width, ActivationBlockerText.Describe(_displayedBlocker), ActivationBlockerText.ReasonColor);
+        }
+
         BuildDivider(width, "Effects", 0.125f);
         BuildEffectsSection(_definition, width);
 

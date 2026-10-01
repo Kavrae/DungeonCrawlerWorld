@@ -27,7 +27,7 @@ public sealed class GameViews
         HealthView = new HealthView(componentManager, EntityBodyParts);
         StatModifierView = new StatModifierView(componentManager);
         AbilityScoreView = new AbilityScoreView(componentManager);
-        ActionStateView = new ActionStateView(componentManager, localTierRoster);
+        ActionStateView = new ActionStateView(componentManager, EntityActions, context.Items, localTierRoster);
         TransformView = new TransformView(componentManager);
     }
 

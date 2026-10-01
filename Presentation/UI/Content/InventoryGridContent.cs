@@ -1,5 +1,6 @@
 using Engine.ECS.Systems;
 using Engine.Tags;
+using Game.Modules.Actions;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops;
@@ -514,11 +515,32 @@ public sealed class InventoryGridContent(
         var summary = ItemHoverSummary.For(definition, showCharges: isSingleStack);
 
         var rows = ComputeHoverRows(definition, stackQuantity);
+        var blocker = candidate.StackInstanceId is { } blockedStackInstanceId && entityId == world.PlayerEntityId && definition.Activator is not null
+            ? _actionStateView.GetItemBlocker(world.PlayerEntityId, blockedStackInstanceId)
+            : ActivationBlocker.None;
 
         // Shop mode's band table needs a guaranteed-wide-enough box for its range-annotated rows
         // (e.g. "Understocked (10-14)") -- a plain description tooltip still shrinks to content as
         // before.
-        tooltipController.Show(this, candidate.Rectangle, PopupAnchor.East, PopupGap, PopupChrome.HoverPopupMaximumSize, summary, definition.Name, rows, useFixedWidth: rows is not null);
+        tooltipController.Show(this, candidate.Rectangle, PopupAnchor.East, PopupGap, PopupChrome.HoverPopupMaximumSize, summary, definition.Name, WithBlockerRows(blocker, rows), useFixedWidth: rows is not null);
+    }
+
+    /// <summary>The reason the player can't use this item (see ActivationBlockerText) ahead of whatever rows shop mode adds -- only the player's own activatable stacks ever have one; a sword with no activation isn't "deactivated".</summary>
+    private static IReadOnlyList<TooltipRow>? WithBlockerRows(ActivationBlocker blocker, IReadOnlyList<TooltipRow>? rows)
+    {
+        if (blocker == ActivationBlocker.None)
+        {
+            return rows;
+        }
+
+        var combined = new List<TooltipRow>();
+        ActivationBlockerText.AppendRows(combined, blocker);
+        if (rows is not null)
+        {
+            combined.AddRange(rows);
+        }
+
+        return combined;
     }
 
     /// <summary>
@@ -714,10 +736,10 @@ public sealed class InventoryGridContent(
         }
     }
 
-    /// <summary>The actual Activate attempt, shared by "Activate" (BuildItemContextMenu) and a confirmed double-click (OnCellDoubleClicked) -- a no-op, not a fallback to the single-click action, if the item can't be activated or the global cooldown is still up (see CanActivate/IsPlayerActionLocked).</summary>
+    /// <summary>The actual Activate attempt, shared by "Activate" (BuildItemContextMenu) and a confirmed double-click (OnCellDoubleClicked) -- a no-op, not a fallback to the single-click action, if the item can't be activated, the global cooldown is still up, or the player can't use it right now (see CanActivate/IsPlayerActionLocked/IsBlocked).</summary>
     private void TryActivate(int cellEntityId, uint stackInstanceId)
     {
-        if (CanActivate(cellEntityId, stackInstanceId) && !IsPlayerActionLocked())
+        if (CanActivate(cellEntityId, stackInstanceId) && !IsPlayerActionLocked() && !IsBlocked(stackInstanceId))
         {
             onActivateRequested(cellEntityId, stackInstanceId);
         }
@@ -744,6 +766,9 @@ public sealed class InventoryGridContent(
 
     /// <summary>Mirrors MapWindow's own "Inspect" context-menu option, the existing precedent for gating a UI action on the shared per-entity action lock (ActionLockGate.IsBlocked).</summary>
     private bool IsPlayerActionLocked() => _actionStateView.IsActionLocked(world.PlayerEntityId, simulationClock.CurrentFrame);
+
+    /// <summary>The player can't use this stack right now (ActionStateView.GetItemBlocker) -- "Activate" stays visible but disabled, the same as while locked.</summary>
+    private bool IsBlocked(uint stackInstanceId) => _actionStateView.GetItemBlocker(world.PlayerEntityId, stackInstanceId) != ActivationBlocker.None;
 
     /// <summary>
     /// "Activate" (arms the item exactly as an ordinary hotbar press would -- see
@@ -783,7 +808,7 @@ public sealed class InventoryGridContent(
 
         if (CanActivate(cell.EntityId, stackInstanceId))
         {
-            options.Add(new ContextMenuOption("Activate", null, Enabled: !IsPlayerActionLocked(), () => onActivateRequested(cell.EntityId, stackInstanceId)));
+            options.Add(new ContextMenuOption("Activate", null, Enabled: !IsPlayerActionLocked() && !IsBlocked(stackInstanceId), () => onActivateRequested(cell.EntityId, stackInstanceId)));
         }
 
         options.Add(new ContextMenuOption("Compare", null, Enabled: true, () => onCompareRequested(cell.EntityId, stackInstanceId)));

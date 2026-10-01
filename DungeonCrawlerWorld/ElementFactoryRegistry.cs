@@ -115,7 +115,7 @@ public static class ElementFactoryRegistry
             mapView));
 
         Register<InspectionWindow>((font, elements, glyph) => new InspectionWindow(font, elements, glyph, mapViewState));
-        Register<ItemDetailsWindow>((font, elements, glyph) => new ItemDetailsWindow(font, elements, glyph, actionCatalog, catalogs.GameplayTags));
+        Register<ItemDetailsWindow>((font, elements, glyph) => new ItemDetailsWindow(font, elements, glyph, actionCatalog, catalogs.GameplayTags, views.ActionStateView, world));
         Register<ItemIconElement>((font, elements, glyph) => new ItemIconElement(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
         Register<CurrencyElement>((font, elements, glyph) => new CurrencyElement(font, elements, glyph, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer));
         Register<TargetShapePreviewElement>((font, elements, glyph) => new TargetShapePreviewElement(font, elements, glyph));

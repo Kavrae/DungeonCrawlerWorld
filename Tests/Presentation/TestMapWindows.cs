@@ -61,6 +61,7 @@ internal static class TestMapWindows
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             new SimulationClock(),
+            TestActionStateViews.EntityActions(componentManager, resolvedActionCatalog),
             eventBus);
         var actionTargeting = new ActionTargetingController(
             world,
@@ -72,7 +73,7 @@ internal static class TestMapWindows
             new TransformView(componentManager),
             new HotkeyBindingView(componentManager),
             new InventoryView(componentManager, resolvedItemCatalog),
-            new ActionStateView(componentManager, localTierRoster: null),
+            TestActionStateViews.Over(componentManager, resolvedActionCatalog, resolvedItemCatalog),
             new AbilityScoreView(componentManager),
             playerCommands, simulationClock: new SimulationClock());
         var playerMovement = new PlayerMovementController(playerCommands);

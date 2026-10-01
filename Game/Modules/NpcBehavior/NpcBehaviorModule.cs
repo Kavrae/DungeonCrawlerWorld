@@ -2,6 +2,8 @@ using Engine.Modules;
 using Game.Blueprints;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
+using Game.Modules.BodyPartEffects;
+using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death;
@@ -10,6 +12,8 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Mana;
+using Game.Modules.Mana.Components;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.NpcBehavior.Components;
@@ -35,7 +39,7 @@ public sealed class NpcBehaviorModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, InventoryModule.ModuleId, ActionsModule.ModuleId, DeathModule.ModuleId, MovementModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId];
+    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, InventoryModule.ModuleId, ActionsModule.ModuleId, BodyPartEffectsModule.ModuleId, ManaModule.ModuleId, DeathModule.ModuleId, MovementModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId];
 
     public IReadOnlyList<Guid> RunsBefore { get; } = [MovementModule.ModuleId];
 
@@ -69,7 +73,9 @@ public sealed class NpcBehaviorModule : IGameModule
             context.MathUtility,
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             context.ProcessingTierEvents,
-            deadEntities));
+            deadEntities,
+            componentManager.GetPackedPool<ManaComponent>(),
+            componentManager.GetPackedPool<MeleeDisabledComponent>()));
 
         systemManager.Register(new TestDummyAttackSystem(
             componentManager.GetPackedPool<TestDummyComponent>(),

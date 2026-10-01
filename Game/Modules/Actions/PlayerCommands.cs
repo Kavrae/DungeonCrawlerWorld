@@ -12,16 +12,19 @@ using Game.World;
 
 namespace Game.Modules.Actions;
 
-/// <summary>Holds the player's one pending command until the action lock clears, and is the only writer of the player's step and activation requests.</summary>
+/// <summary>Holds the player's one pending command until it can be carried out, and is the only writer of the player's step and activation requests.</summary>
 /// <remarks>
 /// A single slot: queueing a move, action or consumable replaces whatever was there, so the command that resolves
-/// when the lock clears is always the newest one. A buffered command expires ExpiryFrames after it was queued,
-/// measured on the simulation clock so a pause does not age it. A command queued while the player is already free
-/// is written the same frame.
+/// is always the newest one. A move or consumable waits for the action lock to clear; an action waits until it is
+/// ready (ActivationQueries.FramesUntilReady: its cooldown and, unless FreeCast, the lock). A buffered command
+/// expires ExpiryFrames after it was queued, measured on the simulation clock so a pause does not age it. A command
+/// queued while it is already ready is written the same frame.
+///
+/// An action or consumable that couldn't be ready before it expired is refused rather than buffered: nothing is
+/// queued, whatever was buffered stays, and the caller is told, so a confirm is never silently dropped.
 ///
 /// Writing a command also withdraws whatever the player had asked for earlier and the game hasn't taken yet: an
 /// action or consumable clears a step still in NextMapPosition, and a move removes a pending activation request.
-/// An action that doesn't wait for the lock (FreeCast) skips the slot and is written at once, but still empties it.
 ///
 /// A move is buffered as a direction, not a tile, and resolved against the player's position when it is written. A
 /// move whose tile can't be occupied clears NextMapPosition rather than leaving an older step in place.
@@ -56,6 +59,7 @@ public sealed class PlayerCommands
     private readonly PackedComponentPool<PendingConsumableActivationComponent> _pendingConsumables;
     private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
     private readonly SimulationClock _simulationClock;
+    private readonly EntityActions _entityActions;
 
     private CommandKind _kind;
     private Vector3Int _moveDirection;
@@ -76,6 +80,7 @@ public sealed class PlayerCommands
         PackedComponentPool<PendingConsumableActivationComponent> pendingConsumables,
         PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
         SimulationClock simulationClock,
+        EntityActions entityActions,
         EventBus eventBus)
     {
         _world = world;
@@ -86,6 +91,7 @@ public sealed class PlayerCommands
         _pendingConsumables = pendingConsumables;
         _pendingDelayedActions = pendingDelayedActions;
         _simulationClock = simulationClock;
+        _entityActions = entityActions;
 
         eventBus.Subscribe<ActionActivatedEvent>(OnActionActivated);
         eventBus.Subscribe<EntityStaggeredEvent>(OnEntityStaggered);
@@ -100,15 +106,13 @@ public sealed class PlayerCommands
         TryWriteBuffered();
     }
 
-    /// <summary>Buffers an activation of <paramref name="actionId"/> against <paramref name="targetTiles"/>, replacing any buffered command.</summary>
-    /// <remarks>An action that doesn't wait for the action lock is written immediately instead of being buffered. <paramref name="stepOnActivation"/> is a tile to step to once the action activates.</remarks>
-    public void QueueAction(Guid actionId, Vector3Int[] targetTiles, bool waitsForLock, Vector3Int? stepOnActivation = null)
+    /// <summary>Buffers an activation of <paramref name="actionId"/> against <paramref name="targetTiles"/>, replacing any buffered command. Returns false, buffering nothing, when <see cref="CanQueueAction"/> is false.</summary>
+    /// <remarks>An action that is ready now is written immediately. <paramref name="stepOnActivation"/> is a tile to step to once the action activates.</remarks>
+    public bool QueueAction(Guid actionId, Vector3Int[] targetTiles, Vector3Int? stepOnActivation = null)
     {
-        if (!waitsForLock)
+        if (!CanQueueAction(actionId))
         {
-            Clear();
-            WriteAction(_world.PlayerEntityId, actionId, targetTiles, stepOnActivation);
-            return;
+            return false;
         }
 
         Buffer(CommandKind.Action);
@@ -116,16 +120,33 @@ public sealed class PlayerCommands
         _targetTiles = targetTiles;
         _stepOnActivation = stepOnActivation;
         TryWriteBuffered();
+        return true;
     }
 
-    /// <summary>Buffers an activation of the stack <paramref name="stackInstanceId"/> against <paramref name="targetTiles"/>, replacing any buffered command.</summary>
-    public void QueueConsumable(uint stackInstanceId, Vector3Int[] targetTiles)
+    /// <summary>Whether the player has <paramref name="actionId"/> and it will be ready (cooldown and, unless FreeCast, the action lock) before a command buffered now would expire.</summary>
+    public bool CanQueueAction(Guid actionId) =>
+        _entityActions.TryGetEffectiveAction(_world.PlayerEntityId, actionId, out var action) &&
+        ActivationQueries.FramesUntilReady(_world.PlayerEntityId, action, _entityActions, _actionLocks, _simulationClock.CurrentFrame) < ExpiryFrames;
+
+    /// <summary>Buffers an activation of the stack <paramref name="stackInstanceId"/> against <paramref name="targetTiles"/>, replacing any buffered command. Returns false, buffering nothing, when <see cref="CanQueueConsumable"/> is false.</summary>
+    public bool QueueConsumable(uint stackInstanceId, Vector3Int[] targetTiles)
     {
+        if (!CanQueueConsumable())
+        {
+            return false;
+        }
+
         Buffer(CommandKind.Consumable);
         _stackInstanceId = stackInstanceId;
         _targetTiles = targetTiles;
         TryWriteBuffered();
+        return true;
     }
+
+    /// <summary>Whether the player's action lock clears before a consumable buffered now would expire.</summary>
+    public bool CanQueueConsumable() =>
+        _actionLocks.TryGetReadonly(_world.PlayerEntityId, out var actionLock) &&
+        ActionLockGate.FramesRemaining(actionLock, _simulationClock.CurrentFrame) < ExpiryFrames;
 
     /// <summary>Drops the buffered command. Returns whether there was one.</summary>
     /// <remarks>A step waiting on an activation already written is not buffered input, so it is kept.</remarks>
@@ -215,7 +236,7 @@ public sealed class PlayerCommands
         }
 
         var playerEntityId = _world.PlayerEntityId;
-        if (ActionLockGate.IsBlocked(_actionLocks, playerEntityId, now))
+        if (!IsBufferedCommandReady(playerEntityId, now))
         {
             return false;
         }
@@ -239,6 +260,17 @@ public sealed class PlayerCommands
         }
 
         return true;
+    }
+
+    private bool IsBufferedCommandReady(int playerEntityId, long now)
+    {
+        if (_kind != CommandKind.Action)
+        {
+            return !ActionLockGate.IsBlocked(_actionLocks, playerEntityId, now);
+        }
+
+        return !_entityActions.TryGetEffectiveAction(playerEntityId, _actionId, out var action) ||
+            ActivationQueries.FramesUntilReady(playerEntityId, action, _entityActions, _actionLocks, now) == 0;
     }
 
     private void WriteMove(int playerEntityId, Vector3Int direction)

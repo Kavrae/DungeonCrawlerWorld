@@ -38,5 +38,6 @@ public sealed class GameCommands(World.World world, GameModuleContext context)
         context.ComponentManager.GetPackedPool<PendingConsumableActivationComponent>(),
         context.ComponentManager.GetPackedPool<PendingDelayedActionComponent>(),
         context.SimulationClock,
+        EntityActions.For(context.ComponentManager, context.Actions, context.Definitions),
         context.EventBus);
 }

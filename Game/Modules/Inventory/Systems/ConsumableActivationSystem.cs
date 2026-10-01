@@ -10,6 +10,7 @@ using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
+using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
@@ -95,6 +96,7 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly EntityKeys _entityKeys;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
     private readonly PackedComponentPool<ManaComponent> _mana;
+    private readonly PackedComponentPool<MeleeDisabledComponent> _meleeDisabled;
     private readonly PackedComponentPool<HotkeyExpansionUnlockComponent> _hotkeyExpansionUnlocks;
     private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores;
     private readonly StatusEffectAuraApplierRegistry _statusEffectAppliers;
@@ -127,6 +129,7 @@ public sealed class ConsumableActivationSystem : ISystem
         MultiComponentPool<StatModifierComponent> statModifiers,
         PackedComponentPool<DeadComponent> deadEntities,
         PackedComponentPool<ManaComponent> mana,
+        PackedComponentPool<MeleeDisabledComponent> meleeDisabled,
         PackedComponentPool<HotkeyExpansionUnlockComponent> hotkeyExpansionUnlocks,
         PackedComponentPool<AbilityScoresComponent> abilityScores,
         MultiComponentPool<StatusEffectAuraSourceComponent> auraSources,
@@ -152,6 +155,7 @@ public sealed class ConsumableActivationSystem : ISystem
         _statModifiers = statModifiers;
         _deadEntities = deadEntities;
         _mana = mana;
+        _meleeDisabled = meleeDisabled;
         _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
         _abilityScores = abilityScores;
         _statusEffectAppliers = statusEffectAppliers;
@@ -189,7 +193,8 @@ public sealed class ConsumableActivationSystem : ISystem
             _pendingActivations.Remove(entityId);
 
             if (!InventoryQueries.TryFindByStackInstanceId(_componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, request.StackInstanceId, out var stack) ||
-                !InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var item))
+                !InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var item) ||
+                ActivationQueries.GetBlocker(entityId, item.Activator, item.Tags, _mana, _meleeDisabled) != ActivationBlocker.None)
             {
                 continue;
             }

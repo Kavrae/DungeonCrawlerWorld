@@ -38,6 +38,7 @@ public sealed class PlayerCommandsTests
         public required SimulationClock Clock { get; init; }
         public required ComponentManager ComponentManager { get; init; }
         public required EventBus EventBus { get; init; }
+        public required EntityActions Actions { get; init; }
 
         private KeyboardState _previous;
 
@@ -97,6 +98,7 @@ public sealed class PlayerCommandsTests
 
         var clock = new SimulationClock();
         var eventBus = new EventBus();
+        var entityActions = TestActionStateViews.EntityActions(componentManager, actionCatalog);
         var playerCommands = new PlayerCommands(
             world,
             componentManager.GetDirectPool<TransformComponent>(),
@@ -106,6 +108,7 @@ public sealed class PlayerCommandsTests
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             clock,
+            entityActions,
             eventBus);
 
         var actionTargeting = new ActionTargetingController(
@@ -118,7 +121,7 @@ public sealed class PlayerCommandsTests
             new TransformView(componentManager),
             new HotkeyBindingView(componentManager),
             new InventoryView(componentManager, new ItemCatalog()),
-            new ActionStateView(componentManager, localTierRoster: null),
+            TestActionStateViews.Over(componentManager, actionCatalog),
             new AbilityScoreView(componentManager),
             playerCommands,
             simulationClock: clock);
@@ -131,6 +134,7 @@ public sealed class PlayerCommandsTests
             Clock = clock,
             ComponentManager = componentManager,
             EventBus = eventBus,
+            Actions = entityActions,
         };
     }
 
@@ -165,6 +169,63 @@ public sealed class PlayerCommandsTests
         harness.ConfirmSelfAction(LockEndsAtFrame - PlayerCommands.ExpiryFrames);
         harness.Frame(LockEndsAtFrame);
 
+        Assert.IsFalse(harness.HasPendingAction);
+    }
+
+    [TestMethod]
+    public void ActionQueuedJustBeforeItsCooldownEnds_IsWrittenTheFrameItEnds()
+    {
+        var harness = Build(locked: false);
+        harness.Clock.Advance(10);
+        harness.Actions.SetCooldown(PlayerEntityId, SelfActionId, 2, now: 10);
+
+        Assert.IsTrue(harness.Buffer.QueueAction(SelfActionId, [PlayerPosition]));
+        Assert.IsFalse(harness.HasPendingAction);
+
+        harness.Frame(11);
+        Assert.IsFalse(harness.HasPendingAction);
+
+        harness.Frame(12);
+        Assert.AreEqual(SelfActionId, harness.PendingActionId);
+    }
+
+    [TestMethod]
+    public void ActionWhoseCooldownOutlastsTheBuffer_IsRefused_AndLeavesTheBufferedCommand()
+    {
+        var harness = Build();
+        harness.Clock.Advance(50);
+        Assert.IsTrue(harness.Buffer.QueueConsumable(StackInstanceId, [PlayerPosition]));
+        harness.Actions.SetCooldown(PlayerEntityId, SelfActionId, (ushort)(PlayerCommands.ExpiryFrames + 5), now: 50);
+
+        Assert.IsFalse(harness.Buffer.CanQueueAction(SelfActionId));
+        Assert.IsFalse(harness.Buffer.QueueAction(SelfActionId, [PlayerPosition]));
+
+        harness.Frame(LockEndsAtFrame);
+        Assert.IsTrue(harness.HasPendingConsumable);
+        Assert.IsFalse(harness.HasPendingAction);
+    }
+
+    [TestMethod]
+    public void ActionOrConsumableConfirmedTooEarlyInALongLock_IsRefused()
+    {
+        var harness = Build();
+        harness.Clock.Advance(LockEndsAtFrame - PlayerCommands.ExpiryFrames);
+
+        Assert.IsFalse(harness.Buffer.QueueAction(SelfActionId, [PlayerPosition]));
+        Assert.IsFalse(harness.Buffer.QueueConsumable(StackInstanceId, [PlayerPosition]));
+
+        harness.Clock.Advance(LockEndsAtFrame - PlayerCommands.ExpiryFrames + 1);
+
+        Assert.IsTrue(harness.Buffer.CanQueueAction(SelfActionId));
+        Assert.IsTrue(harness.Buffer.CanQueueConsumable());
+    }
+
+    [TestMethod]
+    public void ActionThePlayerDoesNotHave_IsRefused()
+    {
+        var harness = Build(locked: false);
+
+        Assert.IsFalse(harness.Buffer.QueueAction(Guid.NewGuid(), [PlayerPosition]));
         Assert.IsFalse(harness.HasPendingAction);
     }
 

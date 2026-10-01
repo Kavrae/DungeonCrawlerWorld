@@ -1,21 +1,27 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
+using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.ProcessingTier;
 
 namespace Game.Views;
 
-/// <summary>What gates an entity's next action -- its action lock, mana and potion cooldown -- and the windup it's in, if any.</summary>
+/// <summary>What gates an entity's next action -- what blocks it, its action lock, mana, cooldowns and potion cooldown -- and the windup it's in, if any.</summary>
 /// <param name="localTierRoster">Scopes CopyLocalPendingDelayedActions to the Local tier; null (a test without tiers) keeps every pending windup.</param>
-public sealed class ActionStateView(ComponentManager componentManager, LocalTierRoster? localTierRoster)
+public sealed class ActionStateView(ComponentManager componentManager, EntityActions entityActions, ItemCatalog itemCatalog, LocalTierRoster? localTierRoster)
 {
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
     private readonly PackedComponentPool<ManaComponent> _mana = componentManager.GetPackedPool<ManaComponent>();
     private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns = componentManager.GetPackedPool<PotionCooldownComponent>();
     private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions = componentManager.GetPackedPool<PendingDelayedActionComponent>();
+    private readonly PackedComponentPool<MeleeDisabledComponent> _meleeDisabled = componentManager.GetPackedPool<MeleeDisabledComponent>();
+    private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
 
     public bool TryGetActionLock(int entityId, out ActionLockComponent actionLock) => _actionLocks.TryGetReadonly(entityId, out actionLock);
 
@@ -25,6 +31,28 @@ public sealed class ActionStateView(ComponentManager componentManager, LocalTier
     public bool TryGetMana(int entityId, out ManaComponent mana) => _mana.TryGetReadonly(entityId, out mana);
 
     public bool TryGetPotionCooldown(int entityId, out PotionCooldownComponent potionCooldown) => _potionCooldowns.TryGetReadonly(entityId, out potionCooldown);
+
+    /// <inheritdoc cref="ActivationQueries.GetBlocker"/>
+    /// <remarks>Reads the entity's effective action. An action the entity doesn't have is None: a binding problem, not a reason to show.</remarks>
+    public ActivationBlocker GetActionBlocker(int entityId, Guid actionId) =>
+        entityActions.TryGetEffectiveAction(entityId, actionId, out var action)
+            ? ActivationQueries.GetBlocker(entityId, action.Activator, action.Tags, _mana, _meleeDisabled)
+            : ActivationBlocker.None;
+
+    /// <inheritdoc cref="ActivationQueries.GetBlocker"/>
+    /// <remarks>Reads the stack's effective item. A stack the entity doesn't hold is None.</remarks>
+    public ActivationBlocker GetItemBlocker(int entityId, uint stackInstanceId) =>
+        InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, entityId, stackInstanceId, out var stack) &&
+        InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item)
+            ? ActivationQueries.GetBlocker(entityId, item.Activator, item.Tags, _mana, _meleeDisabled)
+            : ActivationBlocker.None;
+
+    /// <inheritdoc cref="ActivationQueries.FramesUntilReady"/>
+    /// <remarks>Reads the entity's effective action. An action the entity doesn't have is 0.</remarks>
+    public int FramesUntilReady(int entityId, Guid actionId, long now) =>
+        entityActions.TryGetEffectiveAction(entityId, actionId, out var action)
+            ? ActivationQueries.FramesUntilReady(entityId, action, entityActions, _actionLocks, now)
+            : 0;
 
     /// <summary>The Delayed action entityId is winding up, if any.</summary>
     public bool TryGetPendingDelayedAction(int entityId, out PendingDelayedActionComponent pending) => _pendingDelayedActions.TryGetReadonly(entityId, out pending);

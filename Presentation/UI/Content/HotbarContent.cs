@@ -32,7 +32,7 @@ namespace Presentation.UI.Content;
 /// outer fade (see NotificationCenter's own unread-glow for the same primitive, and
 /// GridSquareRenderer.DrawStateOverlay's Selected case for the same treatment on a selected
 /// inventory cell). A slot that's disabled for
-/// any reason -- an unaffordable action, an unusable/out-of-stock item, or a not-yet-unlocked
+/// any reason -- an action or item the player can't use right now (ActionStateView.GetActionBlocker/GetItemBlocker), or a not-yet-unlocked
 /// Expansion slot in an already-revealed row/page -- draws its border, icon, and text overlays
 /// all at DisabledSlotAlpha; the radial cooldown/lock wedge (RadialFillRenderer) stays scoped to
 /// the icon itself regardless. Implements TODO.md's "Inventory and spell hotbar" and "Player
@@ -93,7 +93,7 @@ public sealed class HotbarContent(
     private SpriteFontBase _overlayFont = null!;
     private SpriteFontBase _countdownFont = null!;
 
-    /// <summary>Whether each slot is currently active (usable) -- refreshed once per Update (see RefreshSlotActiveStates), not recomputed during Draw. Deciding *whether* a slot is disabled (locked, unaffordable, out of stock) is state/game logic; Draw only ever asks "is this slot active" and independently decides how that reads visually (see AlphaFor) -- the two are deliberately kept separate rather than DrawActionSlot/DrawItemSlot each computing and returning their own alpha for the rest of DrawSlot to reuse.</summary>
+    /// <summary>Whether each slot is currently active (usable) -- refreshed once per Update (see RefreshSlotActiveStates), not recomputed during Draw. Deciding *whether* a slot is disabled (locked, or blocked -- see ComputeIsSlotActive) is state/game logic; Draw only ever asks "is this slot active" and independently decides how that reads visually (see AlphaFor) -- the two are deliberately kept separate rather than DrawActionSlot/DrawItemSlot each computing and returning their own alpha for the rest of DrawSlot to reuse.</summary>
     private readonly Dictionary<HotkeySlot, bool> _slotActiveStates = [];
 
     /// <summary>Read at construction (not deferred to Initialize/Update) specifically so ShellBootstrapper can read a correct Size immediately after `new HotbarContent(...)`, before the host Window -- which needs that Size to construct itself -- exists at all. Field initializers can't reference another instance field (only the primary constructor's own parameters), hence re-resolving the pool from componentManager here rather than reusing _hotkeyExpansionUnlocks.</summary>
@@ -157,8 +157,8 @@ public sealed class HotbarContent(
     }
 
     /// <summary>
-    /// Whether each slot is disabled -- locked (see IsSlotLocked), an unaffordable action, or an
-    /// unusable/out-of-stock item -- is entirely decided here, once per frame, not inside Draw.
+    /// Whether each slot is disabled -- locked (see IsSlotLocked), or an action or item the player
+    /// can't use right now (its ActivationBlocker) -- is entirely decided here, once per frame, not inside Draw.
     /// playerEntityId can still be -1 on the very first Update (see GetUnlockedExpansionSlots'
     /// own doc comment on why) -- skip entirely rather than indexing the component pools with it;
     /// DrawSlot's own GetValueOrDefault(slot, true) fallback keeps every slot looking active for
@@ -186,14 +186,14 @@ public sealed class HotbarContent(
             return false;
         }
 
-        if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out var action))
+        if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out _))
         {
-            return HasEnoughMana(playerEntityId, action);
+            return actionStateView.GetActionBlocker(playerEntityId, actionId) == ActivationBlocker.None;
         }
 
-        if (hotkeyBindingView.TryGetBoundItem(playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out _))
+        if (hotkeyBindingView.TryGetBoundItem(playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out _, out _))
         {
-            return item.Activator is not null;
+            return actionStateView.GetItemBlocker(playerEntityId, stackInstanceId) == ActivationBlocker.None;
         }
 
         // Unbound but unlocked -- empty, not disabled (nothing to fade).
@@ -287,6 +287,9 @@ public sealed class HotbarContent(
         }
     }
 
+    /// <summary>Whether slot is usable as of the last Update (see RefreshSlotActiveStates) -- true until the first one has run.</summary>
+    internal bool IsSlotActive(HotkeySlot slot) => _slotActiveStates.GetValueOrDefault(slot, true);
+
     /// <summary>Screen-position hit test for exactly which hotbar slot (if any) screenPosition falls within -- UiInputController's content-drag path uses this both as a bind-drop target and, combined with TryGetBoundItemId, to detect a drag starting on an already-bound slot.</summary>
     internal bool TryGetSlotAt(Point screenPosition, out HotkeySlot slot)
     {
@@ -315,8 +318,9 @@ public sealed class HotbarContent(
     /// Summary window -- false if the slot has no binding. Summary, not Description: a short,
     /// concrete statement of exact effect meant to be read at a glance in this small window (see
     /// ActionDefinition/ItemDefinition's own doc comments on the Summary vs Description split) --
-    /// Description is reserved for future, larger text boxes elsewhere.</summary>
-    internal bool TryGetSlotSummary(HotkeySlot slot, out string title, out string summary)
+    /// Description is reserved for future, larger text boxes elsewhere. blocker is why the player
+    /// can't use it right now, or None.</summary>
+    internal bool TryGetSlotSummary(HotkeySlot slot, out string title, out string summary, out ActivationBlocker blocker)
     {
         var playerEntityId = world.PlayerEntityId;
 
@@ -325,6 +329,7 @@ public sealed class HotbarContent(
         {
             title = action.Name;
             summary = action.Summary;
+            blocker = actionStateView.GetActionBlocker(playerEntityId, actionId);
             return true;
         }
 
@@ -333,11 +338,13 @@ public sealed class HotbarContent(
         {
             title = item.Name;
             summary = item.Summary;
+            blocker = actionStateView.GetItemBlocker(playerEntityId, stackInstanceId);
             return true;
         }
 
         title = string.Empty;
         summary = string.Empty;
+        blocker = ActivationBlocker.None;
         return false;
     }
 
@@ -454,7 +461,7 @@ public sealed class HotbarContent(
     private void DrawSlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, HotkeySlot slot, Rectangle bounds)
     {
         var contentBounds = BorderThickness.Inset(bounds, SlotBorderThickness);
-        var isActive = _slotActiveStates.GetValueOrDefault(slot, true);
+        var isActive = IsSlotActive(slot);
         var alpha = AlphaFor(isActive);
 
         if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out var action))
@@ -500,7 +507,7 @@ public sealed class HotbarContent(
     /// <summary>The one place isActive turns into an opacity -- every draw call in DrawSlot (border, icon, every text overlay) goes through this same mapping, rather than each piece deciding its own alpha.</summary>
     private static float AlphaFor(bool isActive) => isActive ? 1f : DisabledSlotAlpha;
 
-    /// <summary>isActive (see RefreshSlotActiveStates -- an Update-time decision) drives both the icon's opacity and whether the cooldown/lock wedge shows at all: an inactive (unaffordable) action suppresses the radial fill entirely (0f) rather than showing a mask that would read as "almost ready" when it's actually just unaffordable.</summary>
+    /// <summary>isActive (see RefreshSlotActiveStates -- an Update-time decision) drives both the icon's opacity and whether the cooldown/lock wedge shows at all: an inactive (blocked) action suppresses the radial fill entirely (0f) rather than showing a mask that would read as "almost ready" when it's actually unusable.</summary>
     private SlotVisual BuildActionVisual(int playerEntityId, ActionDefinition action, bool isActive)
     {
         var manaCost = SpellActivator.ManaCostOf(action.Activator);
@@ -512,13 +519,6 @@ public sealed class HotbarContent(
             BadgeText: manaCost > 0 ? manaCost.ToString() : null,
             BadgeBottomLeft: true,
             CountdownSecondsAboveSlot: null);
-    }
-
-    /// <summary>Mirrors ActionActivationSystem/ActionTargetingController's own gate (see either's doc comment) -- a zero-cost action (e.g. Punch) always passes.</summary>
-    private bool HasEnoughMana(int playerEntityId, ActionDefinition action)
-    {
-        var manaCost = SpellActivator.ManaCostOf(action.Activator);
-        return manaCost <= 0 || (actionStateView.TryGetMana(playerEntityId, out var mana) && mana.CurrentMana >= manaCost);
     }
 
     /// <summary>

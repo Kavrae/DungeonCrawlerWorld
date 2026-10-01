@@ -18,7 +18,7 @@ internal static class TestInventoryServices
             new InventoryView(componentManager, itemCatalog),
             new ShopView(componentManager),
             new CurrencyView(componentManager),
-            new ActionStateView(componentManager, localTierRoster: null),
+            TestActionStateViews.Over(componentManager, itemCatalog: itemCatalog),
             new InventoryCommands(componentManager, itemCatalog, playerQuery),
             new ShopCommands(componentManager, itemCatalog, eventBus ?? new EventBus(), playerQuery),
             new CurrencyCommands(componentManager),

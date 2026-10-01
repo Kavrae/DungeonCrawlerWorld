@@ -58,6 +58,7 @@ public sealed class ActionTargetingControllerDodgeTests
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             clock,
+            TestActionStateViews.EntityActions(componentManager, actionCatalog),
             eventBus);
         var actionTargeting = new ActionTargetingController(
             world,
@@ -69,7 +70,7 @@ public sealed class ActionTargetingControllerDodgeTests
             new TransformView(componentManager),
             new HotkeyBindingView(componentManager),
             new InventoryView(componentManager, itemCatalog),
-            new ActionStateView(componentManager, localTierRoster: null),
+            TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog),
             new AbilityScoreView(componentManager),
             playerCommands, simulationClock: new SimulationClock());
 

@@ -4,6 +4,7 @@ using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
+using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
@@ -11,6 +12,7 @@ using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Inventory.Definitions;
+using Game.Modules.Mana.Components;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
@@ -77,6 +79,8 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     private readonly IMapQuery _mapQuery;
     private readonly MathUtility _mathUtility;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
+    private readonly PackedComponentPool<ManaComponent> _mana;
+    private readonly PackedComponentPool<MeleeDisabledComponent> _meleeDisabled;
     private readonly ProcessingTierQuery _tierQuery;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
@@ -97,7 +101,9 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         MathUtility mathUtility,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
-        PackedComponentPool<DeadComponent> deadEntities)
+        PackedComponentPool<DeadComponent> deadEntities,
+        PackedComponentPool<ManaComponent> mana,
+        PackedComponentPool<MeleeDisabledComponent> meleeDisabled)
     {
         _movementPool = movementPool;
         _transformPool = transformPool;
@@ -112,6 +118,8 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         _mapQuery = mapQuery;
         _mathUtility = mathUtility;
         _deadEntities = deadEntities;
+        _mana = mana;
+        _meleeDisabled = meleeDisabled;
 
         _tierQuery = new ProcessingTierQuery(processingTiers);
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementPool, processingTiers, processingTierEvents);
@@ -242,6 +250,12 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         }
 
         var actionId = _mathUtility.Next(0, 2) == 0 ? QuickAttackAction.Id : PowerAttackAction.Id;
+        if (!_actions.TryGetEffectiveAction(entityId, actionId, out var action) ||
+            ActivationQueries.GetBlocker(entityId, action.Activator, action.Tags, _mana, _meleeDisabled) != ActivationBlocker.None)
+        {
+            return false;
+        }
+
         _pendingActivations.Merge(entityId, new PendingActionActivationComponent(actionId, _adjacentTilesBuffer.ToArray()));
         ClearStep(entityId);
         return true;

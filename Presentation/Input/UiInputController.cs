@@ -421,6 +421,9 @@ public sealed class UiInputController
     /// <summary>The last cursor UpdateCursor set (or the initial Arrow default, if it's never had reason to change) -- lets tests assert on cursor selection without depending on real OS cursor state.</summary>
     internal MouseCursor CurrentCursor { get; private set; } = MouseCursor.Arrow;
 
+    /// <summary>Last frame's cursor came from IsActivationRefusedAt -- the refusal can end under a stationary mouse, so the next frame re-runs the hover hit test rather than keeping the stale cursor.</summary>
+    private bool _cursorShowsActivationRefusal;
+
     /// <summary>Whether DragGhostContent should draw the ghost right now -- true once a content-drag payload has been held for ContentDragGhostDelayFrames. See that constant's own doc comment for why this delay exists.</summary>
     private bool ContentDragGhostVisible =>
         (_contentDragItemStackInstanceId is not null || _contentDragMergedItemDefinitionId is not null || _contentDragActionId is not null || _contentDragCurrencyType is not null) && _contentDragHeldFrames >= ContentDragGhostDelayFrames;
@@ -1033,7 +1036,7 @@ public sealed class UiInputController
             {
                 if (element is Window { Content: HotbarContent hotbarContent } &&
                     hotbarContent.TryGetSlotAt(mousePosition, out var slot) &&
-                    hotbarContent.TryGetSlotSummary(slot, out _, out _))
+                    hotbarContent.TryGetSlotSummary(slot, out _, out _, out _))
                 {
                     candidateSlot = slot;
                     break;
@@ -2076,6 +2079,7 @@ public sealed class UiInputController
     {
         var position = new Point(mouseState.X, mouseState.Y);
         var previousPosition = new Point(_previousMouseState.X, _previousMouseState.Y);
+        var showsActivationRefusal = false;
 
         MouseCursor cursor;
         if (_activeInteraction.Kind == ElementDragInteractionKind.Resize)
@@ -2100,7 +2104,13 @@ public sealed class UiInputController
             cursor = MouseCursor.No;
             SetHoveredButton(null);
         }
-        else if (position == previousPosition)
+        else if (IsActivationRefusedAt(position))
+        {
+            cursor = MouseCursor.No;
+            SetHoveredButton(null);
+            showsActivationRefusal = true;
+        }
+        else if (position == previousPosition && !_cursorShowsActivationRefusal)
         {
             // Mouse hasn't moved -- reuse whatever cursor/hover state is already current rather
             // than re-walking the whole tree (see this method's own doc comment).
@@ -2119,6 +2129,37 @@ public sealed class UiInputController
             MouseCursorEXT.SetCursor(cursor);
             CurrentCursor = cursor;
         }
+
+        _cursorShowsActivationRefusal = showsActivationRefusal;
+    }
+
+    /// <summary>
+    /// True while position is over something the player tried to use and can't: a hotbar slot that's
+    /// disabled (HotbarContent.IsSlotActive -- blocked or locked), or the map while the armed action or
+    /// item can't be confirmed right now (MapWindow.IsArmedConfirmRefused -- not ready before the
+    /// input buffer would expire). Checked ahead of the position == previousPosition shortcut, since
+    /// either can change under a stationary mouse; the hit test that decides "over the map" only runs
+    /// while something armed is refused.
+    /// </summary>
+    private bool IsActivationRefusedAt(Point position)
+    {
+        foreach (var element in _layers[UiLayer.StaticHud])
+        {
+            if (element is Window { Content: HotbarContent hotbarContent } && hotbarContent.TryGetSlotAt(position, out var slot))
+            {
+                return !hotbarContent.IsSlotActive(slot);
+            }
+        }
+
+        foreach (var element in _layers[UiLayer.Base])
+        {
+            if (element is MapWindow { IsArmedConfirmRefused: true } mapWindow)
+            {
+                return ReferenceEquals(TryHitTestInteraction(position).Element, mapWindow);
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

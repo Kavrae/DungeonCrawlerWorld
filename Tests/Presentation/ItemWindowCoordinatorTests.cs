@@ -99,7 +99,7 @@ public sealed class ItemWindowCoordinatorTests
         elementPool.RegisterFactory<ItemIconElement>(() => new ItemIconElement(fontService, elementPool, labelRenderer, spriteSheetService, spriteRenderer));
         elementPool.RegisterFactory<TargetShapePreviewElement>(() => new TargetShapePreviewElement(fontService, elementPool, labelRenderer));
         elementPool.RegisterFactory<EntityIconElement>(() => new EntityIconElement(fontService, elementPool, labelRenderer, spriteSheetService, spriteRenderer, mapView));
-        elementPool.RegisterFactory<ItemDetailsWindow>(() => new ItemDetailsWindow(fontService, elementPool, labelRenderer, new ActionCatalog(), TestGameplayTags.BuiltIn));
+        elementPool.RegisterFactory<ItemDetailsWindow>(() => new ItemDetailsWindow(fontService, elementPool, labelRenderer, new ActionCatalog(), TestGameplayTags.BuiltIn, inventoryServices.ActionStateView, world));
         elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(fontService, elementPool, labelRenderer, inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
         elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(fontService, elementPool, labelRenderer, inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming, healthView: healthView));
         elementPool.RegisterFactory<ShopWindow>(() => new ShopWindow(fontService, elementPool, labelRenderer, inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming));

@@ -68,7 +68,7 @@ public sealed class HotbarControllerTests
             new TransformView(componentManager),
             new HotkeyBindingView(componentManager),
             new InventoryView(componentManager, itemCatalog),
-            new ActionStateView(componentManager, localTierRoster: null),
+            TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog),
             new AbilityScoreView(componentManager),
             new PlayerCommands(
                 world,
@@ -79,11 +79,12 @@ public sealed class HotbarControllerTests
                 componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
                 componentManager.GetPackedPool<PendingDelayedActionComponent>(),
                 new Engine.ECS.Systems.SimulationClock(),
+                TestActionStateViews.EntityActions(componentManager, actionCatalog),
                 new EventBus()),
             simulationClock: new SimulationClock());
 
         var fontService = TestFonts.Shared;
-        var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), new ActionStateView(componentManager, localTierRoster: null), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
+        var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting, new TooltipController());
 
         return (hotbarController, mapViewState, componentManager);

@@ -564,8 +564,9 @@ buffer). Decisions, so they aren't re-asked:
 - `Game.Modules.Actions.PlayerCommands` is the only writer of the player's `NextMapPosition`,
   `PendingActionActivationComponent` and `PendingConsumableActivationComponent`. One slot (move / action /
   consumable), newest wins, `ExpiryFrames` = 0.25s on the simulation clock (pausing doesn't age it; tune after
-  more play). Written only once `ActionLockGate` reads the player as free; a command queued while free is
-  written the same frame. The Game-side requests stay one-shot -- buffering lives entirely in Presentation.
+  more play). A move or consumable is written once `ActionLockGate` reads the player as free, an action once
+  it's ready (cooldown and, unless FreeCast, the lock -- see "Disabled actions"); a command queued while
+  ready is written the same frame. The Game-side requests stay one-shot -- buffering lives entirely in Presentation.
 - Writing any command withdraws what the game hasn't taken yet: an action/consumable clears an untaken step, a
   move removes an unconsumed activation request. A move is buffered as a direction, resolved at write time; a
   blocked newest direction clears the step rather than falling back to an older one.
@@ -573,7 +574,8 @@ buffer). Decisions, so they aren't re-asked:
   rest and has no activation request pending. Releasing keys cancels nothing. The old 0.25s repeat cooldown and
   the "only while at rest" queue gate in `PlayerMovementController` are gone; the action lock alone paces
   steps. Opposing keys still sum to neutral, and a fresh neutral press clears a buffered step.
-- FreeCast actions (only Dodge today) skip the slot and are written at once, still emptying it.
+- FreeCast actions (only Dodge today) ignore the lock, so one that's off cooldown is written at once, still
+  emptying the slot.
   Escape/right-click cancel order: disarm -> clear the buffer -> cancel the windup; each reports "cancelled" so
   a no-op still falls through to the corpse context menu.
 - `ActionTiming.ReleasesActionLock` (Dodge only): a successful activation cancels the caster's windup and
@@ -590,6 +592,35 @@ buffer). Decisions, so they aren't re-asked:
   through a Stagger still steps once the lock clears). `WindupCancel.TryCancel(..., releaseLock)`
   is the one cancel path for Escape (release), Dodge (release) and Stagger (keep). Unrelated to
   `FrameDeadline.AfterStaggered`.
+
+### Disabled actions
+
+Replaced the "Disable actions that destroyed body parts make unusable, and show why" TODO. Decisions, so
+they aren't re-asked:
+
+- **One rule in Game.** `ActivationQueries.GetBlocker` returns an `ActivationBlocker` -- `NotActivatable` (no
+  activator), `MeleeDisabled` (`Delivery.Melee` + `MeleeDisabledComponent`), `NotEnoughMana`, checked in that
+  order (structural before transient). `ActionActivationSystem`, `ConsumableActivationSystem` and
+  `TestCombatBehaviorSystem` refuse through it; Presentation reads it through `ActionStateView.GetActionBlocker`/
+  `GetItemBlocker`, which resolve the entity's effective action/item (an override's mana cost counts). The
+  Presentation-side mana checks are gone.
+- **Unavailable vs not ready.** Only a blocker disables: the hotbar dims the slot, arming refuses (key, click,
+  double-tap, Inventory "Activate"/double-click), and `ActionTargetingController.Tick` disarms whatever becomes
+  blocked while armed. Cooldown and action lock are timers, not blockers: the radial wedge shows them, the slot
+  still arms.
+- **No silent confirm.** `ActivationQueries.FramesUntilReady` = later of cooldown and (unless FreeCast) lock.
+  `PlayerCommands` holds a buffered action until it's 0, and `QueueAction`/`QueueConsumable` refuse (return
+  false, keep whatever was buffered) a command that couldn't be ready before `ExpiryFrames`; `CanQueueAction`/
+  `CanQueueConsumable` ask without queuing. A refused confirm leaves the action armed.
+- **Showing why.** `ActivationBlockerText` owns the words and tooltip rows: the hotbar summary (rebuilt when the
+  blocker changes), the inventory hover (player's own activatable stacks only -- a sword isn't "deactivated"),
+  and an Item Details line (player's own stack, rebuilt when the blocker changes). `UiInputController` shows
+  `MouseCursor.No` over a disabled hotbar slot and over the map while the armed action can't be confirmed
+  (`MapWindow.IsArmedConfirmRefused`); both are checked ahead of the stationary-mouse shortcut and re-run the
+  hover hit test the frame they end.
+- **Melee wording is generic** ("No usable arms or hands") until actions declare the parts that perform them.
+  Known weakness: regen lifts a 0 HP part within frames, and `BodyPartEffectsSystem` scores once a second, so
+  the melee block is rarely seen -- TODO "Body part disablement that lasts".
 
 ### Pool sizing and the memory report
 

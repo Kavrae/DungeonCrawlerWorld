@@ -23,6 +23,7 @@ public sealed class HotbarController(MapViewState mapViewState, HotbarContent ho
     private HotkeySlot? _hoveredSlot;
     private int _hoveredSlotFrames;
     private HotkeySlot? _displayedSummarySlot;
+    private ActivationBlocker _displayedSummaryBlocker;
 
     /// <summary>Called by UiInputController.HandleMousePress when the press lands on a hotbar slot.</summary>
     public void OnSlotPressed(HotkeySlot slot) => _pressedSlot = slot;
@@ -65,23 +66,29 @@ public sealed class HotbarController(MapViewState mapViewState, HotbarContent ho
     }
 
     /// <summary>Shows/repositions/hides the Armed Hotkey Summary popup for whichever slot is currently hovered or armed (hover wins) -- moved here from the popup's own former per-frame Update override, since this method is already ticked every frame externally (see UpdateHover's own doc comment) and already has direct access to mapViewState/hotbarContent, the only two things that decision ever needed.</summary>
+    /// <remarks>Rebuilt when the shown slot's ActivationBlocker changes too, so the reason appears and clears while the popup stays open.</remarks>
     private void UpdateSummary()
     {
         var slotToShow = mapViewState.HoverSlot ?? mapViewState.ArmedSlot;
+        var title = string.Empty;
+        var summary = string.Empty;
+        var blocker = ActivationBlocker.None;
+        var hasSummary = slotToShow is { } candidateSlot && hotbarContent.TryGetSlotSummary(candidateSlot, out title, out summary, out blocker);
 
-        if (slotToShow == _displayedSummarySlot)
+        if (slotToShow == _displayedSummarySlot && blocker == _displayedSummaryBlocker)
         {
             return;
         }
 
         _displayedSummarySlot = slotToShow;
+        _displayedSummaryBlocker = blocker;
 
-        if (slotToShow is not { } slot || !hotbarContent.TryGetSlotSummary(slot, out var title, out var summary))
+        if (!hasSummary || slotToShow is not { } slot)
         {
             tooltipController.Hide(this);
             return;
         }
 
-        tooltipController.Show(this, hotbarContent.GetSlotBounds(slot), PopupAnchor.North, PopupChrome.HotbarSummaryGap, SummaryMaximumSize, summary, title, useFixedWidth: true);
+        tooltipController.Show(this, hotbarContent.GetSlotBounds(slot), PopupAnchor.North, PopupChrome.HotbarSummaryGap, SummaryMaximumSize, summary, title, ActivationBlockerText.RowsFor(blocker), useFixedWidth: true);
     }
 }
