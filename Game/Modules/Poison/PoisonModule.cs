@@ -16,8 +16,8 @@ namespace Game.Modules.Poison;
 /// <summary>
 /// Poison-specific: its own timer component and system, depending on StatusEffectsModule
 /// (shared immunity storage). Registers a
-/// TimerBasedAuraApplier&lt;PoisonTimerComponent&gt; into the shared
-/// StatusEffectAuraApplierRegistry during Configure, so StatusEffectAuraSystem can grant
+/// TimerBasedStatusEffectApplier&lt;PoisonTimerComponent&gt; into the shared
+/// StatusEffectApplierRegistry during Configure, so anything can grant
 /// Poison stacks without depending on this module directly.
 /// </summary>
 public sealed class PoisonModule : IGameModule
@@ -47,10 +47,11 @@ public sealed class PoisonModule : IGameModule
         var playerQuery = context.PlayerQuery;
         var timers = componentManager.GetPackedPool<PoisonTimerComponent>();
 
-        context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<PoisonTimerComponent>(
+        context.StatusEffectAppliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(
             StatusEffectType.Poison,
             timers,
-            (entityId, source, now) => PoisonEffects.ApplyStack(componentManager, entityKeys, entityId, source, AuraDurationTicks, now, eventBus, playerQuery)));
+            PoisonEffects.MaxStacks,
+            (entityId, count, source, now, announcesRefusal) => PoisonEffects.ApplyStacks(componentManager, entityKeys, entityId, count, source, AuraDurationTicks, now, eventBus, playerQuery, announcesRefusal)));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph,
             timers,
             static (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));

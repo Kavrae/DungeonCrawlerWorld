@@ -8,9 +8,9 @@ namespace Game.Modules.StatusEffects;
 /// component. The variable part is a Func&lt;T, long, int&gt; extracting remaining-duration-in-frames
 /// from the timer struct as of a given frame (timers store absolute deadlines -- see
 /// FrameDeadline) -- register one of these per effect from that effect's own Configure instead of
-/// writing a new class per effect (mirrors TimerBasedAuraApplier&lt;T&gt;'s own shape, including its
+/// writing a new class per effect (mirrors TimerBasedStatusEffectApplier&lt;T&gt;'s own shape, including its
 /// IStatusEffectStackCount constraint -- GetStackCount reads T.StackCount generically the same way
-/// TimerBasedAuraApplier&lt;T&gt;.GetCurrentStackCount does).
+/// TimerBasedStatusEffectApplier&lt;T&gt;.GetCurrentStackCount does).
 /// </summary>
 /// <param name="getRemainingDurationFrames">(timer, now) -> frames remaining as of now.</param>
 public sealed class TimerBasedStatusEffectDisplay<T>(StatusEffectType effectType, string glyph, PackedComponentPool<T> timers, Func<T, long, int> getRemainingDurationFrames) : IStatusEffectDisplay where T : struct, IStatusEffectStackCount

@@ -8,6 +8,7 @@ using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
 using Game.Floors;
 using Game.Spawning;
+using Game.Modules.Auras;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
 using Game.Terrain;
@@ -18,7 +19,7 @@ namespace Game;
 
 /// <summary>
 /// Builds test neighborhoods across all three MapLayers, each layer with its own independent,
-/// percentage-rolled population: Ground (randomized lava/dirt/grass terrain, a Goblin/Fairy/Ghost on
+/// percentage-rolled population: Ground (randomized lava/dirt/grass terrain, one cell of Holy Ground by the spawn, a Healing Shrine on about one cell in a thousand, a Goblin/Fairy/Ghost on
 /// GroundPopulationPercent of free tiles per PopulateGroundEntity's breakdown), UnderGround (a
 /// randomized dirt/lava mixture, a Ghost on UnderGroundGhostPercent of tiles per
 /// PopulateUnderGroundGhost), and Flying (a Fairy on FlyingFairyPercent of tiles per
@@ -30,10 +31,10 @@ namespace Game;
 /// generated from its own NeighborhoodRecord, never from shared random state, and the world has no
 /// border walls: it has no edge.
 /// </remarks>
-public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory factory, TerrainRegistry terrain, BlueprintRegistry definitions)
+public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory factory, TerrainRegistry terrain, AuraCatalog auras, BlueprintRegistry definitions)
 {
     // TEMPORARY: halved once already from the original values (10/5/5) to reduce the creature
-    // population -- Movement/HealthRegen/ContactDamage/StatusEffectAura all iterate this
+    // population -- Movement/HealthRegen/TerrainContacts/Auras all iterate this
     // population every frame, and at the original density the game was effectively
     // unplayable (5-10fps) for manual testing. Revert that half once the performance
     // investigation these values are standing in for (see TODO.md) lands a real fix. Halved
@@ -45,17 +46,27 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     private const int UnderGroundGhostPercent = 2;
     private const int FlyingFairyPercent = 2;
 
+    /// <summary>A Healing Shrine stands on one Ground cell in this many.</summary>
+    private const int GroundCellsPerHealingShrine = 1000;
+
+    /// <summary>Mixed into a neighborhood's layout seed for the sequence its shrines are rolled from.</summary>
+    private const int HealingShrineSeedSalt = 0x5348524E;
+
+    /// <summary>How many shrines are spawned between yields, about a row of creatures' worth, so a neighborhood's shrines spread over frames the way its rows do.</summary>
+    private const int HealingShrinesPerSpawnBatch = 64;
+
     /// <summary>Chance any given rolled NPC (see BuildRaceEntity) is also a Crawler -- deliberately small; most NPCs are not.</summary>
     private const int CrawlerPercent = 2;
 
     /// <summary>The terrain registry, with the sprite variants of every terrain this builder writes already resolved -- on the main thread, at construction -- so Plan's TerrainRegistry.CreateCell only reads the registry's cache from a worker.</summary>
-    private readonly TerrainRegistry _terrain = WithVariantsResolved(terrain, BuiltInTerrain.StoneFloorKey, BuiltInTerrain.StoneWallKey, BuiltInTerrain.DirtKey, BuiltInTerrain.LavaKey, BuiltInTerrain.GrassKey);
+    private readonly TerrainRegistry _terrain = WithVariantsResolved(terrain, BuiltInTerrain.StoneFloorKey, BuiltInTerrain.StoneWallKey, BuiltInTerrain.DirtKey, BuiltInTerrain.LavaKey, BuiltInTerrain.GrassKey, BuiltInTerrain.HolyGroundKey);
 
     private readonly ushort _stoneFloor = terrain.GetId(BuiltInTerrain.StoneFloorKey);
     private readonly ushort _stoneWall = terrain.GetId(BuiltInTerrain.StoneWallKey);
     private readonly ushort _dirt = terrain.GetId(BuiltInTerrain.DirtKey);
     private readonly ushort _lava = terrain.GetId(BuiltInTerrain.LavaKey);
     private readonly ushort _grass = terrain.GetId(BuiltInTerrain.GrassKey);
+    private readonly ushort _holyGround = terrain.GetId(BuiltInTerrain.HolyGroundKey);
     private readonly ushort _goblin = definitions.GetId(Goblin.Id);
     private readonly ushort _fairy = definitions.GetId(Fairy.Id);
     private readonly ushort _ghost = definitions.GetId(Ghost.Id);
@@ -90,6 +101,9 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     /// <inheritdoc cref="_longDescriptionGoblin"/>
     private readonly ushort _potionShop = definitions.GetId(PotionShop.Id);
 
+    /// <inheritdoc cref="_longDescriptionGoblin"/>
+    private readonly ushort _healingShrine = definitions.GetId(HealingShrine.Id);
+
     /// <summary>The neighborhood holding the hallway cross, the fixtures, the shops and the player's spawn.</summary>
     public const int StartingCellX = 0;
 
@@ -101,6 +115,12 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
 
     /// <summary>The spawn row, inside the corridor gap (rows 10-16 are open at the wall columns).</summary>
     public const int SpawnRow = 13;
+
+    /// <summary>The one cell of Holy Ground, counted from the starting neighborhood's origin: inside the hallway cross, west of the spawn, where its aura's edge reaches the spawn.</summary>
+    public const int HolyGroundColumn = 14;
+
+    /// <inheritdoc cref="HolyGroundColumn"/>
+    public const int HolyGroundRow = 13;
 
     /// <summary>
     /// Generates every loaded neighborhood, in row-major order. World is built by the
@@ -156,7 +176,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
         }
     }
 
-    /// <summary>Decides one neighborhood -- its terrain and walls from record.Seed, its creatures from populationSeed -- without touching the world: safe on a worker thread.</summary>
+    /// <summary>Decides one neighborhood -- its terrain, walls and shrines from record.Seed, its creatures from populationSeed -- without touching the world: safe on a worker thread.</summary>
     /// <remarks>
     /// Reads only the record's seed, the map's fixed shape (Map.CreateLayout) and what this builder
     /// resolved at construction, so the plan doesn't depend on what else was generated first, or on
@@ -179,6 +199,8 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
 
         var population = new Population(new MathUtility(new Random(populationSeed)));
         var spawnRowEnds = new List<int>(neighborhoodLayout.MaxY - neighborhoodLayout.MinY + 1);
+        PlanHealingShrines(population, spawnRowEnds, neighborhoodLayout, record, planningCancellation);
+
         for (var row = neighborhoodLayout.MinY; row < neighborhoodLayout.MaxY; row++)
         {
             planningCancellation.ThrowIfCancellationRequested();
@@ -196,11 +218,11 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
             spawnRowEnds.Add(population.Spawns.Count);
         }
 
-        return new NeighborhoodPlan(neighborhoodLayout, TerrainAuraSources.ByRow(neighborhoodLayout, _terrain), population.Spawns, spawnRowEnds);
+        return new NeighborhoodPlan(neighborhoodLayout, TerrainAuraSources.ByRow(neighborhoodLayout, _terrain, auras), population.Spawns, spawnRowEnds);
     }
 
-    /// <summary>Spawns neighborhoodPlan's creatures in order, a row at a time, once its layout is loaded. Main thread only.</summary>
-    /// <remarks>Yields after each row with the number of entities it created, so a caller can spread it over frames. A creature that can't be placed is destroyed rather than left off the map.</remarks>
+    /// <summary>Spawns neighborhoodPlan's shrines and creatures in order, a batch at a time, once its layout is loaded. Main thread only.</summary>
+    /// <remarks>Yields after each batch (a batch of shrines, then a row of creatures) with the number of entities it created, so a caller can spread it over frames. A creature that can't be placed is destroyed rather than left off the map.</remarks>
     public IEnumerable<int> Spawn(NeighborhoodPlan neighborhoodPlan)
     {
         var nextSpawnIndex = 0;
@@ -248,10 +270,58 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
         }
         else
         {
-            BuildTerrain(neighborhoodLayout, layoutRolls, PickGroundTerrain(layoutRolls), column, row, TerrainLayer.Ground);
+            // Rolled even where Holy Ground replaces it, so every other cell keeps the terrain its seed gave it.
+            var rolledGroundTerrain = PickGroundTerrain(layoutRolls);
+            BuildTerrain(neighborhoodLayout, layoutRolls, IsHolyGround(column, row) ? _holyGround : rolledGroundTerrain, column, row, TerrainLayer.Ground);
         }
 
         BuildTerrain(neighborhoodLayout, layoutRolls, layoutRolls.Next(0, 20) == 0 ? _lava : _dirt, column, row, TerrainLayer.UnderGround);
+    }
+
+    /// <summary>Plans the neighborhood's Healing Shrines: one Ground cell in GroundCellsPerHealingShrine, anywhere but on a wall -- lava included.</summary>
+    /// <remarks>
+    /// <para>
+    /// Rolled from the neighborhood's layout seed, not its population seed: a shrine is part of the
+    /// place, so it is in the same cell on every visit, while the creatures around it are rolled anew.
+    /// Its own sequence, so it shifts no creature's roll.
+    /// </para>
+    /// <para>
+    /// All of them are spawned before any creature, in batches of HealingShrinesPerSpawnBatch. First,
+    /// so a creature rolled onto a shrine's cell is the one that doesn't fit. Together, so their
+    /// entity ids are consecutive: what only a shrine holds (its aura source, its immunities) then
+    /// fills a page or two of each pool's entity index per neighborhood. Spawned a row at a time
+    /// among the creatures, they touched every page -- 31 MB of pools for 9,000 shrines.
+    /// </para>
+    /// </remarks>
+    private void PlanHealingShrines(Population population, List<int> spawnRowEnds, NeighborhoodLayout neighborhoodLayout, NeighborhoodRecord record, CancellationToken planningCancellation)
+    {
+        var shrineRolls = new MathUtility(new SeededRandom((ulong)(uint)(record.Seed ^ HealingShrineSeedSalt)));
+        var batchStart = population.Spawns.Count;
+
+        for (var row = neighborhoodLayout.MinY; row < neighborhoodLayout.MaxY; row++)
+        {
+            planningCancellation.ThrowIfCancellationRequested();
+            for (var column = neighborhoodLayout.MinX; column < neighborhoodLayout.MaxX; column++)
+            {
+                var isShrineCell = shrineRolls.Next(0, GroundCellsPerHealingShrine) == 0;
+                if (!isShrineCell || IsHallwayWall(column, row))
+                {
+                    continue;
+                }
+
+                population.Spawns.Add(new SpawnRequest(_healingShrine, column, row) { Layer = MapLayer.Ground, Seed = shrineRolls.NextSeed() });
+                if (population.Spawns.Count - batchStart == HealingShrinesPerSpawnBatch)
+                {
+                    spawnRowEnds.Add(population.Spawns.Count);
+                    batchStart = population.Spawns.Count;
+                }
+            }
+        }
+
+        if (population.Spawns.Count > batchStart)
+        {
+            spawnRowEnds.Add(population.Spawns.Count);
+        }
     }
 
     private void PopulateCell(Population population, int column, int row)
@@ -272,6 +342,9 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
             PopulateFlyingFairy(population, column, row);
         }
     }
+
+    private static bool IsHolyGround(int column, int row) =>
+        column == Neighborhoods.OriginOf(StartingCellX) + HolyGroundColumn && row == Neighborhoods.OriginOf(StartingCellY) + HolyGroundRow;
 
     /// <summary>The starting neighborhood's hallway cross: wall columns 10 and 16 and wall rows 10 and 16, open where they meet.</summary>
     private static bool IsHallwayWall(int column, int row)
@@ -437,6 +510,9 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
 
         // A composite of a composite: GoblinEngineer plus Boss. Last, so adding it didn't shift the seeds the fixtures above draw.
         SpawnFixture(population, _goblinForeman, column: 13, row: 5);
+
+        // A healing shrine in the corridor east of the player's spawn: its aura's edge reaches the spawn.
+        SpawnFixture(population, _healingShrine, column: 19, row: 11);
     }
 
     /// <inheritdoc cref="BuildFixtureEntities"/>

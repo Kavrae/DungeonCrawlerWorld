@@ -10,7 +10,6 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
-using Game.Modules.StatusEffectAura.Components;
 using Game.World;
 
 namespace Game.Modules.Movement.Systems;
@@ -42,7 +41,6 @@ public sealed class MovementSystem : ITieredSystem
     private readonly FrameEventBuffer<EntityMovedEvent> _movedEntitiesEventBuffer;
     private readonly IPlayerQuery _playerQuery;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
-    private readonly MultiComponentPool<StatusEffectAuraSourceComponent> _auraSources;
     private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
     private readonly PackedComponentPool<MovementDisabledComponent> _movementDisabled;
     private readonly TieredEntityStripeSet _tieredStripeSet;
@@ -59,7 +57,6 @@ public sealed class MovementSystem : ITieredSystem
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
         PackedComponentPool<DeadComponent> deadEntities,
-        MultiComponentPool<StatusEffectAuraSourceComponent> auraSources,
         MultiComponentPool<StatModifierComponent> statModifiers,
         PackedComponentPool<MovementDisabledComponent> movementDisabled)
     {
@@ -72,7 +69,6 @@ public sealed class MovementSystem : ITieredSystem
         _movedEntitiesEventBuffer = movedEntities;
         _playerQuery = playerQuery;
         _deadEntities = deadEntities;
-        _auraSources = auraSources;
         _statModifiers = statModifiers;
         _movementDisabled = movementDisabled;
 
@@ -208,7 +204,7 @@ public sealed class MovementSystem : ITieredSystem
             _entityMoveSync.SyncMove(entityMovedEvent, isBlocking);
             _movedEntitiesEventBuffer.Record(entityMovedEvent);
 
-            if (entityId == _playerQuery.PlayerEntityId || _auraSources.Has(entityId))
+            if (entityId == _playerQuery.PlayerEntityId)
             {
                 _eventBus.Publish(entityMovedEvent);
             }

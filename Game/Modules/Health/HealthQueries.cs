@@ -58,4 +58,44 @@ public static class HealthQueries
         effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, maximum);
         return true;
     }
+
+    /// <summary>Whether entityId has any health a heal could restore: below its modifier-effective maximum for Simple health, or any one body part below its own for Complex.</summary>
+    /// <remarks>
+    /// The one gate every heal passes first (HealthHeal.Apply), so a heal of something already at full
+    /// health costs one walk of its modifiers whichever shape its health has. The entity's
+    /// MaximumHealth modifiers are summed once and applied to each part. False for an entity with no
+    /// health at all. Says nothing about whether a particular heal can reach the missing health: a
+    /// part locked out of regeneration still counts here, and BodyPartSelection decides that.
+    /// </remarks>
+    public static bool HasMissingHealth(
+        PackedComponentPool<SimpleHealthComponent> simpleHealth,
+        EntityBodyParts bodyParts,
+        MultiComponentPool<StatModifierComponent> statModifiers,
+        int entityId)
+    {
+        if (simpleHealth.TryGetReadonly(entityId, out var simple))
+        {
+            return simple.CurrentHealth < StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, simple.MaximumHealth);
+        }
+
+        var modifiersSummed = false;
+        var additiveSum = 0f;
+        var multiplicativeSum = 0f;
+
+        foreach (var part in bodyParts.Parts(entityId))
+        {
+            if (!modifiersSummed)
+            {
+                StatModifierMath.GetSums(statModifiers, entityId, StatModifierTarget.MaximumHealth, out additiveSum, out multiplicativeSum);
+                modifiersSummed = true;
+            }
+
+            if (part.CurrentHealth < StatModifierMath.CalculateTotal(part.MaximumHealth, additiveSum, multiplicativeSum))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

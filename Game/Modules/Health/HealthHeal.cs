@@ -25,6 +25,8 @@ namespace Game.Modules.Health;
 /// StatModifierMath's own doc comment for why). A BodyPartComponent-owning entity with no
 /// SimpleHealthComponent delegates to ComplexHealthHeal (targetMode All vs a single part -- see
 /// its own doc comment). Neither pool having entityId is a no-op, same as HealthDamage.Apply.
+/// An entity with nothing to restore (HealthQueries.HasMissingHealth) is a no-op too, for either
+/// shape and before anything else is read: no amount is computed and nothing is published.
 /// Publishes EntityHealedEvent (mirroring HealthDamage.Apply's EntityDamagedEvent) only when the
 /// player is involved as either source or target.
 ///
@@ -53,6 +55,11 @@ public static class HealthHeal
         MathUtility? mathUtility = null,
         string healType = "Heal")
     {
+        if (!HealthQueries.HasMissingHealth(health, bodyParts, statModifiers, entityId))
+        {
+            return;
+        }
+
         var healthBefore = 0f;
         var showsHealedText = floatingTextFeed.IsShownFor(entityId)
             && HealthQueries.TryGetTotals(health, bodyParts, entityId, out healthBefore, out _);

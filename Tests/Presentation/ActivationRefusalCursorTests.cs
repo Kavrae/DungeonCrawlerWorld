@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Game.Effects;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
@@ -95,7 +96,7 @@ public sealed class ActivationRefusalCursorTests
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(
             SpellId, "Test Self Spell", null, "*", Color.White, [GameTags.TargetingSelf],
-            Effects: [ActionEffect.None],
+            Effects: [Effect.None],
             Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: 600))));
         var harness = TestMapWindows.Create(20, 20, 1, playerPosition: new Vector3Int(5, 5, 0), actionCatalog);
         var componentManager = harness.ComponentManager;

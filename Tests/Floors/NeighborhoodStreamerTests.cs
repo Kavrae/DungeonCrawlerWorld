@@ -37,10 +37,10 @@ public sealed class NeighborhoodStreamerTests
 
         var records = new NeighborhoodRecords(mathUtility);
         var factory = result.Internals.Factory;
-        FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Catalogs.Terrain, result.Catalogs.Definitions);
+        FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions);
         result.Internals.MovedEntities.ClearFrame();
 
-        var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Catalogs.Terrain, result.Catalogs.Definitions);
+        var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions);
         var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, result.Internals.ProcessingTierResolver, records, builder, result.Internals.Skeletons) { BudgetPerFrame = budgetPerFrame };
         return new Session(world, ecs, result.Internals.ProcessingTierResolver, streamer, result.Internals.MovedEntities, result.Catalogs.Definitions, result.Internals.Skeletons);
     }
@@ -290,10 +290,10 @@ public sealed class NeighborhoodStreamerTests
         var records = new NeighborhoodRecords(mathUtility);
         var skeletons = result.Internals.Skeletons;
         var factory = result.Internals.Factory;
-        FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Catalogs.Terrain, result.Catalogs.Definitions);
+        FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions);
         result.Internals.MovedEntities.ClearFrame();
 
-        var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Catalogs.Terrain, result.Catalogs.Definitions);
+        var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions);
         var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, result.Internals.ProcessingTierResolver, records, builder, skeletons);
         return new Session(world, ecs, result.Internals.ProcessingTierResolver, streamer, result.Internals.MovedEntities, result.Catalogs.Definitions, skeletons);
     }

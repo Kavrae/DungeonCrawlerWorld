@@ -1,4 +1,6 @@
 using Game.Blueprints;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
@@ -8,7 +10,6 @@ using Game.Modules;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Effects;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Death.Components;
@@ -33,18 +34,28 @@ public sealed class ActionEffectResolverTests
     private static readonly Vector3Int TargetTile = new(5, 5, 0);
     private static readonly ActionDefinition Action = new(
         Guid.NewGuid(), "Test Attack", null, "#", default, [],
-        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
+        Effects: [new Effect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
 
-    /// <summary>Records every ApplyStack call it receives instead of touching any real component pool -- keeps these tests independent of any concrete effect (Burning/Poison/Paralysis).</summary>
-    private sealed class FakeStatusEffectAuraApplier(StatusEffectType effectType) : IStatusEffectAuraApplier
+    /// <summary>Records every stack ApplyStacks is asked for instead of touching any real component pool -- keeps these tests independent of any concrete effect (Burning/Poison/Paralysis).</summary>
+    private sealed class FakeStatusEffectApplier(StatusEffectType effectType) : IStatusEffectApplier
     {
         public StatusEffectType EffectType { get; } = effectType;
         public List<(int EntityId, ActionSource Source)> AppliedCalls { get; } = [];
 
-        public int GetCurrentStackCount(int entityId) => AppliedCalls.Count(call => call.EntityId == entityId);
+        public int GetCurrentStackCount(int entityId, byte? bodyPartId = null) => AppliedCalls.Count(call => call.EntityId == entityId);
 
-        public void ApplyStack(int entityId, ActionSource source, long now) => AppliedCalls.Add((entityId, source));
+        public int MaxStacks => int.MaxValue;
+
+        public int ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null)
+        {
+            for (var stack = 0; stack < count; stack++)
+            {
+                AppliedCalls.Add((entityId, source));
+            }
+
+            return count;
+        }
 
         public void RemoveAllStacks(int entityId) => AppliedCalls.RemoveAll(call => call.EntityId == entityId);
     }
@@ -86,13 +97,13 @@ public sealed class ActionEffectResolverTests
             _occupantsByPosition.TryGetValue(position, out var entityIds) ? entityIds : [];
     }
 
-    private static (FakeMapQuery MapQuery, PackedComponentPool<SimpleHealthComponent> Health, EventBus EventBus, MathUtility MathUtility, StatusEffectAuraApplierRegistry StatusEffectAppliers, ComponentManager ComponentManager) Build()
+    private static (FakeMapQuery MapQuery, PackedComponentPool<SimpleHealthComponent> Health, EventBus EventBus, MathUtility MathUtility, StatusEffectApplierRegistry StatusEffectAppliers, ComponentManager ComponentManager) Build()
     {
         var mapQuery = new FakeMapQuery();
         var health = new PackedComponentPool<SimpleHealthComponent>(entityCapacity: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
         var eventBus = new EventBus();
         var mathUtility = new MathUtility();
-        var statusEffectAppliers = new StatusEffectAuraApplierRegistry();
+        var statusEffectAppliers = new StatusEffectApplierRegistry();
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
 
         return (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager);
@@ -167,7 +178,7 @@ public sealed class ActionEffectResolverTests
 
     private static readonly ActionDefinition StrengthTaggedAction = new(
         Guid.NewGuid(), "Test Strength Attack", null, "#", default, [GameTags.StatsAbilityScoreStrength],
-        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
+        Effects: [new Effect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
 
     [TestMethod]
@@ -201,14 +212,14 @@ public sealed class ActionEffectResolverTests
 
     private static readonly ActionDefinition ActionWithStatusEffect = new(
         Guid.NewGuid(), "Test Status Effect Attack", null, "#", default, [],
-        Effects: [new ActionEffect([new StatusEffectGrant(StatusEffectType.Paralysis)])],
+        Effects: [new Effect([new StatusEffectGrant(StatusEffectType.Paralysis)])],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
 
     [TestMethod]
     public void Apply_BlockingOccupant_GrantsRegisteredStatusEffect()
     {
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
-        var applier = new FakeStatusEffectAuraApplier(StatusEffectType.Paralysis);
+        var applier = new FakeStatusEffectApplier(StatusEffectType.Paralysis);
         statusEffectAppliers.Register(applier);
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
 
@@ -223,7 +234,7 @@ public sealed class ActionEffectResolverTests
     public void Apply_NonBlockingOccupant_GrantsRegisteredStatusEffect()
     {
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
-        var applier = new FakeStatusEffectAuraApplier(StatusEffectType.Paralysis);
+        var applier = new FakeStatusEffectApplier(StatusEffectType.Paralysis);
         statusEffectAppliers.Register(applier);
         mapQuery.AddNonBlockingOccupant(TargetTile, NonBlockingTargetEntityId);
 
@@ -238,7 +249,7 @@ public sealed class ActionEffectResolverTests
     public void Apply_TargetWithNoHealthComponentAtAll_StillGrantsStatusEffect()
     {
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
-        var applier = new FakeStatusEffectAuraApplier(StatusEffectType.Paralysis);
+        var applier = new FakeStatusEffectApplier(StatusEffectType.Paralysis);
         statusEffectAppliers.Register(applier);
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
 
@@ -261,7 +272,7 @@ public sealed class ActionEffectResolverTests
     public void Apply_StatusEffectGranted_PublishesStatusEffectApplied()
     {
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
-        statusEffectAppliers.Register(new FakeStatusEffectAuraApplier(StatusEffectType.Paralysis));
+        statusEffectAppliers.Register(new FakeStatusEffectApplier(StatusEffectType.Paralysis));
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         StatusEffectAppliedEvent? published = null;
         eventBus.Subscribe<StatusEffectAppliedEvent>(e => published = e);
@@ -292,7 +303,7 @@ public sealed class ActionEffectResolverTests
     public void Apply_TargetIsDead_DoesNotGrantStatusEffect()
     {
         var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
-        var applier = new FakeStatusEffectAuraApplier(StatusEffectType.Paralysis);
+        var applier = new FakeStatusEffectApplier(StatusEffectType.Paralysis);
         statusEffectAppliers.Register(applier);
         mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
         componentManager.GetPackedPool<DeadComponent>().Add(BlockingTargetEntityId, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
@@ -304,7 +315,7 @@ public sealed class ActionEffectResolverTests
 
     private static readonly ActionDefinition DodgeableAction = new(
         Guid.NewGuid(), "Test Dodgeable Attack", null, "#", default, [GameTags.TraitDodgeable],
-        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
+        Effects: [new Effect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
 
     [TestMethod]

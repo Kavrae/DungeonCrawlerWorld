@@ -1,4 +1,6 @@
 using Engine.Math;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.Modules;
 using Engine.Tags;
 using Game.Modules;
@@ -6,7 +8,6 @@ using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Actions.Definitions.Spells;
-using Game.Modules.Actions.Effects;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Definitions;
 using Game.Modules.StatModifiers;
@@ -47,7 +48,7 @@ public sealed class ContentTagsTests
         }
     }
 
-    private static ItemDefinition ItemTagged(GameplayTagSet tags, IReadOnlyList<ActionEffect>? effects = null) =>
+    private static ItemDefinition ItemTagged(GameplayTagSet tags, IReadOnlyList<Effect>? effects = null) =>
         new(Guid.NewGuid(), "Tagged Item", null, "?", Color.White, tags, effects ?? []);
 
     private static ActionDefinition ActionTagged(GameplayTagSet tags, IActionActivator activator) =>
@@ -146,7 +147,7 @@ public sealed class ContentTagsTests
     public void ABuild_WhoseStatModifierIsConditionedOnAnUndeclaredTag_Throws()
     {
         var grant = new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, CanModify: false, Magnitude: -0.5f, DurationFrames: null, ConditionTag: UndeclaredTag);
-        var module = new RegisteringModule(context => context.Items.Register(ItemTagged([], [new ActionEffect([grant])])));
+        var module = new RegisteringModule(context => context.Items.Register(ItemTagged([], [new Effect([grant])])));
 
         var exception = Assert.ThrowsExactly<InvalidOperationException>(() => BuiltInTestModules.BuildModules([module]));
         Assert.Contains(UndeclaredTag.Name, exception.Message);

@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Game.Effects;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using Engine.ECS.Systems;
@@ -9,7 +10,6 @@ using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Components;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -19,9 +19,6 @@ using Game.Modules.Inventory.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.Poison;
 using Game.Modules.ProcessingTier;
-using Game.Modules.StatModifiers.Components;
-using Game.Modules.StatusEffectAura.Components;
-using Game.Modules.StatusEffects;
 using Game.World;
 
 namespace Game.Modules.Inventory.Systems;
@@ -45,7 +42,7 @@ namespace Game.Modules.Inventory.Systems;
 /// -- belongs to whoever actually receives the potion's effect (see ApplyPotionToTarget), not
 /// whoever drank/threw it. Drinking your own potion means those are the same entity; throwing one
 /// at a goblin means the goblin's own cooldown ticks, the thrower's does not. This stays this
-/// system's own kind-uniform logic rather than a composable IActionEffectEntry: it doesn't vary per potion
+/// system's own kind-uniform logic rather than a composable IEffectEntry: it doesn't vary per potion
 /// (Constitution, the only varying input, is caster-side), so every potion already gets it
 /// automatically, and making it an entry every item's Effects list must remember to include
 /// (including mod-defined potions) would turn a currently-impossible-to-forget mechanic into a
@@ -86,26 +83,21 @@ public sealed class ConsumableActivationSystem : ISystem
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
-    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
+    private readonly EffectServices _effectServices;
     private readonly ItemCatalog _itemCatalog;
     private readonly ActionCatalog _actionCatalog;
     private readonly IMapQuery _mapQuery;
     private readonly EventBus _eventBus;
-    private readonly MathUtility _mathUtility;
     private readonly ComponentManager _componentManager;
     private readonly EntityKeys _entityKeys;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
     private readonly PackedComponentPool<ManaComponent> _mana;
     private readonly PackedComponentPool<MeleeDisabledComponent> _meleeDisabled;
-    private readonly PackedComponentPool<HotkeyExpansionUnlockComponent> _hotkeyExpansionUnlocks;
     private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores;
-    private readonly StatusEffectAuraApplierRegistry _statusEffectAppliers;
     private readonly IPlayerQuery _playerQuery;
-    private readonly MultiComponentPool<StatusEffectAuraSourceComponent> _auraSources;
     private readonly MultiComponentPool<ItemHotkeyBindingComponent> _itemHotkeyBindings;
     private readonly EntityBodyParts _bodyParts;
     private readonly BlueprintRegistry _creatures;
-    private readonly FloatingTextFeed _floatingTextFeed;
     private readonly List<int> _targetIdsScratch = [];
     private readonly HashSet<int> _seenTargetIdsScratch = [];
     private readonly ProcessingTierQuery _processingTiers;
@@ -118,53 +110,33 @@ public sealed class ConsumableActivationSystem : ISystem
         PackedComponentPool<PendingConsumableActivationComponent> pendingActivations,
         PackedComponentPool<ActionLockComponent> actionLocks,
         PackedComponentPool<PotionCooldownComponent> potionCooldowns,
-        PackedComponentPool<SimpleHealthComponent> health,
+        EffectServices effectServices,
         ItemCatalog itemCatalog,
         ActionCatalog actionCatalog,
         IMapQuery mapQuery,
-        EventBus eventBus,
-        MathUtility mathUtility,
-        ComponentManager componentManager,
-        EntityKeys entityKeys,
-        MultiComponentPool<StatModifierComponent> statModifiers,
-        PackedComponentPool<DeadComponent> deadEntities,
-        PackedComponentPool<ManaComponent> mana,
         PackedComponentPool<MeleeDisabledComponent> meleeDisabled,
-        PackedComponentPool<HotkeyExpansionUnlockComponent> hotkeyExpansionUnlocks,
-        PackedComponentPool<AbilityScoresComponent> abilityScores,
-        MultiComponentPool<StatusEffectAuraSourceComponent> auraSources,
         MultiComponentPool<ItemHotkeyBindingComponent> itemHotkeyBindings,
-        EntityBodyParts bodyParts,
-        ProcessingTierQuery processingTiers,
-        IPlayerQuery playerQuery,
-        StatusEffectAuraApplierRegistry statusEffectAppliers,
-        BlueprintRegistry creatures,
-        FloatingTextFeed floatingTextFeed)
+        ProcessingTierQuery processingTiers)
     {
+        _effectServices = effectServices;
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
         _potionCooldowns = potionCooldowns;
-        _health = health;
+        _health = effectServices.Health;
         _itemCatalog = itemCatalog;
         _actionCatalog = actionCatalog;
         _mapQuery = mapQuery;
-        _eventBus = eventBus;
-        _mathUtility = mathUtility;
-        _componentManager = componentManager;
-        _entityKeys = entityKeys;
-        _statModifiers = statModifiers;
-        _deadEntities = deadEntities;
-        _mana = mana;
+        _eventBus = effectServices.EventBus;
+        _componentManager = effectServices.ComponentManager;
+        _entityKeys = effectServices.EntityKeys;
+        _deadEntities = effectServices.DeadEntities;
+        _mana = effectServices.Mana;
         _meleeDisabled = meleeDisabled;
-        _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
-        _abilityScores = abilityScores;
-        _statusEffectAppliers = statusEffectAppliers;
-        _playerQuery = playerQuery;
-        _auraSources = auraSources;
+        _abilityScores = effectServices.AbilityScores;
+        _playerQuery = effectServices.PlayerQuery;
         _itemHotkeyBindings = itemHotkeyBindings;
-        _bodyParts = bodyParts;
-        _creatures = creatures;
-        _floatingTextFeed = floatingTextFeed;
+        _bodyParts = effectServices.BodyParts;
+        _creatures = effectServices.Definitions;
         _processingTiers = processingTiers;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
@@ -320,7 +292,7 @@ public sealed class ConsumableActivationSystem : ISystem
             _eventBus.Publish(new PotionCooldownAbusedEvent(targetEntityId));
         }
 
-        ActionEffectSequence.Apply(item.Effects, BuildContext(item, sourceEntityId, targetEntityId));
+        EffectSequence.Apply(item.Effects, BuildContext(item, sourceEntityId, targetEntityId));
 
         PotionCooldownEffects.Reset(_componentManager, targetEntityId, durationFrames, _now);
     }
@@ -355,7 +327,7 @@ public sealed class ConsumableActivationSystem : ISystem
             return;
         }
 
-        ActionEffectSequence.Apply(item.Effects, BuildContext(item, sourceEntityId, targetEntityId, durationScaleMultiplier));
+        EffectSequence.Apply(item.Effects, BuildContext(item, sourceEntityId, targetEntityId, durationScaleMultiplier));
     }
 
     private void ActivateWand(ItemDefinition item, int sourceEntityId, Vector3Int[] targetTiles)
@@ -374,7 +346,7 @@ public sealed class ConsumableActivationSystem : ISystem
             return;
         }
 
-        ActionEffectSequence.Apply(item.Effects, BuildContext(item, sourceEntityId, targetEntityId));
+        EffectSequence.Apply(item.Effects, BuildContext(item, sourceEntityId, targetEntityId));
     }
 
     /// <summary>
@@ -417,29 +389,7 @@ public sealed class ConsumableActivationSystem : ISystem
             static (ref readonly ItemHotkeyBindingComponent binding, (uint Old, uint New) state) => binding.StackInstanceId == state.Old,
             static (ref ItemHotkeyBindingComponent binding, (uint Old, uint New) state) => binding.StackInstanceId = state.New);
 
-    /// <summary>Shared ActionEffectContext shape for both ApplyPotionToTarget and ApplyScrollToTarget -- identical field-for-field except DurationScaleMultiplier, which only a scroll activation ever sets away from its 1.0 default.</summary>
-    private ActionEffectContext BuildContext(ItemDefinition item, int sourceEntityId, int targetEntityId, float durationScaleMultiplier = 1.0f) =>
-        new(
-            SourceEntityId: sourceEntityId,
-            TargetEntityId: targetEntityId,
-            Health: _health,
-            EventBus: _eventBus,
-            MathUtility: _mathUtility,
-            ComponentManager: _componentManager,
-            EntityKeys: _entityKeys,
-            ActivatorName: item.Name,
-            ActivatorTags: item.Tags,
-            Now: _now,
-            StatModifiers: _statModifiers,
-            AbilityScores: _abilityScores,
-            Mana: _mana,
-            HotkeyExpansionUnlocks: _hotkeyExpansionUnlocks,
-            StatusEffectAppliers: _statusEffectAppliers,
-            DeadEntities: _deadEntities,
-            AuraSources: _auraSources,
-            BodyParts: _bodyParts,
-            PlayerQuery: _playerQuery,
-            Definitions: _creatures,
-            FloatingTextFeed: _floatingTextFeed,
-            DurationScaleMultiplier: durationScaleMultiplier);
+    /// <summary>The EffectContext for one target of an item's activation; only a scroll sets DurationScaleMultiplier away from 1.</summary>
+    private EffectContext BuildContext(ItemDefinition item, int sourceEntityId, int targetEntityId, float durationScaleMultiplier = 1.0f) =>
+        EffectContext.FromEntity(_effectServices, sourceEntityId, targetEntityId, item.Name, item.Tags, _now, durationScaleMultiplier);
 }

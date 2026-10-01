@@ -103,7 +103,7 @@ public static class WorldSessionBootstrapper
 
         using (EngineHooks.DiagnosticScope("Entity Population"))
         {
-            FloorBuilder.PopulateFloor(world, ecsContext, neighborhoodRecords, gameSession.Internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Definitions);
+            FloorBuilder.PopulateFloor(world, ecsContext, neighborhoodRecords, gameSession.Internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Auras, gameSession.Catalogs.Definitions);
         }
 
         using (EngineHooks.DiagnosticScope("Player Spawn"))
@@ -144,7 +144,7 @@ public static class WorldSessionBootstrapper
         // First in the frame: its population records spawns into the moved-entities buffer the other
         // systems read later the same frame.
         var neighborhoodStreamer = new NeighborhoodStreamer(world, ecsContext.EntityManager, ecsContext.ComponentManager.GetDirectPool<Game.Modules.Core.Components.TransformComponent>(), ecsContext.EventBus, tierResolver, neighborhoodRecords,
-            new Game.TestMapBuilder(ecsContext.EntityManager, gameSession.Internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Definitions), gameSession.Internals.Skeletons);
+            new Game.TestMapBuilder(ecsContext.EntityManager, gameSession.Internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Auras, gameSession.Catalogs.Definitions), gameSession.Internals.Skeletons);
         ecsContext.SystemManager.RegisterFirst(neighborhoodStreamer);
         RegisterStreamerGauges(ecsContext.Gauges, neighborhoodStreamer);
 
@@ -157,6 +157,12 @@ public static class WorldSessionBootstrapper
             System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         }
+
+        // The terrain is all there, so the aura field scans it now rather than on the first frame or
+        // the first draw, whichever came first: a startup step with a cost of its own (the scope is the
+        // field's). After the compaction, not before: built while population's garbage was still held,
+        // the field's own growth raised the peak working set by about 210 MB.
+        gameSession.Internals.AuraField.EnsureBuilt();
 
         ecsContext.BeginSession();
 

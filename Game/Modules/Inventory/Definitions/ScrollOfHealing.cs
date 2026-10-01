@@ -1,8 +1,9 @@
 using Engine.Math;
+using Game.Effects;
+using Game.Effects.Entries;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Definitions.Spells;
-using Game.Modules.Actions.Effects;
 using Game.Tags;
 using Microsoft.Xna.Framework;
 
@@ -23,7 +24,7 @@ public static class ScrollOfHealing
     public static ItemDefinition Build() => new(
         Id, "Scroll of Healing", "Scroll", "s", Color.White,
         Tags: [GameTags.EffectHealing, GameTags.TargetingSelf],
-        Effects: [new ActionEffect([new DirectHeal(HealAmount)])],
+        Effects: [new Effect([new DirectHeal(HealAmount)])],
         Description: "A scroll inscribed with the Heal spell. Heals the target by a percentage of their maximum health and then crumbles to dust.",
         Summary: $"Heal target(s) by {HealAmount:P0}.",
         GoldValue: 11,

@@ -4,9 +4,8 @@ namespace Game.World;
 
 /// <summary>Published by World.SetTerrain whenever a cell's terrain changes -- the signal anything derived from terrain needs to update.</summary>
 /// <remarks>
-/// Consumers: MapWindow's cached terrain image (invalidate), and the aura grids on both sides
-/// (StatusEffectAuraSystem's AuraGrid, Presentation's MapTintGrid), which unsplat the previous
-/// terrain's aura and splat the new one -- which is why the event carries both type ids.
+/// Consumers: MapWindow's cached terrain image (invalidate), and the AuraField, which takes the
+/// previous terrain's aura out and puts the new one in -- which is why the event carries both type ids.
 ///
 /// Immediate, not IBufferedEvent: terrain changes are rare (an explosion, a spell), not per-move,
 /// and no consumer writes a pool another system could be mid-scan over. Population doesn't publish

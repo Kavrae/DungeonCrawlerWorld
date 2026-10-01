@@ -5,7 +5,7 @@ using Engine.Math;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Death.Systems;
-using Game.Modules.StatusEffectAura.Components;
+using Game.Modules.Auras.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -56,7 +56,7 @@ public sealed class DeathSystemTests
         return pool;
     }
 
-    private static MultiComponentPool<StatusEffectAuraSourceComponent> CreateAuraSourcePool() =>
+    private static MultiComponentPool<AuraSourceComponent> CreateAuraSourcePool() =>
         new(entityCapacity: 10, initialCapacity: 4);
 
     private static (DeathSystem System, PackedComponentPool<DeadComponent> DeadEntities, MultiComponentPool<NonBlockingComponent> NonBlockingEntities, RecordingEntityMoveSync EntityMoveSync, FakeMapQuery MapQuery, EventBus EventBus) Build()
@@ -185,7 +185,7 @@ public sealed class DeathSystemTests
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
         var auraSources = CreateAuraSourcePool();
-        var source = new StatusEffectAuraSourceComponent(StatusEffectType.Poison, auraAndGlowStrength: 5, Color.Purple);
+        var source = new AuraSourceComponent(TestAuras.PoisonId, strength: 5);
         auraSources.Add(0, source);
 
         var system = TestSystems.DeathSystem(deadEntities, nonBlockingEntities, transforms, entityMoveSync, mapQuery, eventBus, auraSources);

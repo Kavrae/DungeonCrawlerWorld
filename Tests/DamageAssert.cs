@@ -1,3 +1,4 @@
+using Game.Effects;
 using Game.Modules.Actions;
 
 namespace Tests;

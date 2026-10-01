@@ -6,6 +6,7 @@ using Game.Blueprints;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Auras;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
@@ -83,13 +84,13 @@ internal static class TestMapWindows
         var terrain = new Game.Terrain.TerrainRegistry();
         var mapView = new MapViewQuery(world, componentManager, resolvedActionCatalog, terrain, creatures: new BlueprintRegistry(), new SimulationClock());
         var playerActionGate = new PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), world, new SimulationClock());
-        var tintGrid = new MapTintGrid(componentManager, world, terrain, eventBus);
+        var auraGlow = new AuraGlowView(new AuraField(world, terrain, TestAuras.GlowOnlyCatalog(), eventBus));
 
         var floatingTextController = new FloatingTextController(eventBus, new SimulationClock());
         var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, fontService, new Game.Modules.StatusEffects.StatusEffectDisplayRegistry(), new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new LabelRenderer());
 
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(
-            fontService, windowService, mapView, playerActionGate, mapViewState, tintGrid, eventBus, new TileRenderer(), new LabelRenderer(),
+            fontService, windowService, mapView, playerActionGate, mapViewState, auraGlow, eventBus, new TileRenderer(), new LabelRenderer(),
             new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer, new AdminContextMenuOptions(TestAdminTools.Create())));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions

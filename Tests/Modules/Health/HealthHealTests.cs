@@ -64,6 +64,35 @@ public sealed class HealthHealTests
     }
 
     [TestMethod]
+    public void Apply_SimpleTargetAtFullHealth_PublishesNothing()
+    {
+        var pool = CreatePool();
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        var eventBus = new EventBus();
+        var published = false;
+        eventBus.Subscribe<EntityHealedEvent>(_ => published = true);
+
+        TestHealth.Heal(pool, 0, 0.1f, eventBus: eventBus, playerQuery: new TestPlayerQuery(0), now: 0);
+
+        Assert.IsFalse(published);
+        Assert.AreEqual(100, pool.GetReadonly(0).CurrentHealth);
+    }
+
+    [TestMethod]
+    public void Apply_ComplexTargetAtFullHealth_PublishesNothing()
+    {
+        var pool = CreatePool();
+        var bodyParts = BodyPartTestWorld.WithParts(0, ("Torso", BodyPartType.Torso, 100, 100, true)).BodyParts;
+        var eventBus = new EventBus();
+        var published = false;
+        eventBus.Subscribe<EntityHealedEvent>(_ => published = true);
+
+        TestHealth.Heal(pool, 0, 0.25f, bodyParts: bodyParts, eventBus: eventBus, playerQuery: new TestPlayerQuery(0), now: 0);
+
+        Assert.IsFalse(published);
+    }
+
+    [TestMethod]
     public void Apply_PlayerIsTarget_PublishesEntityHealedEvent()
     {
         var pool = CreatePool();

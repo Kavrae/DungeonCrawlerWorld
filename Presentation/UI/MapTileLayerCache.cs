@@ -18,8 +18,8 @@ namespace Presentation.UI;
 /// Both qualify for the same reason. Terrain only changes through World.SetTerrain, which raises
 /// TerrainChangedEvent, and its visuals and background come from its TerrainDefinition -- so the
 /// background wash is a pure function of terrain too. The
-/// glow grid is incrementally maintained and only changes when MapTintGrid actually splats or
-/// unsplats a source, which at this game's real composition means essentially never: its sources
+/// glow grid is incrementally maintained and only changes when the aura field adds or
+/// removes a source, which at this game's real composition means essentially never: its sources
 /// are overwhelmingly Lava terrain, which never moves.
 ///
 /// Measured motivation: the terrain pass cost 15.8ms of a 1000ms/sec budget, the background pass
@@ -61,7 +61,7 @@ public sealed class MapTileLayerCache : IDisposable
     /// Marks the cached image stale so the next EnsureRendered call rebuilds it. Called from
     /// MapWindow's existing camera-commit points (scroll, zoom, layer change) plus whatever
     /// content event the particular pass depends on -- TerrainChangedEvent for the terrain
-    /// texture, a MapTintGrid version change for the glow one.
+    /// texture, an AuraGlowView version change for the glow one.
     /// </summary>
     public void Invalidate() => _isDirty = true;
 

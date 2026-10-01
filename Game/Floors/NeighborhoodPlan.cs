@@ -12,7 +12,7 @@ namespace Game.Floors;
 /// thread made it and however long it took.
 /// </remarks>
 /// <param name="auraCellsByRow">Layout's aura-radiating terrain cells, one list per row from Layout.MinY -- see TerrainAuraSources.ByRow.</param>
-/// <param name="spawnRowEnds">For each population row (and last, the starting neighborhood's fixtures), the index in spawns one past its last request -- so spawning can stop between rows.</param>
+/// <param name="spawnRowEnds">For each batch of spawns -- the shrines in batches first, then each population row, and last the starting neighborhood's fixtures -- the index in spawns one past its last request, so spawning can stop between batches.</param>
 public sealed class NeighborhoodPlan(NeighborhoodLayout layout, IReadOnlyList<IReadOnlyList<TerrainAuraCell>> auraCellsByRow, IReadOnlyList<SpawnRequest> spawns, IReadOnlyList<int> spawnRowEnds)
 {
     public NeighborhoodLayout Layout { get; } = layout;

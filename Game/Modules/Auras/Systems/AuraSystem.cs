@@ -1,0 +1,581 @@
+using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
+using Engine.Events;
+using Engine.Math;
+using Game.Effects;
+using Game.Modules.Auras.Components;
+using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
+using Game.Modules.ProcessingTier.Components;
+using Game.World;
+
+namespace Game.Modules.Auras.Systems;
+
+/// <summary>Keeps the aura grid in step with its sources, tracks which entities stand inside which auras, and applies each aura's effect to them once a second.</summary>
+/// <remarks>
+/// <para>
+/// <b>One rule for every aura: an effect is applied only by an exposure's tick.</b> Coming into
+/// range -- a move, a spawn, a source appearing nearby -- only starts an exposure
+/// (AuraExposureComponent, one per entity and aura), whose first tick is staggered within the next
+/// AuraEffects.TickIntervalFrames and repeats every interval after. A tick that finds the entity out
+/// of range or dead removes the exposure and applies nothing. So an entity
+/// that crosses an aura and is out again before its tick is untouched, and the rate an aura applies
+/// at is a property of the timer, never of the path an entity takes in and out of range. This is
+/// deliberately different from TerrainContactSystem, which hits on every step onto a hazard.
+/// </para>
+/// <para>
+/// What an aura does is its definition's Effects (AuraCatalog) -- the same Effect lists an action or
+/// item holds, applied with no source entity and attributed to the aura; this system knows no
+/// particular effect. They are read from the definition at every tick, so a definition replaced
+/// during a session is what the next tick applies. An aura with no effects only glows: it is in the
+/// grid, and nothing holds an exposure to it. The magnitude the effects are scaled by is the grid's
+/// total for that aura at the entity's cell with the entity's own sources subtracted, so a source
+/// never affects itself.
+/// </para>
+/// <para>
+/// An exposure is held by anything in range that isn't dead, whether or not the effects can do
+/// anything to it: nothing remembers "this entity can't be affected", so a change to the aura, its
+/// strength or the entity is picked up by the next tick with nothing to invalidate. A tick whose
+/// effects are refused (an immunity) reports that once and stays silent until something lands again
+/// (AuraExposureComponent.Refused).
+/// </para>
+/// <para>
+/// All range checks go through the AuraField (O(1) per lookup, keyed by cell and aura), never a live
+/// scan around each mover: lava covers enough terrain, with a radius wide enough to blanket most of
+/// a wandering population, that scanning per move was a measured production performance bug.
+/// Exposures sit on a timer wheel for the same reason -- only the ones due this frame are touched.
+/// Moves arrive through MovementSystem's shared FrameEventBuffer, drained at the start of Update,
+/// not through an EventBus subscription per move.
+/// </para>
+/// <para>
+/// The field holds terrain auras itself; this system puts entity sources into it, since it is what
+/// knows where each one is (_sourcePositionsInField):
+/// - <b>Added.</b> It observes the source pool, so a source added by any path is noticed. On an
+///   entity already on the map it goes into the field at once; on one still being spawned it waits
+///   for the spawn's move.
+/// - <b>First placement</b> of an entity's sources is immediate at every tier.
+/// - <b>Moved.</b> A Local-tier source is resynced on the move, where the player can see it. Any
+///   other tier is left where the field has it and queued; Update resyncs a few queued sources a
+///   frame (MaximumDeferredResyncsPerFrame), which keeps a moving source's O(radius^2) resync from
+///   multiplying across a population of them. A source that never moves is never queued, so
+///   stationary sources -- most of them -- cost nothing per frame.
+/// - <b>Removed.</b> From AuraSourceRemovedEvent (a pool announces nothing on removal), taken out
+///   of the field where the field has it, not where the entity is now.
+/// A source is never changed in place: AuraSourceEffects replaces one by removing and adding.
+/// </para>
+/// </remarks>
+public sealed class AuraSystem : ISystem
+{
+    /// <summary>How many non-Local sources that moved are resynced into the field per frame; the rest wait their turn in the order they moved.</summary>
+    private const int MaximumDeferredResyncsPerFrame = 8;
+
+    /// <summary>Every frame: this frame's moves must be drained this frame, and the wheel only touches exposures actually due.</summary>
+    public byte StripeCount => 1;
+
+    private readonly MultiComponentPool<AuraExposureComponent> _exposures;
+    private readonly MultiComponentPool<AuraSourceComponent> _sources;
+    private readonly DirectComponentPool<TransformComponent> _transforms;
+    private readonly AuraCatalog _auras;
+    private readonly IMapQuery _mapQuery;
+    private readonly FrameEventBuffer<EntityMovedEvent> _movedEntities;
+    private readonly PackedComponentPool<DeadComponent> _deadEntities;
+    private readonly DirectComponentPool<ProcessingTierComponent> _processingTiers;
+    private readonly SimulationClock _clock;
+    private readonly SimulationScope _simulationScope;
+    private readonly AuraField _auraField;
+    private readonly EffectServices _effectServices;
+
+    /// <summary>
+    /// Each exposure's tick, keyed by AuraId (see AuraExposureComponent). Only exposures due this
+    /// frame are touched, on their exact frame at every processing tier.
+    /// </summary>
+    private readonly MultiTimerWheel<AuraExposureComponent> _exposureWheel;
+
+    private readonly List<byte> _staleExposureAuraIdsScratch = [];
+
+    /// <summary>
+    /// The simulation frame the current entry point is running on -- set first thing by each one
+    /// (Update from its EngineTime; the event handlers from the clock, since they fire from the
+    /// EventBus outside this system's own Update: during population, or during another system's
+    /// turn). Every exposure this system starts is scheduled from it.
+    /// </summary>
+    private long _now;
+
+    // Cached once instead of passing the Tick method group every Update -- an instance method
+    // group conversion allocates a fresh delegate every evaluation.
+    private readonly TimerFired<AuraExposureComponent> _tick;
+
+    /// <summary>Where the field holds each source entity's sources. May lag a non-Local source's real (_transforms) position by however many moves it has made since its last resync -- see ResyncSourceIfStale. An entity with sources and no entry has none of them in the field yet.</summary>
+    private readonly Dictionary<int, Vector3Int> _sourcePositionsInField = [];
+
+    /// <summary>The non-Local sources that moved and have not been resynced yet, in the order they moved, each once.</summary>
+    private readonly Queue<int> _unsyncedSourceQueue = new();
+
+    /// <inheritdoc cref="_unsyncedSourceQueue"/>
+    private readonly HashSet<int> _unsyncedSources = [];
+
+    public AuraSystem(
+        MultiComponentPool<AuraExposureComponent> exposures,
+        MultiComponentPool<AuraSourceComponent> sources,
+        DirectComponentPool<TransformComponent> transforms,
+        IMapQuery mapQuery,
+        EventBus eventBus,
+        AuraCatalog auras,
+        FrameEventBuffer<EntityMovedEvent> movedEntities,
+        DirectComponentPool<ProcessingTierComponent> processingTiers,
+        SimulationClock simulationClock,
+        AuraField auraField,
+        EffectServices effectServices,
+        SimulationScope simulationScope)
+    {
+        _auraField = auraField;
+        _exposures = exposures;
+        _sources = sources;
+        _transforms = transforms;
+        _mapQuery = mapQuery;
+        _auras = auras;
+        _movedEntities = movedEntities;
+        _effectServices = effectServices;
+        _deadEntities = effectServices.DeadEntities;
+        _processingTiers = processingTiers;
+        _clock = simulationClock;
+
+        sources.ComponentChanged += OnSourceAdded;
+        eventBus.Subscribe<AuraSourceRemovedEvent>(OnSourceRemoved);
+        auraField.TerrainAuraAdded += OnTerrainAuraAdded;
+        auraField.TerrainAuraRemoved += OnTerrainAuraRemoved;
+        auras.DefinitionChanged += OnAuraDefinitionChanged;
+
+        _tick = Tick;
+        _simulationScope = simulationScope;
+        _exposureWheel = new MultiTimerWheel<AuraExposureComponent>(exposures, simulationScope);
+        simulationScope.EntityResumed += OnEntityResumed;
+    }
+
+    /// <summary>Picks a resumed entity back up: its exposures move past every tick owed while it froze, applying none (see SkipOwedExposureTicks), and it is exposed to whatever aura it is standing in.</summary>
+    /// <remarks>
+    /// Runs after the wheel's own resume handler has rescheduled the stale deadline; rewriting it here reschedules again and leaves that earlier entry to be dropped as stale, the wheel's ordinary lazy cancellation.
+    /// A frozen entity gains no exposure, so one that never moves -- a shrine, a chest -- would otherwise stay unexposed for good once its neighborhood is simulated.
+    /// </remarks>
+    private void OnEntityResumed(int entityId)
+    {
+        _now = _clock.CurrentFrame;
+        SkipOwedExposureTicks(entityId, _now);
+
+        if (_transforms.TryGetReadonly(entityId, out var transform))
+        {
+            StartExposures(entityId, transform.Position);
+        }
+    }
+
+    /// <summary>Moves each of the entity's exposures past every tick owed while it was frozen, applying none: exposures do not accrue while frozen. Whatever an aura already started on the entity before it froze (a burn's stacks) keeps running through its own effect, which never stopped.</summary>
+    private void SkipOwedExposureTicks(int entityId, long now)
+    {
+        for (var denseIndex = _exposures.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _exposures.GetNextDenseIndex(denseIndex))
+        {
+            if (_exposures.GetReadonlyByDenseIndex(denseIndex).NextTickFrame <= now)
+            {
+                _exposures.UpdateByDenseIndex(denseIndex, now, static (ref AuraExposureComponent e, long frame) => e.SkipOwedPeriods(AuraEffects.TickIntervalFrames, frame));
+            }
+        }
+    }
+
+    /// <summary>A terrain cell started radiating: whoever already stands in range is exposed, the same as for a source that moved there.</summary>
+    private void OnTerrainAuraAdded(Vector3Int position)
+    {
+        _now = _clock.CurrentFrame;
+        StartExposuresNear(position);
+    }
+
+    /// <summary>A terrain cell stopped radiating: exposures it no longer reaches are dropped at once.</summary>
+    private void OnTerrainAuraRemoved(Vector3Int position) => ReEvaluateExposuresNear(position);
+
+    /// <summary>An aura's definition was replaced. If it has effects, whoever stands in reach of one of its sources is exposed -- before, with no effects, nothing held an exposure to it. One that lost its effects needs nothing: each exposure ends on its next tick.</summary>
+    /// <remarks>Walks every entity source and every loaded terrain cell for the ones radiating this aura: rare, and there is no index from an aura to its sources.</remarks>
+    private void OnAuraDefinitionChanged(byte auraId)
+    {
+        if (!_auras.Get(auraId).HasEffects)
+        {
+            return;
+        }
+
+        _now = _clock.CurrentFrame;
+        _auraField.EnsureBuilt();
+
+        var sourceEntityIds = _sources.EntityIds;
+        var sourceComponents = _sources.Components;
+        for (var index = 0; index < sourceEntityIds.Length; index++)
+        {
+            if (sourceComponents[index].AuraId == auraId && _sourcePositionsInField.TryGetValue(sourceEntityIds[index], out var positionInField))
+            {
+                StartExposuresNear(positionInField);
+            }
+        }
+
+        _auraField.ForEachTerrainSource(auraId, StartExposuresNear);
+    }
+
+    private void OnEntityMoved(EntityMovedEvent moved)
+    {
+        _auraField.EnsureBuilt();
+
+        if (_sources.Has(moved.EntityId))
+        {
+            if (!_sourcePositionsInField.ContainsKey(moved.EntityId) || GetSourceTier(moved.EntityId) == ProcessingTierLevel.Local)
+            {
+                ResyncSourceIfStale(moved.EntityId);
+            }
+            else if (_unsyncedSources.Add(moved.EntityId))
+            {
+                _unsyncedSourceQueue.Enqueue(moved.EntityId);
+            }
+        }
+
+        // A frozen entity gains no exposure while frozen -- it is exposed when it resumes (OnEntityResumed).
+        // Only something built at spawn in a frozen tier gets here unsimulated: a creature there is a
+        // skeleton, whose spawn records no move until it is built.
+        if (_simulationScope.IsSimulated(moved.EntityId))
+        {
+            StartExposures(moved.EntityId, moved.NewPosition);
+        }
+    }
+
+    /// <summary>
+    /// Moves entityId's sources in the field to where the entity is now, if that differs from where
+    /// the field has them (_sourcePositionsInField) -- a no-op otherwise. Called on the move for a
+    /// Local-tier source and for any source's first placement, and from Update's queue for a
+    /// source of any other tier that moved. Either way this is the only place a moving source's reach
+    /// changes, so a source that moved several times while non-Local is taken out from where the
+    /// field actually has it, not from one event's old position.
+    /// </summary>
+    private void ResyncSourceIfStale(int entityId)
+    {
+        if (!_transforms.TryGetReadonly(entityId, out var transform))
+        {
+            return;
+        }
+
+        var currentPosition = transform.Position;
+        var hadPreviousPosition = _sourcePositionsInField.TryGetValue(entityId, out var previousPosition);
+        if (hadPreviousPosition && previousPosition == currentPosition)
+        {
+            return;
+        }
+
+        if (!_mapQuery.IsOnMap(currentPosition))
+        {
+            LiftSourcesFromField(entityId);
+            return;
+        }
+
+        SourceSplatting.ResyncEntity(_sources, entityId, hadPreviousPosition ? previousPosition : null, currentPosition,
+            unsplat: (source, position) => _auraField.RemoveSource(position, source),
+            splat: (source, position) => _auraField.AddSource(position, source));
+
+        // Only where the reach was taken away can an exposure have lost its aura, and anything it
+        // reached is within scan range of there.
+        if (hadPreviousPosition)
+        {
+            ReEvaluateExposuresNear(previousPosition);
+        }
+
+        // A source that isn't simulated is surrounded by occupants that aren't either, and those gain
+        // no exposure while frozen (see StartExposuresNear): a shrine spawned into a frozen
+        // neighborhood has nothing to scan for. A simulated occupant just across a tier boundary
+        // from it is exposed by its own next move instead.
+        if (_simulationScope.IsSimulated(entityId))
+        {
+            StartExposuresNear(currentPosition);
+        }
+
+        _sourcePositionsInField[entityId] = currentPosition;
+    }
+
+    /// <summary>Takes every source entityId still carries out of the field, for an entity that left the map: its reach goes with it.</summary>
+    private void LiftSourcesFromField(int entityId)
+    {
+        if (!_sourcePositionsInField.Remove(entityId, out var positionInField))
+        {
+            return;
+        }
+
+        for (var denseIndex = _sources.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _sources.GetNextDenseIndex(denseIndex))
+        {
+            _auraField.RemoveSource(positionInField, _sources.GetReadonlyByDenseIndex(denseIndex));
+        }
+
+        ReEvaluateExposuresNear(positionInField);
+    }
+
+    /// <summary>Fails open to Beyond for a source with no ProcessingTierComponent yet -- the same "unknown = probably far" bias the stripe sets use -- so its moves are queued rather than resynced on the spot.</summary>
+    private ProcessingTierLevel GetSourceTier(int entityId) =>
+        _processingTiers.TryGetReadonly(entityId, out var tier) ? tier.Tier : ProcessingTierLevel.Beyond;
+
+    /// <summary>Puts a source just added to the pool into the field, and exposes whoever already stands in range -- a stationary target doesn't have to move before an aura that was just turned on reaches it.</summary>
+    /// <remarks>
+    /// The pool's change notification, so it covers every way a source is added. If the field already
+    /// holds the entity's other sources, the new one joins them where they are. Otherwise this is the
+    /// entity's first placement and all of its sources go in where it stands -- unless it isn't on the
+    /// map yet (a spawn in progress), in which case its spawn move places them.
+    /// </remarks>
+    private void OnSourceAdded(int entityId, int denseIndex)
+    {
+        _now = _clock.CurrentFrame;
+
+        if (_sourcePositionsInField.TryGetValue(entityId, out var positionInField))
+        {
+            _auraField.AddSource(positionInField, _sources.GetReadonlyByDenseIndex(denseIndex));
+            StartExposuresNear(positionInField);
+            return;
+        }
+
+        ResyncSourceIfStale(entityId);
+    }
+
+    /// <summary>Takes a removed source out of the field from where the field has it, and at once drops the exposures it no longer reaches, so toggling off reads as instant.</summary>
+    private void OnSourceRemoved(AuraSourceRemovedEvent removed)
+    {
+        if (!_sourcePositionsInField.TryGetValue(removed.EntityId, out var positionInField))
+        {
+            return;
+        }
+
+        if (!_sources.Has(removed.EntityId))
+        {
+            _sourcePositionsInField.Remove(removed.EntityId);
+        }
+
+        _auraField.RemoveSource(positionInField, removed.Source);
+        ReEvaluateExposuresNear(positionInField);
+    }
+
+    /// <summary>
+    /// Start-only counterpart to ReEvaluateExposuresNear -- same box-scan shape, but for
+    /// wherever a source is now (just added, or just resynced to) rather than wherever one just left. The source entity itself showing
+    /// up in this same scan is harmless: its own strength is left out of its total (see
+    /// TotalStrengthExcludingSelf).
+    /// </summary>
+    /// <remarks>Walks IMapQuery.GetOccupantEntityIdsAt per cell rather than the Blocking-only GetEntityIdsInBox, so Tiny/Phasing occupants are exposed too.</remarks>
+    private void StartExposuresNear(Vector3Int center)
+    {
+        var scanRadius = _auraField.MaxScanRadius;
+        var boxWidth = scanRadius * 2 + 1;
+        var minX = center.X - scanRadius;
+        var minY = center.Y - scanRadius;
+        var z = center.Z;
+
+        for (var y = minY; y < minY + boxWidth; y++)
+        {
+            for (var x = minX; x < minX + boxWidth; x++)
+            {
+                var position = new Vector3Int(x, y, z);
+                if (!_mapQuery.IsOnMap(position))
+                {
+                    continue;
+                }
+
+                foreach (var occupantId in _mapQuery.GetOccupantEntityIdsAt(position))
+                {
+                    // Frozen occupants gain no new exposure while frozen: a skeleton's starts when it is built (CreatureSkeletons.EnsureBuilt), anything else's when it resumes (OnEntityResumed).
+                    if (!_simulationScope.IsSimulated(occupantId))
+                    {
+                        continue;
+                    }
+
+                    if (!_transforms.TryGetReadonly(occupantId, out var occupantTransform))
+                    {
+                        continue;
+                    }
+
+                    StartExposures(occupantId, occupantTransform.Position);
+                }
+            }
+        }
+    }
+
+    public void Update(EngineTime time, byte stripeIndex)
+    {
+        _now = time.FrameCount;
+
+        // Before this frame's moves are read, so a source queued by one of them waits at least a frame.
+        ResyncQueuedSources();
+
+        // The buffer drain itself is NOT ProcessingTier-gated -- it only ever processes
+        // entities that actually moved this exact frame (already self-limiting, unlike the
+        // periodic passes below).
+        foreach (var moved in _movedEntities.Items)
+        {
+            OnEntityMoved(moved);
+        }
+
+        // Still needed here, idempotently, in case this frame had zero buffered moves.
+        _auraField.EnsureBuilt();
+
+        _exposureWheel.Tick(time.FrameCount, _tick);
+    }
+
+    /// <summary>Resyncs the sources that have waited longest since they moved, up to MaximumDeferredResyncsPerFrame.</summary>
+    /// <remarks>A queued entity that has since lost its sources, or been destroyed, is passed over: its removal already took it out of the field.</remarks>
+    private void ResyncQueuedSources()
+    {
+        for (var resynced = 0; resynced < MaximumDeferredResyncsPerFrame && _unsyncedSourceQueue.TryDequeue(out var entityId); resynced++)
+        {
+            _unsyncedSources.Remove(entityId);
+            if (_sources.Has(entityId))
+            {
+                ResyncSourceIfStale(entityId);
+            }
+        }
+    }
+
+    /// <summary>Applies one tick of the exposure's aura to the entity, or ends the exposure. Returns whether this (entity, aura) exposure should be removed -- the wheel removes that one instance by AuraId.</summary>
+    /// <remarks>True when the entity is dead, has no position, is out of the aura's range, or the aura has no effects. False re-arms the exposure's own next tick itself (via TryUpdateFirst, matched by AuraId) -- see TimerFired's contract.</remarks>
+    private bool Tick(int entityId, AuraExposureComponent exposure, long now)
+    {
+        if (_deadEntities.Has(entityId) || !_transforms.TryGetReadonly(entityId, out var transform))
+        {
+            return true;
+        }
+
+        var auraId = exposure.AuraId;
+        var definition = _auras.Get(auraId);
+        if (!definition.HasEffects)
+        {
+            return true;
+        }
+
+        var strength = TotalStrengthExcludingSelf(entityId, transform.Position, auraId);
+        if (strength <= 0)
+        {
+            return true;
+        }
+
+        var context = new EffectContext(_effectServices, ActionSource.FromAura(auraId), SourceEntityId: null, entityId, definition.EffectName, definition.Tags, now)
+        {
+            Magnitude = definition.Magnitude == AuraMagnitude.Flat ? 1f : strength,
+            AnnouncesRefusal = !exposure.Refused,
+        };
+
+        var refused = EffectSequence.Apply(definition.Effects, in context) == EffectOutcome.Refused;
+
+        _exposures.TryUpdateFirst(entityId, (auraId, refused),
+            static (ref readonly AuraExposureComponent e, (byte AuraId, bool Refused) state) => e.AuraId == state.AuraId,
+            static (ref AuraExposureComponent e, (byte AuraId, bool Refused) state) =>
+            {
+                e.Refused = state.Refused;
+                e.RepeatEvery(AuraEffects.TickIntervalFrames);
+            });
+
+        return false;
+    }
+
+    /// <summary>Starts an exposure for every aura with effects that reaches position and that the entity isn't already exposed to. Applies nothing: the exposure's tick does.</summary>
+    /// <remarks>Safe to call for an entity already exposed to some auras -- each aura is checked on its own, so being inside one never hides coming into range of another. A corpse is never exposed.</remarks>
+    private void StartExposures(int entityId, Vector3Int position)
+    {
+        // Most movers are in no aura at all, which the field answers without a lookup per aura.
+        if (!_auraField.AnyAuraReaches(position) || _deadEntities.Has(entityId))
+        {
+            return;
+        }
+
+        foreach (var auraId in _auraField.AuraIdsInField)
+        {
+            if (_auras.Get(auraId).HasEffects && TotalStrengthExcludingSelf(entityId, position, auraId) > 0 && !HasExposure(entityId, auraId))
+            {
+                _exposures.Add(entityId, new AuraExposureComponent(auraId, FrameDeadline.AfterStaggered(_now, AuraEffects.TickIntervalFrames, entityId)));
+            }
+        }
+    }
+
+    private bool HasExposure(int entityId, byte auraId)
+    {
+        for (var denseIndex = _exposures.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _exposures.GetNextDenseIndex(denseIndex))
+        {
+            if (_exposures.GetReadonlyByDenseIndex(denseIndex).AuraId == auraId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private int TotalStrengthExcludingSelf(int entityId, Vector3Int position, byte auraId)
+    {
+        var totalStrength = _auraField.GetTotalStrengthAt(position, auraId);
+
+        // Out of the aura's reach altogether, which most movers are: nothing of the entity's own to leave out.
+        if (totalStrength <= 0)
+        {
+            return 0;
+        }
+
+        for (var denseIndex = _sources.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _sources.GetNextDenseIndex(denseIndex))
+        {
+            var selfSource = _sources.GetReadonlyByDenseIndex(denseIndex);
+            if (selfSource.AuraId == auraId)
+            {
+                totalStrength -= selfSource.Strength;
+            }
+        }
+
+        return Math.Max(0, totalStrength);
+    }
+
+    /// <summary>
+    /// Removal-only re-check for occupants near a moving/toggled aura source. Per aura: an
+    /// occupant exposed to two (e.g. Burning from one source, Poison from another) only has the
+    /// one whose strength actually dropped to zero removed, rather than waiting for that
+    /// exposure's own next tick to find it out of range.
+    /// </summary>
+    /// <remarks>See StartExposuresNear's own remark -- same GetOccupantEntityIdsAt-per-cell walk, so a Tiny/Phasing occupant's exposure is dropped when it (or the source) moves out of range too.</remarks>
+    private void ReEvaluateExposuresNear(Vector3Int center)
+    {
+        var scanRadius = _auraField.MaxScanRadius;
+        var boxWidth = scanRadius * 2 + 1;
+        var minX = center.X - scanRadius;
+        var minY = center.Y - scanRadius;
+        var z = center.Z;
+
+        for (var y = minY; y < minY + boxWidth; y++)
+        {
+            for (var x = minX; x < minX + boxWidth; x++)
+            {
+                var position = new Vector3Int(x, y, z);
+                if (!_mapQuery.IsOnMap(position))
+                {
+                    continue;
+                }
+
+                foreach (var occupantId in _mapQuery.GetOccupantEntityIdsAt(position))
+                {
+                    // A frozen occupant is left as it is: an unbuilt skeleton holds no exposures to read, and a
+                    // built one's are dropped by their own tick once it resumes.
+                    if (!_simulationScope.IsSimulated(occupantId) || !_transforms.TryGetReadonly(occupantId, out var occupantTransform))
+                    {
+                        continue;
+                    }
+
+                    // Snapshot which of the occupant's current exposures are now out of range
+                    // before removing any of them -- MultiComponentPool.RemoveFirst reorders the dense
+                    // chain, so removing mid-walk of that same chain would skip or revisit entries.
+                    _staleExposureAuraIdsScratch.Clear();
+                    for (var denseIndex = _exposures.GetFirstDenseIndex(occupantId); denseIndex != -1; denseIndex = _exposures.GetNextDenseIndex(denseIndex))
+                    {
+                        var exposure = _exposures.GetReadonlyByDenseIndex(denseIndex);
+                        if (TotalStrengthExcludingSelf(occupantId, occupantTransform.Position, exposure.AuraId) <= 0)
+                        {
+                            _staleExposureAuraIdsScratch.Add(exposure.AuraId);
+                        }
+                    }
+
+                    foreach (var staleAuraId in _staleExposureAuraIdsScratch)
+                    {
+                        _exposures.RemoveFirst(occupantId, staleAuraId, static (ref readonly AuraExposureComponent e, byte auraId) => e.AuraId == auraId);
+                    }
+                }
+            }
+        }
+    }
+}

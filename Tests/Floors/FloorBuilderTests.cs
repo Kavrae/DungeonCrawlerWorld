@@ -14,7 +14,7 @@ using Game.Modules.Actions;
 using Game.Modules.Actions.Definitions;
 using Game.Modules.Burning;
 using Game.Modules.Class;
-using Game.Modules.ContactDamage;
+using Game.Modules.TerrainContacts;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler;
@@ -31,11 +31,12 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.Race;
 using Game.Modules.Shops;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatusEffectAura;
+using Game.Modules.Auras;
 using Game.Modules.StatusEffects;
 using Game.Terrain;
 using Game.World;
 using Game.Blueprints;
+using Game.Blueprints.Objects;
 
 namespace Tests.Floors;
 
@@ -67,7 +68,7 @@ public sealed class FloorBuilderTests
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
         var factory = pass.Factory;
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Definitions);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Auras, context.Definitions);
         FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId);
         world.PlayerEntityId = playerEntityId;
 
@@ -102,7 +103,7 @@ public sealed class FloorBuilderTests
         var ecsContext = pass.EcsContext;
         var context = pass.Context;
 
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), pass.Factory, context.Terrain, context.Definitions);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), pass.Factory, context.Terrain, context.Auras, context.Definitions);
 
         var transforms = ecsContext.ComponentManager.GetDirectPool<TransformComponent>();
         var creatures = 0;
@@ -128,7 +129,7 @@ public sealed class FloorBuilderTests
         var ecsContext = pass.EcsContext;
         var context = pass.Context;
 
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), pass.Factory, context.Terrain, context.Definitions);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), pass.Factory, context.Terrain, context.Auras, context.Definitions);
 
         var wallId = context.Terrain.GetId(BuiltInTerrain.StoneWallKey);
         Assert.AreEqual(wallId, world.GetStructureAt(new Vector3Int(10, 2, (int)MapLayer.Ground)).TypeId);
@@ -210,7 +211,7 @@ public sealed class FloorBuilderTests
         context.ProcessingTierEvents.TierChanged += (entityId, _) => raisedDuringPopulation.Add(entityId);
 
         var factory = pass.Factory;
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Definitions);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Auras, context.Definitions);
         FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId, resolver);
         world.PlayerEntityId = playerEntityId;
 
@@ -276,7 +277,7 @@ public sealed class FloorBuilderTests
     /// <summary>A map reaching one neighborhood west of the starting one: a 30-row slice of neighborhood -1 beside a 40x30 corner of neighborhood 0.</summary>
     private static readonly MapBounds TwoNeighborhoodSlice = new(-1024, 0, 40, 30, 3);
 
-    private static (Game.World.World World, EcsContext Ecs, Game.TestMapBuilder Builder, BlueprintRegistry Creatures, EntityFactory Factory) BuildForGeneration(MapBounds bounds)
+    private static (Game.World.World World, EcsContext Ecs, Game.TestMapBuilder Builder, BlueprintRegistry Creatures, EntityFactory Factory, AuraCatalog Auras) BuildForGeneration(MapBounds bounds)
     {
         var mathUtility = new MathUtility(new Random(1));
         var pass = Build(new Map(bounds), mathUtility);
@@ -284,8 +285,8 @@ public sealed class FloorBuilderTests
         var ecsContext = pass.EcsContext;
         var context = pass.Context;
         var factory = pass.Factory;
-        var builder = new Game.TestMapBuilder(ecsContext.EntityManager, factory, context.Terrain, context.Definitions);
-        return (world, ecsContext, builder, context.Definitions, factory);
+        var builder = new Game.TestMapBuilder(ecsContext.EntityManager, factory, context.Terrain, context.Auras, context.Definitions);
+        return (world, ecsContext, builder, context.Definitions, factory, context.Auras);
     }
 
     private static void Generate(Game.TestMapBuilder builder, Game.World.World world, NeighborhoodRecord record)
@@ -362,11 +363,11 @@ public sealed class FloorBuilderTests
     [TestMethod]
     public void PopulateFloor_HallwayCrossAndShopsExistOnlyInTheStartingNeighborhood()
     {
-        var (world, ecsContext, _, creatures, factory) = BuildForGeneration(TwoNeighborhoodSlice);
+        var (world, ecsContext, _, creatures, factory, auras) = BuildForGeneration(TwoNeighborhoodSlice);
         var mathUtility = new MathUtility(new Random(1));
         var records = new NeighborhoodRecords(mathUtility);
 
-        FloorBuilder.PopulateFloor(world, ecsContext, records, factory, world.Terrain, creatures);
+        FloorBuilder.PopulateFloor(world, ecsContext, records, factory, world.Terrain, auras, creatures);
 
         Assert.AreEqual(2, records.Count);
         Assert.IsTrue(records.TryGet(-1, 0, out _));
@@ -384,9 +385,94 @@ public sealed class FloorBuilderTests
 
     /// <summary>One yield once the whole layout is loaded, one per population row with the entities it created, and one for the starting neighborhood's fixtures -- together accounting for every entity generation created.</summary>
     [TestMethod]
+    public void GenerateNeighborhood_StartingNeighborhood_HasOneCellOfHolyGroundBySpawn()
+    {
+        var (world, _, builder, _, _, _) = BuildForGeneration(new MapBounds(0, 0, 40, 30, 3));
+
+        Generate(builder, world, new NeighborhoodRecord(0, 0, seed: 42));
+
+        var holyGround = world.Terrain.GetId(BuiltInTerrain.HolyGroundKey);
+        var holyGroundCells = new List<(int X, int Y)>();
+        for (var y = 0; y < 30; y++)
+        {
+            for (var x = 0; x < 40; x++)
+            {
+                if (world.GetTerrainAt(new Vector3Int(x, y, (int)MapLayer.Ground)).TypeId == holyGround)
+                {
+                    holyGroundCells.Add((x, y));
+                }
+            }
+        }
+
+        CollectionAssert.AreEqual(new[] { (Game.TestMapBuilder.HolyGroundColumn, Game.TestMapBuilder.HolyGroundRow) }, holyGroundCells);
+    }
+
+    /// <summary>Shrines are part of the place: rolled from the neighborhood's own seed, so a revisit that re-rolls the creatures finds every shrine where it was.</summary>
+    [TestMethod]
+    public void Plan_HealingShrines_AreTheSameOnEveryVisitAndAboutOneCellInAThousand()
+    {
+        var (world, _, builder, creatures, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
+        var healingShrine = creatures.GetId(HealingShrine.Id);
+        var record = new NeighborhoodRecord(-1, 0, seed: 42);
+
+        var firstVisit = builder.Plan(world.Map, record, populationSeed: 7).Spawns.Where(spawn => spawn.BlueprintId == healingShrine).ToList();
+        var secondVisit = builder.Plan(world.Map, record, populationSeed: 8).Spawns.Where(spawn => spawn.BlueprintId == healingShrine).ToList();
+
+        CollectionAssert.AreEqual(firstVisit, secondVisit);
+        Assert.IsTrue(firstVisit.All(static spawn => spawn.Layer == MapLayer.Ground));
+
+        // 1024 x 30 Ground cells at one in a thousand: about 31.
+        Assert.IsInRange(10, 60, firstVisit.Count);
+    }
+
+    /// <summary>Every shrine is spawned before any creature, in batches: first so a creature rolled onto a shrine's cell is the one that doesn't fit, together so their entity ids are consecutive.</summary>
+    [TestMethod]
+    public void Plan_HealingShrines_AreSpawnedFirstInBatchesAndNeverOnAWall()
+    {
+        var (world, _, builder, creatures, _, _) = BuildForGeneration(new MapBounds(0, 0, 1024, 200, 3));
+        var healingShrine = creatures.GetId(HealingShrine.Id);
+
+        var plan = builder.Plan(world.Map, new NeighborhoodRecord(0, 0, seed: 42), populationSeed: 7);
+        world.Map.LoadNeighborhood(plan.Layout);
+
+        // The last spawn is the fixture shrine by the player's spawn; every other shrine comes before the first creature.
+        var randomShrineCount = plan.Spawns.Take(plan.Spawns.Count - 1).Count(spawn => spawn.BlueprintId == healingShrine);
+        Assert.IsGreaterThan(64, randomShrineCount, "Precondition: more than one batch of shrines.");
+        Assert.IsTrue(plan.Spawns.Take(randomShrineCount).All(spawn => spawn.BlueprintId == healingShrine));
+
+        Assert.AreEqual(64, plan.SpawnRowEnds[0]);
+        Assert.AreEqual(128, plan.SpawnRowEnds[1]);
+        CollectionAssert.Contains(plan.SpawnRowEnds.ToList(), randomShrineCount);
+
+        foreach (var shrine in plan.Spawns.Take(randomShrineCount))
+        {
+            Assert.IsFalse(world.IsCellBlocked(new Vector3Int(shrine.X, shrine.Y, (int)MapLayer.Ground)), $"Shrine planned on a wall at {shrine.X},{shrine.Y}.");
+        }
+    }
+
+    /// <summary>Planning the shrines draws nothing from the population's sequence: with the shrines taken out, the plan's creatures are exactly the ones a different shrine seed leaves.</summary>
+    [TestMethod]
+    public void Plan_HealingShrines_ShiftNoCreaturesRoll()
+    {
+        var (world, _, builder, creatures, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
+        var healingShrine = creatures.GetId(HealingShrine.Id);
+
+        var one = builder.Plan(world.Map, new NeighborhoodRecord(-1, 0, seed: 42), populationSeed: 7);
+        var other = builder.Plan(world.Map, new NeighborhoodRecord(-1, 0, seed: 43), populationSeed: 7);
+
+        CollectionAssert.AreNotEqual(
+            one.Spawns.Where(spawn => spawn.BlueprintId == healingShrine).ToList(),
+            other.Spawns.Where(spawn => spawn.BlueprintId == healingShrine).ToList(),
+            "Precondition: the two layout seeds place different shrines.");
+        CollectionAssert.AreEqual(
+            one.Spawns.Where(spawn => spawn.BlueprintId != healingShrine).ToList(),
+            other.Spawns.Where(spawn => spawn.BlueprintId != healingShrine).ToList());
+    }
+
+    [TestMethod]
     public void GenerateNeighborhood_YieldsARowAtATime()
     {
-        var (world, ecsContext, builder, _, _) = BuildForGeneration(new MapBounds(0, 0, 40, 30, 3));
+        var (world, ecsContext, builder, _, _, _) = BuildForGeneration(new MapBounds(0, 0, 40, 30, 3));
         var livingBefore = ecsContext.EntityManager.LivingEntityCount;
 
         var yields = builder.GenerateNeighborhood(world, new NeighborhoodRecord(0, 0, seed: 42)).ToList();
@@ -400,7 +486,7 @@ public sealed class FloorBuilderTests
     [TestMethod]
     public void Plan_SameRecordAndSeed_GivesTheSamePlanOnAnyThread()
     {
-        var (world, _, builder, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
+        var (world, _, builder, _, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
         var record = new NeighborhoodRecord(-1, 0, seed: 42);
 
         var here = builder.Plan(world.Map, record, populationSeed: 7);
@@ -426,7 +512,7 @@ public sealed class FloorBuilderTests
     [TestMethod]
     public void Plan_Cancelled_StopsWithOperationCanceled()
     {
-        var (world, _, builder, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
+        var (world, _, builder, _, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
 
         Assert.ThrowsExactly<OperationCanceledException>(() => builder.Plan(world.Map, new NeighborhoodRecord(-1, 0, seed: 42), populationSeed: 7, new CancellationToken(canceled: true)));
     }
@@ -435,7 +521,7 @@ public sealed class FloorBuilderTests
     [TestMethod]
     public void Plan_AuraCellsByRow_MatchScanningTheLoadedRows()
     {
-        var (world, _, builder, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
+        var (world, _, builder, _, _, auras) = BuildForGeneration(TwoNeighborhoodSlice);
         var plan = builder.Plan(world.Map, new NeighborhoodRecord(-1, 0, seed: 42), populationSeed: 7);
         world.Map.LoadNeighborhood(plan.Layout);
 
@@ -443,7 +529,7 @@ public sealed class FloorBuilderTests
         for (var y = plan.Layout.MinY; y < plan.Layout.MaxY; y++)
         {
             var scanned = new List<TerrainAuraCell>();
-            TerrainAuraSources.ForEach(world, world.Terrain, new MapBounds(plan.Layout.MinX, y, plan.Layout.MaxX, y + 1, 3), (position, aura) => scanned.Add(new TerrainAuraCell(position, aura)));
+            TerrainAuraSources.ForEach(world, world.Terrain, auras, new MapBounds(plan.Layout.MinX, y, plan.Layout.MaxX, y + 1, 3), (position, aura) => scanned.Add(new TerrainAuraCell(position, aura)));
 
             CollectionAssert.AreEqual(scanned, plan.AuraCellsByRow[y - plan.Layout.MinY].ToList(), $"Row {y}.");
             listed += scanned.Count;
@@ -456,7 +542,7 @@ public sealed class FloorBuilderTests
     [TestMethod]
     public void LoadNeighborhood_AlreadyLoaded_TakesTheLayoutAndKeepsItsOccupants()
     {
-        var (world, _, builder, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
+        var (world, _, builder, _, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
         var occupied = new Vector3Int(-2, 5, (int)MapLayer.Ground);
         world.Map.SetBlockingEntityId(occupied, 99);
         world.Map.AddOccupantEntityId(occupied, 99);

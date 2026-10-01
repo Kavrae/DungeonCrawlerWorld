@@ -1,4 +1,6 @@
 using Engine.ECS.Entities;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.ECS.Systems;
 ﻿using Engine.ECS.Components;
 using Engine.Events;
@@ -50,7 +52,7 @@ public sealed class ConsumableActivationSystemTests
     /// <summary>Catalog placeholder only -- Charges/MaxCharges always come from the specific Override each test's own AddItemWithOverride call constructs, mirroring how WandGrantEffects.Grant never grants the bare catalog entry directly. DirectDamage only (no StatusEffectGrant) -- StatusEffectAppliers isn't wired in this fixture, and these tests are about charge/peel/repoint mechanics, not status effects, which DirectDamage/HealthOf already exercises well enough on its own.</summary>
     private static ItemDefinition CreateWandDefinition(ushort charges, ushort maxCharges) =>
         new(WandId, "Test Wand", null, "w", Color.OrangeRed, Tags: [],
-            Effects: [new ActionEffect([new DirectDamage(10, 10)])],
+            Effects: [new Effect([new DirectDamage(10, 10)])],
             Activator: new WandActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null), charges, maxCharges));
 
     private sealed class FakeMapQuery : IMapQuery
@@ -85,15 +87,15 @@ public sealed class ConsumableActivationSystemTests
         var splashTargeting = new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1);
         itemCatalog.Register(new ItemDefinition(
             PotionId, "Test Potion", null, "p", Color.Green, Tags: [],
-            Effects: [new ActionEffect([new DirectHeal(0.5f)])],
+            Effects: [new Effect([new DirectHeal(0.5f)])],
             Activator: new PotionActivator(splashTargeting, new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
         itemCatalog.Register(new ItemDefinition(
             ManaPotionId, "Test Mana Potion", null, "m", Color.Blue, Tags: [],
-            Effects: [new ActionEffect([new DirectManaRestore(1f)])],
+            Effects: [new Effect([new DirectManaRestore(1f)])],
             Activator: new PotionActivator(splashTargeting, new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
         itemCatalog.Register(new ItemDefinition(
             HotkeyExpansionPotionId, "Test Hotkey Expansion Potion", null, "k", Color.Orange, Tags: [],
-            Effects: [new ActionEffect([new HotkeyExpansionGrant(5)])],
+            Effects: [new Effect([new HotkeyExpansionGrant(5)])],
             Activator: new PotionActivator(new TargetingSpec(TargetShape.Self, Range: 0, AreaSize: 0), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
         itemCatalog.Register(new ItemDefinition(NonConsumableId, "Test Hammer", null, "h", Color.Gray, Tags: [], Effects: []));
         itemCatalog.Register(CreateWandDefinition(charges: 0, maxCharges: 0)); // Placeholder -- never granted directly, see CreateWandDefinition's own doc comment.
@@ -138,7 +140,7 @@ public sealed class ConsumableActivationSystemTests
         var splashTargeting = new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1);
         itemCatalog.Register(new ItemDefinition(
             PotionId, "Test Potion", null, "p", Color.Green, Tags: [],
-            Effects: [new ActionEffect([new DirectHeal(0.5f)])],
+            Effects: [new Effect([new DirectHeal(0.5f)])],
             Activator: new PotionActivator(splashTargeting, new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
         var mapQuery = new FakeMapQuery();

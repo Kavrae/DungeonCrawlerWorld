@@ -20,5 +20,5 @@ public static class HealthWindowChrome
     public static Vector2 WindowPosition = new(300, 150);
 
     /// <summary>Wider than its pre-two-column size (260) -- HealthWindow now splits this width across 2 side-by-side columns (see HealthWindow.BuildColumns), so each needs enough room on its own for a body part's bar/status line or a buff/debuff's "+50 MaximumHealth: 12s"-shaped text.</summary>
-    public static Vector2 WindowSize = new(480, 360);
+    public static Vector2 WindowSize = new(480, 540);
 }

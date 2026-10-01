@@ -36,7 +36,7 @@ public sealed class EntityTeleporterTests
         resolver.SetWindowCenter(0, 0);
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecs);
-        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(mathUtility), result.Internals.Factory, result.Catalogs.Terrain, result.Catalogs.Definitions);
+        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(mathUtility), result.Internals.Factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions);
         FloorBuilder.CreatePlayer(world, ecs, mathUtility, result.Internals.Factory, result.Catalogs.Definitions, playerEntityId, resolver);
         world.PlayerEntityId = playerEntityId;
         result.Internals.MovedEntities.ClearFrame();

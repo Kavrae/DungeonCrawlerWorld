@@ -12,7 +12,7 @@ using Game.Modules.Actions.Definitions;
 using Game.Modules.BodyPartEffects;
 using Game.Modules.Burning;
 using Game.Modules.Class;
-using Game.Modules.ContactDamage;
+using Game.Modules.TerrainContacts;
 using Game.Modules.Containers;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
@@ -31,7 +31,7 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.Race;
 using Game.Modules.Shops;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatusEffectAura;
+using Game.Modules.Auras;
 using Game.Modules.StatusEffects;
 using Game.Spawning;
 using Game.World;
@@ -70,8 +70,8 @@ public static class GameBootstrapper
         ModuleFactory<GameModuleContext>.For<BurningModule>(),
         ModuleFactory<GameModuleContext>.For<PoisonModule>(),
         ModuleFactory<GameModuleContext>.For<ParalysisModule>(),
-        ModuleFactory<GameModuleContext>.For<ContactDamageModule>(),
-        ModuleFactory<GameModuleContext>.For<StatusEffectAuraModule>(),
+        ModuleFactory<GameModuleContext>.For<TerrainContactsModule>(),
+        ModuleFactory<GameModuleContext>.For<AurasModule>(),
         ModuleFactory<GameModuleContext>.For<AchievementModule>(),
         ModuleFactory<GameModuleContext>.For<CrawlerModule>(),
         ModuleFactory<GameModuleContext>.For<InventoryModule>(),
@@ -102,7 +102,7 @@ public static class GameBootstrapper
         }
 
         var session = GameBuildPass.Run(builtInModules, validatedMods.Mods, map, mathUtility, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, runtimeSpawnSeed);
-        var spawnRecordRebuilder = new SpawnRecordRebuilder(staging.EcsContext, new EntityBuilder(session.Context.Definitions, staging.EcsContext.EntityManager.Keys));
+        var spawnRecordRebuilder = new SpawnRecordRebuilder(staging.EcsContext, new EntityBuilder(session.Context.Definitions, session.Context.Auras, staging.EcsContext.EntityManager.Keys));
         return new GameSession(session, validatedMods.Failures, spawnRecordRebuilder, CreateTeleporter(session.World, session.EcsContext, session.Factory, session.Factory.Skeletons));
     }
 

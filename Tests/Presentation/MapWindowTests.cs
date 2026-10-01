@@ -1,4 +1,6 @@
 using Engine.ECS.Components;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.Events;
 using Engine.Math;
 using Engine.Utilities;
@@ -6,7 +8,6 @@ using Game.Modules;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Effects;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
@@ -14,7 +15,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Shops.Components;
-using Game.Modules.StatusEffectAura.Components;
+using Game.Modules.Auras.Components;
 using Game.Tags;
 using Game.Views;
 using Microsoft.Xna.Framework;
@@ -491,7 +492,7 @@ public sealed class MapWindowTests
     private static void RegisterTestAdjacentAction(ActionCatalog actionCatalog) =>
         actionCatalog.Register(new ActionDefinition(
             TestActionId, "Test Adjacent", null, "#", default, [],
-            Effects: [ActionEffect.None],
+            Effects: [Effect.None],
             Activator: new DirectAction(new TargetingSpec(TargetShape.Adjacent, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
 
     [TestMethod]
@@ -620,7 +621,7 @@ public sealed class MapWindowTests
         var rangedActionId = Guid.NewGuid();
         actionCatalog.Register(new ActionDefinition(
             rangedActionId, "Test Ranged", null, "*", default, [],
-            Effects: [ActionEffect.None],
+            Effects: [Effect.None],
             Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
@@ -649,7 +650,7 @@ public sealed class MapWindowTests
         var rangedActionId = Guid.NewGuid();
         actionCatalog.Register(new ActionDefinition(
             rangedActionId, "Test Ranged", null, "*", default, [],
-            Effects: [ActionEffect.None],
+            Effects: [Effect.None],
             Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
@@ -728,7 +729,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var rangedActionId = Guid.NewGuid();
-        actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [ActionEffect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
@@ -805,7 +806,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var rangedActionId = Guid.NewGuid();
-        actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [ActionEffect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
@@ -822,7 +823,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var rangedActionId = Guid.NewGuid();
-        actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [ActionEffect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
@@ -892,7 +893,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var lineActionId = Guid.NewGuid();
-        actionCatalog.Register(new ActionDefinition(lineActionId, "Test Line", null, "#", default, [], Effects: [ActionEffect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Line, Range: 2), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        actionCatalog.Register(new ActionDefinition(lineActionId, "Test Line", null, "#", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Line, Range: 2), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(lineActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, lineActionId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
@@ -913,7 +914,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var burstActionId = Guid.NewGuid();
-        actionCatalog.Register(new ActionDefinition(burstActionId, "Test Burst", null, "*", default, [], Effects: [ActionEffect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Burst, Range: 10, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        actionCatalog.Register(new ActionDefinition(burstActionId, "Test Burst", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Burst, Range: 10, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(burstActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, burstActionId));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
@@ -1247,14 +1248,14 @@ public sealed class MapWindowTests
     private static void RegisterTestPotion(ItemCatalog itemCatalog) =>
         itemCatalog.Register(new ItemDefinition(
             TestPotionId, "Test Potion", null, "p", Color.Green, Tags: [GameTags.TargetingSelf],
-            Effects: [new ActionEffect([new DirectHeal(0.5f)])],
+            Effects: [new Effect([new DirectHeal(0.5f)])],
             Activator: new PotionActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
     /// <summary>Same PotionActivator/Burst shape as RegisterTestPotion, but deliberately untagged Self -- covers the double-tap shortcut now being keyed off GameTags.TargetingSelf rather than any particular IActionActivator kind.</summary>
     private static void RegisterTestNonSelfPotion(ItemCatalog itemCatalog) =>
         itemCatalog.Register(new ItemDefinition(
             TestNonSelfPotionId, "Test Non-Self Potion", null, "p", Color.Green, Tags: [],
-            Effects: [new ActionEffect([new DirectHeal(0.5f)])],
+            Effects: [new Effect([new DirectHeal(0.5f)])],
             Activator: new PotionActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
     private static void RegisterTestNonConsumableItem(ItemCatalog itemCatalog) =>

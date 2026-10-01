@@ -29,6 +29,7 @@ public sealed class GameViews
         AbilityScoreView = new AbilityScoreView(componentManager);
         ActionStateView = new ActionStateView(componentManager, EntityActions, context.Items, localTierRoster);
         TransformView = new TransformView(componentManager);
+        AuraGlow = new AuraGlowView(context.AuraField);
     }
 
     public IMapViewQuery MapView { get; }
@@ -58,4 +59,7 @@ public sealed class GameViews
     public ActionStateView ActionStateView { get; }
 
     public TransformView TransformView { get; }
+
+    /// <summary>The glow auras cast on the map.</summary>
+    public AuraGlowView AuraGlow { get; }
 }

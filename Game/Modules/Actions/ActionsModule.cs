@@ -2,7 +2,6 @@ using Engine.ECS.Components;
 using Engine.Modules;
 using Game.Blueprints;
 using Game.Modules.AbilityScores;
-using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Systems;
@@ -11,25 +10,20 @@ using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death;
-using Game.Modules.Death.Components;
 using Game.Modules.Health;
-using Game.Modules.Health.Components;
 using Game.Modules.Mana;
-using Game.Modules.Mana.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
-using Game.Modules.StatusEffectAura;
-using Game.Modules.StatusEffectAura.Components;
+using Game.Modules.Auras;
 using Game.World;
 
 namespace Game.Modules.Actions;
 
 /// <summary>
 /// Doesn't require StatusEffectsModule:
-/// GameModuleContext.StatusEffectAuraAppliers is always a live, shared registry regardless of
+/// GameModuleContext.StatusEffectAppliers is always a live, shared registry regardless of
 /// which effect modules (if any) are loaded -- ActionEffectResolver's StatusEffects grant is a
 /// graceful no-op (TryGet returning false) for any StatusEffectType nothing registered an
 /// applier for.
@@ -40,10 +34,10 @@ namespace Game.Modules.Actions;
 /// rather than in InventoryModule. ScrollMasteryComponent gets the same treatment for the same
 /// reason, one level up from PotionActivator specifically to ScrollActivator activations in
 /// general. Scroll of Torch's own map-coloring effect, by contrast, lives entirely in
-/// Game.Modules.StatusEffectAura (AuraSourceGrant/AuraSourceExpiryComponent/
-/// AuraSourceExpirySystem) -- it's a StatusEffectAuraSourceComponent grant like any other, not a
+/// Game.Modules.Auras (AuraSourceGrant/AuraSourceExpiryComponent/
+/// AuraSourceExpirySystem) -- it's a AuraSourceComponent grant like any other, not a
 /// bespoke Actions-owned component, specifically so MapWindow never needs ability-specific
-/// rendering knowledge (see MapTintGrid, which already renders any aura source generically).
+/// rendering knowledge (see AuraGlowView, which already draws any aura generically).
 /// </summary>
 public sealed class ActionsModule : IGameModule
 {
@@ -51,7 +45,7 @@ public sealed class ActionsModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, StatusEffectAuraModule.ModuleId, BodyPartEffectsModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId];
+    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, AurasModule.ModuleId, BodyPartEffectsModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId];
 
     public void RegisterComponents(ComponentRegistration registration)
     {
@@ -87,13 +81,6 @@ public sealed class ActionsModule : IGameModule
 
         systemManager.Register(new PotionCooldownSystem(componentManager.GetPackedPool<PotionCooldownComponent>()));
 
-        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
-        var deadEntities = componentManager.GetPackedPool<DeadComponent>();
-        var mana = componentManager.GetPackedPool<ManaComponent>();
-        var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
-        var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
-        var hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
-        var bodyParts = EntityBodyParts.For(componentManager, context.Definitions);
         var meleeDisabled = componentManager.GetPackedPool<MeleeDisabledComponent>();
         var dodgingEntities = componentManager.GetPackedPool<DodgingComponent>();
 
@@ -106,55 +93,25 @@ public sealed class ActionsModule : IGameModule
         systemManager.Register(new DelayedActionSystem(
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
             EntityActions.For(componentManager, context.Actions, context.Definitions),
-            componentManager.GetPackedPool<SimpleHealthComponent>(),
+            context.EffectServices,
             context.Actions,
             context.MapQuery,
-            context.EventBus,
-            context.MathUtility,
-            context.PlayerQuery,
-            context.StatusEffectAuraAppliers,
-            componentManager,
-            context.EntityKeys,
-            statModifiers,
-            deadEntities,
-            abilityScores,
-            mana,
-            auraSources,
-            hotkeyExpansionUnlocks,
-            bodyParts,
             dodgingEntities,
             processingTiers,
             context.SimulationScope,
-            context.ProcessingTierEvents,
-            context.Definitions,
-            context.FloatingTextFeed));
+            context.ProcessingTierEvents));
 
         systemManager.Register(new ActionActivationSystem(
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             EntityActions.For(componentManager, context.Actions, context.Definitions),
             componentManager.GetPackedPool<PendingDelayedActionComponent>(),
-            componentManager.GetPackedPool<SimpleHealthComponent>(),
+            context.EffectServices,
             context.Actions,
             context.MapQuery,
-            context.EventBus,
-            context.MathUtility,
-            context.PlayerQuery,
-            context.StatusEffectAuraAppliers,
-            componentManager,
-            context.EntityKeys,
-            statModifiers,
-            deadEntities,
-            mana,
-            abilityScores,
-            auraSources,
-            hotkeyExpansionUnlocks,
-            bodyParts,
             meleeDisabled,
             dodgingEntities,
-            processingTiers,
-            context.Definitions,
-            context.FloatingTextFeed));
+            processingTiers));
     }
 
     /// <summary>A staggered entity loses its windup, and with it the time the windup already cost: the lock it set is kept.</summary>

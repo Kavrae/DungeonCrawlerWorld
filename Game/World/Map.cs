@@ -33,7 +33,7 @@ namespace Game.World;
 /// Dictionary&lt;int, List&lt;int&gt;&gt;. The dictionary charged a full hash lookup for every query,
 /// including the overwhelming majority that find nothing; MapWindow issues one per visible tile
 /// per frame (measured at ~9ms of a 1000ms/sec budget), and MovementSystem,
-/// StatusEffectAuraSystem, ActionEffectResolver and TestCombatBehaviorSystem all query it on hot
+/// AuraSystem, ActionEffectResolver and TestCombatBehaviorSystem all query it on hot
 /// paths. The array makes the empty-cell case a single read: measured 63-74ns per dictionary
 /// lookup against 29-32ns per array lookup over scattered whole-map lookups. It is a primitive
 /// array rather than List&lt;int&gt;?[] because an array of millions of references is scanned in full

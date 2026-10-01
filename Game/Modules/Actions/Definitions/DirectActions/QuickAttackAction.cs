@@ -1,6 +1,7 @@
 using Engine.Math;
+using Game.Effects;
+using Game.Effects.Entries;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Effects;
 using Game.Tags;
 using Microsoft.Xna.Framework;
 
@@ -14,7 +15,7 @@ public static class QuickAttackAction
     public static ActionDefinition Build() => new(
         Id, "Quick Attack", "QuickAttack", "q", Color.Black,
         Tags: [GameTags.DeliveryMeleeUnarmed, GameTags.ActionAttack, GameTags.StatsAbilityScoreStrength, GameTags.TraitDodgeable],
-        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 18, MaxFlatDamage: 22)])],
+        Effects: [new Effect([new DirectDamage(MinFlatDamage: 18, MaxFlatDamage: 22)])],
         Activator: new DirectAction(
             new TargetingSpec(TargetShape.Adjacent, Range: 0),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)),

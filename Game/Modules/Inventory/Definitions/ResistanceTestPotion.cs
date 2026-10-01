@@ -1,8 +1,9 @@
 using Engine.Math;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Effects;
 using Game.Modules.StatModifiers;
 using Game.Tags;
 using Microsoft.Xna.Framework;
@@ -22,7 +23,7 @@ public static class ResistanceTestPotion
     public static ItemDefinition Build() => new(
         Id, "Draught of Insulation", "HealthPotion", "r", Color.Goldenrod,
         Tags: [GameTags.TargetingSelf],
-        Effects: [new ActionEffect([
+        Effects: [new Effect([
             new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
                 CanModify: false, Magnitude: DamageReduction, DurationFrames: DurationFrames, ConditionTag: GameTags.DamageFire),
             new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,

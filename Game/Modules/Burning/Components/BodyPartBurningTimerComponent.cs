@@ -20,7 +20,7 @@ public struct BodyPartBurningTimerComponent(byte partId, byte stackCount, uint n
     /// <summary>The simulation frame of the next damage tick (FrameDeadline).</summary>
     public uint NextTickFrame { get; set; } = nextTickFrame;
 
-    /// <summary>Set once on the 0-to-1 transition (BurningAuraApplier.ApplyBodyPartScopedStack), never overwritten by a later top-off -- mirrors BurningTimerComponent's own Source field.</summary>
+    /// <summary>Set once on the 0-to-1 transition (BurningApplier.ApplyBodyPartScopedStack), never overwritten by a later top-off -- mirrors BurningTimerComponent's own Source field.</summary>
     public ActionSource Source { get; set; } = source;
 
     readonly int IKeyedScheduledTimer.TimerKey => PartId;

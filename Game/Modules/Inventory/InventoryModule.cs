@@ -1,28 +1,21 @@
 using Engine.Modules;
 using Game.Modules.AbilityScores;
-using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Components;
 using Game.Modules.BodyPartEffects;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death;
-using Game.Modules.Death.Components;
 using Game.Modules.Health;
-using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Inventory.Systems;
 using Game.Modules.Mana;
-using Game.Modules.Mana.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
-using Game.Modules.StatusEffectAura;
-using Game.Modules.StatusEffectAura.Components;
+using Game.Modules.Auras;
 
 namespace Game.Modules.Inventory;
 
@@ -32,7 +25,7 @@ public sealed class InventoryModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [ActionsModule.ModuleId, CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, BodyPartEffectsModule.ModuleId, StatusEffectAuraModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId];
+    public IReadOnlyList<Guid> Requires { get; } = [ActionsModule.ModuleId, CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, BodyPartEffectsModule.ModuleId, AurasModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId];
 
     public void RegisterComponents(ComponentRegistration registration)
     {
@@ -63,40 +56,16 @@ public sealed class InventoryModule : IGameModule
         var systemManager = registration.SystemManager;
         var componentManager = registration.ComponentManager;
 
-        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
-        var deadEntities = componentManager.GetPackedPool<DeadComponent>();
-        var mana = componentManager.GetPackedPool<ManaComponent>();
-        var hotkeyExpansionUnlocks = componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>();
-        var abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
-        var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
-        var itemHotkeyBindings = componentManager.GetMultiPool<ItemHotkeyBindingComponent>();
-        var bodyParts = EntityBodyParts.For(componentManager, context.Definitions);
-
         systemManager.Register(new ConsumableActivationSystem(
             componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PotionCooldownComponent>(),
-            componentManager.GetPackedPool<SimpleHealthComponent>(),
+            context.EffectServices,
             context.Items,
             context.Actions,
             context.MapQuery,
-            context.EventBus,
-            context.MathUtility,
-            componentManager,
-            context.EntityKeys,
-            statModifiers,
-            deadEntities,
-            mana,
             componentManager.GetPackedPool<MeleeDisabledComponent>(),
-            hotkeyExpansionUnlocks,
-            abilityScores,
-            auraSources,
-            itemHotkeyBindings,
-            bodyParts,
-            new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>()),
-            context.PlayerQuery,
-            context.StatusEffectAuraAppliers,
-            context.Definitions,
-            context.FloatingTextFeed));
+            componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
+            new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>())));
     }
 }

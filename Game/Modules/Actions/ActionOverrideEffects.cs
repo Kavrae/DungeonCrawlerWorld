@@ -1,4 +1,6 @@
-using Game.Modules.Actions.Effects;
+
+using Game.Effects;
+using Game.Effects.Entries;
 
 namespace Game.Modules.Actions;
 
@@ -6,7 +8,7 @@ namespace Game.Modules.Actions;
 /// Builds a per-instance ActionDefinition.Override for the common "flat damage differs per race"
 /// case (ActionInstanceComponent.Override's own doc comment) -- finds the first DirectDamage entry
 /// across baseDefinition's Effects and replaces its flat range with a fixed value, preserving every
-/// other field on that entry (e.g. TargetBodyPartType) and everything else on the definition.
+/// other field on that entry (e.g. BodyPart) and everything else on the definition.
 /// Centralizes the with-reconstruction in one tested place instead of every grant site hand-rolling
 /// it and risking a silently-dropped field, mirroring WandGrantEffects.Grant's identical role for
 /// item Overrides.
@@ -21,7 +23,7 @@ public static class ActionOverrideEffects
                 .ToList()
         };
 
-    private static IActionEffectEntry ReplaceFlatDamage(IActionEffectEntry entry, ushort flatDamage) =>
+    private static IEffectEntry ReplaceFlatDamage(IEffectEntry entry, ushort flatDamage) =>
         entry is DirectDamage directDamage
             ? directDamage with { MinFlatDamage = (short)flatDamage, MaxFlatDamage = (short)flatDamage }
             : entry;

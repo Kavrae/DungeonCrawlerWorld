@@ -1,4 +1,5 @@
 using Engine.ECS.Systems;
+using Game.Effects;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
@@ -21,24 +22,30 @@ namespace Game.Modules.Actions.Effects;
 /// activation's ActionActivatedEvent. DodgeAction's ReleasesActionLock frees the caster in the same
 /// frame, so MovementSystem takes the step on its next pass (or leaves the entity in place if the
 /// destination turns out occupied), with the same occupancy/wall validation normal movement has.
-/// IActionEffectEntry only ever sees IMapQuery (read-only, mod-safe), never a map-mutating move
+/// IEffectEntry only ever sees IMapQuery (read-only, mod-safe), never a map-mutating move
 /// primitive, so keeping the actual move in Presentation (which already owns the player's
 /// MovementComponent for ordinary movement) avoids widening that boundary for one action's
 /// benefit. Falls back to WindowFrames (Dexterity 1's own value) if
 /// AbilityScores/Dexterity isn't available, the same graceful-degradation shape
-/// AbilityScoreTagBonus.Compute uses.
+/// AbilityScoreTagBonus.Compute uses. Does nothing when the effect has no source entity (terrain,
+/// an aura): there is no caster to dodge.
 /// </summary>
-public sealed record DodgeActivation : IActionEffectEntry
+public sealed record DodgeActivation : IEffectEntry
 {
-    public void Apply(ActionEffectContext context)
+    public EffectOutcome Apply(in EffectContext context)
     {
+        if (context.SourceEntityId is not { } sourceEntityId)
+        {
+            return EffectOutcome.NoEffect;
+        }
+
         var windowFrames = DodgeEffects.WindowFrames;
-        if (context.AbilityScores is { } abilityScores &&
-            AbilityScoreQueries.TryGetComponent(abilityScores, context.SourceEntityId, AbilityScoreType.Dexterity, out var dexterity))
+        if (AbilityScoreQueries.TryGetComponent(context.Services.AbilityScores, sourceEntityId, AbilityScoreType.Dexterity, out var dexterity))
         {
             windowFrames = DodgeEffects.ComputeWindowFrames(dexterity.Total);
         }
 
-        context.ComponentManager.Merge(context.SourceEntityId, new DodgingComponent(FrameDeadline.After(context.Now, windowFrames)));
+        context.Services.ComponentManager.Merge(sourceEntityId, new DodgingComponent(FrameDeadline.After(context.Now, windowFrames)));
+        return EffectOutcome.Applied;
     }
 }

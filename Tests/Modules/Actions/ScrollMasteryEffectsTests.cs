@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Game.Effects;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules;
@@ -25,7 +26,7 @@ public sealed class ScrollMasteryEffectsTests
         var scroll = new ItemDefinition(
             Guid.NewGuid(), "Test Scroll", "Scroll", "s", Color.White,
             Tags: [GameTags.ItemConsumableScroll, GameTags.ItemConsumable],
-            Effects: [ActionEffect.None],
+            Effects: [Effect.None],
             Activator: new ScrollActivator(new TargetingSpec(TargetShape.Adjacent, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, 30, null), SpellId));
 
         return (componentManager, new EventBus(), new ActionCatalog(), scroll);
@@ -63,7 +64,7 @@ public sealed class ScrollMasteryEffectsTests
     {
         var (componentManager, eventBus, actionCatalog, scroll) = Build();
         var existingSpell = new ActionDefinition(
-            SpellId, "Existing Spell", null, "e", Color.Red, Tags: [], Effects: [ActionEffect.None],
+            SpellId, "Existing Spell", null, "e", Color.Red, Tags: [], Effects: [Effect.None],
             Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, 30, null), ManaCost: 0));
         actionCatalog.Register(existingSpell);
 

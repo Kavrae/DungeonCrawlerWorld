@@ -7,7 +7,7 @@ namespace Game.Modules.Health;
 /// </summary>
 public enum BodyPartTargetMode : byte
 {
-    /// <summary>Exactly one part: random, or a specific BodyPartType with fallback (see BodyPartTargetRule) -- today's only damage behavior, and (with a BodyPartTargetRule) how ContactDamageSystem/MagicMissileAction already work.</summary>
+    /// <summary>Exactly one part: random, or a specific BodyPartType with fallback (see BodyPartTargetRule) -- today's only damage behavior, and (with a BodyPartTargetRule) how TerrainContactSystem/MagicMissileAction already work.</summary>
     SingleTarget,
 
     /// <summary>Exactly one part: whichever has the lowest current/effective-maximum health fraction (BodyPartSelection.PickLowestPercentage) -- previously only reachable by passive regen.</summary>

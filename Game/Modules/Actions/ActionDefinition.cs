@@ -1,4 +1,5 @@
 using Engine.Tags;
+using Game.Effects;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Actions;
@@ -20,7 +21,7 @@ public sealed record ActionDefinition(
     string Glyph,
     Color GlyphColor,
     GameplayTagSet Tags,
-    IReadOnlyList<ActionEffect> Effects,
+    IReadOnlyList<Effect> Effects,
     IActionActivator Activator,
     string Description = "",
     string Summary = "")

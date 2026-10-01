@@ -1,4 +1,5 @@
 using Engine.ECS.Entities;
+using Game.Effects;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
@@ -32,7 +33,7 @@ public sealed class DodgeActivationTests
     private const int SourceEntityId = 1;
     private const int TargetEntityId = 2;
 
-    private static (ComponentManager ComponentManager, ActionEffectContext Context) Build(PackedComponentPool<AbilityScoresComponent>? abilityScores = null)
+    private static (ComponentManager ComponentManager, EffectContext Context) Build(PackedComponentPool<AbilityScoresComponent>? abilityScores = null)
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
 

@@ -6,9 +6,9 @@ topics; don't duplicate what a `PLAN-*.md` already records in full (link to it i
 
 ## Game
 
-### Actions/ActionEffect framework, Scrolls, Wands
+### Actions/Effect framework, Scrolls, Wands
 
-- `Game/Modules/Actions/`: `ActionEffect` (composable `IActionEffectEntry` list -- `DirectDamage`,
+- `Game/Effects/` (entries in `Entries/`; the action-only ones stay in `Game/Modules/Actions/Effects/`): `Effect` (composable `IEffectEntry` list -- `DirectDamage`,
   `DirectHeal`, `DirectManaRestore`, `HotkeyExpansionGrant`, `StatusEffectGrant`, `StatModifierGrant`,
   `ChainedEffect`, `AuraSourceGrant`) + `IActionActivator` (`PotionActivator`/`ScrollActivator`/
   `WandActivator`/`SpellActivator`) replaced the old `AbilityEffect`/`ConsumableEffect` split.
@@ -33,10 +33,10 @@ topics; don't duplicate what a `PLAN-*.md` already records in full (link to it i
   `ActionInstanceQueries.TryResolveEffectiveAction` (Override if set, else `ActionCatalog.TryGet`).
   `ActionActivationSystem`/`DelayedActionSystem` resolve `instance` first, then the effective `action`
   off it -- `ActionEffectResolver.Apply` no longer takes `instance` at all, and
-  `ActionEffectContext.DamageOverride` is gone (a fixed value is now just `DirectDamage` with
+  `EffectContext.DamageOverride` is gone (a fixed value is now just `DirectDamage` with
   `MinFlatDamage == MaxFlatDamage` baked into the granted `Override`, built via
   `ActionOverrideEffects.OverrideFlatDamage` so a targeted `with` on the matched entry can't silently
-  drop unrelated fields, e.g. Magic Missile's `TargetBodyPartType: BodyPartType.Head`).
+  drop unrelated fields, e.g. Magic Missile's `BodyPart: BodyPartTargeting.Of(BodyPartType.Head)`).
   `PendingActionActivationComponent` needed no change -- same as Items, it only ever carried an
   identity reference.
 
@@ -302,7 +302,7 @@ target with a body-part-condition-granted one.
   permanent, ticked by the new `StatusEffectImmunityExpirySystem`) or permanent, checked by
   `StatusEffectImmunity.IsImmune` at the true chokepoint each effect already funnels every grant
   through (`PoisonEffects.ApplyStack`, `BurningEffects.ApplyStack`,
-  `BurningAuraApplier.ApplyBodyPartScopedStack`, `ParalysisEffects.Apply`), each of which now also
+  `BurningApplier.ApplyBodyPartScopedStack`, `ParalysisEffects.Apply`), each of which now also
   takes optional `EventBus?`/`IPlayerQuery?` params (threaded from each module's own `Configure`-captured
   fields) so a blocked grant publishes `StatusEffectImmunityBlockedEvent` -- player-involved-only,
   mirrors `EntityDamagedEvent`/`EntityHealedEvent` -- logged by `PlayerActivityLog` as a `BLOCKED` line.
@@ -474,7 +474,7 @@ added 1:1 per `ApplyStack`, existing only so `StatusEffectQueries` could ask "wh
 active, how many stacks" across effect types) are gone entirely -- the magnitude already lived
 exactly once, as `StackCount` on each effect's own timer component. `IStatusEffectDisplay` gained
 `GetStackCount(ComponentManager, int)`; `TimerBasedStatusEffectDisplay<T>`'s generic constraint
-tightened to `where T : struct, IStatusEffectStackCount` (mirrors `TimerBasedAuraApplier<T>`) so it
+tightened to `where T : struct, IStatusEffectStackCount` (mirrors `TimerBasedStatusEffectApplier<T>`) so it
 implements `GetStackCount` generically off the same timer pool it already reads for duration.
 `StatusEffectQueries.HasStack/CountStacks/GetActiveEffectTypes` now take
 `(StatusEffectDisplayRegistry, ComponentManager, int entityId, ...)` instead of the old pool --
@@ -487,9 +487,9 @@ never overwritten by a later top-off, matching Poison's existing "first applier 
 minor, deliberate behavior change from the old arbitrary chain-order pick across multiple
 simultaneous sources). `StatModifiers`/`StatusEffectAura`/`StatusEffectImmunity` were reviewed and
 found unaffected -- `StatModifierComponent` never referenced `StatusEffectStack`, and
-`IStatusEffectAuraApplier`/`StatusEffectAuraApplierRegistry` already read each timer's own
+`IStatusEffectApplier`/`StatusEffectApplierRegistry` already read each timer's own
 `StackCount` directly (never the deleted pool); reusing that registry for querying was considered
-and rejected since `BurningAuraApplier.GetCurrentStackCount` is deliberately scoped to whichever
+and rejected since `BurningApplier.GetCurrentStackCount` is deliberately scoped to whichever
 single mode (entity- vs body-part-burning) is currently hazard-relevant, which would have changed
 `HealthWindow`'s "Status Effects" list to flicker based on hazard exposure.
 
@@ -831,7 +831,7 @@ skeleton holds, when it is built and what may touch one is in `CLAUDE.md`'s Blue
   replays each build's spawn move then; recording during the tier drain throws, because that runs
   after the consumers have read this frame's moves. Each pending move carries its `EntityKey`, so one
   whose creature was destroyed in between is skipped instead of searched for on every destruction.
-- **Aura exposures:** `StatusEffectAuraSystem`'s occupant scan now skips unsimulated occupants, which
+- **Aura exposures:** `AuraSystem`'s occupant scan now skips unsimulated occupants, which
   is what decision 9 of the world-scaling work already said; a promoted creature is granted when its
   build records its spawn.
 - **Evictions before promotions** (`PromotionsHeld` / `IsEvictingBuiltCreatures`): without it, a shift
@@ -1324,7 +1324,7 @@ Level Up and Skill Up join later as new `FloatingTextKind` values.
   accumulator state. `HealCategory`/`DamageCategory` are required parameters on `HealthHeal`/`HealthDamage`,
   so no caller can default a DoT to direct damage.
 - **Status stacks are the count after a grant minus the count before**, at the two grant sites
-  (`StatusEffectGrant`, `StatusEffectAuraSystem.GrantStacks`), so a stack stopped by the cap or immunity is
+  (`StatusEffectGrant`, whatever applied it), so a stack stopped by the cap or immunity is
   never shown. "Immune" is published there once per grant, not from `StatusEffectImmunity.IsImmune`,
   which runs once per stack. Standing immune in an aura repeats "Immune" on each re-grant, accepted.
 - **Waterfall.** Each entity has two lanes, numbers (damage, heals, Dodge) on the left half of the entity
@@ -1421,7 +1421,7 @@ Level Up and Skill Up join later as new `FloatingTextKind` values.
 
 ### Action/item ToString formatting
 
-`ActionEffectFormatting.FormatEntry`, `ActionActivatorFormatting.BuildLines`,
+`EffectFormatting.FormatEntry`, `ActionActivatorFormatting.BuildLines`,
 `TargetShapePreviewGeometry`/`Element` (`Presentation/UI/`) -- all take plain `Game.Modules.Actions`
 types, so a future Magic Menu gets them free. Frame counts always shown as seconds.
 
@@ -1653,9 +1653,9 @@ Landed alongside two generalizations prompted by this feature recurring elsewher
   `CloseTopmostClosableWindow` is unrelated and untouched). A future Magic Menu cast goes through the
   same `ArmAction`/`QueueActionActivation` chokepoints and gets this behavior for free.
 
-### StatusEffectAuraExposureComponent growth: not a leak (leak detector fix)
+### AuraExposureComponent growth: not a leak (leak detector fix)
 
-Investigated 2026-09-26. The leak detector reported `StatusEffectAuraExposureComponent` growing
+Investigated 2026-09-26. The leak detector reported `AuraExposureComponent` growing
 0 -> ~20k with a flat entity count.
 
 - **Not a leak.** A 36,000-frame headless run (seed 12345) sampled the pool every 600 frames: it
@@ -1943,7 +1943,7 @@ Presentation sections for the resulting rules. Headless seed-1 fingerprint uncha
 - **The architecture test bans the store, not component values.** Banning `*Component` values would
   have needed stand-in structs across most of Presentation; views return component copies (a stack,
   a modifier). It scans the whole Presentation assembly, not a list, so new code can't regress;
-  `MapTintGrid`, `InspectionWindowContent` and `DiagnosticsWindow` are exempt by name.
+  `InspectionWindowContent` and `DiagnosticsWindow` are exempt by name (`MapTintGrid` was until the aura field replaced it).
 - **Two writes found while moving reads:** the loot window wrote `LootedComponent` directly (now
   `LootCommands.MarkLooted`), and Escape cancelled a windup with raw pools (now
   `PlayerCommands.TryCancelWindup(now)`).
@@ -1998,3 +1998,125 @@ Replaced the flat `Tag` enum (the plan, now deleted, landed in four phases on 20
 - **Cost:** headless A/B against the enum build (2026-09-30, seed 1, frames 600-3600): same world
   fingerprint, no system beyond noise; `ComplexHealthRegenSystem` -0.3%, `SimpleHealthRegenSystem`
   -0.4%, `EcsContext.Update` -0.3%.
+
+### Auras, terrain contact, Healing Shrine, Holy Ground
+
+Landed 2026-10-01. The healing aura was the second aura effect after lava's Burning; the work made
+auras, terrain contact and the glow generic enough that it is content.
+
+What was built:
+- **Auras are their own definitions**, not status effects. `AuraDefinition` (Guid, name, glow colour,
+  its `Effects`) in `AuraCatalog`, registered by the module that owns each: Burning and
+  Poison (`StatusEffectGrant`, topping up), Healing (`DirectHeal`), Light (glow only; the fake
+  `StatusEffectType.Light` is gone). A source is an aura id and a strength.
+- **One aura field.** `AuraField` holds where every aura reaches and derives the glow from the same
+  totals; `MapTintGrid`, its store-access exemption and `AuraSourceAddedEvent` are deleted.
+  `AuraSystem` observes the source pool for adds and keeps where each entity source is in the field.
+- **Terrain contact is a list of effects** (`TerrainContact`), applied on stepping on and at an
+  optional repeat. `ContactDamage*` became `TerrainContact*`. The effects are the shared `Effect`
+  lists (`Game.Effects`), not a vocabulary of their own: the first version had `ContactDamage` and
+  `ContactStatModifier`, hand-written copies of `DirectDamage` and `StatModifierGrant` that a new
+  terrain behaviour would have had to keep adding to.
+- **`StatModifierEffects.ApplyOrRefresh`**: one modifier per source, its expiry replaced.
+- **One effect vocabulary** (`Game.Effects`): auras and terrain contacts hold
+  the same `Effect` lists actions and items do. Decisions: no source entity means no crit, no
+  ability bonus and no Outgoing modifiers; an aura's effects are attributed to the aura
+  (`ActionSourceKind.Aura`), not to a source of it; an aura's strength scales amounts only, chosen
+  per aura (`AuraMagnitude`); nothing caches whether an entity can be affected -- every tick tries
+  again, and a refused tick is reported once per stay; stacks land through
+  `IStatusEffectApplier.ApplyStacks` in one call. The aura grid no longer clips a source's reach on
+  an unbounded map, so adding and removing one always mirror each other across window shifts. The
+  entity-level Burning display shows the highest stack among the entity and its burning parts.
+- **Body-part targeting is explicit** (`BodyPartTargeting`). A burn used to land on a body part because
+  the entity happened to hold a terrain contact exposure, which tied what an aura did to where the
+  entity stood and to the contact dealing damage. Now the granting entry names the part and
+  `BurningApplier` knows nothing about terrain. Lava's contact holds 8 stacks on the ground-contact
+  part and deals its damage there; lava's aura tops a random part up to its strength each tick, so
+  an entity near lava accumulates burning parts -- deliberately far more dangerous than before (a
+  goblin standing in lava dies in two to four seconds).
+- **Content:** `HealingShrine` (100 health, strength-16 healing aura, half damage, no fire damage,
+  immune to Burning, Poison and Paralysis), one per 1,000 Ground cells plus one by the spawn; Holy
+  Ground (strength-8 healing aura, 10% damage reduction for five minutes), one cell by the spawn.
+- `IStatusEffectAuraApplier` and its registry lost "Aura" from their names: actions use them too.
+
+Decisions:
+1. **Glow colour belongs to the aura, not the source.** It is what lets the glow be read from the
+   gameplay grid: a cell's tint is the auras' colours weighted by their strength there. One source may
+   carry several auras, each with its own reach and colour.
+2. **Every aura applies on its one-second tick only**, never on entering range -- Healing, Burning and
+   Poison alike. Decided for healing (stepping in and out would heal faster than once a second) and
+   applied to all for one rule. A fast or lucky entity crosses an aura untouched. This reversed
+   grant-on-entry.
+3. **Heal amount is the strength at the cell, flat, and overlapping healing auras add.** On a
+   creature with body parts the whole amount goes to its most damaged part (regen's rule). Split
+   evenly across parts, most of it landed on full parts and was lost, and the floating text -- the
+   change in displayed health -- almost never showed.
+4. **Holy Ground's blessing is granted on stepping on and every second while standing.** That is the
+   pattern for any buff or protection tied to an area or terrain: a repeating contact refreshing a
+   timed modifier.
+5. **Shrines never move, may stand on lava, never on walls**, and are fixed per neighborhood: rolled
+   from the layout seed with their own sequence, so a revisit finds them where they were and no
+   creature's roll shifts.
+6. **Every contact hit lands on the terrain's body part or the bottommost one.** Lava's repeat hits
+   used to land wherever `HealthDamage` picks by default.
+7. **A status-effect immunity does not stop contact damage**: the Vial of Warding blocks the burn,
+   not lava's hit. Fire immunity that covers both is a 100% `IncomingDamage` reduction conditioned on
+   `Damage.Fire` plus Burning immunity, which is what the shrine has.
+8. **An aura definition lives with its source; no module registers one.** The first version had
+   `BurningAura`, `PoisonAura`, `HealingAura` and `LightAura` classes, each registered by a module,
+   named by Guid from the content that radiated them and checked by `AuraContentValidation`, with a
+   `HealingAurasModule` existing only to register an aura and the shrine together. That doesn't
+   scale to the number of auras real content will have, and it stops an aura being made at runtime.
+   Now lava, Holy Ground, the shrine, the Toxic Idol and the torch scroll each declare their own,
+   sources hold the definition itself, and the build fills the catalog from the content
+   (`AuraContentRegistration`). Holy Ground and the shrine have separate healing auras, so standing
+   in both is two ticks a second rather than one tick of their sum -- the same healing.
+9. **`AuraField` holds no component pool**, so `GameModuleContext` can build it without making Auras
+   a foundation module. Terrain auras are the field's; entity sources are `AuraSystem`'s to place.
+10. **Nothing unsimulated gains an exposure**; an entity is exposed when it resumes. Before, a
+    stationary entity whose neighborhood became simulated was never exposed.
+
+What went wrong, and what it taught:
+- **Spawn order decides what pools cost.** Random shrines planned a row at a time had ids interleaved
+  with the creatures', so their components touched every page of four pools' entity indexes: +31 MB
+  of pools for 9,000 shrines and the aura system 18% slower. The slowdown was cache pressure, not
+  aura logic -- two experiments with healing disabled still showed it. Planning a neighborhood's
+  shrines first, in batches of 64, took it to +7.5 MB and no measurable frame cost. Recorded as a
+  rule for the real generator in TODO.md "Real map generation".
+- **A second aura costs every move a lookup.** With Healing in the field beside Burning, each move
+  checked two auras. A coverage bit per cell (`NeighborhoodBits`) settles a move that is in no aura;
+  a move inside one still pays a hash lookup per aura.
+- **The world fingerprint hashes component type names**, so a rename changes it with no change in
+  behaviour. Compare every pool's count and distinct values between builds instead
+  (`Invoke-MemoryReport.ps1`) when a phase renames a component.
+- **Building the field before the startup heap compaction** raised peak working set by 210 MB. It is
+  built after it, under its own startup scope ("Aura Field Build").
+- **The skeleton guard caught a real bug**: a source placed in a frozen neighborhood re-checked the
+  exposures of the unbuilt creatures around it.
+- **Shrine planning took 125-210 ms on the worker** until its rolls moved from `new Random(seed)` to
+  `SeededRandom` (4.8 ms). The first walk on that build had a 54 ms frame with a gen-2 collection;
+  the walk after the fix had neither. Not proven to be cause and effect.
+
+Measured, final build against the build before the work (2026-10-01, seed 1, frames 600-3600, map 3072):
+
+| | Before | After |
+|---|---|---|
+| Headless Release, whole update (`ab-20261001-153812.json`, 5 runs, spread 3.9%) | 1.4473 | 1.4759 ms/frame (+2.0%) |
+| ... aura system | 0.2901 | 0.3141 (+8.3%) |
+| ... terrain contact system | 0.0308 | 0.0330 (+7.1%) |
+| ... MovementSystem / BurningSystem | 0.1953 / 0.1491 | 0.1999 / 0.1362 |
+| ... worst frame | 4.6-6.0 ms | 6.5-8.8 ms |
+| Headless Debug, whole update (`ab-20261001-153450.json`, 3 runs) | 4.1099 | 4.1755 (+1.6%) |
+| ... aura system | 0.7290 | 0.8013 (+9.9%) |
+| Windowed Release: update / `MapWindow` draw / worst frame | 2.55 / 0.61 / 21.1 ms | 2.11 / 0.41 / 7.3 ms |
+| Memory: pools / live heap / peak working set | 171.8 / 969 / 1,419 MB | 179.4 / 1,002 / 1,464 MB |
+| Entities at start / built | 654,259 / 73,210 | 663,205 / 82,524 |
+| Startup: session setup + presentation + shell | 2,561 ms | about 2,350 ms |
+| Window shift walk: mid-load worst frame | 21.31 ms | 20.83 ms |
+| ... loads done, worst frame | 14.37 ms | 8.37 ms |
+
+Nothing is flagged by the benchmark's rule. The refactor alone (through Holy Ground) was within a few
+percent everywhere and removed a grid, a terrain scan and 190 ms of startup. The aura system's 8% is
+the second aura's lookup on moves inside an aura; the memory is 9,300 shrines and their aura's reach.
+The windowed figures are one run each, hours apart, so they show direction only. Open items are in
+TODO.md "Aura follow-ups".

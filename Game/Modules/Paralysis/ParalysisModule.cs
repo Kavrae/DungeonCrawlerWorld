@@ -9,9 +9,9 @@ namespace Game.Modules.Paralysis;
 
 /// <summary>
 /// Paralysis-specific: its own timer component and system, depending on StatusEffectsModule
-/// (shared immunity storage). Registers a TimerBasedAuraApplier&lt;ParalysisTimerComponent&gt; into
-/// the shared StatusEffectAuraApplierRegistry during Configure, so any future aura source (or a
-/// StatusEffectGrant inside any IActionActivator's own ActionEffect) can grant Paralysis
+/// (shared immunity storage). Registers a TimerBasedStatusEffectApplier&lt;ParalysisTimerComponent&gt; into
+/// the shared StatusEffectApplierRegistry during Configure, so any future aura source (or a
+/// StatusEffectGrant inside any IActionActivator's own Effect) can grant Paralysis
 /// without depending on this module directly. Paralysis has nothing to do with hit points, only
 /// ActionLockComponent -- the concrete proof that a status effect can apply to
 /// entities without hit points.
@@ -31,10 +31,15 @@ public sealed class ParalysisModule : IGameModule
         var playerQuery = context.PlayerQuery;
         var timers = componentManager.GetPackedPool<ParalysisTimerComponent>();
 
-        context.StatusEffectAuraAppliers.Register(new TimerBasedAuraApplier<ParalysisTimerComponent>(
+        context.StatusEffectAppliers.Register(new TimerBasedStatusEffectApplier<ParalysisTimerComponent>(
             StatusEffectType.Paralysis,
             timers,
-            (entityId, source, now) => ParalysisEffects.Apply(componentManager, entityId, source, now, eventBus, playerQuery)));
+            maxStacks: 1,
+            (entityId, count, source, now, announcesRefusal) =>
+            {
+                var wasParalyzed = timers.Has(entityId);
+                return count > 0 && ParalysisEffects.Apply(componentManager, entityId, source, now, eventBus, playerQuery, announcesRefusal) && !wasParalyzed ? 1 : 0;
+            }));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph,
             timers,
             static (paralysis, now) => FrameDeadline.Remaining(paralysis.ExpiresAtFrame, now)));

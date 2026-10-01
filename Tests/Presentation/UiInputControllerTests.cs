@@ -1,5 +1,6 @@
 ﻿using Engine.ECS.Systems;
 using Game.Views;
+using Effect = Game.Effects.Effect;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
@@ -3394,7 +3395,7 @@ public sealed class UiInputControllerTests
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: playerEntityId);
         var actionId = Guid.NewGuid();
         var actionCatalog = new ActionCatalog();
-        actionCatalog.Register(new ActionDefinition(actionId, "Test Action", null, "t", Color.White, [], Effects: [ActionEffect.None],
+        actionCatalog.Register(new ActionDefinition(actionId, "Test Action", null, "t", Color.White, [], Effects: [Effect.None],
             Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
 
         var fontService = TestFonts.Shared;

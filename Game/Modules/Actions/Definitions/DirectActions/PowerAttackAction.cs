@@ -1,7 +1,8 @@
 using Engine.Math;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.Utilities;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Effects;
 using Game.Tags;
 using Microsoft.Xna.Framework;
 
@@ -17,7 +18,7 @@ public static class PowerAttackAction
     public static ActionDefinition Build() => new(
         Id, "Power Attack", "PowerAttack", "P", Color.DarkRed,
         Tags: [GameTags.DeliveryMelee, GameTags.ActionAttack, GameTags.StatsAbilityScoreStrength, GameTags.TraitDodgeable, GameTags.TraitStaggering],
-        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 36, MaxFlatDamage: 44)])],
+        Effects: [new Effect([new DirectDamage(MinFlatDamage: 36, MaxFlatDamage: 44)])],
         Activator: new DirectAction(
             new TargetingSpec(TargetShape.Adjacent, Range: 0),
             new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: WindupFrames, CooldownFrames: null)),

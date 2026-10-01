@@ -1,4 +1,5 @@
 using Engine.ECS.Systems;
+using Game.Modules.Auras;
 using Game.Modules.ProcessingTier;
 using Game.Spawning;
 using Game.World;
@@ -13,7 +14,8 @@ public sealed class GameSessionInternals(
     EntityTeleporter teleporter,
     ProcessingTierResolver processingTierResolver,
     LocalTierRoster localTierRoster,
-    FrameEventBuffer<EntityMovedEvent> movedEntities)
+    FrameEventBuffer<EntityMovedEvent> movedEntities,
+    AuraField auraField)
 {
     /// <summary>The session's one spawn path.</summary>
     public EntityFactory Factory { get; } = factory;
@@ -31,4 +33,7 @@ public sealed class GameSessionInternals(
 
     /// <summary>MovementSystem's confirmed moves this frame -- see GameModuleContext.MovedEntities.</summary>
     public FrameEventBuffer<EntityMovedEvent> MovedEntities { get; } = movedEntities;
+
+    /// <summary>Where every aura reaches -- see GameModuleContext.AuraField. Bootstrap builds it once the floor is populated, so its terrain scan is a startup step rather than part of the first frame.</summary>
+    public AuraField AuraField { get; } = auraField;
 }

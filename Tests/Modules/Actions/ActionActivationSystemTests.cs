@@ -1,4 +1,6 @@
 using Game.Modules.Actions.Definitions.DirectActions;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.Tags;
 using Game.Tags;
 using Engine.ECS.Entities;
@@ -10,7 +12,6 @@ using Game.Modules;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Effects;
 using Game.Modules.Actions.Systems;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -64,7 +65,7 @@ public sealed class ActionActivationSystemTests
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
         var mathUtility = new MathUtility();
-        var damageEffects = new ActionEffect[] { new([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)]) };
+        var damageEffects = new Effect[] { new([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)]) };
         var targeting = new TargetingSpec(TargetShape.SingleTarget, Range: 10);
 
         var actionCatalog = new ActionCatalog();
@@ -90,7 +91,7 @@ public sealed class ActionActivationSystemTests
             FreeCastWithManaCostActionId, "Test FreeCast Spell", null, "#", default, [], damageEffects,
             new SpellActivator(targeting, new ActionTiming(ActionTimingCategory.FreeCast, ActionLockFrames: 0, CooldownFrames: null), ManaCost: 5)));
         actionCatalog.Register(new ActionDefinition(
-            FreeCastReleasingLockActionId, "Test Lock-Releasing FreeCast", null, "#", default, [], [ActionEffect.None],
+            FreeCastReleasingLockActionId, "Test Lock-Releasing FreeCast", null, "#", default, [], [Effect.None],
             new SpellActivator(targeting, new ActionTiming(ActionTimingCategory.FreeCast, CooldownFrames: 40, ReleasesActionLock: true))));
 
         var system = TestSystems.ActionActivationSystem(
@@ -104,7 +105,7 @@ public sealed class ActionActivationSystemTests
             eventBus,
             mathUtility,
             playerQuery: null,
-            new StatusEffectAuraApplierRegistry(),
+            new StatusEffectApplierRegistry(),
             componentManager,
             new EntityKeys(),
             statModifiers: null,
@@ -504,7 +505,7 @@ public sealed class ActionActivationSystemTests
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(
             meleeActionId, "Test Punch", null, "#", default, actionTags,
-            [new ActionEffect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
+            [new Effect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
             new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
 
         var meleeDisabled = componentManager.GetPackedPool<Game.Modules.BodyPartEffects.Components.MeleeDisabledComponent>();
@@ -521,7 +522,7 @@ public sealed class ActionActivationSystemTests
             new EventBus(),
             mathUtility,
             playerQuery: null,
-            new StatusEffectAuraApplierRegistry(),
+            new StatusEffectApplierRegistry(),
             componentManager,
             new EntityKeys(),
             meleeDisabled: meleeDisabled);

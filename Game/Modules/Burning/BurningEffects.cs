@@ -19,29 +19,37 @@ public static class BurningEffects
     /// <summary>🔥 (U+1F525, "fire"). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService).</summary>
     public const string Glyph = "🔥";
 
-    /// <summary>No-ops entirely if entityId is currently immune to Burning (StatusEffectImmunity), or once MaxStacks is reached.</summary>
-    /// <param name="now">The simulation frame the stack lands on. A new burn's first tick is TickIntervalFrames after it; a top-off leaves the running tick alone.</param>
-    public static void ApplyStack(ComponentManager componentManager, int entityId, ActionSource source, long now, EventBus eventBus, IPlayerQuery playerQuery)
+    /// <summary>Applies one stack -- see ApplyStacks.</summary>
+    public static void ApplyStack(ComponentManager componentManager, int entityId, ActionSource source, long now, EventBus eventBus, IPlayerQuery playerQuery) =>
+        ApplyStacks(componentManager, entityId, count: 1, source, now, eventBus, playerQuery);
+
+    /// <summary>Adds up to count stacks, stopping at MaxStacks, and returns how many landed. None land on an entity currently immune to Burning (StatusEffectImmunity).</summary>
+    /// <param name="now">The simulation frame the stacks land on. A new burn's first tick is TickIntervalFrames after it; a top-off leaves the running tick alone.</param>
+    /// <param name="announcesRefusal">False to leave an immunity's blocked event unpublished.</param>
+    public static int ApplyStacks(ComponentManager componentManager, int entityId, int count, ActionSource source, long now, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true)
     {
-        if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Burning, source, eventBus, playerQuery))
+        if (count <= 0 || StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Burning, source, eventBus, playerQuery, announcesRefusal))
         {
-            return;
+            return 0;
         }
 
         var timers = componentManager.GetPackedPool<BurningTimerComponent>();
-
-        if (timers.TryGetReadonly(entityId, out var existingTimer) && existingTimer.StackCount >= MaxStacks)
+        var hasTimer = timers.TryGetReadonly(entityId, out var existingTimer);
+        var stacksLanded = Math.Min(count, MaxStacks - (hasTimer ? existingTimer.StackCount : 0));
+        if (stacksLanded <= 0)
         {
-            return;
+            return 0;
         }
 
-        if (timers.Has(entityId))
+        if (hasTimer)
         {
-            timers.TryUpdate(entityId, static (ref BurningTimerComponent t) => t.StackCount++);
+            timers.TryUpdate(entityId, (byte)stacksLanded, static (ref BurningTimerComponent t, byte added) => t.StackCount += added);
         }
         else
         {
-            timers.Add(entityId, new BurningTimerComponent(FrameDeadline.AfterStaggered(now, TickIntervalFrames, entityId), stackCount: 1, source));
+            timers.Add(entityId, new BurningTimerComponent(FrameDeadline.AfterStaggered(now, TickIntervalFrames, entityId), stackCount: (byte)stacksLanded, source));
         }
+
+        return stacksLanded;
     }
 }

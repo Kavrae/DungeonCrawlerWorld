@@ -1,11 +1,11 @@
 using Game.Blueprints;
+using Game.Effects;
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Effects;
 using Game.Modules.Containers.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -270,7 +270,7 @@ public sealed class MapViewQueryTests
         var fixture = new Fixture();
         fixture.Actions.Register(new ActionDefinition(
             ChargingActionId, "Slam", null, "!", Color.Orange, [],
-            Effects: [ActionEffect.None],
+            Effects: [Effect.None],
             Activator: new DirectAction(new TargetingSpec(TargetShape.Adjacent, Range: 0), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 45, CooldownFrames: null))));
         fixture.Components.Merge(5, new PendingDelayedActionComponent(ChargingActionId, [], readyAtFrame: 45));
         fixture.Components.Merge(5, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 45, unlockedAtFrame: 45));

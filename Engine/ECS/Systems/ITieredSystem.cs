@@ -30,7 +30,7 @@ namespace Engine.ECS.Systems;
 /// <see cref="BeginFrame"/>, or <see cref="SystemManager"/> will silently skip it.
 /// </para>
 /// <para>
-/// Not every striped system fits. A system that runs two different tiered passes (StatusEffectAuraSystem)
+/// Not every striped system fits. A system that runs two different tiered passes (AuraSystem)
 /// or none at all (an event-driven system) stays a plain <see cref="ISystem"/> running its own loops.
 /// </para>
 /// </remarks>

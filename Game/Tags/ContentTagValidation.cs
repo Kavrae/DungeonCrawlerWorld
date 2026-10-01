@@ -1,15 +1,13 @@
-using Engine.Tags;
+using Game.Effects;
 using Game.Modules;
-using Game.Modules.Actions;
-using Game.Modules.Actions.Effects;
 
 namespace Game.Tags;
 
 /// <summary>Checks that every gameplay tag the build's registered content uses is declared by one of its modules.</summary>
 /// <remarks>
 /// Run once every module is configured, so a mod whose content names an undeclared tag (a typo, or one it forgot to
-/// declare) fails its dry run instead of silently never matching. Covers every action and item definition registered
-/// by then: their tags and their stat modifier grants' conditions.
+/// declare) fails its dry run instead of silently never matching. Covers the tags of every action, item, terrain
+/// contact and aura registered by then, and every tag an effect entry any of them holds names (EffectContent).
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 internal static class ContentTagValidation
@@ -21,28 +19,39 @@ internal static class ContentTagValidation
 
         foreach (var action in context.Actions.Definitions)
         {
-            EnsureDeclared(gameplayTags, action, $"Action '{action.Name}'");
+            gameplayTags.EnsureDeclared(action.Tags, $"Action '{action.Name}'");
         }
 
         foreach (var item in context.Items.Definitions)
         {
-            EnsureDeclared(gameplayTags, item, $"Item '{item.Name}'");
+            gameplayTags.EnsureDeclared(item.Tags, $"Item '{item.Name}'");
         }
-    }
 
-    private static void EnsureDeclared(GameplayTagRegistry gameplayTags, ActivatableDefinition definition, string usedBy)
-    {
-        gameplayTags.EnsureDeclared(definition.Tags, usedBy);
-
-        foreach (var effect in definition.Effects)
+        var terrain = context.Terrain;
+        for (var terrainTypeId = 1; terrainTypeId <= terrain.Count; terrainTypeId++)
         {
-            foreach (var entry in effect.Entries)
+            if (terrain.TryGet((ushort)terrainTypeId, out var terrainDefinition) && terrainDefinition.Contact is { } contact)
             {
-                if (entry is StatModifierGrant { ConditionTag.IsNone: false } grant && !gameplayTags.IsDeclared(grant.ConditionTag))
-                {
-                    throw new InvalidOperationException($"{usedBy} grants a stat modifier conditioned on gameplay tag '{grant.ConditionTag}', which no module in this build declares.");
-                }
+                gameplayTags.EnsureDeclared(contact.Tags, $"Terrain '{terrainDefinition.Name}'");
             }
         }
+
+        var auras = context.Auras;
+        for (var auraId = 0; auraId < auras.Count; auraId++)
+        {
+            var aura = auras.Get((byte)auraId);
+            gameplayTags.EnsureDeclared(aura.Tags, $"Aura '{aura.Name}'");
+        }
+
+        EffectContent.ForEachEntry(context, (entry, heldBy) =>
+        {
+            foreach (var tag in entry.ReferencedTags)
+            {
+                if (!gameplayTags.IsDeclared(tag))
+                {
+                    throw new InvalidOperationException($"{heldBy} has an effect that names gameplay tag '{tag}', which no module in this build declares.");
+                }
+            }
+        });
     }
 }

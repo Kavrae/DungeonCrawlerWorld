@@ -1,4 +1,6 @@
 using Engine.ECS.Systems;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.Events;
 using Engine.Math;
 using Game.Blueprints;
@@ -6,7 +8,6 @@ using Game.Floors;
 using Game.Modules;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Effects;
 using Game.Modules.Currency.Components;
 using Game.Modules.Death;
 using Game.Modules.Inventory;
@@ -47,7 +48,7 @@ public sealed class ItemWindowCoordinatorTests
         var itemCatalog = new ItemCatalog();
         itemCatalog.Register(new ItemDefinition(
             PotionItemId, "Test Potion", null, "p", Color.Green, Tags: [GameTags.ItemConsumablePotion, GameTags.TargetingSelf],
-            Effects: [new ActionEffect([new DirectHeal(0.5f)])],
+            Effects: [new Effect([new DirectHeal(0.5f)])],
             Activator: new PotionActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
         var mapHarness = TestMapWindows.Create(20, 20, 1, new Vector3Int(5, 5, 0), itemCatalog: itemCatalog);

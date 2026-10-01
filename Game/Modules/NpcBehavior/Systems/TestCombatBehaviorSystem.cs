@@ -138,7 +138,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     /// tier divisors, so they still bucket identically and an entity is still decided and moved
     /// on the same frame -- which is what makes this system's ordering ahead of MovementSystem
     /// (see NpcBehaviorModule) meaningful. stripeIndex is accepted for ISystem compliance and
-    /// otherwise unused, the same way StatusEffectAuraSystem already treats it.
+    /// otherwise unused, the same way AuraSystem already treats it.
     /// </summary>
     public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
 

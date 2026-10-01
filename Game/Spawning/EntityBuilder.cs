@@ -5,6 +5,8 @@ using Engine.Math;
 using Engine.Utilities;
 using Game.Blueprints;
 using Game.Modules.Actions;
+using Game.Modules.Auras;
+using Game.Modules.Auras.Components;
 using Game.Modules.Class;
 using Game.Modules.Class.Components;
 using Game.Modules.Core.Components;
@@ -18,7 +20,7 @@ namespace Game.Spawning;
 /// Building is in two steps: the skeleton is what the entity needs to exist on the map before it is ever
 /// simulated (its spawn record, and a NonBlockingComponent for a part that never blocks its cell), the body
 /// is every definition in the blueprint's resolved build order -- each one's race or class, then its own
-/// blueprint -- then its action-lock stagger. One reusable random sequence, reseeded per entity, is the
+/// blueprint -- then the auras it radiates and its action-lock stagger. One reusable random sequence, reseeded per entity, is the
 /// BlueprintContext.Rolls every part builds with, so an entity's rolls depend on its seed alone -- not on
 /// how many entities were built before it, in what order, or when.
 ///
@@ -32,13 +34,15 @@ public sealed class EntityBuilder
     private static readonly ushort MaximumStaggerFrames = GameTiming.FramesForSeconds(1f);
 
     private readonly BlueprintRegistry _definitions;
+    private readonly AuraCatalog _auras;
     private readonly EntityKeys _entityKeys;
     private readonly SeededRandom _random = new();
     private readonly MathUtility _rolls;
 
-    public EntityBuilder(BlueprintRegistry definitions, EntityKeys entityKeys)
+    public EntityBuilder(BlueprintRegistry definitions, AuraCatalog auras, EntityKeys entityKeys)
     {
         _definitions = definitions;
+        _auras = auras;
         _entityKeys = entityKeys;
         _rolls = new MathUtility(_random);
     }
@@ -82,6 +86,7 @@ public sealed class EntityBuilder
         }
 
         GrantManaIfAnyActionCosts(componentManager, entityId, resolved.Actions);
+        GrantAuras(componentManager, entityId, resolved.Auras);
 
         var actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
         if (actionLocks.Has(entityId))
@@ -124,6 +129,7 @@ public sealed class EntityBuilder
             BuildPart(context, partId, classGrantedBy);
             appliedParts.Add(entityId, new AppliedBlueprintComponent(partId, (ushort)appliedParts.CountForEntity(entityId)));
             GrantManaIfAnyActionCosts(componentManager, entityId, definition.Actions);
+            GrantAuras(componentManager, entityId, definition.Auras);
         }
     }
 
@@ -157,6 +163,43 @@ public sealed class EntityBuilder
         }
 
         definition.Build?.Invoke(context);
+    }
+
+    /// <summary>Gives entityId a source of each granted aura it doesn't already radiate.</summary>
+    /// <remarks>
+    /// Added straight to the pool: AuraSystem observes it, and puts the sources into the aura field once
+    /// the entity is on the map. An aura the entity already radiates is left as it is, so applying a
+    /// blueprint to a live entity never replaces a source it has.
+    /// </remarks>
+    private void GrantAuras(ComponentManager componentManager, int entityId, IReadOnlyList<AuraGrant> grants)
+    {
+        if (grants.Count == 0)
+        {
+            return;
+        }
+
+        var sources = componentManager.GetMultiPool<AuraSourceComponent>();
+        for (var index = 0; index < grants.Count; index++)
+        {
+            var auraId = _auras.Register(grants[index].Aura);
+            if (!Radiates(sources, entityId, auraId))
+            {
+                sources.Add(entityId, new AuraSourceComponent(auraId, grants[index].Strength));
+            }
+        }
+    }
+
+    private static bool Radiates(MultiComponentPool<AuraSourceComponent> sources, int entityId, byte auraId)
+    {
+        for (var denseIndex = sources.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = sources.GetNextDenseIndex(denseIndex))
+        {
+            if (sources.GetReadonlyByDenseIndex(denseIndex).AuraId == auraId)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>The definition-grant counterpart of ActionGrantEffects' mana hook: an entity whose blueprint grants a mana-costing action gains a ManaComponent, once every part has granted the ability scores it is sized from.</summary>

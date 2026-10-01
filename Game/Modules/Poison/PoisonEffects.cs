@@ -39,35 +39,43 @@ public static class PoisonEffects
     /// a longer one already landed does nothing to the timer.
     /// </summary>
     /// <param name="now">The simulation frame the stack lands on. A new poisoning's first tick is TickIntervalFrames after it; a re-application leaves the running tick alone.</param>
-    public static void ApplyStack(ComponentManager componentManager, EntityKeys entityKeys, int entityId, ActionSource source, ushort durationInTicks, long now, EventBus eventBus, IPlayerQuery playerQuery)
+    public static void ApplyStack(ComponentManager componentManager, EntityKeys entityKeys, int entityId, ActionSource source, ushort durationInTicks, long now, EventBus eventBus, IPlayerQuery playerQuery) =>
+        ApplyStacks(componentManager, entityKeys, entityId, count: 1, source, durationInTicks, now, eventBus, playerQuery);
+
+    /// <summary>ApplyStack for up to count stacks at once, stopping at MaxStacks; returns how many landed.</summary>
+    /// <param name="announcesRefusal">False to leave an immunity's blocked event unpublished.</param>
+    public static int ApplyStacks(ComponentManager componentManager, EntityKeys entityKeys, int entityId, int count, ActionSource source, ushort durationInTicks, long now, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true)
     {
-        if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Poison, source, eventBus, playerQuery))
+        if (count <= 0 || StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Poison, source, eventBus, playerQuery, announcesRefusal))
         {
-            return;
+            return 0;
         }
 
         var timers = componentManager.GetPackedPool<PoisonTimerComponent>();
-
-        if (timers.TryGetReadonly(entityId, out var existingTimer) && existingTimer.StackCount >= MaxStacks)
+        var hasTimer = timers.TryGetReadonly(entityId, out var existingTimer);
+        var stacksLanded = Math.Min(count, MaxStacks - (hasTimer ? existingTimer.StackCount : 0));
+        if (stacksLanded <= 0)
         {
-            return;
+            return 0;
         }
 
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
         var scaledDuration = ScaleDebuffDuration(entityKeys, statModifiers, source, entityId, durationInTicks);
 
-        if (timers.Has(entityId))
+        if (hasTimer)
         {
-            timers.TryUpdate(entityId, scaledDuration, static (ref PoisonTimerComponent t, ushort newDuration) =>
+            timers.TryUpdate(entityId, ((byte)stacksLanded, scaledDuration), static (ref PoisonTimerComponent t, (byte Added, ushort NewDuration) state) =>
             {
-                t.StackCount++;
-                t.RemainingDurationTicks = Math.Max(t.RemainingDurationTicks, newDuration);
+                t.StackCount += state.Added;
+                t.RemainingDurationTicks = Math.Max(t.RemainingDurationTicks, state.NewDuration);
             });
         }
         else
         {
-            timers.Add(entityId, new PoisonTimerComponent(FrameDeadline.AfterStaggered(now, TickIntervalFrames, entityId), stackCount: 1, remainingDurationTicks: scaledDuration, source));
+            timers.Add(entityId, new PoisonTimerComponent(FrameDeadline.AfterStaggered(now, TickIntervalFrames, entityId), stackCount: (byte)stacksLanded, remainingDurationTicks: scaledDuration, source));
         }
+
+        return stacksLanded;
     }
 
     private static ushort ScaleDebuffDuration(EntityKeys entityKeys, MultiComponentPool<StatModifierComponent> statModifiers, ActionSource source, int targetEntityId, ushort durationInTicks)

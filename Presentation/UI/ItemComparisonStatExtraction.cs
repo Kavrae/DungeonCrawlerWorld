@@ -1,9 +1,12 @@
 using Engine.Math;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.Tags;
 using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
+using Game.Modules.Auras;
 using Game.Modules.Inventory;
 using Game.Modules.StatModifiers;
 
@@ -13,7 +16,7 @@ namespace Presentation.UI;
 /// One ItemComparisonStat per line ItemDetailsWindow's Effects/Activation sections show -- the
 /// single source both plain single-item rendering and Item Details Comparison's own per-line
 /// coloring read from, so the two can never drift out of sync about what lines exist or what they
-/// say. Reuses ActionEffectFormatting.FormatEntry for each effect entry's own DisplayText (the
+/// say. Reuses EffectFormatting.FormatEntry for each effect entry's own DisplayText (the
 /// same text a non-compared item already showed before this existed); activator lines are built
 /// directly here rather than through ActionActivatorFormatting.BuildLines, since that method
 /// returns one flat string list with no per-field Key to key comparisons off of.
@@ -48,9 +51,9 @@ public static class ItemComparisonStatExtraction
         return stats;
     }
 
-    private static ItemComparisonStat ExtractEffectStat(IActionEffectEntry entry, GameplayTagRegistry gameplayTags)
+    private static ItemComparisonStat ExtractEffectStat(IEffectEntry entry, GameplayTagRegistry gameplayTags)
     {
-        var displayText = ActionEffectFormatting.FormatEntry(entry, gameplayTags);
+        var displayText = EffectFormatting.FormatEntry(entry, gameplayTags);
 
         return entry switch
         {
@@ -60,7 +63,7 @@ public static class ItemComparisonStatExtraction
             StatusEffectGrant status => new ItemComparisonStat($"effect:status:{status.Type}", displayText, status.StackCount, HigherIsBetter: true),
             // Signed by Polarity regardless of Operation (Additive/Multiplicative) -- a simplification: this value only drives green/red ranking, not the actual applied math (see StatModifierGrant.Apply for that), so a buff always ranks "higher magnitude is better" and a debuff the opposite.
             StatModifierGrant modifier => new ItemComparisonStat($"effect:statmod:{modifier.Target}", displayText, modifier.Polarity == StatModifierPolarity.Buff ? modifier.Magnitude : -modifier.Magnitude, HigherIsBetter: true),
-            AuraSourceGrant aura => new ItemComparisonStat($"effect:aura:{aura.StatusEffectType}", displayText, DistanceFalloff.MaxRadius(aura.AuraAndGlowStrength), HigherIsBetter: true),
+            AuraSourceGrant aura => new ItemComparisonStat($"effect:aura:{aura.Aura.Id}", displayText, DistanceFalloff.MaxRadius(aura.Strength), HigherIsBetter: true),
             HotkeyExpansionGrant expansion => new ItemComparisonStat("effect:hotkeySlots", displayText, expansion.Slots, HigherIsBetter: true),
             ChainedEffect chained => new ItemComparisonStat("effect:chained", displayText, chained.TriggerChance * 100, HigherIsBetter: true),
             _ => new ItemComparisonStat($"effect:{entry.GetType().Name}", displayText, null, HigherIsBetter: true),

@@ -1,8 +1,9 @@
 using Engine.ECS.Components;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.ECS.Entities;
 using Engine.Events;
 using Engine.Math;
-using Game.Modules.Actions.Effects;
 using Game.Modules.Health.Components;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffects;
@@ -17,31 +18,35 @@ public sealed class StatusEffectGrantFloatingTextTests
     private const int SourceEntityId = 1;
     private const int TargetEntityId = 2;
 
-    private sealed class CountingApplier(ComponentManager componentManager, StatusEffectType effectType, int maxStacks) : IStatusEffectAuraApplier
+    private sealed class CountingApplier(ComponentManager componentManager, StatusEffectType effectType, int maxStacks) : IStatusEffectApplier
     {
         private readonly Dictionary<int, int> _stacksByEntityId = [];
 
         public StatusEffectType EffectType { get; } = effectType;
 
-        public int GetCurrentStackCount(int entityId) => _stacksByEntityId.GetValueOrDefault(entityId);
+        public int GetCurrentStackCount(int entityId, byte? bodyPartId = null) => _stacksByEntityId.GetValueOrDefault(entityId);
 
-        public void ApplyStack(int entityId, ActionSource source, long now)
+        public int MaxStacks => maxStacks;
+
+        public int ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null)
         {
             if (StatusEffectImmunity.HasImmunity(componentManager, entityId, EffectType))
             {
-                return;
+                return 0;
             }
 
-            _stacksByEntityId[entityId] = System.Math.Min(GetCurrentStackCount(entityId) + 1, maxStacks);
+            var stacksBefore = GetCurrentStackCount(entityId);
+            _stacksByEntityId[entityId] = System.Math.Min(stacksBefore + count, maxStacks);
+            return _stacksByEntityId[entityId] - stacksBefore;
         }
 
         public void RemoveAllStacks(int entityId) => _stacksByEntityId.Remove(entityId);
     }
 
-    private static (ComponentManager ComponentManager, TestFloatingText FloatingText, Game.Modules.Actions.ActionEffectContext Context) Build(int maxStacks = 10)
+    private static (ComponentManager ComponentManager, TestFloatingText FloatingText, Game.Effects.EffectContext Context) Build(int maxStacks = 10)
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
-        var appliers = new StatusEffectAuraApplierRegistry();
+        var appliers = new StatusEffectApplierRegistry();
         appliers.Register(new CountingApplier(componentManager, StatusEffectType.Burning, maxStacks));
         var floatingText = new TestFloatingText().Place(TargetEntityId, ProcessingTierLevel.Local);
 
