@@ -15,8 +15,8 @@ namespace Game.Blueprints;
 /// and a definition reached twice is built once, where it was first reached.
 ///
 /// What must be known without building an entity is declared here rather than written by the
-/// blueprint: its appearance, race (body plan), class, occupancy, shared actions and where and how
-/// big it spawns by default. Blueprint writes only the per-entity state a build creates.
+/// blueprint: its appearance, race (body plan), class, occupancy, shared actions, the auras it radiates and where
+/// and how big it spawns by default. Blueprint writes only the per-entity state a build creates.
 /// </remarks>
 /// <param name="Id">The stable identity mods replace a definition by, and what a save persists.</param>
 /// <cleanupVersion>1</cleanupVersion>
@@ -49,6 +49,10 @@ public sealed record BlueprintDefinition(Guid Id, string Name)
 
     /// <summary>The actions every entity built with this definition can use, held here rather than per entity -- see ActionGrant.</summary>
     public IReadOnlyList<ActionGrant> Actions { get; init; } = [];
+
+    /// <summary>The auras every entity built with this definition radiates.</summary>
+    /// <remarks>Declared rather than written by Build: an aura is the same for every entity of the definition, and declaring it lets a build that names an unregistered aura fail when it is configured rather than at its first spawn.</remarks>
+    public IReadOnlyList<AuraGrant> Auras { get; init; } = [];
 
     /// <summary>The MapLayer an entity of it spawns on when the spawn names none.</summary>
     public MapLayer? Layer { get; init; }

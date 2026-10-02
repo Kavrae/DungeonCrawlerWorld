@@ -1,4 +1,5 @@
 using Engine.Math;
+using Game.Effects;
 using Engine.Utilities;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
@@ -32,7 +33,7 @@ public static class DodgeAction
     public static ActionDefinition Build() => new(
         Id, "Dodge", "Dodge", "d", Color.LightGreen,
         Tags: [GameTags.TargetingSelf],
-        Effects: [new ActionEffect([new DodgeActivation()])],
+        Effects: [new Effect([new DodgeActivation()])],
         Activator: new DirectAction(
             new TargetingSpec(TargetShape.SingleTarget, Range: 1, Metric: DistanceMetric.Chebyshev),
             new ActionTiming(ActionTimingCategory.FreeCast, CooldownFrames: CooldownFrames, ReleasesActionLock: true)),

@@ -3,8 +3,8 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
-using Game.Modules.StatusEffectAura;
-using Game.Modules.StatusEffectAura.Components;
+using Game.Modules.Auras;
+using Game.Modules.Auras.Components;
 using Game.World;
 
 namespace Game.Modules.Death.Systems;
@@ -26,7 +26,7 @@ public sealed class DeathSystem : ISystem
     private readonly IEntityMoveSync _entityMoveSync;
     private readonly IMapQuery _mapQuery;
     private readonly EventBus _eventBus;
-    private readonly MultiComponentPool<StatusEffectAuraSourceComponent> _auraSources;
+    private readonly MultiComponentPool<AuraSourceComponent> _auraSources;
 
     public DeathSystem(
         PackedComponentPool<DeadComponent> deadEntities,
@@ -35,7 +35,7 @@ public sealed class DeathSystem : ISystem
         IEntityMoveSync entityMoveSync,
         IMapQuery mapQuery,
         EventBus eventBus,
-        MultiComponentPool<StatusEffectAuraSourceComponent> auraSources)
+        MultiComponentPool<AuraSourceComponent> auraSources)
     {
         _deadEntities = deadEntities;
         _nonBlockingEntities = nonBlockingEntities;

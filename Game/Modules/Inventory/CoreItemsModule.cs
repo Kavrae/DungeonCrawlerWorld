@@ -1,5 +1,7 @@
 using Engine.Modules;
+using Game.Modules.Auras;
 using Game.Modules.Inventory.Definitions;
+using Game.Modules.Poison;
 
 namespace Game.Modules.Inventory;
 
@@ -13,6 +15,8 @@ public sealed class CoreItemsModule : IGameModule
     public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000001a");
 
     public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [AurasModule.ModuleId, PoisonModule.ModuleId];
 
     private static readonly IReadOnlyList<Func<ItemDefinition>> Definitions = [
         HealthPotion.Build,

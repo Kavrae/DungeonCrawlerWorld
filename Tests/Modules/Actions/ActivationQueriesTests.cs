@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Game.Effects;
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
@@ -25,17 +26,17 @@ public sealed class ActivationQueriesTests
 
     private static ActionDefinition Spell(ushort manaCost, ushort? cooldownFrames = null) => new(
         SpellId, "Test Spell", null, "s", Color.White, [GameTags.TargetingSelf],
-        Effects: [ActionEffect.None],
+        Effects: [Effect.None],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: cooldownFrames), manaCost));
 
     private static ActionDefinition MeleeSpell(ushort manaCost) => new(
         MeleeSpellId, "Test Melee Spell", null, "m", Color.White, [GameTags.DeliveryMelee],
-        Effects: [ActionEffect.None],
+        Effects: [Effect.None],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.Adjacent, Range: 0), new ActionTiming(ActionTimingCategory.Immediate), manaCost));
 
     private static ActionDefinition FreeCast(ushort cooldownFrames) => new(
         FreeCastId, "Test Free Cast", null, "f", Color.White, [GameTags.TargetingSelf],
-        Effects: [ActionEffect.None],
+        Effects: [Effect.None],
         Activator: new DirectAction(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.FreeCast, CooldownFrames: cooldownFrames)));
 
     private static ComponentManager Components(float currentMana = 10f, bool meleeDisabled = false, uint lockedUntilFrame = 0)

@@ -14,8 +14,8 @@ using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.BodyPartEffects.Systems;
 using Game.Modules.Burning.Components;
 using Game.Modules.Burning.Systems;
-using Game.Modules.ContactDamage.Components;
-using Game.Modules.ContactDamage.Systems;
+using Game.Modules.TerrainContacts.Components;
+using Game.Modules.TerrainContacts.Systems;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Death.Systems;
@@ -36,7 +36,8 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race.Components;
 using Game.Modules.StatModifiers.Components;
-using Game.Modules.StatusEffectAura.Components;
+using Game.Modules.Auras;
+using Game.Modules.Auras.Components;
 using Game.Modules.StatusEffects;
 using Game.Terrain;
 using Game.World;
@@ -59,12 +60,10 @@ internal static class TestSystems
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
         PackedComponentPool<DeadComponent>? deadEntities = null,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<MovementDisabledComponent>? movementDisabled = null) =>
         new(transformComponents, actionLocks, movementComponents, mapQuery, eventBus, entityMoveSync, movedEntities, playerQuery ?? TestPlayerQuery.NoPlayer, processingTiers, processingTierEvents,
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
-            auraSources ?? EmptyPools.Multi<StatusEffectAuraSourceComponent>(),
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             movementDisabled ?? EmptyPools.Packed<MovementDisabledComponent>());
 
@@ -139,9 +138,9 @@ internal static class TestSystems
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             deadEntities ?? EmptyPools.Packed<DeadComponent>(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
-    public static ContactDamageSystem ContactDamageSystem(
+    public static TerrainContactSystem TerrainContactSystem(
         TerrainRegistry terrain,
-        PackedComponentPool<ContactDamageExposureComponent> exposures,
+        PackedComponentPool<TerrainContactExposureComponent> exposures,
         PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         IMapQuery mapQuery,
@@ -153,12 +152,17 @@ internal static class TestSystems
         PackedComponentPool<DeadComponent>? deadEntities = null,
         EntityBodyParts? bodyParts = null,
         SimulationScope? simulationScope = null,
-        FloatingTextFeed? floatingTextFeed = null) =>
-        new(terrain, exposures, health, eventBus, mapQuery, playerQuery ?? TestPlayerQuery.NoPlayer, movedEntities, mathUtility, simulationClock,
-            statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
-            deadEntities ?? EmptyPools.Packed<DeadComponent>(),
-            bodyParts ?? EmptyPools.BodyParts(),
-            simulationScope ?? new SimulationScope(static _ => true), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
+        FloatingTextFeed? floatingTextFeed = null,
+        DirectComponentPool<TransformComponent>? transforms = null,
+        StatusEffectApplierRegistry? statusEffectAppliers = null,
+        ComponentManager? componentManager = null) =>
+        new(terrain, exposures,
+            TestActionEffects.Services(componentManager ?? BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 16, initialComponentCapacity: 16)), new EntityKeys(), eventBus, mathUtility, health, playerQuery,
+                statusEffectAppliers, statModifiers, deadEntities, bodyParts: bodyParts, floatingTextFeed: floatingTextFeed),
+            mapQuery,
+            transforms ?? EmptyPools.Direct<TransformComponent>(),
+            movedEntities, simulationClock,
+            simulationScope ?? new SimulationScope(static _ => true));
 
     public static ActionActivationSystem ActionActivationSystem(
         PackedComponentPool<PendingActionActivationComponent> pendingActivations,
@@ -171,14 +175,15 @@ internal static class TestSystems
         EventBus eventBus,
         MathUtility mathUtility,
         IPlayerQuery? playerQuery,
-        StatusEffectAuraApplierRegistry statusEffectAppliers,
+        StatusEffectApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
         EntityKeys entityKeys,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<ManaComponent>? mana = null,
         PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
+        MultiComponentPool<AuraSourceComponent>? auraSources = null,
+        AuraCatalog? auras = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
         EntityBodyParts? bodyParts = null,
         PackedComponentPool<MeleeDisabledComponent>? meleeDisabled = null,
@@ -186,18 +191,12 @@ internal static class TestSystems
         ProcessingTierQuery? processingTiers = null,
         BlueprintRegistry? creatures = null,
         FloatingTextFeed? floatingTextFeed = null) =>
-        new(pendingActivations, actionLocks, actions, pendingDelayedActions, health, actionCatalog, mapQuery, eventBus, mathUtility, playerQuery ?? TestPlayerQuery.NoPlayer, statusEffectAppliers, componentManager, entityKeys,
-            statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
-            deadEntities ?? EmptyPools.Packed<DeadComponent>(),
-            mana ?? EmptyPools.Packed<ManaComponent>(),
-            abilityScores ?? EmptyPools.Packed<AbilityScoresComponent>(),
-            auraSources ?? EmptyPools.Multi<StatusEffectAuraSourceComponent>(),
-            hotkeyExpansionUnlocks ?? EmptyPools.Packed<HotkeyExpansionUnlockComponent>(),
-            bodyParts ?? EmptyPools.BodyParts(),
+        new(pendingActivations, actionLocks, actions, pendingDelayedActions,
+            TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, mana, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed),
+            actionCatalog, mapQuery,
             meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>(),
             dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
-            processingTiers ?? EmptyPools.Tiers(),
-            creatures ?? new BlueprintRegistry(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
+            processingTiers ?? EmptyPools.Tiers());
 
     public static DelayedActionSystem DelayedActionSystem(
         PackedComponentPool<PendingDelayedActionComponent> pendingActions,
@@ -208,13 +207,14 @@ internal static class TestSystems
         EventBus eventBus,
         MathUtility mathUtility,
         IPlayerQuery? playerQuery,
-        StatusEffectAuraApplierRegistry statusEffectAppliers,
+        StatusEffectApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
         EntityKeys entityKeys,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
+        MultiComponentPool<AuraSourceComponent>? auraSources = null,
+        AuraCatalog? auras = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
         EntityBodyParts? bodyParts = null,
         PackedComponentPool<DodgingComponent>? dodgingEntities = null,
@@ -223,17 +223,12 @@ internal static class TestSystems
         ProcessingTierEvents? processingTierEvents = null,
         BlueprintRegistry? creatures = null,
         FloatingTextFeed? floatingTextFeed = null) =>
-        new(pendingActions, actions, health, actionCatalog, mapQuery, eventBus, mathUtility, playerQuery ?? TestPlayerQuery.NoPlayer, statusEffectAppliers, componentManager, entityKeys,
-            statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
-            deadEntities ?? EmptyPools.Packed<DeadComponent>(),
-            abilityScores ?? EmptyPools.Packed<AbilityScoresComponent>(),
-            EmptyPools.Packed<ManaComponent>(),
-            auraSources ?? EmptyPools.Multi<StatusEffectAuraSourceComponent>(),
-            hotkeyExpansionUnlocks ?? EmptyPools.Packed<HotkeyExpansionUnlockComponent>(),
-            bodyParts ?? EmptyPools.BodyParts(),
+        new(pendingActions, actions,
+            TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, null, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed),
+            actionCatalog, mapQuery,
             dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
             processingTiers ?? EmptyPools.Tiers(),
-            simulationScope ?? new SimulationScope(static _ => true), processingTierEvents ?? new ProcessingTierEvents(), creatures ?? new BlueprintRegistry(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
+            simulationScope ?? new SimulationScope(static _ => true), processingTierEvents ?? new ProcessingTierEvents());
 
     public static ConsumableActivationSystem ConsumableActivationSystem(
         PackedComponentPool<PendingConsumableActivationComponent> pendingActivations,
@@ -252,28 +247,22 @@ internal static class TestSystems
         PackedComponentPool<ManaComponent>? mana = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
         PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
-        StatusEffectAuraApplierRegistry? statusEffectAppliers = null,
+        StatusEffectApplierRegistry? statusEffectAppliers = null,
         PackedComponentPool<MeleeDisabledComponent>? meleeDisabled = null,
         IPlayerQuery? playerQuery = null,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
+        MultiComponentPool<AuraSourceComponent>? auraSources = null,
+        AuraCatalog? auras = null,
         MultiComponentPool<ItemHotkeyBindingComponent>? itemHotkeyBindings = null,
         EntityBodyParts? bodyParts = null,
         BlueprintRegistry? creatures = null,
         ProcessingTierQuery? processingTiers = null,
         FloatingTextFeed? floatingTextFeed = null) =>
-        new(pendingActivations, actionLocks, potionCooldowns, health, itemCatalog, actionCatalog, mapQuery, eventBus, mathUtility, componentManager, entityKeys,
-            statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
-            deadEntities ?? EmptyPools.Packed<DeadComponent>(),
-            mana ?? EmptyPools.Packed<ManaComponent>(),
+        new(pendingActivations, actionLocks, potionCooldowns,
+            TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, mana, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed),
+            itemCatalog, actionCatalog, mapQuery,
             meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>(),
-            hotkeyExpansionUnlocks ?? EmptyPools.Packed<HotkeyExpansionUnlockComponent>(),
-            abilityScores ?? EmptyPools.Packed<AbilityScoresComponent>(),
-            auraSources ?? EmptyPools.Multi<StatusEffectAuraSourceComponent>(),
             itemHotkeyBindings ?? EmptyPools.Multi<ItemHotkeyBindingComponent>(),
-            bodyParts ?? EmptyPools.BodyParts(),
-            processingTiers ?? EmptyPools.Tiers(),
-            playerQuery ?? TestPlayerQuery.NoPlayer,
-            statusEffectAppliers ?? new StatusEffectAuraApplierRegistry(), creatures ?? new BlueprintRegistry(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
+            processingTiers ?? EmptyPools.Tiers());
 
     public static TestCombatBehaviorSystem TestCombatBehaviorSystem(
         PackedComponentPool<MovementComponent> movementPool,
@@ -305,9 +294,9 @@ internal static class TestSystems
         IEntityMoveSync entityMoveSync,
         IMapQuery mapQuery,
         EventBus eventBus,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null) =>
+        MultiComponentPool<AuraSourceComponent>? auraSources = null) =>
         new(deadEntities, nonBlockingEntities, transforms, entityMoveSync, mapQuery, eventBus,
-            auraSources ?? EmptyPools.Multi<StatusEffectAuraSourceComponent>());
+            auraSources ?? EmptyPools.Multi<AuraSourceComponent>());
 
     public static BodyPartEffectsSystem BodyPartEffectsSystem(
         EntityBodyParts bodyParts,

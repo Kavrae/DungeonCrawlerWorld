@@ -73,8 +73,8 @@ a `phase-performance-testing` A/B.
 
 `FrameEventBuffer<T>` (`Engine/ECS/Systems/`) throws on a second same-cycle `Record` (a safety net, not
 a fix). Real fix: double-buffer (swap, not clear) like Bevy's `Events<T>` -- trades same-cycle
-visibility for 1-frame latency (check this is OK for `MovementSystem`'s `ContactDamageSystem`/
-`StatusEffectAuraSystem` consumers). Do alongside reviewing `EventBus`'s `IBufferedEvent`/
+visibility for 1-frame latency (check this is OK for `MovementSystem`'s `TerrainContactSystem`/
+`AuraSystem` consumers). Do alongside reviewing `EventBus`'s `IBufferedEvent`/
 `SubscribeOnce`/`DispatchBuffered` (`Engine/Events/`) for consistency -- a different mechanism (deferred
 re-entrant handler vs. high-frequency batching), never compared side by side.
 
@@ -405,7 +405,7 @@ consequence -- `BodyPartEffectsSystem`'s movement and melee penalties included -
 paralysis-specific rules.
 
 Burning is the only body-part-scoped effect today, and its per-part path is Burning-specific end to
-end (`BodyPartBurningTimerComponent`, `BodyPartBurningSystem`, `BurningAuraApplier`'s part path,
+end (`BodyPartBurningTimerComponent`, `BodyPartBurningSystem`, `BurningApplier`'s part path,
 `HealthWindow.BuildBurningPartIds`). Refactor it into a generic body-part-scoped status effect that
 any effect plugs into, with Paralysis as the second concrete implementation.
 
@@ -487,6 +487,29 @@ planning a neighborhood as data on a worker already exist (`NeighborhoodRecords`
 budget); the new generator produces the same plan. Subsumes the seed
 plumbing in "Random map generation v1" below. Needs its own plan.
 
+**Spawn order decides entity ids, and ids decide what the pools cost.** Packed and Multi pools index
+entities through pages of 1024 ids, allocated on first write, so a component only some entities hold
+costs a page for every id range one of its holders falls in. `TestMapBuilder` spawns a neighborhood
+row by row, which interleaves every kind of entity through the neighborhood's whole id range. Random
+Healing Shrines spawned that way touched every page of four pools: 31 MB of pools for 9,000 shrines,
+and the aura system 18% slower. Spawning each neighborhood's shrines first, in batches, so their ids
+are consecutive, brought that to 7.5 MB and 1.6% (`IMPLEMENTATION-NOTES.md`, "Auras, terrain contact, Healing Shrine, Holy Ground").
+
+The generator should apply the same rule to everything it spawns: order a neighborhood's spawn list
+so entities that hold the same components get consecutive ids -- grouped by blueprint, or by what the
+blueprint builds (always-built props, then creatures, each race together), rather than by where they
+stand. What that has to keep:
+- **Placement priority.** Spawn order is also who gets a contested cell: an entity that doesn't fit
+  where it was rolled is destroyed. Grouping changes which one loses, so the order of groups is a
+  rule of the generator (fixtures and props before creatures, large footprints before small).
+- **Spreading over frames.** The streamer applies a plan a batch at a time under its budget. Groups
+  need the same batching the shrines got (a few dozen spawns a batch), not one batch per group.
+- **Determinism.** The order must come from the plan alone, as now.
+- **What it doesn't fix.** Skeletons hold only skeleton components, so this matters for what is built
+  at spawn and for what a build adds later: creatures built on promotion keep the ids they were
+  spawned with, so their built-only pools page by spawn order too. Measure with the memory report's
+  per-pool MB against holder count; a pool far above (holders x component size) is paging.
+
 **Unreal Engine reference:** two Unreal features cover this ground.
 - *PCG framework:* generation is a graph of nodes (sample points, filter, pick from weighted lists,
   spawn), seeded per component so the same seed always gives the same result. At runtime, "runtime
@@ -552,8 +575,8 @@ doesn't exist yet) plus an actual "use" action.
 
 #### Torch reveal + light-weakness damage, Scroll Mastery power-scaling
 
-- Scroll of Torch's `StatusEffectType.Light` grant is glow-only -- no `IStatusEffectAuraApplier`
-  registered for `Light`. Needs a real applier (fog-of-war reveal, light-weakness damage). Also worth
+- Scroll of Torch's light aura (`ScrollOfTorch.Aura`) is glow-only -- its `AuraDefinition` has no effects.
+  Needs a real effect (fog-of-war reveal, light-weakness damage). Also worth
   reconsidering once fog of war lands: today's grant is per-*entity*; a light source reads more
   naturally anchored to a *location* (see Torch V2 below). The per-tile light level in "Field of view
   and perception" (High, above) is where the reveal belongs: a Torch writes light into tiles, fog of war
@@ -749,6 +772,26 @@ a "blocks sight" and "blocks light" flag on `TerrainDefinition` (beside `BlocksM
 
 ### Medium Priority
 
+#### Aura source moves -- scan and allocation cost
+
+Every time an entity's aura sources are resynced into the `AuraField` (`AuraSystem.ResyncSourceIfStale`:
+a Local source on each move, others from the deferred queue) the system re-evaluates exposures around
+where the source was and starts them around where it is. Found in the code review of the aura change
+and left for later:
+
+- **Scan size:** both scans cover `(2 * AuraField.MaxScanRadius + 1)^2` cells, and `MaxScanRadius` is
+  the reach of the strongest source the field has ever held. Scan by the reach of the source that
+  moved instead.
+- **Occupant enumeration:** the scans `foreach` over `IMapQuery.GetOccupantEntityIdsAt`, an
+  `IReadOnlyList<int>`, which boxes an enumerator for every occupied cell (40 bytes each). `Map` has a
+  span form (`GetOccupantEntityIdSpanAt`) the draw path already uses; it isn't on `IMapQuery`.
+- **Closures:** `ResyncSourceIfStale` passes two lambdas capturing `this` to
+  `SourceSplatting.ResyncEntity`, and `AuraGrid.Splat` passes a capturing lambda to
+  `DistanceFalloff.ScatterManhattan`, whose allocation-free `TState` overload is unused here.
+
+Skipping the scans for a source whose auras have no effects was considered and dropped: effect-less
+auras are expected to be rare (Light is to gain fog-of-war and NPC aggro effects).
+
 #### Body part disablement that lasts -- injury states, and thresholds instead of 0 HP
 
 A body part is disabled only while its `CurrentHealth` is exactly 0 (`BodyPartStateComponent.IsDisabled`,
@@ -806,7 +849,7 @@ What's known:
   `EntityStripeSet`/`TieredEntityStripeSet` dictionary growth, `NeighborhoodCells<int>` aura-grid
   dictionaries rehashing up to ~22 MB per neighborhood, and `TimerWheel` slot lists.
 - **Per-frame gameplay garbage** in the same window, short-lived but part of every gen-0/gen-1:
-  `ActionEffectContext`, `ManhattanCellVisitor` closures, strings, boxed enumerators.
+  `EffectContext`, `ManhattanCellVisitor` closures, strings, boxed enumerators.
 - **Tried and worse:** Server GC, and a 256 MB gen-0 budget (55-120 ms pauses). Pre-sizing every
   stripe-set and aura-grid dictionary didn't change the spike frames.
 
@@ -816,7 +859,9 @@ Options to measure:
 - Stripe sets: an entity-indexed location array shared across a tiered set's tiers, instead of five
   dictionaries per set.
 - Aura grids: pre-size a new neighborhood's dictionary from its loaded neighbors' counts, or a dense
-  per-neighborhood array where a grid is dense.
+  per-neighborhood array where a grid is dense. A dense array would also cut the aura system's
+  per-move cost: a move inside any aura pays one hash lookup per aura in the field (see "Aura
+  follow-ups", Game).
 - Remove the per-frame allocations above.
 
 Acceptance: no frame over 16.67 ms during either shift of that teleport measurement, other than the
@@ -904,7 +949,7 @@ compose with, not replace, the racial baseline -- exact composition (multiply vs
 #### Spell leveling
 
 Same rules as Skills (level 0-15/20, XP with use, never decreases) -- land after Skills so both share
-one leveling primitive. A spell's level would modify its `ActionEffect` magnitude/duration (bigger
+one leveling primitive. A spell's level would modify its `Effect` magnitude/duration (bigger
 heal, cheaper Magic Missile) -- exact "what changes" design still open.
 
 #### Corpse looting rights based on damage dealt
@@ -1114,7 +1159,87 @@ game-over screen, a floor's contents on a floor transition). Bevy has no run-lev
 `UGameInstance`; resources simply persist across states unless removed. Pairs with "Named schedules,
 system sets and run conditions" (Engine), where "in state X" is a run condition.
 
+#### Aura power and aura size as separate values
+
+An aura source has one number, `Strength`: it is the magnitude at the source, it halves per tile of
+Manhattan distance, and so it also fixes the reach (`DistanceFalloff.MaxRadius`). A strong aura is
+always a wide one, and a wide aura is always strong at its centre. An aura's effects scale their
+amounts by that one magnitude, per aura (`AuraMagnitude.Strength` or `Flat`).
+
+Split it into two values on a source:
+- **Power:** the magnitude effects are scaled by.
+- **Size:** how far the aura reaches.
+
+And a falloff choice per aura:
+- **Calculated falloff:** the magnitude at a cell is derived from power, size and distance, so power
+  fades to nothing at the edge whatever the two values are.
+- **No falloff:** full power everywhere inside the size.
+
+Touches `AuraSourceComponent`, `TerrainAura`, `AuraGrant`, `AuraSourceGrant`, `AuraGrid`'s splat and
+the glow, which should keep following the same falloff as the effect. Revisit whether magnitude
+should then scale per effect entry rather than per aura. See IMPLEMENTATION-NOTES.md, "One effect vocabulary": an aura's strength scales amounts only, chosen per aura.
+
 ### Low Priority
+
+#### Terrain contact as a range-0 aura -- revisit if contact needs to come from entities
+
+Terrain contact (`TerrainContactSystem`) and auras (`AuraSystem`) now hold the same `Effect` lists,
+apply them with no source entity, keep a per-entity exposure on a timer wheel with the same
+refused-once-per-stay bit, and read their definition fresh at every application. A strength-1 aura
+already reaches only its own cell. What still separates them:
+
+| | Terrain contact | Aura |
+|---|---|---|
+| First application | At once on stepping on, and again on every step between such cells | Never on entry; only a tick, the first staggered within a second |
+| Repeat | Per contact (`RepeatEveryFrames`), or none | One second for every aura |
+| Strength | None; effects apply at their own amounts | Scales amounts; overlapping sources add |
+| Body part | Hands the ground-contact part to entries that ask | Hands over nothing |
+| Reaches | Whoever stands on the cell | Everything in range but the source's own entity |
+| Found by | Reading the terrain under each mover (an array read) | The aura grid (a coverage bit, then a hash lookup per aura) |
+
+The first row is the real difference: an entity crossing an aura between ticks is untouched, by
+design, while lava hits on every step.
+
+**Revisit when any of these is wanted:**
+- **An entity that carries a contact effect** -- a creature that burns whatever touches it, a trap
+  that is an entity rather than terrain. That is an entity-sourced, range-0, apply-on-entry effect,
+  which contact can't express (it is terrain's) and an aura can't either (it never applies on entry).
+- **An aura that applies on entry**, or one with its own tick interval, or one that never repeats.
+- **An aura that hands a body part to its effects**, the way a contact hands over the ground part.
+- **A contact whose strength should add** where sources overlap or fall off with distance.
+
+Unifying means an `AuraDefinition` gaining three options -- apply on entry as well as on the tick,
+an interval of its own including "never", and a body part for its effects -- with a terrain's
+contact becoming a second, strength-1 aura on its cells.
+
+**Costs to weigh then:**
+- Every contact cell goes into the aura grid: lava is about 1% of ground cells, a lot of single-cell
+  entries in a structure built for overlapping falloff.
+- Contact detection goes from one array read per mover to a coverage-bit test and a hash lookup per
+  aura.
+- "On every step" has to be added to a system whose one rule is that only a tick applies.
+
+If none of the conditions comes up, the cheaper improvement is sharing more of the exposure code
+between the two systems and leaving detection as it is.
+
+#### An ability that turns a direct-target spell into a limited-duration aura
+
+An ability (or item, or class feature) that takes a spell normally cast at a target and makes the
+caster radiate it instead for a while: Magic Missile becomes a damaging aura, Heal a healing one.
+
+The pieces exist. An aura definition lives with whatever radiates it and is only a name, a glow
+colour and a list of `Effect` -- the same lists an action holds -- and `AuraCatalog.Register` takes a
+definition at any time, so one can be made at runtime from an action's own effects and granted with
+a timed `AuraSourceGrant`. To settle when designing it:
+- **Which spells qualify, and what the aura costs** (mana per tick or up front, cooldown).
+- **Scaling:** an aura applies once a second with no source entity, so no crit, no ability bonus and
+  no Outgoing modifiers, and its strength scales amounts. Decide whether the converted aura keeps the
+  caster's stats (which needs a source entity on an aura's effects -- see "Aura attribution") and
+  what strength and reach it gets.
+- **Identity:** each converted spell needs a stable Guid (derived from the action's and the
+  ability's), so two casters' auras of the same spell add up as one aura and the catalog doesn't
+  grow per cast. The catalog holds at most 256 definitions in a session.
+- **Who it affects:** an aura reaches everything in range but its own sources, allies included.
 
 #### Player-selected healing priority
 
@@ -1451,7 +1576,7 @@ through rare dedicated abilities (a flying race, a burrow spell).
 
 #### Auras and terrain effects per MapLayer
 
-Part of MapLayer interaction (overview). `StatusEffectAuraSystem` spreads every aura on its centre's Z
+Part of MapLayer interaction (overview). `AuraField` spreads every aura on its centre's Z
 only, and terrain auras (`TerrainAuraSources`) skip Flying, which has no floor. Decide per effect which
 layers it reaches, with the same exact-layers rule as MapLayer reach rules for actions: a Ground fire
 aura probably doesn't burn a flyer overhead, while an earthquake is exactly an UnderGround effect reaching
@@ -1499,7 +1624,7 @@ entities keep a fixed layout.
 
 Follow-up to Equipment + Limb-specific penalties (`IMPLEMENTATION-NOTES.md`). `BodyPartEffectsSystem`
 currently scores a generic penalty off every Arm/Hand (correct only because nothing equips to one
-specific limb yet). Once Equipment exists, `IActionActivator`/`ActionEffect` should let a melee action
+specific limb yet). Once Equipment exists, `IActionActivator`/`Effect` should let a melee action
 declare which `BodyPartType`(s) perform it (a two-handed weapon needing both Hands; an offhand punch
 caring about one arm) -- `BodyPartEffectsSystem` would then key its penalty off the acting part(s), not
 a blanket aggregate.
@@ -1547,7 +1672,7 @@ field itself.
 #### Scroll and spell durations scaling with Intelligence
 
 Duration-based effects (buffs, DoTs) should scale with caster Intelligence, same shape as
-Constitution->potion-cooldown. Needs an `ActionEffect` duration field as a real concept first.
+Constitution->potion-cooldown. Needs an `Effect` duration field as a real concept first.
 
 #### Damage types
 
@@ -1638,9 +1763,34 @@ Example FreeCast/Immediate ability raising the caster's own outgoing damage for 
 #### Defensive buff spell -- damage reduction + healing over time
 
 Self-targeted, combining a timed `StatModifierGrant(IncomingDamage, ...)` (fully supported today) with
-a periodic self-heal built like Burning/Poison's DoT (`TimerBasedAuraApplier<T>`, healing instead of
+a periodic self-heal built like Burning/Poison's DoT (`TimerBasedStatusEffectApplier<T>`, healing instead of
 damaging). The regen tick can now carry `IncomingHealing`/`OutgoingHealing` through the chain the same
 way DirectHeal does (`HealthHeal.ComputeAmount`).
+
+#### Aura follow-ups
+
+Left over from the healing aura work (`IMPLEMENTATION-NOTES.md`, "Auras, terrain contact, Healing
+Shrine, Holy Ground").
+
+- **Per-move cost grows with the auras in the field.** (A small slowdown from making one implementation generic is accepted; this is the lever if it ever needs to come back.) A move into a cell no aura reaches is one bit
+  test (`AuraField.AnyAuraReaches`). A move into a cell some aura reaches does a hash lookup per aura
+  with an effect, so the Healing aura joining Burning cost the aura system about 8% (0.024 ms/frame).
+  A dense per-neighborhood array per aura (about 4 MB each) would make it an array read; see "Gen-1 GC
+  frames during a window shift".
+- **Worst frame about 2 ms higher with random shrines** in the steady headless benchmark (6.5-8.8 ms
+  against 4.6-6.0 ms), not GC frames. Cause not found.
+- **`DeathSystem` up about 50%** (0.0037 to 0.0057 ms/frame) in the final A/B. Small, but not looked at:
+  either more deaths with shrines as targets, or the aura removal a dying source does.
+- **A terrain source has no name.** `ActionSource.ToString` gives `Terrain#<id>`, which is what the
+  Ability Score window and the activity log show for lava damage and Holy Ground's blessing. Needs the
+  terrain registry where the name is formatted. The Health window shows no source at all.
+- **Unloading is not covered by a walk.** Every streaming check walked far enough to load three
+  neighborhoods but not to evict one, so shrines being destroyed with their neighborhood (their
+  sources leaving the field) is covered by tests only.
+- **`new Random(seed)` was slow in one planning loop**: about 110 ns a roll for the shrine rolls in
+  `TestMapBuilder`, with tiered compilation off as the game runs, where a million of the same rolls
+  take 7 ms in isolation. Not explained; the shrines roll from `SeededRandom` now. The layout and
+  creature passes still use `Random` and measure normally, but are worth a look if planning time matters.
 
 #### FreeCast toggle-aura ability
 
@@ -1656,10 +1806,10 @@ above). `BodyPartType.Wing` exists but isn't granted to any race yet.
 
 #### Per-body-part vs whole-entity status effects
 
-`StatusEffectStack`/`StatusEffectAuraApplierRegistry` apply every effect entity-wide today -- correct
+`StatusEffectStack`/`StatusEffectApplierRegistry` apply every effect entity-wide today -- correct
 for Poison (systemic), wrong for Burning on a Complex entity (a burning leg reads better, and ties to
 targeted-damage above: lava burning legs should apply Burning to the legs specifically). Needs a
-part-scoped vs. entity-scoped declaration on `StatusEffectGrant`/`IStatusEffectAuraApplier`, and a new
+part-scoped vs. entity-scoped declaration on `StatusEffectGrant`/`IStatusEffectApplier`, and a new
 store keyed by (entityId, bodyPartId) for the part-scoped case. Feeds the HealthWindow item
 (Presentation).
 
@@ -1795,9 +1945,44 @@ than Ability Scores (a skill is already a bigger power swing). (2) A shared New 
 run banks one action into, offered as a starting choice on a fresh run. Both need a new persistent,
 save-file-level meta-progression store distinct from anything in a single `EcsContext`.
 
+#### Aura attribution -- who is behind an aura's effect
+
+An aura's effects are attributed to the aura itself (`ActionSourceKind.Aura`): the `AuraField` holds
+one total per cell and aura, so which source contributed can't be recovered. A kill by a Toxic
+Idol's poison is therefore not credited to its holder, and a burn from lava's aura doesn't name the
+lava.
+
+Attribute an aura's effect to the most specific thing available, in order:
+- **The source entity**, when an entity's source contributes at the cell (kill credit, activity log,
+  `StatModifierComponent.Source`).
+- **The terrain**, when a terrain cell's aura does (`ActionSource.FromTerrain`).
+- **The aura itself**, when neither can be told.
+
+Needs per-source tracking: something the field or an exposure can read that says which sources
+reach a cell, without bringing back a live scan around each entity (the measured performance bug the
+grid replaced). Decide what "the" source is when several overlap -- the strongest at the cell is the
+likely rule. See IMPLEMENTATION-NOTES.md, "One effect vocabulary": an aura's effects are attributed to the aura, not to a source of it.
+
 ## Presentation
 
 ### High Priority
+
+#### Hotbar re-press always activates, even past the double-tap window
+
+Pressing the key of an already-armed hotbar slot should activate the item/action whether or not the
+second press lands inside the double-tap window (`ActionTargetingController.DoubleTapWindowFrames`).
+Today the two cases differ (`HandleActionSlotPress`/`HandleItemSlotPress`):
+- **Within the window**: an action fires at an auto-picked target (`TryActivateWithAutoTarget`); a
+  `GameTags.TargetingSelf` item fires on the player (`TryActivateItemOnSelf`).
+- **Past the window**: the press only confirms against `MapViewState.HoveredTile`
+  (`TryConfirmActivationAtTile`), so it does nothing when the cursor is off the map or over a tile
+  that isn't targetable. Only a `TargetingSelf` action is exempt; a `TargetingSelf` item is not.
+
+Make the slow re-press activate too: confirm at the cursor when it is over a valid target, otherwise
+fall back to what the double-tap does (auto-target for an action, self for a `TargetingSelf` item).
+Decide what a slow re-press of a non-self item does with no valid cursor target, since the double-tap
+has no auto-target path for items either. Keep one rule for actions and items, and keep cancel on
+right-click/Escape only.
 
 #### Bug: open achievement popups fall behind the pause mask when a menu window opens
 
@@ -2062,7 +2247,7 @@ visible, since generated shapes are irregular.
   edges), or re-tile border cells when the neighbour loads.
 - **Per-cell data on the flyweight:** movement cost, blocks sight, blocks light, flammable -- as
   fields on the terrain definition rather than code checks by type, read by pathfinding and
-  perception. `TerrainDefinition` already carries `BlocksMovement`, `ContactHazard` and `Aura`;
+  perception. `TerrainDefinition` already carries `BlocksMovement`, `Contact` and `Aura`;
   this is making it the rule for every per-terrain property.
 - **Tile animation:** a terrain can declare frames with durations (lava, water, torches on walls),
   advanced by presentation time with a per-cell random start so a pool doesn't pulse in unison.
@@ -2160,6 +2345,26 @@ as if a key were pressed, a ready shape for "Replay by recording input" and "In-
 
 ### Medium Priority
 
+#### Buff and debuff icons below the mana bar
+
+The row under the player's mana bar (`PlayerStatusEffectsContent`) shows status effects only
+(Burning, Poison, Paralysis). Stat modifiers -- Holy Ground's blessing, a resistance potion, a
+body-part penalty -- are visible only as text rows in the Health window.
+
+- **Icons for stat modifiers** in the same place, in two rows: buffs on top, debuffs on the bottom
+  (`StatModifierPolarity`). Decide where the existing status-effect icons go: each is a buff or a
+  debuff too, so they most likely join the matching row rather than keep a row of their own.
+- **Tooltips** on every icon, buff and debuff alike, through the shared `TooltipController`: what it
+  is, what it does (the modifier's target, operation and magnitude, as the Health window already
+  formats them), how long is left, and what gave it (`ActionSource` -- an entity, a terrain, an
+  aura). The existing status-effect icons get tooltips too.
+- **An icon per modifier needs a glyph or sprite**, which a `StatModifierComponent` doesn't have.
+  Either the grant names one (`StatModifierGrant`), or it is derived from the modifier's target and
+  polarity. Modifiers that are the same thing from one source should share an icon with a count,
+  as stacks do.
+- `HudChrome` positions everything below this row (the inspection window) from its height, so a
+  second row moves those with it.
+
 #### Player status window
 
 A window for the player's own status that sits alongside the Health window (its own HUD button and
@@ -2190,6 +2395,24 @@ bracket pricing, where each unit's price depends on the shop's stock, so find it
 quantities against it rather than dividing by a unit price. Room is counted in stacks
 (`InventoryCapacity.HasRoomForNewStack`), so as much as fits means topping up existing stacks of
 the item to their max stack size, then filling free slots.
+
+#### Windows exempt from close-on-input (Diagnostics first)
+
+Arming an action closes the Diagnostics window (F3), which is the moment its live gauges are most
+worth watching. Movement leaves it open; arming an action, an item or anything else that goes through
+`ActionTargetingController` calls `UiLayerStack.CloseAllClosableWindows`, which sweeps every closable
+window so none blocks targeting on the map.
+
+Generalize rather than special-casing Diagnostics: a window declares that it stays open when input is
+consumed, and the sweep skips it. First consumer: `DiagnosticsWindow`. Other monitoring windows (the
+debug window, a future AI debugger) opt in the same way.
+
+- Put the exemption on the window (a property set where the window is built), read in
+  `CloseAllClosableWindows`, so every caller of the sweep gets it and no call site names a window.
+- Decide per sweep whether the exemption applies: arming an action should respect it; Escape-hold
+  (`UiInputController`) and the HUD context menu's "Close All" (`DynamicHudContextMenus`) are the
+  player asking for everything closed, and probably should not.
+- An exempt window still closes from its own close button, its hotkey and a single Escape.
 
 #### Draw neighborhood borders and the Local radius in Admin Mode
 
@@ -2898,7 +3121,7 @@ the same serialize-to-disk mechanism) -- but start narrow; window geometry has n
 references to untangle.
 
 **Modded content must degrade gracefully, not corrupt a save.** Once entity/world state (inventory
-items, granted abilities, `IActionActivator`/`ActionEffect` catalog entries) is serialized, a saved `Guid` reference to mod-defined content can go
+items, granted abilities, `IActionActivator`/`Effect` catalog entries) is serialized, a saved `Guid` reference to mod-defined content can go
 stale if that mod changes before the save reloads (RimWorld/PoE's well-known failure mode). Fail
 hierarchy, decided up front: (1) prefer a mod-supplied replacement/migration, (2) fall back to dropping
 just the affected reference while the rest of the save loads, (3) last resort, drop the whole entity if

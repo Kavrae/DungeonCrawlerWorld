@@ -1,6 +1,7 @@
 using Engine.Math;
+using Game.Effects;
+using Game.Effects.Entries;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Effects;
 using Game.Tags;
 using Microsoft.Xna.Framework;
 
@@ -15,7 +16,7 @@ public static class HealAction
     public static ActionDefinition Build() => new(
         Id, "Heal", "Spell-Weak", "h", Color.Red,
         Tags: [GameTags.EffectHealing, GameTags.TargetingSelf],
-        Effects: [new ActionEffect([new DirectHeal(0.2f)])],
+        Effects: [new Effect([new DirectHeal(0.2f)])],
         Activator: new SpellActivator(
             new TargetingSpec(TargetShape.Self, Range: 0),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null),

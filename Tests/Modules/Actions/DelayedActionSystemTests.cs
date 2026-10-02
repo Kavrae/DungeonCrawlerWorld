@@ -1,4 +1,6 @@
 using Engine.ECS.Entities;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
@@ -7,7 +9,6 @@ using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Effects;
 using Game.Modules.Actions.Systems;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
@@ -63,7 +64,7 @@ public sealed class DelayedActionSystemTests
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(
             ActionId, "Test Delayed Attack", null, "#", default, [],
-            Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
+            Effects: [new Effect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
             Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 30, CooldownFrames: null))));
 
         var tierEvents = new ProcessingTierEvents();
@@ -76,7 +77,7 @@ public sealed class DelayedActionSystemTests
             new EventBus(),
             new MathUtility(),
             playerQuery: null,
-            new StatusEffectAuraApplierRegistry(),
+            new StatusEffectApplierRegistry(),
             componentManager,
             new EntityKeys(),
             statModifiers: null,

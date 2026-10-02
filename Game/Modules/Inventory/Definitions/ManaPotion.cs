@@ -1,7 +1,8 @@
 using Engine.Math;
+using Game.Effects;
+using Game.Effects.Entries;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Effects;
 using Game.Tags;
 using Microsoft.Xna.Framework;
 
@@ -14,7 +15,7 @@ public static class ManaPotion
     public static ItemDefinition Build() => new(
         Id, "Regular Mana Potion", "HealthPotion", "m", Color.Blue,
         Tags: [GameTags.TargetingSelf],
-        Effects: [new ActionEffect([new DirectManaRestore(1f)])],
+        Effects: [new Effect([new DirectManaRestore(1f)])],
         Description: "Fully restores the target(s) mana. Oddly tastes like TV static.",
         Summary: "Restore target's mana.",
         GoldValue: 7,

@@ -11,7 +11,7 @@ using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Health;
 
-/// <summary>Simple/Complex dispatching facade for dealing damage -- the one shared chokepoint every non-ActionEffect damage caller (ContactDamageSystem, PoisonSystem/BurningSystem's DoT ticks) as well as ActionEffect's own DirectDamage lean on.</summary>
+/// <summary>Simple/Complex dispatching facade for dealing damage -- the one shared chokepoint every non-Effect damage caller (TerrainContactSystem, PoisonSystem/BurningSystem's DoT ticks) as well as Effect's own DirectDamage lean on.</summary>
 /// <remarks>
 /// Dispatches on which pool actually has entityId: SimpleHealthComponent runs the original
 /// single-pool logic unchanged; a BodyPartComponent-owning entity with no SimpleHealthComponent

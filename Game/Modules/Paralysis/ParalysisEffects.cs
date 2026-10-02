@@ -36,11 +36,13 @@ public static class ParalysisEffects
     /// PoisonEffects.ApplyStack uses for its own duration).
     /// </summary>
     /// <param name="now">The simulation frame Paralysis is applied on.</param>
-    public static void Apply(ComponentManager componentManager, int entityId, ActionSource source, long now, EventBus eventBus, IPlayerQuery playerQuery)
+    /// <param name="announcesRefusal">False to leave an immunity's blocked event unpublished.</param>
+    /// <returns>Whether it was applied.</returns>
+    public static bool Apply(ComponentManager componentManager, int entityId, ActionSource source, long now, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true)
     {
-        if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Paralysis, source, eventBus, playerQuery))
+        if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Paralysis, source, eventBus, playerQuery, announcesRefusal))
         {
-            return;
+            return false;
         }
 
         var timers = componentManager.GetPackedPool<ParalysisTimerComponent>();
@@ -57,5 +59,6 @@ public static class ParalysisEffects
         }
 
         ActionLockGate.Lock(componentManager.GetPackedPool<ActionLockComponent>(), entityId, now, DurationFrames);
+        return true;
     }
 }

@@ -5,6 +5,7 @@ using Game.Modules.Achievements;
 using Game.Modules.Actions;
 using Game.Modules.Inventory;
 using Game.Modules.Lootboxes;
+using Game.Modules.Auras;
 using Game.Modules.StatusEffects;
 using Game.Terrain;
 
@@ -25,6 +26,9 @@ public sealed class GameCatalogs(GameModuleContext context)
     public StatusEffectDisplayRegistry StatusEffectDisplays { get; } = context.StatusEffectDisplays;
 
     public TerrainRegistry Terrain { get; } = context.Terrain;
+
+    /// <summary>Every aura definition: its name and the colour it glows.</summary>
+    public AuraCatalog Auras { get; } = context.Auras;
 
     /// <summary>Every gameplay tag this session's modules declared, and each one's display name.</summary>
     public GameplayTagRegistry GameplayTags { get; } = context.GameplayTags;

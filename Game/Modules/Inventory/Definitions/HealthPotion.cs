@@ -1,7 +1,8 @@
 using Engine.Math;
+using Game.Effects;
+using Game.Effects.Entries;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Effects;
 using Game.Tags;
 using Microsoft.Xna.Framework;
 
@@ -14,7 +15,7 @@ public static class HealthPotion
     public static ItemDefinition Build() => new(
         Id, "Health Potion", "HealthPotion", "h", Color.Green,
         Tags: [GameTags.EffectHealing, GameTags.TargetingSelf],
-        Effects: [new ActionEffect([new DirectHeal(0.5f)])],
+        Effects: [new Effect([new DirectHeal(0.5f)])],
         Description: "Increases your health by at least 50%. Doesn't cure poison or other health-seeping conditions such as succubus-inflicted gonorrhea. So remember to wrap it up, bucko.",
         Summary: "Heal target(s) by 50%.",
         GoldValue: 5,

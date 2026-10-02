@@ -6,7 +6,7 @@ namespace Game.Modules.StatusEffects.Components;
 /// <summary>
 /// One active immunity to EffectType -- an entity holding N of these (MultiComponentPool) is
 /// immune to N distinct StatusEffectTypes. Checked by each effect's own ApplyStack chokepoint
-/// (PoisonEffects.ApplyStack, BurningEffects.ApplyStack, BurningAuraApplier's body-part-scoped
+/// (PoisonEffects.ApplyStack, BurningEffects.ApplyStack, BurningApplier's body-part-scoped
 /// path) before a new stack ever gets added -- a hard on/off gate, not a StatModifierComponent
 /// scale, since "immune" means the stack never lands at all, not "lands but does nothing".
 /// </summary>

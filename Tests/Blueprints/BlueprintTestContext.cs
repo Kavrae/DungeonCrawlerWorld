@@ -31,7 +31,7 @@ internal static class BlueprintTestContext
 
     /// <summary>Builds a whole blueprint, includes and all, the way EntityFactory does in the real world.</summary>
     public static void BuildBlueprint(this EcsContext ecsContext, int entityId, ushort blueprintId, int seed = 1) =>
-        new EntityBuilder(Definitions, ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId, blueprintId, (uint)seed, now: 0);
+        new EntityBuilder(Definitions, new Game.Modules.Auras.AuraCatalog(), ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId, blueprintId, (uint)seed, now: 0);
 
     /// <summary>Builds the built-in definition registered as definitionId -- its race or class and its includes as well as its own blueprint.</summary>
     public static void BuildDefinition(this EcsContext ecsContext, int entityId, Guid definitionId, int seed = 1) =>

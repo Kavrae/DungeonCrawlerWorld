@@ -1,7 +1,4 @@
-using Engine.ECS.Components;
 using Engine.ECS.Systems;
-using Engine.Events;
-using Engine.Math;
 using Game.Modules.Burning.Components;
 using Game.Modules.Burning.Systems;
 using Game.Modules.Death.Components;
@@ -9,12 +6,9 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
-using Game.World;
-using Game.Blueprints;
 using Game.Modules.StatModifiers;
 using Game.Modules.Death;
 using Game.Modules.Race;
-using Game.Modules.ContactDamage;
 using Engine.Modules;
 
 namespace Game.Modules.Burning;
@@ -22,10 +16,10 @@ namespace Game.Modules.Burning;
 /// <summary>
 /// Burning-specific: its own entity-scoped and body-part-scoped timer components and systems,
 /// depending on StatusEffectsModule (shared immunity storage) and HealthModule (what it damages).
-/// Registers a BurningAuraApplier (dispatches entity-scoped vs
+/// Registers a BurningApplier (dispatches entity-scoped vs
 /// body-part-scoped per grant -- see its own doc comment) into the shared
-/// StatusEffectAuraApplierRegistry during Configure, so StatusEffectAuraSystem can grant
-/// Burning stacks without depending on this module directly.
+/// StatusEffectApplierRegistry during Configure, so anything that grants Burning -- an action, a terrain
+/// contact, an aura -- does it without depending on this module directly.
 /// </summary>
 public sealed class BurningModule : IGameModule
 {
@@ -33,17 +27,17 @@ public sealed class BurningModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [StatusEffectsModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, RaceModule.ModuleId, ContactDamageModule.ModuleId];
+    public IReadOnlyList<Guid> Requires { get; } = [StatusEffectsModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, RaceModule.ModuleId];
 
     public void Configure(GameModuleContext context)
     {
-        context.StatusEffectAuraAppliers.Register(new BurningAuraApplier(context.ComponentManager, context.MathUtility, context.Terrain, context.Definitions, context.EventBus, context.PlayerQuery));
-        context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph,
+        context.StatusEffectAppliers.Register(new BurningApplier(context.ComponentManager, context.Definitions, context.EventBus, context.PlayerQuery));
+        context.StatusEffectDisplays.Register(new BurningDisplay(
             context.ComponentManager.GetPackedPool<BurningTimerComponent>(),
-            static (burning, now) => RemainingFrames(burning.NextTickFrame, burning.StackCount, now)));
+            context.ComponentManager.GetMultiPool<BodyPartBurningTimerComponent>()));
     }
 
-    /// <summary>Frames until a burn at stackCount runs out: the running tick, then one tick per remaining stack. Shared by the entity-scoped display and HealthWindow's per-part line so the two can't disagree.</summary>
+    /// <summary>Frames until a burn at stackCount runs out: the running tick, then one tick per remaining stack. Shared by BurningDisplay and HealthWindow's per-part line so the two can't disagree.</summary>
     public static int RemainingFrames(uint nextTickFrame, byte stackCount, long now) =>
         FrameDeadline.Remaining(nextTickFrame, now) + (stackCount - 1) * BurningEffects.TickIntervalFrames;
 

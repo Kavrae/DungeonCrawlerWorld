@@ -177,6 +177,7 @@ public sealed class BlueprintRegistry
         var races = new List<ushort>();
         var classes = new List<ushort>();
         var actions = new List<ActionGrant>();
+        var auras = new List<AuraGrant>();
         var nonBlocking = new List<NonBlockingKind>();
         var appearance = new AppearanceBuilder();
         MapLayer? layer = null;
@@ -223,13 +224,26 @@ public sealed class BlueprintRegistry
                 }
             }
 
+            foreach (var grant in part.Auras)
+            {
+                var existing = auras.FindIndex(held => held.Aura.Id == grant.Aura.Id);
+                if (existing >= 0)
+                {
+                    auras[existing] = grant;
+                }
+                else
+                {
+                    auras.Add(grant);
+                }
+            }
+
             if (part.NonBlocking is { } kind)
             {
                 nonBlocking.Add(kind);
             }
         }
 
-        return new ResolvedBlueprint(Get(id), [.. buildOrder], [.. races], [.. classes], [.. actions], [.. nonBlocking], appearance.Build(), layer ?? MapLayer.Ground, size ?? new Vector2Byte(1, 1), lootbox);
+        return new ResolvedBlueprint(Get(id), [.. buildOrder], [.. races], [.. classes], [.. actions], [.. auras], [.. nonBlocking], appearance.Build(), layer ?? MapLayer.Ground, size ?? new Vector2Byte(1, 1), lootbox);
     }
 
     /// <summary>Appends id's includes depth-first, then id itself, skipping any already appended.</summary>

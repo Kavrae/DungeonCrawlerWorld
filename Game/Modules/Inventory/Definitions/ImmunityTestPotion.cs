@@ -1,8 +1,9 @@
 using Engine.Math;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Effects;
 using Game.Modules.StatusEffects;
 using Game.Tags;
 using Microsoft.Xna.Framework;
@@ -20,7 +21,7 @@ public static class ImmunityTestPotion
     public static ItemDefinition Build() => new(
         Id, "Vial of Warding", "HealthPotion", "w", Color.Cyan,
         Tags: [GameTags.TargetingSelf],
-        Effects: [new ActionEffect([
+        Effects: [new Effect([
             new StatusEffectImmunityGrant(StatusEffectType.Burning, DurationFrames),
             new StatusEffectImmunityGrant(StatusEffectType.Poison, DurationFrames),
         ])],

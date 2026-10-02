@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Game.Effects;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
@@ -90,7 +91,7 @@ public sealed class PlayerCommandsTests
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(
             SelfActionId, "Test Self Action", null, "*", Color.White, [GameTags.TargetingSelf],
-            Effects: [ActionEffect.None],
+            Effects: [Effect.None],
             Activator: new SpellActivator(
                 new TargetingSpec(TargetShape.Self, Range: 0),
                 new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));

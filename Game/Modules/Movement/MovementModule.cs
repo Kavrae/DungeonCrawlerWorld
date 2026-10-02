@@ -11,8 +11,6 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
-using Game.Modules.StatusEffectAura;
-using Game.Modules.StatusEffectAura.Components;
 
 namespace Game.Modules.Movement;
 
@@ -24,7 +22,7 @@ public sealed class MovementModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, DeathModule.ModuleId, StatusEffectAuraModule.ModuleId, StatModifiersModule.ModuleId, BodyPartEffectsModule.ModuleId, ProcessingTierModule.ModuleId];
+    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, DeathModule.ModuleId, StatModifiersModule.ModuleId, BodyPartEffectsModule.ModuleId, ProcessingTierModule.ModuleId];
 
     public void RegisterComponents(ComponentRegistration registration)
     {
@@ -50,7 +48,6 @@ public sealed class MovementModule : IGameModule
         var deadEntities = componentManager.GetPackedPool<DeadComponent>();
         // Only used to widen MovementSystem's EventBus.Publish gate to an aura-carrying mover (see
         // MovementSystem's own doc comment).
-        var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
         var movementDisabled = componentManager.GetPackedPool<MovementDisabledComponent>();
 
@@ -66,7 +63,6 @@ public sealed class MovementModule : IGameModule
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             context.ProcessingTierEvents,
             deadEntities,
-            auraSources,
             statModifiers,
             movementDisabled));
 

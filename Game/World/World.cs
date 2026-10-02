@@ -445,6 +445,9 @@ public sealed class World(
     public MapBounds Bounds => Map.Bounds;
 
     /// <inheritdoc cref="IMapQuery"/>
+    public bool IsBounded => Map.IsBounded;
+
+    /// <inheritdoc cref="IMapQuery"/>
     public int GetEntityIdAt(Vector3Int position) => Map.GetBlockingEntityId(position);
 
     /// <inheritdoc cref="IMapQuery"/>

@@ -23,7 +23,7 @@ namespace Presentation.UI.Inventory;
 /// Sections, top to bottom, a divider (BuildDivider, a single TextDivider row -- plain when its
 /// label is omitted, mirroring InspectionWindowContent.BuildSpacer; labeled for the two sections
 /// that have one) before every one after the first: sprite/glyph + name (no header); Effects
-/// (labeled divider, then one line per ActionEffect entry, or "None"); Activation (labeled
+/// (labeled divider, then one line per Effect entry, or "None"); Activation (labeled
 /// divider, omitted entirely when Activator is null -- a shape-preview grid plus
 /// Targeting/Timing/per-activator-type text lines, all sourced
 /// from ItemComparisonStatExtraction so single-item rendering and Item Details Comparison's own

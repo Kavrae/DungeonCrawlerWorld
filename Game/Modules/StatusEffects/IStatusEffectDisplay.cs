@@ -6,7 +6,7 @@ namespace Game.Modules.StatusEffects;
 /// Presentation code needs to hardcode a switch over every concrete effect type (see
 /// HealthWindow/PlayerStatusEffectsContent's own doc comments for the two consumers). Registered
 /// via StatusEffectDisplayRegistry during IGameModule.Configure (see BurningModule/PoisonModule/
-/// ParalysisModule) -- the exact same shape as IStatusEffectAuraApplier, for display instead of
+/// ParalysisModule) -- the exact same shape as IStatusEffectApplier, for display instead of
 /// application.
 ///
 /// Deliberately does NOT include Color: each display consumer's icon/text has its own genuinely

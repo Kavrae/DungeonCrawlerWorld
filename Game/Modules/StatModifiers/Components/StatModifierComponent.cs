@@ -10,7 +10,8 @@ namespace Game.Modules.StatModifiers.Components;
 /// the same or different stats and stack freely. Never mutates the stat it targets: every
 /// reader recomputes the effective value from the stat's own untouched base plus whichever
 /// modifiers are currently active (see StatModifierMath.GetEffectiveValue) -- so nothing about
-/// this component changes after Add; it is removed outright by StatModifierExpirySystem once
+/// this component changes after Add except ExpiresAtFrame, which a refresh moves
+/// (StatModifierEffects.ApplyOrRefresh); it is removed outright by StatModifierExpirySystem once
 /// ExpiresAtFrame arrives.
 ///
 /// CanModify is stored for a future effect that would target other modifiers directly (e.g.
@@ -19,7 +20,7 @@ namespace Game.Modules.StatModifiers.Components;
 /// itself or chain into infinite recursion. No such effect exists yet; this pass only carries
 /// the field.
 ///
-/// ConditionTag gates this modifier on the current activation's own Tags (ActionEffectContext.
+/// ConditionTag gates this modifier on the current activation's own Tags (EffectContext.
 /// ActivatorTags/ItemDefinition.Tags) rather than always being active -- GameplayTag.None means
 /// unconditional (most modifiers). Matching is parent-aware: a Damage.Fire condition applies to an
 /// activation tagged with any Damage.Fire descendant. See StatModifierMath.GetEffectiveValue's
@@ -48,7 +49,7 @@ public struct StatModifierComponent(
     public float Magnitude { get; } = magnitude;
 
     /// <summary>FrameDeadline.Never means "never expires" -- StatModifierExpirySystem never schedules a modifier at this value, so an entity holding only permanent modifiers costs nothing.</summary>
-    public uint ExpiresAtFrame { get; } = expiresAtFrame;
+    public uint ExpiresAtFrame { get; set; } = expiresAtFrame;
     public ActionSource Source { get; } = source;
     public GameplayTag ConditionTag { get; } = conditionTag;
 

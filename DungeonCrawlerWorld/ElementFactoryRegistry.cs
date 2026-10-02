@@ -57,7 +57,6 @@ public static class ElementFactoryRegistry
         // MapWindow's dependencies (the map view query, renderers) come from Game and Presentation
         // both, plus the map-specific services built alongside it -- too many type-specific extras
         // for the Register helper above to pull its weight.
-        var mapTintGrid = new MapTintGrid(componentManager, world, catalogs.Terrain, ecsContext.EventBus);
         var floatingTextController = new FloatingTextController(ecsContext.EventBus, gameSession.SimulationClock);
         var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, presentationContext.FontService, statusEffectDisplays, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer, presentationContext.LabelRenderer);
         elementPool.RegisterFactory<MapWindow>(() => new MapWindow(
@@ -66,7 +65,7 @@ public static class ElementFactoryRegistry
             mapView,
             views.PlayerActionGate,
             mapViewState,
-            mapTintGrid,
+            views.AuraGlow,
             ecsContext.EventBus,
             presentationContext.TileRenderer,
             presentationContext.LabelRenderer,

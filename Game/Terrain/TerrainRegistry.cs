@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Game.Modules.Core.Components;
 using Game.Sprites;
 
@@ -6,7 +7,7 @@ namespace Game.Terrain;
 /// <summary>Every terrain definition in the session, by runtime id and by key.</summary>
 /// <remarks>
 /// Filled during IGameModule.Configure (TerrainModule for the built-ins, and any mod's own), before
-/// population and before any system reads it -- the same ordering StatusEffectAuraApplierRegistry
+/// population and before any system reads it -- the same ordering StatusEffectApplierRegistry
 /// relies on. Id 0 is reserved for "no terrain", so a zeroed cell array means an empty map.
 ///
 /// Sprite variants are resolved once per definition, on first use, rather than per cell per frame:
@@ -24,16 +25,22 @@ public sealed class TerrainRegistry
     /// <summary>Each id's BlocksMovement, flattened out of its definition for the movement hot path.</summary>
     private readonly List<bool> _blocksMovement = [false];
 
-    /// <summary>Registers definition and returns its runtime id. Registering a key again replaces that definition in place and keeps its id, so a mod can override a built-in.</summary>
+    /// <summary>A registered key was registered again: its id, the definition it held, and the one that replaced it.</summary>
+    /// <remarks>For what is derived from a definition and held outside it -- the aura field's reach, an entity's exposure to a contact -- to follow a definition replaced during a session. Nothing subscribes during Configure, when a mod overriding a built-in is the usual cause.</remarks>
+    public event Action<ushort, TerrainDefinition, TerrainDefinition>? DefinitionChanged;
+
+    /// <summary>Registers definition and returns its runtime id. Registering a key again replaces that definition in place and keeps its id, so a mod can override a built-in, and raises DefinitionChanged.</summary>
     public ushort Register(TerrainDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
 
         if (_idsByKey.TryGetValue(definition.Key, out var existingId))
         {
+            var previous = _definitions[existingId]!;
             _definitions[existingId] = definition;
             _spriteVariants[existingId] = null;
             _blocksMovement[existingId] = definition.BlocksMovement;
+            DefinitionChanged?.Invoke(existingId, previous, definition);
             return existingId;
         }
 
@@ -53,17 +60,11 @@ public sealed class TerrainRegistry
     /// <summary>Whether typeId's definition blocks movement; false for None or an unknown id.</summary>
     public bool BlocksMovement(ushort typeId) => typeId < _blocksMovement.Count && _blocksMovement[typeId];
 
-    /// <summary>typeId's contact hazard, if its definition has one; false for None, an unknown id, or a harmless terrain.</summary>
-    public bool TryGetContactHazard(ushort typeId, out ContactHazard hazard)
+    /// <summary>typeId's contact, if its definition has one; false for None, an unknown id, or terrain that does nothing to what stands on it.</summary>
+    public bool TryGetContact(ushort typeId, [NotNullWhen(true)] out TerrainContact? contact)
     {
-        if (TryGet(typeId, out var definition) && definition.ContactHazard is { } found)
-        {
-            hazard = found;
-            return true;
-        }
-
-        hazard = default;
-        return false;
+        contact = TryGet(typeId, out var definition) ? definition.Contact : null;
+        return contact is not null;
     }
 
     /// <summary>The number of registered definitions, not counting None.</summary>

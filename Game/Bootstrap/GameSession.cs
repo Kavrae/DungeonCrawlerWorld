@@ -25,7 +25,7 @@ public sealed class GameSession
         SimulationClock = context.SimulationClock;
         Views = new GameViews(buildPass.World, context, buildPass.LocalTierRoster);
         Commands = new GameCommands(buildPass.World, context);
-        Internals = new GameSessionInternals(buildPass.Factory, spawnRecordRebuilder, teleporter, context.ProcessingTierResolver, buildPass.LocalTierRoster, context.MovedEntities);
+        Internals = new GameSessionInternals(buildPass.Factory, spawnRecordRebuilder, teleporter, context.ProcessingTierResolver, buildPass.LocalTierRoster, context.MovedEntities, context.AuraField);
         ModuleFailures = moduleFailures;
         Settings = buildPass.Settings.Values;
         SettingsFailures = buildPass.Settings.Failures;

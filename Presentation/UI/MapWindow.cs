@@ -22,7 +22,7 @@ namespace Presentation.UI;
 /// The map-rendering composition root: owns the draw order (background, glyphs/sprites, glow,
 /// targeting/selection highlights) and routes its own input hooks (hotkeys, clicks, right-drag)
 /// to whichever collaborator actually owns that concern -- MapCamera (pan/zoom), MapBackgroundCache
-/// (per-tile background color), MapTintGrid (aura glow), ActionTargetingController (arm/target/
+/// (per-tile background color), AuraGlowView (aura glow), ActionTargetingController (arm/target/
 /// confirm), PlayerMovementController (WASD movement). MapWindow itself should stay thin glue
 /// over those, not accumulate gameplay logic of its own.
 ///
@@ -74,10 +74,10 @@ public sealed class MapWindow : Window
     /// <summary>The aura glow overlay's own cached rendering -- a separate texture from _terrainCache rather than the same one because it is blitted on the other side of the occupants (see DrawGlowOverlay).</summary>
     private MapTileLayerCache? _glowCache;
 
-    /// <summary>The MapTintGrid.Version _glowCache was last rendered against -- the glow texture depends on the tint grid's contents as well as on the camera, so a source appearing, moving or expiring has to invalidate it even though nothing about the camera changed.</summary>
+    /// <summary>The AuraGlowView.Version _glowCache was last rendered against -- the glow texture depends on the aura field's contents as well as on the camera, so a source appearing, moving or expiring has to invalidate it even though nothing about the camera changed.</summary>
     private int _renderedGlowVersion = -1;
 
-    private readonly MapTintGrid _tintGrid;
+    private readonly AuraGlowView _auraGlow;
 
     /// <summary>This frame's "an earlier hotkey handler already used this key" set -- cleared and repopulated every OnHotkeysAction call, before PlayerMovementController.HandleInput reads it. See that class's own doc comment for why this exists (today: Dodge's directional confirm claiming WASD ahead of plain movement).</summary>
     private readonly HashSet<Keys> _claimedKeysThisFrame = [];
@@ -89,7 +89,10 @@ public sealed class MapWindow : Window
 
     private const float TargetSelectionMaskAlpha = 0.5f;
 
-    /// <summary>Halves MapTintGrid's own already-falloff-scaled Factor so a full-strength aura glow (Factor 1) still lets whatever's standing on that tile -- terrain, an occupant sprite/glyph -- read through, rather than washing it out at the source tile itself.</summary>
+    /// <summary>The summed aura strength at a tile that glows at full strength; anything stronger glows no brighter.</summary>
+    private const int FullGlowStrength = 8;
+
+    /// <summary>Halves the glow so a full-strength one still lets whatever's standing on that tile -- terrain, an occupant sprite/glyph -- read through, rather than washing it out at the source tile itself.</summary>
     private const float GlowOpacityMultiplier = 0.5f;
 
     private static readonly Color MapBackgroundColor = new(40, 40, 40);
@@ -154,12 +157,10 @@ public sealed class MapWindow : Window
 
     /// <summary>Constructs the map viewport, wired to the world/camera/targeting/movement collaborators it renders and delegates input to.</summary>
     /// <remarks>
-    /// MapTintGrid and MapBackgroundCache are constructed here, not injected, unlike every other
-    /// dependency -- both are MapWindow-private derived state (a per-cell glow index, a per-cell
-    /// background-color cache) with no other consumer, so there's nothing to gain from resolving
-    /// them through ShellBootstrapper the way the shared services above are. MapTintGrid is the
-    /// exception, injected because it reads aura sources from their component pools, which
-    /// MapWindow itself doesn't.
+    /// MapBackgroundCache is constructed here, not injected, unlike every other dependency -- it is
+    /// MapWindow-private derived state (a per-cell background-color cache) with no other consumer,
+    /// so there's nothing to gain from resolving it through ShellBootstrapper the way the shared
+    /// services above are.
     /// </remarks>
     public MapWindow(
         FontService fontService,
@@ -167,7 +168,7 @@ public sealed class MapWindow : Window
         IMapViewQuery mapView,
         PlayerActionGate playerActionGate,
         MapViewState mapViewState,
-        MapTintGrid tintGrid,
+        AuraGlowView auraGlow,
         EventBus eventBus,
         TileRenderer tileRenderer,
         LabelRenderer labelRenderer,
@@ -194,7 +195,7 @@ public sealed class MapWindow : Window
         _playerMovement = playerMovement;
         _contextMenuController = contextMenuController;
         _adminContextMenuOptions = adminContextMenuOptions;
-        _tintGrid = tintGrid;
+        _auraGlow = auraGlow;
         _backgroundCache = new MapBackgroundCache(mapView, mapViewState, _camera);
         _floatingTextController = floatingTextController;
         _floatingTextRenderer = floatingTextRenderer;
@@ -288,9 +289,9 @@ public sealed class MapWindow : Window
             _glowCache = new MapTileLayerCache(graphicsDevice);
         }
 
-        if (_renderedGlowVersion != _tintGrid.Version)
+        if (_renderedGlowVersion != _auraGlow.Version)
         {
-            _renderedGlowVersion = _tintGrid.Version;
+            _renderedGlowVersion = _auraGlow.Version;
             _glowCache?.Invalidate();
         }
 
@@ -417,7 +418,7 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>
-    /// StatusEffectAuraSourceComponent's glow (see MapTintGrid), drawn as a translucent overlay
+    /// The auras' glow (see AuraGlowView), drawn as a translucent overlay
     /// on top of terrain/occupant sprites rather than blended into the background color
     /// underneath them. Blending it into the background (the old approach) only ever showed
     /// through a small, mostly-transparent glyph -- a full-tile opaque sprite hides an
@@ -441,14 +442,15 @@ public sealed class MapWindow : Window
                 var mapNodeX = columnIndex + _camera.CurrentScrollPosition.X;
                 var mapNodeY = rowIndex + _camera.CurrentScrollPosition.Y;
 
-                if (!_mapView.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)) || !_tintGrid.TryGetTint(mapNodeX, mapNodeY, currentMapLayer, out var tint))
+                if (!_mapView.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)) || !_auraGlow.TryGetGlow(mapNodeX, mapNodeY, currentMapLayer, out var glowColor, out var totalStrength))
                 {
                     continue;
                 }
 
                 var tileOrigin = new Vector2(columnIndex * _camera.CurrentTileSize.X, rowIndex * _camera.CurrentTileSize.Y) - pixelOffset;
                 var destination = new Rectangle((int)tileOrigin.X, (int)tileOrigin.Y, _camera.CurrentTileSize.X, _camera.CurrentTileSize.Y);
-                spriteBatch.Draw(unitRectangle, destination, tint.Color * tint.Factor * GlowOpacityMultiplier);
+                var glowFactor = Math.Min(totalStrength, FullGlowStrength) / (float)FullGlowStrength;
+                spriteBatch.Draw(unitRectangle, destination, glowColor * glowFactor * GlowOpacityMultiplier);
             }
         }
     }

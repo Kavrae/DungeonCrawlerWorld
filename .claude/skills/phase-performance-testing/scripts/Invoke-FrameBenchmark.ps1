@@ -37,8 +37,13 @@ param(
 
     # Default: DungeonCrawlerWorld/bin/<Configuration>/net10.0/DungeonCrawlerWorld.exe
     [string]$ExePath = "",
-    # Default: Log/phase-benchmarks/baseline-build-<configuration>
+    # Default: Log/phase-benchmarks/baseline-build-<configuration>, or
+    # baseline-build-<configuration>-<BaselineName> when a name is given.
     [string]$BaselineDirectory = "",
+    # Keeps more than one baseline per configuration: -SaveBaseline writes the named one and
+    # -Compare runs against it. The unnamed baseline is untouched.
+    [ValidatePattern("^[A-Za-z0-9_-]*$")]
+    [string]$BaselineName = "",
     [string]$DiagnosticsDirectory = "Log/diagnostics",
     [string]$OutputDir = "Log/phase-benchmarks",
     # Frame cost depends on what the world is doing, so a run is only comparable against runs of
@@ -71,6 +76,7 @@ if ([string]::IsNullOrEmpty($ExePath)) {
 }
 if ([string]::IsNullOrEmpty($BaselineDirectory)) {
     $BaselineDirectory = "Log/phase-benchmarks/baseline-build-$($Configuration.ToLowerInvariant())"
+    if (-not [string]::IsNullOrEmpty($BaselineName)) { $BaselineDirectory += "-$BaselineName" }
 }
 
 function Assert-GameNotRunning {

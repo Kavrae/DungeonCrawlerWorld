@@ -303,5 +303,17 @@
         "CellHeight": 16
       }
     ]
+  },
+  {
+    "Name": "Shrine",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Dungeon_Props.png",
+        "Column": 6,
+        "Row": 0,
+        "CellWidth": 16,
+        "CellHeight": 16
+      }
+    ]
   }
 ]

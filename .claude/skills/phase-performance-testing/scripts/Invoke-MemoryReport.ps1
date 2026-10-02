@@ -9,8 +9,12 @@ param(
 
     # Default: DungeonCrawlerWorld/bin/<Configuration>/net10.0/DungeonCrawlerWorld.exe
     [string]$ExePath = "",
-    # Default: Log/phase-benchmarks/baseline-build-<configuration>
+    # Default: Log/phase-benchmarks/baseline-build-<configuration>, or
+    # baseline-build-<configuration>-<BaselineName> when a name is given.
     [string]$BaselineDirectory = "",
+    # The named baseline Invoke-FrameBenchmark.ps1 -SaveBaseline -BaselineName saved.
+    [ValidatePattern("^[A-Za-z0-9_-]*$")]
+    [string]$BaselineName = "",
     [string]$DiagnosticsDirectory = "Log/diagnostics",
     [string]$OutputDir = "Log/phase-benchmarks",
     [int]$Seed = 1,
@@ -29,6 +33,7 @@ if ([string]::IsNullOrEmpty($ExePath)) {
 }
 if ([string]::IsNullOrEmpty($BaselineDirectory)) {
     $BaselineDirectory = "Log/phase-benchmarks/baseline-build-$($Configuration.ToLowerInvariant())"
+    if (-not [string]::IsNullOrEmpty($BaselineName)) { $BaselineDirectory += "-$BaselineName" }
 }
 
 if (@(Get-Process -Name DungeonCrawlerWorld -ErrorAction SilentlyContinue).Count -gt 0) {

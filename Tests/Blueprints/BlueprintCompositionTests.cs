@@ -45,7 +45,7 @@ public sealed class BlueprintCompositionTests
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
-        new EntityBuilder(definitions, ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId, blueprintId, seed: 1, now: 0);
+        new EntityBuilder(definitions, new Game.Modules.Auras.AuraCatalog(), ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId, blueprintId, seed: 1, now: 0);
         return (ecsContext, entityId);
     }
 

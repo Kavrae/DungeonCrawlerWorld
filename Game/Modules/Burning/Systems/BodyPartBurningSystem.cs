@@ -20,7 +20,7 @@ namespace Game.Modules.Burning.Systems;
 /// deals damage equal to the current stack count to the exact part its timer names
 /// (BodyPartSelection.FindByPartId, not a fresh targeting resolution), attributed to
 /// timer.Source (set once on the 0-to-1 transition -- see
-/// BurningAuraApplier.ApplyBodyPartScopedStack), and removes exactly one stack -- same "not
+/// BurningApplier.ApplyBodyPartScopedStack), and removes exactly one stack -- same "not
 /// per-stack damage" rule BurningSystem's own Tick uses.
 /// </summary>
 /// <remarks>

@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Game.Effects;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using Engine.Events;
@@ -15,14 +16,15 @@ using Game.Modules.Health.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.StatModifiers.Components;
-using Game.Modules.StatusEffectAura.Components;
+using Game.Modules.Auras;
+using Game.Modules.Auras.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
 using Microsoft.Xna.Framework;
 
 namespace Tests;
 
-/// <summary>Resolves an action, or builds an ActionEffectContext, for a test that only cares about some of the pools involved, filling in the rest with EmptyPools.</summary>
+/// <summary>Resolves an action, or builds an EffectContext, for a test that only cares about some of the pools involved, filling in the rest with EmptyPools.</summary>
 internal static class TestActionEffects
 {
     public static void Apply(
@@ -34,14 +36,15 @@ internal static class TestActionEffects
         EventBus eventBus,
         MathUtility mathUtility,
         IPlayerQuery? playerQuery,
-        StatusEffectAuraApplierRegistry statusEffectAppliers,
+        StatusEffectApplierRegistry statusEffectAppliers,
         ComponentManager componentManager,
         EntityKeys entityKeys,
         long now,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? auraSources = null,
+        MultiComponentPool<AuraSourceComponent>? auraSources = null,
+        AuraCatalog? auras = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
         EntityBodyParts? bodyParts = null,
         PackedComponentPool<DodgingComponent>? dodgingEntities = null,
@@ -49,20 +52,13 @@ internal static class TestActionEffects
         BlueprintRegistry? creatures = null,
         PackedComponentPool<ManaComponent>? mana = null,
         FloatingTextFeed? floatingTextFeed = null) =>
-        ActionEffectResolver.Apply(action, sourceEntityId, targetTiles, mapQuery, health, eventBus, mathUtility, playerQuery ?? TestPlayerQuery.NoPlayer, statusEffectAppliers, componentManager, entityKeys, now,
-            statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
-            deadEntities ?? EmptyPools.Packed<DeadComponent>(),
-            abilityScores ?? EmptyPools.Packed<AbilityScoresComponent>(),
-            mana ?? EmptyPools.Packed<ManaComponent>(),
-            auraSources ?? EmptyPools.Multi<StatusEffectAuraSourceComponent>(),
-            hotkeyExpansionUnlocks ?? EmptyPools.Packed<HotkeyExpansionUnlockComponent>(),
-            bodyParts ?? EmptyPools.BodyParts(),
+        ActionEffectResolver.Apply(action, sourceEntityId, targetTiles,
+            Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, mana, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed),
+            mapQuery, now,
             dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
-            processingTiers ?? EmptyPools.Tiers(),
-            creatures ?? new BlueprintRegistry(),
-            floatingTextFeed ?? EmptyPools.FloatingTextFeed());
+            processingTiers ?? EmptyPools.Tiers());
 
-    public static ActionEffectContext Context(
+    public static EffectContext Context(
         int SourceEntityId,
         int TargetEntityId,
         PackedComponentPool<SimpleHealthComponent> Health,
@@ -77,23 +73,54 @@ internal static class TestActionEffects
         PackedComponentPool<AbilityScoresComponent>? AbilityScores = null,
         PackedComponentPool<ManaComponent>? Mana = null,
         PackedComponentPool<HotkeyExpansionUnlockComponent>? HotkeyExpansionUnlocks = null,
-        StatusEffectAuraApplierRegistry? StatusEffectAppliers = null,
+        StatusEffectApplierRegistry? StatusEffectAppliers = null,
         PackedComponentPool<DeadComponent>? DeadEntities = null,
         BlueprintRegistry? Definitions = null,
-        MultiComponentPool<StatusEffectAuraSourceComponent>? AuraSources = null,
+        MultiComponentPool<AuraSourceComponent>? AuraSources = null,
+        AuraCatalog? Auras = null,
         EntityBodyParts? BodyParts = null,
         IPlayerQuery? PlayerQuery = null,
         float DurationScaleMultiplier = 1.0f,
         byte ChainDepth = 0,
         FloatingTextFeed? FloatingTextFeed = null) =>
-        new(SourceEntityId, TargetEntityId, Health, EventBus, MathUtility, ComponentManager, EntityKeys, ActivatorName, ActivatorTags, Now,
-            StatModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
-            AbilityScores ?? EmptyPools.Packed<AbilityScoresComponent>(),
-            Mana ?? EmptyPools.Packed<ManaComponent>(),
-            HotkeyExpansionUnlocks ?? EmptyPools.Packed<HotkeyExpansionUnlockComponent>(),
-            DeadEntities ?? EmptyPools.Packed<DeadComponent>(),
-            AuraSources ?? EmptyPools.Multi<StatusEffectAuraSourceComponent>(),
-            BodyParts ?? EmptyPools.BodyParts(),
-            PlayerQuery ?? TestPlayerQuery.NoPlayer,
-            StatusEffectAppliers ?? new StatusEffectAuraApplierRegistry(), Definitions ?? new BlueprintRegistry(), FloatingTextFeed ?? EmptyPools.FloatingTextFeed(), DurationScaleMultiplier, ChainDepth);
+        EffectContext.FromEntity(
+            Services(ComponentManager, EntityKeys, EventBus, MathUtility, Health, PlayerQuery, StatusEffectAppliers, StatModifiers, DeadEntities, AbilityScores, Mana, HotkeyExpansionUnlocks, AuraSources, Auras, BodyParts, Definitions, FloatingTextFeed),
+            SourceEntityId, TargetEntityId, ActivatorName, ActivatorTags, Now, DurationScaleMultiplier) with { ChainDepth = ChainDepth };
+
+    /// <summary>The services every effect entry works with, over the pools a test names and EmptyPools for the rest.</summary>
+    public static EffectServices Services(
+        ComponentManager componentManager,
+        EntityKeys entityKeys,
+        EventBus eventBus,
+        MathUtility mathUtility,
+        PackedComponentPool<SimpleHealthComponent>? health = null,
+        IPlayerQuery? playerQuery = null,
+        StatusEffectApplierRegistry? statusEffectAppliers = null,
+        MultiComponentPool<StatModifierComponent>? statModifiers = null,
+        PackedComponentPool<DeadComponent>? deadEntities = null,
+        PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
+        PackedComponentPool<ManaComponent>? mana = null,
+        PackedComponentPool<HotkeyExpansionUnlockComponent>? hotkeyExpansionUnlocks = null,
+        MultiComponentPool<AuraSourceComponent>? auraSources = null,
+        AuraCatalog? auras = null,
+        EntityBodyParts? bodyParts = null,
+        BlueprintRegistry? definitions = null,
+        FloatingTextFeed? floatingTextFeed = null) =>
+        new(
+            componentManager,
+            entityKeys,
+            eventBus,
+            mathUtility,
+            playerQuery ?? TestPlayerQuery.NoPlayer,
+            definitions ?? new BlueprintRegistry(),
+            health ?? EmptyPools.Packed<SimpleHealthComponent>(),
+            bodyParts ?? EmptyPools.BodyParts(),
+            deadEntities ?? EmptyPools.Packed<DeadComponent>(),
+            statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
+            abilityScores ?? EmptyPools.Packed<AbilityScoresComponent>(),
+            mana ?? EmptyPools.Packed<ManaComponent>(),
+            hotkeyExpansionUnlocks ?? EmptyPools.Packed<HotkeyExpansionUnlockComponent>(),
+            statusEffectAppliers ?? new StatusEffectApplierRegistry(),
+            TestAuras.Sources(auraSources, eventBus, auras),
+            floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 }

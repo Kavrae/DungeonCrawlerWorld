@@ -1,25 +1,17 @@
-using Engine.ECS.Entities;
-using Engine.ECS.Components;
+using Game.Effects;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
-using Engine.Events;
 using Engine.Math;
-using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.ProcessingTier;
-using Game.Modules.Health;
-using Game.Modules.Health.Components;
 using Game.Modules.Mana;
 using Game.Modules.Mana.Components;
 using Game.Modules.StatModifiers.Components;
-using Game.Modules.StatusEffectAura.Components;
-using Game.Modules.StatusEffects;
 using Game.World;
-using Game.Blueprints;
 
 namespace Game.Modules.Actions.Systems;
 
@@ -35,27 +27,15 @@ public sealed class ActionActivationSystem : ISystem
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly EntityActions _actions;
     private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
-    private readonly PackedComponentPool<SimpleHealthComponent> _health;
+    private readonly EffectServices _effectServices;
     private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
     private readonly ActionCatalog _actionCatalog;
     private readonly IMapQuery _mapQuery;
-    private readonly EventBus _eventBus;
-    private readonly IPlayerQuery _playerQuery;
-    private readonly StatusEffectAuraApplierRegistry _statusEffectAppliers;
-    private readonly ComponentManager _componentManager;
-    private readonly EntityKeys _entityKeys;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
     private readonly PackedComponentPool<ManaComponent> _mana;
-    private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores;
-    private readonly MathUtility _mathUtility;
-    private readonly MultiComponentPool<StatusEffectAuraSourceComponent> _auraSources;
-    private readonly PackedComponentPool<HotkeyExpansionUnlockComponent> _hotkeyExpansionUnlocks;
-    private readonly EntityBodyParts _bodyParts;
     private readonly PackedComponentPool<MeleeDisabledComponent> _meleeDisabled;
     private readonly PackedComponentPool<DodgingComponent> _dodgingEntities;
     private readonly ProcessingTierQuery _processingTiers;
-    private readonly BlueprintRegistry _creatures;
-    private readonly FloatingTextFeed _floatingTextFeed;
     private readonly EntityStripeSet _stripeSet;
 
     public ActionActivationSystem(
@@ -63,53 +43,26 @@ public sealed class ActionActivationSystem : ISystem
         PackedComponentPool<ActionLockComponent> actionLocks,
         EntityActions actions,
         PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
-        PackedComponentPool<SimpleHealthComponent> health,
+        EffectServices effectServices,
         ActionCatalog actionCatalog,
         IMapQuery mapQuery,
-        EventBus eventBus,
-        MathUtility mathUtility,
-        IPlayerQuery playerQuery,
-        StatusEffectAuraApplierRegistry statusEffectAppliers,
-        ComponentManager componentManager,
-        EntityKeys entityKeys,
-        MultiComponentPool<StatModifierComponent> statModifiers,
-        PackedComponentPool<DeadComponent> deadEntities,
-        PackedComponentPool<ManaComponent> mana,
-        PackedComponentPool<AbilityScoresComponent> abilityScores,
-        MultiComponentPool<StatusEffectAuraSourceComponent> auraSources,
-        PackedComponentPool<HotkeyExpansionUnlockComponent> hotkeyExpansionUnlocks,
-        EntityBodyParts bodyParts,
         PackedComponentPool<MeleeDisabledComponent> meleeDisabled,
         PackedComponentPool<DodgingComponent> dodgingEntities,
-        ProcessingTierQuery processingTiers,
-        BlueprintRegistry creatures,
-        FloatingTextFeed floatingTextFeed)
+        ProcessingTierQuery processingTiers)
     {
+        _effectServices = effectServices;
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
         _actions = actions;
         _pendingDelayedActions = pendingDelayedActions;
-        _health = health;
-        _statModifiers = statModifiers;
+        _statModifiers = effectServices.StatModifiers;
         _actionCatalog = actionCatalog;
         _mapQuery = mapQuery;
-        _eventBus = eventBus;
-        _mathUtility = mathUtility;
-        _playerQuery = playerQuery;
-        _statusEffectAppliers = statusEffectAppliers;
-        _componentManager = componentManager;
-        _entityKeys = entityKeys;
-        _deadEntities = deadEntities;
-        _mana = mana;
-        _abilityScores = abilityScores;
-        _auraSources = auraSources;
-        _hotkeyExpansionUnlocks = hotkeyExpansionUnlocks;
-        _bodyParts = bodyParts;
+        _deadEntities = effectServices.DeadEntities;
+        _mana = effectServices.Mana;
         _meleeDisabled = meleeDisabled;
         _dodgingEntities = dodgingEntities;
         _processingTiers = processingTiers;
-        _creatures = creatures;
-        _floatingTextFeed = floatingTextFeed;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
     }
@@ -195,7 +148,7 @@ public sealed class ActionActivationSystem : ISystem
             return false;
         }
 
-        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _mana, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures, _floatingTextFeed);
+        ActionEffectResolver.Apply(action, entityId, targetTiles, _effectServices, _mapQuery, now, _dodgingEntities, _processingTiers);
         ActionLockGate.Lock(_actionLocks, entityId, now, action.Activator.Timing.ActionLockFrames);
         return true;
     }
@@ -222,7 +175,7 @@ public sealed class ActionActivationSystem : ISystem
 
     private bool TryActivateFreeCast(int entityId, ActionDefinition action, Vector3Int[] targetTiles, long now)
     {
-        ActionEffectResolver.Apply(action, entityId, targetTiles, _mapQuery, _health, _eventBus, _mathUtility, _playerQuery, _statusEffectAppliers, _componentManager, _entityKeys, now, _statModifiers, _deadEntities, _abilityScores, _mana, _auraSources, _hotkeyExpansionUnlocks, _bodyParts, _dodgingEntities, _processingTiers, _creatures, _floatingTextFeed);
+        ActionEffectResolver.Apply(action, entityId, targetTiles, _effectServices, _mapQuery, now, _dodgingEntities, _processingTiers);
         return true;
     }
 

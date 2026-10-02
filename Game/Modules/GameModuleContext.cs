@@ -7,6 +7,7 @@ using Engine.Settings;
 using Engine.Tags;
 using Engine.Utilities;
 using Game.Blueprints;
+using Game.Effects;
 using Game.Modules.Achievements;
 using Game.Modules.Actions;
 using Game.Modules.Core;
@@ -15,6 +16,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Lootboxes;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
+using Game.Modules.Auras;
 using Game.Modules.StatusEffects;
 using Game.Spawning;
 using Game.World;
@@ -60,6 +62,7 @@ public sealed class GameModuleContext
         MathUtility = mathUtility;
         EntityKeys = entityManager.Keys;
         Terrain = world.Terrain;
+        AuraField = new AuraField(world, Terrain, Auras, eventBus);
 
         var tiers = componentManager.GetDirectPool<ProcessingTierComponent>();
         var transforms = componentManager.GetDirectPool<TransformComponent>();
@@ -76,8 +79,11 @@ public sealed class GameModuleContext
 
         SimulationScope = new SimulationScope(new ProcessingTierQuery(tiers).IsSimulated);
         FloatingTextFeed = new FloatingTextFeed(eventBus, tiers, transforms);
-        EntityFactory = new EntityFactory(Definitions, world, entityManager, componentManager, MovedEntities, SimulationClock, ProcessingTierEvents, ProcessingTierResolver, crawlerNumbers, runtimeSpawnSeed);
+        EntityFactory = new EntityFactory(Definitions, Auras, world, entityManager, componentManager, MovedEntities, SimulationClock, ProcessingTierEvents, ProcessingTierResolver, crawlerNumbers, runtimeSpawnSeed);
+        _effectServices = new Lazy<EffectServices>(() => EffectServices.For(componentManager, EntityKeys, eventBus, mathUtility, PlayerQuery, Definitions, StatusEffectAppliers, Auras, FloatingTextFeed));
     }
+
+    private readonly Lazy<EffectServices> _effectServices;
 
     public IMapQuery MapQuery { get; }
 
@@ -102,16 +108,22 @@ public sealed class GameModuleContext
     public MathUtility MathUtility { get; }
 
     /// <summary>
-    /// Filled during Configure by every effect module -- see StatusEffectAuraApplierRegistry's own doc
+    /// Filled during Configure by every effect module -- see StatusEffectApplierRegistry's own doc
     /// comment for why registering here (during Configure) rather than in RegisterBehavior is what makes
     /// ordering safe.
     /// </summary>
-    public StatusEffectAuraApplierRegistry StatusEffectAuraAppliers { get; } = new();
+    public StatusEffectApplierRegistry StatusEffectAppliers { get; } = new();
 
-    /// <summary>Filled during Configure -- same reasoning as StatusEffectAuraAppliers above.</summary>
+    /// <summary>Every aura definition, filled during Configure by whichever module owns each aura -- same reasoning as StatusEffectAppliers above.</summary>
+    public AuraCatalog Auras { get; } = new();
+
+    /// <summary>Where every aura reaches, for the aura system to apply and the map to draw the glow from. Follows the map's terrain itself; AurasModule's system puts entity sources into it.</summary>
+    public AuraField AuraField { get; }
+
+    /// <summary>Filled during Configure -- same reasoning as StatusEffectAppliers above.</summary>
     public StatusEffectDisplayRegistry StatusEffectDisplays { get; } = new();
 
-    /// <summary>Filled during Configure -- same reasoning as StatusEffectAuraAppliers above.</summary>
+    /// <summary>Filled during Configure -- same reasoning as StatusEffectAppliers above.</summary>
     public ActionCatalog Actions { get; } = new();
 
     /// <summary>Filled during Configure -- same reasoning as Actions above; a mod could register its own achievements the same way a mod could register its own actions.</summary>
@@ -126,7 +138,7 @@ public sealed class GameModuleContext
     /// <summary>Opens an entity's loot boxes, drawing from its own sequence seeded from the runtime spawn seed.</summary>
     public LootboxOpener LootboxOpener { get; }
 
-    /// <summary>MovementSystem's confirmed moves this frame, shared with ContactDamageSystem/StatusEffectAuraSystem so they can react without a per-move EventBus dispatch -- see FrameEventBuffer's own doc comment.</summary>
+    /// <summary>MovementSystem's confirmed moves this frame, shared with TerrainContactSystem/AuraSystem so they can react without a per-move EventBus dispatch -- see FrameEventBuffer's own doc comment.</summary>
     public FrameEventBuffer<EntityMovedEvent> MovedEntities { get; } = new();
 
     /// <summary>Every tier change, for any module to subscribe to -- see ProcessingTierEvents' own doc comment.</summary>
@@ -153,10 +165,18 @@ public sealed class GameModuleContext
     /// <summary>Where anything that happens to an entity publishes the floating text shown above it.</summary>
     public FloatingTextFeed FloatingTextFeed { get; }
 
+    /// <summary>The pools and services every effect entry works with, for anything that applies effects: an action, an item, a terrain contact, an aura.</summary>
+    /// <remarks>
+    /// Made on first use, from pools other modules register (health, stat modifiers, ability scores,
+    /// mana, death, auras, actions), so a build without those modules can still be made as long as
+    /// nothing in it applies effects. A module that reads this declares those modules in Requires.
+    /// </remarks>
+    public EffectServices EffectServices => _effectServices.Value;
+
     /// <summary>The stable key table every entity is issued into -- the EntityManager's own.</summary>
     public EntityKeys EntityKeys { get; }
 
-    /// <summary>Every terrain definition, filled during Configure -- same reasoning as StatusEffectAuraAppliers above. A mod registers its own terrain here, or replaces a built-in by registering its key.</summary>
+    /// <summary>Every terrain definition, filled during Configure -- same reasoning as StatusEffectAppliers above. A mod registers its own terrain here, or replaces a built-in by registering its key.</summary>
     public Terrain.TerrainRegistry Terrain { get; }
 
     public BlueprintRegistry Definitions { get; } = new();

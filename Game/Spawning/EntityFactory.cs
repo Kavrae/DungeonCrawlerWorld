@@ -4,6 +4,7 @@ using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints;
+using Game.Modules.Auras;
 using Game.Modules.Class.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
@@ -62,6 +63,7 @@ public sealed class EntityFactory
     /// <param name="runtimeSeed">Seeds the sequence a request that names no seed draws its own from -- kept apart from every other random sequence, so a spawn at runtime shifts nothing else.</param>
     public EntityFactory(
         BlueprintRegistry definitions,
+        AuraCatalog auras,
         World.World world,
         EntityManager entityManager,
         ComponentManager componentManager,
@@ -73,7 +75,7 @@ public sealed class EntityFactory
         ulong runtimeSeed = 0)
     {
         _definitions = definitions;
-        _builder = new EntityBuilder(definitions, entityManager.Keys);
+        _builder = new EntityBuilder(definitions, auras, entityManager.Keys);
         _world = world;
         _entityManager = entityManager;
         _componentManager = componentManager;
@@ -151,9 +153,9 @@ public sealed class EntityFactory
             // directly into a static aura source's range (e.g. spawned beside Lava) is granted
             // immediately, the same as one that later steps into range under its own power --
             // World.PlaceEntityOnMap itself never raises an EntityMovedEvent, and
-            // StatusEffectAuraSystem's own one-time startup scatter (EnsureGrid) only registers
+            // AuraSystem's own one-time startup scatter (EnsureGrid) only registers
             // SOURCES into the grid, it never grants to occupants already standing in one's radius.
-            // Recorded into the shared buffer StatusEffectAuraSystem/ContactDamageSystem actually
+            // Recorded into the shared buffer AuraSystem/TerrainContactSystem actually
             // drain, not published on the bus -- this is bulk population-time placement (tens of
             // thousands of entities per floor), not the rare player-move frequency PlayerActivityLog
             // is built around.

@@ -22,8 +22,6 @@ public sealed class PresentationStoreAccessArchitectureTests
     /// <summary>The types still reading the store, each for its own reason.</summary>
     private static readonly HashSet<string> ExemptTypeNames =
     [
-        // Splats aura sources from their pools into the map's tint grid; the map-view work owns it.
-        nameof(MapTintGrid),
         // Its admin and rebuild paths read the staging world's store by design.
         "InspectionWindowContent",
         // Reports entity and pool counts for the F3 window.

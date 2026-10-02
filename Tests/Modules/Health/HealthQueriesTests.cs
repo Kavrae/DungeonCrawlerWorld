@@ -1,6 +1,10 @@
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
+using Game.World;
 
 namespace Tests.Modules.Health;
 
@@ -73,5 +77,69 @@ public sealed class HealthQueriesTests
         Assert.IsFalse(found);
         Assert.AreEqual(0f, current);
         Assert.AreEqual(0f, maximum);
+    }
+
+    private static MultiComponentPool<StatModifierComponent> ModifiersOf(BodyPartTestWorld world) =>
+        world.Components.GetMultiPool<StatModifierComponent>();
+
+    private static StatModifierComponent MaximumHealthMultiplier(float magnitude) =>
+        new(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: true, magnitude, FrameDeadline.Never, ActionSource.Admin);
+
+    [TestMethod]
+    public void HasMissingHealth_SimpleHealth_IsTrueOnlyBelowTheMaximum()
+    {
+        var simpleHealth = CreateSimplePool();
+        var world = CreateBodyParts();
+        simpleHealth.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        simpleHealth.Add(1, new SimpleHealthComponent(currentHealth: 99, maximumHealth: 100));
+
+        Assert.IsFalse(HealthQueries.HasMissingHealth(simpleHealth, world.BodyParts, ModifiersOf(world), 0));
+        Assert.IsTrue(HealthQueries.HasMissingHealth(simpleHealth, world.BodyParts, ModifiersOf(world), 1));
+    }
+
+    [TestMethod]
+    public void HasMissingHealth_SimpleHealthAtItsStoredMaximumWithARaisedMaximum_IsTrue()
+    {
+        var simpleHealth = CreateSimplePool();
+        var world = CreateBodyParts();
+        simpleHealth.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        ModifiersOf(world).Add(0, MaximumHealthMultiplier(0.5f));
+
+        Assert.IsTrue(HealthQueries.HasMissingHealth(simpleHealth, world.BodyParts, ModifiersOf(world), 0));
+    }
+
+    [TestMethod]
+    public void HasMissingHealth_BodyParts_IsTrueWhenAnyOnePartIsBelowItsMaximum()
+    {
+        var simpleHealth = CreateSimplePool();
+        var world = CreateBodyParts();
+        world.Give(0);
+
+        Assert.IsFalse(HealthQueries.HasMissingHealth(simpleHealth, world.BodyParts, ModifiersOf(world), 0));
+
+        world.SetHealth(0, 2, 14);
+
+        Assert.IsTrue(HealthQueries.HasMissingHealth(simpleHealth, world.BodyParts, ModifiersOf(world), 0));
+    }
+
+    [TestMethod]
+    public void HasMissingHealth_BodyPartsAtTheirStoredMaximumWithARaisedMaximum_IsTrue()
+    {
+        var simpleHealth = CreateSimplePool();
+        var world = CreateBodyParts();
+        world.Give(0);
+        world.SetHealth(0, 0, 10);
+        ModifiersOf(world).Add(0, MaximumHealthMultiplier(0.5f));
+
+        Assert.IsTrue(HealthQueries.HasMissingHealth(simpleHealth, world.BodyParts, ModifiersOf(world), 0));
+    }
+
+    [TestMethod]
+    public void HasMissingHealth_EntityHasNeither_IsFalse()
+    {
+        var simpleHealth = CreateSimplePool();
+        var world = CreateBodyParts();
+
+        Assert.IsFalse(HealthQueries.HasMissingHealth(simpleHealth, world.BodyParts, ModifiersOf(world), 0));
     }
 }

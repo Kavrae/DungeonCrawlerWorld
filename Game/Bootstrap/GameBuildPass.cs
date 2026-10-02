@@ -11,8 +11,8 @@ using Game.Modules.Core.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
-using Game.Modules.StatusEffectAura;
-using Game.Modules.StatusEffectAura.Components;
+using Game.Modules.Auras;
+using Game.Modules.Auras.Components;
 using Game.Spawning;
 using Game.Tags;
 using Game.Terrain;
@@ -128,6 +128,7 @@ public static class GameBuildPass
             gameModuleContext.Definitions.ResolveAll();
         }
 
+        AuraContentRegistration.RegisterAll(gameModuleContext);
         ContentTagValidation.EnsureDeclared(gameModuleContext);
 
         var registeredBehavior = configuredModules.RegisterBehavior();
@@ -155,7 +156,7 @@ public static class GameBuildPass
     private static void WireEntityDestruction(GameModuleContext context, EcsContext ecsContext, World.World world)
     {
         var componentManager = ecsContext.ComponentManager;
-        var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
+        var auraSources = componentManager.GetMultiPool<AuraSourceComponent>();
         var transforms = componentManager.GetDirectPool<TransformComponent>();
         var processingTierResolver = context.ProcessingTierResolver;
         var eventBus = ecsContext.EventBus;

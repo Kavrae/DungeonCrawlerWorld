@@ -1,9 +1,9 @@
 using Engine.Math;
+using Game.Effects;
 using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Effects;
-using Game.Modules.StatusEffects;
+using Game.Modules.Auras;
 using Game.Tags;
 using Microsoft.Xna.Framework;
 
@@ -16,16 +16,15 @@ namespace Game.Modules.Inventory.Definitions;
 /// ActionDefinition, so mastering this scroll builds and registers a fresh "Torch" spell at
 /// runtime instead of looking one up.
 ///
-/// Effect is AuraSourceGrant's timed mode granting StatusEffectType.Light -- a purely
-/// cosmetic map glow today (MapWindow renders it generically via MapTintGrid, the same pipeline
+/// Effect is AuraSourceGrant's timed mode granting the scroll's own light aura (Aura) -- a purely
+/// cosmetic map glow today (MapWindow draws it generically from AuraGlowView, the same pipeline
 /// Lava's own Burning glow already uses, with zero Torch-specific knowledge anywhere in
-/// Presentation). AuraAndGlowStrength: 8 matches this scroll's own base AreaSize (3) via
+/// Presentation). AuraStrength: 8 matches this scroll's own base AreaSize (3) via
 /// DistanceFalloff.MaxRadius(strength) = log2(strength), the same way Lava's Strength 8 produces
 /// a 3-tile range -- fixed, not itself re-derived from the scaled targeting AreaSize (only
 /// Duration is explicitly scaled here, same as every other scroll effect entry). Future TODO:
-/// reveal fog of war in its AOE and damage entities with a light weakness (vampires) -- register a
-/// real IStatusEffectAuraApplier for StatusEffectType.Light once that lands; nothing here needs to
-/// change to support it (see StatusEffectType.Light's own doc comment).
+/// reveal fog of war in its AOE and damage entities with a light weakness (vampires) -- give
+/// Aura effects once that lands.
 /// </summary>
 public static class ScrollOfTorch
 {
@@ -33,12 +32,15 @@ public static class ScrollOfTorch
     public static readonly Guid SpellId = new("7c3e9a1d-4b6f-4e2a-8d1c-000000000022");
 
     private const int BaseFramesRemaining = GameTiming.FramesPerSecond * 10; // 10s at Intelligence 1 (100%)
-    private const int AuraAndGlowStrength = 8; // -> 3-tile reach, matching this scroll's own base AreaSize
+    private const byte AuraStrength = 8; // -> 3-tile reach, matching this scroll's own base AreaSize
+
+    /// <summary>The torch's own aura: light, which only glows.</summary>
+    public static readonly AuraDefinition Aura = new(new Guid("d9f6a1c4-8b2e-4f3a-9c1d-000000000303"), "Light", Color.White);
 
     public static ItemDefinition Build() => new(
         Id, "Scroll of Torch", "Scroll", "t", Color.White,
         Tags: [GameTags.TargetingSelf],
-        Effects: [new ActionEffect([new AuraSourceGrant(StatusEffectType.Light, AuraAndGlowStrength, Color.White, DurationFrames: BaseFramesRemaining)])],
+        Effects: [new Effect([new AuraSourceGrant(Aura, AuraStrength, DurationFrames: BaseFramesRemaining)])],
         Description: "A scroll that marks an area with a bright, temporary light.",
         Summary: "Marks the target area with a temporary torch light.",
         GoldValue: 14,

@@ -1,0 +1,123 @@
+using Engine.ECS.Entities;
+using Game.Effects;
+using Game.Effects.Entries;
+using Engine.ECS.Systems;
+using Engine.ECS.Components;
+using Engine.Events;
+using Engine.Math;
+using Game.Modules.Actions;
+using Game.Modules.Health.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
+using Game.World;
+
+namespace Tests.Effects.Entries;
+
+[TestClass]
+public sealed class StatModifierGrantTests
+{
+    private const int SourceEntityId = 1;
+    private const int TargetEntityId = 2;
+
+    private static EffectContext BuildContext(ComponentManager componentManager, float durationScaleMultiplier) => TestActionEffects.Context(
+        SourceEntityId: SourceEntityId,
+        TargetEntityId: TargetEntityId,
+        Health: componentManager.GetPackedPool<SimpleHealthComponent>(),
+        EventBus: new EventBus(),
+        MathUtility: new MathUtility(),
+        ComponentManager: componentManager,
+        EntityKeys: new EntityKeys(),
+        ActivatorName: "Test",
+        ActivatorTags: [], Now: 0,
+        StatModifiers: componentManager.GetMultiPool<StatModifierComponent>(),
+        DurationScaleMultiplier: durationScaleMultiplier);
+
+    private static ComponentManager Build()
+    {
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
+        return componentManager;
+    }
+
+    private static StatModifierComponent GetGrantedModifier(ComponentManager componentManager)
+    {
+        var pool = componentManager.GetMultiPool<StatModifierComponent>();
+        var denseIndex = pool.GetFirstDenseIndex(TargetEntityId);
+        Assert.AreNotEqual(-1, denseIndex, "Expected a StatModifierComponent to have been granted.");
+        return pool.GetReadonlyByDenseIndex(denseIndex);
+    }
+
+    [TestMethod]
+    public void Apply_DurationScaleMultiplierAboveOne_ScalesDurationFrames()
+    {
+        var componentManager = Build();
+        var entry = new StatModifierGrant(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 1f, DurationFrames: 100);
+
+        entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 4.0f));
+
+        Assert.AreEqual(400u, GetGrantedModifier(componentManager).ExpiresAtFrame);
+    }
+
+    [TestMethod]
+    public void Apply_DefaultDurationScaleMultiplier_LeavesDurationFramesUnchanged()
+    {
+        var componentManager = Build();
+        var entry = new StatModifierGrant(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 1f, DurationFrames: 100);
+
+        entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
+
+        Assert.AreEqual(100u, GetGrantedModifier(componentManager).ExpiresAtFrame);
+    }
+
+    [TestMethod]
+    public void Apply_PermanentDuration_IsNeverScaled()
+    {
+        var componentManager = Build();
+        var entry = new StatModifierGrant(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 1f, DurationFrames: null);
+
+        entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 4.0f));
+
+        Assert.AreEqual(FrameDeadline.Never, GetGrantedModifier(componentManager).ExpiresAtFrame, "Permanent.");
+    }
+
+    [TestMethod]
+    public void Apply_DebuffGrantWithOutgoingDebuffDurationOnCaster_ScalesDuration()
+    {
+        var componentManager = Build();
+        componentManager.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
+            StatModifierTarget.OutgoingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: 1.0f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(SourceEntityId)));
+        var entry = new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, CanModify: false, Magnitude: 0.1f, DurationFrames: 100);
+
+        entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
+
+        Assert.AreEqual(200u, GetGrantedModifier(componentManager).ExpiresAtFrame, "100 * (1 + 1.0) = 200.");
+    }
+
+    [TestMethod]
+    public void Apply_DebuffGrantWithIncomingDebuffDurationOnTarget_ScalesDuration()
+    {
+        var componentManager = Build();
+        componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
+            StatModifierTarget.IncomingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId)));
+        var entry = new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, CanModify: false, Magnitude: 0.1f, DurationFrames: 100);
+
+        entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
+
+        Assert.AreEqual(50u, GetGrantedModifier(componentManager).ExpiresAtFrame, "100 * (1 - 0.5) = 50 -- debuffs against the target expire faster.");
+    }
+
+    [TestMethod]
+    public void Apply_BuffGrant_UsesBuffDurationTargetsNotDebuff()
+    {
+        var componentManager = Build();
+        // Scoped to Debuff -- must have zero effect on this Buff-polarity grant.
+        componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
+            StatModifierTarget.IncomingDebuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.9f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId)));
+        componentManager.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
+            StatModifierTarget.IncomingBuffDuration, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId)));
+        var entry = new StatModifierGrant(StatModifierTarget.OutgoingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff, CanModify: true, Magnitude: 1f, DurationFrames: 100);
+
+        entry.Apply(BuildContext(componentManager, durationScaleMultiplier: 1.0f));
+
+        Assert.AreEqual(150u, GetGrantedModifier(componentManager).ExpiresAtFrame, "100 * (1 + 0.5) = 150 -- the IncomingDebuffDuration modifier must not apply to a Buff grant.");
+    }
+}

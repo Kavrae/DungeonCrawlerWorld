@@ -3,8 +3,8 @@ using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Death.Systems;
-using Game.Modules.StatusEffectAura;
-using Game.Modules.StatusEffectAura.Components;
+using Game.Modules.Auras;
+using Game.Modules.Auras.Components;
 
 namespace Game.Modules.Death;
 
@@ -15,7 +15,7 @@ public sealed class DeathModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, StatusEffectAuraModule.ModuleId];
+    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, AurasModule.ModuleId];
 
     public void RegisterComponents(ComponentRegistration registration)
     {
@@ -33,7 +33,7 @@ public sealed class DeathModule : IGameModule
         var systemManager = registration.SystemManager;
         var componentManager = registration.ComponentManager;
 
-        var auraSources = componentManager.GetMultiPool<StatusEffectAuraSourceComponent>();
+        var auraSources = componentManager.GetMultiPool<AuraSourceComponent>();
 
         systemManager.Register(new DeathSystem(
             componentManager.GetPackedPool<DeadComponent>(),

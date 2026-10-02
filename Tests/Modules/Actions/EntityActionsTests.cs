@@ -1,4 +1,6 @@
 using Engine.ECS.Components;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.Math;
 using Engine.ECS.Components.Stores;
 using Game.Blueprints;
@@ -6,7 +8,6 @@ using Game.Spawning;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Effects;
 using Game.Modules.Class.Components;
 
 namespace Tests.Modules.Actions;
@@ -43,7 +44,7 @@ public sealed class EntityActionsTests
     }
 
     private static ActionDefinition ActionWithDamage(Guid actionId, string name, short flatDamage, ushort? cooldownFrames = null) =>
-        new(actionId, name, null, "#", default, [], [new ActionEffect([new DirectDamage(MinFlatDamage: flatDamage, MaxFlatDamage: flatDamage)])],
+        new(actionId, name, null, "#", default, [], [new Effect([new DirectDamage(MinFlatDamage: flatDamage, MaxFlatDamage: flatDamage)])],
             new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 0, CooldownFrames: cooldownFrames)));
 
     /// <summary>A race and a class, a trait that grants an action of its own, the creature they make, and a champion of it that overrides the racial attack.</summary>

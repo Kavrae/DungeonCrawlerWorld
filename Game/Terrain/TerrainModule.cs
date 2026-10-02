@@ -1,5 +1,6 @@
 using Engine.Modules;
 using Game.Modules;
+using Game.Modules.Burning;
 
 namespace Game.Terrain;
 
@@ -9,6 +10,8 @@ public sealed class TerrainModule : IGameModule
     public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000020");
 
     public Guid Id => ModuleId;
+
+    public IReadOnlyList<Guid> Requires { get; } = [BurningModule.ModuleId];
 
     public void Configure(GameModuleContext context) => BuiltInTerrain.RegisterAll(context.Terrain);
 

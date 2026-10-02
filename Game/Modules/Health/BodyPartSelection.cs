@@ -119,7 +119,7 @@ public static class BodyPartSelection
         return bestPartId;
     }
 
-    /// <summary>Picks entityId's highest-VerticalPosition non-disabled body part (e.g. the Head), falling back to the highest overall if every part is disabled. preferAlive: false skips straight to the disabled-inclusive pass, for a caller that needs a deterministic, disabled-status-independent pick instead (see BurningAuraApplier's own doc comment for why).</summary>
+    /// <summary>Picks entityId's highest-VerticalPosition non-disabled body part (e.g. the Head), falling back to the highest overall if every part is disabled. preferAlive: false skips straight to the disabled-inclusive pass, for a caller that needs a deterministic, disabled-status-independent pick instead (see BurningApplier's own doc comment for why).</summary>
     public static int PickTopmost(EntityBodyParts bodyParts, int entityId, bool preferAlive = true)
     {
         if (preferAlive)
@@ -134,7 +134,7 @@ public static class BodyPartSelection
         return PickExtreme(bodyParts, entityId, preferHigher: true, aliveOnly: false);
     }
 
-    /// <summary>Picks entityId's lowest-VerticalPosition non-disabled body part (e.g. a Foot), falling back to the lowest overall if every part is disabled. preferAlive: false skips straight to the disabled-inclusive pass, for a caller that needs a deterministic, disabled-status-independent pick instead (see BurningAuraApplier's own doc comment for why).</summary>
+    /// <summary>Picks entityId's lowest-VerticalPosition non-disabled body part (e.g. a Foot), falling back to the lowest overall if every part is disabled. preferAlive: false skips straight to the disabled-inclusive pass, for a caller that needs a deterministic, disabled-status-independent pick instead (see BurningApplier's own doc comment for why).</summary>
     public static int PickBottommost(EntityBodyParts bodyParts, int entityId, bool preferAlive = true)
     {
         if (preferAlive)
@@ -172,7 +172,7 @@ public static class BodyPartSelection
         return bestPartId;
     }
 
-    /// <summary>Picks entityId's first non-disabled body part of the requested type, falling back to a disabled part of that type if no alive one exists. preferAlive: false returns the first match outright regardless of disabled status, for a caller that needs a deterministic, disabled-status-independent pick instead (see BurningAuraApplier's own doc comment for why).</summary>
+    /// <summary>Picks entityId's first non-disabled body part of the requested type, falling back to a disabled part of that type if no alive one exists. preferAlive: false returns the first match outright regardless of disabled status, for a caller that needs a deterministic, disabled-status-independent pick instead (see BurningApplier's own doc comment for why).</summary>
     /// <remarks>Returns -1 if entityId has no body part of that type at all -- the expected "no Foot on this race" outcome, not an error case.</remarks>
     public static int PickByType(EntityBodyParts bodyParts, int entityId, BodyPartType type, bool preferAlive = true)
     {
@@ -207,11 +207,11 @@ public static class BodyPartSelection
     /// <remarks>
     /// preferAlive: false makes the whole resolution deterministic and disabled-status-independent
     /// -- the same rule always maps to the same part, whether or not that part is currently
-    /// disabled. BurningAuraApplier is the one caller that needs this: it must keep re-resolving to
+    /// disabled. BurningApplier is the one caller that needs this: it must keep re-resolving to
     /// the *same* part on every aura re-grant tick so it keeps topping off the one existing timer
     /// instead of drifting to a different part once the original target hits 0 (see its own doc
     /// comment) -- reusing the ordinary alive-preferring pick (the default here, used by every other
-    /// caller -- ComplexHealthDamage/ContactDamageSystem's own fresh, one-off hit resolutions, which
+    /// caller -- ComplexHealthDamage/TerrainContactSystem's own fresh, one-off hit resolutions, which
     /// *should* keep steering away from an already-destroyed part) would silently break that
     /// stability the instant the target part became disabled.
     /// </remarks>

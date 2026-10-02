@@ -12,7 +12,7 @@ public sealed class ResolvedBlueprint
 {
     private readonly ActionGrant[] _actions;
 
-    internal ResolvedBlueprint(BlueprintDefinition definition, ushort[] buildOrder, ushort[] races, ushort[] classes, ActionGrant[] actions, NonBlockingKind[] nonBlocking, EntityAppearance appearance, MapLayer layer, Vector2Byte size, LootboxReward? lootbox)
+    internal ResolvedBlueprint(BlueprintDefinition definition, ushort[] buildOrder, ushort[] races, ushort[] classes, ActionGrant[] actions, AuraGrant[] auras, NonBlockingKind[] nonBlocking, EntityAppearance appearance, MapLayer layer, Vector2Byte size, LootboxReward? lootbox)
     {
         Lootbox = lootbox;
         Layer = layer;
@@ -22,6 +22,7 @@ public sealed class ResolvedBlueprint
         Races = races;
         Classes = classes;
         _actions = actions;
+        Auras = auras;
         NonBlocking = nonBlocking;
         Appearance = appearance;
     }
@@ -39,6 +40,9 @@ public sealed class ResolvedBlueprint
 
     /// <summary>Every action its definitions grant, one per action: a later definition's grant of an action replaces an earlier one's, so a composite can override what a race gives.</summary>
     public IReadOnlyList<ActionGrant> Actions => _actions;
+
+    /// <summary>Every aura its definitions grant, one per aura: a later definition's grant of an aura replaces an earlier one's.</summary>
+    public IReadOnlyList<AuraGrant> Auras { get; }
 
     /// <summary>Each occupancy kind a part declares, in build order.</summary>
     public IReadOnlyList<NonBlockingKind> NonBlocking { get; }

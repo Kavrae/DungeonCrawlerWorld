@@ -15,9 +15,12 @@ public enum ActionSourceKind : byte
 
     /// <summary>A kind of terrain (lava) rather than any one entity -- see TerrainTypeId.</summary>
     Terrain,
+
+    /// <summary>A kind of aura rather than any one of its sources -- see AuraId. The aura field holds a total per cell, so which source contributed isn't known.</summary>
+    Aura,
 }
 
-/// <summary>What caused an effect: an entity, a kind of terrain, an admin action or AI.</summary>
+/// <summary>What caused an effect: an entity, a kind of terrain, a kind of aura, an admin action or AI.</summary>
 /// <remarks>
 /// An entity source holds the entity's stable key and a handle to who it was when the source was
 /// created, never its runtime id. Anything that records what caused something keeps one -- a status
@@ -59,11 +62,14 @@ public readonly record struct ActionSource
     /// <summary>The source entity's stable key for Kind Entity; None otherwise.</summary>
     public EntityKey Key => new(_packed & KeyMask);
 
-    /// <summary>The identity handle for Kind Entity; the terrain type id for Kind Terrain; 0 otherwise.</summary>
+    /// <summary>The identity handle for Kind Entity; the terrain type id for Kind Terrain; the aura id for Kind Aura; 0 otherwise.</summary>
     private int Detail => (int)((_packed >> KeyBits) & DetailMask);
 
     /// <summary>The terrain type for Kind Terrain; 0 otherwise.</summary>
     public ushort TerrainTypeId => Kind == ActionSourceKind.Terrain ? (ushort)Detail : (ushort)0;
+
+    /// <summary>The aura's session-local id for Kind Aura; 0 otherwise.</summary>
+    public byte AuraId => Kind == ActionSourceKind.Aura ? (byte)Detail : (byte)0;
 
     /// <summary>Who the source entity was when this source was created, for Kind Entity; the unknown identity otherwise.</summary>
     public EntityIdentity Identity => EntityIdentities.Get(Kind == ActionSourceKind.Entity ? Detail : EntityIdentities.UnknownHandle);
@@ -87,6 +93,9 @@ public readonly record struct ActionSource
 
     public static ActionSource FromTerrain(ushort terrainTypeId) => new(ActionSourceKind.Terrain, EntityKey.None, terrainTypeId);
 
+    /// <param name="auraId">The aura's session-local id (AuraCatalog).</param>
+    public static ActionSource FromAura(byte auraId) => new(ActionSourceKind.Aura, EntityKey.None, auraId);
+
     public static readonly ActionSource Admin = new(ActionSourceKind.Admin, EntityKey.None, 0);
     public static readonly ActionSource AI = new(ActionSourceKind.AI, EntityKey.None, 0);
 
@@ -97,6 +106,7 @@ public readonly record struct ActionSource
     {
         ActionSourceKind.Entity => $"{Identity.DisplayName} ({Key})",
         ActionSourceKind.Terrain => $"Terrain#{TerrainTypeId}",
+        ActionSourceKind.Aura => $"Aura#{AuraId}",
         _ => Kind.ToString(),
     };
 }

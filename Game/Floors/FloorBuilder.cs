@@ -66,11 +66,12 @@ public static class FloorBuilder
     /// <summary>Fills the floor's loaded neighborhoods: terrain, walls and everything spawned on them.</summary>
     /// <remarks>The tier resolver the factory was built with must already have its reference position set to <see cref="PlayerSpawnOrigin"/>, so every entity is born with its processing tier as its first component instead of being tiered and then migrated.</remarks>
     /// <param name="terrain">The session's terrain definitions -- population writes cells of them.</param>
+    /// <param name="auras">The session's aura definitions -- a neighborhood's plan lists the terrain cells that radiate one.</param>
     /// <param name="definitions">The session's blueprints -- population spawns them.</param>
     /// <param name="factory">The one spawn path (see EntityFactory), which carries the tier resolver, the skeletons, the move buffer and the crawler numbers population used to take one by one.</param>
     /// <param name="records">The session's neighborhood records: each neighborhood the map covers is assigned one if it has none, and generated from it.</param>
-    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, NeighborhoodRecords records, EntityFactory factory, Terrain.TerrainRegistry terrain, Blueprints.BlueprintRegistry definitions) =>
-        new TestMapBuilder(ecsContext.EntityManager, factory, terrain, definitions).Populate(world, records);
+    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, NeighborhoodRecords records, EntityFactory factory, Terrain.TerrainRegistry terrain, Modules.Auras.AuraCatalog auras, Blueprints.BlueprintRegistry definitions) =>
+        new TestMapBuilder(ecsContext.EntityManager, factory, terrain, auras, definitions).Populate(world, records);
 
     /// <summary>
     /// Where the player is aimed at spawning -- the actual cell is the nearest free Ground cell to
@@ -171,7 +172,7 @@ public static class FloorBuilder
         }
 
         // The spawn move itself is EntityFactory's (see Spawn), so hazard/aura detection
-        // (ContactDamageSystem, StatusEffectAuraSystem) sees the player immediately if spawned
+        // (TerrainContactSystem, AuraSystem) sees the player immediately if spawned
         // onto/next to one, rather than only on their first real move. Published on the bus here as
         // well, purely so PlayerActivityLog's existing spawn-time log line is preserved unchanged.
         var size = ecsContext.ComponentManager.GetDirectPool<TransformComponent>().GetReadonly(entityId).Size;

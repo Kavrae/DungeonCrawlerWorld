@@ -14,7 +14,7 @@ public static class StatModifierMath
     /// <param name="entityId">The ID of the entity.</param>
     /// <param name="target">The target stat.</param>
     /// <param name="baseValue">The base value of the stat.</param>
-    /// <param name="activeTags">The current activation's own Tags (e.g. ActionEffectContext.ActivatorTags) -- a modifier with a ConditionTag only contributes when activeTags has it (parent-aware); empty (the default) means only unconditional modifiers apply.</param>
+    /// <param name="activeTags">The current activation's own Tags (e.g. EffectContext.ActivatorTags) -- a modifier with a ConditionTag only contributes when activeTags has it (parent-aware); empty (the default) means only unconditional modifiers apply.</param>
     /// <returns>The effective value of the stat.</returns>
     public static float GetEffectiveValue(MultiComponentPool<StatModifierComponent> pool, int entityId, StatModifierTarget target, float baseValue, GameplayTagSet activeTags = default)
     {

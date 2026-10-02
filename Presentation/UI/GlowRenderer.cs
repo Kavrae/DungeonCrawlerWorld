@@ -19,7 +19,7 @@ public enum GlowMode
 /// <summary>
 /// Draws a glow around or within a rectangle -- shared by any Window that opts in via SetGlow.
 /// No shader/gradient support exists in this renderer stack (SpriteBatchRenderer's
-/// unitRectangle is a flat-color quad, same constraint BorderRenderer/MapTintGrid work
+/// unitRectangle is a flat-color quad, same constraint BorderRenderer and the map glow overlay work
 /// within), so InteriorFade/ExteriorFade approximate the fade with FadeRingCount concentric
 /// 1px rings, reusing BorderThickness.GetEdgeRectangles the same way BorderRenderer does, against
 /// an inset (InteriorFade) or inflated (ExteriorFade) rectangle.

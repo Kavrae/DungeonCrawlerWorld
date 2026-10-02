@@ -1,11 +1,12 @@
 using Engine.Tags;
+using Game.Effects;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Actions;
 
 /// <summary>
 /// Shared, catalog-level content shape for anything with a name/glyph/tags that produces
-/// ActionEffects -- ItemDefinition (Game.Modules.Inventory) and ActionDefinition both derive from
+/// Effects -- ItemDefinition (Game.Modules.Inventory) and ActionDefinition both derive from
 /// this instead of duplicating the same six presentation/effect fields. SpriteName/GlyphColor
 /// follow the sprite-first, glyph-as-fallback convention (see GlyphComponent's own doc comment).
 /// Summary is a short, concrete statement of exact effect meant to be read at a glance in a small
@@ -27,6 +28,6 @@ public abstract record ActivatableDefinition(
     string Glyph,
     Color GlyphColor,
     GameplayTagSet Tags,
-    IReadOnlyList<ActionEffect> Effects,
+    IReadOnlyList<Effect> Effects,
     string Description = "",
     string Summary = "");

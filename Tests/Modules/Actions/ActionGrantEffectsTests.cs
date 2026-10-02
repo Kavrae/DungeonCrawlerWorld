@@ -1,10 +1,11 @@
 using Engine.ECS.Components;
+using Game.Effects;
+using Game.Effects.Entries;
 using Engine.Math;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Effects;
 using Game.Modules.Mana;
 using Game.Modules.Mana.Components;
 using Game.Modules.StatModifiers;
@@ -18,7 +19,7 @@ public sealed class ActionGrantEffectsTests
 
     private static readonly ActionDefinition TestActionDefinition = new(
         ActionId, "Test Action", null, "#", default, [],
-        Effects: [new ActionEffect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
+        Effects: [new Effect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
         Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
 
     private static ComponentManager CreateRegisteredManager()

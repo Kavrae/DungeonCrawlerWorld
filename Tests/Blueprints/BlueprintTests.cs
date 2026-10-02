@@ -1,4 +1,5 @@
 using Engine.ECS.Entities;
+using Game.Effects.Entries;
 using Engine.ECS.Components;
 using Engine.ECS.Context;
 using Engine.Events;
@@ -55,7 +56,7 @@ public sealed class BlueprintTests
 {
     /// <summary>Reads the flat damage a grant's Override pins its DirectDamage entry to (Min == Max, same convention ActionOverrideEffects.OverrideFlatDamage produces) -- null when the instance carries no Override at all.</summary>
     private static short? FlatDamageOf(ActionDefinition action) =>
-        action.Effects.SelectMany(effect => effect.Entries).OfType<Game.Modules.Actions.Effects.DirectDamage>().First().MinFlatDamage;
+        action.Effects.SelectMany(effect => effect.Entries).OfType<Game.Effects.Entries.DirectDamage>().First().MinFlatDamage;
 
     private static EcsContext BuildEcsContext() =>
         BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1))).EcsContext;
@@ -339,7 +340,7 @@ public sealed class BlueprintTests
         // Starting items: 5 Health Potions, 5 Mana Potions, 3 Hotkey Expansion Potions, 5 Volatile
         // Concoctions (damage), 5 Toxic Flasks (Poison+Burning), 5 Toxic Idols (Poison aura toggle),
         // 5 Scrolls of Healing, 5 Scrolls of Torch, 5 Vials of Warding (Burning+Poison immunity),
-        // 5 Draughts of Insulation (Burning+Poison resistance) -- see the ActionEffect/
+        // 5 Draughts of Insulation (Burning+Poison resistance) -- see the Effect/
         // ActionActivator plan's concrete test content. Plus a batch of 10 Wands of Fireball and
         // one TEMPORARY divergent Adjacent-targeting test wand -- two separate stacks sharing
         // WandOfFireball.Id, since the divergent one carries its own Override -- see the per-slot

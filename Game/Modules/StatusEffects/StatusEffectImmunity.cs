@@ -5,7 +5,7 @@ using Game.World;
 
 namespace Game.Modules.StatusEffects;
 
-/// <summary>The one chokepoint "is entityId currently immune to effectType" -- every ApplyStack implementation (PoisonEffects, BurningEffects, BurningAuraApplier's body-part-scoped path, ParalysisEffects) checks this before adding a stack.</summary>
+/// <summary>The one chokepoint "is entityId currently immune to effectType" -- every ApplyStack implementation (PoisonEffects, BurningEffects, BurningApplier's body-part-scoped path, ParalysisEffects) checks this before adding a stack.</summary>
 public static class StatusEffectImmunity
 {
     /// <summary>
@@ -13,11 +13,12 @@ public static class StatusEffectImmunity
     /// when this call actually blocks something, and only when the player is involved as either entityId or source, mirroring
     /// HealthHeal.PublishHealEvent's identical shape.
     /// </summary>
-    public static bool IsImmune(ComponentManager componentManager, int entityId, StatusEffectType effectType, ActionSource source, EventBus eventBus, IPlayerQuery playerQuery)
+    /// <param name="announcesRefusal">False to leave the blocked event unpublished: the caller already reported this refusal.</param>
+    public static bool IsImmune(ComponentManager componentManager, int entityId, StatusEffectType effectType, ActionSource source, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true)
     {
         var immune = HasImmunity(componentManager, entityId, effectType);
 
-        if (immune)
+        if (immune && announcesRefusal)
         {
             PublishBlockedEvent(eventBus, playerQuery, entityId, effectType, source);
         }

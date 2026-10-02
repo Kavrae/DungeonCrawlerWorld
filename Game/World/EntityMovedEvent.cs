@@ -12,7 +12,7 @@ namespace Game.World;
 /// by anything that spawns an entity directly via World.PlaceEntityOnMap, immediately after
 /// placing it -- e.g. FloorBuilder.CreatePlayer. WorldEventSync's handler tolerates Old ==
 /// New harmlessly (clears then immediately re-sets the same cell). Without this, an entity
-/// spawned directly onto/next to a hazard (ContactDamageSystem/StatusEffectAuraSystem, both
+/// spawned directly onto/next to a hazard (TerrainContactSystem/AuraSystem, both
 /// EntityMovedEvent-driven) would stay undetected until it next actually moved. Any future spawn
 /// path (a monster spawner, once one exists) must do the same.
 /// </summary>

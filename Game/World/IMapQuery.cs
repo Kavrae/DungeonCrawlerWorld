@@ -10,6 +10,10 @@ public interface IMapQuery
     /// <summary>The tiles the map covers.</summary>
     MapBounds Bounds { get; }
 
+    /// <summary>Whether Bounds is a fixed, declared rectangle rather than one that follows whichever neighborhoods are loaded.</summary>
+    /// <remarks>Anything that must answer the same for a position before and after the map's window moves can clip to Bounds only when this is true.</remarks>
+    bool IsBounded => true;
+
     /// <summary>Checks if a position is on the map.</summary>
     /// <param name="position">The position to check.</param>
     /// <returns>True if the position is on the map, false otherwise.</returns>
