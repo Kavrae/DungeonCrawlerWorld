@@ -63,6 +63,27 @@ public sealed class HealthHealTests
         TestHealth.Heal(pool, 0, 0.1f, bodyParts: bodyParts, now: 0);
     }
 
+    /// <summary>Apply says whether it healed, so a caller that needs to know doesn't check for missing health a second time.</summary>
+    [TestMethod]
+    public void Apply_ReturnsWhetherTheTargetHadHealthToRestore()
+    {
+        var pool = CreatePool();
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
+        pool.Add(1, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        var damagedParts = BodyPartTestWorld.WithParts(2, ("Torso", BodyPartType.Torso, 50, 100, true)).BodyParts;
+        var fullParts = BodyPartTestWorld.WithParts(3, ("Torso", BodyPartType.Torso, 100, 100, true)).BodyParts;
+
+        Assert.IsTrue(Heal(pool, 0, EmptyPools.BodyParts()));
+        Assert.IsFalse(Heal(pool, 1, EmptyPools.BodyParts()));
+        Assert.IsTrue(Heal(pool, 2, damagedParts));
+        Assert.IsFalse(Heal(pool, 3, fullParts));
+        Assert.IsFalse(Heal(pool, 4, EmptyPools.BodyParts()), "An entity with no health at all.");
+
+        static bool Heal(PackedComponentPool<SimpleHealthComponent> health, int entityId, EntityBodyParts bodyParts) =>
+            HealthHeal.Apply(health, entityId, percentOfMaxHealth: 0.1f, now: 0, EmptyPools.Multi<Game.Modules.StatModifiers.Components.StatModifierComponent>(), bodyParts,
+                new EventBus(), TestPlayerQuery.NoPlayer, EmptyPools.FloatingTextFeed(), HealCategory.Direct);
+    }
+
     [TestMethod]
     public void Apply_SimpleTargetAtFullHealth_PublishesNothing()
     {

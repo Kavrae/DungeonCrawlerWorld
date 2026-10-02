@@ -36,7 +36,8 @@ namespace Game.Modules.Health;
 /// </remarks>
 public static class HealthHeal
 {
-    public static void Apply(
+    /// <returns>Whether entityId had health to restore, so the heal was applied; false leaves everything untouched.</returns>
+    public static bool Apply(
         PackedComponentPool<SimpleHealthComponent> health,
         int entityId,
         float percentOfMaxHealth,
@@ -57,7 +58,7 @@ public static class HealthHeal
     {
         if (!HealthQueries.HasMissingHealth(health, bodyParts, statModifiers, entityId))
         {
-            return;
+            return false;
         }
 
         var healthBefore = 0f;
@@ -70,6 +71,8 @@ public static class HealthHeal
         {
             PublishHealed(floatingTextFeed, entityId, healthBefore, healthAfter, healCategory);
         }
+
+        return true;
     }
 
     /// <summary>Publishes the floating text for the health entityId gained, as the HUD displays it.</summary>

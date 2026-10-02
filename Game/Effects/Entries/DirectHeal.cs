@@ -28,7 +28,8 @@ namespace Game.Effects.Entries;
 /// see ComplexHealthHeal's own doc comment for why) so every existing potion/scroll keeps its
 /// "heals everyone" behavior unless it opts into SingleTarget/LowestPercentage.
 /// FlatAmount is multiplied by context.Magnitude (an aura's strength at the target; 1 otherwise).
-/// A target with nothing to restore is left alone and reported as NoEffect.
+/// A target with nothing to restore is left alone and reported as NoEffect -- HealthHeal.Apply's own
+/// answer, so the check is made once.
 /// </summary>
 public sealed record DirectHeal(
     float PercentOfMaxHealth,
@@ -45,7 +46,7 @@ public sealed record DirectHeal(
         }
 
         var baseHeal = FlatAmount * context.Magnitude + percentageBaseHeal;
-        if (baseHeal <= 0 || !HealthQueries.HasMissingHealth(context.Services.Health, context.Services.BodyParts, context.Services.StatModifiers, context.TargetEntityId))
+        if (baseHeal <= 0)
         {
             return EffectOutcome.NoEffect;
         }
@@ -55,7 +56,7 @@ public sealed record DirectHeal(
             : baseHeal;
 
         var targetRule = BodyPart.ResolveRule(in context);
-        HealthHeal.Apply(context.Services.Health, context.TargetEntityId, percentOfMaxHealth: 0f, context.Now, context.Services.StatModifiers, context.Services.BodyParts, flatAmount: healWithAbilityScoreScaling, sourceEntityId: context.SourceEntityId, activatorTags: context.ActivatorTags, targetMode: BodyPartTargetMode, targetRule: targetRule, mathUtility: context.Services.MathUtility, eventBus: context.Services.EventBus, playerQuery: context.Services.PlayerQuery, floatingTextFeed: context.Services.FloatingTextFeed, healCategory: HealCategory.Direct, healType: context.ActivatorName);
-        return EffectOutcome.Applied;
+        var healed = HealthHeal.Apply(context.Services.Health, context.TargetEntityId, percentOfMaxHealth: 0f, context.Now, context.Services.StatModifiers, context.Services.BodyParts, flatAmount: healWithAbilityScoreScaling, sourceEntityId: context.SourceEntityId, activatorTags: context.ActivatorTags, targetMode: BodyPartTargetMode, targetRule: targetRule, mathUtility: context.Services.MathUtility, eventBus: context.Services.EventBus, playerQuery: context.Services.PlayerQuery, floatingTextFeed: context.Services.FloatingTextFeed, healCategory: HealCategory.Direct, healType: context.ActivatorName);
+        return healed ? EffectOutcome.Applied : EffectOutcome.NoEffect;
     }
 }

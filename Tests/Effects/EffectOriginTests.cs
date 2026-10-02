@@ -291,6 +291,64 @@ public sealed class EffectOriginTests
     }
 
     [TestMethod]
+    public void DirectHeal_BodyPartTargetWithADamagedPart_IsAppliedAndHealsIt()
+    {
+        var fixture = WithHeadTorsoAndFeet();
+        fixture.BodyParts!.SetCurrentHealth(TargetEntityId, TorsoPartId, 20);
+
+        var outcome = new DirectHeal(PercentOfMaxHealth: 0f, FlatAmount: 5f, BodyPartTargetMode: BodyPartTargetMode.LowestPercentage).Apply(fixture.Sourceless());
+
+        Assert.AreEqual(EffectOutcome.Applied, outcome);
+        Assert.AreEqual(25, PartHealth(fixture, TorsoPartId));
+    }
+
+    [TestMethod]
+    public void DirectHeal_BodyPartTargetWithEveryPartFull_IsNoEffect()
+    {
+        var fixture = WithHeadTorsoAndFeet();
+
+        Assert.AreEqual(EffectOutcome.NoEffect, new DirectHeal(PercentOfMaxHealth: 0.5f).Apply(fixture.Sourceless()));
+    }
+
+    /// <summary>A cure ends the effect wherever it is held: a burn on one body part, with nothing on the entity as a whole, is still a burn.</summary>
+    [TestMethod]
+    public void StatusEffectRemoval_BurnHeldOnlyOnABodyPart_RemovesItAndIsApplied()
+    {
+        var fixture = WithHeadTorsoAndFeet();
+        new StatusEffectGrant(StatusEffectType.Burning, StackCount: 3, BodyPart: BodyPartTargeting.Of(BodyPartType.Head)).Apply(fixture.Sourceless());
+        Assert.AreEqual(3, PartBurningStacks(fixture, HeadPartId), "Precondition: the burn is on the head only.");
+        Assert.AreEqual(0, fixture.BurningStacks);
+
+        var outcome = new StatusEffectRemoval(StatusEffectType.Burning).Apply(fixture.Sourceless());
+
+        Assert.AreEqual(EffectOutcome.Applied, outcome);
+        Assert.AreEqual(0, PartBurningStacks(fixture, HeadPartId));
+    }
+
+    [TestMethod]
+    public void StatusEffectRemoval_BurnOnTheEntityAndOnParts_RemovesAllOfIt()
+    {
+        var fixture = WithHeadTorsoAndFeet();
+        new StatusEffectGrant(StatusEffectType.Burning, StackCount: 3, BodyPart: BodyPartTargeting.Of(BodyPartType.Head)).Apply(fixture.Sourceless());
+        new StatusEffectGrant(StatusEffectType.Burning, StackCount: 2).Apply(fixture.Sourceless());
+
+        var outcome = new StatusEffectRemoval(StatusEffectType.Burning).Apply(fixture.Sourceless());
+
+        Assert.AreEqual(EffectOutcome.Applied, outcome);
+        Assert.AreEqual(0, fixture.BurningStacks);
+        Assert.IsFalse(fixture.ComponentManager.GetMultiPool<BodyPartBurningTimerComponent>().Has(TargetEntityId));
+    }
+
+    [TestMethod]
+    public void StatusEffectRemoval_TargetWithoutTheEffect_IsNoEffect()
+    {
+        var fixture = WithHeadTorsoAndFeet();
+
+        Assert.AreEqual(EffectOutcome.NoEffect, new StatusEffectRemoval(StatusEffectType.Burning).Apply(fixture.Sourceless()));
+        Assert.AreEqual(EffectOutcome.NoEffect, new StatusEffectRemoval(StatusEffectType.Paralysis).Apply(fixture.Sourceless()), "No applier is registered for Paralysis here.");
+    }
+
+    [TestMethod]
     public void StatusEffectGrant_TopUpTo_RaisesStacksToTheScaledCountAndNoFurther()
     {
         var fixture = WithSimpleHealth();

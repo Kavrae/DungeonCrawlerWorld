@@ -6,18 +6,16 @@ namespace Game.Effects.Entries;
 /// <remarks>
 /// Goes through the same StatusEffectApplierRegistry plugin StatusEffectGrant adds stacks through,
 /// so Actions never reaches into an effect's own components. A type with no registered applier is
-/// silently skipped, the same "not yet supported" treatment StatusEffectGrant gives one.
+/// silently skipped, the same "not yet supported" treatment StatusEffectGrant gives one. Whether the
+/// target had the effect at all is the applier's answer, since only it knows everywhere the effect
+/// can be held -- a burn on one body part is still a burn.
 /// </remarks>
 public sealed record StatusEffectRemoval(StatusEffectType Type) : IEffectEntry
 {
     public EffectOutcome Apply(in EffectContext context)
     {
-        if (!context.Services.StatusEffectAppliers.TryGet(Type, out var applier) || applier.GetCurrentStackCount(context.TargetEntityId) == 0)
-        {
-            return EffectOutcome.NoEffect;
-        }
-
-        applier.RemoveAllStacks(context.TargetEntityId);
-        return EffectOutcome.Applied;
+        return context.Services.StatusEffectAppliers.TryGet(Type, out var applier) && applier.RemoveAllStacks(context.TargetEntityId)
+            ? EffectOutcome.Applied
+            : EffectOutcome.NoEffect;
     }
 }

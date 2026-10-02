@@ -45,10 +45,11 @@ public sealed class BurningApplier(ComponentManager componentManager, BlueprintR
             : BurningEffects.ApplyStacks(componentManager, entityId, count, source, now, eventBus, playerQuery, announcesRefusal);
 
     /// <summary>Puts out every burn on entityId: the entity-scoped one and every body part's.</summary>
-    public void RemoveAllStacks(int entityId)
+    public bool RemoveAllStacks(int entityId)
     {
-        _entityTimers.Remove(entityId);
-        _bodyPartTimers.Remove(entityId);
+        var removedFromEntity = _entityTimers.Remove(entityId);
+        var removedFromBodyParts = _bodyPartTimers.Remove(entityId);
+        return removedFromEntity || removedFromBodyParts;
     }
 
     /// <summary>Adds up to count Burning stacks to entityId's partId and returns how many landed -- BurningEffects.ApplyStacks' own shape (immunity, capped at MaxStacks), scoped to the one part instead of the whole entity.</summary>

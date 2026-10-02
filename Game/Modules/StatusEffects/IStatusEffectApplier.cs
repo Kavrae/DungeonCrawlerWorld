@@ -30,6 +30,6 @@ public interface IStatusEffectApplier
     /// <param name="bodyPartId">The one body part to hold the stacks on, or null for the entity as a whole. Named by whatever grants the stacks, never worked out here. An effect that isn't held per body part ignores it.</param>
     int ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null);
 
-    /// <summary>Removes every stack of EffectType from entityId, ending the effect; a no-op when it has none.</summary>
-    void RemoveAllStacks(int entityId);
+    /// <summary>Removes every stack of EffectType from entityId, ending the effect wherever it is held -- on the entity as a whole and on every body part. Returns whether there was anything to remove.</summary>
+    bool RemoveAllStacks(int entityId);
 }

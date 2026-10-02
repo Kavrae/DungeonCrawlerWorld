@@ -40,7 +40,7 @@ public sealed class StatusEffectGrantFloatingTextTests
             return _stacksByEntityId[entityId] - stacksBefore;
         }
 
-        public void RemoveAllStacks(int entityId) => _stacksByEntityId.Remove(entityId);
+        public bool RemoveAllStacks(int entityId) => _stacksByEntityId.Remove(entityId);
     }
 
     private static (ComponentManager ComponentManager, TestFloatingText FloatingText, Game.Effects.EffectContext Context) Build(int maxStacks = 10)

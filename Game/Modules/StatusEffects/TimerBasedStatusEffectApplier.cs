@@ -29,5 +29,5 @@ public sealed class TimerBasedStatusEffectApplier<T>(StatusEffectType effectType
         applyStacks(entityId, count, source, now, announcesRefusal);
 
     /// <remarks>Removing the timer component is the whole effect: its stack count lives on it, and the effect's timer wheel drops a removed timer's scheduled tick on its own.</remarks>
-    public void RemoveAllStacks(int entityId) => timers.Remove(entityId);
+    public bool RemoveAllStacks(int entityId) => timers.Remove(entityId);
 }

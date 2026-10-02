@@ -176,9 +176,30 @@ public sealed class BurningApplierTests
         applier.ApplyStacks(EntityId, count: 2, ActionSource.Admin, now: 0, bodyPartId: HeadPartId);
         applier.ApplyStacks(EntityId, count: 1, ActionSource.Admin, now: 0);
 
-        applier.RemoveAllStacks(EntityId);
+        Assert.IsTrue(applier.RemoveAllStacks(EntityId));
 
         Assert.IsFalse(componentManager.GetPackedPool<BurningTimerComponent>().Has(EntityId));
         Assert.IsFalse(componentManager.GetMultiPool<BodyPartBurningTimerComponent>().Has(EntityId));
+    }
+
+    [TestMethod]
+    public void RemoveAllStacks_BurnHeldOnlyOnABodyPart_RemovesItAndSaysSo()
+    {
+        var componentManager = CreateComponentManager();
+        var applier = CreateApplier(componentManager, AddComplexBodyParts(componentManager));
+        applier.ApplyStacks(EntityId, count: 4, ActionSource.Admin, now: 0, bodyPartId: FootPartId);
+
+        Assert.IsTrue(applier.RemoveAllStacks(EntityId));
+
+        Assert.IsFalse(componentManager.GetMultiPool<BodyPartBurningTimerComponent>().Has(EntityId));
+    }
+
+    [TestMethod]
+    public void RemoveAllStacks_NothingBurning_SaysThereWasNothingToRemove()
+    {
+        var componentManager = CreateComponentManager();
+        var applier = CreateApplier(componentManager, AddComplexBodyParts(componentManager));
+
+        Assert.IsFalse(applier.RemoveAllStacks(EntityId));
     }
 }
