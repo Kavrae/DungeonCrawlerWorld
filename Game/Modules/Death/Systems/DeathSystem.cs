@@ -80,6 +80,7 @@ public sealed class DeathSystem : ISystem
 
         _deadEntities.Add(died.EntityId, new DeadComponent(died.Source, _currentFrame));
 
-        AuraSourceEffects.RemoveAll(_auraSources, _eventBus, died.EntityId);
+        // A source a toggle holds stays: ending it is the toggle's own decision (a lit item keeps working on a corpse).
+        AuraSourceEffects.RemoveUnheld(_auraSources, _eventBus, died.EntityId);
     }
 }

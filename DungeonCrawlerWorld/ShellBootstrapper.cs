@@ -66,7 +66,7 @@ public static class ShellBootstrapper
             views.HotkeyBindingView,
             views.InventoryView,
             views.ActionStateView,
-            views.AbilityScoreView,
+            views.TargetingView,
             commands.PlayerCommands,
             gameSession.SimulationClock);
         var playerMovementController = new PlayerMovementController(commands.PlayerCommands);
@@ -100,7 +100,8 @@ public static class ShellBootstrapper
             itemWindows.ReleaseEntity(entityId);
         };
 
-        var inputController = new UiInputController(uiLayers, screenSize, pointerState, views.ShopView, world, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, hotbarController, contextMenuController, itemWindows.ItemDetails, itemWindows.ItemComparison, mapViewState, healthController, itemWindows.Inventory, abilityScoreController, diagnosticsController);
+        var inputController = new UiInputController(uiLayers, screenSize, pointerState, views.ShopView, world, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, hotbarController, contextMenuController, itemWindows.ItemDetails, itemWindows.ItemComparison, mapViewState, healthController, itemWindows.Inventory, abilityScoreController, diagnosticsController,
+            new TargetingModeSwitch(mapViewState, views.ActionStateView, world, shellServices.CursorTextContent));
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 
@@ -254,7 +255,7 @@ public static class ShellBootstrapper
         // player's currently-unlocked Expansion slot count, so it's constructed first and its own
         // Size read to size/position this window -- see HotbarContent.RefreshLayoutIfChanged for
         // how it keeps itself bottom-anchored/horizontally-centered as that Size changes later.
-        var hotbarContent = new HotbarContent(world, mapViewState, gameSession.Views.HotkeyBindingView, gameSession.Views.InventoryView, gameSession.Views.ActionStateView, gameSession.Commands.HotkeyBindingCommands, catalogs.ActionCatalog, catalogs.ItemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize, simulationClock, gameSession.Views.EntityActions);
+        var hotbarContent = new HotbarContent(world, mapViewState, gameSession.Views.HotkeyBindingView, gameSession.Views.InventoryView, gameSession.Views.ActionStateView, gameSession.Commands.HotkeyBindingCommands, catalogs.ActionCatalog, catalogs.ItemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize, simulationClock, gameSession.Views.EntityActions, catalogs.GameplayTags);
         var hotbarSize = hotbarContent.Size;
         var hotbarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {

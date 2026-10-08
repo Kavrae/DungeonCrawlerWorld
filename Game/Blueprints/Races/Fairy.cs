@@ -1,9 +1,13 @@
+using Engine.Utilities;
 using Game.Blueprints.NPCs;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Definitions.DirectActions;
+using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
+using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
 using Microsoft.Xna.Framework;
 
@@ -40,13 +44,41 @@ public static class Fairy
     /// <inheritdoc cref="QuickAttackOverride"/>
     private static readonly ActionDefinition PowerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
 
+    private const int MagicMissileRange = 8;
+
+    private const ushort MagicMissileDamage = 8;
+
+    private static readonly ushort MagicMissileWindupFrames = GameTiming.FramesForSeconds(1f);
+
+    /// <summary>TEMPORARY: the first NPC ranged attack, to see targeting modes in play -- Magic Missile wound up for a second, over a shorter range, for less damage. The catalog spell, and the player's, stay Immediate with range 20.</summary>
+    /// <remarks>After MagicMissileWindupFrames, which it reads.</remarks>
+    private static readonly ActionDefinition MagicMissileOverride = BuildMagicMissileOverride();
+
+    /// <summary>Enough mana for three Magic Missiles, regenerating, so a Fairy runs dry and waits like a caster.</summary>
+    private const float MaximumMana = 15;
+
     /// <summary>What every creature of this race can do -- held on its race definition, not on each creature (see ActionGrant). Dodge has no override: it rolls its catalog definition unchanged.</summary>
     public static readonly ActionGrant[] ActionGrants =
     [
         new(QuickAttackAction.Id, QuickAttackOverride),
         new(PowerAttackAction.Id, PowerAttackOverride),
         new(DodgeAction.Id),
+        new(MagicMissileAction.Id, MagicMissileOverride),
     ];
+
+    private static ActionDefinition BuildMagicMissileOverride()
+    {
+        var catalogSpell = ActionOverrideEffects.OverrideFlatDamage(MagicMissileAction.Build(), MagicMissileDamage);
+        var spell = (SpellActivator)catalogSpell.Activator;
+        return catalogSpell with
+        {
+            Activator = spell with
+            {
+                Targeting = spell.Targeting with { Range = MagicMissileRange },
+                Timing = new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: MagicMissileWindupFrames, CooldownFrames: null),
+            },
+        };
+    }
 
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
@@ -65,6 +97,7 @@ public static class Fairy
         componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 48, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(entityId, new ManaComponent(MaximumMana, MaximumMana));
 
 
         TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, context.Rolls);

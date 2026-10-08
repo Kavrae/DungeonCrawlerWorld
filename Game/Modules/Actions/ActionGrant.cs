@@ -8,6 +8,5 @@ namespace Game.Modules.Actions;
 /// granted to it alone (a wand, a learned scroll) -- see EntityActions, which reads both as one set.
 /// </remarks>
 /// <param name="Override">The definition to use instead of the catalog's, or null to use the catalog's unchanged -- see ActionInstanceComponent.Override.</param>
-/// <param name="ManaCost">What the action costs, so a creature that has one gains a ManaComponent at build time (see ActionGrantEffects).</param>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed record ActionGrant(Guid ActionId, ActionDefinition? Override = null, ushort ManaCost = 0);
+public sealed record ActionGrant(Guid ActionId, ActionDefinition? Override = null);

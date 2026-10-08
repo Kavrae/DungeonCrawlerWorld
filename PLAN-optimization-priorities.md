@@ -318,7 +318,7 @@ Most are genuinely trivial (`DeathSystem` 0.51, `AchievementPollingSystem` 0.35)
 - **`PoisonSystem`** -- 10.80 ms/sec, `StripeCount => 1`. See P2 item 1.
 
 A further three cost-bearing systems use plain `EntityStripeSet` rather than tiering:
-`TestCombatBehaviorSystem` (146.13), `ActionActivationSystem` (3.31), `ConsumableActivationSystem`
+`TestCombatBehaviorSystem` (146.13), `ActionActivationSystem` (3.31), `ItemActivationSystem`
 (2.07). Only the first matters, and it is P1.
 
 **Investigate:** whether each untiered system is untiered *deliberately* (some genuinely must run
@@ -385,7 +385,7 @@ A full sweep found three more defects of the same family as A/E and closed them.
 **Deliberately not tiered (6), each now documented at its own site:**
 - `DodgeExpirySystem` -- flat StripeCount 1. Dodge is a 0.5-1s precision window; coarse steps
   would blur the thing it measures. The one timed system left untiered.
-- `ActionActivationSystem`, `ConsumableActivationSystem` -- drain a queue of activations already
+- `ActionActivationSystem`, `ItemActivationSystem` -- drain a queue of activations already
   committed this frame. Deferring one leaves a player input unresolved.
 - `DeathSystem`, `ContainerDestructionSystem` -- event-driven queues, no per-entity population.
 - `AchievementPollingSystem` -- iterates a handful of polled achievements, not entities.

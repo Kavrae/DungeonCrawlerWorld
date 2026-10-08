@@ -18,7 +18,7 @@ public static class BodyPartDamageEffects
 
     /// <summary>Clamps the part's current health down by amount against its modifier-effective MaximumHealth, disabling the part (and locking it out of regen for a fresh 10 seconds from now) the instant it lands at 0 -- re-armed on every hit that leaves it at 0, not only the first transition into 0.</summary>
     /// <param name="now">The simulation frame this hit lands on -- the lockout is a deadline measured from it (see BodyPartStateComponent).</param>
-    public static void ApplyToPart(EntityBodyParts bodyParts, int entityId, int partId, MultiComponentPool<StatModifierComponent> statModifiers, ushort amount, long now)
+    public static void ApplyToPart(EntityBodyParts bodyParts, int entityId, int partId, MultiComponentPool<StatModifierComponent> statModifiers, float amount, long now)
     {
         ArgumentNullException.ThrowIfNull(bodyParts);
 
@@ -55,7 +55,7 @@ public static class BodyPartDamageEffects
         EventBus eventBus,
         int entityId,
         int partId,
-        ushort effectiveAmount,
+        float effectiveAmount,
         ActionSource source,
         IPlayerQuery playerQuery,
         string damageType,
@@ -93,7 +93,7 @@ public static class BodyPartDamageEffects
         EntityBodyParts bodyParts,
         EventBus eventBus,
         int entityId,
-        ushort effectiveAmount,
+        float effectiveAmount,
         ActionSource source,
         IPlayerQuery playerQuery,
         string damageType,

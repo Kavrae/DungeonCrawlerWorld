@@ -17,6 +17,7 @@ using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
+using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
@@ -42,9 +43,11 @@ namespace Presentation.UI;
 /// (see AbilityScoreModifierFormatter), shown there instead of duplicated here. The Buffs section
 /// also lists every active StatusEffectImmunityComponent (immunity has no Debuffs-section
 /// counterpart -- it's unconditionally beneficial). Every section collapses to nothing when
-/// nothing is active.
+/// nothing is active. Hovering a stat-modifier row or a status-effect row (a body part's burning line
+/// included) shows where it came from, in the popup AbilityScoreWindow shows for a modifier.
 /// </summary>
 /// <param name="simulationClock">"CurrentFrame" for every remaining-duration line -- timers store absolute deadlines.</param>
+/// <param name="pointerState">Where the cursor is, for the hover popup.</param>
 public sealed class HealthWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
@@ -56,7 +59,10 @@ public sealed class HealthWindow(
     StatusEffectDisplayRegistry statusEffectDisplays,
     ItemCatalog itemCatalog,
     GameplayTagRegistry gameplayTags,
-    SimulationClock simulationClock)
+    SimulationClock simulationClock,
+    ActionSourceNaming actionSourceNaming,
+    TooltipController tooltipController,
+    PointerState pointerState)
     : Window(fontService, elementPoolService, labelRenderer)
 {
     private static readonly Color BodyTextColor = Color.White;
@@ -131,6 +137,30 @@ public sealed class HealthWindow(
 
     private int _entityId;
     private int _framesSinceLastTextRefresh;
+
+    private HoveredRow? _hoveredRow;
+    private int _hoveredFrames;
+
+    /// <summary>Which list a hovered row is in.</summary>
+    private enum HoveredRowKind
+    {
+        StatusEffect,
+        BodyPartBurning,
+        Buff,
+        Debuff,
+
+        /// <summary>Highlighted on hover, but records no source, so it has no popup.</summary>
+        Immunity,
+
+        /// <inheritdoc cref="Immunity"/>
+        PotionCooldown,
+    }
+
+    /// <summary>The row currently drawn with the hover highlight, to clear it when the cursor moves on.</summary>
+    private TextWindow? _highlightedRowWindow;
+
+    /// <summary>A row under the cursor, by where it sits rather than by its element, so the popup stays up across a rebuild that leaves the row in place.</summary>
+    private readonly record struct HoveredRow(HoveredRowKind Kind, int Index);
 
     /// <summary>Just records entityId -- must be called after CreateElement but before Initialize, same contract as AbilityScoreWindow.Configure.</summary>
     public void Configure(int entityId) => _entityId = entityId;
@@ -209,6 +239,7 @@ public sealed class HealthWindow(
         AddChild(_rightColumn);
 
         Resized += HandleResized;
+        Closed += _ => tooltipController.Hide(this);
     }
 
     /// <summary>
@@ -257,6 +288,12 @@ public sealed class HealthWindow(
     {
         base.Update(gameTime);
 
+        RefreshContent();
+        UpdateHover();
+    }
+
+    private void RefreshContent()
+    {
         StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, _entityId, _activeEffectTypesScratch);
         BuildBurningPartIds(_activeBurningPartIdsScratch, _bodyParts, ReadBodyPartBurningTimers(), _entityId, CurrentFrame);
         BuildModifierSignature(_activeModifierSignatureScratch, ReadStatModifiers());
@@ -295,6 +332,173 @@ public sealed class HealthWindow(
         RefreshRowValues();
     }
 
+    /// <summary>Shows the source popup for the row under the cursor once it has been hovered for HudChrome.HoverTooltipDelayFrames, and hides it as soon as the cursor leaves or the row's effect is gone.</summary>
+    /// <remarks>The cursor comes from PointerState, which UiInputController publishes each update. The source, the effect and its duration are read here each frame the popup is up, never kept on the row.</remarks>
+    private void UpdateHover()
+    {
+        var hoveredRow = FindHoveredRow(pointerState.CursorPosition, out var rowWindow);
+        var rowRectangle = rowWindow?.Rectangle ?? default;
+
+        // The highlight is immediate; only the popup waits for the delay.
+        if (!ReferenceEquals(rowWindow, _highlightedRowWindow))
+        {
+            _highlightedRowWindow?.SetContentColor(Color.Transparent);
+            rowWindow?.SetContentColor(WindowPalette.HighlightColor);
+            _highlightedRowWindow = rowWindow;
+        }
+
+        if (hoveredRow == _hoveredRow)
+        {
+            _hoveredFrames++;
+        }
+        else
+        {
+            _hoveredRow = hoveredRow;
+            _hoveredFrames = hoveredRow is null ? 0 : 1;
+        }
+
+        if (hoveredRow is not { } row
+            || _hoveredFrames < HudChrome.HoverTooltipDelayFrames
+            || !TryDescribeRowSource(row, out var source, out var effectText, out var remainingDurationFrames))
+        {
+            tooltipController.Hide(this);
+            return;
+        }
+
+        var (title, body) = ModifierDisplayFormatting.SourcePopup(actionSourceNaming, source, effectText, remainingDurationFrames);
+        tooltipController.Show(this, rowRectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, PopupChrome.HoverPopupMaximumSize, body, title);
+    }
+
+    /// <summary>The status-effect, buff or debuff row the position falls inside, if any -- only within its own column's visible area, so a row scrolled out of view is never hit.</summary>
+    private HoveredRow? FindHoveredRow(Point position, out TextWindow? rowWindow)
+    {
+        if (_leftColumn.Rectangle.Contains(position))
+        {
+            if (FindRowAt(_statusEffectRowWindows, position, out rowWindow) is { } statusEffectIndex)
+            {
+                return new HoveredRow(HoveredRowKind.StatusEffect, statusEffectIndex);
+            }
+
+            if (_potionCooldownRowWindow is { } potionCooldownRow && potionCooldownRow.Rectangle.Contains(position))
+            {
+                rowWindow = potionCooldownRow;
+                return new HoveredRow(HoveredRowKind.PotionCooldown, 0);
+            }
+
+            if (FindRowAt(_bodyPartStatusEffectRowWindows, position, out rowWindow) is { } bodyPartIndex)
+            {
+                return new HoveredRow(HoveredRowKind.BodyPartBurning, bodyPartIndex);
+            }
+        }
+        else if (_rightColumn.Rectangle.Contains(position))
+        {
+            if (FindRowAt(_buffRowWindows, position, out rowWindow) is { } buffIndex)
+            {
+                return new HoveredRow(HoveredRowKind.Buff, buffIndex);
+            }
+
+            if (FindRowAt(_immunityRowWindows, position, out rowWindow) is { } immunityIndex)
+            {
+                return new HoveredRow(HoveredRowKind.Immunity, immunityIndex);
+            }
+
+            if (FindRowAt(_debuffRowWindows, position, out rowWindow) is { } debuffIndex)
+            {
+                return new HoveredRow(HoveredRowKind.Debuff, debuffIndex);
+            }
+        }
+
+        rowWindow = null;
+        return null;
+    }
+
+    private static int? FindRowAt<TRow>(List<TRow> rowWindows, Point position, out TextWindow? rowWindow)
+        where TRow : TextWindow?
+    {
+        for (var index = 0; index < rowWindows.Count; index++)
+        {
+            if (rowWindows[index] is { } candidate && candidate.Rectangle.Contains(position))
+            {
+                rowWindow = candidate;
+                return index;
+            }
+        }
+
+        rowWindow = null;
+        return null;
+    }
+
+    /// <summary>What the row shows as of now: its source, the effect without its duration, and the duration in frames. False when the row's effect is gone or records no source.</summary>
+    private bool TryDescribeRowSource(HoveredRow row, out ActionSource source, out string effectText, out int? remainingDurationFrames)
+    {
+        source = default;
+        effectText = string.Empty;
+        remainingDurationFrames = null;
+
+        switch (row.Kind)
+        {
+            case HoveredRowKind.Buff:
+            case HoveredRowKind.Debuff:
+            {
+                var modifierRows = row.Kind == HoveredRowKind.Buff ? _buffRows : _debuffRows;
+                BuildModifierRows(modifierRows, ReadStatModifiers(), row.Kind == HoveredRowKind.Buff ? StatModifierPolarity.Buff : StatModifierPolarity.Debuff, CurrentFrame);
+                if (row.Index >= modifierRows.Count)
+                {
+                    return false;
+                }
+
+                var modifierRow = modifierRows[row.Index];
+                source = modifierRow.Source;
+                effectText = FormatModifierRow(modifierRow with { RemainingSeconds = null }, gameplayTags);
+                remainingDurationFrames = modifierRow.RemainingDurationFrames;
+                return true;
+            }
+
+            case HoveredRowKind.StatusEffect:
+            {
+                BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, CurrentFrame);
+                if (row.Index >= _statusEffectRows.Count
+                    || !statusEffectDisplays.TryGet(_statusEffectRows[row.Index].Type, out var display)
+                    || display.GetSource(_entityId) is not { } statusEffectSource)
+                {
+                    return false;
+                }
+
+                source = statusEffectSource;
+                effectText = FormatStatusEffectRow(_statusEffectRows[row.Index] with { RemainingSeconds = null });
+                remainingDurationFrames = display.GetRemainingDurationFrames(_entityId, CurrentFrame);
+                return true;
+            }
+
+            case HoveredRowKind.BodyPartBurning:
+            {
+                if (row.Index >= _bodyPartRows.Count)
+                {
+                    return false;
+                }
+
+                var partId = _bodyPartRows[row.Index].PartId;
+                foreach (var timer in ReadBodyPartBurningTimers())
+                {
+                    if (timer.PartId != partId)
+                    {
+                        continue;
+                    }
+
+                    source = timer.Source;
+                    effectText = FormatStatusEffectRow(new StatusEffectRow(StatusEffectType.Burning, RemainingSeconds: null, timer.StackCount));
+                    remainingDurationFrames = BurningModule.RemainingFrames(timer.NextTickFrame, timer.StackCount, CurrentFrame);
+                    return true;
+                }
+
+                return false;
+            }
+
+            default:
+                return false;
+        }
+    }
+
     /// <summary>Full rebuild -- status effect types actually appearing/disappearing is rare enough (a stack granted/expiring) that closing and re-adding every row is simpler and safer than an in-place structural diff. Only clears each column's own children, not the column sub-windows themselves (those are built once by BuildColumns and persist across opens).</summary>
     private void RebuildContent()
     {
@@ -307,6 +511,7 @@ public sealed class HealthWindow(
         _bodyPartBars.Clear();
         _bodyPartStatusEffectRowWindows.Clear();
         _potionCooldownRowWindow = null;
+        _highlightedRowWindow = null;
 
         BuildStatusEffectSection(_leftColumn);
         BuildBodyPartSection(_leftColumn);
@@ -649,6 +854,12 @@ public sealed class HealthWindow(
             return FormatMovementPenalty(row, gameplayTags);
         }
 
+        if (EffectAmountModifierText.SubjectOf(row.Target) is { } effectAmountSubject)
+        {
+            var effectAmountText = $"{EffectAmountModifierText.FormatAmount(row.Operation, row.Magnitude)} {WithTagPrefix(row.ConditionTag, effectAmountSubject, gameplayTags)}";
+            return row.RemainingSeconds is { } effectAmountSeconds ? $"{effectAmountText}: {FormatRemainingDuration(effectAmountSeconds)}" : effectAmountText;
+        }
+
         var sign = row.Operation == StatModifierOperation.Additive
             ? row.Polarity == StatModifierPolarity.Buff ? '+' : '-'
             : row.Polarity == StatModifierPolarity.Buff ? 'x' : '÷';
@@ -739,7 +950,8 @@ public sealed class HealthWindow(
 
     internal readonly record struct StatusEffectRow(StatusEffectType Type, int? RemainingSeconds, int StackCount);
 
-    internal readonly record struct ModifierRow(StatModifierTarget Target, StatModifierOperation Operation, StatModifierPolarity Polarity, float Magnitude, GameplayTag ConditionTag, int? RemainingSeconds);
+    /// <param name="RemainingDurationFrames">The exact duration RemainingSeconds was rounded from, for the hover popup.</param>
+    internal readonly record struct ModifierRow(StatModifierTarget Target, StatModifierOperation Operation, StatModifierPolarity Polarity, float Magnitude, GameplayTag ConditionTag, int? RemainingSeconds, ActionSource Source = default, int? RemainingDurationFrames = null);
 
     /// <summary>Identity used only to detect a modifier appearing/disappearing (see Update's own comment on why RemainingSeconds is excluded here -- ticking down every frame would otherwise look like a structural change every frame).</summary>
     private readonly record struct ModifierSignature(StatModifierTarget Target, StatModifierOperation Operation, StatModifierPolarity Polarity, float Magnitude, GameplayTag ConditionTag, ActionSource Source);
@@ -873,10 +1085,9 @@ public sealed class HealthWindow(
                 continue;
             }
 
-            var remainingSeconds = modifier.ExpiresAtFrame == FrameDeadline.Never
-                ? (int?)null
-                : (int)System.Math.Ceiling(FrameDeadline.Remaining(modifier.ExpiresAtFrame, now) / (float)GameTiming.FramesPerSecond);
-            destination.Add(new ModifierRow(modifier.Target, modifier.Operation, modifier.Polarity, modifier.Magnitude, modifier.ConditionTag, remainingSeconds));
+            var remainingFrames = modifier.ExpiresAtFrame == FrameDeadline.Never ? (int?)null : FrameDeadline.Remaining(modifier.ExpiresAtFrame, now);
+            var remainingSeconds = remainingFrames is { } frames ? (int)System.Math.Ceiling(frames / (float)GameTiming.FramesPerSecond) : (int?)null;
+            destination.Add(new ModifierRow(modifier.Target, modifier.Operation, modifier.Polarity, modifier.Magnitude, modifier.ConditionTag, remainingSeconds, modifier.Source, remainingFrames));
         }
     }
 

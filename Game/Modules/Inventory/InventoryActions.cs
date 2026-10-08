@@ -11,24 +11,23 @@ public static class InventoryActions
     /// <summary>The per-item-stack cap every entity starts with -- see MaxStackSizeComponent's own doc comment for the per-entity override that replaces this for whichever entity has one.</summary>
     public const ushort DefaultMaxStackSize = 999;
 
-    /// <summary>
-    /// Grants quantity of itemDefinitionId, stacking onto an existing matching stack if one
-    /// exists rather than always creating a new one. Only a stack with no Override matches: one
-    /// with an Override is a different item that shares the id -- this is the "identical items grouped with
-    /// a count" behavior. The single chokepoint every item grant goes through (starting kits,
-    /// future loot drops), so it's also where InventoryGrant.EnsureInventoryComponentExists runs
-    /// -- every caller gets the "gains an inventory on first item" behavior for free, the player
-    /// included, with no per-call-site handling needed. Returns the StackInstanceId of whichever
-    /// stack the *last* granted unit ended up in -- e.g. so a caller can immediately bind a hotkey
-    /// to the exact stack just granted (see ItemHotkeyBindingComponent's own doc comment for why
-    /// binding is by StackInstanceId, not ItemDefinitionId).
-    ///
-    /// Any quantity that would overflow entityId's own effective cap (see
-    /// GetEffectiveMaxStackSize) spills into additional new stacks rather than growing one stack
-    /// past it -- splitting a stack that already exceeds the cap is a separate, not-yet-built TODO
-    /// item, so this only ever affects freshly-granted quantity.
-    /// </summary>
-    public static uint AddItem(ComponentManager componentManager, int entityId, Guid itemDefinitionId, ushort quantity)
+    /// <summary>Grants quantity plain units of itemDefinitionId: no Override, not divergent, not disabled.</summary>
+    /// <remarks>
+    /// A stack with an Override is a different item that shares the id, so only plain stacks are joined. Returns the
+    /// StackInstanceId the last unit landed in, so a caller can bind a hotkey to exactly what it granted (see
+    /// ItemHotkeyBindingComponent for why binding is by stack). See AddUnits for how units are placed.
+    /// </remarks>
+    public static uint AddItem(ComponentManager componentManager, int entityId, Guid itemDefinitionId, ushort quantity) =>
+        AddUnits(componentManager, entityId, new StackTemplate(itemDefinitionId, overrideDefinition: null, isDivergent: false, isDisabled: false), quantity);
+
+    /// <summary>Adds quantity units shaped by template to entityId, filling every interchangeable stack with room before starting new ones.</summary>
+    /// <remarks>
+    /// Every item grant ends here, so it is also where InventoryGrant.EnsureInventoryComponentExists runs: whoever is
+    /// given an item gains an inventory. No stack grows past entityId's effective cap (GetEffectiveMaxStackSize); what
+    /// doesn't fit starts new stacks. A joined stack keeps its StackInstanceId and AcquiredSequence. Returns the
+    /// StackInstanceId the last unit landed in, or 0 when quantity is 0.
+    /// </remarks>
+    private static uint AddUnits(ComponentManager componentManager, int entityId, StackTemplate template, ushort quantity)
     {
         InventoryGrant.EnsureInventoryComponentExists(componentManager, entityId);
 
@@ -37,25 +36,21 @@ public static class InventoryActions
         var remaining = quantity;
         var lastStackInstanceId = 0u;
 
-        var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId, itemDefinitionId, static (stack, id) => stack.ItemDefinitionId == id && stack.Override is null);
-        if (matchedDenseIndex != -1)
-        {
-            var existingQuantity = stacks.GetReadonlyByDenseIndex(matchedDenseIndex).Quantity;
-            var room = (ushort)System.Math.Max(0, effectiveCap - existingQuantity);
-            var addNow = (ushort)System.Math.Min(remaining, room);
-            if (addNow > 0)
-            {
-                stacks.UpdateByDenseIndex(matchedDenseIndex, addNow, static (ref InventoryItemStackComponent stack, ushort add) => stack.Quantity += add);
-                remaining -= addNow;
-            }
-
-            lastStackInstanceId = stacks.GetReadonlyByDenseIndex(matchedDenseIndex).StackInstanceId;
-        }
-
         while (remaining > 0)
         {
+            var joinedDenseIndex = FindMatchingDenseIndex(stacks, entityId, (Template: template, Cap: effectiveCap),
+                static (stack, state) => stack.Quantity < state.Cap && state.Template.Matches(in stack));
+            if (joinedDenseIndex != -1)
+            {
+                var addNow = (ushort)System.Math.Min(remaining, effectiveCap - stacks.GetReadonlyByDenseIndex(joinedDenseIndex).Quantity);
+                stacks.UpdateByDenseIndex(joinedDenseIndex, addNow, static (ref InventoryItemStackComponent stack, ushort add) => stack.Quantity += add);
+                lastStackInstanceId = stacks.GetReadonlyByDenseIndex(joinedDenseIndex).StackInstanceId;
+                remaining -= addNow;
+                continue;
+            }
+
             var chunk = (ushort)System.Math.Min(remaining, effectiveCap);
-            var newStack = new InventoryItemStackComponent(itemDefinitionId, chunk);
+            var newStack = template.CreateStack(chunk);
             stacks.Add(entityId, newStack);
             lastStackInstanceId = newStack.StackInstanceId;
             remaining -= chunk;
@@ -69,42 +64,13 @@ public static class InventoryActions
         componentManager.GetPackedPool<MaxStackSizeComponent>().TryGetReadonly(entityId, out var overrideComponent) ? overrideComponent.Value : DefaultMaxStackSize;
 
     /// <summary>
-    /// Ticks the matching stack's Quantity down by 1, removing the stack entirely once it hits
-    /// 0 (same "no instance for this item" empty-state convention InventoryItemStackComponent's
-    /// own doc comment describes) -- called by ConsumableActivationSystem after every successful
-    /// activation. A no-op if the entity doesn't actually have the item (defense-in-depth; the
-    /// caller is expected to have already checked).
-    /// </summary>
-    public static void ConsumeItem(ComponentManager componentManager, int entityId, Guid itemDefinitionId)
-    {
-        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
-
-        if (!InventoryQueries.TryGetStack(stacks, entityId, itemDefinitionId, out var stack))
-        {
-            return;
-        }
-
-        if (stack.Quantity <= 1)
-        {
-            stacks.RemoveFirst(entityId, itemDefinitionId, static (ref readonly s, id) => s.ItemDefinitionId == id);
-            return;
-        }
-
-        stacks.TryUpdateFirst(
-            entityId,
-            itemDefinitionId,
-            static (ref readonly s, id) => s.ItemDefinitionId == id,
-            static (ref s, id) => s.Quantity--);
-    }
-
-    /// <summary>
     /// Structural equality for two divergence Overrides -- ItemDefinition's auto-generated record
     /// equality isn't reliable here, since its Effects list-typed field compares by reference,
     /// not content, and two independently-`with`-derived definitions won't reliably share the same
     /// list reference. Used to decide whether a new unit can merge into an existing stack rather
     /// than needing its own.
     /// </summary>
-    private static bool AreEquivalentOverrides(ItemDefinition a, ItemDefinition b) =>
+    internal static bool AreEquivalentOverrides(ItemDefinition a, ItemDefinition b) =>
         a.Id == b.Id &&
         a.Name == b.Name &&
         a.SpriteName == b.SpriteName &&
@@ -115,21 +81,40 @@ public static class InventoryActions
         a.Summary == b.Summary &&
         Equals(a.Activator, b.Activator) &&
         Equals(a.Contents, b.Contents) &&
+        Equals(a.Toggle, b.Toggle) &&
         a.CanTrade == b.CanTrade &&
         a.Tags == b.Tags &&
         a.Effects.SequenceEqual(b.Effects);
 
-    /// <summary>Whether two stacks hold interchangeable units: the same item, the same Override (or neither has one), and the same divergence and disabled state.</summary>
-    private static bool AreEquivalentStacks(in InventoryItemStackComponent first, in InventoryItemStackComponent second) =>
-        first.ItemDefinitionId == second.ItemDefinitionId &&
-        first.IsDivergent == second.IsDivergent &&
-        first.IsDisabled == second.IsDisabled &&
-        (first.Override, second.Override) switch
-        {
-            (null, null) => true,
-            ({ } firstOverride, { } secondOverride) => AreEquivalentOverrides(firstOverride, secondOverride),
-            _ => false,
-        };
+    /// <summary>What a unit is, apart from which stack holds it: the stacks it can join, and the stack it starts when none has room.</summary>
+    private readonly struct StackTemplate(Guid itemDefinitionId, ItemDefinition? overrideDefinition, bool isDivergent, bool isDisabled)
+    {
+        public Guid ItemDefinitionId { get; } = itemDefinitionId;
+
+        public ItemDefinition? OverrideDefinition { get; } = overrideDefinition;
+
+        public bool IsDivergent { get; } = isDivergent;
+
+        public bool IsDisabled { get; } = isDisabled;
+
+        public static StackTemplate Of(in InventoryItemStackComponent stack) =>
+            new(stack.ItemDefinitionId, stack.Override, stack.IsDivergent, stack.IsDisabled);
+
+        /// <summary>Whether stack holds units interchangeable with this template's: the same item, the same Override (or neither has one), and the same divergence and disabled state.</summary>
+        public bool Matches(in InventoryItemStackComponent stack) =>
+            stack.ItemDefinitionId == ItemDefinitionId &&
+            stack.IsDivergent == IsDivergent &&
+            stack.IsDisabled == IsDisabled &&
+            (stack.Override, OverrideDefinition) switch
+            {
+                (null, null) => true,
+                ({ } stackOverride, { } templateOverride) => AreEquivalentOverrides(stackOverride, templateOverride),
+                _ => false,
+            };
+
+        public InventoryItemStackComponent CreateStack(ushort quantity) =>
+            new(ItemDefinitionId, quantity, IsDisabled, OverrideDefinition, IsDivergent);
+    }
 
     /// <summary>Moves stack stackInstanceId's units into another stack entityId already holds with interchangeable units, as many as that stack's cap allows, removing stackInstanceId once it's empty.</summary>
     /// <remarks>
@@ -149,8 +134,8 @@ public static class InventoryActions
 
         var source = stacks.GetReadonlyByDenseIndex(sourceDenseIndex);
         var effectiveCap = GetEffectiveMaxStackSize(componentManager, entityId);
-        var targetDenseIndex = FindMatchingDenseIndex(stacks, entityId, (Source: source, Cap: effectiveCap),
-            static (stack, state) => stack.StackInstanceId != state.Source.StackInstanceId && stack.Quantity < state.Cap && AreEquivalentStacks(in stack, in state.Source));
+        var targetDenseIndex = FindMatchingDenseIndex(stacks, entityId, (SourceStackInstanceId: source.StackInstanceId, Template: StackTemplate.Of(in source), Cap: effectiveCap),
+            static (stack, state) => stack.StackInstanceId != state.SourceStackInstanceId && stack.Quantity < state.Cap && state.Template.Matches(in stack));
         if (targetDenseIndex == -1)
         {
             return stackInstanceId;
@@ -205,125 +190,54 @@ public static class InventoryActions
         return -1;
     }
 
-    /// <summary>
-    /// Grants quantity units carrying a shared Override -- IsDivergent stays false, since every
-    /// unit granted together this way is still identical to every other (e.g. a freshly-granted
-    /// batch of wands, all at the same Intelligence-derived MaxCharges baked in at grant time).
-    /// Merges into an existing plain (IsDivergent == false) stack of the same ItemDefinitionId if
-    /// one has an equivalent Override, respecting entityId's own effective cap (see
-    /// GetEffectiveMaxStackSize) -- any quantity that would overflow it spills into additional new
-    /// stacks rather than growing one stack past it.
-    /// Returns the StackInstanceId of whichever stack the last granted unit ended up in, as AddItem does.
-    /// </summary>
-    public static uint AddItemWithOverride(ComponentManager componentManager, int entityId, ItemDefinition effectiveDefinition, ushort quantity)
+    /// <summary>Grants quantity units sharing effectiveDefinition as their Override, not divergent and not disabled.</summary>
+    /// <remarks>
+    /// Units granted together this way are still identical to one another (a batch of wands with the same
+    /// Intelligence-derived MaxCharges), so they are not divergent. Returns the StackInstanceId the last unit landed in.
+    /// </remarks>
+    public static uint AddItemWithOverride(ComponentManager componentManager, int entityId, ItemDefinition effectiveDefinition, ushort quantity) =>
+        AddUnits(componentManager, entityId, new StackTemplate(effectiveDefinition.Id, effectiveDefinition, isDivergent: false, isDisabled: false), quantity);
+
+    /// <summary>Adds one unit that differs from its catalog item, with overrideDefinition as its Override, divergent and not disabled.</summary>
+    /// <remarks>
+    /// For anything that makes an item genuinely differ from its definition (a wand's remaining charges). Returns the
+    /// StackInstanceId the unit landed in.
+    /// </remarks>
+    public static uint AddDivergentItem(ComponentManager componentManager, int entityId, ItemDefinition overrideDefinition) =>
+        AddUnits(componentManager, entityId, new StackTemplate(overrideDefinition.Id, overrideDefinition, isDivergent: true, isDisabled: false), quantity: 1);
+
+    /// <summary>Changes one unit of entityId's stack stackInstanceId into newOverrideDefinition, moving it to the stack it now belongs in.</summary>
+    /// <remarks>
+    /// A null newOverrideDefinition returns the unit to a plain stack of its item; any other makes it a divergent unit
+    /// with that Override. The unit keeps its stack's disabled state. It joins an interchangeable stack with room when
+    /// there is one -- which may be the stack it left, if nothing about it changed -- and starts its own otherwise.
+    /// Returns the StackInstanceId the unit landed in, or 0, changing nothing, when entityId doesn't hold the stack.
+    /// </remarks>
+    public static uint MoveOneUnit(ComponentManager componentManager, int entityId, uint stackInstanceId, ItemDefinition? newOverrideDefinition)
     {
-        InventoryGrant.EnsureInventoryComponentExists(componentManager, entityId);
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
-        var effectiveCap = GetEffectiveMaxStackSize(componentManager, entityId);
-        var remaining = quantity;
-        var lastStackInstanceId = 0u;
-
-        var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId, effectiveDefinition,
-            static (stack, definition) => !stack.IsDivergent && stack.Override is { } existing && AreEquivalentOverrides(existing, definition));
-
-        if (matchedDenseIndex != -1)
+        var sourceDenseIndex = FindMatchingDenseIndex(stacks, entityId, stackInstanceId, static (stack, id) => stack.StackInstanceId == id);
+        if (sourceDenseIndex == -1)
         {
-            var existingQuantity = stacks.GetReadonlyByDenseIndex(matchedDenseIndex).Quantity;
-            var room = (ushort)System.Math.Max(0, effectiveCap - existingQuantity);
-            var addNow = (ushort)System.Math.Min(remaining, room);
-            if (addNow > 0)
-            {
-                stacks.UpdateByDenseIndex(matchedDenseIndex, addNow, static (ref InventoryItemStackComponent stack, ushort add) => stack.Quantity += add);
-                remaining -= addNow;
-            }
-
-            lastStackInstanceId = stacks.GetReadonlyByDenseIndex(matchedDenseIndex).StackInstanceId;
+            return 0;
         }
 
-        while (remaining > 0)
-        {
-            var chunk = (ushort)System.Math.Min(remaining, effectiveCap);
-            var newStack = new InventoryItemStackComponent(effectiveDefinition.Id, chunk, overrideDefinition: effectiveDefinition, isDivergent: false);
-            stacks.Add(entityId, newStack);
-            lastStackInstanceId = newStack.StackInstanceId;
-            remaining -= chunk;
-        }
+        var source = stacks.GetReadonlyByDenseIndex(sourceDenseIndex);
+        var template = newOverrideDefinition is null
+            ? new StackTemplate(source.ItemDefinitionId, overrideDefinition: null, isDivergent: false, source.IsDisabled)
+            : new StackTemplate(newOverrideDefinition.Id, newOverrideDefinition, isDivergent: true, source.IsDisabled);
 
-        return lastStackInstanceId;
+        RemoveOneUnit(componentManager, entityId, stackInstanceId);
+        return AddUnits(componentManager, entityId, template, quantity: 1);
     }
 
-    /// <summary>
-    /// The generic divergence primitive -- reusable by anything that makes an item genuinely differ
-    /// from its ItemDefinition (a wand's remaining charges today, a future enchant permanently
-    /// modifying stats). Adds one unit with Override = overrideDefinition, IsDivergent: true,
-    /// merging (Quantity++) into an existing divergent stack of the same ItemDefinitionId with an
-    /// equivalent Override if one exists and has room under entityId's own effective cap (see
-    /// GetEffectiveMaxStackSize), else creating a new Quantity: 1 stack. Returns the StackInstanceId of whichever stack the unit
-    /// ended up in (new or merged-into-existing) -- callers (e.g. a wand repointing its hotkey
-    /// binding after firing) need this to know exactly which physical stack now holds it.
-    /// </summary>
-    public static uint AddDivergentItem(ComponentManager componentManager, int entityId, ItemDefinition overrideDefinition)
-    {
-        InventoryGrant.EnsureInventoryComponentExists(componentManager, entityId);
-        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
-        var effectiveCap = GetEffectiveMaxStackSize(componentManager, entityId);
-
-        var matchedDenseIndex = FindMatchingDenseIndex(stacks, entityId,
-            stack => stack.IsDivergent && stack.Override is { } existing && AreEquivalentOverrides(existing, overrideDefinition) &&
-                     stack.Quantity < effectiveCap);
-
-        if (matchedDenseIndex != -1)
-        {
-            stacks.UpdateByDenseIndex(matchedDenseIndex, static (ref InventoryItemStackComponent stack) => stack.Quantity++);
-            return stacks.GetReadonlyByDenseIndex(matchedDenseIndex).StackInstanceId;
-        }
-
-        var newStack = new InventoryItemStackComponent(overrideDefinition.Id, quantity: 1, overrideDefinition: overrideDefinition, isDivergent: true);
-        stacks.Add(entityId, newStack);
-        return newStack.StackInstanceId;
-    }
-
-    /// <summary>
-    /// Decrements the *exact* source stack (found via StackInstanceId, not an item-id search --
-    /// works whether the source was plain or already divergent) by 1 Quantity, removing it entirely
-    /// at 0 (same convention ConsumeItem below already follows for the non-diverging case), then
-    /// adds/merges newOverrideDefinition as a divergent unit via AddDivergentItem above. What a
-    /// wand's every single shot calls, uniformly, whether it's the first shot off a fresh batch or
-    /// the Nth shot depleting an already-divergent instance -- see ConsumableActivationSystem.
-    /// </summary>
-    public static uint PeelOneIntoDivergentStack(ComponentManager componentManager, int entityId, uint sourceStackInstanceId, ItemDefinition newOverrideDefinition)
+    /// <summary>Takes one unit out of entityId's stack stackInstanceId, removing the stack once it is empty.</summary>
+    /// <remarks>A no-op when the entity doesn't hold the stack.</remarks>
+    public static void RemoveOneUnit(ComponentManager componentManager, int entityId, uint stackInstanceId)
     {
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
 
-        var sourceDenseIndex = FindMatchingDenseIndex(stacks, entityId, stack => stack.StackInstanceId == sourceStackInstanceId);
-        if (sourceDenseIndex != -1)
-        {
-            var sourceQuantity = stacks.GetReadonlyByDenseIndex(sourceDenseIndex).Quantity;
-            if (sourceQuantity <= 1)
-            {
-                stacks.RemoveByDenseIndex(sourceDenseIndex);
-            }
-            else
-            {
-                stacks.UpdateByDenseIndex(sourceDenseIndex, static (ref InventoryItemStackComponent stack) => stack.Quantity--);
-            }
-        }
-
-        return AddDivergentItem(componentManager, entityId, newOverrideDefinition);
-    }
-
-    /// <summary>
-    /// Ticks the exact matched stack's Quantity down by 1, removing it entirely at 0 -- the
-    /// StackInstanceId-keyed counterpart to ConsumeItem below, used by activation now that item
-    /// hotkey binding (and every activation request) targets one specific stack rather than an
-    /// item id. A no-op if stackInstanceId no longer resolves to anything (defense-in-depth; the
-    /// caller is expected to have already checked).
-    /// </summary>
-    public static void ConsumeItemByStackInstanceId(ComponentManager componentManager, int entityId, uint stackInstanceId)
-    {
-        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
-
-        var denseIndex = FindMatchingDenseIndex(stacks, entityId, stack => stack.StackInstanceId == stackInstanceId);
+        var denseIndex = FindMatchingDenseIndex(stacks, entityId, stackInstanceId, static (stack, id) => stack.StackInstanceId == id);
         if (denseIndex == -1)
         {
             return;

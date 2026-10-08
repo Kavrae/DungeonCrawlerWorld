@@ -1,3 +1,4 @@
+using Engine.Math;
 using Engine.Tags;
 using Game.Modules.Health;
 using Game.World;
@@ -39,8 +40,14 @@ public readonly record struct EffectContext(
     float DurationScaleMultiplier = 1.0f,
     byte ChainDepth = 0)
 {
+    /// <summary>TargetEntityId of an application with no target entity: an entry placed once at TargetLocation.</summary>
+    public const int NoTargetEntity = -1;
+
+    /// <summary>The tile an activation is centred on, for an entry placed once there (EffectPlacement). Null where nothing was aimed at a tile: an aura's tick, a terrain contact.</summary>
+    public Vector3Int? TargetLocation { get; init; }
+
     /// <summary>What an entry multiplies its amount by -- damage, healing, mana, stacks; never a duration or a stat modifier's magnitude.</summary>
-    /// <remarks>1 for an action, an item and a terrain contact. An aura passes its strength at the target's cell, so one definition is weaker further from its source.</remarks>
+    /// <remarks>1 for an action, an item and a terrain contact. An aura passes its power at the target's cell, so one definition is weaker further from its source.</remarks>
     public float Magnitude { get; init; } = 1.0f;
 
     /// <summary>The part touching the ground the effects came from, for an entry aimed at it (BodyPartTargeting.GroundContact). Set only by a terrain contact; null everywhere else, where such an entry names no part.</summary>
@@ -49,6 +56,10 @@ public readonly record struct EffectContext(
     /// <summary>Whether a refusal is reported: the "Immune" text and StatusEffectImmunityBlockedEvent.</summary>
     /// <remarks>False from something that keeps applying the same effects to the same target and has already reported this stay's refusal (an aura's tick, a contact's repeat).</remarks>
     public bool AnnouncesRefusal { get; init; } = true;
+
+    /// <summary>The key of the toggle whose held effects are being applied or reverted, so each grant can be taken back without touching another toggle's. Null everywhere else.</summary>
+    /// <remarks>Set only by Toggles. Unique among one entity's active toggles, and never 0.</remarks>
+    public uint? HeldGrantKey { get; init; }
 
     /// <summary>A context for effects sourceEntityId causes, attributed to it as it is now.</summary>
     public static EffectContext FromEntity(EffectServices services, int sourceEntityId, int targetEntityId, string activatorName, GameplayTagSet activatorTags, long now, float durationScaleMultiplier = 1.0f) =>

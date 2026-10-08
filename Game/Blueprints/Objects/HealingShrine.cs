@@ -30,12 +30,14 @@ public static class HealingShrine
 
     private const float MaximumHealth = 100;
 
-    /// <summary>Halves with each tile, so it reaches four tiles: 8 beside the shrine, then 4, 2, 1.</summary>
-    private const byte HealingAuraStrength = 16;
+    /// <summary>16 at the shrine, then 13, 10, 7 and 4 a tile further each (Linear over HealingAuraSize).</summary>
+    private const ushort HealingAuraPower = 16;
+
+    private const byte HealingAuraSize = 4;
 
     private const float DamageResistance = 0.5f;
 
-    /// <summary>The shrine's aura: each tick heals one point of health per point of strength at the entity.</summary>
+    /// <summary>The shrine's aura: each tick heals one point of health per point of power at the entity.</summary>
     /// <remarks>
     /// As a flat amount, so overlapping shrines add. On a creature with body parts the whole amount
     /// follows its healing priority -- the part missing the largest share of its health, the rule
@@ -48,7 +50,7 @@ public static class HealingShrine
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
         Build = Build,
-        Auras = [new AuraGrant(Aura, HealingAuraStrength)],
+        Auras = [new AuraGrant(Aura, HealingAuraPower, HealingAuraSize)],
         Appearance = new() { Name = Name, Description = Description, Glyph = "+", GlyphColor = Color.White, SpriteName = "Shrine" }
     };
 

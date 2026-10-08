@@ -35,14 +35,16 @@ public sealed class EntityBuilder
 
     private readonly BlueprintRegistry _definitions;
     private readonly AuraCatalog _auras;
+    private readonly ActionCatalog _actions;
     private readonly EntityKeys _entityKeys;
     private readonly SeededRandom _random = new();
     private readonly MathUtility _rolls;
 
-    public EntityBuilder(BlueprintRegistry definitions, AuraCatalog auras, EntityKeys entityKeys)
+    public EntityBuilder(BlueprintRegistry definitions, AuraCatalog auras, ActionCatalog actions, EntityKeys entityKeys)
     {
         _definitions = definitions;
         _auras = auras;
+        _actions = actions;
         _entityKeys = entityKeys;
         _rolls = new MathUtility(_random);
     }
@@ -78,14 +80,14 @@ public sealed class EntityBuilder
     {
         var resolved = _definitions.Resolve(blueprintId);
         _random.Reseed(seed);
-        var context = new BlueprintContext(componentManager, entityId, _rolls, _entityKeys, seed, _definitions);
+        var context = new BlueprintContext(componentManager, entityId, _rolls, _entityKeys, seed, _definitions, _actions);
 
         foreach (var partId in resolved.BuildOrder)
         {
             BuildPart(context, partId);
         }
 
-        GrantManaIfAnyActionCosts(componentManager, entityId, resolved.Actions);
+        GrantManaIfAnyActionDrainsIt(componentManager, entityId, resolved.Actions);
         GrantAuras(componentManager, entityId, resolved.Auras);
 
         var actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
@@ -111,7 +113,7 @@ public sealed class EntityBuilder
         }
 
         _random.Reseed(seed ^ ((ulong)(uint)blueprint.Definition.Id.GetHashCode() << 32));
-        var context = new BlueprintContext(componentManager, entityId, _rolls, _entityKeys, seed, _definitions);
+        var context = new BlueprintContext(componentManager, entityId, _rolls, _entityKeys, seed, _definitions, _actions);
 
         foreach (var partId in blueprint.BuildOrder)
         {
@@ -128,7 +130,7 @@ public sealed class EntityBuilder
 
             BuildPart(context, partId, classGrantedBy);
             appliedParts.Add(entityId, new AppliedBlueprintComponent(partId, (ushort)appliedParts.CountForEntity(entityId)));
-            GrantManaIfAnyActionCosts(componentManager, entityId, definition.Actions);
+            GrantManaIfAnyActionDrainsIt(componentManager, entityId, definition.Actions);
             GrantAuras(componentManager, entityId, definition.Auras);
         }
     }
@@ -184,7 +186,7 @@ public sealed class EntityBuilder
             var auraId = _auras.Register(grants[index].Aura);
             if (!Radiates(sources, entityId, auraId))
             {
-                sources.Add(entityId, new AuraSourceComponent(auraId, grants[index].Strength));
+                sources.Add(entityId, new AuraSourceComponent(auraId, grants[index].Power, grants[index].Size));
             }
         }
     }
@@ -202,12 +204,13 @@ public sealed class EntityBuilder
         return false;
     }
 
-    /// <summary>The definition-grant counterpart of ActionGrantEffects' mana hook: an entity whose blueprint grants a mana-costing action gains a ManaComponent, once every part has granted the ability scores it is sized from.</summary>
-    private static void GrantManaIfAnyActionCosts(ComponentManager componentManager, int entityId, IReadOnlyList<ActionGrant> actions)
+    /// <summary>The definition-grant counterpart of ActionGrantEffects' mana hook: an entity whose blueprint grants an action that drains its user's mana (ManaUse.DrainsUsersMana) gains a ManaComponent, once every part has granted the ability scores it is sized from.</summary>
+    private void GrantManaIfAnyActionDrainsIt(ComponentManager componentManager, int entityId, IReadOnlyList<ActionGrant> actions)
     {
         for (var index = 0; index < actions.Count; index++)
         {
-            if (actions[index].ManaCost > 0)
+            var grant = actions[index];
+            if ((grant.Override ?? (_actions.TryGet(grant.ActionId, out var definition) ? definition : null)) is { } action && ManaUse.DrainsUsersMana(action))
             {
                 ManaGrant.EnsureManaComponentExists(componentManager, entityId);
                 return;

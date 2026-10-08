@@ -7,6 +7,7 @@ using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.ProcessingTier.Components;
+using Game.Resources;
 using Game.World;
 
 namespace Tests.Modules.Health;
@@ -42,7 +43,7 @@ public sealed class HealthFloatingTextTests
     {
         var floatingText = LocalEntity();
 
-        TestHealth.Damage(CreateHealthPool(), new EventBus(), EntityId, 3, ActionSource.Admin, null, "Test", now: 0, floatingTextFeed: floatingText.Feed, damageCategory: DamageCategory.StatusEffect);
+        TestHealth.Damage(CreateHealthPool(), new EventBus(), EntityId, 3, ActionSource.Admin, null, "Test", now: 0, floatingTextFeed: floatingText.Feed, damageCategory: ResourceLossCategory.StatusEffect);
 
         Assert.AreEqual(FloatingTextKind.StatusEffectDamageTaken, floatingText.Published.Single().Kind);
     }
@@ -163,7 +164,7 @@ public sealed class HealthFloatingTextTests
     {
         var floatingText = LocalEntity();
 
-        TestHealth.Heal(CreateHealthPool(currentHealth: 50), EntityId, 0.2f, now: 0, floatingTextFeed: floatingText.Feed, healCategory: HealCategory.Regeneration);
+        TestHealth.Heal(CreateHealthPool(currentHealth: 50), EntityId, 0.2f, now: 0, floatingTextFeed: floatingText.Feed, healCategory: ResourceGainCategory.Regeneration);
 
         Assert.AreEqual(new FloatingTextEvent(EntityId, FloatingTextKind.Regenerated, 20, default, new Vector2Byte(1, 1)), floatingText.Published.Single());
     }
@@ -176,7 +177,7 @@ public sealed class HealthFloatingTextTests
 
         for (var tick = 0; tick < 10; tick++)
         {
-            TestHealth.Heal(health, EntityId, 0f, now: 0, flatAmount: 0.3f, floatingTextFeed: floatingText.Feed, healCategory: HealCategory.Regeneration);
+            TestHealth.Heal(health, EntityId, 0f, now: 0, flatAmount: 0.3f, floatingTextFeed: floatingText.Feed, healCategory: ResourceGainCategory.Regeneration);
         }
 
         Assert.AreEqual(53.1f, health.GetReadonly(EntityId).CurrentHealth, 0.001f);
@@ -191,7 +192,7 @@ public sealed class HealthFloatingTextTests
 
         HealthDamage.Apply(CreateHealthPool(), new EventBus(), EntityId, 30, ActionSource.Admin, TestPlayerQuery.NoPlayer, "Test", now: 0,
             EmptyPools.Multi<Game.Modules.StatModifiers.Components.StatModifierComponent>(), EmptyPools.BodyParts(), null, EmptyPools.Packed<DeadComponent>(),
-            floatingText.Feed, DamageCategory.Direct, isCritical: true);
+            floatingText.Feed, ResourceLossCategory.Direct, isCritical: true);
 
         Assert.AreEqual(FloatingTextFlags.Critical, floatingText.Published.Single().Flags);
     }

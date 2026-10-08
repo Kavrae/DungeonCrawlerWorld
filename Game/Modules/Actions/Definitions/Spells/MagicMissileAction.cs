@@ -20,8 +20,10 @@ public static class MagicMissileAction
         Effects: [new Effect([new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 25, BodyPart: BodyPartTargeting.Of(BodyPartType.Head))])],
         Activator: new SpellActivator(
             new TargetingSpec(TargetShape.SingleTarget, Range: 20),
-            new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null),
-            ManaCost),
+            new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)),
         Description: "A basic single target ranged attack spell that shoots hot laser bolts from the caster's eyes, one bolt after another.",
-        Summary: "Single target ranged attack.");
+        Summary: "Single target ranged attack.")
+    {
+        ActivationEffects = [new Effect([new ManaDrain(ManaCost)])],
+    };
 }

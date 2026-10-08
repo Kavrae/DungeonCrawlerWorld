@@ -113,6 +113,7 @@ public sealed class BuiltInModulesTests
             "DodgeExpirySystem",
             "DelayedActionSystem",
             "ActionActivationSystem",
+            "ToggleUpkeepSystem",
             "StatusEffectImmunityExpirySystem",
             "StatModifierExpirySystem",
             "BodyPartEffectsSystem",
@@ -123,8 +124,9 @@ public sealed class BuiltInModulesTests
             "TerrainContactSystem",
             "AuraSystem",
             "AuraSourceExpirySystem",
+            "AuraAnchorEndingSystem",
             "AchievementPollingSystem",
-            "ConsumableActivationSystem",
+            "ItemActivationSystem",
             "ContainerDestructionSystem",
         ];
 

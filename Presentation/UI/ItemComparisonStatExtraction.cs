@@ -1,4 +1,3 @@
-using Engine.Math;
 using Game.Effects;
 using Game.Effects.Entries;
 using Engine.Tags;
@@ -44,11 +43,25 @@ public static class ItemComparisonStatExtraction
         {
             foreach (var entry in effect.Entries)
             {
-                stats.Add(ExtractEffectStat(entry, gameplayTags));
+                AddEffectStats(stats, entry, gameplayTags);
             }
         }
 
         return stats;
+    }
+
+    /// <summary>One line per entry, except an aura grant's two -- its size and its power, each compared on its own.</summary>
+    private static void AddEffectStats(List<ItemComparisonStat> stats, IEffectEntry entry, GameplayTagRegistry gameplayTags)
+    {
+        if (entry is AuraSourceGrant aura)
+        {
+            var duration = aura.DurationFrames is { } durationFrames ? $" -- for {FormatSeconds(durationFrames)}" : string.Empty;
+            stats.Add(new ItemComparisonStat($"effect:aura:{aura.Aura.Id}:size", $"Grants a {aura.Aura.Name} aura, size {aura.Size}{duration}", aura.Size, HigherIsBetter: true));
+            stats.Add(new ItemComparisonStat($"effect:aura:{aura.Aura.Id}:power", $"{aura.Aura.Name} aura power {aura.Power}", aura.Power, HigherIsBetter: true));
+            return;
+        }
+
+        stats.Add(ExtractEffectStat(entry, gameplayTags));
     }
 
     private static ItemComparisonStat ExtractEffectStat(IEffectEntry entry, GameplayTagRegistry gameplayTags)
@@ -63,7 +76,6 @@ public static class ItemComparisonStatExtraction
             StatusEffectGrant status => new ItemComparisonStat($"effect:status:{status.Type}", displayText, status.StackCount, HigherIsBetter: true),
             // Signed by Polarity regardless of Operation (Additive/Multiplicative) -- a simplification: this value only drives green/red ranking, not the actual applied math (see StatModifierGrant.Apply for that), so a buff always ranks "higher magnitude is better" and a debuff the opposite.
             StatModifierGrant modifier => new ItemComparisonStat($"effect:statmod:{modifier.Target}", displayText, modifier.Polarity == StatModifierPolarity.Buff ? modifier.Magnitude : -modifier.Magnitude, HigherIsBetter: true),
-            AuraSourceGrant aura => new ItemComparisonStat($"effect:aura:{aura.Aura.Id}", displayText, DistanceFalloff.MaxRadius(aura.Strength), HigherIsBetter: true),
             HotkeyExpansionGrant expansion => new ItemComparisonStat("effect:hotkeySlots", displayText, expansion.Slots, HigherIsBetter: true),
             ChainedEffect chained => new ItemComparisonStat("effect:chained", displayText, chained.TriggerChance * 100, HigherIsBetter: true),
             _ => new ItemComparisonStat($"effect:{entry.GetType().Name}", displayText, null, HigherIsBetter: true),
@@ -111,9 +123,6 @@ public static class ItemComparisonStatExtraction
                 stats.Add(new ItemComparisonStat("activator:charges", $"Charges: {wand.Charges}/{wand.MaxCharges}", wand.MaxCharges, HigherIsBetter: true));
                 break;
 
-            case SpellActivator { ManaCost: > 0 } spellActivator:
-                stats.Add(new ItemComparisonStat("activator:manaCost", $"Mana Cost: {spellActivator.ManaCost}", spellActivator.ManaCost, HigherIsBetter: false));
-                break;
         }
 
         return stats;

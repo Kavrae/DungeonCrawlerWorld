@@ -16,10 +16,10 @@ What exists today:
   replacement has to be at least as cheap.
 - `NpcBehaviorModule` is registered before `MovementModule`, so the decision runs before
   `MovementSystem`. `ActionsModule` and `InventoryModule` are registered after it, so
-  `ActionActivationSystem` and `ConsumableActivationSystem` drain the queued requests later in the
+  `ActionActivationSystem` and `ItemActivationSystem` drain the queued requests later in the
   same frame.
 - A decision is written as one of three requests: `PendingActionActivationComponent`,
-  `PendingConsumableActivationComponent`, or `MovementComponent.NextMapPosition`/`WaitUntilFrame`.
+  `PendingItemActivationComponent`, or `MovementComponent.NextMapPosition`/`WaitUntilFrame`.
 - `MovementSystem.UpdateEntity` skips an entity that has either pending activation component
   (`//TEMPORARY replace with a more generic mechanics`). That's the check the TODO entry is about:
   every new request type would need another pool injected and another `Has` here.
@@ -78,7 +78,7 @@ compares it. `MovementSystem` gates on `IsBlocked(...) || IsTurnClaimed(...)`.
 that replaces the three request channels, like `PlayerCommands`'s single slot or RimWorld's
 single current `Job`.
 - Pro: double-booking a turn becomes structurally impossible.
-- Con: rewrites `ActionActivationSystem`, `ConsumableActivationSystem`, `PlayerCommands`,
+- Con: rewrites `ActionActivationSystem`, `ItemActivationSystem`, `PlayerCommands`,
   Dodge's step-on-activation and every test that queues a request. FreeCast has to coexist with a
   move, so it isn't really one slot anyway.
 
@@ -89,7 +89,7 @@ single current `Job`.
 ### Recommendation: B, written through one chokepoint
 
 Add `IntentWriter` (Game, next to `ActionLockGate`), the only way to queue a turn-taking request:
-`QueueAction(entityId, actionId, targetTiles, now)`, `QueueConsumable(entityId, stackInstanceId,
+`QueueAction(entityId, actionId, targetTiles, now)`, `QueueItemActivation(entityId, stackInstanceId,
 targetTiles, now)`. Each writes the pending component *and* claims the turn, so no caller can forget
 to claim (the same reasoning as the timer wheels observing `ComponentChanged` so no caller has to
 remember to schedule).
@@ -446,7 +446,7 @@ Stop after each phase for in-game testing.
 1. Add a test first: an NPC with a queued activation and a stale `NextMapPosition` doesn't move, to
    pin down today's behavior before changing how it's guaranteed.
 2. `ActionLockComponent.TurnClaimedAtFrame`, `ActionLockGate.ClaimTurn`/`IsTurnClaimed`.
-3. `IntentWriter.QueueAction`/`QueueConsumable`. Route `TestCombatBehaviorSystem`,
+3. `IntentWriter.QueueAction`/`QueueItemActivation`. Route `TestCombatBehaviorSystem`,
    `TestDummyAttackSystem` and `PlayerCommands` through it.
 4. `MovementSystem`: replace the pending-pool check with `IsTurnClaimed`, and drop the two
    constructor parameters and the `//TEMPORARY` comment.
@@ -491,9 +491,10 @@ Stop after each phase for in-game testing.
 
 ### Phase 4 -- runtime drives, Fear, Dread Idol, inspection
 
-**Depends on `PLAN-toggle-items.md` Phase 1** (`ToggleItemActivator`, `ToggleItemActions.TryToggle`,
-`ToggledItemHolderEffects`). If that hasn't landed when this phase starts, land it first rather than
-building the idol on Toxic Idol's current flip-mode `PotionActivator`, which costs a stack to turn off.
+**Toggle items have landed** (aura stage 2: `ToggleItemActivator`, `ToggleSpec`, `ToggleItemActions.TryToggle`,
+`ToggleItemHolderSync` -- see IMPLEMENTATION-NOTES.md "Toggles: items and actions"), so the Dread Idol is a
+toggle item like Toxic Idol. Its aura needs a Guid of its own: the build refuses two different aura
+definitions sharing one.
 
 1. `StatModifierTarget.BehaviorAggression`/`BehaviorCaution` and `DriveMultiplier` in the loop.
 2. **Fear status effect** (`Game/Modules/Fear/`, modelled on Paralysis):

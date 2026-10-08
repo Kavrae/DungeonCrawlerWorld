@@ -1,15 +1,14 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
-using Engine.Math;
 using Engine.Tags;
+using Game.Modules.Burning.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
-using Game.Modules.Burning.Components;
 using Game.Modules.Health.Components;
-using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
+using Game.Resources;
 using Game.Tags;
 using Game.World;
 
@@ -87,10 +86,7 @@ public sealed class BodyPartBurningSystem : ISystem
 
         if (_bodyParts.TryGet(entityId, timer.PartId, out _))
         {
-            var effectiveAmount = MathUtility.ClampUShort(
-                StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.IncomingDamage, stackCount, BurningDamageTags),
-                0,
-                ushort.MaxValue);
+            var effectiveAmount = HealthDamage.IncomingDamageOf(_statModifiers, entityId, stackCount, BurningDamageTags);
             var wasDead = _deadEntities.Has(entityId);
 
             BodyPartDamageEffects.ApplyToPart(_bodyParts, entityId, timer.PartId, _statModifiers, effectiveAmount, now);
@@ -104,7 +100,7 @@ public sealed class BodyPartBurningSystem : ISystem
 
             if (!wasDead)
             {
-                HealthDamage.PublishDamageTaken(_floatingTextFeed, entityId, effectiveAmount, DamageCategory.StatusEffect);
+                HealthDamage.PublishDamageTaken(_floatingTextFeed, entityId, effectiveAmount, ResourceLossCategory.StatusEffect);
             }
         }
 

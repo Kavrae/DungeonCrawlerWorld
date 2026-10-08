@@ -12,6 +12,7 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.StatModifiers.Components;
+using Game.Resources;
 using Game.Spawning;
 using Game.Tags;
 using Game.Terrain;
@@ -44,7 +45,7 @@ public sealed class HealingShrineTests
             HealthDamage.Apply(
                 Components.GetPackedPool<SimpleHealthComponent>(), Build.EcsContext.EventBus, entityId, amount, ActionSource.Admin, Build.World, "Test", Build.Context.SimulationClock.CurrentFrame,
                 Components.GetMultiPool<StatModifierComponent>(), EntityBodyParts.For(Components, Build.Context.Definitions), Build.Context.MathUtility,
-                Components.GetPackedPool<DeadComponent>(), Build.Context.FloatingTextFeed, DamageCategory.Direct, targetRule, damageTags: fire ? [GameTags.DamageFire] : default);
+                Components.GetPackedPool<DeadComponent>(), Build.Context.FloatingTextFeed, ResourceLossCategory.Direct, targetRule, damageTags: fire ? [GameTags.DamageFire] : default);
 
         public void RunFrames(int count)
         {
@@ -77,7 +78,7 @@ public sealed class HealingShrineTests
     private static Vector3Int Beside(Vector3Int position, int tilesEast) => new(position.X + tilesEast, position.Y, position.Z);
 
     [TestMethod]
-    public void Spawned_RadiatesAStrengthSixteenHealingAura()
+    public void Spawned_RadiatesAPowerSixteenSizeFourHealingAura()
     {
         var session = BuildSession();
 
@@ -87,15 +88,16 @@ public sealed class HealingShrineTests
         Assert.AreEqual(1, sources.CountForEntity(shrineId));
         var source = sources.GetReadonlyByDenseIndex(sources.GetFirstDenseIndex(shrineId));
         Assert.AreEqual(session.Build.Context.Auras.GetId(HealingShrine.Aura.Id), source.AuraId);
-        Assert.AreEqual(16, source.Strength);
+        Assert.AreEqual(16, source.Power);
+        Assert.AreEqual(4, source.Size);
     }
 
     [TestMethod]
-    [DataRow(1, 8)]
-    [DataRow(2, 4)]
-    [DataRow(3, 2)]
-    [DataRow(4, 1)]
-    public void HealsAnEntityInRangeByTheAurasStrengthThereEachSecond(int tilesAway, int healthPerSecond)
+    [DataRow(1, 13)]
+    [DataRow(2, 10)]
+    [DataRow(3, 7)]
+    [DataRow(4, 4)]
+    public void HealsAnEntityInRangeByTheAurasPowerThereEachSecond(int tilesAway, int healthPerSecond)
     {
         var session = BuildSession();
         session.Spawn(HealingShrine.Id, ShrinePosition);
@@ -124,7 +126,7 @@ public sealed class HealingShrineTests
 
         var healed = published.Single(text => text.EntityId == chestId);
         Assert.AreEqual(FloatingTextKind.Healed, healed.Kind);
-        Assert.AreEqual(8, healed.Amount);
+        Assert.AreEqual(13, healed.Amount);
     }
 
     /// <summary>A creature with body parts gets the whole heal on its most damaged part, so nothing is spent on parts that are already full and the text shows the full amount.</summary>
@@ -145,9 +147,9 @@ public sealed class HealingShrineTests
         session.RunFrames(FramesPerSecond + 2);
 
         var healed = published.First(text => text.EntityId == goblinId && text.Kind == FloatingTextKind.Healed);
-        Assert.AreEqual(8, healed.Amount);
+        Assert.AreEqual(13, healed.Amount);
         bodyParts.TryGet(goblinId, torsoPartId, out var torsoAfter);
-        Assert.IsGreaterThanOrEqualTo(torsoBefore.CurrentHealth - 20 + 8, torsoAfter.CurrentHealth);
+        Assert.IsGreaterThanOrEqualTo(torsoBefore.CurrentHealth - 20 + 13, torsoAfter.CurrentHealth);
     }
 
     [TestMethod]
@@ -174,7 +176,7 @@ public sealed class HealingShrineTests
 
         session.RunUntilHealthChanges(chestId);
 
-        Assert.AreEqual(66, session.HealthOf(chestId));
+        Assert.AreEqual(76, session.HealthOf(chestId));
     }
 
     [TestMethod]
@@ -247,13 +249,13 @@ public sealed class HealingShrineTests
         var shrineId = session.Spawn(HealingShrine.Id, ShrinePosition);
         var beside = Beside(ShrinePosition, 1);
         session.RunFrames(2);
-        Assert.AreEqual(8, session.Build.Context.AuraField.GetTotalStrengthAt(beside, healingAuraId), "Precondition: the shrine's aura is in the field.");
+        Assert.AreEqual(13, session.Build.Context.AuraField.GetTotalPowerAt(beside, healingAuraId), "Precondition: the shrine's aura is in the field.");
 
         session.Damage(shrineId, 1000);
         session.RunFrames(2);
 
         Assert.IsTrue(session.Components.GetPackedPool<DeadComponent>().Has(shrineId));
-        Assert.AreEqual(0, session.Build.Context.AuraField.GetTotalStrengthAt(beside, healingAuraId));
+        Assert.AreEqual(0, session.Build.Context.AuraField.GetTotalPowerAt(beside, healingAuraId));
         Assert.IsFalse(session.Build.Context.AuraField.TryGetGlow(beside, out _, out _));
     }
 
@@ -268,7 +270,7 @@ public sealed class HealingShrineTests
 
         session.Build.Factory.Apply(chestId, session.Build.Context.Definitions.GetId(HealingShrine.Id));
 
-        Assert.AreEqual(8, session.Build.Context.AuraField.GetTotalStrengthAt(Beside(ShrinePosition, 1), healingAuraId));
+        Assert.AreEqual(13, session.Build.Context.AuraField.GetTotalPowerAt(Beside(ShrinePosition, 1), healingAuraId));
 
         session.Build.Factory.Apply(chestId, session.Build.Context.Definitions.GetId(HealingShrine.Id));
         Assert.AreEqual(1, session.Components.GetMultiPool<AuraSourceComponent>().CountForEntity(chestId), "Applying it again adds no second source.");

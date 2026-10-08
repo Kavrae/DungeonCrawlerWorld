@@ -8,6 +8,7 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
+using Game.Resources;
 using Game.Tags;
 using Game.World;
 using Game.Modules.Death.Components;
@@ -83,7 +84,7 @@ public sealed class BurningSystem : ISystem
             return true;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, _floatingTextFeed, DamageCategory.StatusEffect, damageTags: BurningDamageTags);
+        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, _floatingTextFeed, ResourceLossCategory.StatusEffect, damageTags: BurningDamageTags);
 
         var remainingStacks = (byte)(stackCount - 1);
         if (remainingStacks == 0)

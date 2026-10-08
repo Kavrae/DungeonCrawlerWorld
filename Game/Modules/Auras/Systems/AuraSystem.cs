@@ -25,7 +25,9 @@ namespace Game.Modules.Auras.Systems;
 /// </para>
 /// <para>
 /// What an aura does is its definition's Effects (AuraCatalog) -- the same Effect lists an action or
-/// item holds, applied with no source entity and attributed to the aura; this system knows no
+/// item holds, applied with no source entity and credited to the strongest contributor at the cell
+/// (AuraField.Attribute: an entity source's entity or anchor placer, a terrain, or the aura) -- so a kill
+/// by a lit idol is its holder's; this system knows no
 /// particular effect. They are read from the definition at every tick, so a definition replaced
 /// during a session is what the next tick applies. An aura with no effects only glows: it is in the
 /// grid, and nothing holds an exposure to it. The magnitude the effects are scaled by is the grid's
@@ -35,7 +37,7 @@ namespace Game.Modules.Auras.Systems;
 /// <para>
 /// An exposure is held by anything in range that isn't dead, whether or not the effects can do
 /// anything to it: nothing remembers "this entity can't be affected", so a change to the aura, its
-/// strength or the entity is picked up by the next tick with nothing to invalidate. A tick whose
+/// power, its size or the entity is picked up by the next tick with nothing to invalidate. A tick whose
 /// effects are refused (an immunity) reports that once and stays silent until something lands again
 /// (AuraExposureComponent.Refused).
 /// </para>
@@ -49,14 +51,14 @@ namespace Game.Modules.Auras.Systems;
 /// </para>
 /// <para>
 /// The field holds terrain auras itself; this system puts entity sources into it, since it is what
-/// knows where each one is (_sourcePositionsInField):
+/// knows where each one is (_sourcePlacementsInField):
 /// - <b>Added.</b> It observes the source pool, so a source added by any path is noticed. On an
 ///   entity already on the map it goes into the field at once; on one still being spawned it waits
 ///   for the spawn's move.
 /// - <b>First placement</b> of an entity's sources is immediate at every tier.
 /// - <b>Moved.</b> A Local-tier source is resynced on the move, where the player can see it. Any
 ///   other tier is left where the field has it and queued; Update resyncs a few queued sources a
-///   frame (MaximumDeferredResyncsPerFrame), which keeps a moving source's O(radius^2) resync from
+///   frame (MaximumDeferredResyncsPerFrame), which keeps a moving source's resync from
 ///   multiplying across a population of them. A source that never moves is never queued, so
 ///   stationary sources -- most of them -- cost nothing per frame.
 /// - <b>Removed.</b> From AuraSourceRemovedEvent (a pool announces nothing on removal), taken out
@@ -84,6 +86,7 @@ public sealed class AuraSystem : ISystem
     private readonly SimulationScope _simulationScope;
     private readonly AuraField _auraField;
     private readonly EffectServices _effectServices;
+    private readonly PackedComponentPool<AuraAnchorComponent> _anchors;
 
     /// <summary>
     /// Each exposure's tick, keyed by AuraId (see AuraExposureComponent). Only exposures due this
@@ -106,7 +109,11 @@ public sealed class AuraSystem : ISystem
     private readonly TimerFired<AuraExposureComponent> _tick;
 
     /// <summary>Where the field holds each source entity's sources. May lag a non-Local source's real (_transforms) position by however many moves it has made since its last resync -- see ResyncSourceIfStale. An entity with sources and no entry has none of them in the field yet.</summary>
-    private readonly Dictionary<int, Vector3Int> _sourcePositionsInField = [];
+    private readonly Dictionary<int, SourcePlacement> _sourcePlacementsInField = [];
+
+    /// <summary>Where the field holds an entity's sources, and whether the occupants in their reach were exposed when they were put there.</summary>
+    /// <param name="ExposedOccupants">False when the entity wasn't simulated at the time: nobody in reach was scanned, so its next resync scans the whole reach rather than only the cells that changed sides.</param>
+    private readonly record struct SourcePlacement(Vector3Int Position, bool ExposedOccupants);
 
     /// <summary>The non-Local sources that moved and have not been resynced yet, in the order they moved, each once.</summary>
     private readonly Queue<int> _unsyncedSourceQueue = new();
@@ -136,6 +143,7 @@ public sealed class AuraSystem : ISystem
         _auras = auras;
         _movedEntities = movedEntities;
         _effectServices = effectServices;
+        _anchors = effectServices.ComponentManager.GetPackedPool<AuraAnchorComponent>();
         _deadEntities = effectServices.DeadEntities;
         _processingTiers = processingTiers;
         _clock = simulationClock;
@@ -181,14 +189,14 @@ public sealed class AuraSystem : ISystem
     }
 
     /// <summary>A terrain cell started radiating: whoever already stands in range is exposed, the same as for a source that moved there.</summary>
-    private void OnTerrainAuraAdded(Vector3Int position)
+    private void OnTerrainAuraAdded(Vector3Int position, AuraSourceComponent source)
     {
         _now = _clock.CurrentFrame;
-        StartExposuresNear(position);
+        StartExposuresNear(position, AuraField.ReachOf(source));
     }
 
     /// <summary>A terrain cell stopped radiating: exposures it no longer reaches are dropped at once.</summary>
-    private void OnTerrainAuraRemoved(Vector3Int position) => ReEvaluateExposuresNear(position);
+    private void OnTerrainAuraRemoved(Vector3Int position, AuraSourceComponent source) => ReEvaluateExposuresNear(position, AuraField.ReachOf(source));
 
     /// <summary>An aura's definition was replaced. If it has effects, whoever stands in reach of one of its sources is exposed -- before, with no effects, nothing held an exposure to it. One that lost its effects needs nothing: each exposure ends on its next tick.</summary>
     /// <remarks>Walks every entity source and every loaded terrain cell for the ones radiating this aura: rare, and there is no index from an aura to its sources.</remarks>
@@ -206,13 +214,13 @@ public sealed class AuraSystem : ISystem
         var sourceComponents = _sources.Components;
         for (var index = 0; index < sourceEntityIds.Length; index++)
         {
-            if (sourceComponents[index].AuraId == auraId && _sourcePositionsInField.TryGetValue(sourceEntityIds[index], out var positionInField))
+            if (sourceComponents[index].AuraId == auraId && _sourcePlacementsInField.TryGetValue(sourceEntityIds[index], out var placementInField))
             {
-                StartExposuresNear(positionInField);
+                StartExposuresNear(placementInField.Position, AuraField.ReachOf(sourceComponents[index]));
             }
         }
 
-        _auraField.ForEachTerrainSource(auraId, StartExposuresNear);
+        _auraField.ForEachTerrainSource(auraId, (position, source) => StartExposuresNear(position, AuraField.ReachOf(source)));
     }
 
     private void OnEntityMoved(EntityMovedEvent moved)
@@ -221,7 +229,7 @@ public sealed class AuraSystem : ISystem
 
         if (_sources.Has(moved.EntityId))
         {
-            if (!_sourcePositionsInField.ContainsKey(moved.EntityId) || GetSourceTier(moved.EntityId) == ProcessingTierLevel.Local)
+            if (!_sourcePlacementsInField.ContainsKey(moved.EntityId) || GetSourceTier(moved.EntityId) == ProcessingTierLevel.Local)
             {
                 ResyncSourceIfStale(moved.EntityId);
             }
@@ -242,12 +250,18 @@ public sealed class AuraSystem : ISystem
 
     /// <summary>
     /// Moves entityId's sources in the field to where the entity is now, if that differs from where
-    /// the field has them (_sourcePositionsInField) -- a no-op otherwise. Called on the move for a
+    /// the field has them (_sourcePlacementsInField) -- a no-op otherwise. Called on the move for a
     /// Local-tier source and for any source's first placement, and from Update's queue for a
     /// source of any other tier that moved. Either way this is the only place a moving source's reach
     /// changes, so a source that moved several times while non-Local is taken out from where the
     /// field actually has it, not from one event's old position.
     /// </summary>
+    /// <remarks>
+    /// Each source is scanned by its own reach, and only over the cells that changed sides: an
+    /// exposure can end only where the source's old reach covered and its new one doesn't, and can
+    /// start only in the reverse. The whole new reach is scanned instead on a first placement, and
+    /// when the last placement exposed nobody (SourcePlacement.ExposedOccupants).
+    /// </remarks>
     private void ResyncSourceIfStale(int entityId)
     {
         if (!_transforms.TryGetReadonly(entityId, out var transform))
@@ -256,8 +270,9 @@ public sealed class AuraSystem : ISystem
         }
 
         var currentPosition = transform.Position;
-        var hadPreviousPosition = _sourcePositionsInField.TryGetValue(entityId, out var previousPosition);
-        if (hadPreviousPosition && previousPosition == currentPosition)
+        var hadPreviousPlacement = _sourcePlacementsInField.TryGetValue(entityId, out var previousPlacement);
+        var previousPosition = previousPlacement.Position;
+        if (hadPreviousPlacement && previousPosition == currentPosition)
         {
             return;
         }
@@ -268,44 +283,69 @@ public sealed class AuraSystem : ISystem
             return;
         }
 
-        SourceSplatting.ResyncEntity(_sources, entityId, hadPreviousPosition ? previousPosition : null, currentPosition,
-            unsplat: (source, position) => _auraField.RemoveSource(position, source),
-            splat: (source, position) => _auraField.AddSource(position, source));
-
-        // Only where the reach was taken away can an exposure have lost its aura, and anything it
-        // reached is within scan range of there.
-        if (hadPreviousPosition)
+        // Every source is moved in the field before any cell is scanned, so a scan reads the totals as they end up.
+        for (var denseIndex = _sources.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _sources.GetNextDenseIndex(denseIndex))
         {
-            ReEvaluateExposuresNear(previousPosition);
+            var source = _sources.GetReadonlyByDenseIndex(denseIndex);
+            if (hadPreviousPlacement)
+            {
+                _auraField.MoveEntitySource(entityId, previousPosition, currentPosition, source);
+            }
+            else
+            {
+                _auraField.AddEntitySource(entityId, currentPosition, source, AttributionOf(entityId));
+            }
         }
 
         // A source that isn't simulated is surrounded by occupants that aren't either, and those gain
         // no exposure while frozen (see StartExposuresNear): a shrine spawned into a frozen
         // neighborhood has nothing to scan for. A simulated occupant just across a tier boundary
         // from it is exposed by its own next move instead.
-        if (_simulationScope.IsSimulated(entityId))
+        var exposesOccupants = _simulationScope.IsSimulated(entityId);
+        var overlapAlreadyExposed = hadPreviousPlacement && previousPlacement.ExposedOccupants;
+
+        for (var denseIndex = _sources.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _sources.GetNextDenseIndex(denseIndex))
         {
-            StartExposuresNear(currentPosition);
+            var reach = AuraField.ReachOf(_sources.GetReadonlyByDenseIndex(denseIndex));
+
+            if (hadPreviousPlacement)
+            {
+                ReEvaluateExposuresNear(previousPosition, reach, exceptWithinReachOf: currentPosition);
+            }
+
+            if (exposesOccupants)
+            {
+                StartExposuresNear(currentPosition, reach, exceptWithinReachOf: overlapAlreadyExposed ? previousPosition : null);
+            }
         }
 
-        _sourcePositionsInField[entityId] = currentPosition;
+        _sourcePlacementsInField[entityId] = new SourcePlacement(currentPosition, exposesOccupants);
     }
 
     /// <summary>Takes every source entityId still carries out of the field, for an entity that left the map: its reach goes with it.</summary>
     private void LiftSourcesFromField(int entityId)
     {
-        if (!_sourcePositionsInField.Remove(entityId, out var positionInField))
+        if (!_sourcePlacementsInField.Remove(entityId, out var placementInField))
         {
             return;
         }
 
         for (var denseIndex = _sources.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _sources.GetNextDenseIndex(denseIndex))
         {
-            _auraField.RemoveSource(positionInField, _sources.GetReadonlyByDenseIndex(denseIndex));
+            _auraField.RemoveEntitySource(entityId, placementInField.Position, _sources.GetReadonlyByDenseIndex(denseIndex));
         }
 
-        ReEvaluateExposuresNear(positionInField);
+        for (var denseIndex = _sources.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _sources.GetNextDenseIndex(denseIndex))
+        {
+            ReEvaluateExposuresNear(placementInField.Position, AuraField.ReachOf(_sources.GetReadonlyByDenseIndex(denseIndex)));
+        }
     }
+
+    /// <summary>Whom entityId's sources' effects are credited to (AuraField.Attribute): whoever placed it, for an anchor; otherwise the entity, as it is when its sources are first placed.</summary>
+    private ActionSource AttributionOf(int entityId) =>
+        _anchors.TryGetReadonly(entityId, out var anchor)
+            ? anchor.PlacedBy
+            : ActionSource.FromEntity(_effectServices.ComponentManager, _effectServices.EntityKeys, entityId, _effectServices.Definitions);
 
     /// <summary>Fails open to Beyond for a source with no ProcessingTierComponent yet -- the same "unknown = probably far" bias the stripe sets use -- so its moves are queued rather than resynced on the spot.</summary>
     private ProcessingTierLevel GetSourceTier(int entityId) =>
@@ -322,10 +362,11 @@ public sealed class AuraSystem : ISystem
     {
         _now = _clock.CurrentFrame;
 
-        if (_sourcePositionsInField.TryGetValue(entityId, out var positionInField))
+        if (_sourcePlacementsInField.TryGetValue(entityId, out var placementInField))
         {
-            _auraField.AddSource(positionInField, _sources.GetReadonlyByDenseIndex(denseIndex));
-            StartExposuresNear(positionInField);
+            var addedSource = _sources.GetReadonlyByDenseIndex(denseIndex);
+            _auraField.AddEntitySource(entityId, placementInField.Position, addedSource, AttributionOf(entityId));
+            StartExposuresNear(placementInField.Position, AuraField.ReachOf(addedSource));
             return;
         }
 
@@ -335,46 +376,50 @@ public sealed class AuraSystem : ISystem
     /// <summary>Takes a removed source out of the field from where the field has it, and at once drops the exposures it no longer reaches, so toggling off reads as instant.</summary>
     private void OnSourceRemoved(AuraSourceRemovedEvent removed)
     {
-        if (!_sourcePositionsInField.TryGetValue(removed.EntityId, out var positionInField))
+        if (!_sourcePlacementsInField.TryGetValue(removed.EntityId, out var placementInField))
         {
             return;
         }
 
         if (!_sources.Has(removed.EntityId))
         {
-            _sourcePositionsInField.Remove(removed.EntityId);
+            _sourcePlacementsInField.Remove(removed.EntityId);
         }
 
-        _auraField.RemoveSource(positionInField, removed.Source);
-        ReEvaluateExposuresNear(positionInField);
+        _auraField.RemoveEntitySource(removed.EntityId, placementInField.Position, removed.Source);
+        ReEvaluateExposuresNear(placementInField.Position, AuraField.ReachOf(removed.Source));
     }
 
+    /// <summary>Whether (x, y) on layer z is within reach tiles of center, by Manhattan distance on the same layer. False for no center.</summary>
+    private static bool IsWithinReachOf(Vector3Int? center, int reach, int x, int y, int z) =>
+        center is { } position && position.Z == z && Math.Abs(x - position.X) + Math.Abs(y - position.Y) <= reach;
+
     /// <summary>
-    /// Start-only counterpart to ReEvaluateExposuresNear -- same box-scan shape, but for
+    /// Start-only counterpart to ReEvaluateExposuresNear -- same diamond walk, but for
     /// wherever a source is now (just added, or just resynced to) rather than wherever one just left. The source entity itself showing
-    /// up in this same scan is harmless: its own strength is left out of its total (see
-    /// TotalStrengthExcludingSelf).
+    /// up in this same scan is harmless: its own power is left out of its total (see
+    /// PowerReaching).
     /// </summary>
-    /// <remarks>Walks IMapQuery.GetOccupantEntityIdsAt per cell rather than the Blocking-only GetEntityIdsInBox, so Tiny/Phasing occupants are exposed too.</remarks>
-    private void StartExposuresNear(Vector3Int center)
+    /// <remarks>Walks IMapQuery.GetOccupantEntityIdSpanAt per cell rather than the Blocking-only GetEntityIdsInBox, so Tiny/Phasing occupants are exposed too.</remarks>
+    /// <param name="center">Where the source is.</param>
+    /// <param name="reach">The source's reach (AuraField.ReachOf): the cells walked are those within this Manhattan distance of center.</param>
+    /// <param name="exceptWithinReachOf">Where the source was, to skip the cells its reach already covered from there -- ruled out by arithmetic, with no map read. Null walks the whole reach.</param>
+    private void StartExposuresNear(Vector3Int center, int reach, Vector3Int? exceptWithinReachOf = null)
     {
-        var scanRadius = _auraField.MaxScanRadius;
-        var boxWidth = scanRadius * 2 + 1;
-        var minX = center.X - scanRadius;
-        var minY = center.Y - scanRadius;
         var z = center.Z;
 
-        for (var y = minY; y < minY + boxWidth; y++)
+        for (var deltaY = -reach; deltaY <= reach; deltaY++)
         {
-            for (var x = minX; x < minX + boxWidth; x++)
+            var y = center.Y + deltaY;
+            var remainingReach = reach - Math.Abs(deltaY);
+            for (var x = center.X - remainingReach; x <= center.X + remainingReach; x++)
             {
-                var position = new Vector3Int(x, y, z);
-                if (!_mapQuery.IsOnMap(position))
+                if (IsWithinReachOf(exceptWithinReachOf, reach, x, y, z))
                 {
                     continue;
                 }
 
-                foreach (var occupantId in _mapQuery.GetOccupantEntityIdsAt(position))
+                foreach (var occupantId in _mapQuery.GetOccupantEntityIdSpanAt(new Vector3Int(x, y, z)))
                 {
                     // Frozen occupants gain no new exposure while frozen: a skeleton's starts when it is built (CreatureSkeletons.EnsureBuilt), anything else's when it resumes (OnEntityResumed).
                     if (!_simulationScope.IsSimulated(occupantId))
@@ -403,7 +448,7 @@ public sealed class AuraSystem : ISystem
         // The buffer drain itself is NOT ProcessingTier-gated -- it only ever processes
         // entities that actually moved this exact frame (already self-limiting, unlike the
         // periodic passes below).
-        foreach (var moved in _movedEntities.Items)
+        foreach (var moved in _movedEntities.ItemSpan)
         {
             OnEntityMoved(moved);
         }
@@ -444,15 +489,15 @@ public sealed class AuraSystem : ISystem
             return true;
         }
 
-        var strength = TotalStrengthExcludingSelf(entityId, transform.Position, auraId);
-        if (strength <= 0)
+        var power = _auraField.PowerReaching(transform.Position, auraId, entityId, out var credit);
+        if (power <= 0)
         {
             return true;
         }
 
-        var context = new EffectContext(_effectServices, ActionSource.FromAura(auraId), SourceEntityId: null, entityId, definition.EffectName, definition.Tags, now)
+        var context = new EffectContext(_effectServices, credit, SourceEntityId: null, entityId, definition.EffectName, definition.Tags, now)
         {
-            Magnitude = definition.Magnitude == AuraMagnitude.Flat ? 1f : strength,
+            Magnitude = definition.Magnitude == AuraMagnitude.Flat ? 1f : power,
             AnnouncesRefusal = !exposure.Refused,
         };
 
@@ -481,7 +526,7 @@ public sealed class AuraSystem : ISystem
 
         foreach (var auraId in _auraField.AuraIdsInField)
         {
-            if (_auras.Get(auraId).HasEffects && TotalStrengthExcludingSelf(entityId, position, auraId) > 0 && !HasExposure(entityId, auraId))
+            if (_auras.Get(auraId).HasEffects && PowerReaching(entityId, position, auraId) > 0 && !HasExposure(entityId, auraId))
             {
                 _exposures.Add(entityId, new AuraExposureComponent(auraId, FrameDeadline.AfterStaggered(_now, AuraEffects.TickIntervalFrames, entityId)));
             }
@@ -501,54 +546,36 @@ public sealed class AuraSystem : ISystem
         return false;
     }
 
-    private int TotalStrengthExcludingSelf(int entityId, Vector3Int position, byte auraId)
-    {
-        var totalStrength = _auraField.GetTotalStrengthAt(position, auraId);
-
-        // Out of the aura's reach altogether, which most movers are: nothing of the entity's own to leave out.
-        if (totalStrength <= 0)
-        {
-            return 0;
-        }
-
-        for (var denseIndex = _sources.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = _sources.GetNextDenseIndex(denseIndex))
-        {
-            var selfSource = _sources.GetReadonlyByDenseIndex(denseIndex);
-            if (selfSource.AuraId == auraId)
-            {
-                totalStrength -= selfSource.Strength;
-            }
-        }
-
-        return Math.Max(0, totalStrength);
-    }
+    /// <summary>The aura's power reaching entityId at position, the sources it carries left out (AuraField.PowerReaching): a source never affects the entity carrying it.</summary>
+    private int PowerReaching(int entityId, Vector3Int position, byte auraId) =>
+        _auraField.PowerReaching(position, auraId, entityId);
 
     /// <summary>
     /// Removal-only re-check for occupants near a moving/toggled aura source. Per aura: an
     /// occupant exposed to two (e.g. Burning from one source, Poison from another) only has the
-    /// one whose strength actually dropped to zero removed, rather than waiting for that
+    /// one whose power actually dropped to zero removed, rather than waiting for that
     /// exposure's own next tick to find it out of range.
     /// </summary>
-    /// <remarks>See StartExposuresNear's own remark -- same GetOccupantEntityIdsAt-per-cell walk, so a Tiny/Phasing occupant's exposure is dropped when it (or the source) moves out of range too.</remarks>
-    private void ReEvaluateExposuresNear(Vector3Int center)
+    /// <remarks>See StartExposuresNear's own remark -- same GetOccupantEntityIdSpanAt-per-cell walk, so a Tiny/Phasing occupant's exposure is dropped when it (or the source) moves out of range too.</remarks>
+    /// <param name="center">Where the source was.</param>
+    /// <param name="reach">The source's reach (AuraField.ReachOf): the cells walked are those within this Manhattan distance of center.</param>
+    /// <param name="exceptWithinReachOf">Where the source is now, to skip the cells its reach still covers from there -- ruled out by arithmetic, with no map read. Null walks the whole reach.</param>
+    private void ReEvaluateExposuresNear(Vector3Int center, int reach, Vector3Int? exceptWithinReachOf = null)
     {
-        var scanRadius = _auraField.MaxScanRadius;
-        var boxWidth = scanRadius * 2 + 1;
-        var minX = center.X - scanRadius;
-        var minY = center.Y - scanRadius;
         var z = center.Z;
 
-        for (var y = minY; y < minY + boxWidth; y++)
+        for (var deltaY = -reach; deltaY <= reach; deltaY++)
         {
-            for (var x = minX; x < minX + boxWidth; x++)
+            var y = center.Y + deltaY;
+            var remainingReach = reach - Math.Abs(deltaY);
+            for (var x = center.X - remainingReach; x <= center.X + remainingReach; x++)
             {
-                var position = new Vector3Int(x, y, z);
-                if (!_mapQuery.IsOnMap(position))
+                if (IsWithinReachOf(exceptWithinReachOf, reach, x, y, z))
                 {
                     continue;
                 }
 
-                foreach (var occupantId in _mapQuery.GetOccupantEntityIdsAt(position))
+                foreach (var occupantId in _mapQuery.GetOccupantEntityIdSpanAt(new Vector3Int(x, y, z)))
                 {
                     // A frozen occupant is left as it is: an unbuilt skeleton holds no exposures to read, and a
                     // built one's are dropped by their own tick once it resumes.
@@ -564,7 +591,7 @@ public sealed class AuraSystem : ISystem
                     for (var denseIndex = _exposures.GetFirstDenseIndex(occupantId); denseIndex != -1; denseIndex = _exposures.GetNextDenseIndex(denseIndex))
                     {
                         var exposure = _exposures.GetReadonlyByDenseIndex(denseIndex);
-                        if (TotalStrengthExcludingSelf(occupantId, occupantTransform.Position, exposure.AuraId) <= 0)
+                        if (PowerReaching(occupantId, occupantTransform.Position, exposure.AuraId) <= 0)
                         {
                             _staleExposureAuraIdsScratch.Add(exposure.AuraId);
                         }

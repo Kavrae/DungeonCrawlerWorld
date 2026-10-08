@@ -58,6 +58,18 @@ internal static class TestAuras
         return auras;
     }
 
+    /// <summary>Adds an unkeyed source of the aura to entityId, or removes the one it has: a source switched on and off by hand.</summary>
+    public static void ToggleSource(MultiComponentPool<AuraSourceComponent> sources, EventBus eventBus, int entityId, byte auraId, ushort power, byte size)
+    {
+        if (sources.CountMatching(entityId, auraId, static (ref readonly AuraSourceComponent source, byte id) => source.AuraId == id) > 0)
+        {
+            AuraSourceEffects.Revoke(sources, eventBus, entityId, auraId);
+            return;
+        }
+
+        AuraSourceEffects.Apply(sources, eventBus, entityId, auraId, power, size);
+    }
+
     public static AuraSources Sources(MultiComponentPool<AuraSourceComponent>? sources, EventBus eventBus, AuraCatalog? auras = null) =>
         new(sources ?? EmptyPools.Multi<AuraSourceComponent>(), auras ?? GlowOnlyCatalog(), eventBus);
 }

@@ -42,10 +42,13 @@ internal static class TestMapWindows
 
         if (playerPosition is { } position)
         {
-            TestTransforms.Set(componentManager, PlayerEntityId, new TransformComponent(position, new Vector2Byte(1, 1)));
+            var playerTransform = new TransformComponent(position, new Vector2Byte(1, 1));
+            TestTransforms.Set(componentManager, PlayerEntityId, playerTransform);
+            world.PlaceEntityOnMap(PlayerEntityId, position, ref playerTransform);
             componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
             // Fully unlocked -- these tests are about arm/target/confirm behavior, not the Expansion lock itself, so default to every slot being usable rather than incidentally locking out whichever slot a given test happens to bind to.
             componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 20));
+            world.EntityKeys.Issue(PlayerEntityId);
             world.PlayerEntityId = PlayerEntityId;
         }
 
@@ -59,8 +62,10 @@ internal static class TestMapWindows
             componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
+            componentManager.GetPackedPool<PendingItemActivationComponent>(),
+            componentManager.GetPackedPool<PendingWindupComponent>(),
+            componentManager.GetMultiPool<InventoryItemStackComponent>(),
+            resolvedItemCatalog,
             new SimulationClock(),
             TestActionStateViews.EntityActions(componentManager, resolvedActionCatalog),
             eventBus);
@@ -75,7 +80,7 @@ internal static class TestMapWindows
             new HotkeyBindingView(componentManager),
             new InventoryView(componentManager, resolvedItemCatalog),
             TestActionStateViews.Over(componentManager, resolvedActionCatalog, resolvedItemCatalog),
-            new AbilityScoreView(componentManager),
+            TestActionStateViews.Targeting(componentManager, world, resolvedActionCatalog, resolvedItemCatalog, world.EntityKeys),
             playerCommands, simulationClock: new SimulationClock());
         var playerMovement = new PlayerMovementController(playerCommands);
 

@@ -12,7 +12,7 @@ namespace Tests;
 /// multiplying the fully-scaled result by CritMath.BaseCritMultiplier (3x) on success. Any test
 /// that asserts an exact post-damage number is therefore asserting only one of two correct
 /// answers, and fails on the roll it didn't expect. That is a real defect this codebase shipped:
-/// ConsumableActivationSystemTests' wand tests deal a flat 10 to a 20-health target and assert 10
+/// ItemActivationSystemTests' wand tests deal a flat 10 to a 20-health target and assert 10
 /// remaining, so a crit took the target to 0 instead and the test failed roughly one suite run in
 /// ten -- diagnosed only after it had been dismissed as unexplained flakiness more than once.
 ///

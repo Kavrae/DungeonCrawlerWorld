@@ -2,6 +2,7 @@ using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Resources;
 using Game.World;
 
 namespace Tests.Modules.Health;
@@ -81,7 +82,7 @@ public sealed class HealthHealTests
 
         static bool Heal(PackedComponentPool<SimpleHealthComponent> health, int entityId, EntityBodyParts bodyParts) =>
             HealthHeal.Apply(health, entityId, percentOfMaxHealth: 0.1f, now: 0, EmptyPools.Multi<Game.Modules.StatModifiers.Components.StatModifierComponent>(), bodyParts,
-                new EventBus(), TestPlayerQuery.NoPlayer, EmptyPools.FloatingTextFeed(), HealCategory.Direct);
+                new EventBus(), TestPlayerQuery.NoPlayer, EmptyPools.FloatingTextFeed(), ResourceGainCategory.Direct);
     }
 
     [TestMethod]

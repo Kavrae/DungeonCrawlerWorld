@@ -55,8 +55,10 @@ public sealed class ActionTargetingControllerDodgeTests
             componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
+            componentManager.GetPackedPool<PendingItemActivationComponent>(),
+            componentManager.GetPackedPool<PendingWindupComponent>(),
+            componentManager.GetMultiPool<InventoryItemStackComponent>(),
+            itemCatalog,
             clock,
             TestActionStateViews.EntityActions(componentManager, actionCatalog),
             eventBus);
@@ -71,7 +73,7 @@ public sealed class ActionTargetingControllerDodgeTests
             new HotkeyBindingView(componentManager),
             new InventoryView(componentManager, itemCatalog),
             TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog),
-            new AbilityScoreView(componentManager),
+            TestActionStateViews.Targeting(componentManager, world, actionCatalog, itemCatalog),
             playerCommands, simulationClock: new SimulationClock());
 
         return (actionTargeting, mapViewState, componentManager, new PlayerMovementController(playerCommands), clock, eventBus);
@@ -167,7 +169,7 @@ public sealed class ActionTargetingControllerDodgeTests
 
         var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
         Assert.AreEqual(DodgeAction.Id, pending.ActionId);
-        CollectionAssert.AreEqual(new[] { PlayerPosition }, pending.TargetTiles,
+        Assert.AreEqual(PlayerPosition, pending.Selection.AimedTile,
             "Must name the caster's own current tile (still occupied by the caster, since the move is only queued) -- not (6,5,0), the destination MovementSystem hasn't placed anyone at yet.");
     }
 
@@ -191,7 +193,7 @@ public sealed class ActionTargetingControllerDodgeTests
 
         var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
         Assert.AreEqual(DodgeAction.Id, pending.ActionId);
-        CollectionAssert.AreEqual(new[] { PlayerPosition }, pending.TargetTiles,
+        Assert.AreEqual(PlayerPosition, pending.Selection.AimedTile,
             "A double-tapped Dodge must activate on the caster's own tile, not silently fail to queue anything at all.");
         Assert.IsNull(mapViewState.ArmedActionId,
             "The pair's first press armed the slot; now that the second press has fired it, it should disarm -- but only after actually activating, not instead of activating.");

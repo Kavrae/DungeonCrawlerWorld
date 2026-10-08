@@ -8,7 +8,7 @@ using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Actions.Definitions.Spells;
 
-/// <summary>Ranged DoT-only attack spell, free to cast today (ManaCost 0) -- see ActionDefinition/SpellActivator's own doc comments for the shape.</summary>
+/// <summary>Ranged DoT-only attack spell, free to cast today (no activation effects) -- see ActionDefinition/SpellActivator's own doc comments for the shape.</summary>
 public static class ToxicStrikeAction
 {
     public static readonly Guid Id = new("b8729e94-aee0-42d4-bda2-9b323afd3134");

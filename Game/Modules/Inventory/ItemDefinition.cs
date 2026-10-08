@@ -21,6 +21,7 @@ namespace Game.Modules.Inventory;
 /// <param name="Contents">What the item grants when it's opened; null for an item that isn't opened.</param>
 /// <param name="CanTrade">False for an item that never leaves its owner's inventory: it can't be traded, looted, sold, bought, dropped or destroyed (a loot box). See InventoryActions.TryTransferStack.</param>
 /// <param name="SpriteTint">Multiplied into the item's sprite wherever it's drawn; null draws it untinted. A loot box is tinted its rarity's color.</param>
+/// <param name="Toggle">Set exactly when Activator is a ToggleItemActivator: what the item holds, takes and does as a toggle.</param>
 /// <remarks>Max stack size is not an item property -- every item stack shares whichever entity holds it own cap instead (see InventoryActions.GetEffectiveMaxStackSize/MaxStackSizeComponent), uniformly across every item that entity carries.</remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed record ItemDefinition(
@@ -38,5 +39,6 @@ public sealed record ItemDefinition(
     int? MaximumShopStock = null,
     IItemContents? Contents = null,
     bool CanTrade = true,
-    Color? SpriteTint = null)
-    : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Activator is null ? Tags : Tags.Union(Activator.ImpliedTags), Effects, Description, Summary);
+    Color? SpriteTint = null,
+    ToggleSpec? Toggle = null)
+    : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Activator is null ? Tags : Tags.Union(Activator.ImpliedTags), Effects, Description, Summary, Toggle);

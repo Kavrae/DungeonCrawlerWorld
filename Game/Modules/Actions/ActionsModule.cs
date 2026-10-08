@@ -10,6 +10,7 @@ using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death;
+using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Mana;
 using Game.Modules.ProcessingTier;
@@ -55,8 +56,8 @@ public sealed class ActionsModule : IGameModule
 
         // Sparse: written the first time an entity uses an action that has a cooldown at all.
         componentManager.RegisterMultiPool<ActionCooldownComponent>(initialCapacity: 64);
-        componentManager.RegisterPackedPool<PendingDelayedActionComponent>(
-            static (ref PendingDelayedActionComponent existing, PendingDelayedActionComponent incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PendingWindupComponent>(
+            static (ref PendingWindupComponent existing, PendingWindupComponent incoming) => existing = incoming);
         componentManager.RegisterPackedPool<DodgingComponent>(
             static (ref DodgingComponent existing, DodgingComponent incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingActionActivationComponent>(
@@ -69,6 +70,8 @@ public sealed class ActionsModule : IGameModule
         componentManager.RegisterPackedPool<PotionCooldownComponent>(static (ref existing, incoming) => existing = incoming);
         // Player-only, exceedingly rare (hours between masteries) -- starts small, grows organically.
         componentManager.RegisterMultiPool<ScrollMasteryComponent>(initialCapacity: 8);
+        // One per toggle that is on -- a handful across the whole world.
+        componentManager.RegisterMultiPool<ActiveToggleComponent>(initialCapacity: 16);
     }
 
     public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
@@ -91,7 +94,7 @@ public sealed class ActionsModule : IGameModule
         WireStagger(componentManager, context);
 
         systemManager.Register(new DelayedActionSystem(
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
+            componentManager.GetPackedPool<PendingWindupComponent>(),
             EntityActions.For(componentManager, context.Actions, context.Definitions),
             context.EffectServices,
             context.Actions,
@@ -99,28 +102,45 @@ public sealed class ActionsModule : IGameModule
             dodgingEntities,
             processingTiers,
             context.SimulationScope,
-            context.ProcessingTierEvents));
+            context.ProcessingTierEvents,
+            context.Toggles,
+            context.WindupResolvers,
+            context.TargetResolution));
 
         systemManager.Register(new ActionActivationSystem(
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             EntityActions.For(componentManager, context.Actions, context.Definitions),
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
+            componentManager.GetPackedPool<PendingWindupComponent>(),
             context.EffectServices,
-            context.Actions,
             context.MapQuery,
             meleeDisabled,
             dodgingEntities,
-            processingTiers));
+            processingTiers,
+            context.Toggles,
+            context.TargetResolution));
+
+        var entityActions = EntityActions.For(componentManager, context.Actions, context.Definitions);
+        context.Toggles.RegisterOwner(ActivatableKind.Action, new ActionToggleOwner(entityActions, context.Toggles));
+
+        systemManager.Register(new ToggleUpkeepSystem(
+            componentManager.GetMultiPool<ActiveToggleComponent>(),
+            context.Toggles,
+            componentManager.GetPackedPool<DeadComponent>(),
+            componentManager.GetDirectPool<TransformComponent>(),
+            context.MapQuery,
+            context.EventBus,
+            context.SimulationClock,
+            context.SimulationScope));
     }
 
     /// <summary>A staggered entity loses its windup, and with it the time the windup already cost: the lock it set is kept.</summary>
     private static void WireStagger(ComponentManager componentManager, GameModuleContext context)
     {
-        var pendingDelayedActions = componentManager.GetPackedPool<PendingDelayedActionComponent>();
+        var pendingWindups = componentManager.GetPackedPool<PendingWindupComponent>();
         var actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
 
         context.EventBus.Subscribe<EntityStaggeredEvent>(staggered =>
-            WindupCancel.TryCancel(pendingDelayedActions, actionLocks, staggered.EntityId, context.SimulationClock.CurrentFrame, releaseLock: false));
+            WindupCancel.TryCancel(pendingWindups, actionLocks, staggered.EntityId, context.SimulationClock.CurrentFrame, releaseLock: false));
     }
 }

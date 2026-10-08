@@ -12,7 +12,7 @@ namespace Game.Modules.Inventory;
 /// time of obtaining the item"), never recomputed later even if Intelligence changes afterward.
 /// Falls back to Intelligence 1 (WandActivationEffects' own floor) when AbilityScoresModule isn't
 /// wired or the recipient has no Intelligence score -- the same defensive shape
-/// ConsumableActivationSystem.ComputeScrollScaleMultiplier already uses for Scroll scaling.
+/// ItemActivationSystem.ComputeScrollScaleMultiplier already uses for Scroll scaling.
 /// </summary>
 public static class WandGrantEffects
 {

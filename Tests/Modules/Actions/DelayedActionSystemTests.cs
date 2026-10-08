@@ -1,3 +1,4 @@
+using Game.Modules.Core.Components;
 using Engine.ECS.Entities;
 using Game.Effects;
 using Game.Effects.Entries;
@@ -46,6 +47,9 @@ public sealed class DelayedActionSystemTests
         public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) =>
             GetEntityIdAt(position) is var entityId && entityId != -1 ? [entityId] : [];
 
+        public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) =>
+            GetEntityIdAt(position) is var entityId && entityId != -1 ? new[] { entityId } : [];
+
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
     }
 
@@ -58,6 +62,7 @@ public sealed class DelayedActionSystemTests
     private static (DelayedActionSystem System, ComponentManager ComponentManager, FakeMapQuery MapQuery, ActionCatalog ActionCatalog, ProcessingTierEvents TierEvents) Build()
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
+        TestTransforms.Set(componentManager, CasterEntityId, new TransformComponent(new Vector3Int(1, 1, 0), new Vector2Byte(1, 1)));
 
         var mapQuery = new FakeMapQuery();
 
@@ -69,7 +74,7 @@ public sealed class DelayedActionSystemTests
 
         var tierEvents = new ProcessingTierEvents();
         var system = TestSystems.DelayedActionSystem(
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
+            componentManager.GetPackedPool<PendingWindupComponent>(),
             EntityActions.For(componentManager, actionCatalog, new BlueprintRegistry()),
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             actionCatalog,
@@ -91,7 +96,7 @@ public sealed class DelayedActionSystemTests
         componentManager.GetPackedPool<SimpleHealthComponent>().TryGetReadonly(entityId, out var health) ? health.CurrentHealth : -1f;
 
     private static bool HasPending(ComponentManager componentManager) =>
-        componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(CasterEntityId);
+        componentManager.GetPackedPool<PendingWindupComponent>().Has(CasterEntityId);
 
     /// <summary>Builds an ActionInstanceComponent whose Override pins the catalog action's shared DirectDamage entry to a fixed flat value, mirroring how a real per-race grant (see ActionOverrideEffects) makes damage deterministic instead of rolling MinFlatDamage..MaxFlatDamage.</summary>
     private static ActionInstanceComponent FixedDamageInstance(ActionCatalog actionCatalog, Guid actionId, ushort damageAmount)
@@ -106,7 +111,7 @@ public sealed class DelayedActionSystemTests
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
         componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ActionId, 15));
-        componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile], ReadyAtFrame));
+        componentManager.Merge(CasterEntityId, PendingWindupComponent.ForAction(ActionId, TestSelections.At(TargetTile), ReadyAtFrame));
     }
 
     private static void Run(DelayedActionSystem system, long from, long to)
@@ -220,7 +225,7 @@ public sealed class DelayedActionSystemTests
         ArmWindup(componentManager, mapQuery, actionCatalog);
 
         Run(system, 0, 10);
-        componentManager.GetPackedPool<PendingDelayedActionComponent>().Remove(CasterEntityId);
+        componentManager.GetPackedPool<PendingWindupComponent>().Remove(CasterEntityId);
 
         Run(system, 11, ReadyAtFrame + 60);
 
@@ -236,7 +241,7 @@ public sealed class DelayedActionSystemTests
         ArmWindup(componentManager, mapQuery, actionCatalog);
 
         Run(system, 0, 10);
-        componentManager.Merge(CasterEntityId, new PendingDelayedActionComponent(ActionId, [TargetTile], readyAtFrame: 90));
+        componentManager.Merge(CasterEntityId, PendingWindupComponent.ForAction(ActionId, TestSelections.At(TargetTile), readyAtFrame: 90));
 
         Run(system, 11, ReadyAtFrame);
         Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId), "The old frame passed, but this windup now ends later.");

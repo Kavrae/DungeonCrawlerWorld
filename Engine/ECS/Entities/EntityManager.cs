@@ -13,6 +13,9 @@ public sealed class EntityManager
     private readonly FreeIdPool _entityIdPool;
     private int _capacity;
 
+    /// <summary>The entities DestroyEntity is currently running for; more than one only when destroying one entity destroys another.</summary>
+    private readonly HashSet<int> _destroyingEntityIds = [];
+
     public EntityManager(ComponentManager componentManager, int initialCapacity)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(initialCapacity);
@@ -67,11 +70,24 @@ public sealed class EntityManager
     /// <param name="entityId">The id of the entity to destroy.</param>
     public void DestroyEntity(int entityId)
     {
-        EntityDestroying?.Invoke(entityId);
-        _componentManager.RemoveAllComponents(entityId);
+        _destroyingEntityIds.Add(entityId);
+        try
+        {
+            EntityDestroying?.Invoke(entityId);
+            _componentManager.RemoveAllComponents(entityId);
+        }
+        finally
+        {
+            _destroyingEntityIds.Remove(entityId);
+        }
+
         Keys.Release(entityId);
         _entityIdPool.Release(entityId);
     }
+
+    /// <summary>Whether the specified entity is inside DestroyEntity: from before EntityDestroying is raised until its components are removed.</summary>
+    /// <remarks>For anything that reacts to a component being removed and must tell a removal that is part of destroying the entity from one that isn't.</remarks>
+    public bool IsDestroying(int entityId) => _destroyingEntityIds.Contains(entityId);
 
     /// <summary>Checks if the specified entity exists by id.</summary>
     /// <param name="entityId">The id of the entity to check.</param>

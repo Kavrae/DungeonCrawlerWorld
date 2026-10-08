@@ -20,6 +20,6 @@ public static class ManaPotion
         Summary: "Restore target's mana.",
         GoldValue: 7,
         Activator: new PotionActivator(
-            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1),
+            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1, TargetModeAffects: TargetModeAffects.MarkedOnly),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));
 }

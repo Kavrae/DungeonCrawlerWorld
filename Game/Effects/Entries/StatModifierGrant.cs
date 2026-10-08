@@ -1,5 +1,4 @@
 using Engine.ECS.Systems;
-using Engine.Math;
 using Engine.Tags;
 using Game.Modules.StatModifiers;
 
@@ -44,7 +43,17 @@ public sealed record StatModifierGrant(
     GameplayTag ConditionTag = default,
     StatModifierStacking Stacking = StatModifierStacking.Add) : IEffectEntry
 {
+    private static readonly (StatModifierTarget, StatModifierTarget)[] BuffDurationModifiers = [(StatModifierTarget.OutgoingBuffDuration, StatModifierTarget.IncomingBuffDuration)];
+
+    private static readonly (StatModifierTarget, StatModifierTarget)[] DebuffDurationModifiers = [(StatModifierTarget.OutgoingDebuffDuration, StatModifierTarget.IncomingDebuffDuration)];
+
+    /// <remarks>The duration of a timed modifier, by polarity. The magnitude is not scaled.</remarks>
+    public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers =>
+        DurationFrames is null ? [] : Polarity == StatModifierPolarity.Buff ? BuffDurationModifiers : DebuffDurationModifiers;
+
     public IEnumerable<GameplayTag> ReferencedTags => ConditionTag.IsNone ? [] : [ConditionTag];
+
+    public bool GrantsUntilRevoked => DurationFrames is null;
 
     public EffectOutcome Apply(in EffectContext context)
     {
@@ -78,13 +87,6 @@ public sealed record StatModifierGrant(
         var outgoingTarget = polarity == StatModifierPolarity.Buff ? StatModifierTarget.OutgoingBuffDuration : StatModifierTarget.OutgoingDebuffDuration;
         var incomingTarget = polarity == StatModifierPolarity.Buff ? StatModifierTarget.IncomingBuffDuration : StatModifierTarget.IncomingDebuffDuration;
 
-        if (context.SourceEntityId is { } sourceEntityId)
-        {
-            scaled = StatModifierMath.GetEffectiveValue(context.Services.StatModifiers, sourceEntityId, outgoingTarget, scaled, context.ActivatorTags);
-        }
-
-        scaled = StatModifierMath.GetEffectiveValue(context.Services.StatModifiers, context.TargetEntityId, incomingTarget, scaled, context.ActivatorTags);
-
-        return MathUtility.ClampUShort(scaled, 0, ushort.MaxValue);
+        return EffectModifiers.ScaleToUShort(in context, scaled, outgoingTarget, incomingTarget);
     }
 }

@@ -78,7 +78,7 @@ public sealed class AuraCatalogTests
         var sources = new AuraSources(sourcePool, auras, new EventBus());
         var madeAtRuntime = new AuraDefinition(FirstAuraGuid, "Made at runtime", Color.Red);
 
-        sources.Apply(entityId: 3, madeAtRuntime, strength: 4);
+        sources.Apply(entityId: 3, madeAtRuntime, power: 4, size: 2);
 
         Assert.IsTrue(auras.TryGetId(FirstAuraGuid, out var auraId));
         Assert.AreSame(madeAtRuntime, auras.Get(auraId));

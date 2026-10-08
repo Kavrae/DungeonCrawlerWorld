@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Game.Effects;
+using Game.Effects.Entries;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
@@ -101,22 +102,26 @@ public sealed class DisabledActionInputTests
             Effects: [Effect.None],
             Activator: new SpellActivator(
                 new TargetingSpec(TargetShape.Self, Range: 0),
-                new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: SpellCooldownFrames),
-                SpellManaCost)));
+                new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: SpellCooldownFrames)))
+        {
+            ActivationEffects = [new Effect([new ManaDrain(SpellManaCost)])],
+        });
         var itemCatalog = new ItemCatalog();
 
         var clock = new SimulationClock();
         clock.Advance(StartFrame);
         var entityActions = TestActionStateViews.EntityActions(componentManager, actionCatalog);
-        var actionStateView = new ActionStateView(componentManager, entityActions, itemCatalog, localTierRoster: null);
+        var actionStateView = new ActionStateView(componentManager, entityActions, itemCatalog, localTierRoster: null, TestActionStateViews.EffectServicesOver(componentManager));
         var playerCommands = new PlayerCommands(
             world,
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
+            componentManager.GetPackedPool<PendingItemActivationComponent>(),
+            componentManager.GetPackedPool<PendingWindupComponent>(),
+            componentManager.GetMultiPool<InventoryItemStackComponent>(),
+            itemCatalog,
             clock,
             entityActions,
             new EventBus());
@@ -132,7 +137,7 @@ public sealed class DisabledActionInputTests
             new HotkeyBindingView(componentManager),
             new InventoryView(componentManager, itemCatalog),
             actionStateView,
-            new AbilityScoreView(componentManager),
+            TestActionStateViews.Targeting(componentManager, world, actionCatalog, itemCatalog),
             playerCommands,
             simulationClock: clock);
 

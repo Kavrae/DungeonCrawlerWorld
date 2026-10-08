@@ -7,9 +7,11 @@ using Engine.Settings;
 using Engine.Tags;
 using Engine.Utilities;
 using Game.Blueprints;
+using Game.Blueprints.Objects;
 using Game.Effects;
 using Game.Modules.Achievements;
 using Game.Modules.Actions;
+using Game.Modules.Actions.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
@@ -79,11 +81,18 @@ public sealed class GameModuleContext
 
         SimulationScope = new SimulationScope(new ProcessingTierQuery(tiers).IsSimulated);
         FloatingTextFeed = new FloatingTextFeed(eventBus, tiers, transforms);
-        EntityFactory = new EntityFactory(Definitions, Auras, world, entityManager, componentManager, MovedEntities, SimulationClock, ProcessingTierEvents, ProcessingTierResolver, crawlerNumbers, runtimeSpawnSeed);
-        _effectServices = new Lazy<EffectServices>(() => EffectServices.For(componentManager, EntityKeys, eventBus, mathUtility, PlayerQuery, Definitions, StatusEffectAppliers, Auras, FloatingTextFeed));
+        EntityFactory = new EntityFactory(Definitions, Auras, Actions, world, entityManager, componentManager, MovedEntities, SimulationClock, ProcessingTierEvents, ProcessingTierResolver, crawlerNumbers, runtimeSpawnSeed);
+        _effectServices = new Lazy<EffectServices>(() => EffectServices.For(componentManager, EntityKeys, eventBus, mathUtility, PlayerQuery, Definitions, StatusEffectAppliers, Auras, FloatingTextFeed,
+            entityManager, position => EntityFactory.Spawn(SpawnRequest.At(Definitions.GetId(AuraAnchor.Id), position))));
+        _toggles = new Lazy<Toggles>(() => new Toggles(componentManager.GetMultiPool<ActiveToggleComponent>(), EffectServices));
+        _targetResolution = new Lazy<TargetResolution>(() => new TargetResolution(world, transforms, EntityKeys, EffectServices.DeadEntities, componentManager.GetMultiPool<NonBlockingComponent>(), EffectServices.AbilityScores));
     }
 
     private readonly Lazy<EffectServices> _effectServices;
+
+    private readonly Lazy<Toggles> _toggles;
+
+    private readonly Lazy<TargetResolution> _targetResolution;
 
     public IMapQuery MapQuery { get; }
 
@@ -172,6 +181,17 @@ public sealed class GameModuleContext
     /// nothing in it applies effects. A module that reads this declares those modules in Requires.
     /// </remarks>
     public EffectServices EffectServices => _effectServices.Value;
+
+    /// <summary>What resolves a windup Actions doesn't resolve itself (an item's), filled during RegisterBehavior by the feature that owns it.</summary>
+    public WindupResolvers WindupResolvers { get; } = new();
+
+    /// <summary>Switches an entity's toggles on and off, for every feature that owns a kind of toggle (an action, an item).</summary>
+    /// <remarks>Made on first use, like EffectServices, which it applies effects through: a module that reads this lists EffectServices.RequiredModuleIds in Requires.</remarks>
+    public Toggles Toggles => _toggles.Value;
+
+    /// <summary>Turns a caster's TargetSelection into the tiles an activation lands on, for every activation, windup, NPC choice and preview.</summary>
+    /// <remarks>Made on first use, like Toggles: a module that reads this lists EffectServices.RequiredModuleIds in Requires.</remarks>
+    public TargetResolution TargetResolution => _targetResolution.Value;
 
     /// <summary>The stable key table every entity is issued into -- the EntityManager's own.</summary>
     public EntityKeys EntityKeys { get; }

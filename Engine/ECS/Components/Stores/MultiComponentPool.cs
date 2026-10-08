@@ -101,6 +101,14 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// </remarks>
     public event Action<int, int>? ComponentChanged;
 
+    /// <summary>Opt-in: fired before a component instance is removed -- (entityId, denseIndex) -- while it can still be read.</summary>
+    /// <remarks>
+    /// Raised by every removal path (Remove, RemoveFirst, RemoveByDenseIndex), once per instance, and
+    /// not by Clear. A handler may read the instance and write other pools, but must not add to or
+    /// remove from this one.
+    /// </remarks>
+    public event Action<int, int>? ComponentRemoving;
+
     /// <summary> Initializes a new instance of the <see cref="MultiComponentPool{T}"/> class with the specified capacities. </summary>
     /// <param name="entityCapacity">The entity id space the chain index's page table starts out covering; ids beyond it grow it on demand.</param>
     /// <param name="initialCapacity">The initial dense storage size.</param>
@@ -538,6 +546,8 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     private void RemoveDenseIndexInternal(int denseIndex)
     {
         var ownerEntityId = _denseIndexToEntityIdMap[denseIndex];
+        ComponentRemoving?.Invoke(ownerEntityId, denseIndex);
+
         var prev = _densePrevious[denseIndex];
         var next = _denseNext[denseIndex];
         ref var ownerChain = ref _chains.GetWritable(ownerEntityId);

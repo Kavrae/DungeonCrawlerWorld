@@ -22,7 +22,7 @@ namespace Game.Modules.Inventory.Components;
 /// Wand of Fireball's Intelligence-derived MaxCharges, baked in once at grant time) without yet
 /// being divergent -- every unit in that batch is still identical to every other. A stack only
 /// becomes IsDivergent once a specific unit is actually used/altered and peeled off from its batch
-/// (see InventoryActions.AddDivergentItem/PeelOneIntoDivergentStack) -- the mechanism this
+/// (see InventoryActions.AddDivergentItem/MoveOneUnit) -- the mechanism this
 /// component's own doc comment used to only predict ("a stack that later diverges from its
 /// ItemDefinition ... is expected to become its own Quantity == 1 stack once that system exists").
 ///

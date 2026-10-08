@@ -12,7 +12,7 @@ namespace Game.Modules.Auras;
 /// <para>
 /// Ids are assigned in registration order and differ between sessions, so nothing saves or orders
 /// by one; a Guid is the identity that lasts, and what makes two sources the same aura: their
-/// strengths add. Nothing keeps a copy of a definition: whatever needs an aura's effects or colour
+/// powers add. Nothing keeps a copy of a definition: whatever needs an aura's effects or colour
 /// reads it from here by id, so a definition replaced during a session is what is used next.
 /// </para>
 /// <para>

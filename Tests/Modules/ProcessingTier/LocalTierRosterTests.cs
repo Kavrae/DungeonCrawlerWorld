@@ -34,7 +34,7 @@ public sealed class LocalTierRosterTests
     /// mover born Local must be admitted when it gains MovementComponent. The roster used to rely on
     /// TierChanged alone, on the grounds that a new entity had no tier yet -- true of the old periodic
     /// scan, false now, and without this the enemy-telegraph consumer
-    /// (ActionTargetingController.AllPendingDelayedActionTargets) would silently see nobody.
+    /// (ActionTargetingController.AllPendingWindupTargets) would silently see nobody.
     /// </summary>
     [TestMethod]
     public void MoverBornLocal_IsAdmittedOnJoiningTheDrivingPool_WithNoTierChanged()

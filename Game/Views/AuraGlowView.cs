@@ -11,6 +11,6 @@ public sealed class AuraGlowView(AuraField auraField)
     public int Version => auraField.Version;
 
     /// <inheritdoc cref="AuraField.TryGetGlow"/>
-    public bool TryGetGlow(int x, int y, int mapLayer, out Color glowColor, out int totalStrength) =>
-        auraField.TryGetGlow(new Vector3Int(x, y, mapLayer), out glowColor, out totalStrength);
+    public bool TryGetGlow(int x, int y, int mapLayer, out Color glowColor, out int totalPower) =>
+        auraField.TryGetGlow(new Vector3Int(x, y, mapLayer), out glowColor, out totalPower);
 }

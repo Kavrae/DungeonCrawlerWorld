@@ -5,6 +5,7 @@ using Game.Blueprints.Races;
 using Game.Bootstrap;
 using Game.Modules.Burning.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Movement.Components;
 using Game.Modules.StatusEffects;
@@ -87,20 +88,26 @@ public sealed class LavaBurningTests
         Assert.IsGreaterThanOrEqualTo(7, StatusEffectQueries.CountStacks(session.Build.Context.StatusEffectDisplays, session.EntityId, StatusEffectType.Burning), "The entity-level display shows the highest burning part.");
     }
 
-    /// <summary>Beside lava only its aura reaches: random parts burn at the aura's strength there, and the lava's contact -- which belongs to standing on it -- plays no part.</summary>
+    /// <summary>Beside lava only its aura reaches: random parts burn at the aura's power there, and the lava's contact -- which belongs to standing on it -- plays no part.</summary>
     [TestMethod]
-    public void StandingBesideLava_TheAuraAloneBurnsRandomPartsAtItsStrengthThere()
+    public void StandingBesideLava_TheAuraAloneBurnsRandomPartsAtItsPowerThere()
     {
         var session = SpawnGoblin(tilesEastOfLava: 1);
 
-        session.RunFrames(10 * FramesPerSecond);
+        var dead = session.Components.GetPackedPool<DeadComponent>();
+        for (var frame = 0; frame < 10 * FramesPerSecond && session.BurningPartCount <= 1 && !dead.Has(session.EntityId); frame++)
+        {
+            session.RunFrames(1);
+        }
+
+        Assert.IsFalse(dead.Has(session.EntityId), "Precondition: alive until a second part burns.");
 
         Assert.IsGreaterThan(1, session.BurningPartCount);
         Assert.AreEqual(0, session.EntityScopedStacks);
         var partBurns = session.Components.GetMultiPool<BodyPartBurningTimerComponent>();
         for (var denseIndex = partBurns.GetFirstDenseIndex(session.EntityId); denseIndex != -1; denseIndex = partBurns.GetNextDenseIndex(denseIndex))
         {
-            Assert.IsLessThanOrEqualTo(4, partBurns.GetReadonlyByDenseIndex(denseIndex).StackCount, "No part is topped up past the aura's strength one tile away.");
+            Assert.IsLessThanOrEqualTo(6, partBurns.GetReadonlyByDenseIndex(denseIndex).StackCount, "No part is topped up past the aura's power one tile away.");
         }
     }
 

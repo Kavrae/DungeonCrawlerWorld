@@ -28,7 +28,7 @@ namespace Game.World;
 /// </para>
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class EntityTeleporter(World world, DirectComponentPool<TransformComponent> transforms, SpawnMoves moves, EventBus eventBus, CreatureSkeletons skeletons, PackedComponentPool<MovementComponent> movements, PackedComponentPool<PendingDelayedActionComponent> pendingActions)
+public sealed class EntityTeleporter(World world, DirectComponentPool<TransformComponent> transforms, SpawnMoves moves, EventBus eventBus, CreatureSkeletons skeletons, PackedComponentPool<MovementComponent> movements, PackedComponentPool<PendingWindupComponent> pendingActions)
 {
 
     /// <summary>Whether TryTeleport would move entityId to destination: entityId is on the map, and destination is another cell it could stand in (on the loaded map, not blocked, not occupied).</summary>

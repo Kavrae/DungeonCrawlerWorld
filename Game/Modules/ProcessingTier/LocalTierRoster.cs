@@ -30,7 +30,7 @@ namespace Game.Modules.ProcessingTier;
 /// holds on the order of a thousand entities, against pools that hold tens of thousands. A
 /// consumer wanting "the pending entities that are Local" is far better off walking this and
 /// probing its own pool than walking its pool and probing tiers -- see
-/// ActionTargetingController.AllPendingDelayedActionTargets, the first such consumer.
+/// ActionTargetingController.AllPendingWindupTargets, the first such consumer.
 ///
 /// Two limits worth knowing before adding a consumer:
 ///

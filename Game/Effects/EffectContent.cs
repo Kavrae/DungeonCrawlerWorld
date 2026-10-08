@@ -1,13 +1,14 @@
 using Game.Modules;
+using Game.Modules.Actions;
 
 namespace Game.Effects;
 
 /// <summary>Walks every effect entry a build's registered content holds, whatever holds it.</summary>
 /// <remarks>
 /// The one enumeration the content checks share (ContentTagValidation, AuraContentRegistration), so a
-/// new kind of effect holder is added here once and every check covers it: actions, items, terrain
-/// contacts and aura definitions, and the effects an entry applies in turn (a ChainedEffect's), to
-/// any depth.
+/// new kind of effect holder is added here once and every check covers it: actions and items (their
+/// activation effects and a toggle's periodic effects included), terrain contacts and aura definitions, and
+/// the effects an entry applies in turn (a ChainedEffect's), to any depth.
 /// </remarks>
 internal static class EffectContent
 {
@@ -16,12 +17,12 @@ internal static class EffectContent
     {
         foreach (var action in context.Actions.Definitions)
         {
-            Visit(action.Effects, $"Action '{action.Name}'", visit);
+            VisitActivatable(action, $"Action '{action.Name}'", visit);
         }
 
         foreach (var item in context.Items.Definitions)
         {
-            Visit(item.Effects, $"Item '{item.Name}'", visit);
+            VisitActivatable(item, $"Item '{item.Name}'", visit);
         }
 
         var terrain = context.Terrain;
@@ -38,6 +39,18 @@ internal static class EffectContent
         {
             var aura = auras.Get((byte)auraId);
             Visit(aura.Effects, $"Aura '{aura.Name}'", visit);
+        }
+    }
+
+    /// <summary>A definition's own effects, what using it takes, and, for a toggle, what it does while on.</summary>
+    private static void VisitActivatable(ActivatableDefinition definition, string heldBy, Action<IEffectEntry, string> visit)
+    {
+        Visit(definition.Effects, heldBy, visit);
+        Visit(definition.ActivationEffects, heldBy, visit);
+
+        if (definition.Toggle?.Periodic is { } periodic)
+        {
+            Visit(periodic.Effects, heldBy, visit);
         }
     }
 

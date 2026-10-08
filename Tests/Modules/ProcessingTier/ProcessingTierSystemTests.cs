@@ -33,6 +33,8 @@ public sealed class ProcessingTierSystemTests
 
         public int GetEntityIdAt(Vector3Int position) => _blocking.TryGetValue(position, out var id) ? id : -1;
 
+        public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) => [];
+
         public bool IsBlocking(int entityId) => true;
 
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => entityIds.Fill(-1);

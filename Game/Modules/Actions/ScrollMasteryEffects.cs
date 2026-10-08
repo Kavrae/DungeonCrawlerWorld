@@ -26,8 +26,7 @@ public static class ScrollMasteryEffects
     /// Flat for every scroll today. TODO: scale with the power of the spell/effect being taught
     /// (a cheap effect shouldn't take as long to master as a strong one) -- blocked on Action
     /// Effects having some form of power-scaling concept, which doesn't exist yet. The
-    /// synthesized spell's placeholder ManaCost: 0 (see SynthesizeSpellFromScroll below) has the
-    /// same dependency.
+    /// synthesized spell costing nothing (see SynthesizeSpellFromScroll below) has the same dependency.
     /// </summary>
     public const int MasteryThreshold = 200;
 
@@ -57,12 +56,12 @@ public static class ScrollMasteryEffects
             actionCatalog.Register(action);
         }
 
-        ActionGrantEffects.Grant(componentManager, entityId, spellId, SpellActivator.ManaCostOf(action.Activator), overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, actionCatalog, entityId, spellId, overrideDefinition: null);
         eventBus.Publish(new ScrollMasteredEvent(entityId, spellId));
     }
 
     /// <summary>The spell a mastered scroll becomes: the scroll's content, with its Item tags dropped (the SpellActivator adds Action.Spell and Magic).</summary>
-    /// <remarks>ManaCost: 0 is a placeholder -- see MasteryThreshold's own doc comment for the same power-scaling TODO.</remarks>
+    /// <remarks>No activation effects, so it costs nothing: a placeholder -- see MasteryThreshold's own doc comment for the same power-scaling TODO.</remarks>
     private static ActionDefinition SynthesizeSpellFromScroll(ItemDefinition scroll, Guid spellId) => new(
         Id: spellId,
         Name: scroll.Name,
@@ -71,7 +70,7 @@ public static class ScrollMasteryEffects
         GlyphColor: scroll.GlyphColor,
         Tags: scroll.Tags.WithoutDescendantsOf(GameTags.Item),
         Effects: scroll.Effects,
-        Activator: new SpellActivator(scroll.Activator!.Targeting, scroll.Activator.Timing, ManaCost: 0),
+        Activator: new SpellActivator(scroll.Activator!.Targeting, scroll.Activator.Timing),
         Description: scroll.Description,
         Summary: scroll.Summary);
 

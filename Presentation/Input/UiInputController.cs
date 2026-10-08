@@ -232,6 +232,7 @@ public sealed class UiInputController
     /// <summary>Backs the O hotkey -- see _healthWindowController's own doc comment.</summary>
     private readonly AbilityScoreWindowController? _abilityScoreWindowController;
     private readonly DiagnosticsWindowController? _diagnosticsWindowController;
+    private readonly TargetingModeSwitch? _targetingModeSwitch;
 
     /// <summary>Mouse position when the current hotbar-slot press started -- ResolveHotbarSlotClick only treats the release as a tap if it's within ContentDragTapThresholdPixels of this, the same tap-vs-drag distinction ResolveContentDrag already makes for content-drags.</summary>
     private Vector2 _hotbarPressMousePosition;
@@ -290,7 +291,7 @@ public sealed class UiInputController
     /// window to this same list afterward. Passing the list itself (not a snapshot/copy) is what
     /// makes that work -- this class only ever reads through the reference, never replaces it.
     /// </summary>
-    public UiInputController(UiLayerStack layers, Vector2 screenSize, PointerState pointerState, ShopView shopView, IPlayerQuery playerQuery, InventoryCommands inventoryCommands, ShopCommands shopCommands, CurrencyCommands currencyCommands, HotbarController? hotbarController = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null, MapViewState? mapViewState = null, HealthWindowController? healthWindowController = null, InventoryWindowController? inventoryWindowController = null, AbilityScoreWindowController? abilityScoreWindowController = null, DiagnosticsWindowController? diagnosticsWindowController = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, PointerState pointerState, ShopView shopView, IPlayerQuery playerQuery, InventoryCommands inventoryCommands, ShopCommands shopCommands, CurrencyCommands currencyCommands, HotbarController? hotbarController = null, ContextMenuController? contextMenuController = null, ItemDetailsWindowController? itemDetailsWindowController = null, ItemComparisonController? itemComparisonController = null, MapViewState? mapViewState = null, HealthWindowController? healthWindowController = null, InventoryWindowController? inventoryWindowController = null, AbilityScoreWindowController? abilityScoreWindowController = null, DiagnosticsWindowController? diagnosticsWindowController = null, TargetingModeSwitch? targetingModeSwitch = null)
     {
         _layers = layers;
         _screenSize = screenSize;
@@ -308,6 +309,7 @@ public sealed class UiInputController
         _inventoryWindowController = inventoryWindowController;
         _abilityScoreWindowController = abilityScoreWindowController;
         _diagnosticsWindowController = diagnosticsWindowController;
+        _targetingModeSwitch = targetingModeSwitch;
         _shopView = shopView;
         _dragDropResolvers = BuildDragDropResolvers();
 
@@ -453,6 +455,7 @@ public sealed class UiInputController
         HandleEscape(keyboardState);
         HandleAdminModeToggle(keyboardState);
         HandleWindowToggleHotkeys(keyboardState);
+        HandleTargetingModeSwitch(keyboardState);
         RouteKeyPressesToFocusedElement(keyboardState);
         RouteTextInputToFocusedElement();
 
@@ -616,6 +619,17 @@ public sealed class UiInputController
         {
             _diagnosticsWindowController?.ToggleDiagnosticsWindow();
         }
+    }
+
+    /// <summary>A Left Alt tap switches the player's targeting mode (TargetingModeSwitch) -- edge-triggered and unconditional like F3, but not while a TextBox has focus, which keeps its own keys.</summary>
+    private void HandleTargetingModeSwitch(KeyboardState keyboardState)
+    {
+        if (_targetingModeSwitch is null || IsTextBoxFocused || !IsKeyPressed(keyboardState, Keys.LeftAlt))
+        {
+            return;
+        }
+
+        _targetingModeSwitch.Switch();
     }
 
     /// <summary>

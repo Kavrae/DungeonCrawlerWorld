@@ -29,7 +29,7 @@ public sealed class EntityKeyWiringTests
         ecs.ComponentManager.Merge(targetId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         ecs.ComponentManager.Merge(casterId, new ActionLockComponent(standardLockFrames: 30, currentLockTotalFrames: 0, unlockedAtFrame: 0));
         ecs.ComponentManager.Merge(casterId, new ActionInstanceComponent(QuickAttackAction.Id, overrideDefinition: null));
-        ecs.ComponentManager.Merge(casterId, new PendingActionActivationComponent(QuickAttackAction.Id, [targetPosition]));
+        ecs.ComponentManager.Merge(casterId, new PendingActionActivationComponent(QuickAttackAction.Id, TestSelections.At(targetPosition)));
         ActionSource? damageSource = null;
         ecs.EventBus.Subscribe<EntityDamagedEvent>(damaged => damageSource = damaged.EntityId == targetId ? damaged.Source : damageSource);
 

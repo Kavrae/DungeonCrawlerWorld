@@ -1,4 +1,5 @@
 using Engine.ECS.Systems;
+using Engine.Tags;
 using FontStashSharp;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
@@ -53,7 +54,8 @@ public sealed class HotbarContent(
     SpriteRenderer spriteRenderer,
     Vector2 screenSize,
     SimulationClock simulationClock,
-    EntityActions? actions = null) : IElementContent
+    EntityActions? actions = null,
+    GameplayTagRegistry? gameplayTags = null) : IElementContent
 {
 
     /// <summary>Optional for the same reason as the clock: a test that never shows an action cooldown needs no action lookups at all.</summary>
@@ -328,7 +330,7 @@ public sealed class HotbarContent(
             actionCatalog.TryGet(actionId, out var action))
         {
             title = action.Name;
-            summary = action.Summary;
+            summary = WithStateAndCostLines(action.Summary, action, actionStateView.IsActionToggledOn(playerEntityId, actionId));
             blocker = actionStateView.GetActionBlocker(playerEntityId, actionId);
             return true;
         }
@@ -337,7 +339,7 @@ public sealed class HotbarContent(
             TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out _))
         {
             title = item.Name;
-            summary = item.Summary;
+            summary = WithStateAndCostLines(item.Summary, item, ToggleText.IsLit(item));
             blocker = actionStateView.GetItemBlocker(playerEntityId, stackInstanceId);
             return true;
         }
@@ -346,6 +348,20 @@ public sealed class HotbarContent(
         summary = string.Empty;
         blocker = ActivationBlocker.None;
         return false;
+    }
+
+    /// <summary>A summary with "Active" ahead of it while a toggle is on, and what using it takes after it (CostText).</summary>
+    private string WithStateAndCostLines(string summary, ActivatableDefinition definition, bool isOn)
+    {
+        var lines = new List<string>();
+        if (definition.Toggle is not null && isOn)
+        {
+            lines.Add(ToggleText.Active);
+        }
+
+        lines.Add(summary);
+        lines.AddRange(CostText.Lines(definition, gameplayTags));
+        return lines.Count == 1 ? summary : string.Join('\n', lines);
     }
 
     /// <summary>slot's on-screen bounds -- reuses the same EnumerateSlotBounds walk DrawContent/
@@ -445,17 +461,17 @@ public sealed class HotbarContent(
     /// The action/item-agnostic shape DrawSlot actually renders -- BuildActionVisual/
     /// BuildItemVisual are the only two places that know how to turn a binding into one of these;
     /// everything downstream (radial fill, badge, countdown) is drawn identically regardless of
-    /// which kind produced it. BadgeBottomLeft picks between an action's mana-cost badge
-    /// (bottom-left) and an item's stack-count badge (bottom-center) -- the two badges never
-    /// coexist since a slot binds to at most one of {action, item}.
+    /// which kind produced it. Costs (bottom-left) are what using it takes now, one number per
+    /// resource in that resource's colour; QuantityText (bottom-center) is an item's stack count or
+    /// a wand's charges.
     /// </summary>
     private readonly record struct SlotVisual(
         string? SpriteName,
         string Glyph,
         Color GlyphColor,
         float FillPercentage,
-        string? BadgeText,
-        bool BadgeBottomLeft,
+        ActivationCostTotals Costs,
+        string? QuantityText,
         int? CountdownSecondsAboveSlot);
 
     private void DrawSlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, HotkeySlot slot, Rectangle bounds)
@@ -467,10 +483,20 @@ public sealed class HotbarContent(
         if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out var action))
         {
             DrawSlotVisual(spriteBatch, unitRectangle, bounds, contentBounds, BuildActionVisual(playerEntityId, action, isActive), alpha);
+
+            if (actionStateView.IsActionToggledOn(playerEntityId, actionId))
+            {
+                ToggleActiveMarker.Draw(spriteBatch, unitRectangle, contentBounds, alpha);
+            }
         }
         else if (hotkeyBindingView.TryGetBoundItem(playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out var stack))
         {
             DrawSlotVisual(spriteBatch, unitRectangle, bounds, contentBounds, BuildItemVisual(playerEntityId, item, stack, isActive), alpha);
+
+            if (ToggleText.IsLit(item))
+            {
+                ToggleActiveMarker.Draw(spriteBatch, unitRectangle, contentBounds, alpha);
+            }
 
             if (stackInstanceId == mapViewState.SelectedItemStackInstanceId)
             {
@@ -510,14 +536,13 @@ public sealed class HotbarContent(
     /// <summary>isActive (see RefreshSlotActiveStates -- an Update-time decision) drives both the icon's opacity and whether the cooldown/lock wedge shows at all: an inactive (blocked) action suppresses the radial fill entirely (0f) rather than showing a mask that would read as "almost ready" when it's actually unusable.</summary>
     private SlotVisual BuildActionVisual(int playerEntityId, ActionDefinition action, bool isActive)
     {
-        var manaCost = SpellActivator.ManaCostOf(action.Activator);
         return new SlotVisual(
             SpriteName: action.SpriteName,
             Glyph: action.Glyph,
             GlyphColor: action.GlyphColor,
             FillPercentage: isActive ? ComputeActionFillPercentage(playerEntityId, action) : 0f,
-            BadgeText: manaCost > 0 ? manaCost.ToString() : null,
-            BadgeBottomLeft: true,
+            Costs: actionStateView.ActionCostsOf(playerEntityId, action.Id),
+            QuantityText: null,
             CountdownSecondsAboveSlot: null);
     }
 
@@ -569,16 +594,16 @@ public sealed class HotbarContent(
             Glyph: item.Glyph,
             GlyphColor: WindowPalette.SlotGlyphColor,
             FillPercentage: isActive ? ComputeItemFillPercentage(playerEntityId) : 0f,
-            BadgeText: item.Activator is WandActivator wandActivator
+            Costs: actionStateView.ItemCostsOf(playerEntityId, stack.StackInstanceId),
+            QuantityText: item.Activator is WandActivator wandActivator
                 ? $"{wandActivator.Charges}/{wandActivator.MaxCharges}"
                 : quantity > 1
                     ? $"x{quantity}"
                     : null,
-            BadgeBottomLeft: false,
             CountdownSecondsAboveSlot: countdownSeconds);
     }
 
-    /// <summary>The one place a SlotVisual actually gets drawn -- radial fill/icon, then its badge (mana cost bottom-left, or stack count bottom-center) and countdown, if any. Shared by both BuildActionVisual and BuildItemVisual outputs, regardless of which kind produced them.</summary>
+    /// <summary>The one place a SlotVisual actually gets drawn -- radial fill/icon, then its costs (bottom-left), its quantity (bottom-center) and countdown, if any. Shared by both BuildActionVisual and BuildItemVisual outputs, regardless of which kind produced them.</summary>
     private void DrawSlotVisual(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Rectangle contentBounds, SlotVisual visual, float alpha)
     {
         _radialFill.Sprite = visual.SpriteName is not null && SpriteManifest.TryGetFirst(visual.SpriteName, out var sprite) ? sprite : null;
@@ -589,16 +614,14 @@ public sealed class HotbarContent(
         _radialFill.FillPercentage = visual.FillPercentage;
         _radialFill.Draw(spriteBatch, unitRectangle, _font, contentBounds, alpha);
 
-        if (visual.BadgeText is not null)
+        if (!visual.Costs.IsFree)
         {
-            if (visual.BadgeBottomLeft)
-            {
-                DrawBottomLeftText(spriteBatch, bounds, visual.BadgeText, alpha);
-            }
-            else
-            {
-                DrawBottomCenterText(spriteBatch, bounds, visual.BadgeText, alpha);
-            }
+            DrawCosts(spriteBatch, bounds, visual.Costs, alpha);
+        }
+
+        if (visual.QuantityText is not null)
+        {
+            DrawBottomCenterText(spriteBatch, bounds, visual.QuantityText, alpha);
         }
 
         if (visual.CountdownSecondsAboveSlot is { } seconds)
@@ -625,12 +648,26 @@ public sealed class HotbarContent(
         ContrastTextRenderer.Draw(spriteBatch, _overlayFont, text, position, alpha);
     }
 
-    /// <summary>Bottom-left -- an action's mana cost, only ever called when ManaCost > 0.</summary>
-    private void DrawBottomLeftText(SpriteBatch spriteBatch, Rectangle bounds, string text, float alpha)
+    /// <summary>Bottom-left -- what using the slot takes, only ever called when it takes anything: each resource's amount in its own colour (CostBadgePalette), mana then health, to one decimal place since a modifier can leave a fraction.</summary>
+    private void DrawCosts(SpriteBatch spriteBatch, Rectangle bounds, ActivationCostTotals costs, float alpha)
     {
+        var x = bounds.X + OverlayPadding.X;
+        x = DrawCost(spriteBatch, bounds, x, costs.Mana, CostBadgePalette.Mana, alpha);
+        DrawCost(spriteBatch, bounds, x, costs.Health, CostBadgePalette.Health, alpha);
+    }
+
+    /// <summary>One resource's amount at x along the bottom edge, or nothing when it is 0. Returns where the next one starts.</summary>
+    private float DrawCost(SpriteBatch spriteBatch, Rectangle bounds, float x, float amount, Color color, float alpha)
+    {
+        if (amount <= 0)
+        {
+            return x;
+        }
+
+        var text = amount.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
         var textSize = _overlayFont.MeasureString(text);
-        var position = new Vector2(bounds.X + OverlayPadding.X, bounds.Bottom - textSize.Y - OverlayPadding.Y);
-        ContrastTextRenderer.Draw(spriteBatch, _overlayFont, text, position, alpha);
+        ContrastTextRenderer.Draw(spriteBatch, _overlayFont, text, new Vector2(x, bounds.Bottom - textSize.Y - OverlayPadding.Y), alpha, color);
+        return x + textSize.X + OverlayPadding.X;
     }
 
     /// <summary>Bottom-center -- an item stack's quantity as "x{n}", only ever called when quantity > 1. Replaces the old ItemIconRenderer.DrawQuantityBadge call this element used to make (that method has since moved to the bottom-left corner instead, for consistency with Shop/TradeItemStackCell's own quantity placement -- InventoryItemStackCell is its one remaining consumer, unaffected by this element's own bottom-center choice).</summary>
@@ -681,7 +718,7 @@ public sealed class HotbarContent(
     }
 
     /// <summary>
-    /// Items have no per-instance cooldown the way actions do -- ConsumableActivationSystem
+    /// Items have no per-instance cooldown the way actions do -- ItemActivationSystem
     /// only ever sets the shared ActionLock (see PotionActivator.Timing.ActionLockFrames' own doc
     /// comment), so that's the only fill signal here. Deliberately not PotionCooldownComponent:
     /// that cooldown never blocks a second potion (see PotionCooldownEffects' own doc comment),

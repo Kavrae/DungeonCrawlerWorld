@@ -1,9 +1,7 @@
 using Engine.ECS.Components.Stores;
-using Engine.Tags;
-using Game.Modules.Actions.Activators;
+using Game.Effects;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
-using Game.Modules.Mana.Components;
 using Game.Tags;
 
 namespace Game.Modules.Actions;
@@ -12,33 +10,51 @@ namespace Game.Modules.Actions;
 /// <remarks>The activation systems refuse through it and ActionStateView answers Presentation through it, so what the player sees and what happens can't disagree.</remarks>
 public static class ActivationQueries
 {
-    /// <summary>The first blocker that holds for entityId using something with this activator and these tags, or None.</summary>
-    /// <remarks>Checked structural first: no activator, then melee disabled, then mana -- regaining mana wouldn't help an entity with no usable arms or hands.</remarks>
+    /// <summary>The first blocker that holds for entityId using definition now, or None.</summary>
+    /// <remarks>
+    /// Checked structural first: no activator, then melee disabled, then the activation effects (a cost among
+    /// them) -- regaining mana wouldn't help an entity with no usable arms or hands. Turning a toggle off takes
+    /// nothing, so one that is on is blocked by nothing -- not a cost, not disabled arms. The activation effects
+    /// block with the first refusal's own blocker (BlockerFor).
+    /// </remarks>
+    /// <param name="isToggledOn">Whether the toggle is on now, so this use would turn it off. Ignored for a definition that isn't a toggle.</param>
     public static ActivationBlocker GetBlocker(
         int entityId,
+        ActivatableDefinition definition,
         IActionActivator? activator,
-        GameplayTagSet tags,
-        PackedComponentPool<ManaComponent> mana,
-        PackedComponentPool<MeleeDisabledComponent> meleeDisabled)
+        bool isToggledOn,
+        PackedComponentPool<MeleeDisabledComponent> meleeDisabled,
+        EffectServices effectServices,
+        long now)
     {
         if (activator is null)
         {
             return ActivationBlocker.NotActivatable;
         }
 
-        if (tags.Has(GameTags.DeliveryMelee) && meleeDisabled.Has(entityId))
+        if (definition.Tags.Has(GameTags.DeliveryMelee) && meleeDisabled.Has(entityId))
         {
             return ActivationBlocker.MeleeDisabled;
         }
 
-        var manaCost = SpellActivator.ManaCostOf(activator);
-        if (manaCost > 0 && (!mana.TryGetReadonly(entityId, out var entityMana) || entityMana.CurrentMana < manaCost))
+        if (definition.Toggle is not null && isToggledOn)
         {
-            return ActivationBlocker.NotEnoughMana;
+            return ActivationBlocker.None;
         }
 
-        return ActivationBlocker.None;
+        return BlockerFor(ActivationEffectsApplier.GetRefusal(effectServices, entityId, definition, now));
     }
+
+    /// <summary>The blocker an activation effect's refusal shows as.</summary>
+    public static ActivationBlocker BlockerFor(EffectRefusal refusal) => refusal switch
+    {
+        EffectRefusal.None => ActivationBlocker.None,
+        EffectRefusal.NoManaPool => ActivationBlocker.NoManaPool,
+        EffectRefusal.NotEnoughMana => ActivationBlocker.NotEnoughMana,
+        EffectRefusal.NoHealth => ActivationBlocker.NoHealth,
+        EffectRefusal.NotEnoughHealth => ActivationBlocker.NotEnoughHealth,
+        _ => throw new ArgumentOutOfRangeException(nameof(refusal), refusal, "Every EffectRefusal needs a blocker of its own."),
+    };
 
     /// <summary>Frames until entityId could activate action at frame now: the later of its cooldown and, unless it's FreeCast, the action lock. 0 when ready.</summary>
     /// <remarks>An entity with no ActionLockComponent is never free of the lock (ActionLockGate.IsBlocked), so a lock-waiting action reads int.MaxValue for it.</remarks>

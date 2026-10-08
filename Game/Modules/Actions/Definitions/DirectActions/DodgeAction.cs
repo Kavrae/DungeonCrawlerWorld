@@ -35,7 +35,7 @@ public static class DodgeAction
         Tags: [GameTags.TargetingSelf],
         Effects: [new Effect([new DodgeActivation()])],
         Activator: new DirectAction(
-            new TargetingSpec(TargetShape.SingleTarget, Range: 1, Metric: DistanceMetric.Chebyshev),
+            new TargetingSpec(TargetShape.SingleTarget, Range: 1, Metric: DistanceMetric.Chebyshev, Modes: TargetingModes.GroundOnly),
             new ActionTiming(ActionTimingCategory.FreeCast, CooldownFrames: CooldownFrames, ReleasesActionLock: true)),
         Description: "Briefly become immune to dodgeable attacks, optionally moving to an adjacent tile in the process. Has its own 4 second cooldown, so it can't be used as a safer form of movement.",
         Summary: "Briefly dodge dodgeable attacks");

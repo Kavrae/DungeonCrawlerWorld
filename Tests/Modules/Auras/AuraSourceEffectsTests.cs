@@ -16,49 +16,100 @@ public sealed class AuraSourceEffectsTests
     private static MultiComponentPool<AuraSourceComponent> CreatePool() =>
         new(entityCapacity: 10, initialCapacity: 4);
 
+    /// <summary>Removal must publish the component that was actually stored, not reconstruct one from the call's own parameters -- see AuraSourceRemovedEvent's own doc comment.</summary>
     [TestMethod]
-    public void Toggle_AbsentType_AddsSource()
+    public void Revoke_PublishesRemovedWithTheStoredSource()
     {
         var sources = CreatePool();
         var eventBus = new EventBus();
-
-        AuraSourceEffects.Toggle(sources, eventBus, EntityId, TestAuras.PoisonId, strength: 5);
-
-        Assert.AreEqual(1, sources.CountForEntity(EntityId));
-        var added = sources.GetReadonlyByDenseIndex(sources.GetFirstDenseIndex(EntityId));
-        Assert.AreEqual(TestAuras.PoisonId, added.AuraId);
-        Assert.AreEqual(5, added.Strength);
-    }
-
-    /// <summary>Removal must publish the component that was actually stored, not reconstruct one from whatever this call's own parameters happen to be -- see AuraSourceRemovedEvent's own doc comment.</summary>
-    [TestMethod]
-    public void Toggle_PresentType_RemovesSourceAndPublishesRemovedWithRealStoredValue()
-    {
-        var sources = CreatePool();
-        var eventBus = new EventBus();
-        AuraSourceEffects.Toggle(sources, eventBus, EntityId, TestAuras.PoisonId, strength: 5);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.PoisonId, power: 5, size: 2);
 
         AuraSourceRemovedEvent? published = null;
         eventBus.Subscribe<AuraSourceRemovedEvent>(e => published = e);
 
-        AuraSourceEffects.Toggle(sources, eventBus, EntityId, TestAuras.PoisonId, strength: 99);
+        AuraSourceEffects.Revoke(sources, eventBus, EntityId, TestAuras.PoisonId);
 
         Assert.IsFalse(sources.Has(EntityId));
         Assert.IsNotNull(published);
         Assert.AreEqual(EntityId, published!.Value.EntityId);
-        Assert.AreEqual(5, published.Value.Source.Strength);
+        Assert.AreEqual(5, published.Value.Source.Power);
     }
 
     [TestMethod]
-    public void Toggle_DifferentTypeAlreadyPresent_AddsSecondTypeWithoutRemovingFirst()
+    public void Apply_DifferentAuraAlreadyPresent_AddsSecondWithoutRemovingFirst()
     {
         var sources = CreatePool();
         var eventBus = new EventBus();
-        AuraSourceEffects.Toggle(sources, eventBus, EntityId, TestAuras.PoisonId, strength: 5);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.PoisonId, power: 5, size: 2);
 
-        AuraSourceEffects.Toggle(sources, eventBus, EntityId, TestAuras.BurningId, strength: 8);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.BurningId, power: 8, size: 3);
 
         Assert.AreEqual(2, sources.CountForEntity(EntityId));
+    }
+
+    [TestMethod]
+    public void AddHeld_SameAuraUnderTwoKeys_HoldsBothBesideTheUnkeyedOne()
+    {
+        var sources = CreatePool();
+        var eventBus = new EventBus();
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.PoisonId, power: 5, size: 2);
+
+        AuraSourceEffects.AddHeld(sources, EntityId, TestAuras.PoisonId, power: 16, size: 4, heldGrantKey: 1);
+        AuraSourceEffects.AddHeld(sources, EntityId, TestAuras.PoisonId, power: 16, size: 4, heldGrantKey: 2);
+
+        Assert.AreEqual(3, sources.CountForEntity(EntityId));
+    }
+
+    [TestMethod]
+    public void RemoveHeld_RemovesOnlyTheSourceUnderThatKey()
+    {
+        var sources = CreatePool();
+        var eventBus = new EventBus();
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.PoisonId, power: 5, size: 2);
+        AuraSourceEffects.AddHeld(sources, EntityId, TestAuras.PoisonId, power: 16, size: 4, heldGrantKey: 1);
+        AuraSourceEffects.AddHeld(sources, EntityId, TestAuras.PoisonId, power: 16, size: 4, heldGrantKey: 2);
+
+        AuraSourceEffects.RemoveHeld(sources, eventBus, EntityId, TestAuras.PoisonId, heldGrantKey: 1);
+
+        var remaining = new List<AuraSourceComponent>();
+        sources.CopyAll(EntityId, remaining);
+        CollectionAssert.AreEquivalent(new uint[] { 0, 2 }, remaining.Select(source => source.HeldGrantKey).ToArray());
+    }
+
+    [TestMethod]
+    public void ApplyAndRevoke_LeaveHeldSourcesOfTheSameAura()
+    {
+        var sources = CreatePool();
+        var eventBus = new EventBus();
+        AuraSourceEffects.AddHeld(sources, EntityId, TestAuras.LightId, power: 16, size: 4, heldGrantKey: 7);
+
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, power: 8, size: 3);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, power: 8, size: 3);
+        Assert.AreEqual(2, sources.CountForEntity(EntityId));
+
+        AuraSourceEffects.Revoke(sources, eventBus, EntityId, TestAuras.LightId);
+
+        Assert.AreEqual(1, sources.CountForEntity(EntityId));
+        Assert.AreEqual(7u, sources.GetReadonlyByDenseIndex(sources.GetFirstDenseIndex(EntityId)).HeldGrantKey);
+    }
+
+    [TestMethod]
+    public void RemoveUnheld_RemovesUnkeyedSourcesAndLeavesHeldOnes()
+    {
+        var sources = CreatePool();
+        var eventBus = new EventBus();
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.PoisonId, power: 5, size: 2);
+        AuraSourceEffects.AddHeld(sources, EntityId, TestAuras.PoisonId, power: 16, size: 4, heldGrantKey: 3);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.BurningId, power: 8, size: 3);
+
+        var removedAuraIds = new List<byte>();
+        eventBus.Subscribe<AuraSourceRemovedEvent>(e => removedAuraIds.Add(e.Source.AuraId));
+
+        AuraSourceEffects.RemoveUnheld(sources, eventBus, EntityId);
+
+        Assert.AreEqual(1, sources.CountForEntity(EntityId));
+        Assert.AreEqual(3u, sources.GetReadonlyByDenseIndex(sources.GetFirstDenseIndex(EntityId)).HeldGrantKey);
+        CollectionAssert.AreEquivalent(new[] { TestAuras.PoisonId, TestAuras.BurningId }, removedAuraIds);
     }
 
     [TestMethod]
@@ -66,8 +117,8 @@ public sealed class AuraSourceEffectsTests
     {
         var sources = CreatePool();
         var eventBus = new EventBus();
-        AuraSourceEffects.Toggle(sources, eventBus, EntityId, TestAuras.PoisonId, strength: 5);
-        AuraSourceEffects.Toggle(sources, eventBus, EntityId, TestAuras.BurningId, strength: 8);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.PoisonId, power: 5, size: 2);
+        AuraSourceEffects.AddHeld(sources, EntityId, TestAuras.BurningId, power: 8, size: 3, heldGrantKey: 1);
 
         var publishedTypes = new List<byte>();
         eventBus.Subscribe<AuraSourceRemovedEvent>(e => publishedTypes.Add(e.Source.AuraId));
@@ -99,20 +150,20 @@ public sealed class AuraSourceEffectsTests
         var sources = CreatePool();
         var eventBus = new EventBus();
 
-        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, strength: 8);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, power: 8, size: 3);
 
         Assert.IsTrue(sources.Has(EntityId));
     }
 
-    /// <summary>The behavioral difference from Toggle -- re-Applying an already-present type refreshes it (still present afterward) rather than flipping it off.</summary>
+    /// <summary>Re-applying an already-present aura refreshes it: one source afterwards, never two and never none.</summary>
     [TestMethod]
     public void Apply_TypeAlreadyPresent_RefreshesRatherThanRemoving()
     {
         var sources = CreatePool();
         var eventBus = new EventBus();
-        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, strength: 8);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, power: 8, size: 3);
 
-        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, strength: 8);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, power: 8, size: 3);
 
         Assert.IsTrue(sources.Has(EntityId));
         Assert.AreEqual(1, sources.CountForEntity(EntityId));
@@ -123,8 +174,8 @@ public sealed class AuraSourceEffectsTests
     {
         var sources = CreatePool();
         var eventBus = new EventBus();
-        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, strength: 8);
-        AuraSourceEffects.Toggle(sources, eventBus, EntityId, TestAuras.PoisonId, strength: 5);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, power: 8, size: 3);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.PoisonId, power: 5, size: 2);
 
         AuraSourceEffects.Revoke(sources, eventBus, EntityId, TestAuras.LightId);
 

@@ -24,6 +24,6 @@ public static class ToxicPotion
         Summary: "Inflicts 5 stacks of Poison and 3 stacks of Burning.",
         GoldValue: 6,
         Activator: new PotionActivator(
-            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1),
+            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1, TargetModeAffects: TargetModeAffects.MarkedOnly),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));
 }

@@ -87,14 +87,15 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
     /// that passes it (see SetRows' own doc comment); every other caller omits it, which clears any
     /// rows this same pooled instance might still be carrying from an earlier ShowNear call.
     /// </summary>
-    public void ShowNear(Rectangle target, PopupAnchor anchor, Vector2 gap, string bodyText, string? titleText = null, IReadOnlyList<TooltipRow>? rows = null)
+    /// <param name="screenBounds">The screen to keep the popup inside; the graphics device's viewport when null.</param>
+    public void ShowNear(Rectangle target, PopupAnchor anchor, Vector2 gap, string bodyText, string? titleText = null, IReadOnlyList<TooltipRow>? rows = null, Rectangle? screenBounds = null)
     {
         _headerState.ShowHeader = titleText is not null;
         TitleText = titleText ?? string.Empty;
         SetRows(rows);
 
         UpdateText(bodyText);
-        SetRelativePosition(PopupPositioning.GetPositionWithinBounds(target, CurrentSize, anchor, gap, ElementPoolService.GraphicsDevice.Viewport.Bounds));
+        SetRelativePosition(PopupPositioning.GetPositionWithinBounds(target, CurrentSize, anchor, gap, screenBounds ?? ElementPoolService.GraphicsDevice.Viewport.Bounds));
 
         IsVisible = true;
     }

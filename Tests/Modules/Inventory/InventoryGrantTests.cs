@@ -50,12 +50,12 @@ public sealed class InventoryGrantTests
 
     /// <summary>The permanence guarantee InventoryComponent's own doc comment describes -- "no items = no inventory" only applies before the first grant; once granted, running out of items never takes it away.</summary>
     [TestMethod]
-    public void AddItem_ThenConsumeItemDownToZero_InventoryComponentIsNotRemoved()
+    public void AddItem_ThenRemoveOneUnitDownToZero_InventoryComponentIsNotRemoved()
     {
         var manager = CreateRegisteredManager();
-        InventoryActions.AddItem(manager, 0, TestItemId, quantity: 1);
+        var stackInstanceId = InventoryActions.AddItem(manager, 0, TestItemId, quantity: 1);
 
-        InventoryActions.ConsumeItem(manager, 0, TestItemId);
+        InventoryActions.RemoveOneUnit(manager, 0, stackInstanceId);
 
         Assert.IsFalse(InventoryQueries.TryGetStack(manager.GetMultiPool<InventoryItemStackComponent>(), 0, TestItemId, out _), "Sanity check: the stack itself really is gone.");
         Assert.IsTrue(manager.GetPackedPool<InventoryComponent>().Has(0), "InventoryComponent must survive even once every stack is consumed.");

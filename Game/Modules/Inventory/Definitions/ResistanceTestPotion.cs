@@ -33,6 +33,6 @@ public static class ResistanceTestPotion
         Summary: "Reduces Burning and Poison damage taken by 50% for 10 minutes.",
         GoldValue: 8,
         Activator: new PotionActivator(
-            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1),
+            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1, TargetModeAffects: TargetModeAffects.MarkedOnly),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));
 }

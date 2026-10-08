@@ -51,8 +51,9 @@ internal static class TestActionEffects
         ProcessingTierQuery? processingTiers = null,
         BlueprintRegistry? creatures = null,
         PackedComponentPool<ManaComponent>? mana = null,
-        FloatingTextFeed? floatingTextFeed = null) =>
-        ActionEffectResolver.Apply(action, sourceEntityId, targetTiles,
+        FloatingTextFeed? floatingTextFeed = null,
+        ResolvedTargets resolved = default) =>
+        ActionEffectResolver.Apply(action, sourceEntityId, targetTiles, resolved,
             Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, mana, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed),
             mapQuery, now,
             dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
@@ -105,8 +106,10 @@ internal static class TestActionEffects
         AuraCatalog? auras = null,
         EntityBodyParts? bodyParts = null,
         BlueprintRegistry? definitions = null,
-        FloatingTextFeed? floatingTextFeed = null) =>
-        new(
+        FloatingTextFeed? floatingTextFeed = null)
+    {
+        var sources = TestAuras.Sources(auraSources, eventBus, auras);
+        return new(
             componentManager,
             entityKeys,
             eventBus,
@@ -121,6 +124,12 @@ internal static class TestActionEffects
             mana ?? EmptyPools.Packed<ManaComponent>(),
             hotkeyExpansionUnlocks ?? EmptyPools.Packed<HotkeyExpansionUnlockComponent>(),
             statusEffectAppliers ?? new StatusEffectApplierRegistry(),
-            TestAuras.Sources(auraSources, eventBus, auras),
+            sources,
+            new AuraAnchors(componentManager, new EntityManager(componentManager, initialCapacity: 16), sources, NoAnchorSpawner),
             floatingTextFeed ?? EmptyPools.FloatingTextFeed());
+    }
+
+    /// <summary>A test built without an entity factory can't place an aura anchor: one that tries fails loudly rather than placing nothing.</summary>
+    private static int NoAnchorSpawner(Engine.Math.Vector3Int tile) =>
+        throw new InvalidOperationException($"This test has no entity factory to place an aura anchor at {tile} with; build the modules for that.");
 }

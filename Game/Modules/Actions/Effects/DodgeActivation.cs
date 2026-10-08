@@ -12,7 +12,7 @@ namespace Game.Modules.Actions.Effects;
 /// TargetEntityId: unlike every other effect entry (DirectDamage, DirectHeal, ...), Dodge's benefit
 /// always belongs to the caster specifically, never to "whoever the resolved target tile's occupant
 /// turns out to be" -- ActionTargetingController.QueueActionActivation resolves Dodge's own
-/// PendingActionActivationComponent.TargetTiles against the caster's *own* current tile precisely so
+/// PendingActionActivationComponent.Selection at the caster's *own* current tile precisely so
 /// this effect always finds at least the caster there, but that tile could still be shared with
 /// another entity (a co-located Tiny/Phasing occupant) that must not also receive the grant.
 ///

@@ -1,4 +1,4 @@
-﻿using Engine.ECS.Components.Stores;
+using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
 using Engine.Tags;
@@ -6,6 +6,7 @@ using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Resources;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -25,6 +26,9 @@ namespace Game.Modules.Health;
 /// body part locks it out of passive regen until a deadline measured from it (see
 /// BodyPartComponent.RegenLockedUntilFrame) -- but it is required rather than optional so no caller
 /// can silently pass "frame 0" and give a part a lockout that expired before it started.
+///
+/// No amount is ever rounded: health is held as a float, so a hit the target's modifiers cut to 0.4
+/// takes 0.4. Only the floating text, which shows a whole number, rounds (PublishDamageTaken).
 /// </remarks>
 public static class HealthDamage
 {
@@ -32,7 +36,7 @@ public static class HealthDamage
         PackedComponentPool<SimpleHealthComponent> health,
         EventBus eventBus,
         int entityId,
-        ushort amount,
+        float amount,
         ActionSource source,
         IPlayerQuery playerQuery,
         string damageType,
@@ -42,7 +46,7 @@ public static class HealthDamage
         MathUtility? mathUtility,
         PackedComponentPool<DeadComponent> deadEntities,
         FloatingTextFeed floatingTextFeed,
-        DamageCategory damageCategory,
+        ResourceLossCategory damageCategory,
         BodyPartTargetRule? targetRule = null,
         GameplayTagSet damageTags = default,
         BodyPartTargetMode targetMode = BodyPartTargetMode.SingleTarget,
@@ -78,16 +82,13 @@ public static class HealthDamage
         // buff) before anything else -- clamped at 0 so a large enough reduction can't turn
         // damage into healing. Computed once up front (not per-call-site) since both the health
         // clamp below and the EntityDamagedEvent need the same, already-reduced amount.
-        var effectiveAmount = MathUtility.ClampUShort(
-            StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.IncomingDamage, amount, damageTags),
-            0,
-            ushort.MaxValue);
+        var effectiveAmount = IncomingDamageOf(statModifiers, entityId, amount, damageTags);
 
         // Clamped against the effective (modifier-adjusted) max, not the raw stored field, so a
         // permanent +max-HP buff actually raises the ceiling damage is clamped against -- see
         // StatModifierMath's own doc comment for why this is recomputed here rather than baked
         // into SimpleHealthComponent.MaximumHealth itself.
-        health.TryUpdate(entityId, (statModifiers, entityId, effectiveAmount), static (ref SimpleHealthComponent healthComponent, (MultiComponentPool<StatModifierComponent> StatModifiers, int EntityId, ushort Amount) state) =>
+        health.TryUpdate(entityId, (statModifiers, entityId, effectiveAmount), static (ref SimpleHealthComponent healthComponent, (MultiComponentPool<StatModifierComponent> StatModifiers, int EntityId, float Amount) state) =>
         {
             var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, healthComponent.MaximumHealth);
             healthComponent.CurrentHealth = MathHelper.Clamp(healthComponent.CurrentHealth - state.Amount, 0f, effectiveMaximumHealth);
@@ -126,16 +127,25 @@ public static class HealthDamage
         eventBus.Publish(new EntityDamagedEvent(entityId, effectiveAmount, source, (ushort)updatedHealth.CurrentHealth, effectiveMaximumHealthForEvent, damageType));
     }
 
+    /// <summary>amount after entityId's IncomingDamage modifiers, floored at 0 so a large enough reduction can't turn damage into healing, and never rounded.</summary>
+    public static float IncomingDamageOf(MultiComponentPool<StatModifierComponent> statModifiers, int entityId, float amount, GameplayTagSet damageTags) =>
+        MathF.Max(0f, StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.IncomingDamage, amount, damageTags));
+
     /// <summary>Publishes the floating text for damage entityId has just taken.</summary>
-    /// <remarks>For a damage source that applies damage to a body part itself rather than through Apply (BodyPartBurningSystem). Damage fully absorbed by modifiers shows nothing.</remarks>
-    public static void PublishDamageTaken(FloatingTextFeed floatingTextFeed, int entityId, ushort effectiveAmount, DamageCategory damageCategory, bool isCritical = false)
+    /// <remarks>
+    /// For a damage source that applies damage to a body part itself rather than through Apply (BodyPartBurningSystem).
+    /// Damage fully absorbed by modifiers shows nothing. The text is the amount to the nearest whole point, but at least 1:
+    /// a fraction of a point really was taken, so it never reads as a "0" hit.
+    /// </remarks>
+    public static void PublishDamageTaken(FloatingTextFeed floatingTextFeed, int entityId, float effectiveAmount, ResourceLossCategory damageCategory, bool isCritical = false)
     {
-        if (effectiveAmount == 0)
+        if (effectiveAmount <= 0)
         {
             return;
         }
 
-        var kind = damageCategory == DamageCategory.StatusEffect ? FloatingTextKind.StatusEffectDamageTaken : FloatingTextKind.DamageTaken;
-        floatingTextFeed.Publish(entityId, kind, effectiveAmount, flags: isCritical ? FloatingTextFlags.Critical : FloatingTextFlags.None);
+        var shownAmount = (ushort)Math.Clamp(MathF.Round(effectiveAmount, MidpointRounding.AwayFromZero), 1f, ushort.MaxValue);
+        var kind = damageCategory == ResourceLossCategory.StatusEffect ? FloatingTextKind.StatusEffectDamageTaken : FloatingTextKind.DamageTaken;
+        floatingTextFeed.Publish(entityId, kind, shownAmount, flags: isCritical ? FloatingTextFlags.Critical : FloatingTextFlags.None);
     }
 }

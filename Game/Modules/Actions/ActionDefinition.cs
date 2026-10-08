@@ -24,5 +24,6 @@ public sealed record ActionDefinition(
     IReadOnlyList<Effect> Effects,
     IActionActivator Activator,
     string Description = "",
-    string Summary = "")
-    : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Tags.Union(Activator.ImpliedTags), Effects, Description, Summary);
+    string Summary = "",
+    ToggleSpec? Toggle = null)
+    : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Tags.Union(Activator.ImpliedTags), Effects, Description, Summary, Toggle);

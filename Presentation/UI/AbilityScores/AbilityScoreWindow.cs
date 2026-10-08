@@ -4,8 +4,8 @@ using Game.Modules.AbilityScores;
 using Game.Modules.StatModifiers;
 using Game.Views;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
+using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
@@ -20,14 +20,12 @@ namespace Presentation.UI.AbilityScores;
 /// children directly via AddChild -- no
 /// IElementContent/TabbedContent needed, since there's nothing to tab between. Created fresh by
 /// AbilityScoreWindowController each time it's opened and returned to ElementPoolService's pool
-/// on close, same lifecycle as InventoryManagementWindow. Also self-polls Mouse.GetState() every
-/// Update (see UpdateHover),
-/// the same idiom MapWindow uses for its own tile hover, to drive a header/modifier-row hover
-/// popup shown/hidden through the shared TooltipController (see its own doc comment) -- kept
-/// self-contained here rather than routed through UiInputController since nothing else needs to
-/// know about it.
+/// on close, same lifecycle as InventoryManagementWindow. Also reads the cursor from PointerState
+/// every Update (see UpdateHover), which UiInputController publishes each update, to drive a
+/// header/modifier-row hover popup shown/hidden through the shared TooltipController (see its own
+/// doc comment).
 /// </summary>
-public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, AbilityScoreView abilityScoreView, StatModifierView statModifierView, SimulationClock simulationClock)
+public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, AbilityScoreView abilityScoreView, StatModifierView statModifierView, ActionSourceNaming actionSourceNaming, SimulationClock simulationClock, PointerState pointerState)
     : Window(fontService, elementPoolService, labelRenderer)
 {
     private const float HeaderHeight = 50f;
@@ -110,7 +108,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     {
         base.Update(gameTime);
 
-        UpdateHover(Mouse.GetState());
+        UpdateHover(pointerState.CursorPosition);
 
         if (GlobalState.IsAdminModeOn != _lastAdminModeOn)
         {
@@ -143,9 +141,8 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     /// active drag of this window's own title bar -- not worth the extra plumbing unless it
     /// turns out to actually be noticeable.
     /// </summary>
-    private void UpdateHover(MouseState mouseState)
+    private void UpdateHover(Point mousePosition)
     {
-        var mousePosition = new Point(mouseState.X, mouseState.Y);
         var candidate = FindHoverCandidate(mousePosition);
 
         foreach (var header in _columnHeaders)
@@ -186,8 +183,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         }
         else if (candidate is AbilityScoreModifierRow row)
         {
-            var title = ModifierDisplayFormatting.DescribeSource(row.Source!.Value);
-            var body = $"{row.ModifierText}\n{ModifierDisplayFormatting.FormatDuration(row.RemainingDurationFrames)}";
+            var (title, body) = ModifierDisplayFormatting.SourcePopup(actionSourceNaming, row.Source!.Value, row.ModifierText!, row.RemainingDurationFrames);
             _tooltipController.Show(this, row.Rectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, PopupChrome.HoverPopupMaximumSize, body, title);
         }
     }
@@ -334,7 +330,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
         _columnHeaders[index].Configure(type, GetTotal(type), new Vector2(listWindow.CurrentSize.X, HeaderHeight));
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(abilityScoreView, statModifierView, _entityId, type, simulationClock.CurrentFrame);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(abilityScoreView, statModifierView, actionSourceNaming, _entityId, type, simulationClock.CurrentFrame);
         for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
         {
             if (NeedsSeparatorBefore(lines, lineIndex))

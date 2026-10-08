@@ -453,8 +453,7 @@ public sealed class World(
     /// <inheritdoc cref="IMapQuery"/>
     public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) => Map.GetOccupantEntityIdsAt(position);
 
-    /// <summary>The allocation-free span form of GetOccupantEntityIdsAt, for the per-frame draw path -- see Map.GetOccupantEntityIdSpanAt for why it exists and what invalidates the span. Not on IMapQuery: that interface is implemented by test doubles, and a span-returning member can't be expressed by every one of them as cheaply as this concrete pass-through.</summary>
-    /// <param name="position">The position to query.</param>
+    /// <inheritdoc cref="IMapQuery"/>
     public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) => Map.GetOccupantEntityIdSpanAt(position);
 
     /// <inheritdoc cref="IMapQuery"/>

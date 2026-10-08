@@ -119,14 +119,14 @@ public sealed class EntityTeleporterTests
             movement.TargetMapPosition = origin with { X = origin.X + 5 };
             movement.NextMapPosition = origin with { X = origin.X + 1 };
         });
-        componentManager.Merge(session.PlayerEntityId, new PendingDelayedActionComponent(Guid.NewGuid(), [origin with { X = origin.X + 1 }], 1_000));
+        componentManager.Merge(session.PlayerEntityId, PendingWindupComponent.ForAction(Guid.NewGuid(), TestSelections.At(origin with { X = origin.X + 1 }), 1_000));
 
         session.Teleporter.TryTeleport(session.PlayerEntityId, FreeCellNear(session, origin.X + 300, origin.Y));
 
         var movement = componentManager.GetPackedPool<MovementComponent>().GetReadonly(session.PlayerEntityId);
         Assert.IsNull(movement.TargetMapPosition);
         Assert.IsNull(movement.NextMapPosition);
-        Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(session.PlayerEntityId));
+        Assert.IsFalse(componentManager.GetPackedPool<PendingWindupComponent>().Has(session.PlayerEntityId));
     }
 
     [TestMethod]

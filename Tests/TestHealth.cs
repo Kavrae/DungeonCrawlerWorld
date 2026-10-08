@@ -7,6 +7,7 @@ using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
+using Game.Resources;
 using Game.World;
 
 namespace Tests;
@@ -31,7 +32,7 @@ internal static class TestHealth
         GameplayTagSet damageTags = default,
         BodyPartTargetMode targetMode = BodyPartTargetMode.SingleTarget,
         FloatingTextFeed? floatingTextFeed = null,
-        DamageCategory damageCategory = DamageCategory.Direct) =>
+        ResourceLossCategory damageCategory = ResourceLossCategory.Direct) =>
         HealthDamage.Apply(health, eventBus, entityId, amount, source, playerQuery ?? TestPlayerQuery.NoPlayer, damageType, now,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),
@@ -57,7 +58,7 @@ internal static class TestHealth
         IPlayerQuery? playerQuery = null,
         string healType = "Heal",
         FloatingTextFeed? floatingTextFeed = null,
-        HealCategory healCategory = HealCategory.Direct) =>
+        ResourceGainCategory healCategory = ResourceGainCategory.Direct) =>
         HealthHeal.Apply(health, entityId, percentOfMaxHealth, now,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),

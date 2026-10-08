@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.Modules;
 using Game.Effects;
 using Game.Modules.Auras.Components;
@@ -7,6 +8,7 @@ using Game.Modules.Core.Components;
 using Game.Modules.Movement;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
+using Game.World;
 
 namespace Game.Modules.Auras;
 
@@ -35,6 +37,7 @@ public sealed class AurasModule : IGameModule
         componentManager.RegisterMultiPool<AuraSourceComponent>();
         componentManager.RegisterMultiPool<AuraExposureComponent>();
         componentManager.RegisterPackedPool<AuraSourceExpiryComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<AuraAnchorComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 16);
     }
 
     public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
@@ -62,5 +65,18 @@ public sealed class AurasModule : IGameModule
             componentManager.GetMultiPool<AuraSourceComponent>(),
             context.EventBus,
             context.SimulationScope));
+
+        WireAnchors(context, systemManager);
+    }
+
+    /// <summary>Ends an anchor once its last source goes, cancels an owner's anchors when the owner is destroyed, and switches off the toggle holding an anchor that is destroyed (its neighborhood unloading).</summary>
+    private static void WireAnchors(GameModuleContext context, SystemManager systemManager)
+    {
+        var anchors = context.EffectServices.AuraAnchors;
+        context.EventBus.Subscribe<AuraSourceRemovedEvent>(removed => anchors.OnSourceRemoved(removed.EntityId));
+        context.EntityManager.EntityDestroying += entityId =>
+            anchors.OnEntityDestroying(entityId, (holderEntityId, toggleKey) => context.Toggles.SwitchOff(holderEntityId, toggleKey, context.SimulationClock.CurrentFrame));
+
+        systemManager.Register(new AuraAnchorEndingSystem(anchors));
     }
 }

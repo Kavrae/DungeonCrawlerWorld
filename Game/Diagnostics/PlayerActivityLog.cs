@@ -1,8 +1,9 @@
-﻿using Engine.ECS.Components;
+using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Blueprints;
 using Game.Spawning;
+using Game.Views;
 using Game.World;
 
 namespace Game.Diagnostics;
@@ -19,12 +20,15 @@ public sealed class PlayerActivityLog : IDisposable
     private readonly EntityNaming _naming;
     private readonly StreamWriter _writer;
     private readonly SimulationClock _simulationClock;
+    private readonly ActionSourceNaming _actionSourceNaming;
 
     /// <param name="simulationClock">The frame each line is stamped with.</param>
-    public PlayerActivityLog(Game.World.World world, ComponentManager componentManager, EventBus eventBus, SimulationClock simulationClock, string logFilePath, BlueprintRegistry creatures)
+    /// <param name="actionSourceNaming">Names the source of each damage and blocked-effect line.</param>
+    public PlayerActivityLog(Game.World.World world, ComponentManager componentManager, EventBus eventBus, SimulationClock simulationClock, string logFilePath, BlueprintRegistry creatures, ActionSourceNaming actionSourceNaming)
     {
         _world = world;
         _simulationClock = simulationClock;
+        _actionSourceNaming = actionSourceNaming;
         _naming = EntityNaming.For(componentManager, creatures);
 
         var logDirectory = Path.GetDirectoryName(logFilePath);
@@ -39,6 +43,7 @@ public sealed class PlayerActivityLog : IDisposable
         eventBus.Subscribe<EntityDamagedEvent>(OnEntityDamaged);
         eventBus.Subscribe<EntityHealedEvent>(OnEntityHealed);
         eventBus.Subscribe<StatusEffectImmunityBlockedEvent>(OnStatusEffectImmunityBlocked);
+        eventBus.Subscribe<ToggleEndedEvent>(OnToggleEnded);
     }
 
     private void OnEntityMoved(EntityMovedEvent moved)
@@ -68,7 +73,7 @@ public sealed class PlayerActivityLog : IDisposable
             return;
         }
 
-        Write($"DAMAGE amount={damaged.Amount} type={damaged.DamageType} source={DescribeSource(damaged.Source)} target={DescribeEntity(damaged.EntityId)} currentHealth={damaged.CurrentHealth} maximumHealth={damaged.MaximumHealth}");
+        Write($"DAMAGE amount={damaged.Amount:0.##} type={damaged.DamageType} source={_actionSourceNaming.Describe(damaged.Source)} target={DescribeEntity(damaged.EntityId)} currentHealth={damaged.CurrentHealth} maximumHealth={damaged.MaximumHealth}");
     }
 
     /// <summary>Mirrors OnEntityDamaged exactly -- both directions the player can appear in a heal event (healed, or the source that healed someone else) are logged, same reasoning as the DAMAGE line above.</summary>
@@ -96,7 +101,18 @@ public sealed class PlayerActivityLog : IDisposable
             return;
         }
 
-        Write($"BLOCKED type={blocked.EffectType} source={DescribeSource(blocked.Source)} target={DescribeEntity(blocked.EntityId)} (immune)");
+        Write($"BLOCKED type={blocked.EffectType} source={_actionSourceNaming.Describe(blocked.Source)} target={DescribeEntity(blocked.EntityId)} (immune)");
+    }
+
+    /// <summary>One of the player's toggles was switched off without the player asking: its upkeep couldn't be met, or the player died.</summary>
+    private void OnToggleEnded(ToggleEndedEvent ended)
+    {
+        if (ended.EntityId != _world.PlayerEntityId)
+        {
+            return;
+        }
+
+        Write($"TOGGLE_OFF name={ended.ToggleName} reason={ended.Reason}");
     }
 
     /// <summary>entityId alone, or "Name (#entityId)" when anything names it (its own DisplayTextComponent, or its race -- see EntityNaming) -- shared by both the source and target sides of a DAMAGE line.</summary>
@@ -104,12 +120,6 @@ public sealed class PlayerActivityLog : IDisposable
         _naming.TryGetName(entityId, out var name)
             ? $"{name} (#{entityId})"
             : entityId.ToString();
-
-    /// <summary>An entity source by the name and crawler number it had when the source was created (its runtime id may already belong to someone else); anything else by ActionSource.ToString().</summary>
-    private static string DescribeSource(ActionSource source) =>
-        source.Kind == ActionSourceKind.Entity
-            ? source.Identity.DisplayName
-            : source.ToString();
 
     private void Write(string message) =>
         _writer.WriteLine($"[{DateTime.Now:O}] [Frame {_simulationClock.CurrentFrame}] {message}");

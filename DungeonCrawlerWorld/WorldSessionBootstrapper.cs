@@ -86,7 +86,7 @@ public static class WorldSessionBootstrapper
         // (see FloorBuilder.CreatePlayer's own comment on why both exist). Population itself
         // (PopulateFloor, just below) never publishes EntityMovedEvent this way -- only the
         // buffered path -- so subscribing this early doesn't log anything spurious.
-        var playerActivityLog = new PlayerActivityLog(world, ecsContext.ComponentManager, ecsContext.EventBus, ecsContext.SystemManager.Clock, playerActivityLogFilePath, gameSession.Catalogs.Definitions);
+        var playerActivityLog = new PlayerActivityLog(world, ecsContext.ComponentManager, ecsContext.EventBus, ecsContext.SystemManager.Clock, playerActivityLogFilePath, gameSession.Catalogs.Definitions, gameSession.Views.ActionSourceNaming);
         Console.WriteLine($"[PlayerActivityLog] Writing to {playerActivityLogFilePath}");
 
         // The tier reference is set to where the player is aimed at spawning BEFORE population, so

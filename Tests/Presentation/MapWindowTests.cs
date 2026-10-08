@@ -605,9 +605,7 @@ public sealed class MapWindowTests
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         var pending = pendingActivations.GetReadonly(PlayerEntityId);
         Assert.AreEqual(TestActionId, pending.ActionId);
-        Assert.HasCount(8, pending.TargetTiles);
-        CollectionAssert.DoesNotContain(pending.TargetTiles, new Vector3Int(100, 100, 0));
-        CollectionAssert.Contains(pending.TargetTiles, new Vector3Int(101, 100, 0));
+        Assert.AreEqual(new Vector3Int(100, 100, 0), pending.Selection.AimedTile, "Adjacent needs no aim: the caster's own tile, around which Game resolves the ring.");
 
         Assert.IsNull(mapViewState.ArmedActionId, "The first press of the pair armed this slot -- once the double-tap fires, it shouldn't be left stale-armed.");
     }
@@ -639,8 +637,7 @@ public sealed class MapWindowTests
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         var pending = pendingActivations.GetReadonly(PlayerEntityId);
         Assert.AreEqual(rangedActionId, pending.ActionId);
-        Assert.HasCount(1, pending.TargetTiles);
-        Assert.AreEqual(targetPosition, pending.TargetTiles[0]);
+        Assert.AreEqual(targetPosition, pending.Selection.AimedTile);
     }
 
     [TestMethod]
@@ -866,7 +863,7 @@ public sealed class MapWindowTests
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         var pending = pendingActivations.GetReadonly(PlayerEntityId);
         Assert.AreEqual(TestActionId, pending.ActionId);
-        Assert.HasCount(8, pending.TargetTiles);
+        Assert.AreEqual(new Vector3Int(101, 100, 0), pending.Selection.AimedTile);
         Assert.IsNull(mapViewState.ArmedActionId, "Confirming a target must disarm.");
         Assert.IsNull(mapViewState.TargetableTiles);
     }
@@ -906,7 +903,7 @@ public sealed class MapWindowTests
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         var pending = pendingActivations.GetReadonly(PlayerEntityId);
         Assert.AreEqual(lineActionId, pending.ActionId);
-        CollectionAssert.AreEqual(new[] { new Vector3Int(101, 100, 0), new Vector3Int(102, 100, 0) }, pending.TargetTiles);
+        Assert.AreEqual(new Vector3Int(102, 100, 0), pending.Selection.AimedTile, "The line runs from the caster through the clicked tile when Game resolves it.");
     }
 
     [TestMethod]
@@ -927,9 +924,8 @@ public sealed class MapWindowTests
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         var pending = pendingActivations.GetReadonly(PlayerEntityId);
         Assert.AreEqual(burstActionId, pending.ActionId);
-        Assert.HasCount(5, pending.TargetTiles, "areaSize 1 -> radius-1 diamond centered on the clicked tile, not the caster.");
-        CollectionAssert.Contains(pending.TargetTiles, clickedTile);
-        CollectionAssert.DoesNotContain(pending.TargetTiles, new Vector3Int(100, 100, 0));
+        Assert.AreEqual(clickedTile, pending.Selection.AimedTile, "Centred on the clicked tile, not the caster.");
+        Assert.AreEqual(1, pending.Selection.AreaSize);
     }
 
     [TestMethod]
@@ -965,28 +961,28 @@ public sealed class MapWindowTests
     }
 
     [TestMethod]
-    public void HandleRightClickTap_NothingArmed_PendingDelayedAction_CancelsItAndZeroesTheActionLock()
+    public void HandleRightClickTap_NothingArmed_PendingWindup_CancelsItAndZeroesTheActionLock()
     {
         var (_, _, mapWindow, componentManager, _) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
-        componentManager.Merge(PlayerEntityId, new PendingDelayedActionComponent(Guid.NewGuid(), [new Vector3Int(101, 100, 0)], readyAtFrame: 60));
+        componentManager.Merge(PlayerEntityId, PendingWindupComponent.ForAction(Guid.NewGuid(), TestSelections.At(new Vector3Int(101, 100, 0)), readyAtFrame: 60));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, unlockedAtFrame: 45));
 
         mapWindow.HandleRightClickTap(new Point(0, 0));
 
-        Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(PlayerEntityId));
+        Assert.IsFalse(componentManager.GetPackedPool<PendingWindupComponent>().Has(PlayerEntityId));
         Assert.AreEqual(0u, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId).UnlockedAtFrame);
     }
 
     [TestMethod]
-    public void HandleEscape_NothingArmed_PendingDelayedAction_CancelsItAndZeroesTheActionLock()
+    public void HandleEscape_NothingArmed_PendingWindup_CancelsItAndZeroesTheActionLock()
     {
         var (_, _, mapWindow, componentManager, _) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
-        componentManager.Merge(PlayerEntityId, new PendingDelayedActionComponent(Guid.NewGuid(), [new Vector3Int(101, 100, 0)], readyAtFrame: 60));
+        componentManager.Merge(PlayerEntityId, PendingWindupComponent.ForAction(Guid.NewGuid(), TestSelections.At(new Vector3Int(101, 100, 0)), readyAtFrame: 60));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, unlockedAtFrame: 45));
 
         mapWindow.HandleEscape();
 
-        Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(PlayerEntityId));
+        Assert.IsFalse(componentManager.GetPackedPool<PendingWindupComponent>().Has(PlayerEntityId));
         Assert.AreEqual(0u, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId).UnlockedAtFrame);
     }
 
@@ -1249,7 +1245,7 @@ public sealed class MapWindowTests
         itemCatalog.Register(new ItemDefinition(
             TestPotionId, "Test Potion", null, "p", Color.Green, Tags: [GameTags.TargetingSelf],
             Effects: [new Effect([new DirectHeal(0.5f)])],
-            Activator: new PotionActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
+            Activator: new PotionActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1, TargetModeAffects: TargetModeAffects.MarkedOnly), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
     /// <summary>Same PotionActivator/Burst shape as RegisterTestPotion, but deliberately untagged Self -- covers the double-tap shortcut now being keyed off GameTags.TargetingSelf rather than any particular IActionActivator kind.</summary>
     private static void RegisterTestNonSelfPotion(ItemCatalog itemCatalog) =>
@@ -1297,7 +1293,7 @@ public sealed class MapWindowTests
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(100, 100, 0)));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
-        var pendingActivations = componentManager.GetPackedPool<PendingConsumableActivationComponent>();
+        var pendingActivations = componentManager.GetPackedPool<PendingItemActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         Assert.AreEqual(stackInstanceId, pendingActivations.GetReadonly(PlayerEntityId).StackInstanceId);
         Assert.IsNull(mapViewState.ArmedItemStackInstanceId);
@@ -1331,7 +1327,7 @@ public sealed class MapWindowTests
         mapWindow.UpdateHoveredTile(new Point(-1, -1));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
-        Assert.IsFalse(componentManager.GetPackedPool<PendingConsumableActivationComponent>().Has(PlayerEntityId));
+        Assert.IsFalse(componentManager.GetPackedPool<PendingItemActivationComponent>().Has(PlayerEntityId));
         Assert.IsNotNull(mapViewState.ArmedItemStackInstanceId);
         Assert.AreEqual(HotkeySlot.Slot1, mapViewState.ArmedSlot);
     }
@@ -1370,7 +1366,7 @@ public sealed class MapWindowTests
     [TestMethod]
     public void HandleHotkeys_DoubleTapPotionSlot_QueuesSelfActivation_AndClearsAnyArming()
     {
-        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        var (world, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestPotion(itemCatalog);
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
@@ -1378,12 +1374,12 @@ public sealed class MapWindowTests
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
-        var pendingActivations = componentManager.GetPackedPool<PendingConsumableActivationComponent>();
+        var pendingActivations = componentManager.GetPackedPool<PendingItemActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         var pending = pendingActivations.GetReadonly(PlayerEntityId);
         Assert.AreEqual(stackInstanceId, pending.StackInstanceId);
-        Assert.HasCount(1, pending.TargetTiles);
-        Assert.AreEqual(new Vector3Int(100, 100, 0), pending.TargetTiles[0]);
+        Assert.AreEqual(TargetingMode.Target, pending.Selection.Mode, "Double-tapped, a potion is drunk: Target mode on the player.");
+        Assert.AreEqual(world.EntityKeys.GetKey(PlayerEntityId), pending.Selection.MarkedEntity);
 
         Assert.IsNull(mapViewState.ArmedItemStackInstanceId, "The first press of the pair armed this slot -- once the double-tap fires, it shouldn't be left stale-armed.");
     }
@@ -1400,12 +1396,12 @@ public sealed class MapWindowTests
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
-        Assert.IsFalse(componentManager.GetPackedPool<PendingConsumableActivationComponent>().Has(PlayerEntityId), "No self-cast shortcut without GameTags.TargetingSelf -- a second rapid press just confirms against the cursor, which has no hovered tile here, so nothing should queue.");
+        Assert.IsFalse(componentManager.GetPackedPool<PendingItemActivationComponent>().Has(PlayerEntityId), "No self-cast shortcut without GameTags.TargetingSelf -- a second rapid press just confirms against the cursor, which has no hovered tile here, so nothing should queue.");
         Assert.AreEqual(stackInstanceId, mapViewState.ArmedItemStackInstanceId, "Still armed -- the second press had nothing to confirm against.");
     }
 
     [TestMethod]
-    public void HandleClick_ArmedItem_ClickWithinFootprint_QueuesConsumableActivationAndDisarms()
+    public void HandleClick_ArmedItem_ClickWithinFootprint_QueuesItemActivationAndDisarms()
     {
         var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestPotion(itemCatalog);
@@ -1417,7 +1413,7 @@ public sealed class MapWindowTests
         var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0));
         mapWindow.HandleClick(clickPosition);
 
-        var pendingActivations = componentManager.GetPackedPool<PendingConsumableActivationComponent>();
+        var pendingActivations = componentManager.GetPackedPool<PendingItemActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         Assert.AreEqual(stackInstanceId, pendingActivations.GetReadonly(PlayerEntityId).StackInstanceId);
         Assert.IsNull(mapViewState.ArmedItemStackInstanceId, "Confirming a target must disarm.");
@@ -1432,9 +1428,9 @@ public sealed class MapWindowTests
     /// tile" behave differently before this fix.
     /// </summary>
     [TestMethod]
-    public void HandleClick_ArmedItem_ClickOwnTile_QueuesSelfOnlyActivation_NotTheRealSplashShape()
+    public void HandleClick_ArmedPotion_ClickOwnTileInTargetMode_MarksThePlayer()
     {
-        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        var (world, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestPotion(itemCatalog);
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
@@ -1443,12 +1439,12 @@ public sealed class MapWindowTests
         var clickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(100, 100, 0));
         mapWindow.HandleClick(clickPosition);
 
-        var pendingActivations = componentManager.GetPackedPool<PendingConsumableActivationComponent>();
+        var pendingActivations = componentManager.GetPackedPool<PendingItemActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         var pending = pendingActivations.GetReadonly(PlayerEntityId);
         Assert.AreEqual(stackInstanceId, pending.StackInstanceId);
-        Assert.HasCount(1, pending.TargetTiles, "A Potion's real Burst/AreaSize:1 shape centered on the caster would resolve to 5 tiles -- clicking your own tile must bypass that and self-target only.");
-        Assert.AreEqual(new Vector3Int(100, 100, 0), pending.TargetTiles[0]);
+        Assert.AreEqual(TargetingMode.Target, pending.Selection.Mode);
+        Assert.AreEqual(world.EntityKeys.GetKey(PlayerEntityId), pending.Selection.MarkedEntity, "In Target mode, clicking your own tile marks you: a MarkedOnly potion reaches you alone, not the splash.");
         Assert.IsNull(mapViewState.ArmedItemStackInstanceId, "Confirming a target must disarm.");
     }
 

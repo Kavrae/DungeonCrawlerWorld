@@ -79,7 +79,7 @@ public sealed class SpawnRecordRebuilderTests
     {
         var result = Bootstrap(new Map(new Vector3Int(20, 20, 3)));
         var ecs = result.EcsContext;
-        var builder = new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, ecs.EntityManager.Keys);
+        var builder = new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, result.Catalogs.ActionCatalog, ecs.EntityManager.Keys);
 
         foreach (var race in new[] { Goblin.Id, Fairy.Id, Ghost.Id, Human.Id })
         {
@@ -102,7 +102,7 @@ public sealed class SpawnRecordRebuilderTests
         var ecs = result.EcsContext;
         var entityId = ecs.EntityManager.CreateEntity();
         var blueprintId = Blueprint(result, Goblin.Id);
-        new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, blueprintId, seed: 1, now: 0);
+        new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, result.Catalogs.ActionCatalog, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, blueprintId, seed: 1, now: 0);
         var creature = Read(ecs.ComponentManager, entityId);
 
         var others = Enumerable.Range(2, 10).Select(seed => RebuildDefaults(result, new SpawnRecordComponent(blueprintId, (uint)seed)));
@@ -119,7 +119,7 @@ public sealed class SpawnRecordRebuilderTests
         var entityId = ecs.EntityManager.CreateEntity();
         var blueprintId = Blueprint(result, Goblin.Id, Engineer.Id, Tank.Id);
 
-        new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, blueprintId, seed: 99, now: 0);
+        new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, result.Catalogs.ActionCatalog, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, blueprintId, seed: 99, now: 0);
 
         AssertSame(Read(ecs.ComponentManager, entityId), RebuildDefaults(result, new SpawnRecordComponent(blueprintId, 99)));
     }
@@ -131,7 +131,7 @@ public sealed class SpawnRecordRebuilderTests
         var ecs = result.EcsContext;
         var entityId = ecs.EntityManager.CreateEntity();
 
-        new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, Blueprint(result, Goblin.Id, Engineer.Id), seed: 1, now: 0);
+        new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, result.Catalogs.ActionCatalog, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, Blueprint(result, Goblin.Id, Engineer.Id), seed: 1, now: 0);
 
         // Goblin's 54-frame lock, then Engineer's 10% reduction on top of it.
         Assert.AreEqual((ushort)48, ecs.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId).StandardLockFrames);
@@ -145,7 +145,7 @@ public sealed class SpawnRecordRebuilderTests
         var entityId = ecs.EntityManager.CreateEntity();
         var blueprintId = Blueprint(result, Fairy.Id);
 
-        new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, blueprintId, seed: 1234, now: 0);
+        new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, result.Catalogs.ActionCatalog, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, blueprintId, seed: 1234, now: 0);
 
         Assert.AreEqual(new SpawnRecordComponent(blueprintId, 1234), ecs.ComponentManager.GetDirectPool<SpawnRecordComponent>().GetReadonly(entityId));
     }
@@ -155,7 +155,7 @@ public sealed class SpawnRecordRebuilderTests
     {
         var result = Bootstrap(new Map(new Vector3Int(20, 20, 3)));
         var ecs = result.EcsContext;
-        var builder = new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, ecs.EntityManager.Keys);
+        var builder = new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, result.Catalogs.ActionCatalog, ecs.EntityManager.Keys);
         var blueprintId = Blueprint(result, Goblin.Id);
 
         var loadouts = Enumerable.Range(0, 20).Select(seed =>

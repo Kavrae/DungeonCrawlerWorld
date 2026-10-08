@@ -4,6 +4,7 @@ using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints;
+using Game.Modules.Actions;
 using Game.Modules.Auras;
 using Game.Modules.Class.Components;
 using Game.Modules.Core.Components;
@@ -64,6 +65,7 @@ public sealed class EntityFactory
     public EntityFactory(
         BlueprintRegistry definitions,
         AuraCatalog auras,
+        ActionCatalog actions,
         World.World world,
         EntityManager entityManager,
         ComponentManager componentManager,
@@ -75,7 +77,7 @@ public sealed class EntityFactory
         ulong runtimeSeed = 0)
     {
         _definitions = definitions;
-        _builder = new EntityBuilder(definitions, auras, entityManager.Keys);
+        _builder = new EntityBuilder(definitions, auras, actions, entityManager.Keys);
         _world = world;
         _entityManager = entityManager;
         _componentManager = componentManager;

@@ -5,6 +5,7 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Blueprints;
+using Game.Effects;
 using Game.Modules;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
@@ -168,9 +169,8 @@ internal static class TestSystems
         PackedComponentPool<PendingActionActivationComponent> pendingActivations,
         PackedComponentPool<ActionLockComponent> actionLocks,
         EntityActions actions,
-        PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
+        PackedComponentPool<PendingWindupComponent> pendingWindups,
         PackedComponentPool<SimpleHealthComponent> health,
-        ActionCatalog actionCatalog,
         IMapQuery mapQuery,
         EventBus eventBus,
         MathUtility mathUtility,
@@ -191,15 +191,17 @@ internal static class TestSystems
         ProcessingTierQuery? processingTiers = null,
         BlueprintRegistry? creatures = null,
         FloatingTextFeed? floatingTextFeed = null) =>
-        new(pendingActivations, actionLocks, actions, pendingDelayedActions,
-            TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, mana, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed),
-            actionCatalog, mapQuery,
+        WithServices(TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, mana, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed), services => new ActionActivationSystem(pendingActivations, actionLocks, actions, pendingWindups,
+            services,
+            mapQuery,
             meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>(),
             dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
-            processingTiers ?? EmptyPools.Tiers());
+            processingTiers ?? EmptyPools.Tiers(),
+            TogglesOver(services),
+            TargetResolutionOver(services, mapQuery)));
 
     public static DelayedActionSystem DelayedActionSystem(
-        PackedComponentPool<PendingDelayedActionComponent> pendingActions,
+        PackedComponentPool<PendingWindupComponent> pendingActions,
         EntityActions actions,
         PackedComponentPool<SimpleHealthComponent> health,
         ActionCatalog actionCatalog,
@@ -223,15 +225,16 @@ internal static class TestSystems
         ProcessingTierEvents? processingTierEvents = null,
         BlueprintRegistry? creatures = null,
         FloatingTextFeed? floatingTextFeed = null) =>
-        new(pendingActions, actions,
-            TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, null, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed),
+        WithServices(TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, null, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed), services => new DelayedActionSystem(pendingActions, actions,
+            services,
             actionCatalog, mapQuery,
             dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
             processingTiers ?? EmptyPools.Tiers(),
-            simulationScope ?? new SimulationScope(static _ => true), processingTierEvents ?? new ProcessingTierEvents());
+            simulationScope ?? new SimulationScope(static _ => true), processingTierEvents ?? new ProcessingTierEvents(),
+            TogglesOver(services), new WindupResolvers(), TargetResolutionOver(services, mapQuery)));
 
-    public static ConsumableActivationSystem ConsumableActivationSystem(
-        PackedComponentPool<PendingConsumableActivationComponent> pendingActivations,
+    public static ItemActivationSystem ItemActivationSystem(
+        PackedComponentPool<PendingItemActivationComponent> pendingActivations,
         PackedComponentPool<ActionLockComponent> actionLocks,
         PackedComponentPool<PotionCooldownComponent> potionCooldowns,
         PackedComponentPool<SimpleHealthComponent> health,
@@ -257,12 +260,31 @@ internal static class TestSystems
         BlueprintRegistry? creatures = null,
         ProcessingTierQuery? processingTiers = null,
         FloatingTextFeed? floatingTextFeed = null) =>
-        new(pendingActivations, actionLocks, potionCooldowns,
-            TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, mana, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed),
+        WithServices(TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, mana, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed), services => new ItemActivationSystem(pendingActivations, actionLocks, potionCooldowns,
+            services,
             itemCatalog, actionCatalog, mapQuery,
             meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>(),
             itemHotkeyBindings ?? EmptyPools.Multi<ItemHotkeyBindingComponent>(),
-            processingTiers ?? EmptyPools.Tiers());
+            processingTiers ?? EmptyPools.Tiers(),
+            TogglesOver(services),
+            services.ComponentManager.GetPackedPool<PendingWindupComponent>(),
+            TargetResolutionOver(services, mapQuery)));
+
+    private static TSystem WithServices<TSystem>(EffectServices services, Func<EffectServices, TSystem> build) => build(services);
+
+    /// <summary>Toggles over the services' own component manager, for a system a test builds without the modules.</summary>
+    private static Toggles TogglesOver(EffectServices services) => new(services.ComponentManager.GetMultiPool<ActiveToggleComponent>(), services);
+
+    /// <summary>Target resolution over the services' own component manager and the test's map: a caster is found by its transform there, so a test places its caster.</summary>
+    internal static TargetResolution TargetResolutionOver(EffectServices services, IMapQuery mapQuery)
+    {
+        var componentManager = services.ComponentManager;
+        return new(mapQuery,
+            componentManager.IsRegistered<TransformComponent>() ? componentManager.GetDirectPool<TransformComponent>() : EmptyPools.Direct<TransformComponent>(),
+            services.EntityKeys, services.DeadEntities,
+            componentManager.IsRegistered<NonBlockingComponent>() ? componentManager.GetMultiPool<NonBlockingComponent>() : EmptyPools.Multi<NonBlockingComponent>(),
+            services.AbilityScores);
+    }
 
     public static TestCombatBehaviorSystem TestCombatBehaviorSystem(
         PackedComponentPool<MovementComponent> movementPool,
@@ -274,18 +296,22 @@ internal static class TestSystems
         EntityActions actions,
         PackedComponentPool<RaceSlotsComponent> raceSlots,
         PackedComponentPool<PendingActionActivationComponent> pendingActivations,
-        PackedComponentPool<PendingConsumableActivationComponent> pendingConsumableActivations,
+        PackedComponentPool<PendingItemActivationComponent> pendingItemActivations,
         IMapQuery mapQuery,
         MathUtility mathUtility,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         PackedComponentPool<ManaComponent>? mana = null,
-        PackedComponentPool<MeleeDisabledComponent>? meleeDisabled = null) =>
-        new(movementPool, transformPool, actionLocks, health, bodyParts, inventoryStacks, actions, raceSlots, pendingActivations, pendingConsumableActivations, mapQuery, mathUtility, processingTiers, processingTierEvents,
+        PackedComponentPool<MeleeDisabledComponent>? meleeDisabled = null,
+        IPlayerQuery? playerQuery = null,
+        EntityKeys? entityKeys = null) =>
+        new(movementPool, transformPool, actionLocks, health, bodyParts, inventoryStacks, actions, raceSlots, pendingActivations, pendingItemActivations, mapQuery, mathUtility, processingTiers, processingTierEvents,
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
-            mana ?? EmptyPools.Packed<ManaComponent>(),
-            meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>());
+            TestActionEffects.Services(BuiltInTestComponents.RegisterAll(new ComponentManager(16, 16)), entityKeys ?? new EntityKeys(), new EventBus(), mathUtility, deadEntities: deadEntities, mana: mana),
+            meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>(),
+            playerQuery ?? TestPlayerQuery.NoPlayer,
+            new TargetResolution(mapQuery, transformPool, entityKeys ?? new EntityKeys(), deadEntities ?? EmptyPools.Packed<DeadComponent>(), EmptyPools.Multi<NonBlockingComponent>(), EmptyPools.Packed<AbilityScoresComponent>()));
 
     public static DeathSystem DeathSystem(
         PackedComponentPool<DeadComponent> deadEntities,

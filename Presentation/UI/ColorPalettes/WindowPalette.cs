@@ -82,6 +82,12 @@ internal static class WindowPalette
     /// <summary>Generic "draw attention to this" gold glow -- an unread notification badge/folder, an armed hotbar slot, a drag-drop target slot inviting a drop. Deliberately its own field, not FocusAccentColor (also Gold) -- that one specifically means "this window is focused," a different signal that shouldn't move just because this one does, even though both happen to be Gold today.</summary>
     public static Color AttentionGlow = Color.Gold;
 
+    /// <summary>The "this is on" glow -- a lit toggle item's inventory cell and hotbar slot, and a toggled-on action's hotbar slot (ToggleActiveMarker). Its own colour, apart from AttentionGlow (selected or armed) and the green comparison-eligible glow, so being on never reads as either.</summary>
+    public static Color ToggleActiveGlow = Color.Cyan;
+
+    /// <summary>The "Active" line in a tooltip or Item Details for a toggle that is on -- the same colour as its glow.</summary>
+    public static Color ToggleActiveText = Color.Cyan;
+
     /// <summary>♥ heart-glyph color -- HealthWindowController's own button icon.</summary>
     public static Color HeartGlyphColor = Color.Red;
 

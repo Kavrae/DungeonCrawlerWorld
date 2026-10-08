@@ -62,8 +62,10 @@ public sealed class PlayerMovementControllerTests
             componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
+            componentManager.GetPackedPool<PendingItemActivationComponent>(),
+            componentManager.GetPackedPool<PendingWindupComponent>(),
+            componentManager.GetMultiPool<InventoryItemStackComponent>(),
+            new Game.Modules.Inventory.ItemCatalog(),
             clock,
             TestActionStateViews.EntityActions(componentManager),
             new Engine.Events.EventBus());

@@ -14,13 +14,13 @@ public sealed class BlueprintAuraTests
     public void Resolve_CollectsEveryPartsAurasInBuildOrder()
     {
         var definitions = new BlueprintRegistry();
-        var basePart = new BlueprintDefinition(Guid.NewGuid(), "Base") { Auras = [new AuraGrant(FirstAura, 4)] };
+        var basePart = new BlueprintDefinition(Guid.NewGuid(), "Base") { Auras = [new AuraGrant(FirstAura, 4, 2)] };
         definitions.Register(basePart);
-        var compositeId = definitions.Register(new BlueprintDefinition(Guid.NewGuid(), "Composite") { Includes = [basePart.Id], Auras = [new AuraGrant(SecondAura, 2)] });
+        var compositeId = definitions.Register(new BlueprintDefinition(Guid.NewGuid(), "Composite") { Includes = [basePart.Id], Auras = [new AuraGrant(SecondAura, 2, 1)] });
 
         var auras = definitions.Resolve(compositeId).Auras;
 
-        CollectionAssert.AreEqual(new[] { new AuraGrant(FirstAura, 4), new AuraGrant(SecondAura, 2) }, auras.ToArray());
+        CollectionAssert.AreEqual(new[] { new AuraGrant(FirstAura, 4, 2), new AuraGrant(SecondAura, 2, 1) }, auras.ToArray());
     }
 
     /// <summary>A composite overrides an aura a part it includes grants, the same rule as for actions: one source per aura, the later grant's strength.</summary>
@@ -28,13 +28,13 @@ public sealed class BlueprintAuraTests
     public void Resolve_LaterGrantOfTheSameAura_ReplacesTheEarlierOne()
     {
         var definitions = new BlueprintRegistry();
-        var basePart = new BlueprintDefinition(Guid.NewGuid(), "Base") { Auras = [new AuraGrant(FirstAura, 4)] };
+        var basePart = new BlueprintDefinition(Guid.NewGuid(), "Base") { Auras = [new AuraGrant(FirstAura, 4, 2)] };
         definitions.Register(basePart);
-        var compositeId = definitions.Register(new BlueprintDefinition(Guid.NewGuid(), "Composite") { Includes = [basePart.Id], Auras = [new AuraGrant(FirstAura, 8)] });
+        var compositeId = definitions.Register(new BlueprintDefinition(Guid.NewGuid(), "Composite") { Includes = [basePart.Id], Auras = [new AuraGrant(FirstAura, 8, 3)] });
 
         var auras = definitions.Resolve(compositeId).Auras;
 
-        CollectionAssert.AreEqual(new[] { new AuraGrant(FirstAura, 8) }, auras.ToArray());
+        CollectionAssert.AreEqual(new[] { new AuraGrant(FirstAura, 8, 3) }, auras.ToArray());
     }
 
     [TestMethod]

@@ -68,6 +68,9 @@ public sealed class CursorTextContent(PointerState pointerState, FontService fon
         _remainingFrames = 0;
     }
 
+    /// <summary>The message showing now, or empty -- for tests.</summary>
+    internal string ShownText => _isPersistent || _remainingFrames > 0 ? _text : string.Empty;
+
     public void Initialize(Window hostWindow) => _hostWindow = hostWindow;
 
     public void Update(GameTime gameTime)

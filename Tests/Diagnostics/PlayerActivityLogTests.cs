@@ -45,7 +45,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry());
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
             simulationClock.Advance(5);
 
             eventBus.Publish(new EntityMovedEvent(0, new Vector3Int(1, 1, 0), new Vector3Int(2, 1, 0), new Vector2Byte(1, 1)));
@@ -70,7 +70,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry());
+            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
             simulationClock.Advance(1);
 
             eventBus.Publish(new EntityMovedEvent(1, new Vector3Int(1, 1, 0), new Vector3Int(2, 1, 0), new Vector2Byte(1, 1)));
@@ -92,7 +92,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry());
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
             simulationClock.Advance(9);
 
             eventBus.Publish(new EntityDamagedEvent(0, 7, ActionSource.Admin, 93, 100, "Status Effect (Burning)"));
@@ -119,7 +119,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry());
+            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
             simulationClock.Advance(1);
 
             eventBus.Publish(new EntityDamagedEvent(1, 7, ActionSource.Admin, 93, 100, "Status Effect (Burning)"));
@@ -142,7 +142,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry());
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
             simulationClock.Advance(3);
 
             eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0, creatures: new BlueprintRegistry()), 88, 100, "Default Attack"));
@@ -170,7 +170,7 @@ public sealed class PlayerActivityLogTests
         componentManager.Merge(5, new DisplayTextComponent("Goblin1", "A goblin."));
         try
         {
-            var log = new PlayerActivityLog(world, componentManager, eventBus, simulationClock, logPath, creatures: new BlueprintRegistry());
+            var log = new PlayerActivityLog(world, componentManager, eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
             simulationClock.Advance(4);
 
             eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0, creatures: new BlueprintRegistry()), 88, 100, "Default Attack"));
@@ -196,7 +196,7 @@ public sealed class PlayerActivityLogTests
         componentManager.Merge(0, new DisplayTextComponent("PlayerOne", "The player."));
         try
         {
-            var log = new PlayerActivityLog(world, componentManager, eventBus, simulationClock, logPath, creatures: new BlueprintRegistry());
+            var log = new PlayerActivityLog(world, componentManager, eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
             simulationClock.Advance(4);
 
             eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(componentManager, IssueKeys(new EntityKeys()), 0, creatures: new BlueprintRegistry()), 88, 100, "Default Attack"));
@@ -220,7 +220,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry());
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
             simulationClock.Advance(9);
 
             eventBus.Publish(new EntityHealedEvent(0, 12f, null, 93f, 100f, "Regeneration"));
@@ -247,7 +247,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry());
+            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
             simulationClock.Advance(1);
 
             eventBus.Publish(new EntityHealedEvent(1, 12f, null, 93f, 100f, "Regeneration"));
@@ -270,7 +270,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry());
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
             simulationClock.Advance(3);
 
             eventBus.Publish(new EntityHealedEvent(5, 20f, 0, 88f, 100f, "Heal"));
@@ -296,7 +296,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry());
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
             simulationClock.Advance(9);
 
             eventBus.Publish(new StatusEffectImmunityBlockedEvent(0, StatusEffectType.Burning, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 7, creatures: new BlueprintRegistry())));
@@ -322,7 +322,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry());
+            using var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
             simulationClock.Advance(1);
 
             eventBus.Publish(new StatusEffectImmunityBlockedEvent(1, StatusEffectType.Poison, ActionSource.Admin));
@@ -345,7 +345,7 @@ public sealed class PlayerActivityLogTests
         var logPath = CreateTempLogPath();
         try
         {
-            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry());
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
             simulationClock.Advance(3);
 
             eventBus.Publish(new StatusEffectImmunityBlockedEvent(5, StatusEffectType.Poison, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0, creatures: new BlueprintRegistry())));

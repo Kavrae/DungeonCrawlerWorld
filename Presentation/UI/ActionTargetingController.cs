@@ -1,8 +1,6 @@
 using Engine.ECS.Systems;
 using Engine.Math;
-using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
-using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Inventory;
@@ -17,7 +15,7 @@ namespace Presentation.UI;
 
 /// <summary>  Player's moment-to-moment action input </summary>
 /// <remarks>
-/// Arming/disarming/confirming/auto-targeting actions and consumable items via their hotbar hotkeys.
+/// Arming/disarming/confirming/auto-targeting actions and usable items via their hotbar hotkeys.
 /// Player movement is a separate concern handled by the sibling PlayerMovementController.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
@@ -33,7 +31,7 @@ public sealed class ActionTargetingController(
     HotkeyBindingView hotkeyBindingView,
     InventoryView inventoryView,
     ActionStateView actionStateView,
-    AbilityScoreView abilityScoreView,
+    TargetingView targetingView,
     PlayerCommands playerCommands,
     SimulationClock simulationClock)
 {
@@ -49,7 +47,6 @@ public sealed class ActionTargetingController(
     // a caller-owned buffer instead of allocating).
     private readonly List<Vector3Int> _candidateTilesBuffer = [];
     private readonly List<Vector3Int> _occupiedCandidateTilesBuffer = [];
-    private readonly List<Vector3Int> _finalTargetTilesBuffer = [];
 
     /// <summary>
     /// Backs MapViewState.TargetableTiles -- populated by RefreshTargetableTiles (Clear +
@@ -80,45 +77,62 @@ public sealed class ActionTargetingController(
     /// <summary>O(1) via _hoveredFootprintSet -- MapWindow's targeting-highlight draw calls this once per visible targetable tile, every frame something is armed, so a linear List.Contains here would cost O(TargetableTiles.Count * HoveredFootprint.Count) per frame instead.</summary>
     internal bool HoveredFootprintContains(Vector3Int tile) => _hoveredFootprintSet.Contains(tile);
 
-    /// <summary>The player's own pending Delayed action's already-resolved target tiles, or null if there is none.</summary>
+    private readonly List<Vector3Int> _playerWindupTilesBuffer = [];
+
+    /// <summary>Where the player's own windup would land if it ended now, or null if there is none.</summary>
     /// <remarks>
-    /// A live lookup, not a cached/refreshed-per-Update field -- unlike TargetableTiles
-    /// (an actual scatter computation worth skipping on unchanged frames), this is a single
-    /// view lookup, cheap enough to just recompute on every read. See MapWindow.
-    /// DrawTargetingHighlights' own doc comment for why this is the fallback highlight once
-    /// TargetableTiles/HoveredFootprint themselves are cleared: once a Delayed ability is
-    /// actually queued, Disarm already clears both (there's nothing left to aim), but the player
-    /// benefits from still seeing exactly which tiles are about to be hit once the windup ends.
+    /// Resolved every read through TargetingView -- the resolution the windup itself ends with -- so a
+    /// Target-mode windup's highlight follows its target. See MapWindow.DrawTargetingHighlights' own
+    /// doc comment for why this is the fallback highlight once TargetableTiles/HoveredFootprint
+    /// themselves are cleared: once a Delayed ability is actually queued, Disarm already clears both
+    /// (there's nothing left to aim), but the player benefits from still seeing exactly which tiles
+    /// are about to be hit once the windup ends.
     /// </remarks>
-    internal Vector3Int[]? PendingDelayedActionTargetTiles =>
-        actionStateView.TryGetPendingDelayedAction(world.PlayerEntityId, out var pending) ? pending.TargetTiles : null;
+    internal IReadOnlyList<Vector3Int>? PendingWindupTargetTiles =>
+        actionStateView.TryGetPendingWindup(world.PlayerEntityId, out var pending) && targetingView.TryResolveWindup(world.PlayerEntityId, in pending, _playerWindupTilesBuffer)
+            ? _playerWindupTilesBuffer
+            : null;
 
-    private readonly List<(int EntityId, PendingDelayedActionComponent Pending)> _localPendingDelayedActionsScratch = [];
+    private readonly List<(int EntityId, PendingWindupComponent Pending)> _localPendingWindupsScratch = [];
 
-    private readonly List<(int EntityId, Vector3Int[] TargetTiles, bool IsDodgeable)> _pendingDelayedActionTargetsBuffer = [];
+    private readonly List<(int EntityId, IReadOnlyList<Vector3Int> TargetTiles, bool IsDodgeable)> _pendingWindupTargetsBuffer = [];
+
+    /// <summary>One reused tile list per windup drawn, grown to the most windups seen in a frame.</summary>
+    private readonly List<List<Vector3Int>> _windupTileListPool = [];
 
     /// <summary>
-    /// Every entity mid-windup on a Delayed action within the Local tier (the player always), with its already-resolved
-    /// target tiles and whether that action is Dodgeable -- so MapWindow can telegraph an enemy's incoming attack
-    /// (red/yellow, see CombatTargetPalette) as well as the player's own (dark green).
+    /// Every entity mid-windup within the Local tier (the player always), with where its windup would land if it ended
+    /// now and whether that action is Dodgeable -- so MapWindow can telegraph an enemy's incoming attack
+    /// (red/yellow, see CombatTargetPalette) as well as the player's own (dark green), following a Target-mode target.
     /// </summary>
     /// <remarks>
-    /// Which windups count as Local is ActionStateView.CopyLocalPendingDelayedActions'. Reads the catalog definition
+    /// Which windups count as Local is ActionStateView.CopyLocalPendingWindups'. Reads the catalog definition's Tags
     /// directly rather than resolving a per-instance Override: ActionOverrideEffects.OverrideFlatDamage (the only
     /// Override producer today) never touches Tags, so the catalog's own Tags are always correct here.
     /// </remarks>
-    public IReadOnlyList<(int EntityId, Vector3Int[] TargetTiles, bool IsDodgeable)> AllPendingDelayedActionTargets()
+    public IReadOnlyList<(int EntityId, IReadOnlyList<Vector3Int> TargetTiles, bool IsDodgeable)> AllPendingWindupTargets()
     {
-        actionStateView.CopyLocalPendingDelayedActions(world.PlayerEntityId, _localPendingDelayedActionsScratch);
+        actionStateView.CopyLocalPendingWindups(world.PlayerEntityId, _localPendingWindupsScratch);
 
-        _pendingDelayedActionTargetsBuffer.Clear();
-        foreach (var (entityId, pending) in _localPendingDelayedActionsScratch)
+        _pendingWindupTargetsBuffer.Clear();
+        foreach (var (entityId, pending) in _localPendingWindupsScratch)
         {
-            var isDodgeable = actionCatalog.TryGet(pending.ActionId, out var action) && action.Tags.Has(GameTags.TraitDodgeable);
-            _pendingDelayedActionTargetsBuffer.Add((entityId, pending.TargetTiles, isDodgeable));
+            if (_windupTileListPool.Count <= _pendingWindupTargetsBuffer.Count)
+            {
+                _windupTileListPool.Add([]);
+            }
+
+            var tiles = _windupTileListPool[_pendingWindupTargetsBuffer.Count];
+            if (!targetingView.TryResolveWindup(entityId, in pending, tiles))
+            {
+                continue;
+            }
+
+            var isDodgeable = targetingView.IsWindupDodgeable(entityId, in pending);
+            _pendingWindupTargetsBuffer.Add((entityId, tiles, isDodgeable));
         }
 
-        return _pendingDelayedActionTargetsBuffer;
+        return _pendingWindupTargetsBuffer;
     }
 
     /// <summary>Advances the double-tap frame clock, and disarms whatever is armed once the player can no longer use it -- called once per MapWindow.Update, before anything else this class does that frame.</summary>
@@ -166,7 +180,7 @@ public sealed class ActionTargetingController(
             return playerCommands.CanQueueAction(armedActionId);
         }
 
-        return mapViewState.ArmedItemStackInstanceId is null || playerCommands.CanQueueConsumable();
+        return mapViewState.ArmedItemStackInstanceId is not { } armedStackInstanceId || playerCommands.CanQueueItemActivation(armedStackInstanceId);
     }
 
     /// <summary>
@@ -204,7 +218,12 @@ public sealed class ActionTargetingController(
         var hoveredTile = new Vector3Int(hoveredColumnRow.X, hoveredColumnRow.Y, playerTransform.Position.Z);
         mapViewState.HoveredTile = hoveredTile;
 
-        TargetShapeResolver.Resolve(targeting.Shape, playerTransform.Position, playerTransform.Size, hoveredTile, targeting.Range, targeting.AreaSize, world.Map.Bounds, _hoveredFootprintBuffer, targeting.Metric);
+        if (TryGetArmedActivator(out var activator))
+        {
+            var selection = targetingView.Select(world.PlayerEntityId, activator, mapViewState.TargetingMode, hoveredTile, simulationClock.CurrentFrame);
+            targetingView.Resolve(world.PlayerEntityId, activator, selection, _hoveredFootprintBuffer);
+        }
+
         foreach (var tile in _hoveredFootprintBuffer)
         {
             _hoveredFootprintSet.Add(tile);
@@ -231,24 +250,16 @@ public sealed class ActionTargetingController(
     /// <summary>
     /// Confirms the armed action or item's activation against targetTile, provided it's actually
     /// within TargetableTiles (a miss is a no-op -- whatever's armed stays armed, exactly like
-    /// clicking empty space doesn't clear an inspector selection either). Resolves the real Shape
-    /// anchored on targetTile (not the fixed candidate-enumeration shape ComputeTargetableTiles
-    /// uses) -- for Adjacent this produces the same fixed footprint regardless of which of its
-    /// tiles was targeted, since Adjacent ignores the cursor entirely. Reads which of
-    /// {action, item} is armed from MapViewState itself rather than taking either id as a
-    /// parameter -- mirrors CancelArmedOrPendingAction, which already does the same.
-    ///
-    /// A GameTags.TargetingSelf item specifically gets one more special case: clicking your own tile confirms
-    /// as a self-only activation (see TryActivateItemOnSelf) rather than resolving the real Burst
-    /// shape centered on yourself -- otherwise a manual click on your own tile would splash onto
-    /// your neighbors while double-tapping the same slot (also self-targeted) wouldn't, two
-    /// different results for the same intent. Targeting any other tile is untouched -- still the
-    /// real Burst/AreaSize splash centered on that tile, which may or may not catch you depending
-    /// on distance, same as always.
+    /// clicking empty space doesn't clear an inspector selection either). Queues the selection
+    /// TargetingView builds for the player's targeting mode: in Target mode it marks whoever stands
+    /// on targetTile, and Game resolves it into tiles -- now for Immediate and FreeCast, when the
+    /// windup ends for Delayed. Reads which of {action, item} is armed from MapViewState itself
+    /// rather than taking either id as a parameter -- mirrors CancelArmedOrPendingAction, which
+    /// already does the same.
     /// </summary>
     private void TryConfirmActivationAtTile(Vector3Int targetTile)
     {
-        if (!TryGetArmedTargeting(out var targeting) || !transformView.TryGetTransform(world.PlayerEntityId, out var transform))
+        if (!TryGetArmedActivator(out var activator))
         {
             return;
         }
@@ -263,19 +274,8 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        if (targetTile == transform.Position &&
-            mapViewState.ArmedItemStackInstanceId is { } armedStackInstanceId &&
-            inventoryView.TryGetStack(world.PlayerEntityId, armedStackInstanceId, out var armedStack) &&
-            InventoryQueries.TryResolveEffectiveItem(itemCatalog, in armedStack, out var item) &&
-            item.Tags.Has(GameTags.TargetingSelf))
-        {
-            TryActivateItemOnSelf(world.PlayerEntityId, armedStackInstanceId);
-            Disarm();
-            return;
-        }
-
-        TargetShapeResolver.Resolve(targeting.Shape, transform.Position, transform.Size, targetTile, targeting.Range, targeting.AreaSize, world.Map.Bounds, _finalTargetTilesBuffer, targeting.Metric);
-        QueueArmedActivation(world.PlayerEntityId, _finalTargetTilesBuffer);
+        var selection = targetingView.Select(world.PlayerEntityId, activator, mapViewState.TargetingMode, targetTile, simulationClock.CurrentFrame);
+        QueueArmedActivation(world.PlayerEntityId, targetTile, selection);
         Disarm();
     }
 
@@ -284,7 +284,7 @@ public sealed class ActionTargetingController(
     /// the command PlayerCommands is holding, or, if there is none, cancels a Delayed action's
     /// in-progress windup instead (WindupCancel, releasing the shared ActionLock) so cancelling
     /// frees the entity immediately rather than still waiting out the full wind-up with no
-    /// effect at the end -- see PendingDelayedActionComponent's own doc comment. Returns whether
+    /// effect at the end -- see PendingWindupComponent's own doc comment. Returns whether
     /// there was actually anything to cancel -- MapWindow's own right-click-tap handler uses this
     /// to decide whether a corpse context menu should open instead (a no-op cancel means the
     /// right-click wasn't "cancel," so it falls through to whatever else is under the cursor).
@@ -439,6 +439,18 @@ public sealed class ActionTargetingController(
             return;
         }
 
+        // A toggle action is never armed: it applies to the player, so every press queues it at
+        // once on the player's own tile, in the player's mode (Ground anchors what it places there), and no window closes.
+        if (actionCatalog.TryGet(actionId, out var pressedAction) && pressedAction.Toggle is not null)
+        {
+            if (transformView.TryGetTransform(world.PlayerEntityId, out var playerTransform))
+            {
+                playerCommands.QueueAction(actionId, targetingView.Select(world.PlayerEntityId, pressedAction.Activator, mapViewState.TargetingMode, playerTransform.Position, simulationClock.CurrentFrame));
+            }
+
+            return;
+        }
+
         if (isDoubleTap)
         {
             if (!playerCommands.CanQueueAction(actionId))
@@ -483,7 +495,7 @@ public sealed class ActionTargetingController(
     /// A bound item the player can't use right now (ActionStateView.GetItemBlocker -- e.g. an
     /// Equipment/Tool item with no activated action yet), or with no remaining stock (the player's stack was fully consumed -- see
     /// InventoryItemStackComponent's "no instance means empty" convention, the same one
-    /// InventoryActions.ConsumeItem relies on), is inert, the same no-op an unbound slot already
+    /// InventoryActions.RemoveOneUnit relies on), is inert, the same no-op an unbound slot already
     /// is -- HotbarContent greys it out the same way, so "can't be armed" and "looks unusable"
     /// stay in sync. Any item tagged GameTags.TargetingSelf (Health/Mana/Hotkey Expansion Potion today) has its
     /// double-tap always activate on the caster's own tile (TryActivateItemOnSelf), skipping
@@ -492,7 +504,8 @@ public sealed class ActionTargetingController(
     /// future non-Potion self-only item (e.g. a bandage) gets the same shortcut just by carrying
     /// GameTags.TargetingSelf. A non-double-tap re-press of an already-armed slot confirms against the cursor
     /// instead (see TryConfirmActivationAtTile) -- same rhythm as HandleActionSlotPress,
-    /// cancelling is right-click/Escape's job now.
+    /// cancelling is right-click/Escape's job now. A toggle item is never armed: every press queues
+    /// it at once (see QueueToggleItem).
     /// </summary>
     private void HandleItemSlotPress(HotkeySlot slot, uint stackInstanceId, bool isDoubleTap)
     {
@@ -503,14 +516,20 @@ public sealed class ActionTargetingController(
             return;
         }
 
+        if (item.Toggle is not null)
+        {
+            QueueToggleItem(stackInstanceId, slot);
+            return;
+        }
+
         if (isDoubleTap && item.Tags.Has(GameTags.TargetingSelf))
         {
-            if (!playerCommands.CanQueueConsumable())
+            if (!playerCommands.CanQueueItemActivation(stackInstanceId))
             {
                 return;
             }
 
-            TryActivateItemOnSelf(world.PlayerEntityId, stackInstanceId);
+            TryActivateItemOnSelf(world.PlayerEntityId, stackInstanceId, slot);
 
             if (mapViewState.ArmedSlot == slot)
             {
@@ -574,18 +593,35 @@ public sealed class ActionTargetingController(
     /// menu click or double-click has no natural "double-tap" gesture of its own, and a plain single
     /// press of an unarmed hotbar slot always arms too (the self-cast shortcut is an addition on top
     /// of that base behavior, not a replacement for it) -- so arming here matches an ordinary,
-    /// non-double-tap hotbar press exactly.
+    /// non-double-tap hotbar press exactly. That includes a toggle item, which a hotbar press queues at
+    /// once rather than arming (see QueueToggleItem).
     /// </summary>
     public void ArmItemFromStack(uint stackInstanceId)
     {
         if (!inventoryView.TryGetStack(world.PlayerEntityId, stackInstanceId, out var stack) ||
-            !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out _) ||
+            !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
             actionStateView.GetItemBlocker(world.PlayerEntityId, stackInstanceId) != ActivationBlocker.None)
         {
             return;
         }
 
+        if (item.Toggle is not null)
+        {
+            QueueToggleItem(stackInstanceId, activatedFromSlot: null);
+            return;
+        }
+
         ArmItem(null, stackInstanceId);
+    }
+
+    /// <summary>Queues a toggle item's activation on the player's own tile, with nothing armed and no window closed.</summary>
+    /// <remarks>A toggle applies to its holder, so there is no target to pick and nothing on the map to make room for. Whatever was armed stays armed.</remarks>
+    private void QueueToggleItem(uint stackInstanceId, HotkeySlot? activatedFromSlot)
+    {
+        if (transformView.TryGetTransform(world.PlayerEntityId, out var transform))
+        {
+            playerCommands.QueueItemActivation(stackInstanceId, TargetSelection.Ground(transform.Position), activatedFromSlot);
+        }
     }
 
     private void Disarm()
@@ -598,47 +634,51 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// Resolves whichever of {action, item} is currently armed to its shared TargetingSpec -- the
-    /// one piece both kinds need for every targeting computation below, so callers stop caring
-    /// which kind they're dealing with past this point. The single chokepoint every hover-preview/
-    /// arm-highlight/confirm-click path reads through (ArmItem calls this too, after setting
-    /// ArmedItemStackInstanceId, rather than taking a targeting parameter of its own), so a
-    /// ScrollActivator item's Range/AreaSize scaling (see ScaleScrollTargeting) applies
-    /// consistently everywhere instead of only on some call sites. Resolves the armed item through
-    /// its bound *stack* (InventoryQueries.TryResolveEffectiveItem), not a bare catalog lookup by
-    /// item id -- a diverged stack's own Override (e.g. a wand carrying non-default Targeting) is
-    /// what actually gets read, not always the catalog original.
+    /// The activator of whichever of {action, item} is currently armed -- the one piece both kinds
+    /// need for every targeting computation below, so callers stop caring which kind they're
+    /// dealing with past this point. Resolves the armed item through its bound *stack*
+    /// (InventoryQueries.TryResolveEffectiveItem), not a bare catalog lookup by item id -- a
+    /// diverged stack's own Override (e.g. a wand carrying non-default Targeting) is what actually
+    /// gets read, not always the catalog original.
     /// </summary>
-    private bool TryGetArmedTargeting(out TargetingSpec targeting)
+    private bool TryGetArmedActivator(out IActionActivator activator)
     {
         if (mapViewState.ArmedActionId is { } actionId && actionCatalog.TryGet(actionId, out var action))
         {
-            targeting = action.Activator.Targeting;
+            activator = action.Activator;
             return true;
         }
 
         if (mapViewState.ArmedItemStackInstanceId is { } stackInstanceId &&
             inventoryView.TryGetStack(world.PlayerEntityId, stackInstanceId, out var stack) &&
             InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) &&
-            item.Activator is { } activator)
+            item.Activator is { } itemActivator)
         {
-            targeting = activator is ScrollActivator ? ScaleScrollTargeting(activator.Targeting) : activator.Targeting;
+            activator = itemActivator;
+            return true;
+        }
+
+        activator = null!;
+        return false;
+    }
+
+    /// <summary>
+    /// The armed activator's targeting as it applies to the player now (TargetingView.EffectiveSpec:
+    /// a scroll's Range/AreaSize scaled by the player's Intelligence in Game, the same scaling the
+    /// activation is resolved with). The single chokepoint every arm-highlight path reads through
+    /// (ArmItem calls this too, after setting ArmedItemStackInstanceId, rather than taking a
+    /// targeting parameter of its own).
+    /// </summary>
+    private bool TryGetArmedTargeting(out TargetingSpec targeting)
+    {
+        if (TryGetArmedActivator(out var activator))
+        {
+            targeting = targetingView.EffectiveSpec(world.PlayerEntityId, activator);
             return true;
         }
 
         targeting = null!;
         return false;
-    }
-
-    /// <summary>Scales baseTargeting's Range/AreaSize by the player's own Intelligence -- see ScrollScalingEffects's own doc comment. No-op (returns baseTargeting unchanged) when the player has no Intelligence score, the same "1.0 multiplier" fallback ScrollScalingEffects.ComputeScaleMultiplier itself defaults to.</summary>
-    private TargetingSpec ScaleScrollTargeting(TargetingSpec baseTargeting)
-    {
-        if (!abilityScoreView.TryGetAbilityScore(world.PlayerEntityId, AbilityScoreType.Intelligence, out var intelligence))
-        {
-            return baseTargeting;
-        }
-
-        return ScrollScalingEffects.ScaleTargeting(baseTargeting, ScrollScalingEffects.ComputeScaleMultiplier(intelligence.Total));
     }
 
     /// <summary>
@@ -741,21 +781,13 @@ public sealed class ActionTargetingController(
 
         var attackerPosition = transform.Position;
         var attackerSize = transform.Size;
-        var bounds = world.Map.Bounds;
-        var targeting = action.Activator.Targeting;
+        var activator = action.Activator;
+        var targeting = targetingView.EffectiveSpec(entityId, activator);
+        var now = simulationClock.CurrentFrame;
 
-        if (action.Tags.Has(GameTags.TargetingSelf))
+        if (action.Tags.Has(GameTags.TargetingSelf) || IsCursorIndependent(targeting.Shape))
         {
-            _candidateTilesBuffer.Clear();
-            _candidateTilesBuffer.Add(attackerPosition);
-            QueueActionActivation(entityId, actionId, _candidateTilesBuffer);
-            return;
-        }
-
-        if (IsCursorIndependent(targeting.Shape))
-        {
-            ComputeTargetableTiles(attackerPosition, attackerSize, targeting, _candidateTilesBuffer);
-            QueueActionActivation(entityId, actionId, _candidateTilesBuffer);
+            QueueActionActivation(entityId, actionId, attackerPosition, targetingView.Select(entityId, activator, mapViewState.TargetingMode, attackerPosition, now));
             return;
         }
 
@@ -777,30 +809,26 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        TargetShapeResolver.Resolve(targeting.Shape, attackerPosition, attackerSize, chosenTile, targeting.Range, targeting.AreaSize, bounds, _finalTargetTilesBuffer, targeting.Metric);
-        QueueActionActivation(entityId, actionId, _finalTargetTilesBuffer);
+        QueueActionActivation(entityId, actionId, chosenTile, targetingView.Select(entityId, activator, mapViewState.TargetingMode, chosenTile, now));
     }
 
-    /// <summary>The double-tap path for a Potion -- always the caster's own tile, no candidate search at all (contrast TryActivateWithAutoTarget's action equivalent).</summary>
-    private void TryActivateItemOnSelf(int entityId, uint stackInstanceId)
+    /// <summary>The double-tap path for a self-targeting item -- Target mode on the caster itself, whatever the player's mode, with no candidate search at all (contrast TryActivateWithAutoTarget's action equivalent): a potion double-tapped is drunk, not splashed.</summary>
+    private void TryActivateItemOnSelf(int entityId, uint stackInstanceId, HotkeySlot? activatedFromSlot)
     {
-        if (!transformView.TryGetTransform(entityId, out var transform))
+        if (!inventoryView.TryGetStack(entityId, stackInstanceId, out var stack) ||
+            !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
+            item.Activator is not { } activator)
         {
             return;
         }
 
-        QueueConsumableActivation(stackInstanceId, [transform.Position]);
+        QueueItemActivation(stackInstanceId, targetingView.SelectEntity(entityId, activator, entityId), activatedFromSlot);
     }
 
-    /// <summary>Presentation only ever queues an activation request -- ActionActivationSystem is the only thing that applies gameplay effects. Mirrors PlayerCommands's own queue-and-let-a-system-consume pattern for movement. Closes every closable window here too (not just in ArmAction) -- this is also reachable straight from a double-tap auto-target (TryActivateWithAutoTarget), which skips arming entirely, so it's the only chokepoint that catches that path. Placed after the early-return above so a no-op (no valid target) never spuriously closes anything.</summary>
-    private void QueueActionActivation(int entityId, Guid actionId, List<Vector3Int> targetTiles)
+    /// <summary>Presentation only ever queues an activation request -- ActionActivationSystem is the only thing that applies gameplay effects. Mirrors PlayerCommands's own queue-and-let-a-system-consume pattern for movement. Closes every closable window here too (not just in ArmAction) -- this is also reachable straight from a double-tap auto-target (TryActivateWithAutoTarget), which skips arming entirely, so it's the only chokepoint that catches that path.</summary>
+    /// <param name="aimedTile">The tile confirmed -- for Dodge, the tile it steps to.</param>
+    private void QueueActionActivation(int entityId, Guid actionId, Vector3Int aimedTile, TargetSelection selection)
     {
-        if (targetTiles.Count == 0)
-        {
-            return;
-        }
-
-        var effectTargetTiles = targetTiles.ToArray();
         Vector3Int? stepOnActivation = null;
 
         if (actionId == DodgeAction.Id && transformView.TryGetTransform(entityId, out var casterTransform))
@@ -808,54 +836,48 @@ public sealed class ActionTargetingController(
             // DodgeActivation's own effect (DodgingComponent) always applies to the caster, not to
             // "whoever occupies the resolved target tile" -- for a directional dodge that tile is the
             // destination, where nobody stands yet when ActionEffectResolver.Apply looks for
-            // occupants, so the effect would never run. Resolving the effect against the caster's own
+            // occupants, so the effect would never run. Aiming the effect at the caster's own
             // current tile guarantees an occupant is found there -- see DodgeActivation's own doc
             // comment for why it also reads SourceEntityId rather than TargetEntityId, in case
-            // something else shares that tile.
-            effectTargetTiles = [casterTransform.Position];
-            stepOnActivation = DodgeStep(targetTiles, casterTransform.Position);
+            // something else shares that tile. Dodge is Ground only, so this is all its selection is.
+            selection = TargetSelection.Ground(casterTransform.Position) with { Range = selection.Range };
+            stepOnActivation = DodgeStep(aimedTile, casterTransform.Position);
         }
 
         uiLayers.CloseAllClosableWindows();
 
-        playerCommands.QueueAction(actionId, effectTargetTiles, stepOnActivation);
+        playerCommands.QueueAction(actionId, selection, stepOnActivation);
     }
 
-    /// <summary>The tile a Dodge resolved to <paramref name="targetTiles"/> steps to, or null for a Dodge in place.</summary>
+    /// <summary>The tile a Dodge aimed at <paramref name="aimedTile"/> steps to, or null for a Dodge in place.</summary>
     /// <remarks>
-    /// Dodge's own targeting (SingleTarget + Metric.Chebyshev, Range 1) resolves to exactly one tile -- self, or one
+    /// Dodge's own targeting (SingleTarget + Metric.Chebyshev, Range 1) aims at exactly one tile -- self, or one
     /// adjacent tile. The step goes through PlayerCommands to MovementComponent.NextMapPosition, the same path
     /// ordinary movement uses, never World.MoveEntity: that only updates Map's occupancy index, not
     /// TransformComponent.Position, and would leave the two out of step. MovementSystem's own occupancy/wall/diagonal
     /// validation keeps the caster in place if the tile turns out occupied.
     /// </remarks>
-    private static Vector3Int? DodgeStep(List<Vector3Int> targetTiles, Vector3Int casterPosition) =>
-        targetTiles.Count == 1 && targetTiles[0] != casterPosition ? targetTiles[0] : null;
+    private static Vector3Int? DodgeStep(Vector3Int aimedTile, Vector3Int casterPosition) =>
+        aimedTile != casterPosition ? aimedTile : null;
 
-    /// <summary>Item counterpart to QueueActionActivation -- ConsumableActivationSystem is the only thing that applies its gameplay effects. See QueueActionActivation's own doc comment for why it also closes every closable window here (catches TryActivateItemOnSelf's double-tap self-cast, which skips arming).</summary>
-    private void QueueConsumableActivation(uint stackInstanceId, List<Vector3Int> targetTiles)
+    /// <summary>Item counterpart to QueueActionActivation -- ItemActivationSystem is the only thing that applies its gameplay effects. See QueueActionActivation's own doc comment for why it also closes every closable window here (catches TryActivateItemOnSelf's double-tap self-cast, which skips arming).</summary>
+    private void QueueItemActivation(uint stackInstanceId, TargetSelection selection, HotkeySlot? activatedFromSlot)
     {
-        if (targetTiles.Count == 0)
-        {
-            return;
-        }
-
         uiLayers.CloseAllClosableWindows();
 
-        playerCommands.QueueConsumable(stackInstanceId, targetTiles.ToArray());
+        playerCommands.QueueItemActivation(stackInstanceId, selection, activatedFromSlot);
     }
 
     /// <summary>Dispatches a confirmed click activation to whichever of {action, item} MapViewState currently has armed -- see TryConfirmActivation, the only caller.</summary>
-    private void QueueArmedActivation(int entityId, List<Vector3Int> targetTiles)
+    private void QueueArmedActivation(int entityId, Vector3Int aimedTile, TargetSelection selection)
     {
         if (mapViewState.ArmedActionId is { } actionId)
         {
-            QueueActionActivation(entityId, actionId, targetTiles);
+            QueueActionActivation(entityId, actionId, aimedTile, selection);
         }
         else if (mapViewState.ArmedItemStackInstanceId is { } stackInstanceId)
         {
-            QueueConsumableActivation(stackInstanceId, targetTiles);
+            QueueItemActivation(stackInstanceId, selection, mapViewState.ArmedSlot);
         }
     }
-
 }

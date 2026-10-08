@@ -103,4 +103,35 @@ public sealed class EntityManagerTests
         CollectionAssert.AreEqual(Enumerable.Range(2, 998).ToList(), createdIds);
         Assert.AreEqual(1000, entityManager.LivingEntityCount);
     }
+
+    [TestMethod]
+    public void IsDestroying_IsTrueFromEntityDestroyingUntilTheComponentsAreRemoved_AndOnlyForThatEntity()
+    {
+        var componentManager = new ComponentManager(4, 4);
+        componentManager.RegisterMultiPool<TestComponent>();
+        var entityManager = new EntityManager(componentManager, 4);
+        var destroyed = entityManager.CreateEntity();
+        var other = entityManager.CreateEntity();
+        var pool = componentManager.GetMultiPool<TestComponent>();
+        pool.Add(destroyed, new TestComponent { Value = 1 });
+
+        var duringEvent = false;
+        var duringRemoval = false;
+        var otherDuringRemoval = true;
+        entityManager.EntityDestroying += entityId => duringEvent = entityManager.IsDestroying(entityId);
+        pool.ComponentRemoving += (entityId, _) =>
+        {
+            duringRemoval = entityManager.IsDestroying(entityId);
+            otherDuringRemoval = entityManager.IsDestroying(other);
+        };
+
+        Assert.IsFalse(entityManager.IsDestroying(destroyed));
+
+        entityManager.DestroyEntity(destroyed);
+
+        Assert.IsTrue(duringEvent);
+        Assert.IsTrue(duringRemoval);
+        Assert.IsFalse(otherDuringRemoval);
+        Assert.IsFalse(entityManager.IsDestroying(destroyed));
+    }
 }

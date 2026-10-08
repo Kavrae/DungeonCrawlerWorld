@@ -15,7 +15,7 @@ public sealed class GameViews
     {
         var componentManager = context.ComponentManager;
 
-        MapView = new MapViewQuery(world, componentManager, context.Actions, context.Terrain, context.Definitions, context.SimulationClock);
+        MapView = new MapViewQuery(world, componentManager, context.Actions, context.Terrain, context.Definitions, context.SimulationClock, context.Items);
         EntityBodyParts = EntityBodyParts.For(componentManager, context.Definitions);
         EntityActions = EntityActions.For(componentManager, context.Actions, context.Definitions);
         EntityNaming = EntityNaming.For(componentManager, context.Definitions);
@@ -27,9 +27,11 @@ public sealed class GameViews
         HealthView = new HealthView(componentManager, EntityBodyParts);
         StatModifierView = new StatModifierView(componentManager);
         AbilityScoreView = new AbilityScoreView(componentManager);
-        ActionStateView = new ActionStateView(componentManager, EntityActions, context.Items, localTierRoster);
+        ActionStateView = new ActionStateView(componentManager, EntityActions, context.Items, localTierRoster, context.EffectServices, context.Toggles, context.SimulationClock);
+        TargetingView = new TargetingView(context.TargetResolution, EntityActions, context.Items, componentManager);
         TransformView = new TransformView(componentManager);
         AuraGlow = new AuraGlowView(context.AuraField);
+        ActionSourceNaming = new ActionSourceNaming(context.Terrain, context.Auras);
     }
 
     public IMapViewQuery MapView { get; }
@@ -58,8 +60,14 @@ public sealed class GameViews
 
     public ActionStateView ActionStateView { get; }
 
+    /// <summary>Targeting selections, previews and windup landings, all through the resolution activations use.</summary>
+    public TargetingView TargetingView { get; }
+
     public TransformView TransformView { get; }
 
     /// <summary>The glow auras cast on the map.</summary>
     public AuraGlowView AuraGlow { get; }
+
+    /// <summary>The name shown for what caused an effect: an entity, a terrain, an aura.</summary>
+    public ActionSourceNaming ActionSourceNaming { get; }
 }

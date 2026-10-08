@@ -146,40 +146,6 @@ public sealed class InventoryActionsTests
     }
 
     [TestMethod]
-    public void ConsumeItem_StackAboveOne_DecrementsQuantityWithoutRemovingStack()
-    {
-        var manager = CreateRegisteredManager();
-        var itemId = Guid.NewGuid();
-        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 3);
-
-        InventoryActions.ConsumeItem(manager, entityId: 0, itemId);
-
-        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
-        Assert.AreEqual(1, pool.CountForEntity(0));
-        Assert.AreEqual(2, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).Quantity);
-    }
-
-    [TestMethod]
-    public void ConsumeItem_LastOneInStack_RemovesTheStackEntirely()
-    {
-        var manager = CreateRegisteredManager();
-        var itemId = Guid.NewGuid();
-        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 1);
-
-        InventoryActions.ConsumeItem(manager, entityId: 0, itemId);
-
-        Assert.AreEqual(0, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
-    }
-
-    [TestMethod]
-    public void ConsumeItem_ItemNotInInventory_DoesNotThrow()
-    {
-        var manager = CreateRegisteredManager();
-
-        InventoryActions.ConsumeItem(manager, entityId: 0, Guid.NewGuid());
-    }
-
-    [TestMethod]
     public void AddItem_OntoAnOverriddenStackOfTheSameItem_MakesItsOwnPlainStack()
     {
         var manager = CreateRegisteredManager();
@@ -193,6 +159,42 @@ public sealed class InventoryActionsTests
         Assert.HasCount(2, stacks);
         Assert.AreEqual(4, stacks.Single(stack => stack.Override is not null).Quantity);
         Assert.AreEqual(2, stacks.Single(stack => stack.Override is null).Quantity);
+    }
+
+    [TestMethod]
+    public void AddItem_OntoADisabledStackOfTheSameItem_MakesItsOwnEnabledStack()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        pool.Add(0, new InventoryItemStackComponent(itemId, quantity: 2, isDisabled: true));
+
+        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 1);
+
+        var stacks = new List<InventoryItemStackComponent>();
+        InventoryQueries.CopyStacksForEntity(pool, 0, stacks);
+        Assert.HasCount(2, stacks);
+        Assert.AreEqual(2, stacks.Single(stack => stack.IsDisabled).Quantity);
+        Assert.AreEqual(1, stacks.Single(stack => !stack.IsDisabled).Quantity);
+    }
+
+    [TestMethod]
+    public void AddItem_FirstMatchingStackFull_FillsALaterStackWithRoom()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        manager.Merge(entityId: 0, new MaxStackSizeComponent(10));
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        pool.Add(0, new InventoryItemStackComponent(itemId, quantity: 10));
+        var partlyFullStack = new InventoryItemStackComponent(itemId, quantity: 4);
+        pool.Add(0, partlyFullStack);
+
+        var landedStackInstanceId = InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 3);
+
+        Assert.AreEqual(2, pool.CountForEntity(0));
+        Assert.AreEqual(partlyFullStack.StackInstanceId, landedStackInstanceId);
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 0, partlyFullStack.StackInstanceId, out var filledStack));
+        Assert.AreEqual(7, filledStack.Quantity);
     }
 
     [TestMethod]
@@ -273,7 +275,7 @@ public sealed class InventoryActionsTests
     }
 
     [TestMethod]
-    public void PeelOneIntoDivergentStack_MultiUnitPlainStack_DecrementsOriginalAndCreatesDivergentStack()
+    public void MoveOneUnit_MultiUnitPlainStack_DecrementsOriginalAndCreatesDivergentStack()
     {
         var manager = CreateRegisteredManager();
         var itemId = Guid.NewGuid();
@@ -281,7 +283,7 @@ public sealed class InventoryActionsTests
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
         var plainStackInstanceId = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).StackInstanceId;
 
-        InventoryActions.PeelOneIntoDivergentStack(manager, entityId: 0, plainStackInstanceId, CreateDefinition(itemId, charges: 9));
+        InventoryActions.MoveOneUnit(manager, entityId: 0, plainStackInstanceId, CreateDefinition(itemId, charges: 9));
 
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(pool, 0, stacks);
@@ -291,7 +293,7 @@ public sealed class InventoryActionsTests
     }
 
     [TestMethod]
-    public void PeelOneIntoDivergentStack_ThenGrantAnotherStandardWand_LeavesNoOrphanedStack()
+    public void MoveOneUnit_ThenGrantAnotherStandardWand_LeavesNoOrphanedStack()
     {
         // Give the player a single standard wand, fire it (peeling it into a divergent stack),
         // then give them another standard wand -- exactly two stacks should exist at the end (one
@@ -304,7 +306,7 @@ public sealed class InventoryActionsTests
         InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10), quantity: 1);
         var originalStackInstanceId = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).StackInstanceId;
 
-        InventoryActions.PeelOneIntoDivergentStack(manager, entityId: 0, originalStackInstanceId, CreateDefinition(itemId, charges: 9));
+        InventoryActions.MoveOneUnit(manager, entityId: 0, originalStackInstanceId, CreateDefinition(itemId, charges: 9));
 
         // The original plain stack must be gone entirely, not left behind at Quantity: 0.
         Assert.IsFalse(InventoryQueries.TryFindByStackInstanceId(pool, 0, originalStackInstanceId, out _));
@@ -320,7 +322,67 @@ public sealed class InventoryActionsTests
     }
 
     [TestMethod]
-    public void ConsumeItemByStackInstanceId_LastUnit_RemovesTheStackEntirely()
+    public void MoveOneUnit_NoOverride_ReturnsTheUnitToTheExistingPlainStack()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        var plainStackInstanceId = InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 2);
+        var divergentStackInstanceId = InventoryActions.AddDivergentItem(manager, entityId: 0, CreateDefinition(itemId, charges: 5));
+
+        var landedStackInstanceId = InventoryActions.MoveOneUnit(manager, entityId: 0, divergentStackInstanceId, newOverrideDefinition: null);
+
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(plainStackInstanceId, landedStackInstanceId);
+        Assert.AreEqual(1, pool.CountForEntity(0));
+        Assert.AreEqual(3, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).Quantity);
+    }
+
+    [TestMethod]
+    public void MoveOneUnit_FromADisabledStack_LandsInADisabledStack()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        var disabledStack = new InventoryItemStackComponent(itemId, quantity: 2, isDisabled: true, overrideDefinition: CreateDefinition(itemId, charges: 10));
+        pool.Add(0, disabledStack);
+
+        var landedStackInstanceId = InventoryActions.MoveOneUnit(manager, entityId: 0, disabledStack.StackInstanceId, CreateDefinition(itemId, charges: 9));
+
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 0, landedStackInstanceId, out var landedStack));
+        Assert.IsTrue(landedStack.IsDisabled);
+        Assert.IsTrue(landedStack.IsDivergent);
+    }
+
+    [TestMethod]
+    public void MoveOneUnit_UnknownStackInstanceId_ReturnsZeroAndChangesNothing()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 2);
+
+        var landedStackInstanceId = InventoryActions.MoveOneUnit(manager, entityId: 0, stackInstanceId: uint.MaxValue, CreateDefinition(itemId, charges: 9));
+
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(0u, landedStackInstanceId);
+        Assert.AreEqual(1, pool.CountForEntity(0));
+        Assert.AreEqual(2, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).Quantity);
+    }
+
+    [TestMethod]
+    public void RemoveOneUnit_StackAboveOne_DecrementsQuantityWithoutRemovingStack()
+    {
+        var manager = CreateRegisteredManager();
+        var stackInstanceId = InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 3);
+
+        InventoryActions.RemoveOneUnit(manager, entityId: 0, stackInstanceId);
+
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(1, pool.CountForEntity(0));
+        Assert.AreEqual(2, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).Quantity);
+    }
+
+    [TestMethod]
+    public void RemoveOneUnit_LastUnit_RemovesTheStackEntirely()
     {
         var manager = CreateRegisteredManager();
         var itemId = Guid.NewGuid();
@@ -328,17 +390,17 @@ public sealed class InventoryActionsTests
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
         var stackInstanceId = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).StackInstanceId;
 
-        InventoryActions.ConsumeItemByStackInstanceId(manager, entityId: 0, stackInstanceId);
+        InventoryActions.RemoveOneUnit(manager, entityId: 0, stackInstanceId);
 
         Assert.AreEqual(0, pool.CountForEntity(0));
     }
 
     [TestMethod]
-    public void ConsumeItemByStackInstanceId_UnknownStackInstanceId_DoesNotThrow()
+    public void RemoveOneUnit_UnknownStackInstanceId_DoesNotThrow()
     {
         var manager = CreateRegisteredManager();
 
-        InventoryActions.ConsumeItemByStackInstanceId(manager, entityId: 0, stackInstanceId: 9999);
+        InventoryActions.RemoveOneUnit(manager, entityId: 0, stackInstanceId: 9999);
     }
 
     [TestMethod]

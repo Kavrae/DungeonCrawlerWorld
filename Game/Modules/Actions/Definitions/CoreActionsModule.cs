@@ -1,4 +1,6 @@
 using Engine.Modules;
+using Game.Modules.Auras;
+using Game.Modules.Poison;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Actions.Definitions.Spells;
 
@@ -18,13 +20,18 @@ public sealed class CoreActionsModule : IGameModule
 
     public Guid Id => ModuleId;
 
+    public IReadOnlyList<Guid> Requires { get; } = [AurasModule.ModuleId, PoisonModule.ModuleId];
+
     private static readonly IReadOnlyList<Func<ActionDefinition>> Definitions = [
         HealAction.Build,
         QuickAttackAction.Build,
         PowerAttackAction.Build,
         DodgeAction.Build,
+        ToxicAuraAction.Build,
+        LanternAction.Build,
         MagicMissileAction.Build,
         ToxicStrikeAction.Build,
+        FireballAction.Build,
     ];
 
     public void Configure(GameModuleContext context)

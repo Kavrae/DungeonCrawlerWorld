@@ -85,4 +85,18 @@ public sealed class NeighborhoodBitsTests
 
         Assert.IsFalse(bits.IsSet(cell));
     }
+
+    [TestMethod]
+    public void Set_InANewNeighborhoodAfterOneWasEmptied_CarriesNoBitsFromIt()
+    {
+        var bits = new NeighborhoodBits(depth: 1);
+        var emptied = new Vector3Int(7, 7, 0);
+        bits.Set(emptied);
+        bits.Clear(emptied);
+
+        bits.Set(new Vector3Int(1024 + 8, 7, 0));
+
+        Assert.IsFalse(bits.IsSet(new Vector3Int(1024 + 7, 7, 0)));
+        Assert.IsFalse(bits.IsSet(emptied));
+    }
 }

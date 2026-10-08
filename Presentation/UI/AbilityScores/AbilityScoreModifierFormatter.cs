@@ -17,7 +17,7 @@ namespace Presentation.UI.AbilityScores;
 public static class AbilityScoreModifierFormatter
 {
     /// <param name="now">The current simulation frame -- each modifier stores an absolute expiry frame (StatModifierComponent.ExpiresAtFrame), so "how long is left" only exists relative to this.</param>
-    public static IReadOnlyList<ModifierDisplayLine> GetOrderedLines(AbilityScoreView abilityScoreView, StatModifierView statModifierView, int entityId, AbilityScoreType type, long now)
+    public static IReadOnlyList<ModifierDisplayLine> GetOrderedLines(AbilityScoreView abilityScoreView, StatModifierView statModifierView, ActionSourceNaming actionSourceNaming, int entityId, AbilityScoreType type, long now)
     {
         var lines = new List<ModifierDisplayLine> { new($"Base : {GetBaseValue(abilityScoreView, entityId, type)}", Source: null, RemainingDurationFrames: null) };
 
@@ -34,7 +34,7 @@ public static class AbilityScoreModifierFormatter
 
         foreach (var modifier in ordered)
         {
-            lines.Add(FormatModifierLine(modifier, now));
+            lines.Add(FormatModifierLine(modifier, actionSourceNaming, now));
         }
 
         return lines;
@@ -45,9 +45,9 @@ public static class AbilityScoreModifierFormatter
             ? component.BaseValue
             : throw new InvalidOperationException($"No {type} ability score for entity {entityId}.");
 
-    private static ModifierDisplayLine FormatModifierLine(StatModifierComponent modifier, long now)
+    private static ModifierDisplayLine FormatModifierLine(StatModifierComponent modifier, ActionSourceNaming actionSourceNaming, long now)
     {
-        var sourceName = ModifierDisplayFormatting.DescribeSource(modifier.Source);
+        var sourceName = actionSourceNaming.Describe(modifier.Source);
         var modifierText = modifier.Operation == StatModifierOperation.Additive
             ? FormatSigned((int)MathF.Round(modifier.Magnitude))
             : $"{FormatSigned((int)MathF.Round(modifier.Magnitude * 100))}%";

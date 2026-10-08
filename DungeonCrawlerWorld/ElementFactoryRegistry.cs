@@ -92,9 +92,10 @@ public static class ElementFactoryRegistry
         Register<Toggle>((font, elements, glyph) => new Toggle(font, elements, glyph));
 
         elementPool.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
-            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, views.AbilityScoreView, views.StatModifierView, gameSession.SimulationClock));
+            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, views.AbilityScoreView, views.StatModifierView, views.ActionSourceNaming, gameSession.SimulationClock, shellServices.PointerState));
         elementPool.RegisterFactory<HealthWindow>(() => new HealthWindow(
-            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, views.HealthView, views.StatModifierView, views.ActionStateView, views.EntityBodyParts, statusEffectDisplays, itemCatalog, catalogs.GameplayTags, gameSession.SimulationClock));
+            presentationContext.FontService, elementPool, presentationContext.LabelRenderer, views.HealthView, views.StatModifierView, views.ActionStateView, views.EntityBodyParts, statusEffectDisplays, itemCatalog, catalogs.GameplayTags, gameSession.SimulationClock,
+            views.ActionSourceNaming, shellServices.TooltipController, shellServices.PointerState));
         Register<AbilityScoreColumnHeader>((font, elements, glyph) => new AbilityScoreColumnHeader(font, elements, glyph));
         Register<AbilityScoreModifierRow>((font, elements, glyph) => new AbilityScoreModifierRow(font, elements, glyph));
         Register<SeparatorBar>((font, elements, glyph) => new SeparatorBar(font, elements, glyph));

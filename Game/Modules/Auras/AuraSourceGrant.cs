@@ -1,53 +1,107 @@
 using Engine.ECS.Systems;
 using Game.Effects;
+using Game.Effects.Entries;
 using Game.Modules.Auras.Components;
+using Game.Modules.StatModifiers;
 
 namespace Game.Modules.Auras;
 
-/// <summary>
-/// Grants (or, permanent-only, flip-toggles) a source of Aura on
-/// context.TargetEntityId -- always the resolved target, no separate Source/Target choice: a
-/// caller that wants to target itself (e.g. Toxic Idol) does so by using a Self-shaped
-/// TargetingSpec, which already resolves TargetEntityId to the caster, the same way every other
-/// effect entry reads "who this lands on." This entry is only the add/remove switch: everything
-/// downstream (radiating, exposing nearby entities, keeping the AuraField in step) stays
-/// inside AuraSourceEffects and AuraSystem.
-///
-/// Two distinct modes, chosen by whether DurationFrames is set:
-/// - null (default) -- permanent flip-toggle (AuraSourceEffects.Toggle), e.g. Toxic Idol.
-///   Re-applying removes it; well-behaved only on a single-resolution activator (e.g.
-///   Self-targeted) -- a multi-target activator would call Apply once per resolved target, each
-///   with its own TargetEntityId, so it flips each target independently rather than the same
-///   entity on/off/on/off -- almost certainly still not what a multi-target permanent toggle
-///   wants, the action author's responsibility per the "composition order is meaningful" rule.
-/// - non-null -- a timed grant (AuraSourceEffects.Apply, never flips, refreshes on re-apply)
-///   plus an AuraSourceExpiryComponent so AuraSourceExpirySystem revokes it once DurationFrames
-///   (scaled by context.DurationScaleMultiplier, same as StatModifierGrant's own duration --
-///   a ScrollActivator activation sets this off the caster's Intelligence, every other activator
-///   leaves it at the default 1.0, a no-op) runs out. Scroll of Torch is the concrete user
-///   (its own light aura).
-/// </summary>
+/// <summary>Makes the marked entity radiate Aura -- or, with nothing marked, an anchor at the tile aimed at -- for a time or until it is taken back.</summary>
+/// <remarks>
+/// <para>
+/// Placed once per activation (EffectPlacement.OncePerActivation), however many entities the
+/// activation reaches: on the marked entity (Target mode, or a toggle's holder), or, with no target
+/// entity, on an AuraAnchor spawned at context.TargetLocation and owned by the source entity
+/// (AuraAnchors). So a light cast at someone follows them, and one cast at the ground stays there.
+/// This entry only adds and removes the source; radiating, exposing nearby entities and keeping the
+/// AuraField in step are AuraSourceEffects' and AuraSystem's.
+/// </para>
+/// <para>
+/// Timed (DurationFrames set): the target holds one unkeyed source of the aura, renewed on re-apply,
+/// and an AuraSourceExpiryComponent ends it once the duration runs out. The duration is scaled as a
+/// Buff's StatModifierGrant duration is: context.DurationScaleMultiplier, then Outgoing/IncomingBuffDuration.
+/// An anchor ends with its source.
+/// Scroll of Torch is the concrete user.
+/// </para>
+/// <para>
+/// Permanent (DurationFrames null): held by a toggle (context.HeldGrantKey set), it adds a source of
+/// its own under that key -- on the holder, or on an anchor the holder owns -- beside any other source
+/// of the aura, and Revert removes exactly that one. Outside a toggle it ensures the target's one
+/// unkeyed source, so applying it twice leaves one.
+/// </para>
+/// </remarks>
 /// <param name="Aura">The aura's definition, declared with whatever grants it: what the aura does and the colour it glows.</param>
-/// <param name="Strength">The source's strength, which also sets its reach (see AuraSourceComponent).</param>
+/// <param name="Power">The source's value at its own tile (see AuraSourceComponent).</param>
+/// <param name="Size">How many tiles the source reaches.</param>
 public sealed record AuraSourceGrant(
     AuraDefinition Aura,
-    byte Strength,
-    ushort? DurationFrames = null) : IEffectEntry
+    ushort Power,
+    byte Size,
+    ushort? DurationFrames = null) : IReversibleEffectEntry
 {
+    private static readonly (StatModifierTarget, StatModifierTarget)[] PermanentModifiers =
+    [
+        (StatModifierTarget.OutgoingAuraPower, StatModifierTarget.IncomingAuraPower),
+        (StatModifierTarget.OutgoingAuraSize, StatModifierTarget.IncomingAuraSize),
+    ];
+
+    private static readonly (StatModifierTarget, StatModifierTarget)[] TimedModifiers =
+    [
+        .. PermanentModifiers,
+        (StatModifierTarget.OutgoingBuffDuration, StatModifierTarget.IncomingBuffDuration),
+    ];
+
     public IEnumerable<AuraDefinition> ReferencedAuras => [Aura];
+
+    public EffectPlacement Placement => EffectPlacement.OncePerActivation;
+
+    /// <remarks>Power and size, and a timed grant's duration as a Buff's (StatModifierGrant.ScaleDurationFrames). Incoming is skipped for an anchor, which has no target entity.</remarks>
+    public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => DurationFrames is null ? PermanentModifiers : TimedModifiers;
+
+    public bool GrantsUntilRevoked => DurationFrames is null;
 
     public EffectOutcome Apply(in EffectContext context)
     {
-        if (DurationFrames is not { } durationFrames)
+        var power = EffectModifiers.ScaleToUShort(in context, Power, StatModifierTarget.OutgoingAuraPower, StatModifierTarget.IncomingAuraPower);
+        var size = EffectModifiers.ScaleToByte(in context, Size, StatModifierTarget.OutgoingAuraSize, StatModifierTarget.IncomingAuraSize);
+
+        var expiresAtFrame = StatModifierGrant.ScaleDurationFrames(in context, DurationFrames, StatModifierPolarity.Buff) is { } durationFrames
+            ? FrameDeadline.After(context.Now, durationFrames)
+            : (uint?)null;
+        var heldGrantKey = DurationFrames is null ? context.HeldGrantKey : null;
+
+        if (context.TargetEntityId == EffectContext.NoTargetEntity)
         {
-            context.Services.AuraSources.Toggle(context.TargetEntityId, Aura, Strength);
-            return EffectOutcome.Applied;
+            return context.TargetLocation is { } tile &&
+                context.Services.AuraAnchors.Place(tile, Aura, power, size, context.Source, context.SourceEntityId, heldGrantKey, expiresAtFrame) >= 0
+                ? EffectOutcome.Applied
+                : EffectOutcome.NoEffect;
         }
 
-        var scaledDurationFrames = (ushort)Math.Round(durationFrames * context.DurationScaleMultiplier);
+        if (heldGrantKey is { } key)
+        {
+            context.Services.AuraSources.AddHeld(context.TargetEntityId, Aura, power, size, key);
+        }
+        else
+        {
+            context.Services.AuraSources.Apply(context.TargetEntityId, Aura, power, size);
+        }
 
-        context.Services.AuraSources.Apply(context.TargetEntityId, Aura, Strength);
-        context.Services.ComponentManager.Merge(context.TargetEntityId, new AuraSourceExpiryComponent(context.Services.AuraSources.GetId(Aura), FrameDeadline.After(context.Now, scaledDurationFrames)));
+        if (expiresAtFrame is { } expires)
+        {
+            context.Services.ComponentManager.Merge(context.TargetEntityId, new AuraSourceExpiryComponent(context.Services.AuraSources.GetId(Aura), expires));
+        }
+
         return EffectOutcome.Applied;
+    }
+
+    /// <remarks>Takes back the holder's own source under the key and any anchor it placed under it. A timed grant ends by its own expiry, and a permanent one applied outside a toggle has no key to be reverted under.</remarks>
+    public void Revert(in EffectContext context)
+    {
+        if (DurationFrames is null && context.HeldGrantKey is { } heldGrantKey)
+        {
+            context.Services.AuraSources.RemoveHeld(context.TargetEntityId, Aura, heldGrantKey);
+            context.Services.AuraAnchors.EndHeld(context.TargetEntityId, heldGrantKey);
+        }
     }
 }

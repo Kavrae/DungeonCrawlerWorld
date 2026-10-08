@@ -1,6 +1,14 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
+using Engine.Events;
 using Engine.Math;
+using Game.Modules.Auras;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
+using Game.Terrain;
+using Game.World;
+using Microsoft.Xna.Framework.Input;
+using Presentation.Input;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
 using Game.Modules.Health.Components;
@@ -32,7 +40,21 @@ public sealed class HealthWindowControllerTests
 {
     private const int PlayerEntityId = 1;
 
+    private sealed record Harness(
+        HealthWindowController Health,
+        UiLayerStack Layers,
+        ComponentManager ComponentManager,
+        UiInputController Input,
+        TerrainRegistry Terrain,
+        AuraCatalog Auras);
+
     private static (HealthWindowController Health, UiLayerStack Layers) Build()
+    {
+        var harness = BuildHarness();
+        return (harness.Health, harness.Layers);
+    }
+
+    private static Harness BuildHarness()
     {
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
         var fontService = TestFonts.Shared;
@@ -47,21 +69,118 @@ public sealed class HealthWindowControllerTests
         var statusEffectDisplays = new StatusEffectDisplayRegistry();
         statusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph, componentManager.GetPackedPool<PoisonTimerComponent>(),
             (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));
-        statusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph, componentManager.GetPackedPool<BurningTimerComponent>(),
-            (burning, now) => FrameDeadline.Remaining(burning.NextTickFrame, now) + (burning.StackCount - 1) * BurningEffects.TickIntervalFrames));
+        statusEffectDisplays.Register(new BurningDisplay(componentManager.GetPackedPool<BurningTimerComponent>(), componentManager.GetMultiPool<BodyPartBurningTimerComponent>()));
         statusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph, componentManager.GetPackedPool<ParalysisTimerComponent>(),
             (paralysis, now) => FrameDeadline.Remaining(paralysis.ExpiresAtFrame, now)));
 
         var itemCatalog = new ItemCatalog();
+        var terrain = new TerrainRegistry();
+        var auras = new AuraCatalog();
+        var pointerState = new PointerState();
 
-        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, labelRenderer, new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), new StatModifierView(componentManager), TestActionStateViews.Over(componentManager), BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog, TestGameplayTags.BuiltIn, simulationClock: new SimulationClock()));
+        pool.RegisterFactory<Tooltip>(() => new Tooltip(fontService, pool, labelRenderer));
+        var tooltipController = new TooltipController { ScreenBoundsOverrideForTests = new Rectangle(0, 0, 2000, 2000) };
+        tooltipController.Initialize(pool, layers);
+
+        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, labelRenderer, new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), new StatModifierView(componentManager), TestActionStateViews.Over(componentManager), BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog, TestGameplayTags.BuiltIn, simulationClock: new SimulationClock(),
+            TestActionSources.Naming(terrain, auras), tooltipController, pointerState));
         pool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, pool, labelRenderer));
         pool.RegisterFactory<FractionBarElement>(() => new FractionBarElement(fontService, pool, labelRenderer));
 
         var health = new HealthWindowController(pool, world);
         health.Initialize(layers);
 
-        return (health, layers);
+        var input = TestUiInputController.Create(layers, new Vector2(2000, 2000), componentManager, world, new EventBus(), itemCatalog, pointerState: pointerState);
+
+        return new Harness(health, layers, componentManager, input, terrain, auras);
+    }
+
+    private static MouseState MouseAt(Point position) =>
+        new(position.X, position.Y, 0, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
+
+    /// <summary>Holds the cursor at position for frameCount frames: the input controller publishes it, then the window reads it.</summary>
+    private static void HoverFor(Harness harness, HealthWindow window, Point position, int frameCount)
+    {
+        for (var frame = 0; frame < frameCount; frame++)
+        {
+            harness.Input.Update(default, MouseAt(position));
+            window.Update(new GameTime());
+        }
+    }
+
+    private static HealthWindow OpenWindow(Harness harness)
+    {
+        var button = FindButton(harness.Layers);
+        button.HandleClick(button.Rectangle.Center);
+        return FindWindow(harness.Layers)!;
+    }
+
+    private static Tooltip FindTooltip(UiLayerStack layers) => layers[UiLayer.Tooltip].OfType<Tooltip>().Single();
+
+    private static TextWindow FindRow(HealthWindow window, string textFragment) =>
+        SelfAndDescendants(window).OfType<TextWindow>().Last(row => row.OriginalText.Contains(textFragment));
+
+    [TestMethod]
+    public void HoveringATerrainSourcedModifierRow_ShowsTheTerrainsName_AndMovingOffHidesIt()
+    {
+        var harness = BuildHarness();
+        var holyGroundId = harness.Terrain.Register(new TerrainDefinition("test:holy", "Holy Ground", "", default, ".", default));
+        harness.ComponentManager.GetMultiPool<StatModifierComponent>().Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: true, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.FromTerrain(holyGroundId)));
+        var window = OpenWindow(harness);
+        var row = FindRow(window, "Resistance");
+        var tooltip = FindTooltip(harness.Layers);
+
+        HoverFor(harness, window, row.Rectangle.Center, 1);
+        Assert.AreEqual(global::Presentation.UI.ColorPalettes.WindowPalette.HighlightColor, row.ContentColor);
+
+        HoverFor(harness, window, row.Rectangle.Center, HudChrome.HoverTooltipDelayFrames - 2);
+        Assert.IsFalse(tooltip.IsVisible);
+
+        HoverFor(harness, window, row.Rectangle.Center, 1);
+        Assert.IsTrue(tooltip.IsVisible);
+        Assert.AreEqual("Holy Ground", tooltip.TitleText);
+        Assert.AreEqual("50% Damage Resistance\nPermanent", tooltip.OriginalText);
+
+        HoverFor(harness, window, new Point(1999, 1999), 1);
+        Assert.IsFalse(tooltip.IsVisible);
+        Assert.AreEqual(Color.Transparent, row.ContentColor);
+    }
+
+    [TestMethod]
+    public void HoveringAnAuraSourcedBodyPartBurn_ShowsTheAurasName_AndMovingOffHidesIt()
+    {
+        var harness = BuildHarness();
+        var auraId = harness.Auras.Register(new AuraDefinition(new Guid("00000000-0000-0000-0000-00000000b002"), "Lava", Color.OrangeRed));
+        harness.ComponentManager.GetMultiPool<BodyPartBurningTimerComponent>().Add(PlayerEntityId, new BodyPartBurningTimerComponent(partId: 0, stackCount: 3, nextTickFrame: 60, ActionSource.FromAura(auraId)));
+        var window = OpenWindow(harness);
+        var bodyPartBurningRow = FindRow(window, "Burning");
+        var tooltip = FindTooltip(harness.Layers);
+
+        HoverFor(harness, window, bodyPartBurningRow.Rectangle.Center, HudChrome.HoverTooltipDelayFrames);
+        Assert.IsTrue(tooltip.IsVisible);
+        Assert.AreEqual("Lava", tooltip.TitleText);
+        StringAssert.Contains(tooltip.OriginalText, "Burning x3");
+
+        HoverFor(harness, window, new Point(1999, 1999), 1);
+        Assert.IsFalse(tooltip.IsVisible);
+    }
+
+    [TestMethod]
+    public void ClosingTheWindowMidHover_HidesThePopup()
+    {
+        var harness = BuildHarness();
+        harness.ComponentManager.GetMultiPool<StatModifierComponent>().Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: true, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
+        var window = OpenWindow(harness);
+        var tooltip = FindTooltip(harness.Layers);
+        HoverFor(harness, window, FindRow(window, "Resistance").Rectangle.Center, HudChrome.HoverTooltipDelayFrames);
+        Assert.IsTrue(tooltip.IsVisible);
+
+        var button = FindButton(harness.Layers);
+        button.HandleClick(button.Rectangle.Center);
+
+        Assert.IsFalse(tooltip.IsVisible);
     }
 
     private static Button FindButton(UiLayerStack layers) => layers[UiLayer.DynamicHud].OfType<Button>().Single();

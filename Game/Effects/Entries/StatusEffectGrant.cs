@@ -1,3 +1,4 @@
+using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffects;
 using Game.World;
 
@@ -16,8 +17,8 @@ public enum StatusEffectGrantMode : byte
 /// <summary>Grants stacks of Type to the target through its registered IStatusEffectApplier.</summary>
 /// <remarks>
 /// <para>
-/// StackCount is multiplied by context.Magnitude and rounded, so under an aura it follows the aura's
-/// strength at the target. With TopUpTo that makes the count the level the target's position
+/// StackCount is multiplied by context.Magnitude, scaled by Outgoing/IncomingStatusStacks (EffectModifiers) and rounded, so under an aura it follows the aura's
+/// power at the target. With TopUpTo that makes the count the level the target's position
 /// should carry rather than an amount per application: applying it again and again holds the stacks
 /// there instead of outpacing the effect's own decay, and the decay unwinds them once the
 /// applications stop.
@@ -42,6 +43,10 @@ public sealed record StatusEffectGrant(
     StatusEffectGrantMode Mode = StatusEffectGrantMode.Add,
     BodyPartTargeting BodyPart = default) : IEffectEntry
 {
+    private static readonly (StatModifierTarget, StatModifierTarget)[] Modifiers = [(StatModifierTarget.OutgoingStatusStacks, StatModifierTarget.IncomingStatusStacks)];
+
+    public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => Modifiers;
+
     public EffectOutcome Apply(in EffectContext context)
     {
         var services = context.Services;
@@ -54,7 +59,7 @@ public sealed record StatusEffectGrant(
 
         var bodyPartId = BodyPart.ResolvePartId(in context);
 
-        var stacksToGrant = (int)MathF.Round(StackCount * context.Magnitude);
+        int stacksToGrant = EffectModifiers.ScaleToUShort(in context, StackCount * context.Magnitude, StatModifierTarget.OutgoingStatusStacks, StatModifierTarget.IncomingStatusStacks);
         if (Mode == StatusEffectGrantMode.TopUpTo)
         {
             stacksToGrant -= applier.GetCurrentStackCount(targetEntityId, bodyPartId);

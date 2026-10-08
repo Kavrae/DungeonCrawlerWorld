@@ -65,7 +65,7 @@ public sealed class ScrollMasteryEffectsTests
         var (componentManager, eventBus, actionCatalog, scroll) = Build();
         var existingSpell = new ActionDefinition(
             SpellId, "Existing Spell", null, "e", Color.Red, Tags: [], Effects: [Effect.None],
-            Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, 30, null), ManaCost: 0));
+            Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, 30, null)));
         actionCatalog.Register(existingSpell);
 
         var masteredCount = 0;

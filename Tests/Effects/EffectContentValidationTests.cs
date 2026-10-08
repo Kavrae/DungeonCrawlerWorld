@@ -35,7 +35,7 @@ public sealed class EffectContentValidationTests
     private static Effect ModifierConditionedOn(GameplayTag tag) =>
         new([new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, CanModify: true, -0.1f, DurationFrames: 60, tag)]);
 
-    private static Effect GrantOf(AuraDefinition aura) => new([new AuraSourceGrant(aura, Strength: 4)]);
+    private static Effect GrantOf(AuraDefinition aura) => new([new AuraSourceGrant(aura, Power: 4, Size: 2)]);
 
     /// <summary>An aura nothing registers: only an effect entry names it, and its own effects use an undeclared tag.</summary>
     private static readonly AuraDefinition AuraWithAnUndeclaredTagInside = new(NamedOnlyByAnEffectAuraGuid, "Hidden Blight", Color.Purple, [ModifierConditionedOn(UndeclaredTag)]);
@@ -57,7 +57,7 @@ public sealed class EffectContentValidationTests
     public void Aura_WhoseOwnTagIsUndeclared_ThrowsNamingTheAuraAndTag()
     {
         var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", default, "~", default,
-            Aura: new TerrainAura(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, Tags: [UndeclaredTag]), 4))));
+            Aura: new TerrainAura(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, Tags: [UndeclaredTag]), 4, 2))));
 
         Assert.Contains("Aura 'Miasma'", exception.Message);
         Assert.Contains(UndeclaredTag.Name, exception.Message);
@@ -67,7 +67,7 @@ public sealed class EffectContentValidationTests
     public void Aura_WhoseEffectNamesAnUndeclaredTag_ThrowsNamingTheAuraAndTag()
     {
         var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", default, "~", default,
-            Aura: new TerrainAura(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, [ModifierConditionedOn(UndeclaredTag)]), 4))));
+            Aura: new TerrainAura(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, [ModifierConditionedOn(UndeclaredTag)]), 4, 2))));
 
         Assert.Contains("Aura 'Miasma'", exception.Message);
         Assert.Contains(UndeclaredTag.Name, exception.Message);
@@ -86,6 +86,37 @@ public sealed class EffectContentValidationTests
         Assert.AreSame(harmless, build.Context.Auras.Get(auraId));
     }
 
+    /// <summary>Two different auras sharing a Guid would replace each other in the catalog every time either radiated.</summary>
+    [TestMethod]
+    public void TwoDifferentAurasSharingAGuid_FailTheBuild_NamingBoth()
+    {
+        var first = new AuraDefinition(HolderAuraGuid, "Glimmer", Color.White);
+        var second = new AuraDefinition(HolderAuraGuid, "Murk", Color.Purple);
+
+        var exception = BuildWith(context =>
+        {
+            context.Items.Register(new ItemDefinition(Guid.NewGuid(), "Lamp", null, "?", Color.White, [], [GrantOf(first)]));
+            context.Items.Register(new ItemDefinition(Guid.NewGuid(), "Shroud", null, "?", Color.White, [], [GrantOf(second)]));
+        });
+
+        Assert.Contains("Glimmer", exception.Message);
+        Assert.Contains("Murk", exception.Message);
+        Assert.Contains(HolderAuraGuid.ToString(), exception.Message);
+    }
+
+    /// <summary>Two sources of one aura share one definition, which is no conflict.</summary>
+    [TestMethod]
+    public void TwoHoldersOfTheSameAuraDefinition_Build()
+    {
+        var shared = new AuraDefinition(HolderAuraGuid, "Glimmer", Color.White);
+
+        BuiltInTestModules.BuildModules([new RegisteringModule(context =>
+        {
+            context.Items.Register(new ItemDefinition(Guid.NewGuid(), "Lamp", null, "?", Color.White, [], [GrantOf(shared)]));
+            context.Items.Register(new ItemDefinition(Guid.NewGuid(), "Lantern", null, "?", Color.White, [], [GrantOf(shared)]));
+        })]);
+    }
+
     /// <summary>An aura found that way is content like any other: what its own effects name is checked too.</summary>
     [TestMethod]
     public void AuraNamedOnlyByATerrainContact_HasItsOwnEffectsChecked()
@@ -102,7 +133,7 @@ public sealed class EffectContentValidationTests
     public void AuraNamedOnlyByAnotherAurasEffects_HasItsOwnEffectsChecked()
     {
         var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", default, "~", default,
-            Aura: new TerrainAura(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, [GrantOf(AuraWithAnUndeclaredTagInside)]), 4))));
+            Aura: new TerrainAura(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, [GrantOf(AuraWithAnUndeclaredTagInside)]), 4, 2))));
 
         Assert.Contains("Aura 'Hidden Blight'", exception.Message);
     }

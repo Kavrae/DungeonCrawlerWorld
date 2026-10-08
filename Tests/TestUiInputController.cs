@@ -33,7 +33,8 @@ internal static class TestUiInputController
         InventoryWindowController? inventoryWindowController = null,
         AbilityScoreWindowController? abilityScoreWindowController = null,
         DiagnosticsWindowController? diagnosticsWindowController = null,
-        PointerState? pointerState = null) =>
+        PointerState? pointerState = null,
+        TargetingModeSwitch? targetingModeSwitch = null) =>
         new(
             layers,
             screenSize,
@@ -51,5 +52,6 @@ internal static class TestUiInputController
             healthWindowController,
             inventoryWindowController,
             abilityScoreWindowController,
-            diagnosticsWindowController);
+            diagnosticsWindowController,
+            targetingModeSwitch);
 }

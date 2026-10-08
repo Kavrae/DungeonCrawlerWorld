@@ -24,7 +24,7 @@ topics; don't duplicate what a `PLAN-*.md` already records in full (link to it i
   `context.TargetEntityId` -- no separate Source/Target field (tried, removed); self-targeting is a
   Self-shaped `TargetingSpec` instead.
 - `WandActivator`: per-instance `Charges`/`MaxCharges` fixed at grant off Intelligence
-  (`WandGrantEffects`), ticks down via `InventoryActions.PeelOneIntoDivergentStack` -- first item ever
+  (`WandGrantEffects`), ticks down via `InventoryActions.MoveOneUnit` -- first item ever
   granted as a diverged stack. Forced item-hotkey binding to key by `StackInstanceId`, not
   `ItemDefinitionId`. No Equipment gate (doesn't exist yet).
 - `ActionInstanceComponent.Override: ActionDefinition?` replaced the old bare `DamageAmount: ushort`,
@@ -42,7 +42,7 @@ topics; don't duplicate what a `PLAN-*.md` already records in full (link to it i
 
 ### Move inventory items to hotbar
 
-`ItemHotkeyBindingComponent` + `ConsumableActivationSystem`/`ActionTargetingController` arm/target/
+`ItemHotkeyBindingComponent` + `ItemActivationSystem`/`ActionTargetingController` arm/target/
 confirm/double-tap path, keyed by `StackInstanceId`. Click-and-drag assignment from the grid landed too.
 
 ### Melee attack
@@ -445,11 +445,197 @@ Builds on the Currency/container and loot currency work above.
   bound) and `AcquiredSequence` (so topping up doesn't read as "New"). Staging into or out of the
   trade window never merges -- a staged stack needs its own id to move back.
 
-### Toggle poison aura ability -- item side
+### Toggles: items and actions (aura stage 2, 2026-10-03)
 
-Toxic Idol (`Game/Modules/Inventory/Definitions/ToxicIdol.cs`) is the first user of `AuraSourceGrant`'s
-permanent flip-toggle. Built the aura-sync fix (`AuraSourceAddedEvent`/`RemovedEvent`) and
-multi-aura-per-entity support. FreeCast ability version still open (see TODO.md).
+`PLAN-aura-stage-2.md` (superseding `PLAN-toggle-items.md`), built in five phases, each checked in game.
+The rules themselves are in CLAUDE.md ("Toggles and windups"); this is what was decided and found.
+
+Decisions (confirmed in the plan's review, not to be reopened):
+- A toggle is a field on the shared definition (`ToggleSpec`), not an activator kind. An item still gets
+  `ToggleItemActivator`, because an item's activator says how units are spent: never, lit state per unit.
+- Toggles stack and are independent. Each lit unit is its own toggle; an entity may hold several
+  sources of one aura, one per toggle, keyed.
+- Everything a toggle does is an `Effect` list: held, activation, periodic. Effects are asked first
+  (`CanApply`) and are all or nothing, which is also what lets an unaffordable turn-on show disabled.
+- Turning on needs only the activation effects; periodic effects that can't apply switch the toggle off.
+- Death: a toggle action goes off; a lit item with periodic effects goes off; one without keeps working
+  on the corpse. Any holder can hold a lit item.
+- An item toggle activates like an action, by its timing, through the pending path (reverses the old
+  plan's "direct call, never gated by the lock"). Delayed toggles share the action windup: one
+  component for actions and items.
+- Toxic Idol is a Delayed toggle item; Toxic Aura a FreeCast toggle action draining 1 mana a second.
+  Potions, scrolls and wands stay Immediate. Stances wait on a reversible `StatModifierGrant`.
+
+Choices made while building (reported at each phase):
+- `Toggles.TurnOff` takes the definition from its caller; the owner registry (`IToggleOwner`) arrived
+  with `ToggleUpkeepSystem`, which is what needs it.
+- A holder off the map is not ticked. The trade-offer entities count as simulated, and without this a
+  staged lit item with upkeep would be asked to pay and go out.
+- A lit item with upkeep that arrives at a dead holder is due at once and goes out on the next upkeep
+  update, not inside the stack event: flipping a stack from inside its own change event risked a
+  transfer or merge in progress.
+- No item cooldowns exist (cooldowns are keyed by action id), so "the cooldown starts both ways" is
+  built for actions only.
+- No UI binds an action to a slot, so `PlayerKit` binds Toxic Aura to Slot 7 (marked TEMPORARY) rather
+  than leaving it unbound. Slot 6 and 7 are locked expansion slots until a Hotkey Expansion Potion.
+- `MultiComponentPool.ComponentRemoving` and `EntityManager.IsDestroying` were added for the item
+  reconcile: a removal the holder's destruction causes is ignored, so nothing is re-added to a
+  recycled id.
+
+Found in game, not by review:
+- **Several hotbar slots bound to one stack.** A bought idol merges into the one already held, so two
+  slots named one stack of two; lighting a unit moved "the first binding on the stack", not the slot
+  pressed, and one slot cycled on, both on, one off, both off. The pressed slot now travels with the
+  activation (`ActivatedFromSlot`, through `PlayerCommands`, the request and the windup), and
+  `ItemHotkeyBindingActions.RepointAfterUnitMoved` moves only that slot, plus any slot left on a stack
+  that is gone. Wands had the same latent fault and use the same rule.
+- **A 1-2 s freeze the first time Toxic Aura was used.** Its aura definition had Scroll of Torch's
+  Guid. A definition is re-registered whenever its source radiates, so the first use replaced Torch's
+  definition, and a definition change rescans every aura source in the world (~370 ms headless; the
+  second use, the idol and a first attack were normal). It would also have swapped back on the next
+  Torch cast. Found by timing the frame in a full-size headless world, then per system, then inside
+  the flip. Fixed with Toxic Aura's own Guid; `AuraContentRegistration` now fails a build with two
+  different aura definitions sharing a Guid.
+
+The windup rename (`PendingDelayedActionComponent` -> `PendingWindupComponent`, and the identifiers
+built on it) changes the pool's name in diagnostics output, so a benchmark baseline saved before it
+lists that pool under the old name.
+
+### Aura stage 3: power and size, targeting modes, anchors, attribution, modifier checks (2026-10-06)
+
+`PLAN-aura-stage-3.md`, built in seven phases, each checked in game. The rules are in CLAUDE.md
+("Auras and terrain contact", "Targeting"); this is what was decided, found and measured.
+
+Decisions (confirmed in the plan's reviews, not to be reopened):
+- **Totals are dense chunks**, 32x32 `int`, per aura per neighborhood, allocated on first write and
+  freed at zero. `int`, not `ushort`: overlapping `ushort` powers pass 65535, and a total wrapping to
+  exactly 0 would read as empty and free a chunk still in reach.
+- **A source is a power (`ushort`) and a size (`byte`)**; `AuraSourceComponent` stays 8 bytes. Halving
+  per tile is gone. Falloff is per aura: `Linear`, `power * (size + 1 - distance) / (size + 1)` rounded
+  up, so the edge fades to about 1, or `None`, full power to the edge. Content kept its numbers as
+  power and size, so the middle of each aura got stronger (the shrine heals 16, 13, 10, 7, 4).
+- **Targeting modes, Target (default) and Ground**, the player's choice (Left Alt), kept in
+  Presentation for the session. Game resolves targets: a request carries a `TargetSelection`, and one
+  function (`TargetResolution.Resolve`) turns it into tiles for the activation, the preview, the
+  telegraph and NPCs, so what is drawn is what lands. Which activations have a mode and what Target
+  affects are the targeting spec's (`Modes`, `TargetModeAffects`); melee, Adjacent shapes and Dodge
+  are Ground only.
+- **An effect entry says where it lands** (`IEffectEntry.Placement`: `OnEachTarget`,
+  `OncePerActivation`, `AtLocation`), so Torch's "attachment mode" is the targeting mode: Target lights
+  the entity, Ground anchors the light on the tile.
+- **Anchors are ordinary entities** (`AuraAnchor`), ended with their last source, their placer's
+  destruction or their neighborhood's unloading; a toggle holding one switches off with it. A maximum
+  distance from the caster is a TODO.
+- **Attribution is credit only**, to the strongest single contributor at the cell: an entity source's
+  entity (an anchor's placer), else the terrain's share, else the aura when several terrain types
+  radiate it. The effect still has no source entity. Kill credit follows it.
+- **An anchor reaches its placer.** Only sources an entity carries leave it alone; an aura that
+  shouldn't hit its placer grants an immunity first -- what makes droppable healing auras and
+  explosives work. Toxic Aura holds a Poison immunity on its user while on.
+- **Modifiers are read live, at application**, not snapshotted at the start of a windup. CPU is the
+  same either way (one chain walk per amount); snapshotting would add bytes or an allocation to every
+  windup -- NPC combat has over 10,000 in flight -- and a capture step beside every entry's apply.
+  Incoming modifiers are the target's, unknown until resolution in Target mode, so they are live
+  regardless.
+
+Choices made while building:
+- `NeighborhoodBits` and `AuraTotals` keep freed bitmaps, chunks and neighborhoods for reuse: freeing
+  and reallocating a 131 KB-per-layer bitmap on every step across a seam cost 54 MB over the test walk.
+  Found by the zero-allocation test.
+- The field fixes an aura's falloff while it holds any source of it; a replaced falloff takes effect
+  once they have gone. Rewriting on `AuraCatalog.DefinitionChanged` didn't hold: a terrain still holding
+  the old definition re-registers it during the rewrite.
+- A Ground windup is resolved from its aimed tile when it ends, like a Target one: the same tiles unless
+  the caster moved. A Target selection with nothing on the tile marks nothing and resolves as Ground.
+- An emptied anchor is destroyed by `AuraAnchorEndingSystem` the next frame: removals happen inside
+  other systems' timer callbacks. Anchors are `NonBlockingKind.None`, so Target never marks one.
+- A toggle action switched on in Ground mode anchors what it places on the holder's tile; toggle items
+  always place on the holder.
+- `AuraSourceIndex` (entity sources by 32x32 chunk, attribution fixed at first placement) lives in
+  `AuraField`; an entity source wins a tie with the terrain share; ties between entities go to the
+  lowest key. `StatusEffectImmunityGrant` became reversible under a toggle's key: a held immunity is its
+  own instance (`StatusEffectImmunityEffects.GrantHeld`/`RevokeHeld`).
+- `EffectModifiers.Scale` runs Outgoing on the source entity when there is one and Incoming on the target
+  when there is one; damage's Incoming stays at `HealthDamage` and healing's both passes at
+  `HealthHeal`, the chokepoints DoTs and regeneration share. Twelve targets were appended to
+  `StatModifierTarget` (mana restore and drain, status stacks, proc chance, aura power and size,
+  Outgoing and Incoming), so existing values kept their numbers. `IEffectEntry.AmountModifiers` declares
+  each entry's pairs.
+- **A spell's mana cost goes through the ManaDrain modifiers**: the caster drains itself, so Outgoing
+  and Incoming both apply. Before, a spell's cost bypassed every modifier, which the Thrift check found.
+  The cost has since become a `ManaDrain` activation effect (see "Costs are activation effects").
+- TEMPORARY test content: Fireball (Slot8), the Lantern toggle (Slot9, 4 expansion potions), the Fairy
+  Magic Missile override (Delayed, range 8, mode rolled per cast) and 15 mana, the "Radiant" trait,
+  30 starting mana, and the four `ModifierTestPotions`.
+
+Measured (Release, headless, seed 1, frames 600-3600, A/B against the commit before the stage; each
+phase's run is a different world, since content changed):
+
+| Phase | `EcsContext.Update` ms/frame | Notes |
+|---|---|---|
+| 1 storage | +7.3% (A's spread 4.3%) | heap 1,225.6 -> 847.6 MB; totals 26,297 chunks, 103.8 MB |
+| 2 power/size | 1.764 -> 1.687 (-4.4%) | `AuraSystem` -11.4% |
+| 3 targeting | 1.726 -> 1.610 | all within the run's 22% spread |
+| 4 placement | 1.790 -> 1.662 | `AuraAnchorEndingSystem` 0.0002 ms |
+| 5 attribution | 1.619 -> 1.617 | attribution about 0.04 ms/frame in `AuraSystem` |
+| 6 modifiers | 1.555 -> 1.549 | no system flagged |
+
+Storage variants measured in phase 1: 16x16 `int` 91.5 MB, 32x32 `ushort` 52.4 MB, 16x16 `ushort`
+47.8 MB, all within noise on frame cost and 11-13 ns a cell. 32x32 `int` was chosen for the `int`
+reason above, and because a 16x16 neighborhood's slot array is 96 KB, on the large object heap.
+
+### Costs are activation effects (2026-10-06)
+
+Came out of a review of `EffectModifiers`: a spell's mana cost and a toggle's activation `ManaDrain`
+were checked separately against the same mana, so a toggle spell costing 10 with a 10-mana activation
+effect passed with 15 and was charged 20. Built in five phases, each checked in game. The rules are in
+CLAUDE.md ("Effects", "Toggles and windups"); this is what was decided and found.
+
+Decisions (confirmed, not to be reopened):
+- **A cost and an activation effect are the same thing.** `SpellActivator.ManaCost`, `ActionGrant.ManaCost`,
+  `ActivationQueries.ManaCostOf` and the separate spell-mana spend are gone; a spell declares a
+  `ManaDrain` in `ActivatableDefinition.ActivationEffects`, which every action and item has, not only
+  toggles.
+- **The name stays `ActivationEffects`, not `Costs`**: it leaves room for effects on the user that aren't
+  costs, such as stunning the caster in place.
+- **Every refusal has its own text** -- no generic "can't be used" bucket. `ActivationEffectsRefused` is
+  gone; each `EffectRefusal` maps to its own `ActivationBlocker`.
+- **The hotbar badge shows every cost**, one number per resource in its colour (mana sky blue, health
+  red), bottom-left on action and item slots alike. Revisit only if costs outgrow a badge and a tooltip.
+- **Health and mana are never rounded** -- damage, healing, mana drained and restored, costs or not.
+  Rounding to the nearest made a halved 1-mana upkeep free (0.5 rounds to 0); rounding up would have made
+  a -50% modifier do nothing on it. Both pools were already floats, so exact amounts cost nothing.
+- **A health cost (`HealthDrain`) is refused rather than killing its payer, split evenly across a body
+  plan's parts, and never reduced by damage reduction.** It has its own modifier pair
+  (`Outgoing`/`IncomingHealthDrain`). A cost isn't a hit: no damage event, no floating text, no
+  inflicted-damage achievement credit.
+
+Choices made while building:
+- `ActivationEffects` is an `init` property on `ActivatableDefinition`, not a positional parameter: a
+  list has no constant default, and a required parameter would have touched every definition.
+- `EffectSequence.CanApply` asks a whole list against one `EffectReservations`, so costs in one list are
+  checked together, and returns the first refusal's reason instead of a bool.
+- The action-lock check moved to one place in `ActionActivationSystem`, before anything is taken: a use
+  waiting on the lock takes nothing. A spell's mana is now taken before its effects land, not after;
+  no outcome changes.
+- Whether a grant gives an entity a mana pool is read from the definition it will use
+  (`ManaUse.DrainsUsersMana`: an activation effect or a toggle's upkeep). `EntityBuilder`,
+  `EntityFactory` and `BlueprintContext` gained the action catalog, as they had the aura catalog, and
+  `PlayerKit`'s `manaCost: 1` stand-in for Toxic Aura's upkeep went.
+- `ManaDrain` and `HealthDrain` implement `IResourceDrain`, so the badge totals (`ActivationCosts`) and
+  the mana-pool rule find costs without listing entry types.
+- A toggle that is on shows no cost on its slot: turning it off takes nothing.
+- NPCs check activation effects too (`TestCombatBehaviorSystem` takes `EffectServices`).
+- Entries placed once per activation follow the marked entity: one that dodged or isn't simulated gets
+  none of them, and only `AtLocation` entries are placed. Found in the same review.
+
+Found in game, not by review:
+- **A halved Toxic Aura upkeep drained nothing.** 1 mana x 0.5 rounded to 0 every second. This is what
+  turned "round to the nearest" into "never round" for every health and mana amount.
+
+Found while building:
+- Damage was cut to a whole number at five points, and a whole-body hit lost up to (parts - 1) points
+  to integer division before being spread across the parts. Both went with the no-rounding rule.
 
 ### Goblins attack adjacent targets (temporary stand-in)
 
@@ -520,7 +706,7 @@ Decisions (don't re-litigate):
 4. No targeting across the simulated/frozen boundary; the player only interacts with Local. NPCs
    can reach the seam, so every tile-targeted effect skips frozen occupants: actions
    (`ActionEffectResolver`), NPC target choice (`TestCombatBehaviorSystem`), and potions, scrolls and
-   wands (`ConsumableActivationSystem`, added 2026-09-26 after a potion reached an unbuilt skeleton).
+   wands (`ItemActivationSystem`, added 2026-09-26 after a potion reached an unbuilt skeleton).
 5. Exact timers at every simulated tier. Neighborhood speed 1/8, settled in-game.
 6. Other MapLayers take the (x, y) neighborhood's tier but are never Local.
 7. Population is defined per MOB population template (dense or sparse); neighborhood placement is
@@ -562,7 +748,7 @@ buffer with a short expiry; held movement sampled, taps buffered; dodge cancels 
 buffer). Decisions, so they aren't re-asked:
 
 - `Game.Modules.Actions.PlayerCommands` is the only writer of the player's `NextMapPosition`,
-  `PendingActionActivationComponent` and `PendingConsumableActivationComponent`. One slot (move / action /
+  `PendingActionActivationComponent` and `PendingItemActivationComponent`. One slot (move / action /
   consumable), newest wins, `ExpiryFrames` = 0.25s on the simulation clock (pausing doesn't age it; tune after
   more play). A move or consumable is written once `ActionLockGate` reads the player as free, an action once
   it's ready (cooldown and, unless FreeCast, the lock -- see "Disabled actions"); a command queued while
@@ -600,7 +786,7 @@ they aren't re-asked:
 
 - **One rule in Game.** `ActivationQueries.GetBlocker` returns an `ActivationBlocker` -- `NotActivatable` (no
   activator), `MeleeDisabled` (`Delivery.Melee` + `MeleeDisabledComponent`), `NotEnoughMana`, checked in that
-  order (structural before transient). `ActionActivationSystem`, `ConsumableActivationSystem` and
+  order (structural before transient). `ActionActivationSystem`, `ItemActivationSystem` and
   `TestCombatBehaviorSystem` refuse through it; Presentation reads it through `ActionStateView.GetActionBlocker`/
   `GetItemBlocker`, which resolve the entity's effective action/item (an override's mana cost counts). The
   Presentation-side mana checks are gone.
@@ -609,9 +795,9 @@ they aren't re-asked:
   blocked while armed. Cooldown and action lock are timers, not blockers: the radial wedge shows them, the slot
   still arms.
 - **No silent confirm.** `ActivationQueries.FramesUntilReady` = later of cooldown and (unless FreeCast) lock.
-  `PlayerCommands` holds a buffered action until it's 0, and `QueueAction`/`QueueConsumable` refuse (return
+  `PlayerCommands` holds a buffered action until it's 0, and `QueueAction`/`QueueItemActivation` refuse (return
   false, keep whatever was buffered) a command that couldn't be ready before `ExpiryFrames`; `CanQueueAction`/
-  `CanQueueConsumable` ask without queuing. A refused confirm leaves the action armed.
+  `CanQueueItemActivation` ask without queuing. A refused confirm leaves the action armed.
 - **Showing why.** `ActivationBlockerText` owns the words and tooltip rows: the hotbar summary (rebuilt when the
   blocker changes), the inventory hover (player's own activatable stacks only -- a sword isn't "deactivated"),
   and an Item Details line (player's own stack, rebuilt when the blocker changes). `UiInputController` shows
@@ -1265,7 +1451,7 @@ record in Achievements.
 **Opening**
 - "Open All" (the context menu's only option on a box) or double-clicking any box opens
   every box the player holds. Never blocked: no action lock and no location check (safe rooms are a TODO).
-- **A direct call, not a System.** `ConsumableActivationSystem` is a system because consumables need the
+- **A direct call, not a System.** `ItemActivationSystem` is a system because consumables need the
   action lock, map targeting, system ordering and the skeleton guard; opening needs none of that and only
   touches the player's own built inventory, which Presentation already mutates between frames. A system
   would poll an empty queue every frame.
@@ -1321,7 +1507,7 @@ Level Up and Skill Up join later as new `FloatingTextKind` values.
   attacker for damage it dealt. A corpse shows nothing for damage it takes; the killing hit still shows.
 - **Heals show the change in the HUD's rounded-up health**, `ceil(after) - ceil(before)`: a heal at full
   health shows nothing, and regen shows "+1" only on the visits that move the displayed number. No
-  accumulator state. `HealCategory`/`DamageCategory` are required parameters on `HealthHeal`/`HealthDamage`,
+  accumulator state. `ResourceGainCategory`/`ResourceLossCategory` (`Game.Resources`, shared with mana) are required parameters on `HealthHeal`/`HealthDamage`,
   so no caller can default a DoT to direct damage.
 - **Status stacks are the count after a grant minus the count before**, at the two grant sites
   (`StatusEffectGrant`, whatever applied it), so a stack stopped by the cap or immunity is
@@ -1647,7 +1833,7 @@ Landed alongside two generalizations prompted by this feature recurring elsewher
 - **Activating anything closes every closable window** -- `UiLayerStack.CloseAllClosableWindows()` (a
   new, unconditional sweep across every layer, no menu-mode short-circuit) is called from
   `ActionTargetingController`'s four real commit points (`ArmAction`/`ArmItem` for arming,
-  `QueueActionActivation`/`QueueConsumableActivation` for the double-tap instant-fire paths that skip
+  `QueueActionActivation`/`QueueItemActivation` for the double-tap instant-fire paths that skip
   arming). This replaced `UiInputController`'s own bespoke Escape-hold sweep entirely -- Escape-hold and
   item/action activation now share the one implementation (single-tap Escape's
   `CloseTopmostClosableWindow` is unrelated and untouched). A future Magic Menu cast goes through the
@@ -1717,7 +1903,7 @@ after") became three Id-keyed lists; see CLAUDE.md's Modding section for the rul
   pool to `HealthDamage`, so a dead complex entity that kept burning republished `EntityDiedEvent`
   on each tick that hit a zeroed vital part. Actions resolved through `ActionEffectResolver` had no
   mana pool, so a mana-restoring ability would have done nothing (only the Mana Potion restores
-  mana today, through `ConsumableActivationSystem`).
+  mana today, through `ItemActivationSystem`).
 - **Checking behavior stayed the same.** `--headless --seed=1 --benchmark-frames=60-120` prints a
   world fingerprint; a `git archive HEAD` copy in the scratchpad gives the baseline. The fingerprint
   hashes pool type *full names*, so moving a component to another namespace changes it without any
@@ -2120,3 +2306,53 @@ percent everywhere and removed a grid, a terrain scan and 190 ms of startup. The
 the second aura's lookup on moves inside an aura; the memory is 9,300 shrines and their aura's reach.
 The windowed figures are one run each, hours apart, so they show direction only. Open items are in
 TODO.md "Aura follow-ups".
+
+#### Aura stage 1: source-move scans, source names, planning rolls (2026-10-02)
+
+What changed:
+- **A cell's occupants are read as a span** (`IMapQuery.GetOccupantEntityIdSpanAt`), valid until that
+  cell's occupants change. A reader that runs open-ended code per occupant copies first
+  (`ActionEffectResolver`, `ProcessingTierSystem`, `TerrainContactSystem`): a stale span fails
+  silently where the old list threw. The frame's moves are read the same way
+  (`FrameEventBuffer.ItemSpan`).
+- **A source is scanned by its own reach, and a move scans only the cells that changed sides.** An
+  exposure can end only where the source's old diamond covered and its new one doesn't, and start
+  only in the reverse: about `2R + 1` cells each way for a one-tile step instead of the whole
+  diamond. The whole diamond is scanned when a source is added, removed or first placed, and when its
+  last placement exposed nobody because it wasn't simulated then (`SourcePlacement.ExposedOccupants`).
+  `AuraField.MaxScanRadius` and `SourceSplatting` are deleted.
+- **A resync adds each source at its new position before removing it at the old one.**
+  `NeighborhoodBits` drops a neighborhood's coverage bitmap when its last bit clears, so the other
+  order freed and reallocated 393 KB on every step of a neighborhood's only source. Found by the
+  zero-allocation test, not by review.
+- **Sources have names** (`ActionSourceNaming`, `GameViews.ActionSourceNaming`): an entity's recorded
+  name, a terrain's or an aura's `Name` read by id at display time, or the kind. The Health window
+  shows the Ability Score window's source popup for stat-modifier and status-effect rows
+  (`IStatusEffectDisplay.GetSource`); a row whose effect records no source has no popup. Both windows
+  read the cursor from `PointerState`.
+- **Layout and population roll from `SeededRandom`.** Planning one 1024x1024 neighborhood went from
+  109 to 87 ms (Release, tiered compilation off, median of 9); a roll is 4.2 ns against 6.8. The
+  saving is per roll, about 8 million of them a neighborhood. **Every world for a given seed changed**
+  (seed 1 ends frames 600-3600 at fingerprint `A66729EC8E9FEBC4`), so benchmarks saved before this
+  are a different world; the default A/B baselines were re-recorded. The 110 ns-a-roll anomaly once
+  seen in the shrine loop did not appear in either pass.
+
+Measured (headless, seed 1, frames 600-3600, 5 runs a side, against the commit before the work, before
+the planning-roll switch):
+
+| | Before | After |
+|---|---|---|
+| Release, whole update (`ab-20261002-161607.json`) | 1.9065 | 1.8001 ms/frame (-5.6%) |
+| ... `TestCombatBehaviorSystem` | 0.6014 | 0.5211 (-13.3%) |
+| ... `ProcessingTierSystem` / `TerrainContactSystem` | 0.0211 / 0.0575 | 0.0185 / 0.0536 |
+| ... `AuraSystem` / `DeathSystem` | 0.5075 / 0.0071 | 0.4991 / 0.0069 |
+| ... worst frame | 7.1-10.2 ms | 7.3-8.9 ms |
+| Debug, whole update (`ab-20261002-161332.json`) | 5.3308 | 5.3125 (-0.3%) |
+| Allocated over the range (one run each) | 229.7 MB | 204.2 MB |
+
+The aura system is flat because the benchmark world has almost no moving sources; the scan work shows
+only where one moves. The two builds end in different worlds, cause not established. `DeathSystem`
+did not fall, so the removal scan a dying source pays is not what raised it, and neither is the death
+count (TODO.md "Aura follow-ups"). Unloading a neighborhood with its shrines is covered by a
+teleported walk through the whole session (`AuraEvictionWalkTests`): the field afterwards matches one
+built from scratch across the border.

@@ -91,7 +91,7 @@ public sealed class TerrainContactSystem : ISystem
     /// </summary>
     public void Update(EngineTime time, byte stripeIndex)
     {
-        foreach (var moved in _movedEntities.Items)
+        foreach (var moved in _movedEntities.ItemSpan)
         {
             StepOnto(moved.EntityId, moved.NewPosition, time.FrameCount);
         }
@@ -219,7 +219,7 @@ public sealed class TerrainContactSystem : ISystem
 
         // Copied first: applying a contact can change who occupies the cell.
         _occupantIdsScratch.Clear();
-        _occupantIdsScratch.AddRange(_mapQuery.GetOccupantEntityIdsAt(position));
+        _occupantIdsScratch.AddRange(_mapQuery.GetOccupantEntityIdSpanAt(position));
 
         foreach (var occupantId in _occupantIdsScratch)
         {

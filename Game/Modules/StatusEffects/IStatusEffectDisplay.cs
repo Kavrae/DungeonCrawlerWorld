@@ -28,4 +28,7 @@ public interface IStatusEffectDisplay
 
     /// <summary>This entity's current stack count for EffectType, or 0 if it isn't active.</summary>
     int GetStackCount(int entityId);
+
+    /// <summary>What caused EffectType on this entity, or null if it isn't active or the effect records no source.</summary>
+    Game.World.ActionSource? GetSource(int entityId);
 }

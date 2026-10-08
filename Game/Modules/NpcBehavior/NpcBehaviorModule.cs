@@ -1,5 +1,6 @@
 using Engine.Modules;
 using Game.Blueprints;
+using Game.Effects;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.BodyPartEffects;
@@ -13,7 +14,6 @@ using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Mana;
-using Game.Modules.Mana.Components;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.NpcBehavior.Components;
@@ -22,6 +22,7 @@ using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race;
 using Game.Modules.Race.Components;
+using Game.Modules.StatModifiers;
 
 namespace Game.Modules.NpcBehavior;
 
@@ -39,7 +40,7 @@ public sealed class NpcBehaviorModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, InventoryModule.ModuleId, ActionsModule.ModuleId, BodyPartEffectsModule.ModuleId, ManaModule.ModuleId, DeathModule.ModuleId, MovementModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId];
+    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, InventoryModule.ModuleId, ActionsModule.ModuleId, BodyPartEffectsModule.ModuleId, ManaModule.ModuleId, DeathModule.ModuleId, MovementModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId, StatModifiersModule.ModuleId, .. EffectServices.RequiredModuleIds];
 
     public IReadOnlyList<Guid> RunsBefore { get; } = [MovementModule.ModuleId];
 
@@ -68,20 +69,21 @@ public sealed class NpcBehaviorModule : IGameModule
             EntityActions.For(componentManager, context.Actions, context.Definitions),
             componentManager.GetPackedPool<RaceSlotsComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+            componentManager.GetPackedPool<PendingItemActivationComponent>(),
             context.MapQuery,
             context.MathUtility,
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             context.ProcessingTierEvents,
             deadEntities,
-            componentManager.GetPackedPool<ManaComponent>(),
-            componentManager.GetPackedPool<MeleeDisabledComponent>()));
+            context.EffectServices,
+            componentManager.GetPackedPool<MeleeDisabledComponent>(),
+            context.PlayerQuery,
+            context.TargetResolution));
 
         systemManager.Register(new TestDummyAttackSystem(
             componentManager.GetPackedPool<TestDummyComponent>(),
             componentManager.GetDirectPool<TransformComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
-            componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            context.MapQuery));
+            componentManager.GetPackedPool<PendingActionActivationComponent>()));
     }
 }

@@ -78,6 +78,8 @@ public sealed class TestCombatBehaviorSystemTests
 
         public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) =>
             _occupantsByPosition.TryGetValue(position, out var entityIds) ? entityIds : [];
+
+        public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) => GetOccupantEntityIdsAt(position).ToArray();
     }
 
     private sealed record Fixture(
@@ -93,7 +95,7 @@ public sealed class TestCombatBehaviorSystemTests
         MultiComponentPool<ActionInstanceComponent> ActionInstances,
         PackedComponentPool<RaceSlotsComponent> RaceSlots,
         PackedComponentPool<PendingActionActivationComponent> PendingActivations,
-        PackedComponentPool<PendingConsumableActivationComponent> PendingConsumableActivations,
+        PackedComponentPool<PendingItemActivationComponent> PendingItemActivations,
         PackedComponentPool<DeadComponent> DeadEntities,
         DirectComponentPool<ProcessingTierComponent> ProcessingTiers,
         MathUtility MathUtility,
@@ -116,7 +118,7 @@ public sealed class TestCombatBehaviorSystemTests
             existing.Add(incoming.Race2);
         });
         var pendingActivations = new PackedComponentPool<PendingActionActivationComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
-        var pendingConsumableActivations = new PackedComponentPool<PendingConsumableActivationComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
+        var pendingItemActivations = new PackedComponentPool<PendingItemActivationComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var meleeDisabled = new PackedComponentPool<MeleeDisabledComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         var mapQuery = new FakeMapQuery();
@@ -136,9 +138,9 @@ public sealed class TestCombatBehaviorSystemTests
 
         var system = TestSystems.TestCombatBehaviorSystem(
             movementPool, transformPool, actionLockPool, healthPool, bodyParts, inventoryStacks, actions, raceSlots,
-            pendingActivations, pendingConsumableActivations, mapQuery, math, processingTiers, new ProcessingTierEvents(), deadEntities, meleeDisabled: meleeDisabled);
+            pendingActivations, pendingItemActivations, mapQuery, math, processingTiers, new ProcessingTierEvents(), deadEntities, meleeDisabled: meleeDisabled);
 
-        return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, bodyParts, bodyPartWorld, inventoryStacks, actionInstances, raceSlots, pendingActivations, pendingConsumableActivations, deadEntities, processingTiers, math, meleeDisabled);
+        return new Fixture(system, mapQuery, movementPool, transformPool, actionLockPool, healthPool, bodyParts, bodyPartWorld, inventoryStacks, actionInstances, raceSlots, pendingActivations, pendingItemActivations, deadEntities, processingTiers, math, meleeDisabled);
     }
 
     /// <summary>Grants both QuickAttack and PowerAttack, matching every real race blueprint's paired grant -- TryDecideMeleeAttack gates on QuickAttack's presence but randomly picks either for the actual attack.</summary>
@@ -191,13 +193,13 @@ public sealed class TestCombatBehaviorSystemTests
 
         fixture.System.Update(default, 0);
 
-        Assert.IsTrue(fixture.PendingConsumableActivations.Has(GoblinEntityId));
-        var pending = fixture.PendingConsumableActivations.GetReadonly(GoblinEntityId);
+        Assert.IsTrue(fixture.PendingItemActivations.Has(GoblinEntityId));
+        var pending = fixture.PendingItemActivations.GetReadonly(GoblinEntityId);
         var pool = fixture.InventoryStacks;
         Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, GoblinEntityId, pending.StackInstanceId, out var boundStack));
         Assert.AreEqual(HealthPotion.Id, boundStack.ItemDefinitionId);
-        Assert.HasCount(1, pending.TargetTiles);
-        Assert.AreEqual(GoblinPosition, pending.TargetTiles[0]);
+        Assert.AreEqual(TargetingMode.Target, pending.Selection.Mode, "Drunk, not thrown: Target mode on itself.");
+        Assert.AreEqual(GoblinPosition, pending.Selection.AimedTile);
         Assert.IsFalse(fixture.PendingActivations.Has(GoblinEntityId), "Healing takes priority over attacking -- both should never fire the same tick.");
     }
 
@@ -211,7 +213,7 @@ public sealed class TestCombatBehaviorSystemTests
 
         fixture.System.Update(default, 0);
 
-        Assert.IsFalse(fixture.PendingConsumableActivations.Has(GoblinEntityId));
+        Assert.IsFalse(fixture.PendingItemActivations.Has(GoblinEntityId));
         Assert.IsTrue(fixture.PendingActivations.Has(GoblinEntityId));
     }
 
@@ -226,12 +228,12 @@ public sealed class TestCombatBehaviorSystemTests
 
         fixture.System.Update(default, 0);
 
-        Assert.IsTrue(fixture.PendingConsumableActivations.Has(GoblinEntityId));
+        Assert.IsTrue(fixture.PendingItemActivations.Has(GoblinEntityId));
         Assert.IsFalse(fixture.PendingActivations.Has(GoblinEntityId), "Healing takes priority over attacking -- both should never fire the same tick.");
     }
 
     [TestMethod]
-    public void Update_FullHealthAdjacentToPlayer_QueuesMeleeAttackAgainstWholeAdjacentFootprint()
+    public void Update_FullHealthAdjacentToPlayer_QueuesMeleeAttackAsGroundAroundItself()
     {
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId);
@@ -243,9 +245,8 @@ public sealed class TestCombatBehaviorSystemTests
         Assert.IsTrue(fixture.PendingActivations.Has(GoblinEntityId));
         var pending = fixture.PendingActivations.GetReadonly(GoblinEntityId);
         Assert.IsTrue(pending.ActionId == QuickAttackAction.Id || pending.ActionId == PowerAttackAction.Id, "Randomly one or the other -- see TryDecideMeleeAttack's own doc comment.");
-        Assert.HasCount(8, pending.TargetTiles, "The whole resolved Adjacent footprint is queued, not just the occupied tile -- ActionEffectResolver sorts out who's actually there.");
-        CollectionAssert.Contains(pending.TargetTiles, AdjacentTile);
-        CollectionAssert.DoesNotContain(pending.TargetTiles, GoblinPosition);
+        Assert.AreEqual(TargetingMode.Ground, pending.Selection.Mode, "Melee is Ground only: the Adjacent ring around the attacker, whoever is in it when it resolves.");
+        Assert.AreEqual(GoblinPosition, pending.Selection.AimedTile);
     }
 
     [TestMethod]
@@ -274,7 +275,7 @@ public sealed class TestCombatBehaviorSystemTests
         fixture.System.Update(default, 0);
 
         Assert.IsFalse(fixture.PendingActivations.Has(GoblinEntityId));
-        Assert.IsFalse(fixture.PendingConsumableActivations.Has(GoblinEntityId));
+        Assert.IsFalse(fixture.PendingItemActivations.Has(GoblinEntityId));
     }
 
     /// <summary>A raceless entity (a shop, a container, any non-creature prop) is never attackable -- IsAttackable requires the candidate to actually hold a race to compare against, not just "any race but mine."</summary>
@@ -356,7 +357,7 @@ public sealed class TestCombatBehaviorSystemTests
         fixture.System.Update(default, 0);
 
         Assert.IsFalse(fixture.PendingActivations.Has(GoblinEntityId));
-        Assert.IsFalse(fixture.PendingConsumableActivations.Has(GoblinEntityId));
+        Assert.IsFalse(fixture.PendingItemActivations.Has(GoblinEntityId));
     }
 
     [TestMethod]
@@ -407,7 +408,7 @@ public sealed class TestCombatBehaviorSystemTests
 
         fixture.System.Update(default, 0);
 
-        Assert.IsTrue(fixture.PendingConsumableActivations.Has(GoblinEntityId));
+        Assert.IsTrue(fixture.PendingItemActivations.Has(GoblinEntityId));
         Assert.IsNull(fixture.MovementPool.GetReadonly(GoblinEntityId).NextMapPosition);
     }
 

@@ -9,6 +9,7 @@ using Game.Bootstrap;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Lootboxes;
+using Game.Resources;
 using Game.Spawning;
 using Game.World;
 
@@ -110,7 +111,7 @@ public sealed class BossLootboxAwarderTests
                 componentManager.GetPackedPool<Game.Modules.Health.Components.SimpleHealthComponent>(), result.EcsContext.EventBus, goblin, 1000, source, result.World, "Test", now: 0,
                 componentManager.GetMultiPool<Game.Modules.StatModifiers.Components.StatModifierComponent>(), Game.Modules.Health.EntityBodyParts.For(componentManager, result.Catalogs.Definitions),
                 new MathUtility(new Random(1)), deadEntities, new Game.World.FloatingTextFeed(result.EcsContext.EventBus, componentManager.GetDirectPool<Game.Modules.ProcessingTier.Components.ProcessingTierComponent>(), componentManager.GetDirectPool<Game.Modules.Core.Components.TransformComponent>()),
-                Game.Modules.Health.DamageCategory.Direct, targetMode: Game.Modules.Health.BodyPartTargetMode.All);
+                ResourceLossCategory.Direct, targetMode: Game.Modules.Health.BodyPartTargetMode.All);
             result.EcsContext.EventBus.DispatchBuffered<EntityDiedEvent>();
         }
 

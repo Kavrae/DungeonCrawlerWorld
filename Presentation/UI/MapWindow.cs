@@ -89,8 +89,8 @@ public sealed class MapWindow : Window
 
     private const float TargetSelectionMaskAlpha = 0.5f;
 
-    /// <summary>The summed aura strength at a tile that glows at full strength; anything stronger glows no brighter.</summary>
-    private const int FullGlowStrength = 8;
+    /// <summary>The summed aura power at a tile that glows at full brightness; anything more glows no brighter.</summary>
+    private const int FullGlowPower = 8;
 
     /// <summary>Halves the glow so a full-strength one still lets whatever's standing on that tile -- terrain, an occupant sprite/glyph -- read through, rather than washing it out at the source tile itself.</summary>
     private const float GlowOpacityMultiplier = 0.5f;
@@ -442,14 +442,14 @@ public sealed class MapWindow : Window
                 var mapNodeX = columnIndex + _camera.CurrentScrollPosition.X;
                 var mapNodeY = rowIndex + _camera.CurrentScrollPosition.Y;
 
-                if (!_mapView.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)) || !_auraGlow.TryGetGlow(mapNodeX, mapNodeY, currentMapLayer, out var glowColor, out var totalStrength))
+                if (!_mapView.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)) || !_auraGlow.TryGetGlow(mapNodeX, mapNodeY, currentMapLayer, out var glowColor, out var totalPower))
                 {
                     continue;
                 }
 
                 var tileOrigin = new Vector2(columnIndex * _camera.CurrentTileSize.X, rowIndex * _camera.CurrentTileSize.Y) - pixelOffset;
                 var destination = new Rectangle((int)tileOrigin.X, (int)tileOrigin.Y, _camera.CurrentTileSize.X, _camera.CurrentTileSize.Y);
-                var glowFactor = Math.Min(totalStrength, FullGlowStrength) / (float)FullGlowStrength;
+                var glowFactor = Math.Min(totalPower, FullGlowPower) / (float)FullGlowPower;
                 spriteBatch.Draw(unitRectangle, destination, glowColor * glowFactor * GlowOpacityMultiplier);
             }
         }
@@ -484,12 +484,12 @@ public sealed class MapWindow : Window
     /// Once a Delayed ability is actually queued, Disarm already clears TargetableTiles (there's
     /// nothing left to aim), but the player benefits from still seeing exactly which tiles are
     /// about to be hit once the windup ends -- so this falls back to highlighting
-    /// ActionTargetingController.PendingDelayedActionTargetTiles (the already-resolved,
+    /// ActionTargetingController.PendingWindupTargetTiles (the already-resolved,
     /// locked-in footprint) in the same dark green used for a confirmed hover target, for as long
     /// as that pending action exists. Separately (and unconditionally, every frame, regardless of
     /// the player's own armed/pending state above), every OTHER entity's own in-flight Delayed
     /// windup is telegraphed too, in red or yellow depending on whether it's Dodgeable -- see
-    /// CombatTargetPalette and ActionTargetingController.AllPendingDelayedActionTargets. This is
+    /// CombatTargetPalette and ActionTargetingController.AllPendingWindupTargets. This is
     /// the "delayed actions keep the target shape drawn on the map... until they activate" half of
     /// Combat Overhaul: Dodge (TODO.md).
     /// </summary>
@@ -511,7 +511,7 @@ public sealed class MapWindow : Window
                 }
             }
         }
-        else if (_actionTargeting.PendingDelayedActionTargetTiles is { } pendingTargetTiles)
+        else if (_actionTargeting.PendingWindupTargetTiles is { } pendingTargetTiles)
         {
             var fillFraction = _mapView.GetChargeFraction(_mapView.PlayerEntityId);
             foreach (var tile in pendingTargetTiles)
@@ -523,9 +523,9 @@ public sealed class MapWindow : Window
         // Every OTHER entity's own Delayed-action telegraph -- red (undodgeable) or yellow
         // (Dodgeable), per Combat Overhaul: Dodge. The player's own is already drawn above (dark
         // green, "player target"), so it's skipped here to avoid drawing it twice.
-        // AllPendingDelayedActionTargets itself already scopes this to Local processing tier (see
+        // AllPendingWindupTargets itself already scopes this to Local processing tier (see
         // that method's own doc comment) -- MapWindow doesn't need its own second tier check here.
-        foreach (var (entityId, targetTiles, isDodgeable) in _actionTargeting.AllPendingDelayedActionTargets())
+        foreach (var (entityId, targetTiles, isDodgeable) in _actionTargeting.AllPendingWindupTargets())
         {
             if (entityId == _mapView.PlayerEntityId)
             {
@@ -992,7 +992,7 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>
-    /// While entityId is mid-windup on a Delayed action (PendingDelayedActionComponent), draws
+    /// While entityId is mid-windup on a Delayed action (PendingWindupComponent), draws
     /// that action's own sprite/glyph as a small badge centered above its footprint -- "put that
     /// action/item's sprite as a badge above their sprite on the map" (Combat Overhaul: Dodge,
     /// TODO.md). Positioned a full badge-height above footprintTopLeft.Y (not flush with it) so it

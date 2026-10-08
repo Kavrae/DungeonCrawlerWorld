@@ -31,6 +31,10 @@ public sealed class CoreItemsModule : IGameModule
         WandOfFireball.Build,
         ImmunityTestPotion.Build,
         ResistanceTestPotion.Build,
+        ModifierTestPotions.BuildPlenty,
+        ModifierTestPotions.BuildThrift,
+        ModifierTestPotions.BuildVenom,
+        ModifierTestPotions.BuildRadiance,
     ];
 
     public void Configure(GameModuleContext context)

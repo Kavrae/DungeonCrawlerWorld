@@ -54,7 +54,8 @@ public sealed class PoisonModule : IGameModule
             (entityId, count, source, now, announcesRefusal) => PoisonEffects.ApplyStacks(componentManager, entityKeys, entityId, count, source, AuraDurationTicks, now, eventBus, playerQuery, announcesRefusal)));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph,
             timers,
-            static (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));
+            static (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames,
+            static poison => poison.Source));
     }
 
     public void RegisterComponents(ComponentRegistration registration)

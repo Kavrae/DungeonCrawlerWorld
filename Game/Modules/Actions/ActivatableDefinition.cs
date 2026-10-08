@@ -20,6 +20,8 @@ namespace Game.Modules.Actions;
 /// Tags holds the tags a definition declares plus whatever its activator implies (see
 /// IActionActivator.ImpliedTags): ActionDefinition and ItemDefinition add those at construction. A
 /// with-expression that swaps the activator for another kind therefore keeps the old kind's implied tags.
+/// Toggle makes the definition a toggle, whatever its activator: the activator still says how it is
+/// triggered, and Effects become what is held while it is on (see ToggleSpec).
 /// </remarks>
 public abstract record ActivatableDefinition(
     Guid Id,
@@ -30,4 +32,15 @@ public abstract record ActivatableDefinition(
     GameplayTagSet Tags,
     IReadOnlyList<Effect> Effects,
     string Description = "",
-    string Summary = "");
+    string Summary = "",
+    ToggleSpec? Toggle = null)
+{
+    /// <summary>What using this does to whoever uses it, applied before anything else it does: a cost (ManaDrain), or anything else an effect can do to the user.</summary>
+    /// <remarks>
+    /// Asked first and all or nothing (ActivationEffectsApplier): a use whose activation effects can't all be
+    /// applied is blocked, with the first refusal's reason as the blocker. Applied with source and target both
+    /// the user when the use goes ahead -- a Delayed one's when its windup starts, and never given back if it is
+    /// cancelled. Turning a toggle off is not a use: it takes nothing.
+    /// </remarks>
+    public IReadOnlyList<Effect> ActivationEffects { get; init; } = [];
+}

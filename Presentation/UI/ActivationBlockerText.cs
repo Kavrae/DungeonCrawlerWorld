@@ -16,6 +16,9 @@ public static class ActivationBlockerText
         ActivationBlocker.NotActivatable => "Can't be activated",
         ActivationBlocker.MeleeDisabled => "No usable arms or hands",
         ActivationBlocker.NotEnoughMana => "Not enough mana",
+        ActivationBlocker.NoManaPool => "Needs mana",
+        ActivationBlocker.NoHealth => "Needs health",
+        ActivationBlocker.NotEnoughHealth => "Not enough health",
         _ => string.Empty,
     };
 

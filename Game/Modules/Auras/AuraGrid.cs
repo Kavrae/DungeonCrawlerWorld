@@ -4,17 +4,14 @@ using Game.World;
 namespace Game.Modules.Auras;
 
 /// <summary>
-/// Precomputed per-cell, per-aura total strength across the whole map -- a sparse index for every
-/// aura at once.
+/// Precomputed per-cell, per-aura total power across the whole map, for every aura at once.
 ///
 /// Kept in sync incrementally as sources are added and removed (AddSource/RemoveSource), each
-/// scattering or unscattering its falloff.
+/// scattering or unscattering its value at each distance (AuraFalloff).
 ///
-/// One NeighborhoodCells per aura, indexed by the aura's id, so a lookup is an array read plus a
-/// per-neighborhood dictionary lookup, and a neighborhood's totals can be dropped with it. Beside
-/// them, one bit per cell says whether any aura reaches it at all (IsCovered): most cells are in no
-/// aura, and most questions are asked of those, so the common answer costs an array read instead
-/// of a hash lookup per aura.
+/// The totals are AuraTotals' dense chunks. Beside them, one bit per cell says whether any aura
+/// reaches it at all (IsCovered): most cells are in no aura, and most questions are asked of those,
+/// so the common answer costs one read instead of one per aura.
 ///
 /// Uses Manhattan distance (diamond-shaped falloff).
 /// </summary>
@@ -29,8 +26,7 @@ public sealed class AuraGrid
 {
     private const int Unlimited = int.MaxValue;
 
-    private readonly NeighborhoodCells<int>?[] _totalStrengthByAuraId = new NeighborhoodCells<int>?[byte.MaxValue + 1];
-    private readonly List<byte> _auraIdsWithTotals = [];
+    private readonly AuraTotals _totals;
     private readonly NeighborhoodBits _coveredCells;
     private readonly IMapQuery _map;
 
@@ -38,6 +34,7 @@ public sealed class AuraGrid
     public AuraGrid(IMapQuery map)
     {
         _map = map;
+        _totals = new AuraTotals(map.Bounds.Depth);
         _coveredCells = new NeighborhoodBits(map.Bounds.Depth);
     }
 
@@ -45,59 +42,56 @@ public sealed class AuraGrid
     private MapBounds ReachLimits =>
         _map.IsBounded ? _map.Bounds : new MapBounds(-Unlimited, -Unlimited, Unlimited, Unlimited, _map.Bounds.Depth);
 
-    /// <summary>Whether any aura reaches position. False means GetTotalStrengthAt is zero there for every aura.</summary>
+    /// <summary>Chunks of totals in use, across every aura.</summary>
+    public int TotalsChunkCount => _totals.ChunkCount;
+
+    /// <summary>Bytes the totals hold, in use or kept for reuse.</summary>
+    public long TotalsAllocatedBytes => _totals.AllocatedBytes;
+
+    /// <summary>Whether any aura reaches position. False means GetTotalPowerAt is zero there for every aura.</summary>
     public bool IsCovered(Vector3Int position) => _coveredCells.IsSet(position);
 
-    public int GetTotalStrengthAt(Vector3Int position, byte auraId) =>
-        _totalStrengthByAuraId[auraId] is { } totals ? totals.GetValueOrDefault(position) : 0;
+    public int GetTotalPowerAt(Vector3Int position, byte auraId) => _totals.Get(position, auraId);
 
-    public void AddSource(Vector3Int sourcePosition, int strength, byte auraId) => Splat(sourcePosition, strength, auraId, sign: 1);
+    public void AddSource(Vector3Int sourcePosition, int power, int size, AuraFalloff falloff, byte auraId) =>
+        Splat(sourcePosition, power, size, falloff, auraId, sign: 1, excludedCenter: null);
 
-    public void RemoveSource(Vector3Int sourcePosition, int strength, byte auraId) => Splat(sourcePosition, strength, auraId, sign: -1);
+    public void RemoveSource(Vector3Int sourcePosition, int power, int size, AuraFalloff falloff, byte auraId) =>
+        Splat(sourcePosition, power, size, falloff, auraId, sign: -1, excludedCenter: null);
 
-    private void Splat(Vector3Int sourcePosition, int strength, byte auraId, int sign)
+    /// <summary>Moves one source's reach from previousPosition to currentPosition.</summary>
+    /// <remarks>
+    /// A None aura is the same value everywhere it reaches, so only the cells that changed sides are
+    /// written: gained at the new position, lost at the old. A Linear one changes value under every
+    /// cell, so both diamonds are written whole. Either way the new reach is added before the old is
+    /// taken out, so a neighborhood the source never left keeps its storage throughout.
+    /// </remarks>
+    public void MoveSource(Vector3Int previousPosition, Vector3Int currentPosition, int power, int size, AuraFalloff falloff, byte auraId)
     {
-        var totals = _totalStrengthByAuraId[auraId];
-        if (totals is null)
-        {
-            totals = new NeighborhoodCells<int>();
-            _totalStrengthByAuraId[auraId] = totals;
-            _auraIdsWithTotals.Add(auraId);
-        }
-
-        DistanceFalloff.ScatterManhattan(sourcePosition, DistanceFalloff.MaxRadius(strength), strength, FalloffShape.Fading, ReachLimits, (cellPosition, contribution) =>
-        {
-            var newTotal = totals.GetValueOrDefault(cellPosition) + sign * contribution;
-
-            // Remove rather than store a zero -- keeps the store's size proportional to cells
-            // actually under some source's influence right now, not to every cell any source has
-            // ever touched.
-            if (newTotal == 0)
-            {
-                totals.Remove(cellPosition);
-                if (!AnyOtherAuraReaches(cellPosition, auraId))
-                {
-                    _coveredCells.Clear(cellPosition);
-                }
-            }
-            else
-            {
-                totals.Set(cellPosition, newTotal);
-                _coveredCells.Set(cellPosition);
-            }
-        });
+        var writesChangedSidesOnly = falloff == AuraFalloff.None;
+        Splat(currentPosition, power, size, falloff, auraId, sign: 1, excludedCenter: writesChangedSidesOnly ? previousPosition : null);
+        Splat(previousPosition, power, size, falloff, auraId, sign: -1, excludedCenter: writesChangedSidesOnly ? currentPosition : null);
     }
 
-    private bool AnyOtherAuraReaches(Vector3Int position, byte exceptAuraId)
-    {
-        foreach (var auraId in _auraIdsWithTotals)
-        {
-            if (auraId != exceptAuraId && _totalStrengthByAuraId[auraId]!.TryGetValue(position, out _))
-            {
-                return true;
-            }
-        }
+    private void Splat(Vector3Int sourcePosition, int power, int size, AuraFalloff falloff, byte auraId, int sign, Vector3Int? excludedCenter) =>
+        ManhattanDiamond.ForEachCellOutside(sourcePosition, size, ReachLimits, excludedCenter,
+            new SplatTarget(this, auraId, sign, power, size, falloff),
+            static (cellPosition, distance, target) =>
+                target.Grid.AddToCell(target.AuraId, cellPosition, target.Sign * target.Falloff.ValueAt(target.Power, target.Size, distance)));
 
-        return false;
+    /// <summary>What one splat writes into: the aura, the sign its values are added with, and the source's shape.</summary>
+    private readonly record struct SplatTarget(AuraGrid Grid, byte AuraId, int Sign, int Power, int Size, AuraFalloff Falloff);
+
+    private void AddToCell(byte auraId, Vector3Int cellPosition, int signedContribution)
+    {
+        switch (_totals.Add(cellPosition, auraId, signedContribution))
+        {
+            case AuraTotals.CellChange.BecameNonZero:
+                _coveredCells.Set(cellPosition);
+                break;
+            case AuraTotals.CellChange.BecameZero when !_totals.AnyOtherAuraHas(cellPosition, auraId):
+                _coveredCells.Clear(cellPosition);
+                break;
+        }
     }
 }

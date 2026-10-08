@@ -20,7 +20,7 @@ public static class PowerAttackAction
         Tags: [GameTags.DeliveryMelee, GameTags.ActionAttack, GameTags.StatsAbilityScoreStrength, GameTags.TraitDodgeable, GameTags.TraitStaggering],
         Effects: [new Effect([new DirectDamage(MinFlatDamage: 36, MaxFlatDamage: 44)])],
         Activator: new DirectAction(
-            new TargetingSpec(TargetShape.Adjacent, Range: 0),
+            new TargetingSpec(TargetShape.Adjacent, Range: 0, Modes: TargetingModes.GroundOnly),
             new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: WindupFrames, CooldownFrames: null)),
         Description: "A heavy, telegraphed strike -- a visible windup gives the target a real chance to Dodge before it lands, in exchange for far more damage than a Quick Attack. A hit staggers the target, interrupting any attack they are winding up.",
         Summary: "Slow, heavy, dodgeable melee attack");

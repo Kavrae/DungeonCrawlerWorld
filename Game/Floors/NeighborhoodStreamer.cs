@@ -554,7 +554,7 @@ public sealed class NeighborhoodStreamer : ISystem
                         continue;
                     }
 
-                    foreach (var entityId in _world.GetOccupantEntityIdsAt(new Vector3Int(x, y, z)))
+                    foreach (var entityId in _world.GetOccupantEntityIdSpanAt(new Vector3Int(x, y, z)))
                     {
                         _straddlingEntityIds.Add(entityId);
                     }

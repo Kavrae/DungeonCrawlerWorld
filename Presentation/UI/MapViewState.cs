@@ -37,6 +37,9 @@ public sealed class MapViewState
     /// <summary>See ArmedActionId/ArmedItemStackInstanceId -- shared regardless of which of the two is actually armed.</summary>
     public HotkeySlot? ArmedSlot;
 
+    /// <summary>The player's targeting mode for every activation that offers one: Target (default) marks the entity on the confirmed tile, Ground aims at the tile. Switched with Left Alt (TargetingModeSwitch), kept for the session and not saved yet.</summary>
+    public TargetingMode TargetingMode = TargetingMode.Target;
+
     /// <summary>The hotbar slot currently under the cursor, once HotbarController's hover tracking
     /// has held on the same bound slot for at least HudChrome.HoverTooltipDelayFrames -- null the
     /// instant the cursor moves off that slot (no delay on hiding, only on showing). Takes priority

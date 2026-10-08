@@ -36,6 +36,7 @@ public sealed class DeathSystemTests
         public MapBounds Bounds { get; } = new(0, 0, 100, 100, 1);
         public bool IsOnMap(Vector3Int position) => true;
         public int GetEntityIdAt(Vector3Int position) => -1;
+        public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) => [];
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) { }
 
         public void SetBlocking(int entityId) => _blockingEntityIds.Add(entityId);
@@ -174,7 +175,7 @@ public sealed class DeathSystemTests
         Assert.AreEqual(12345, deadEntities.GetReadonly(0).DiedAtFrame);
     }
 
-    /// <summary>The corpse-radiates-forever gap this AuraSourceEffects.RemoveAll wiring closes -- a corpse persists indefinitely (see this class's own doc comments above), so a source active at death time must be explicitly retracted here, not left for something else to eventually notice.</summary>
+    /// <summary>A corpse persists indefinitely, so a source no toggle holds (a blueprint's, a timed grant's) is retracted at death rather than radiating from it for good.</summary>
     [TestMethod]
     public void EntityDied_HasActiveAuraSource_RetractsItAndPublishesRemoved()
     {
@@ -185,7 +186,7 @@ public sealed class DeathSystemTests
         var mapQuery = new FakeMapQuery();
         var eventBus = new EventBus();
         var auraSources = CreateAuraSourcePool();
-        var source = new AuraSourceComponent(TestAuras.PoisonId, strength: 5);
+        var source = new AuraSourceComponent(TestAuras.PoisonId, power: 5, size: 2);
         auraSources.Add(0, source);
 
         var system = TestSystems.DeathSystem(deadEntities, nonBlockingEntities, transforms, entityMoveSync, mapQuery, eventBus, auraSources);
@@ -202,4 +203,22 @@ public sealed class DeathSystemTests
         Assert.AreEqual(source, published.Value.Source);
     }
 
+    /// <summary>A source a toggle holds is the toggle's to end: a lit item keeps working on its holder's corpse.</summary>
+    [TestMethod]
+    public void EntityDied_HeldAuraSource_IsLeftInPlace()
+    {
+        var deadEntities = CreateDeadPool();
+        var eventBus = new EventBus();
+        var auraSources = CreateAuraSourcePool();
+        auraSources.Add(0, new AuraSourceComponent(TestAuras.PoisonId, power: 5, size: 2));
+        auraSources.Add(0, new AuraSourceComponent(TestAuras.PoisonId, power: 16, size: 4, heldGrantKey: 4));
+
+        TestSystems.DeathSystem(deadEntities, CreateNonBlockingPool(), CreateTransformPool(), new RecordingEntityMoveSync(), new FakeMapQuery(), eventBus, auraSources);
+
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
+        eventBus.DispatchBuffered<EntityDiedEvent>();
+
+        Assert.AreEqual(1, auraSources.CountForEntity(0));
+        Assert.AreEqual(4u, auraSources.GetReadonlyByDenseIndex(auraSources.GetFirstDenseIndex(0)).HeldGrantKey);
+    }
 }

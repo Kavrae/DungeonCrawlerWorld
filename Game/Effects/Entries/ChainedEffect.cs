@@ -1,3 +1,5 @@
+using Game.Modules.StatModifiers;
+
 
 namespace Game.Effects.Entries;
 
@@ -13,11 +15,17 @@ public sealed record ChainedEffect(float TriggerChance, IReadOnlyList<Effect> Tr
 {
     public const byte MaxChainDepth = 5;
 
+    private static readonly (StatModifierTarget, StatModifierTarget)[] Modifiers = [(StatModifierTarget.OutgoingProcChance, StatModifierTarget.IncomingProcChance)];
+
     public IReadOnlyList<Effect> NestedEffects => TriggeredEffects;
 
+    public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => Modifiers;
+
+    /// <remarks>TriggerChance is scaled by Outgoing/IncomingProcChance (EffectModifiers) before it is rolled.</remarks>
     public EffectOutcome Apply(in EffectContext context)
     {
-        if (context.ChainDepth >= MaxChainDepth || context.Services.MathUtility.NextDouble() >= TriggerChance)
+        if (context.ChainDepth >= MaxChainDepth ||
+            context.Services.MathUtility.NextDouble() >= EffectModifiers.Scale(in context, TriggerChance, StatModifierTarget.OutgoingProcChance, StatModifierTarget.IncomingProcChance))
         {
             return EffectOutcome.NoEffect;
         }

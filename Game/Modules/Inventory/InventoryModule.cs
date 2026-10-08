@@ -2,6 +2,7 @@ using Engine.Modules;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
+using Game.Modules.Actions.Components;
 using Game.Modules.BodyPartEffects;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core;
@@ -39,7 +40,7 @@ public sealed class InventoryModule : IGameModule
         componentManager.RegisterPackedPool<InventoryDisabledComponent>(
             static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled, initialCapacity: 16);
 
-        componentManager.RegisterPackedPool<PendingConsumableActivationComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PendingItemActivationComponent>(static (ref existing, incoming) => existing = incoming);
 
         // Player-only in practice (see MaxStackSizeComponent's own doc comment) -- Packed for the same reason InventoryDisabledComponent above is.
         componentManager.RegisterPackedPool<MaxStackSizeComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 2);
@@ -56,8 +57,8 @@ public sealed class InventoryModule : IGameModule
         var systemManager = registration.SystemManager;
         var componentManager = registration.ComponentManager;
 
-        systemManager.Register(new ConsumableActivationSystem(
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
+        systemManager.Register(new ItemActivationSystem(
+            componentManager.GetPackedPool<PendingItemActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PotionCooldownComponent>(),
             context.EffectServices,
@@ -66,6 +67,20 @@ public sealed class InventoryModule : IGameModule
             context.MapQuery,
             componentManager.GetPackedPool<MeleeDisabledComponent>(),
             componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
-            new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>())));
+            new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>()),
+            context.Toggles,
+            componentManager.GetPackedPool<PendingWindupComponent>(),
+            context.TargetResolution));
+
+        var toggleItemHolderSync = new ToggleItemHolderSync(
+            componentManager.GetMultiPool<InventoryItemStackComponent>(),
+            componentManager.GetMultiPool<ActiveToggleComponent>(),
+            context.Toggles,
+            context.Items,
+            context.EntityManager,
+            context.SimulationClock,
+            componentManager);
+        context.Toggles.RegisterOwner(ActivatableKind.Item, toggleItemHolderSync);
+        context.WindupResolvers.RegisterItemResolver(new ToggleItemWindupResolver(componentManager, context.Items));
     }
 }

@@ -29,7 +29,7 @@ public static class ScrollOfHealing
         Summary: $"Heal target(s) by {HealAmount:P0}.",
         GoldValue: 11,
         Activator: new ScrollActivator(
-            new TargetingSpec(Shape: TargetShape.Adjacent | TargetShape.Self, Range: 0),
+            new TargetingSpec(Shape: TargetShape.Adjacent | TargetShape.Self, Range: 0, Modes: TargetingModes.GroundOnly),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null),
             SpellId: HealAction.Id));
 }

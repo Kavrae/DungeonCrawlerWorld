@@ -1,6 +1,7 @@
 using Engine.ECS.Systems;
 using Engine.Tags;
 using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops;
@@ -512,7 +513,7 @@ public sealed class InventoryGridContent(
         // Charges only makes sense for one specific physical stack -- a merged cell could be
         // averaging over several different charge counts, so it's suppressed there entirely
         // rather than showing a misleading single number.
-        var summary = ItemHoverSummary.For(definition, showCharges: isSingleStack);
+        var summary = ItemHoverSummary.For(definition, showCharges: isSingleStack, inventoryServices.GameplayTags);
 
         var rows = ComputeHoverRows(definition, stackQuantity);
         var blocker = candidate.StackInstanceId is { } blockedStackInstanceId && entityId == world.PlayerEntityId && definition.Activator is not null
@@ -736,14 +737,37 @@ public sealed class InventoryGridContent(
         }
     }
 
-    /// <summary>The actual Activate attempt, shared by "Activate" (BuildItemContextMenu) and a confirmed double-click (OnCellDoubleClicked) -- a no-op, not a fallback to the single-click action, if the item can't be activated, the global cooldown is still up, or the player can't use it right now (see CanActivate/IsPlayerActionLocked/IsBlocked).</summary>
+    /// <summary>The actual Activate attempt, shared by "Activate" (BuildItemContextMenu) and a confirmed double-click (OnCellDoubleClicked) -- a no-op, not a fallback to the single-click action, if the item can't be activated, the global cooldown is still up and holds it, or the player can't use it right now (see CanActivate/IsHeldByActionLock/IsBlocked).</summary>
     private void TryActivate(int cellEntityId, uint stackInstanceId)
     {
-        if (CanActivate(cellEntityId, stackInstanceId) && !IsPlayerActionLocked() && !IsBlocked(stackInstanceId))
+        if (CanActivate(cellEntityId, stackInstanceId) && !IsHeldByActionLock(stackInstanceId) && !IsBlocked(stackInstanceId))
         {
             onActivateRequested(cellEntityId, stackInstanceId);
         }
     }
+
+    /// <summary>Whether the action lock is what stops the player activating this stack now: it is up, and the stack's item isn't FreeCast (which ignores it).</summary>
+    private bool IsHeldByActionLock(uint stackInstanceId) =>
+        IsPlayerActionLocked() &&
+        !(TryGetPlayerItem(stackInstanceId, out var item) && item.Activator?.Timing.Category == ActionTimingCategory.FreeCast);
+
+    private bool TryGetPlayerItem(uint stackInstanceId, out ItemDefinition item)
+    {
+        if (_inventoryView.TryGetStack(world.PlayerEntityId, stackInstanceId, out var stack) &&
+            InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out item))
+        {
+            return true;
+        }
+
+        item = null!;
+        return false;
+    }
+
+    /// <summary>What activating this stack is called: "Turn on" or "Turn off" for a toggle item, by whether the unit is lit, and "Activate" for anything else.</summary>
+    private string ActivateLabel(uint stackInstanceId) =>
+        TryGetPlayerItem(stackInstanceId, out var item) && item.Activator is ToggleItemActivator toggleActivator
+            ? toggleActivator.IsToggledOn ? "Turn off" : "Turn on"
+            : "Activate";
 
     /// <summary>
     /// Player-owned, non-Merged-Stack, and the effective ItemDefinition carries an IActionActivator
@@ -773,8 +797,9 @@ public sealed class InventoryGridContent(
     /// <summary>
     /// "Activate" (arms the item exactly as an ordinary hotbar press would -- see
     /// ActionTargetingController.ArmItemFromStack -- and closes this window; shown whenever
-    /// CanActivate is true, but disabled rather than omitted while IsPlayerActionLocked, so the
-    /// player can see it exists and why it's currently unavailable; placed first, before Compare),
+    /// CanActivate is true, but disabled rather than omitted while IsHeldByActionLock, so the
+    /// player can see it exists and why it's currently unavailable; placed first, before Compare;
+    /// reads "Turn on"/"Turn off" for a toggle item, which is queued at once and closes nothing),
     /// "Compare" (arms Item Details Comparison against this stack -- see ItemComparisonController.
     /// Arm), "Add to trade" (this grid's own entity -> the matching trade-offer entity, only while a
     /// shop -- and so a trade window -- is open, see below), plus "Give"/"Sell All" (this grid's own
@@ -808,7 +833,7 @@ public sealed class InventoryGridContent(
 
         if (CanActivate(cell.EntityId, stackInstanceId))
         {
-            options.Add(new ContextMenuOption("Activate", null, Enabled: !IsPlayerActionLocked() && !IsBlocked(stackInstanceId), () => onActivateRequested(cell.EntityId, stackInstanceId)));
+            options.Add(new ContextMenuOption(ActivateLabel(stackInstanceId), null, Enabled: !IsHeldByActionLock(stackInstanceId) && !IsBlocked(stackInstanceId), () => onActivateRequested(cell.EntityId, stackInstanceId)));
         }
 
         options.Add(new ContextMenuOption("Compare", null, Enabled: true, () => onCompareRequested(cell.EntityId, stackInstanceId)));
@@ -1015,6 +1040,7 @@ public sealed class InventoryGridContent(
                     : elementPoolService.CreateElement<InventoryItemStackCell>(_hostWindow, options);
 
             cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Definition.SpriteTint, entry.Quantity, entry.IsDisabled, entry.IsDivergent, entry.MergedStackBadgeVisible, entry.Definition.CanTrade, ItemHotkeyBindingQueries.CanBind(entry.Definition), cellSize);
+            cell.IsToggledOn = entry.StackInstanceId is not null && ToggleText.IsLit(entry.Definition);
 
             if (cell is ShopItemStackCell shopCell)
             {
@@ -1215,8 +1241,35 @@ public sealed class InventoryGridContent(
             indices.Add(i);
         }
 
-        foreach (var (itemId, indices) in _reusableGroupIndices)
+        foreach (var (itemId, allIndices) in _reusableGroupIndices)
         {
+            var indices = allIndices;
+
+            // A lit toggle item never joins a Merged Stack cell: it keeps a cell of its own, so it
+            // is visible and can be clicked to turn it off. An expanded group shows every member
+            // anyway, lit ones included.
+            if (itemId != _expandedItemDefinitionId && allIndices.Count > 1 && allIndices.Exists(index => ToggleText.IsLit(_reusableVisibleEntries[index].Definition)))
+            {
+                indices = [];
+                foreach (var index in allIndices)
+                {
+                    var (stack, definition) = _reusableVisibleEntries[index];
+                    if (ToggleText.IsLit(definition))
+                    {
+                        _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.AcquiredSequence, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
+                    }
+                    else
+                    {
+                        indices.Add(index);
+                    }
+                }
+
+                if (indices.Count == 0)
+                {
+                    continue;
+                }
+            }
+
             if (indices.Count == 1)
             {
                 var (stack, definition) = _reusableVisibleEntries[indices[0]];

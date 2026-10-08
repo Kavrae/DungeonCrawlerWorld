@@ -10,6 +10,7 @@ All delayed actions keep the target shape drawn on the map (so enemies show thei
 While an entity is charging an action/item, put that action/item's sprite as a badge above their sprite on the map.
 This allows FreeCast actions like dodge, block, parry, counterspell, etc to have a purpose and timing.
 This makes combat slower and more deliberate instead of spamming actions. Shifting to more of a 2d souls-like game
+The windup path now carries items as well as actions (`PendingWindupComponent` with `Kind` Item, started by `Windups.Begin`, resolved through `WindupResolvers`), so making a potion, scroll or wand Delayed is its timing plus a resolver that applies it: today's item resolver (`ToggleItemWindupResolver`) only lights toggle items, and `ItemActivationSystem` only winds up a toggle.
 Lower enemy count to make this more deliberate and punishing combat style work.
 Give every entity three default core actions. QuickAttack, PowerAttack, and Dodge.
 	QuickAttack is an immediate adjacent-target action (so can't be dodged) with low damage. No cooldown besides global. This replaces Punch, defaulting to the R key.
@@ -24,7 +25,7 @@ Stances: a set of toggle actions that boost one specialty while weakening anothe
 Add a visual element to toggle actions/items to indicate when they're toggled on. Compare a rotating inner-fade glow to industry standard.
 Stance 1 = Power Stance = Lower charge up times for delay actions in exchange for longer global cooldowns.
 Stance 2 = Mage Stance = Improved magic effects at the cost of melee. 
-Should toggle be a separate activator type or a different part of an action? Items (torch), spells (buff aura), and direct actions (stances) can all have toggles with various effects that can be manually activated and deactivated by the owning entity.
+Stances wait on a reversible `StatModifierGrant`: a toggle may only hold what it can take back when it is switched off (`ToggleContentValidation`), and a permanent stat modifier can't be yet.
 
 # Long-Term TODOs
 
@@ -125,8 +126,8 @@ Every link from one entity to another is a one-way `EntityKey` in a component (`
 entity the source of", "what's in this container") without a scan or a hand-kept index. Cleanup is by
 hand too: `GameBootstrapper` clears aura sources, map footprint and tier membership at
 `EntityDestroying`, and each new link needs its own line there. Planned features add many links:
-equipment and its wearer, container contents, companions and their leader, Torch V2's "attach to a
-specific other entity", claimed spots ("Spatial queries for NPC decisions", Game), an NPC's current
+equipment and its wearer, container contents, companions and their leader, an aura anchor and its
+owner (`AuraAnchors`, already wired), claimed spots ("Spatial queries for NPC decisions", Game), an NPC's current
 target, a pet's bonded player ("Entity storage", Global).
 - **A relationship is a pair of component types:** the source side (on the item: "equipped by X") is
   the one code writes; the target side (on the wearer: "items equipped") is maintained by the engine
@@ -373,6 +374,42 @@ primitive. Companion to the Game/Presentation equipment items below.
 
 ### High Priority
 
+#### Attribute effects to the action or item that applied them
+
+An effect from an action or item is credited to the entity that used it and nothing else
+(`ActionSource.FromEntity`). So a Draught of Thrift's buff shows "Player1 (crawler #)" as its source
+in the Health window's hover popup, and a poison from Toxic Strike reads the same as one from a
+Toxic Potion. Name the action or item as well: "Draught of Thrift (Player1)".
+- **Every recorded source:** stat modifiers, status effect timers (poison, burning, body-part
+  burning), immunities, `DeadComponent.KilledBy` and the floating-text/activity log lines read the same
+  `ActionSource`, so all of them gain it at once.
+- **Storage stays 8 bytes** (`ActionSource`'s remarks: a 16-byte source made BurningSystem ~50%
+  slower). The entity's 24-bit detail is already an interned handle (`EntityIdentities`), so intern
+  (identity, cause) pairs instead of identities alone, rather than widening the struct. Interning per
+  use would be per application -- intern per (entity, action or item) once, on first use.
+- **Where it is set:** whoever builds the `EffectContext` for an action or item activation
+  (`ActionEffectResolver`, the item activators, `Toggles` for held and periodic effects) knows the
+  definition; terrain, auras and admin keep their own kinds. An aura an anchor places credits its
+  placer today (`AuraSystem.AttributionOf`); it could name the action that placed it the same way.
+- **Display:** `ActionSourceNaming.Describe` prints "{cause} ({entity})" for an entity source with a
+  cause, the entity alone without one.
+
+#### AOE vs targeted melee attacks (experimental)
+
+Every melee attack today is an Adjacent ring (`QuickAttackAction`, `PowerAttackAction`): it hits
+everyone around the attacker, and an NPC queues the whole ring (`TestCombatBehaviorSystem`). Try
+splitting melee into two kinds and see whether it plays better:
+- **Targeted melee:** one adjacent tile, chosen like Dodge's (`TargetShape.SingleTarget`, Range 1,
+  `DistanceMetric.Chebyshev`) -- a stab or a jab that only hits who it's aimed at.
+- **AOE melee:** the Adjacent ring as now, or a Cone -- a sweep or a cleave, usually slower or
+  weaker per target.
+- Melee stays Ground only (`TargetingModes.GroundOnly`, enforced by `TargetingContentValidation`):
+  a targeted melee aims at a tile, not an entity that could step away.
+- Which of QuickAttack/PowerAttack becomes which, and whether NPCs pick the target tile (the
+  adjacent hostile) or keep swinging the ring.
+Separate from the rest of the melee work because it is an experiment: if it doesn't feel better in
+play, revert to the all-ring melee.
+
 #### ProcessingTierResolver.PromotionsHeld set after the session is assembled
 
 `ProcessingTierResolver.PromotionsHeld` is a settable `Func<bool>?`. `WorldSessionBootstrapper` sets
@@ -577,23 +614,12 @@ doesn't exist yet) plus an actual "use" action.
 
 - Scroll of Torch's light aura (`ScrollOfTorch.Aura`) is glow-only -- its `AuraDefinition` has no effects.
   Needs a real effect (fog-of-war reveal, light-weakness damage). Also worth
-  reconsidering once fog of war lands: today's grant is per-*entity*; a light source reads more
-  naturally anchored to a *location* (see Torch V2 below). The per-tile light level in "Field of view
+  reconsidering once fog of war lands: a Torch now lights the entity it is read at, or anchors on the
+  tile read at (`AuraAnchors`). The per-tile light level in "Field of view
   and perception" (High, above) is where the reveal belongs: a Torch writes light into tiles, fog of war
   and NPC sight read it, and light-weakness damage checks the light level on the victim's tile.
 - `ScrollMasteryEffects.MasteryThreshold` (flat 200) and a synthesized spell's placeholder `ManaCost: 0`
   should scale with the effect's power. Blocked on Action Effects gaining a power-scaling concept.
-
-#### Torch V2 -- selectable attachment mode
-
-`AuraSourceGrant` always targets `context.TargetEntityId`. Three modes worth making selectable:
-- **Follow the caster** -- already works via a Self-shaped `TargetingSpec`, no code change.
-- **Fixed at a location** -- needs a minimal stationary prop entity (Transform + AuraSourceComponent,
-  no creature identity, cf. `Lava`), despawned on expiry.
-- **Attach to a specific other entity** (companion/pet) -- not expressible today; needs a new
-  `TargetShape` or an explicit target-override on the entry.
-
-Design as one shared "attachment mode" concept reusable by any future aura-granting effect.
 
 #### Experience module
 
@@ -772,25 +798,74 @@ a "blocks sight" and "blocks light" flag on `TerrainDefinition` (beside `BlocksM
 
 ### Medium Priority
 
-#### Aura source moves -- scan and allocation cost
+#### Dropping items on the ground
 
-Every time an entity's aura sources are resynced into the `AuraField` (`AuraSystem.ResyncSourceIfStale`:
-a Local source on each move, others from the deferred queue) the system re-evaluates exposures around
-where the source was and starts them around where it is. Found in the code review of the aura change
-and left for later:
+Let the player put items down on the map, and pick them up again. Besides being expected, it is how
+a light is set down: a carried light item stays lit in a dropped pile and radiates from it
+(`ToggleItemHolderSync` already lets any holder, on the map or not, alive or dead, hold a lit unit),
+which replaces using Ground mode to anchor an item's light. Plan it as one rule set, so every way an
+item leaves an inventory treats it the same.
 
-- **Scan size:** both scans cover `(2 * AuraField.MaxScanRadius + 1)^2` cells, and `MaxScanRadius` is
-  the reach of the strongest source the field has ever held. Scan by the reach of the source that
-  moved instead.
-- **Occupant enumeration:** the scans `foreach` over `IMapQuery.GetOccupantEntityIdsAt`, an
-  `IReadOnlyList<int>`, which boxes an enumerator for every occupied cell (40 bytes each). `Map` has a
-  span form (`GetOccupantEntityIdSpanAt`) the draw path already uses; it isn't on `IMapQuery`.
-- **Closures:** `ResyncSourceIfStale` passes two lambdas capturing `this` to
-  `SourceSplatting.ResyncEntity`, and `AuraGrid.Splat` passes a capturing lambda to
-  `DistanceFalloff.ScatterManhattan`, whose allocation-free `TState` overload is unused here.
+**What a drop is**
+- An item pile: an entity on the dropper's tile (a blueprint like `TreasureChest`, but non-blocking,
+  with no health and no `ContainerComponent` destruction), holding ordinary `InventoryItemStackComponent`s.
+  One pile per tile and layer: dropping where a pile already is adds to it. It shows the loot bag badge
+  (`MapViewQuery`'s `LootBagState`) and opens in the loot window, where Take/Take All pick items up, as
+  for a corpse or a chest. An empty pile is destroyed.
+- The moved unit keeps everything that is the unit's: a diverged stack's `Override` (a wand's
+  charges), its lit state (`ToggleItemActivator.IsToggledOn`), `FirstAcquired`. A lit stack never
+  joins a Merged Stack cell, here as anywhere. Moving goes through the existing transfer path
+  (`InventoryActions`), never a new one, so `ToggleItemHolderSync` (lit units) and
+  `ItemHotkeyBindingActions.RepointAfterUnitMoved` (slots on a stack that is now gone) follow with no
+  caller remembering.
 
-Skipping the scans for a source whose auras have no effects was considered and dropped: effect-less
-auras are expected to be rare (Light is to gain fog-of-war and NPC aggro effects).
+**Where it is offered**
+- Inventory grid context menu: "Drop" (one unit) and "Drop All" (the stack), named like
+  "Give"/"Give All" (`InventoryGridContent`). Offered for the player's own inventory only, not a
+  corpse's, a shop's or a trade offer.
+- Hotbar item slot context menu: "Drop" -- one unit of the stack the slot is bound to, the same unit
+  an activation from that slot would use (`ActivatedFromSlot`). The slot follows the rule
+  `RepointAfterUnitMoved` already applies: it moves with the unit only if the stack it named is gone.
+- Possibly dragging an item out of the inventory onto the map (an `IDragDropResolver`, priority order
+  with Trade/Shop/Plain). Decide whether that is wanted or only the menu.
+
+**Decide**
+- Refused, with the disabled cursor and a reason, while the stack is winding up (`PendingWindupComponent`
+  with Kind Item) or has a pending activation, during a trade, and while dead.
+- What an unloaded neighborhood does to a pile (today every entity in it is destroyed): lose the
+  items, or keep piles in the neighborhood record ("Entity storage", Global).
+- Whether NPCs pick piles up ("Mobs looting corpses") and whether a pile has loot rights like a
+  corpse ("Corpse looting rights based on damage dealt").
+- Currency: a "Drop" on the currency row, or never.
+- Destroying an item outright stays "Destroyed items", not a drop.
+
+#### Fuzzy targeting
+
+Version 2 of "an area effect that attaches to one entity attaches to the entity on its center tile"
+(aura stage 3, `PLAN-aura-stage-3.md`). In Target mode only: prefer the entity on the center tile; if
+the center tile is empty, take an entity on a tile adjacent to it instead, so a slightly missed click
+on a crowd or a large entity still lands on someone. Decide the order among several adjacent
+candidates (the same Blocking, then Tiny, then Phasing priority Target mode uses on one tile is the
+likely start). Ground mode never does this: it is exactly the tiles aimed at.
+
+#### Anchored effects: a maximum distance from the caster
+
+Version 2 of "an anchored effect is cancelled when it is too far from its caster" (aura stage 3).
+Version 1 cancels it only when the neighborhood holding it, or its caster, unloads. Version 2 gives
+each cast an explicit maximum distance, from the action and the caster's modifiers (a new
+`StatModifierTarget`), checked as the caster moves; past it the anchor ends, and a toggle holding it
+switches off, the same as version 1's cancellation. Decide whether the check runs on the caster's
+moves (cheap, exact) or on the anchor's own timer.
+
+#### Spell customization at the time of casting
+
+A spell's numbers chosen as it is cast: Magic Missile picks a strength, with a mana cost that scales
+with it; a light spell picks a radius. Only spells for now. Wands and potions get theirs when they are
+made (crafting), not when used. Needs: a per-spell declaration of what can be chosen and its range,
+how the choice scales the cost, a casting UI (likely a step after arming, or a modifier key with the
+mouse wheel), and the choice carried on the activation request and the windup like the target
+selection is. A light's radius is its aura size (`AuraSourceGrant.Size`); see also
+"Spell leveling".
 
 #### Body part disablement that lasts -- injury states, and thresholds instead of 0 HP
 
@@ -846,10 +921,11 @@ What's known:
   kept per entity, and shift 2 from 9 frames over budget to 0.
 - **Remaining per-creature allocations** (sampled with a `GCAllocationTick` listener): occupant
   `List<int>`s in `MapNeighborhood` (one per occupied cell, new for every loaded neighborhood),
-  `EntityStripeSet`/`TieredEntityStripeSet` dictionary growth, `NeighborhoodCells<int>` aura-grid
-  dictionaries rehashing up to ~22 MB per neighborhood, and `TimerWheel` slot lists.
+  `EntityStripeSet`/`TieredEntityStripeSet` dictionary growth, and `TimerWheel` slot lists.
 - **Per-frame gameplay garbage** in the same window, short-lived but part of every gen-0/gen-1:
-  `EffectContext`, `ManhattanCellVisitor` closures, strings, boxed enumerators.
+  `EffectContext`, strings. The `ManhattanCellVisitor` closures and the boxed enumerators over a
+  cell's occupants and the frame's moves are gone (2026-10-02; steady allocation down 11%, 229.7 to
+  204.2 MB over frames 600-3600), leaving about 68 KB a frame whose sources have not been sampled since.
 - **Tried and worse:** Server GC, and a 256 MB gen-0 budget (55-120 ms pauses). Pre-sizing every
   stripe-set and aura-grid dictionary didn't change the spike frames.
 
@@ -858,10 +934,6 @@ Options to measure:
   recycle an unloaded neighborhood's `MapNeighborhood` (arrays and lists) for the next load.
 - Stripe sets: an entity-indexed location array shared across a tiered set's tiers, instead of five
   dictionaries per set.
-- Aura grids: pre-size a new neighborhood's dictionary from its loaded neighbors' counts, or a dense
-  per-neighborhood array where a grid is dense. A dense array would also cut the aura system's
-  per-move cost: a move inside any aura pays one hash lookup per aura in the field (see "Aura
-  follow-ups", Game).
 - Remove the per-frame allocations above.
 
 Acceptance: no frame over 16.67 ms during either shift of that teleport measurement, other than the
@@ -930,15 +1002,6 @@ Open: the ticket cap and radius (measure the per-bubble cost), whether an area t
 into the dropped ring when the window shifts (probably not: fall back to transit), and how ticket
 cost shows up in the diagnostics engine so it's visible when budgets are tuned.
 
-#### Toggle item activator
-
-`PotionActivator` always consumes a stack per activation -- wrong for a stateful toggle (Toxic Idol's
-Poison aura costs a stack to turn *off* too). Needs a new `IActionActivator` (`ToggleItemActivator`)
-`ConsumableActivationSystem` recognizes and doesn't consume a stack for. Open questions: does the
-effect force-untoggle if the item is dropped/sold/stack empties (mirrors `DeathSystem`'s corpse-aura
-cleanup, one layer up)? Is "toggled on" its own tracked state, or implicit in component existence (only
-works while a toggle item drives exactly one effect kind)? Toxic Idol migrates to this once it lands.
-
 #### Dexterity scaling ActionLockComponent.StandardLockFrames
 
 Flat per-entity today (Goblin 54, Fairy/Ghost 48, Player 20, +Engineer 10%). Lerp
@@ -977,25 +1040,19 @@ can't be used. Update `ContainerDestructionSystem` (and any future container typ
 deleting them outright, once this lands.
 An item with `ItemDefinition.CanTrade` false (a loot box) can never be destroyed or dropped.
 
-#### Add source and target modifier checks for all actions
+#### Item activator behaviour on the activators, not in ItemActivationSystem
 
-Only `DirectDamage` runs both an Outgoing (source) and Incoming (target)
-`StatModifierMath.GetEffectiveValue` pass -- `DirectHeal`/`DirectManaRestore`/`HotkeyExpansionGrant`/
-`StatusEffectGrant`/`ChainedEffect`/`AuraSourceGrant` check neither. Make both checks standard on every
-effect entry's `Apply`, even with no real `StatModifierTarget` consumer yet, so a future buff/equipment
-source can hook in by granting a modifier alone. Calling-convention change, not a new stat.
-
-**Unreal Engine reference:** GAS (Gameplay Ability System) makes this the only path. Every change goes
-through a `UGameplayEffect` spec, and an effect that needs both sides runs a
-`UGameplayEffectExecutionCalculation`, which declares the source and target attributes it captures
-(`DECLARE_ATTRIBUTE_CAPTUREDEF`). Each capture is either a *snapshot* (value when the spec was made,
-e.g. the caster's Strength when the fireball launched) or live (value on application). That choice is
-worth making explicit per effect entry here, since a Delayed action resolves seconds after it was
-cast. Each effect also carries tag requirements (`ApplicationTagRequirements`, source/target tag
-requirements on modifiers), so "only while the target is Burning" is data, not code -- the tag facility
-for that exists (`GameplayTagQuery`, IMPLEMENTATION-NOTES "Gameplay tags"). Damage usually goes through a *meta attribute* (`IncomingDamage`):
-the execution writes a raw number, and one place (`PostGameplayEffectExecute`) applies shields,
-resistances and Health. That corresponds to `HealthDamage.Apply` being the one chokepoint.
+Investigate. `ItemActivationSystem` switches on `item.Activator`'s concrete type and holds each kind's
+rules as private methods: `PeelWandCharge`, `ActivatePotion`/`ApplyPotionToTarget` (cooldown and the
+cooldown-abuse Poison), `ActivateScroll`/`ApplyScrollToTarget` (Intelligence scaling, mastery),
+`ActivateWand`, the toggle branch. A new activator kind -- a mod's included -- means editing the system.
+Look at whether each activator (or a per-kind handler registered by activator type, as `WindupResolvers`
+and `IToggleOwner` are) can own what using it does: how the unit is spent (`RemoveOneUnit`, a charge
+via `MoveOneUnit`, nothing), what gates it (`TryBeginActivation`/`TryBeginWandActivation`, the lock or
+FreeCast), and how its effects are applied per target. The system would keep what every kind shares:
+the request queue, the blocker check, activation effects, the action lock. Decide where the per-kind
+state a handler needs (pools, catalogs, `EffectServices`, the clock) comes from, since activators are
+immutable content records today.
 
 #### Spatial queries for NPC decisions, and a per-NPC blackboard
 
@@ -1017,6 +1074,11 @@ nearest shop that buys potions" or "a corpse I have rights to loot". Add a small
   blackboard today. Anything that must outlive a decision (the current target's `EntityKey`, the
   last-known location from perception, a claimed slot) needs a small per-NPC component rather than
   per-creature objects (the plan's GC point about Caves of Qud's goal stacks).
+- **NPC ranged attacks at any hostile:** the first NPC ranged attack (a Fairy's Magic Missile, aura
+  stage 3) is cast only at the player, because the player is one distance check away; finding the
+  nearest hostile within a spell's range needs an "entities of a kind nearby" query. The same query
+  should pick the NPC's targeting mode (Target or Ground) on purpose -- Ground to catch something
+  walking into a choke point, Target to chase -- instead of the stage-3 coin flip.
 
 **Unreal Engine reference:**
 - *EQS (Environment Query System):* `UEnvQuery` assets made of a generator (`EnvQueryGenerator_SimpleGrid`,
@@ -1159,26 +1221,6 @@ game-over screen, a floor's contents on a floor transition). Bevy has no run-lev
 `UGameInstance`; resources simply persist across states unless removed. Pairs with "Named schedules,
 system sets and run conditions" (Engine), where "in state X" is a run condition.
 
-#### Aura power and aura size as separate values
-
-An aura source has one number, `Strength`: it is the magnitude at the source, it halves per tile of
-Manhattan distance, and so it also fixes the reach (`DistanceFalloff.MaxRadius`). A strong aura is
-always a wide one, and a wide aura is always strong at its centre. An aura's effects scale their
-amounts by that one magnitude, per aura (`AuraMagnitude.Strength` or `Flat`).
-
-Split it into two values on a source:
-- **Power:** the magnitude effects are scaled by.
-- **Size:** how far the aura reaches.
-
-And a falloff choice per aura:
-- **Calculated falloff:** the magnitude at a cell is derived from power, size and distance, so power
-  fades to nothing at the edge whatever the two values are.
-- **No falloff:** full power everywhere inside the size.
-
-Touches `AuraSourceComponent`, `TerrainAura`, `AuraGrant`, `AuraSourceGrant`, `AuraGrid`'s splat and
-the glow, which should keep following the same falloff as the effect. Revisit whether magnitude
-should then scale per effect entry rather than per aura. See IMPLEMENTATION-NOTES.md, "One effect vocabulary": an aura's strength scales amounts only, chosen per aura.
-
 ### Low Priority
 
 #### Terrain contact as a range-0 aura -- revisit if contact needs to come from entities
@@ -1222,6 +1264,28 @@ contact becoming a second, strength-1 aura on its cells.
 If none of the conditions comes up, the cheaper improvement is sharing more of the exposure code
 between the two systems and leaving detection as it is.
 
+#### Generalize the aura field's pieces when Explosions and Traps land
+
+Explosions and traps both need things the aura stack already has, but only for auras today. When
+either is designed, explore which pieces should become general rather than building a parallel set:
+- **Reach and falloff** -- `ManhattanDiamond` and `AuraFalloff` (Engine.Math) already give a shape and
+  a value per distance. An explosion is a one-shot reach with falloff; it likely wants these directly,
+  not the persistent per-cell totals.
+- **Per-cell totals** -- `AuraGrid`/`AuraTotals` hold a lasting field keyed by aura id. Decide whether
+  anything else (a lingering blast zone, a trap's trigger area, a danger map for NPCs) wants a lasting
+  per-cell field, and if so whether it is keyed by something other than a `byte` aura id.
+- **Spatial index of entity sources** -- `AuraSourceIndex` (32x32 chunk buckets, fixed attribution,
+  strongest-contributor lookup) is a general "which entity sources reach this cell" structure.
+  Entity traps need "which trap is on or near this cell" on every move; see whether this index, or
+  `Map`'s non-blocking occupant index, serves that.
+- **Attribution** -- an explosion's or trap's damage needs kill credit to whoever set it, the same
+  rule as an anchor's placer (`AuraSystem.AttributionOf`).
+- **Apply on entry** -- a trap is an entity-sourced, range-0, apply-on-entry effect: the first bullet of
+  "Terrain contact as a range-0 aura" above. Settle that entry's question at the same time.
+
+Keep what stays aura-specific (exposures, the once-a-second tick, glow) in Auras; move only what a
+second consumer actually uses.
+
 #### An ability that turns a direct-target spell into a limited-duration aura
 
 An ability (or item, or class feature) that takes a spell normally cast at a target and makes the
@@ -1234,8 +1298,8 @@ a timed `AuraSourceGrant`. To settle when designing it:
 - **Which spells qualify, and what the aura costs** (mana per tick or up front, cooldown).
 - **Scaling:** an aura applies once a second with no source entity, so no crit, no ability bonus and
   no Outgoing modifiers, and its strength scales amounts. Decide whether the converted aura keeps the
-  caster's stats (which needs a source entity on an aura's effects -- see "Aura attribution") and
-  what strength and reach it gets.
+  caster's stats (which needs a source entity on an aura's effects; today they are only credited to
+  the strongest contributor, `AuraField.Attribute`) and what strength and reach it gets.
 - **Identity:** each converted spell needs a stable Guid (derived from the action's and the
   ability's), so two casters' auras of the same spell add up as one aura and the catalog doesn't
   grow per cast. The catalog holds at most 256 definitions in a session.
@@ -1560,7 +1624,7 @@ Touch points: `TargetShapeResolver` (Engine) builds every shape on the origin's 
 `ActionTargetingController` builds hovered/clicked tiles on the player's Z; `TestCombatBehaviorSystem`
 must only pick targets it can reach. An action refused for reach gets clear feedback (disabled cursor),
 never a silent no-op. An undetected digger is never a valid target (see Digger detection (Game)).
-Related: Add source and target modifier checks for all actions (Medium).
+Related: every effect amount already runs Outgoing and Incoming stat modifiers (`EffectModifiers`).
 
 #### Layer-change actions -- Land, Take Off, Surface, Burrow
 
@@ -1687,7 +1751,7 @@ a fireball is `Damage.Fire` + `Magic`, a torch `Damage.Fire`. So there is no `Da
 "magic resistance" conditions on `Magic`, a fire resistance on `Damage.Fire`, and a mod adds
 `Damage.Void` without touching Game. A grouping that really is always-true can still nest
 (`Damage.Fire.Lava`). Resistances and vulnerabilities are stat modifiers conditioned on a tag, applied
-in the Incoming pass ("Add source and target modifier checks for all actions", Medium).
+in the Incoming pass every effect amount runs (`EffectModifiers`).
 
 **Unreal Engine reference:** Unreal's old `UDamageType` classes (passed to `ApplyDamage`) were one class
 per type with no hierarchy or data; GAS projects replaced them with damage-type gameplay tags on the
@@ -1720,7 +1784,7 @@ design pass through `World`/`Map` placement, not a drop-in `ParalysisEffects.App
 Follow-ups to the temporary `TestCombatBehaviorSystem` stand-in (`IMPLEMENTATION-NOTES.md`):
 - Replace the hardcoded if/else chain with composable behaviors (self-heal, engage, flee, wander)
   arbitrated by a per-race-configurable priority/utility system.
-- `MovementSystem` currently checks `_pendingAbilityActivations`/`_pendingConsumableActivations`
+- `MovementSystem` currently checks `_pendingAbilityActivations`/`_pendingItemActivations`
   directly to know a turn's claimed -- doesn't scale as action types grow. Needs a single shared
   "turn claimed" marker any decision system can set/check generically.
 
@@ -1772,31 +1836,16 @@ way DirectHeal does (`HealthHeal.ComputeAmount`).
 Left over from the healing aura work (`IMPLEMENTATION-NOTES.md`, "Auras, terrain contact, Healing
 Shrine, Holy Ground").
 
-- **Per-move cost grows with the auras in the field.** (A small slowdown from making one implementation generic is accepted; this is the lever if it ever needs to come back.) A move into a cell no aura reaches is one bit
-  test (`AuraField.AnyAuraReaches`). A move into a cell some aura reaches does a hash lookup per aura
-  with an effect, so the Healing aura joining Burning cost the aura system about 8% (0.024 ms/frame).
-  A dense per-neighborhood array per aura (about 4 MB each) would make it an array read; see "Gen-1 GC
-  frames during a window shift".
 - **Worst frame about 2 ms higher with random shrines** in the steady headless benchmark (6.5-8.8 ms
-  against 4.6-6.0 ms), not GC frames. Cause not found.
-- **`DeathSystem` up about 50%** (0.0037 to 0.0057 ms/frame) in the final A/B. Small, but not looked at:
-  either more deaths with shrines as targets, or the aura removal a dying source does.
-- **A terrain source has no name.** `ActionSource.ToString` gives `Terrain#<id>`, which is what the
-  Ability Score window and the activity log show for lava damage and Holy Ground's blessing. Needs the
-  terrain registry where the name is formatted. The Health window shows no source at all.
-- **Unloading is not covered by a walk.** Every streaming check walked far enough to load three
-  neighborhoods but not to evict one, so shrines being destroyed with their neighborhood (their
-  sources leaving the field) is covered by tests only.
-- **`new Random(seed)` was slow in one planning loop**: about 110 ns a roll for the shrine rolls in
-  `TestMapBuilder`, with tiered compilation off as the game runs, where a million of the same rolls
-  take 7 ms in isolation. Not explained; the shrines roll from `SeededRandom` now. The layout and
-  creature passes still use `Random` and measure normally, but are worth a look if planning time matters.
-
-#### FreeCast toggle-aura ability
-
-Item side landed (Toxic Idol, `IMPLEMENTATION-NOTES.md`). Still want the actual FreeCast *ability*
-version (usable during an Action Lock) for that specific coverage, and to remove the "costs a stack to
-toggle off" quirk (see Toggle item activator above).
+  against 4.6-6.0 ms), not GC frames. Cause not found. Looked at again 2026-10-02 (Release, headless,
+  gauges): 7.1-10.2 ms. Of the ten slowest frames, seven are gen-0/gen-1 collections (2-6 ms
+  pause each); the rest, including the slowest, moved no gauge. Ruled out: the streamer and tier
+  transitions (no activity in the range) and the aura source-move scans (the worst frame is the same
+  with the changed-sides scan). Which system's row those frames land in is not recorded per frame.
+- **`DeathSystem` up about 50%** (0.0037 to 0.0057 ms/frame) in the final A/B; 0.0071 on 2026-10-02.
+  Ruled out: the removal scan a dying source pays (per-source reach and the changed-sides scan left it
+  at 0.0069) and the death count (corpses at the end of the range are 6% up on the pre-aura build,
+  7,693 against 7,252). Not looked at: what `OnEntityDied` does per death since the aura work.
 
 #### BodyPartType categorization -- lifting/pickup still open
 
@@ -1945,27 +1994,38 @@ than Ability Scores (a skill is already a bigger power swing). (2) A shared New 
 run banks one action into, offered as a starting choice on a fresh run. Both need a new persistent,
 save-file-level meta-progression store distinct from anything in a single `EcsContext`.
 
-#### Aura attribution -- who is behind an aura's effect
-
-An aura's effects are attributed to the aura itself (`ActionSourceKind.Aura`): the `AuraField` holds
-one total per cell and aura, so which source contributed can't be recovered. A kill by a Toxic
-Idol's poison is therefore not credited to its holder, and a burn from lava's aura doesn't name the
-lava.
-
-Attribute an aura's effect to the most specific thing available, in order:
-- **The source entity**, when an entity's source contributes at the cell (kill credit, activity log,
-  `StatModifierComponent.Source`).
-- **The terrain**, when a terrain cell's aura does (`ActionSource.FromTerrain`).
-- **The aura itself**, when neither can be told.
-
-Needs per-source tracking: something the field or an exposure can read that says which sources
-reach a cell, without bringing back a live scan around each entity (the measured performance bug the
-grid replaced). Decide what "the" source is when several overlap -- the strongest at the cell is the
-likely rule. See IMPLEMENTATION-NOTES.md, "One effect vocabulary": an aura's effects are attributed to the aura, not to a source of it.
-
 ## Presentation
 
 ### High Priority
+
+#### Read the player's effective actions, not the bare catalog
+
+`HotbarContent` (slot drawing, `TryGetSlotSummary`) and `ActionTargetingController` (the toggle check,
+the Self-targeting check, arming, the targeting preview) look the player's actions up with
+`actionCatalog.TryGet(actionId, ...)` -- the catalog entry, not the action the player actually has. An
+override (`ActionInstanceComponent.Override`, read through `EntityActions.TryGetEffectiveAction`) can
+change targeting, timing, glyph, tags or effects, so these can disagree with what Game does: the player's
+Magic Missile already has one (damage only, so nothing shows yet), and Fairy's changes timing and range.
+- Add a view method returning the player's effective `ActionDefinition` (on `ActionStateView` or
+  `HotkeyBindingView`; Presentation can't touch the store) and use it at every one of those sites.
+- The same drift was fixed for windups by `ActivatableLookup` (`MapViewQuery`'s charging badge read the
+  catalog action; the windup telegraph read the catalog action's tags) -- see CLAUDE.md's
+  `ActivatableReference` bullet.
+- A UI change: check it in game.
+
+#### Item Details for toggle items: show what the toggle holds
+
+Item Details (`ItemDetailsWindow`) describes a toggle item (`ToggleItemActivator`, e.g. Toxic Idol)
+as if it were a self-targeted activation. Fix:
+- **Effects** are the effects held while the toggle is on (`ItemDefinition.Effects`); say so.
+- **Shape**: show the shape of the toggled effect -- an aura's diamond of its size -- instead of the
+  activation's "Self" shape preview.
+- **Activation** still shows, as it carries the turn-on costs and timing (`ToggleSpec.ActivationEffects`,
+  the windup) and the upkeep (`ToggleSpec.Periodic`).
+- **Aura size and power** are separate lines on the effect, not folded into its text: today's
+  "Grants a Poison aura (size 4, power 16)" (`EffectFormatting.FormatAuraSourceGrant`) and the
+  Summary's "(range 4)" lose them. The Item Details comparison already keys them separately
+  (`ItemComparisonStatExtraction`, `effect:aura:{id}:size` and `:power`).
 
 #### Hotbar re-press always activates, even past the double-tap window
 
@@ -2344,6 +2404,37 @@ as if a key were pressed, a ready shape for "Replay by recording input" and "In-
 (Global).
 
 ### Medium Priority
+
+#### Clean up item and action tooltips
+
+Items and actions are described in several places, each assembled its own way:
+- The hotbar's hover summary (`HotbarContent.TryGetSlotSummary`): name, "Active" for a toggle that is on,
+  `Summary`, the cost lines (`CostText`) and the blocker.
+- The inventory's hover tooltip (`ItemHoverSummary`): "Active", `Summary`, "Target: <shape>", a wand's
+  charges, the cost lines.
+- Item Details (`ItemDetailsWindow`): sections for effects ("While on" for a toggle), "Cost", "Activation"
+  (`ItemComparisonStatExtraction`), description, value and tags. Actions have no equivalent.
+Bring them to one structure: the same order and wording for the same facts (targeting appears for items
+but not actions, charges only in the inventory), one place that builds the lines for both items and
+actions, and a decision on what belongs in a hover summary versus Item Details. Costs now appear on the
+hotbar badge and in text: decide whether the hover summary repeats them.
+
+#### Telegraph whether an incoming attack is aimed at the ground or at you
+
+An enemy's windup is drawn on the tiles it will hit, red or yellow by whether it can be dodged
+(`CombatTargetPalette`, the `Trait.Dodgeable` tag). It doesn't say how it was aimed, which decides
+what avoids it:
+- **Ground** (`TargetingMode.Ground`): it lands on the tiles aimed at, so stepping off them avoids it.
+- **Target**: it follows you to the end of the windup (`TargetResolution`), so stepping away does
+  nothing; only a Dodge, where allowed, does.
+Show the difference, for example a solid fill for a Target-mode windup and a hatched or outlined one
+for Ground, or a marker on the entity a Target-mode windup is following. Both kinds are in play
+already: Fairies roll the mode for each Magic Missile (TEMPORARY content).
+- **Gated behind a Skill** eventually ("Skills", Game): without it the player sees only the tiles, as
+  today; with it, the mode too. Build the display first, behind a plain check that reads the
+  player, so the Skill only replaces that check.
+- The windup's selection already carries the mode (`PendingWindupComponent.Selection`), so this is a
+  view method (`TargetingView`) and a draw change in `MapWindow`, nothing new in the simulation.
 
 #### Buff and debuff icons below the mana bar
 
@@ -2792,6 +2883,24 @@ FontStashSharp's measuring is enough.
 
 ### Low Priority
 
+#### Change the cursor to a targeting mode indicator while armed
+
+While an action or item is armed, the cursor over the map should show the player's targeting mode
+(`MapViewState.TargetingMode`) instead of the plain arrow, so the mode is visible before confirming
+rather than only for the second after Left Alt switches it (`TargetingModeSwitch`). The cursor is
+already chosen in one place each frame (`UiInputController`, `CurrentCursor`, set through
+`MouseCursorEXT.SetCursor`); the armed-confirm-refused case already uses `MouseCursor.No` there.
+- **Candidates from the system set** (FNA's `MouseCursor`): `Crosshair` for Target (aiming at
+  someone), `Hand` or `SizeAll` for Ground (placing on a spot). No asset needed, but the set is small
+  and looks like an OS cursor.
+- **Custom cursors** (`MouseCursor.FromTexture2D`): a reticle for Target and a ground marker (a
+  ring or an X on the floor) for Ground, drawn in the game's sprite style. Possibly also a
+  difference between single-target and area effects -- a small reticle for SingleTarget, a wider
+  ring for Burst/Cone -- and Ground-only activations (melee, Dodge) keeping the plain arrow, since
+  their mode can't change.
+- Decide whether the hover footprint already says enough about single target vs area, so the cursor
+  only needs to carry the mode.
+
 #### Boss and crawler kill icons
 
 Show an icon for each boss and each crawler an entity has killed, in two places: the Inspection window
@@ -3101,6 +3210,23 @@ of a duplicate sprite per color variant. Generalizes to any other "one silhouett
 (dyed equipment, faction banners). The GPU route is the palette-swap effect in "Sprite shaders and
 tinting" (Medium); Godot games do this with a `canvas_item` shader that maps greyscale mask values
 through a palette texture, one palette row per variant, selected per sprite.
+
+#### Aura glows pulse outward from the source
+
+An aura's glow is a static tint today: `AuraField.TryGetGlow` hands `MapWindow` one colour per cell
+(the aura colours there, weighted by strength) through `GameViews.AuraGlow`. Animate it instead as a
+pulse that travels outward from the source, drawn as a gradient within each tile rather than one flat
+colour per tile, so the wave reads as continuous across tile edges.
+
+- The pulse's phase at a tile comes from its distance to the source (the same Manhattan distance the
+  strength falloff uses), so the wave front moves outward ring by ring.
+- Each aura has its own pulse interval, so several auras on one entity pulse out of step with each
+  other. The interval belongs on the `AuraDefinition` beside the glow colour, never on the source.
+- That needs the glow per aura at a cell, not the single blended colour `TryGetGlow` returns today --
+  each aura's contribution has to be drawn (or blended) at its own phase.
+- Purely visual: it is driven by render time and changes nothing about when an exposure ticks.
+
+Related: "Animation primitives -- flipbooks, tweens and curves" and "Visual 2D lighting" (Medium).
 
 ## Global
 

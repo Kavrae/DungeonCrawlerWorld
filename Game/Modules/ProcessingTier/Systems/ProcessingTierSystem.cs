@@ -76,6 +76,7 @@ public sealed class ProcessingTierSystem : ISystem
     private readonly ProcessingTierResolver _resolver;
     private readonly IPlayerQuery _playerQuery;
     private readonly int _transitionsPerFrame;
+    private readonly List<int> _occupantIdsScratch = [];
 
     /// <summary>Set the first time the player is observed on the map. The player is normally already pinned by the spawn sequence (FloorBuilder.CreatePlayer); this is the fallback for any path that did not, and it runs once, never per frame.</summary>
     private bool _playerPinned;
@@ -134,7 +135,7 @@ public sealed class ProcessingTierSystem : ISystem
             return;
         }
 
-        foreach (var moved in _movedEntities.Items)
+        foreach (var moved in _movedEntities.ItemSpan)
         {
             _resolver.Retier(moved.EntityId);
         }
@@ -351,7 +352,17 @@ public sealed class ProcessingTierSystem : ISystem
             _resolver.Retier(blocking);
         }
 
-        foreach (var occupant in _mapQuery.GetOccupantEntityIdsAt(tile))
+        var occupants = _mapQuery.GetOccupantEntityIdSpanAt(tile);
+        if (occupants.IsEmpty)
+        {
+            return;
+        }
+
+        // Copied first: a tier change raises events, and a handler may change who occupies the tile.
+        _occupantIdsScratch.Clear();
+        _occupantIdsScratch.AddRange(occupants);
+
+        foreach (var occupant in _occupantIdsScratch)
         {
             _resolver.Retier(occupant);
         }

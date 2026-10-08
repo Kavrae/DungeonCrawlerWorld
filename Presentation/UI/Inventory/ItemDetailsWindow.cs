@@ -210,14 +210,29 @@ public sealed class ItemDetailsWindow(
 
         BuildNameRow(_definition, width);
 
+        if (ToggleText.IsLit(_definition))
+        {
+            BuildFixedTextLine(width, ToggleText.Active, WindowPalette.ToggleActiveText);
+        }
+
         _displayedBlocker = ComputeBlocker();
         if (_displayedBlocker != ActivationBlocker.None)
         {
             BuildFixedTextLine(width, ActivationBlockerText.Describe(_displayedBlocker), ActivationBlockerText.ReasonColor);
         }
 
-        BuildDivider(width, "Effects", 0.125f);
+        // A toggle's own Effects are what it holds while it is on.
+        BuildDivider(width, _definition.Toggle is null ? "Effects" : "While on", 0.125f);
         BuildEffectsSection(_definition, width);
+
+        if (CostText.Lines(_definition, gameplayTags).ToList() is { Count: > 0 } costLines)
+        {
+            BuildDivider(width, "Cost", 0.125f);
+            foreach (var line in costLines)
+            {
+                BuildFixedTextLine(width, line, BodyTextColor);
+            }
+        }
 
         if (_definition.Activator is { } activator)
         {

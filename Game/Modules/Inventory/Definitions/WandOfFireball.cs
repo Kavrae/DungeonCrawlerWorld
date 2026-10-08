@@ -12,7 +12,7 @@ namespace Game.Modules.Inventory.Definitions;
 /// <summary>
 /// First real WandActivator item, and the concrete proof case for per-slot item divergence (see
 /// the Inventory system TODO entry) -- each wand's remaining Charges is per-physical-instance
-/// state, tracked via InventoryActions.PeelOneIntoDivergentStack rather than a shared stack
+/// state, tracked via InventoryActions.MoveOneUnit rather than a shared stack
 /// Quantity. This catalog entry's own Charges/MaxCharges: 0 is a placeholder, always overwritten
 /// at grant time -- never granted directly via plain InventoryActions.AddItem; see
 /// Game.Modules.Inventory.WandGrantEffects.

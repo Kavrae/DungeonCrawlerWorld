@@ -17,7 +17,7 @@ public static class QuickAttackAction
         Tags: [GameTags.DeliveryMeleeUnarmed, GameTags.ActionAttack, GameTags.StatsAbilityScoreStrength, GameTags.TraitDodgeable],
         Effects: [new Effect([new DirectDamage(MinFlatDamage: 18, MaxFlatDamage: 22)])],
         Activator: new DirectAction(
-            new TargetingSpec(TargetShape.Adjacent, Range: 0),
+            new TargetingSpec(TargetShape.Adjacent, Range: 0, Modes: TargetingModes.GroundOnly),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)),
         Description: "A fast, low-damage strike with no windup -- no target-shape telegraph appears before it lands, but a well-timed or predicted Dodge can still avoid it.",
         Summary: "Fast, low-damage melee attack");

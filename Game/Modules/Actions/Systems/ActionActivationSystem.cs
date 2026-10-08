@@ -1,16 +1,12 @@
-using Game.Effects;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Math;
-using Game.Modules.Actions.Activators;
+using Game.Effects;
 using Game.Modules.Actions.Components;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.ProcessingTier;
-using Game.Modules.Mana;
-using Game.Modules.Mana.Components;
-using Game.Modules.StatModifiers.Components;
 using Game.World;
 
 namespace Game.Modules.Actions.Systems;
@@ -26,55 +22,56 @@ public sealed class ActionActivationSystem : ISystem
     private readonly PackedComponentPool<PendingActionActivationComponent> _pendingActivations;
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly EntityActions _actions;
-    private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
+    private readonly PackedComponentPool<PendingWindupComponent> _pendingWindups;
     private readonly EffectServices _effectServices;
-    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
-    private readonly ActionCatalog _actionCatalog;
     private readonly IMapQuery _mapQuery;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
-    private readonly PackedComponentPool<ManaComponent> _mana;
     private readonly PackedComponentPool<MeleeDisabledComponent> _meleeDisabled;
     private readonly PackedComponentPool<DodgingComponent> _dodgingEntities;
     private readonly ProcessingTierQuery _processingTiers;
+    private readonly Toggles _toggles;
+    private readonly TargetResolution _targetResolution;
+    private readonly List<Vector3Int> _targetTilesScratch = [];
     private readonly EntityStripeSet _stripeSet;
 
     public ActionActivationSystem(
         PackedComponentPool<PendingActionActivationComponent> pendingActivations,
         PackedComponentPool<ActionLockComponent> actionLocks,
         EntityActions actions,
-        PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
+        PackedComponentPool<PendingWindupComponent> pendingWindups,
         EffectServices effectServices,
-        ActionCatalog actionCatalog,
         IMapQuery mapQuery,
         PackedComponentPool<MeleeDisabledComponent> meleeDisabled,
         PackedComponentPool<DodgingComponent> dodgingEntities,
-        ProcessingTierQuery processingTiers)
+        ProcessingTierQuery processingTiers,
+        Toggles toggles,
+        TargetResolution targetResolution)
     {
         _effectServices = effectServices;
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
         _actions = actions;
-        _pendingDelayedActions = pendingDelayedActions;
-        _statModifiers = effectServices.StatModifiers;
-        _actionCatalog = actionCatalog;
+        _pendingWindups = pendingWindups;
         _mapQuery = mapQuery;
         _deadEntities = effectServices.DeadEntities;
-        _mana = effectServices.Mana;
         _meleeDisabled = meleeDisabled;
         _dodgingEntities = dodgingEntities;
         _processingTiers = processingTiers;
+        _toggles = toggles;
+        _targetResolution = targetResolution;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
     }
 
     /// <summary>Activate the pending actions for the entities in the specified entity stripe</summary>
     /// <remarks>
-    /// Routes actions between the Immediate, Delayed, and QuickCast categories.
-    /// Costs and cooldowns are not triggered unless the action is successful.
-    /// 
-    /// Immediate actions are gated by the action lock, applied immediately, and the action lock is applied.
-    /// Delayed actions are gated by the action lock, the action lock is applied, and the action is queued to activate at the end of the action lock.
-    /// QuickCast ignore the action lock and are are activated immediately.
+    /// Routes actions between the Immediate, Delayed, and FreeCast categories.
+    /// Anything but FreeCast waits for the action lock; a use that is blocked or waiting takes nothing and starts no cooldown.
+    /// A use that goes ahead takes its activation effects (a cost among them) first -- a Delayed one's when its windup starts -- unless it turns a toggle off.
+    ///
+    /// Immediate actions are applied immediately, and the action lock is applied.
+    /// Delayed actions apply the action lock and are queued to activate at the end of it.
+    /// FreeCast actions ignore the action lock and are activated immediately.
     /// </remarks>
     /// <param name="time"></param>
     /// <param name="stripeIndex"></param>
@@ -107,84 +104,97 @@ public sealed class ActionActivationSystem : ISystem
                 continue;
             }
 
-            if (ActivationQueries.GetBlocker(entityId, action.Activator, action.Tags, _mana, _meleeDisabled) != ActivationBlocker.None)
+            var toggleKey = 0u;
+            var isToggle = action.Toggle is not null;
+            var isToggledOn = isToggle && _toggles.TryGetKey(entityId, ActivatableReference.Action(action.Id), out toggleKey);
+
+            var now = time.FrameCount;
+            if (ActivationQueries.GetBlocker(entityId, action, action.Activator, isToggledOn, _meleeDisabled, _effectServices, now) != ActivationBlocker.None)
             {
                 continue;
             }
 
-            var manaCost = SpellActivator.ManaCostOf(action.Activator);
-
-            var activationWasSuccessful = false;
-            switch (action.Activator.Timing.Category)
+            var timing = action.Activator.Timing;
+            if (timing.Category != ActionTimingCategory.FreeCast && ActionLockGate.IsBlocked(_actionLocks, entityId, now))
             {
-                case ActionTimingCategory.Immediate:
-                    activationWasSuccessful = TryActivateImmediate(entityId, action, request.TargetTiles, time.FrameCount);
-                    break;
-                case ActionTimingCategory.Delayed:
-                    activationWasSuccessful = TryActivateDelayed(entityId, action, request.TargetTiles, time.FrameCount);
-                    break;
-                case ActionTimingCategory.FreeCast:
-                    activationWasSuccessful = TryActivateFreeCast(entityId, action, request.TargetTiles, time.FrameCount);
-                    break;
+                continue;
             }
-            if (activationWasSuccessful)
-            {
-                SpendManaIfAny(entityId, manaCost);
-                StartCooldownIfAny(entityId, action, time.FrameCount);
 
-                if (action.Activator.Timing.ReleasesActionLock)
+            // Turning a toggle off takes nothing.
+            if (!isToggledOn)
+            {
+                ActivationEffectsApplier.Apply(_effectServices, entityId, action, now);
+            }
+
+            if (isToggle)
+            {
+                FlipToggle(entityId, action, isToggledOn, toggleKey, request.Selection, now);
+            }
+            else
+            {
+                switch (timing.Category)
                 {
-                    WindupCancel.TryCancel(_pendingDelayedActions, _actionLocks, entityId, time.FrameCount, releaseLock: false);
-                    ActionLockGate.Release(_actionLocks, entityId, time.FrameCount);
+                    case ActionTimingCategory.Immediate:
+                        ApplyNow(entityId, action, request.Selection, now);
+                        ActionLockGate.Lock(_actionLocks, entityId, now, timing.ActionLockFrames);
+                        break;
+                    case ActionTimingCategory.Delayed:
+                        Windups.Begin(_actionLocks, _pendingWindups, entityId, now, timing.ActionLockFrames, PendingWindupComponent.ForAction(action.Id, request.Selection, readyAtFrame: 0));
+                        break;
+                    case ActionTimingCategory.FreeCast:
+                        ApplyNow(entityId, action, request.Selection, now);
+                        break;
                 }
             }
+
+            StartCooldownIfAny(entityId, action, now);
+
+            if (timing.ReleasesActionLock)
+            {
+                WindupCancel.TryCancel(_pendingWindups, _actionLocks, entityId, now, releaseLock: false);
+                ActionLockGate.Release(_actionLocks, entityId, now);
+            }
         }
     }
 
-    private bool TryActivateImmediate(int entityId, ActionDefinition action, Vector3Int[] targetTiles, long now)
+    /// <summary>Switches a toggle action on or off in place of applying its effects: its Effects are what it holds while on (Toggles), and it applies to the entity itself.</summary>
+    /// <remarks>
+    /// The caller has checked the lock and taken the activation effects. A Delayed toggle that is off
+    /// winds up instead (Windups.Begin) and goes on only when the windup resolves (DelayedActionSystem);
+    /// turning one off is at once, as Immediate. FreeCast leaves the lock alone; anything else sets it.
+    /// ActionActivatedEvent is published when the toggle actually flips, as for any action.
+    /// </remarks>
+    private void FlipToggle(int entityId, ActionDefinition action, bool isToggledOn, uint toggleKey, TargetSelection selection, long now)
     {
-        if (ActionLockGate.IsBlocked(_actionLocks, entityId, now))
+        var timing = action.Activator.Timing;
+        if (!isToggledOn && timing.Category == ActionTimingCategory.Delayed)
         {
-            return false;
+            Windups.Begin(_actionLocks, _pendingWindups, entityId, now, timing.ActionLockFrames, PendingWindupComponent.ForAction(action.Id, selection, readyAtFrame: 0));
+            return;
         }
 
-        ActionEffectResolver.Apply(action, entityId, targetTiles, _effectServices, _mapQuery, now, _dodgingEntities, _processingTiers);
-        ActionLockGate.Lock(_actionLocks, entityId, now, action.Activator.Timing.ActionLockFrames);
-        return true;
-    }
+        _effectServices.EventBus.Publish(new ActionActivatedEvent(entityId, action.Id));
 
-    /// <summary>The windup's end is the lock's own deadline, read straight back off the component this just locked -- so the pending action and the lock can never disagree about when it resolves.</summary>
-    private bool TryActivateDelayed(int entityId, ActionDefinition action, Vector3Int[] targetTiles, long now)
-    {
-        if (ActionLockGate.IsBlocked(_actionLocks, entityId, now))
+        if (isToggledOn)
         {
-            return false;
+            _toggles.TurnOff(entityId, toggleKey, action, now);
         }
-
-        ActionLockGate.Lock(_actionLocks, entityId, now, action.Activator.Timing.ActionLockFrames);
-
-        // The fallback is unreachable in practice -- an entity with no ActionLockComponent reads as
-        // blocked above, so it never gets here -- but it keeps the deadline honest if that ever changes.
-        var readyAtFrame = _actionLocks.TryGetReadonly(entityId, out var actionLock)
-            ? actionLock.UnlockedAtFrame
-            : FrameDeadline.After(now, action.Activator.Timing.ActionLockFrames ?? 0);
-
-        _pendingDelayedActions.Merge(entityId, new PendingDelayedActionComponent(action.Id, targetTiles, readyAtFrame));
-        return true;
-    }
-
-    private bool TryActivateFreeCast(int entityId, ActionDefinition action, Vector3Int[] targetTiles, long now)
-    {
-        ActionEffectResolver.Apply(action, entityId, targetTiles, _effectServices, _mapQuery, now, _dodgingEntities, _processingTiers);
-        return true;
-    }
-
-    private void SpendManaIfAny(int entityId, ushort manaCost)
-    {
-        if (manaCost > 0)
+        else
         {
-            ManaSpend.Apply(_mana!, entityId, manaCost, _statModifiers);
+            _toggles.TurnOn(entityId, ActivatableReference.Action(action.Id), action, now, placesAtHolderTile: selection.Mode == TargetingMode.Ground);
         }
+
+        if (timing.Category != ActionTimingCategory.FreeCast)
+        {
+            ActionLockGate.Lock(_actionLocks, entityId, now, timing.ActionLockFrames);
+        }
+    }
+
+    /// <summary>Resolves the selection into tiles now and applies the action there: an Immediate or FreeCast activation lands where its target is at the moment it is confirmed, whatever the mode.</summary>
+    private void ApplyNow(int entityId, ActionDefinition action, TargetSelection selection, long now)
+    {
+        var resolved = _targetResolution.Resolve(entityId, action.Activator.Targeting, selection, _targetTilesScratch);
+        ActionEffectResolver.Apply(action, entityId, _targetTilesScratch, resolved, _effectServices, _mapQuery, now, _dodgingEntities, _processingTiers);
     }
 
     private void StartCooldownIfAny(int entityId, ActionDefinition action, long now)

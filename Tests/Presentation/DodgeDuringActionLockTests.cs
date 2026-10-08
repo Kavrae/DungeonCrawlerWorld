@@ -86,8 +86,10 @@ public sealed class DodgeDuringActionLockTests
             components.GetPackedPool<MovementComponent>(),
             components.GetPackedPool<ActionLockComponent>(),
             components.GetPackedPool<PendingActionActivationComponent>(),
-            components.GetPackedPool<PendingConsumableActivationComponent>(),
-            components.GetPackedPool<PendingDelayedActionComponent>(),
+            components.GetPackedPool<PendingItemActivationComponent>(),
+            components.GetPackedPool<PendingWindupComponent>(),
+            components.GetMultiPool<InventoryItemStackComponent>(),
+            result.Catalogs.ItemCatalog,
             clock,
             EntityActions.For(components, result.Catalogs.ActionCatalog, result.Catalogs.Definitions),
             ecs.EventBus);
@@ -102,8 +104,8 @@ public sealed class DodgeDuringActionLockTests
             new TransformView(components),
             new HotkeyBindingView(components),
             new InventoryView(components, result.Catalogs.ItemCatalog),
-            new ActionStateView(components, EntityActions.For(components, result.Catalogs.ActionCatalog, result.Catalogs.Definitions), result.Catalogs.ItemCatalog, localTierRoster: null),
-            new AbilityScoreView(components),
+            new ActionStateView(components, EntityActions.For(components, result.Catalogs.ActionCatalog, result.Catalogs.Definitions), result.Catalogs.ItemCatalog, localTierRoster: null, TestActionStateViews.EffectServicesOver(components)),
+            result.Views.TargetingView,
             playerCommands,
             simulationClock: clock);
 

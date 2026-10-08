@@ -122,7 +122,7 @@ public static class TargetShapeResolver
             return;
         }
 
-        DistanceFalloff.ScatterManhattan(anchor, radius, strength: 1, FalloffShape.Flat, bounds, results, static (cellPosition, _, resultsList) => resultsList.Add(cellPosition));
+        ManhattanDiamond.ForEachCell(anchor, radius, bounds, results, static (cellPosition, _, resultsList) => resultsList.Add(cellPosition));
     }
 
     /// <summary>The caster's own WxH footprint size, as a single point

@@ -19,6 +19,9 @@ public sealed class TooltipController
     private Tooltip _tooltip = null!;
     private object? _currentOwner;
 
+    /// <summary>Stands in for the graphics device's viewport, which a headless test has none of -- the same seam as ContextMenuController.ScreenBoundsOverrideForTests.</summary>
+    internal Rectangle? ScreenBoundsOverrideForTests { get; set; }
+
     public void Initialize(ElementPoolService elementPoolService, UiLayerStack layers)
     {
         _tooltip = elementPoolService.CreateElement<Tooltip>(null, new ElementOptions
@@ -45,7 +48,7 @@ public sealed class TooltipController
         _currentOwner = owner;
         _tooltip.SetMaximumSize(maximumSize);
         _tooltip.UseFixedWidth = useFixedWidth;
-        _tooltip.ShowNear(target, anchor, gap, bodyText, titleText, rows);
+        _tooltip.ShowNear(target, anchor, gap, bodyText, titleText, rows, ScreenBoundsOverrideForTests);
     }
 
     /// <summary>

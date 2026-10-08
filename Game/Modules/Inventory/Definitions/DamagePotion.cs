@@ -20,6 +20,6 @@ public static class DamagePotion
         Summary: "Deals damage to target(s).",
         GoldValue: 9,
         Activator: new PotionActivator(
-            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 3),
+            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 3, TargetModeAffects: TargetModeAffects.MarkedOnly),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));
 }

@@ -19,7 +19,7 @@ What exists today:
 - It is read in two places:
   - `ActionLockGate.Lock(..., framesToWait: null)` falls back to `actionLock.StandardLockFrames`. Every
     `ActionTiming.ActionLockFrames` is null except `PowerAttackAction`'s windup, so this covers
-    `ActionActivationSystem` (Immediate and Delayed), `ConsumableActivationSystem` (potion, scroll and
+    `ActionActivationSystem` (Immediate and Delayed), `ItemActivationSystem` (potion, scroll and
     wand) and `PlayerActionGate.Lock` (the map's Inspect).
   - `MovementSystem.TryMoveToNextMapPosition` reads it as the base value for
     `StatModifierTarget.MovementLockFrames` (`BodyPartEffectsSystem`'s leg/foot debuff), then applies
@@ -105,7 +105,7 @@ frame.
   on AbilityScores or StatModifiers). Callers that relied on null now pass
   `timing.ActionLockFrames ?? StandardActionLockFrames.ResolveForEntity(_abilityScores, _statModifiers, entityId)`:
   - `ActionActivationSystem.TryActivateImmediate` / `TryActivateDelayed` (already hold both pools).
-  - `ConsumableActivationSystem`'s potion, scroll and wand branches. It already holds `_abilityScores`;
+  - `ItemActivationSystem`'s potion, scroll and wand branches. It already holds `_abilityScores`;
     it gets the stat-modifier pool if it doesn't already hold one. One local
     `ResolveLockFrames(ActionTiming, entityId)` helper per system saves repeating the expression five
     times.
@@ -173,7 +173,7 @@ change, and an accepted one: faster creatures are handled by the future race sco
    - A -100% modifier floors at 1.
 2. Remove `StandardLockFrames` from `ActionLockComponent`, its `CoreModule` merge and `ToString`;
    delete `ActionLockGate.StandardLockFrames`; make `Lock`'s frames required.
-3. Update the callers: `ActionActivationSystem`, `ConsumableActivationSystem`, `MovementSystem` (+
+3. Update the callers: `ActionActivationSystem`, `ItemActivationSystem`, `MovementSystem` (+
    `MovementModule` wiring), `PlayerActionGate` (+ `ElementFactoryRegistry`).
 4. Blueprints: drop the frame counts from the five race/dummy builds; switch Engineer and
    GoblinEngineer to the `ActionLockFrames` modifier.

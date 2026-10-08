@@ -31,7 +31,7 @@ public sealed class AbilityScoreModifierFormatterTests
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 6);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), 0, AbilityScoreType.Strength, now: 0);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), TestActionSources.Naming(), 0, AbilityScoreType.Strength, now: 0);
 
         CollectionAssert.AreEqual(new[] { "Base : 6" }, lines.Select(static line => line.Text).ToArray());
     }
@@ -44,7 +44,7 @@ public sealed class AbilityScoreModifierFormatterTests
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, 0.5f, ActionSource.Admin);
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 2f, ActionSource.AI);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), 0, AbilityScoreType.Strength, now: 0);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), TestActionSources.Naming(), 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Base : 5", lines[0].Text);
         Assert.AreEqual("AI : +2", lines[1].Text);
@@ -59,7 +59,7 @@ public sealed class AbilityScoreModifierFormatterTests
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, -1f, ActionSource.AI);
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 3f, ActionSource.Admin);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), 0, AbilityScoreType.Strength, now: 0);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), TestActionSources.Naming(), 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Admin : +3", lines[1].Text);
         Assert.AreEqual("AI : -1", lines[2].Text);
@@ -75,7 +75,7 @@ public sealed class AbilityScoreModifierFormatterTests
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, 0.25f, ActionSource.Admin);
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 2f, ActionSource.Admin);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), 0, AbilityScoreType.Strength, now: 0);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), TestActionSources.Naming(), 0, AbilityScoreType.Strength, now: 0);
 
         CollectionAssert.AreEqual(new[] { "Base : 5", "Admin : +2", "AI : -1", "Admin : +25%", "Admin : -10%" }, lines.Select(static line => line.Text).ToArray());
     }
@@ -87,7 +87,7 @@ public sealed class AbilityScoreModifierFormatterTests
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 2.6f, ActionSource.Admin);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), 0, AbilityScoreType.Strength, now: 0);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), TestActionSources.Naming(), 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Admin : +3", lines[1].Text);
     }
@@ -99,7 +99,7 @@ public sealed class AbilityScoreModifierFormatterTests
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Multiplicative, -0.104f, ActionSource.Admin);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), 0, AbilityScoreType.Strength, now: 0);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), TestActionSources.Naming(), 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Admin : -10%", lines[1].Text);
     }
@@ -112,7 +112,7 @@ public sealed class AbilityScoreModifierFormatterTests
         manager.Merge(1, new DisplayTextComponent("Iron Ring", "A plain iron ring."));
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, ActionSource.FromEntity(manager, new EntityKeys(), 1, creatures: new BlueprintRegistry()));
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), 0, AbilityScoreType.Strength, now: 0);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), TestActionSources.Naming(), 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Iron Ring : +1", lines[1].Text);
     }
@@ -130,7 +130,7 @@ public sealed class AbilityScoreModifierFormatterTests
         manager.RemoveAllComponents(1);
         manager.Merge(1, new DisplayTextComponent("Goblin", "Someone else."));
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), 0, AbilityScoreType.Strength, now: 0);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), TestActionSources.Naming(), 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Iron Ring (Crawler #4242) : +1", lines[1].Text);
     }
@@ -142,7 +142,7 @@ public sealed class AbilityScoreModifierFormatterTests
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
         GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, TestSources.Entity(7));
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), 0, AbilityScoreType.Strength, now: 0);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), TestActionSources.Naming(), 0, AbilityScoreType.Strength, now: 0);
 
         Assert.AreEqual("Unknown : +1", lines[1].Text);
     }
@@ -155,7 +155,7 @@ public sealed class AbilityScoreModifierFormatterTests
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Dexterity, 4);
         GrantModifier(manager, 0, AbilityScoreType.Dexterity, StatModifierOperation.Additive, 9f, ActionSource.Admin);
 
-        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), 0, AbilityScoreType.Strength, now: 0);
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), TestActionSources.Naming(), 0, AbilityScoreType.Strength, now: 0);
 
         CollectionAssert.AreEqual(new[] { "Base : 5" }, lines.Select(static line => line.Text).ToArray());
     }

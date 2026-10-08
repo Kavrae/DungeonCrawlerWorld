@@ -8,6 +8,7 @@ using Game.Modules.Health.Components;
 using Game.Modules.Poison.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
+using Game.Resources;
 using Game.Tags;
 using Game.World;
 using Game.Modules.Death.Components;
@@ -80,7 +81,7 @@ public sealed class PoisonSystem : ISystem
             return true;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, _floatingTextFeed, DamageCategory.StatusEffect,
+        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, _floatingTextFeed, ResourceLossCategory.StatusEffect,
             targetRule: new BodyPartTargetRule(BodyPartType.Internal, BodyPartFallback.Random), damageTags: PoisonDamageTags);
 
         var remainingDuration = (ushort)(timer.RemainingDurationTicks - 1);

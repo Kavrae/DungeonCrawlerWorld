@@ -45,7 +45,7 @@ public sealed class PlayerCommandsTests
 
         public Vector3Int? NextMapPosition => ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(PlayerEntityId).NextMapPosition;
         public bool HasPendingAction => ComponentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId);
-        public bool HasPendingConsumable => ComponentManager.GetPackedPool<PendingConsumableActivationComponent>().Has(PlayerEntityId);
+        public bool HasPendingItemActivation => ComponentManager.GetPackedPool<PendingItemActivationComponent>().Has(PlayerEntityId);
         public Guid PendingActionId => ComponentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId).ActionId;
 
         public void Frame(long frame, params Keys[] held)
@@ -106,8 +106,10 @@ public sealed class PlayerCommandsTests
             componentManager.GetPackedPool<MovementComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
-            componentManager.GetPackedPool<PendingConsumableActivationComponent>(),
-            componentManager.GetPackedPool<PendingDelayedActionComponent>(),
+            componentManager.GetPackedPool<PendingItemActivationComponent>(),
+            componentManager.GetPackedPool<PendingWindupComponent>(),
+            componentManager.GetMultiPool<InventoryItemStackComponent>(),
+            new ItemCatalog(),
             clock,
             entityActions,
             eventBus);
@@ -123,7 +125,7 @@ public sealed class PlayerCommandsTests
             new HotkeyBindingView(componentManager),
             new InventoryView(componentManager, new ItemCatalog()),
             TestActionStateViews.Over(componentManager, actionCatalog),
-            new AbilityScoreView(componentManager),
+            TestActionStateViews.Targeting(componentManager, world, actionCatalog),
             playerCommands,
             simulationClock: clock);
 
@@ -180,7 +182,7 @@ public sealed class PlayerCommandsTests
         harness.Clock.Advance(10);
         harness.Actions.SetCooldown(PlayerEntityId, SelfActionId, 2, now: 10);
 
-        Assert.IsTrue(harness.Buffer.QueueAction(SelfActionId, [PlayerPosition]));
+        Assert.IsTrue(harness.Buffer.QueueAction(SelfActionId, TestSelections.At(PlayerPosition)));
         Assert.IsFalse(harness.HasPendingAction);
 
         harness.Frame(11);
@@ -195,30 +197,30 @@ public sealed class PlayerCommandsTests
     {
         var harness = Build();
         harness.Clock.Advance(50);
-        Assert.IsTrue(harness.Buffer.QueueConsumable(StackInstanceId, [PlayerPosition]));
+        Assert.IsTrue(harness.Buffer.QueueItemActivation(StackInstanceId, TestSelections.At(PlayerPosition)));
         harness.Actions.SetCooldown(PlayerEntityId, SelfActionId, (ushort)(PlayerCommands.ExpiryFrames + 5), now: 50);
 
         Assert.IsFalse(harness.Buffer.CanQueueAction(SelfActionId));
-        Assert.IsFalse(harness.Buffer.QueueAction(SelfActionId, [PlayerPosition]));
+        Assert.IsFalse(harness.Buffer.QueueAction(SelfActionId, TestSelections.At(PlayerPosition)));
 
         harness.Frame(LockEndsAtFrame);
-        Assert.IsTrue(harness.HasPendingConsumable);
+        Assert.IsTrue(harness.HasPendingItemActivation);
         Assert.IsFalse(harness.HasPendingAction);
     }
 
     [TestMethod]
-    public void ActionOrConsumableConfirmedTooEarlyInALongLock_IsRefused()
+    public void ActionOrItemConfirmedTooEarlyInALongLock_IsRefused()
     {
         var harness = Build();
         harness.Clock.Advance(LockEndsAtFrame - PlayerCommands.ExpiryFrames);
 
-        Assert.IsFalse(harness.Buffer.QueueAction(SelfActionId, [PlayerPosition]));
-        Assert.IsFalse(harness.Buffer.QueueConsumable(StackInstanceId, [PlayerPosition]));
+        Assert.IsFalse(harness.Buffer.QueueAction(SelfActionId, TestSelections.At(PlayerPosition)));
+        Assert.IsFalse(harness.Buffer.QueueItemActivation(StackInstanceId, TestSelections.At(PlayerPosition)));
 
         harness.Clock.Advance(LockEndsAtFrame - PlayerCommands.ExpiryFrames + 1);
 
         Assert.IsTrue(harness.Buffer.CanQueueAction(SelfActionId));
-        Assert.IsTrue(harness.Buffer.CanQueueConsumable());
+        Assert.IsTrue(harness.Buffer.CanQueueItemActivation(StackInstanceId));
     }
 
     [TestMethod]
@@ -226,7 +228,7 @@ public sealed class PlayerCommandsTests
     {
         var harness = Build(locked: false);
 
-        Assert.IsFalse(harness.Buffer.QueueAction(Guid.NewGuid(), [PlayerPosition]));
+        Assert.IsFalse(harness.Buffer.QueueAction(Guid.NewGuid(), TestSelections.At(PlayerPosition)));
         Assert.IsFalse(harness.HasPendingAction);
     }
 
@@ -288,19 +290,19 @@ public sealed class PlayerCommandsTests
     }
 
     [TestMethod]
-    public void Consumable_FollowsTheSameRules_AndReplacesABufferedAction()
+    public void ItemActivation_FollowsTheSameRules_AndReplacesABufferedAction()
     {
         var harness = Build();
 
         harness.ConfirmSelfAction(50);
         harness.Clock.Advance(55);
-        harness.Buffer.QueueConsumable(StackInstanceId, [PlayerPosition]);
+        harness.Buffer.QueueItemActivation(StackInstanceId, TestSelections.At(PlayerPosition));
         harness.Frame(59);
-        Assert.IsFalse(harness.HasPendingConsumable);
+        Assert.IsFalse(harness.HasPendingItemActivation);
 
         harness.Frame(LockEndsAtFrame);
 
-        Assert.IsTrue(harness.HasPendingConsumable);
+        Assert.IsTrue(harness.HasPendingItemActivation);
         Assert.IsFalse(harness.HasPendingAction);
     }
 

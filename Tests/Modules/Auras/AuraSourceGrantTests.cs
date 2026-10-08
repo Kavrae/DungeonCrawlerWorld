@@ -39,10 +39,10 @@ public sealed class AuraSourceGrantTests
     }
 
     [TestMethod]
-    public void Apply_Permanent_TogglesOnTargetEntityNotSourceEntity()
+    public void Apply_Permanent_GrantsToTargetEntityNotSourceEntity()
     {
         var (componentManager, auraSources) = Build();
-        var entry = new AuraSourceGrant(TestAuras.PoisonGlowOnly, Strength: 5);
+        var entry = new AuraSourceGrant(TestAuras.PoisonGlowOnly, Power: 5, Size: 2);
 
         entry.Apply(BuildContext(componentManager, auraSources));
 
@@ -52,10 +52,10 @@ public sealed class AuraSourceGrantTests
 
     /// <summary>A caller that wants to target itself (e.g. Toxic Idol) does so via a Self-shaped TargetingSpec, which resolves TargetEntityId to the caster -- not by anything AuraSourceGrant itself does with SourceEntityId.</summary>
     [TestMethod]
-    public void Apply_SourceAndTargetAreSameEntity_TogglesOnThatEntity()
+    public void Apply_SourceAndTargetAreSameEntity_GrantsToThatEntity()
     {
         var (componentManager, auraSources) = Build();
-        var entry = new AuraSourceGrant(TestAuras.PoisonGlowOnly, Strength: 5);
+        var entry = new AuraSourceGrant(TestAuras.PoisonGlowOnly, Power: 5, Size: 2);
         var context = BuildContext(componentManager, auraSources) with { TargetEntityId = SourceEntityId };
 
         entry.Apply(context);
@@ -64,23 +64,61 @@ public sealed class AuraSourceGrantTests
     }
 
     [TestMethod]
-    public void Apply_PermanentAppliedTwice_TogglesOff()
+    public void Apply_PermanentAppliedTwiceOutsideAToggle_LeavesOneSource()
     {
         var (componentManager, auraSources) = Build();
-        var entry = new AuraSourceGrant(TestAuras.PoisonGlowOnly, Strength: 5);
+        var entry = new AuraSourceGrant(TestAuras.PoisonGlowOnly, Power: 5, Size: 2);
         var context = BuildContext(componentManager, auraSources);
 
         entry.Apply(context);
         entry.Apply(context);
 
-        Assert.IsFalse(auraSources.Has(TargetEntityId));
+        Assert.AreEqual(1, auraSources.CountForEntity(TargetEntityId));
+    }
+
+    [TestMethod]
+    public void ApplyUnderTwoKeys_AddsASourcePerKey_AndRevertRemovesOnlyItsOwn()
+    {
+        var (componentManager, auraSources) = Build();
+        var entry = new AuraSourceGrant(TestAuras.PoisonGlowOnly, Power: 5, Size: 2);
+        var first = BuildContext(componentManager, auraSources) with { HeldGrantKey = 1 };
+        var second = BuildContext(componentManager, auraSources) with { HeldGrantKey = 2 };
+
+        entry.Apply(first);
+        entry.Apply(second);
+        Assert.AreEqual(2, auraSources.CountForEntity(TargetEntityId));
+
+        entry.Revert(first);
+
+        Assert.AreEqual(1, auraSources.CountForEntity(TargetEntityId));
+        Assert.AreEqual(2u, auraSources.GetReadonlyByDenseIndex(auraSources.GetFirstDenseIndex(TargetEntityId)).HeldGrantKey);
+    }
+
+    [TestMethod]
+    public void Revert_OutsideAToggle_RemovesNothing()
+    {
+        var (componentManager, auraSources) = Build();
+        var entry = new AuraSourceGrant(TestAuras.PoisonGlowOnly, Power: 5, Size: 2);
+        var context = BuildContext(componentManager, auraSources);
+        entry.Apply(context);
+
+        entry.Revert(context);
+
+        Assert.AreEqual(1, auraSources.CountForEntity(TargetEntityId));
+    }
+
+    [TestMethod]
+    public void GrantsUntilRevoked_OnlyWithoutADuration()
+    {
+        Assert.IsTrue(new AuraSourceGrant(TestAuras.Light, Power: 8, Size: 3).GrantsUntilRevoked);
+        Assert.IsFalse(new AuraSourceGrant(TestAuras.Light, Power: 8, Size: 3, DurationFrames: 100).GrantsUntilRevoked);
     }
 
     [TestMethod]
     public void Apply_PoolNotWired_DoesNotThrow()
     {
         var (componentManager, _) = Build();
-        var entry = new AuraSourceGrant(TestAuras.PoisonGlowOnly, Strength: 5);
+        var entry = new AuraSourceGrant(TestAuras.PoisonGlowOnly, Power: 5, Size: 2);
 
         entry.Apply(BuildContext(componentManager, auraSources: null));
     }
@@ -89,7 +127,7 @@ public sealed class AuraSourceGrantTests
     public void Apply_TimedDuration_GrantsSourceAndSchedulesExpiry()
     {
         var (componentManager, auraSources) = Build();
-        var entry = new AuraSourceGrant(TestAuras.Light, Strength: 8, DurationFrames: 100);
+        var entry = new AuraSourceGrant(TestAuras.Light, Power: 8, Size: 3, DurationFrames: 100);
 
         entry.Apply(BuildContext(componentManager, auraSources));
 
@@ -104,19 +142,19 @@ public sealed class AuraSourceGrantTests
     public void Apply_TimedDurationScaleMultiplierAboveOne_ScalesExpiryFrames()
     {
         var (componentManager, auraSources) = Build();
-        var entry = new AuraSourceGrant(TestAuras.Light, Strength: 8, DurationFrames: 100);
+        var entry = new AuraSourceGrant(TestAuras.Light, Power: 8, Size: 3, DurationFrames: 100);
 
         entry.Apply(BuildContext(componentManager, auraSources, durationScaleMultiplier: 4.0f));
 
         Assert.AreEqual(400u, componentManager.GetPackedPool<AuraSourceExpiryComponent>().GetReadonly(TargetEntityId).ExpiresAtFrame);
     }
 
-    /// <summary>The behavioral difference from permanent mode -- re-applying a timed grant before it expires must refresh it, not flip it off (a flip would extinguish an existing grant instead of renewing it).</summary>
+    /// <summary>Re-applying a timed grant before it expires refreshes it: one source afterwards.</summary>
     [TestMethod]
-    public void Apply_TimedAppliedTwice_RefreshesRatherThanTogglingOff()
+    public void Apply_TimedAppliedTwice_RefreshesTheOneSource()
     {
         var (componentManager, auraSources) = Build();
-        var entry = new AuraSourceGrant(TestAuras.Light, Strength: 8, DurationFrames: 100);
+        var entry = new AuraSourceGrant(TestAuras.Light, Power: 8, Size: 3, DurationFrames: 100);
         var context = BuildContext(componentManager, auraSources);
 
         entry.Apply(context);

@@ -1,4 +1,3 @@
-using Engine.Math;
 using Engine.Tags;
 using Engine.Utilities;
 using Game.Effects;
@@ -20,11 +19,13 @@ namespace Presentation.UI;
 /// </summary>
 public static class EffectFormatting
 {
-    public static string FormatEntry(IEffectEntry entry, GameplayTagRegistry gameplayTags) => entry switch
+    public static string FormatEntry(IEffectEntry entry, GameplayTagRegistry? gameplayTags) => entry switch
     {
         DirectDamage damage => FormatDirectDamage(damage),
         DirectHeal heal => FormatDirectHeal(heal),
         DirectManaRestore mana => $"Restores {mana.Fraction:P0} of max mana",
+        ManaDrain drain => $"Drains {drain.Amount} mana",
+        HealthDrain drain => $"Drains {drain.Amount} health",
         StatusEffectGrant status => $"Applies {status.StackCount} stack{(status.StackCount == 1 ? "" : "s")} of {status.Type}",
         StatusEffectImmunityGrant immunity => $"{immunity.Type} Immunity",
         StatModifierGrant modifier when IsDamageReduction(modifier) => FormatDamageReduction(modifier, gameplayTags),
@@ -50,15 +51,20 @@ public static class EffectFormatting
         modifier.Target == StatModifierTarget.IncomingDamage && modifier.Operation == StatModifierOperation.Multiplicative && modifier.Magnitude < 0;
 
     /// <summary>ConditionTag prefixed when present (e.g. "Fire Damage Reduction : 50%") -- unscoped IncomingDamage reductions (ConditionTag None) apply to every damage source, so the tag prefix would be misleading there.</summary>
-    private static string FormatDamageReduction(StatModifierGrant modifier, GameplayTagRegistry gameplayTags)
+    private static string FormatDamageReduction(StatModifierGrant modifier, GameplayTagRegistry? gameplayTags)
     {
-        var tagPrefix = modifier.ConditionTag.IsNone ? string.Empty : $"{gameplayTags.GetDisplayName(modifier.ConditionTag)} ";
+        var tagPrefix = modifier.ConditionTag.IsNone ? string.Empty : $"{gameplayTags?.GetDisplayName(modifier.ConditionTag) ?? modifier.ConditionTag.Name} ";
         return $"{tagPrefix}Damage Reduction : {-modifier.Magnitude:P0}";
     }
 
     /// <summary>Reuses StatModifierComponent.ToString()'s own +/-/x/÷ symbol convention for Operation x Polarity (Game/Modules/StatModifiers/Components/StatModifierComponent.cs) so an item's own preview reads consistently with the Ability Score window's live modifier list.</summary>
     private static string FormatStatModifierGrant(StatModifierGrant modifier)
     {
+        if (EffectAmountModifierText.SubjectOf(modifier.Target) is { } effectAmountSubject)
+        {
+            return $"{EffectAmountModifierText.FormatAmount(modifier.Operation, modifier.Magnitude)} {effectAmountSubject} ({FormatDurationFrames(modifier.DurationFrames)})";
+        }
+
         var symbol = modifier.Operation == StatModifierOperation.Additive
             ? modifier.Polarity == StatModifierPolarity.Buff ? "+" : "-"
             : modifier.Polarity == StatModifierPolarity.Buff ? "x" : "÷";
@@ -66,10 +72,13 @@ public static class EffectFormatting
         return $"{modifier.Target}: {symbol}{modifier.Magnitude} ({FormatDurationFrames(modifier.DurationFrames)})";
     }
 
+    /// <summary>No duration for a grant without one: the only such grant is a toggle's, which lasts while the toggle is on, not for good.</summary>
     private static string FormatAuraSourceGrant(AuraSourceGrant aura) =>
-        $"Grants a {aura.Aura.Name} aura (radius {DistanceFalloff.MaxRadius(aura.Strength)}) -- {FormatDurationFrames(aura.DurationFrames)}";
+        aura.DurationFrames is null
+            ? $"Grants a {aura.Aura.Name} aura (size {aura.Size}, power {aura.Power})"
+            : $"Grants a {aura.Aura.Name} aura (size {aura.Size}, power {aura.Power}) -- {FormatDurationFrames(aura.DurationFrames)}";
 
-    private static string FormatChainedEffect(ChainedEffect chained, GameplayTagRegistry gameplayTags)
+    private static string FormatChainedEffect(ChainedEffect chained, GameplayTagRegistry? gameplayTags)
     {
         var nestedLines = new List<string>();
         foreach (var triggeredEffect in chained.TriggeredEffects)

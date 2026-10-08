@@ -7,6 +7,7 @@ using Engine.Modules;
 using Engine.Settings;
 using Engine.Tags;
 using Game.Modules;
+using Game.Modules.Actions;
 using Game.Modules.Core.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
@@ -73,13 +74,13 @@ public static class GameBuildPass
 
         var localTierRoster = new LocalTierRoster(componentManager.GetPackedPool<MovementComponent>(), componentManager.GetDirectPool<ProcessingTierComponent>(), context.ProcessingTierEvents);
 
-        RegisterDiagnostics(ecsContext, factory.Skeletons, localTierRoster, context.ProcessingTierResolver);
+        RegisterDiagnostics(ecsContext, factory.Skeletons, localTierRoster, context.ProcessingTierResolver, context.AuraField);
 
         return new GameBuildPassResult(ecsContext, build.World, context, modules, settings, localTierRoster);
     }
 
-    /// <summary>Gives diagnostics the skeleton/built split of living entities and the gauges for creature and tier counts.</summary>
-    private static void RegisterDiagnostics(EcsContext ecsContext, CreatureSkeletons skeletons, LocalTierRoster localTierRoster, ProcessingTierResolver tierResolver)
+    /// <summary>Gives diagnostics the skeleton/built split of living entities and the gauges for creature and tier counts and aura storage.</summary>
+    private static void RegisterDiagnostics(EcsContext ecsContext, CreatureSkeletons skeletons, LocalTierRoster localTierRoster, ProcessingTierResolver tierResolver, AuraField auraField)
     {
         var entityManager = ecsContext.EntityManager;
         int CountBuiltEntities() => entityManager.LivingEntityCount - skeletons.Count;
@@ -89,9 +90,11 @@ public static class GameBuildPass
         ecsContext.Gauges.Register("Creatures", "Skeletons", GaugeKind.Level, () => skeletons.Count);
         ecsContext.Gauges.Register("ProcessingTier", "Local", GaugeKind.Level, () => localTierRoster.Count);
         ecsContext.Gauges.Register("ProcessingTier", "PendingTransitionNeighborhoods", GaugeKind.Level, () => tierResolver.Transitions.PendingNeighborhoodCount);
+        ecsContext.Gauges.Register("Auras", "TotalsChunks", GaugeKind.Level, () => auraField.TotalsChunkCount);
+        ecsContext.Gauges.Register("Auras", "TotalsBytes", GaugeKind.Level, () => auraField.TotalsAllocatedBytes);
     }
 
-    /// <summary>Runs every phase of modules, and only those, over map: declares their gameplay tags, registers their registeredComponents, builds the World and the gameModuleContext from them, configures the modules, resolves the blueprint definitions they registered, checks their content's tags are declared, and registers their systems.</summary>
+    /// <summary>Runs every phase of modules, and only those, over map: declares their gameplay tags, registers their registeredComponents, builds the World and the gameModuleContext from them, configures the modules, resolves the blueprint definitions they registered, checks their content's tags are declared, its toggles can be switched off and its melee is Ground-only, and registers their systems.</summary>
     /// <remarks>The module build alone, with none of Run's game wiring -- for a module set that isn't a whole game (a test of a few modules). It must still contain every one of GameModuleContext.FoundationModuleIds.</remarks>
     /// <exception cref="InvalidOperationException">modules lacks a foundation module, or fails EcsBuilder's own checks.</exception>
     public static GameModuleBuild BuildModules(
@@ -130,6 +133,8 @@ public static class GameBuildPass
 
         AuraContentRegistration.RegisterAll(gameModuleContext);
         ContentTagValidation.EnsureDeclared(gameModuleContext);
+        ToggleContentValidation.EnsureValid(gameModuleContext);
+        TargetingContentValidation.EnsureValid(gameModuleContext);
 
         var registeredBehavior = configuredModules.RegisterBehavior();
         var ecsContext = registeredBehavior.Complete();

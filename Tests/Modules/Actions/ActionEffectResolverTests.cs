@@ -95,6 +95,8 @@ public sealed class ActionEffectResolverTests
 
         public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) =>
             _occupantsByPosition.TryGetValue(position, out var entityIds) ? entityIds : [];
+
+        public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) => GetOccupantEntityIdsAt(position).ToArray();
     }
 
     private static (FakeMapQuery MapQuery, PackedComponentPool<SimpleHealthComponent> Health, EventBus EventBus, MathUtility MathUtility, StatusEffectApplierRegistry StatusEffectAppliers, ComponentManager ComponentManager) Build()
@@ -478,6 +480,79 @@ public sealed class ActionEffectResolverTests
         var published = floatingText.Published.Single();
         Assert.AreEqual(FloatingTextKind.Dodged, published.Kind);
         Assert.AreEqual(BlockingTargetEntityId, published.EntityId);
+    }
+
+    private sealed record RecordingEntry(EffectPlacement Placement, List<int> Targets) : IEffectEntry
+    {
+        EffectPlacement IEffectEntry.Placement => Placement;
+
+        public EffectOutcome Apply(in EffectContext context)
+        {
+            Targets.Add(context.TargetEntityId);
+            return EffectOutcome.Applied;
+        }
+    }
+
+    private static (ActionDefinition Action, List<int> OncePerActivation, List<int> AtLocation) DodgeableActionPlacingOnce()
+    {
+        var oncePerActivation = new List<int>();
+        var atLocation = new List<int>();
+        var action = DodgeableAction with
+        {
+            Id = Guid.NewGuid(),
+            Effects = [new Effect([new RecordingEntry(EffectPlacement.OncePerActivation, oncePerActivation), new RecordingEntry(EffectPlacement.AtLocation, atLocation)])],
+        };
+
+        return (action, oncePerActivation, atLocation);
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void Apply_MarkedTargetReached_ReceivesTheEntriesPlacedOnce(bool markedOnly)
+    {
+        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        var (action, oncePerActivation, atLocation) = DodgeableActionPlacingOnce();
+
+        TestActionEffects.Apply(action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0,
+            resolved: new ResolvedTargets(TargetTile, BlockingTargetEntityId, markedOnly));
+
+        CollectionAssert.AreEqual(new[] { BlockingTargetEntityId }, oncePerActivation);
+        CollectionAssert.AreEqual(new[] { EffectContext.NoTargetEntity }, atLocation);
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void Apply_MarkedTargetDodging_ReceivesNoEntryPlacedOncePerActivation_ButAtLocationStillLands(bool markedOnly)
+    {
+        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
+        mapQuery.SetBlockingOccupant(TargetTile, BlockingTargetEntityId);
+        var dodgingEntities = new PackedComponentPool<DodgingComponent>(entityCapacity: 10, initialCapacity: 10, static (ref existing, incoming) => existing = incoming);
+        dodgingEntities.Add(BlockingTargetEntityId, new DodgingComponent(expiresAtFrame: 30));
+        var (action, oncePerActivation, atLocation) = DodgeableActionPlacingOnce();
+
+        TestActionEffects.Apply(action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0,
+            dodgingEntities: dodgingEntities, resolved: new ResolvedTargets(TargetTile, BlockingTargetEntityId, markedOnly));
+
+        Assert.IsEmpty(oncePerActivation, "A dodged mark lands nothing on its target, and nothing at the tile in its place.");
+        CollectionAssert.AreEqual(new[] { EffectContext.NoTargetEntity }, atLocation);
+    }
+
+    [TestMethod]
+    public void Apply_MarkedTargetFrozen_OutsideTheArea_ReceivesNoEntryPlacedOncePerActivation()
+    {
+        var (mapQuery, health, eventBus, mathUtility, statusEffectAppliers, componentManager) = Build();
+        var tiers = new DirectComponentPool<ProcessingTierComponent>(16, static (ref existing, incoming) => existing = incoming);
+        tiers.Add(BlockingTargetEntityId, new ProcessingTierComponent(ProcessingTierLevel.Borough));
+        var (action, oncePerActivation, atLocation) = DodgeableActionPlacingOnce();
+
+        TestActionEffects.Apply(action, SourceEntityId, [TargetTile], mapQuery, health, eventBus, mathUtility, playerQuery: null, statusEffectAppliers, componentManager, Keys, now: 0,
+            processingTiers: new ProcessingTierQuery(tiers), resolved: new ResolvedTargets(TargetTile, BlockingTargetEntityId, MarkedOnly: false));
+
+        Assert.IsEmpty(oncePerActivation);
+        Assert.HasCount(1, atLocation);
     }
 
     [TestMethod]

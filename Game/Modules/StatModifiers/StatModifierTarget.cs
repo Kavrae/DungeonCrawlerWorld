@@ -57,4 +57,50 @@ public enum StatModifierTarget : byte
     Charisma,
     Luck,
     Wisdom,
+
+    // Each pair below scales one amount an effect entry carries (EffectModifiers.Scale): Outgoing against
+    // the entity causing it, when there is one, then Incoming against the entity it lands on. Tag-
+    // conditional through StatModifierComponent.ConditionTag like every other target.
+
+    /// <summary>Mana a DirectManaRestore gives out.</summary>
+    OutgoingManaRestore,
+
+    /// <summary>Mana a DirectManaRestore restores to whoever receives it.</summary>
+    IncomingManaRestore,
+
+    /// <summary>Mana a ManaDrain takes, by its cause -- a toggle's upkeep is its holder's own.</summary>
+    OutgoingManaDrain,
+
+    /// <summary>Mana a ManaDrain takes from whoever pays it.</summary>
+    IncomingManaDrain,
+
+    /// <summary>Stacks a StatusEffectGrant applies, by its cause.</summary>
+    OutgoingStatusStacks,
+
+    /// <summary>Stacks a StatusEffectGrant applies to whoever receives them.</summary>
+    IncomingStatusStacks,
+
+    /// <summary>The chance a ChainedEffect triggers, by its cause.</summary>
+    OutgoingProcChance,
+
+    /// <summary>The chance a ChainedEffect triggers on whoever it lands on.</summary>
+    IncomingProcChance,
+
+    /// <summary>The power of an aura an AuraSourceGrant grants, by its cause.</summary>
+    OutgoingAuraPower,
+
+    /// <summary>The power of an aura an AuraSourceGrant grants to the entity radiating it (none for an anchor).</summary>
+    IncomingAuraPower,
+
+    /// <summary>The size of an aura an AuraSourceGrant grants, by its cause.</summary>
+    OutgoingAuraSize,
+
+    /// <summary>The size of an aura an AuraSourceGrant grants to the entity radiating it (none for an anchor).</summary>
+    IncomingAuraSize,
+
+    /// <summary>Health a HealthDrain takes, by its cause -- a health cost is its user's own.</summary>
+    OutgoingHealthDrain,
+
+    /// <summary>Health a HealthDrain takes from whoever pays it. Damage reduction (IncomingDamage) never applies to it.</summary>
+    IncomingHealthDrain,
 }

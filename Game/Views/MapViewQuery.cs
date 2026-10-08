@@ -11,6 +11,7 @@ using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops.Components;
 using Game.Modules.StatModifiers;
@@ -29,7 +30,7 @@ public sealed class MapViewQuery : IMapViewQuery
 {
     private readonly World.World _world;
     private readonly TerrainRegistry _terrain;
-    private readonly ActionCatalog _actionCatalog;
+    private readonly ActivatableLookup _activatables;
     private readonly DirectComponentPool<TransformComponent> _transforms;
     private readonly PackedComponentPool<GlyphComponent> _glyphs;
     private readonly PackedComponentPool<SpriteComponent> _sprites;
@@ -45,7 +46,7 @@ public sealed class MapViewQuery : IMapViewQuery
     private readonly PackedComponentPool<ContainerComponent> _containers;
     private readonly PackedComponentPool<ShopComponent> _shops;
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
-    private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
+    private readonly PackedComponentPool<PendingWindupComponent> _pendingWindups;
     private readonly PackedComponentPool<DodgingComponent> _dodging;
     private readonly BlueprintRegistry _creatures;
     private readonly DirectComponentPool<SpawnRecordComponent> _spawnRecords;
@@ -53,12 +54,13 @@ public sealed class MapViewQuery : IMapViewQuery
 
     /// <param name="creatures">The blueprint definitions, for drawing and naming every entity that holds no visual or name of its own -- which is nearly all of them, built or skeleton.</param>
     /// <param name="simulationClock">The current simulation frame, which a windup's progress is measured against.</param>
-    public MapViewQuery(World.World world, ComponentManager componentManager, ActionCatalog actionCatalog, TerrainRegistry terrain, BlueprintRegistry creatures, SimulationClock simulationClock)
+    public MapViewQuery(World.World world, ComponentManager componentManager, ActionCatalog actionCatalog, TerrainRegistry terrain, BlueprintRegistry creatures, SimulationClock simulationClock    /// <param name="itemCatalog">Names the item an item windup is for, so it is drawn like an action's; null (a test without items) draws none.</param>
+, ItemCatalog? itemCatalog = null)
     {
         _simulationClock = simulationClock;
         _world = world;
         _terrain = terrain;
-        _actionCatalog = actionCatalog;
+        _activatables = new ActivatableLookup(EntityActions.For(componentManager, actionCatalog, creatures), itemCatalog, componentManager);
         _transforms = componentManager.GetDirectPool<TransformComponent>();
         _glyphs = componentManager.GetPackedPool<GlyphComponent>();
         _sprites = componentManager.GetPackedPool<SpriteComponent>();
@@ -74,7 +76,7 @@ public sealed class MapViewQuery : IMapViewQuery
         _containers = componentManager.GetPackedPool<ContainerComponent>();
         _shops = componentManager.GetPackedPool<ShopComponent>();
         _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
-        _pendingDelayedActions = componentManager.GetPackedPool<PendingDelayedActionComponent>();
+        _pendingWindups = componentManager.GetPackedPool<PendingWindupComponent>();
         _dodging = componentManager.GetPackedPool<DodgingComponent>();
         _creatures = creatures;
         _spawnRecords = componentManager.GetDirectPool<SpawnRecordComponent>();
@@ -235,8 +237,8 @@ public sealed class MapViewQuery : IMapViewQuery
 
     public bool TryGetChargingAction(int entityId, out ChargingActionView action)
     {
-        if (!_pendingDelayedActions.TryGetReadonly(entityId, out var pending) ||
-            !_actionCatalog.TryGet(pending.ActionId, out var definition))
+        if (!_pendingWindups.TryGetReadonly(entityId, out var pending) ||
+            !_activatables.TryGetDefinition(entityId, pending.Activatable, out var definition))
         {
             action = default;
             return false;
@@ -253,7 +255,7 @@ public sealed class MapViewQuery : IMapViewQuery
     /// <remarks>The windup's length is the lock's CurrentLockTotalFrames, set on the same frame ReadyAtFrame was copied from the lock's deadline.</remarks>
     public float GetChargeFraction(int entityId)
     {
-        if (!_pendingDelayedActions.TryGetReadonly(entityId, out var pending) ||
+        if (!_pendingWindups.TryGetReadonly(entityId, out var pending) ||
             !_actionLocks.TryGetReadonly(entityId, out var actionLock) ||
             actionLock.CurrentLockTotalFrames == 0)
         {

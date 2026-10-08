@@ -48,6 +48,11 @@ public interface IMapQuery
     /// <returns>A list of entity IDs at the position.</returns>
     IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) => [];
 
+    /// <summary>The IDs of every entity occupying a position, Blocking or not, as a span -- empty off the map.</summary>
+    /// <remarks>The span is valid until that cell's occupants change: a caller that can place, move, remove or destroy an entity while reading it copies the span first.</remarks>
+    /// <param name="position">The position to check.</param>
+    ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position);
+
     /// <summary>Checks if an entity is blocking.</summary>
     /// <param name="entityId">The ID of the entity to check.</param>
     /// <returns>True if the entity is blocking, false otherwise.</returns>

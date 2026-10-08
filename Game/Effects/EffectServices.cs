@@ -46,6 +46,7 @@ public sealed record EffectServices(
     PackedComponentPool<HotkeyExpansionUnlockComponent> HotkeyExpansionUnlocks,
     StatusEffectApplierRegistry StatusEffectAppliers,
     AuraSources AuraSources,
+    AuraAnchors AuraAnchors,
     FloatingTextFeed FloatingTextFeed)
 {
     /// <summary>The modules whose pools the services are made from. A module that applies effects (reads GameModuleContext.EffectServices) lists these in its Requires.</summary>
@@ -56,6 +57,7 @@ public sealed record EffectServices(
     ];
 
     /// <summary>The services over a build's registered pools.</summary>
+    /// <param name="spawnAuraAnchor">Spawns an AuraAnchor at a tile, for an aura placed there (AuraAnchors).</param>
     public static EffectServices For(
         ComponentManager componentManager,
         EntityKeys entityKeys,
@@ -65,8 +67,12 @@ public sealed record EffectServices(
         BlueprintRegistry definitions,
         StatusEffectApplierRegistry statusEffectAppliers,
         AuraCatalog auras,
-        FloatingTextFeed floatingTextFeed) =>
-        new(
+        FloatingTextFeed floatingTextFeed,
+        EntityManager entityManager,
+        Func<Vector3Int, int> spawnAuraAnchor)
+    {
+        var auraSources = new AuraSources(componentManager.GetMultiPool<AuraSourceComponent>(), auras, eventBus);
+        return new(
             componentManager,
             entityKeys,
             eventBus,
@@ -81,6 +87,8 @@ public sealed record EffectServices(
             componentManager.GetPackedPool<ManaComponent>(),
             componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
             statusEffectAppliers,
-            new AuraSources(componentManager.GetMultiPool<AuraSourceComponent>(), auras, eventBus),
+            auraSources,
+            new AuraAnchors(componentManager, entityManager, auraSources, spawnAuraAnchor),
             floatingTextFeed);
+    }
 }

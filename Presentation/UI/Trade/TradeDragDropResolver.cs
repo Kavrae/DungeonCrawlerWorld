@@ -115,9 +115,11 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, ShopView 
         // identity to resolve the real shop from), then the ordinary buy action pays with (and
         // delivers into) destinationEntityId exactly as an ordinary Shop grid -> Player Inventory
         // drag already does; undone if the purchase itself fails.
-        if (isOriginTradeShop && mapViewState.OpenShopEntityId is { } realShopEntityId)
+        // With no shop open there is no real shop to buy from, so the drag is refused.
+        if (isOriginTradeShop)
         {
-            if (inventoryCommands.TryTransferStack(originEntityId, realShopEntityId, stackInstanceId) &&
+            if (mapViewState.OpenShopEntityId is { } realShopEntityId &&
+                inventoryCommands.TryTransferStack(originEntityId, realShopEntityId, stackInstanceId) &&
                 !shopCommands.TryBuyFromShop(destinationEntityId, realShopEntityId, stackInstanceId))
             {
                 inventoryCommands.TryTransferStack(realShopEntityId, originEntityId, stackInstanceId);
@@ -127,11 +129,9 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, ShopView 
         }
 
         // Anything else still touching the shop column at this point (Player Inventory -> Trade:
-        // shop column, Shop grid -> Trade: player column, and the reverse of each -- plus the
-        // degenerate case just above where no shop was actually open)
-        // is not allowed -- only the real shop's own stock may ever populate the shop column, and
-        // only a plain inventory may ever populate the player column.
-        if (isDestinationTradeShop || isOriginTradeShop)
+        // shop column) is not allowed -- only the real shop's own stock may ever populate the shop
+        // column.
+        if (isDestinationTradeShop)
         {
             return;
         }

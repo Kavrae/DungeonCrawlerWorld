@@ -22,6 +22,7 @@ public sealed class MovementCandidatesTests
         public MapBounds Bounds { get; } = MapBounds.FromSize(mapSize);
         public bool IsOnMap(Vector3Int position) => Bounds.Contains(position);
         public int GetEntityIdAt(Vector3Int position) => _occupants.TryGetValue(position, out var id) ? id : -1;
+        public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) => [];
         public bool IsBlocking(int entityId) => true;
         public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds) => entityIds.Fill(-1);
 

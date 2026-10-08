@@ -187,7 +187,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     public NeighborhoodPlan Plan(Map map, NeighborhoodRecord record, int populationSeed, CancellationToken planningCancellation = default)
     {
         var neighborhoodLayout = map.CreateLayout(record.CellX, record.CellY);
-        var layoutRolls = new MathUtility(new Random(record.Seed));
+        var layoutRolls = new MathUtility(new SeededRandom((ulong)(uint)record.Seed));
         for (var row = neighborhoodLayout.MinY; row < neighborhoodLayout.MaxY; row++)
         {
             planningCancellation.ThrowIfCancellationRequested();
@@ -197,7 +197,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
             }
         }
 
-        var population = new Population(new MathUtility(new Random(populationSeed)));
+        var population = new Population(new MathUtility(new SeededRandom((ulong)(uint)populationSeed)));
         var spawnRowEnds = new List<int>(neighborhoodLayout.MaxY - neighborhoodLayout.MinY + 1);
         PlanHealingShrines(population, spawnRowEnds, neighborhoodLayout, record, planningCancellation);
 

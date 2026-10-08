@@ -34,6 +34,17 @@ public sealed class FrameEventBuffer<T> : IFrameScoped
         }
     }
 
+    /// <summary>The same items as Items, as a span: the form a system reads every frame, since foreach over Items boxes an enumerator whenever the buffer isn't empty.</summary>
+    /// <remarks>Marks the buffer read, as Items does, so nothing is recorded while the span is in use: it is valid until ClearFrame.</remarks>
+    public ReadOnlySpan<T> ItemSpan
+    {
+        get
+        {
+            _hasBeenRead = true;
+            return System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_items);
+        }
+    }
+
     /// <summary>Records item for this cycle's consumers to read via Items.</summary>
     /// <remarks>
     /// Throws if Items has already been read this cycle -- SystemManager.Update runs every

@@ -50,4 +50,28 @@ public sealed class BurningDisplay(
 
         return highestStackCount;
     }
+
+    /// <remarks>The entity-scoped burn's source if there is one, else the source of the body part holding the most stacks -- the burn GetStackCount reports.</remarks>
+    public Game.World.ActionSource? GetSource(int entityId)
+    {
+        if (entityTimers.TryGetReadonly(entityId, out var entityTimer))
+        {
+            return entityTimer.Source;
+        }
+
+        Game.World.ActionSource? source = null;
+        var highestStackCount = -1;
+
+        for (var denseIndex = bodyPartTimers.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = bodyPartTimers.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var partTimer = ref bodyPartTimers.GetReadonlyByDenseIndex(denseIndex);
+            if (partTimer.StackCount > highestStackCount)
+            {
+                highestStackCount = partTimer.StackCount;
+                source = partTimer.Source;
+            }
+        }
+
+        return source;
+    }
 }

@@ -16,7 +16,7 @@ public enum ActionSourceKind : byte
     /// <summary>A kind of terrain (lava) rather than any one entity -- see TerrainTypeId.</summary>
     Terrain,
 
-    /// <summary>A kind of aura rather than any one of its sources -- see AuraId. The aura field holds a total per cell, so which source contributed isn't known.</summary>
+    /// <summary>A kind of aura rather than any one of its sources -- see AuraId. Credited when no single contributor can be named: a share of the aura several terrain types radiate (AuraField.Attribute).</summary>
     Aura,
 }
 

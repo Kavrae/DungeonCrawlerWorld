@@ -30,7 +30,7 @@ public sealed class BlueprintAdminCommands(EntityFactory factory, BlueprintRegis
     /// <inheritdoc cref="EntityFactory.Apply"/>
     public void Apply(int entityId, ushort blueprintId) => factory.Apply(entityId, blueprintId);
 
-    /// <summary>Not spawnable, and has something to build: a blueprint, a race or class, actions or occupancy -- a definition that only declares appearance would change nothing on a live entity.</summary>
+    /// <summary>Not spawnable, and has something to build: a blueprint, a race or class, actions, auras or occupancy -- a definition that only declares appearance would change nothing on a live entity.</summary>
     private bool IsApplicable(ResolvedBlueprint blueprint)
     {
         if (blueprint.IsSpawnable)
@@ -41,7 +41,7 @@ public sealed class BlueprintAdminCommands(EntityFactory factory, BlueprintRegis
         foreach (var partId in blueprint.BuildOrder)
         {
             var part = definitions.Get(partId);
-            if (part.Build is not null || part.Race is not null || part.Class is not null || part.Actions.Count > 0 || part.NonBlocking is not null)
+            if (part.Build is not null || part.Race is not null || part.Class is not null || part.Actions.Count > 0 || part.Auras.Count > 0 || part.NonBlocking is not null)
             {
                 return true;
             }

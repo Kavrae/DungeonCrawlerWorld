@@ -5,6 +5,7 @@ using Engine.Tags;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Resources;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -47,7 +48,7 @@ public static class HealthHeal
         EventBus eventBus,
         IPlayerQuery playerQuery,
         FloatingTextFeed floatingTextFeed,
-        HealCategory healCategory,
+        ResourceGainCategory healCategory,
         float flatAmount = 0f,
         int? sourceEntityId = null,
         GameplayTagSet activatorTags = default,
@@ -77,7 +78,7 @@ public static class HealthHeal
 
     /// <summary>Publishes the floating text for the health entityId gained, as the HUD displays it.</summary>
     /// <remarks>The HUD rounds current health up, so the amount is the change in the rounded-up value: what the player sees the bar number move by, never a "+0" for a fraction of a point. Regeneration gains a fraction of a point per visit, so its text appears only on the visits that move the displayed value.</remarks>
-    public static void PublishHealed(FloatingTextFeed floatingTextFeed, int entityId, float healthBefore, float healthAfter, HealCategory healCategory)
+    public static void PublishHealed(FloatingTextFeed floatingTextFeed, int entityId, float healthBefore, float healthAfter, ResourceGainCategory healCategory)
     {
         var displayedGain = (int)MathF.Ceiling(healthAfter) - (int)MathF.Ceiling(healthBefore);
         if (displayedGain <= 0)
@@ -85,7 +86,7 @@ public static class HealthHeal
             return;
         }
 
-        var kind = healCategory == HealCategory.Regeneration ? FloatingTextKind.Regenerated : FloatingTextKind.Healed;
+        var kind = healCategory == ResourceGainCategory.Regeneration ? FloatingTextKind.Regenerated : FloatingTextKind.Healed;
         floatingTextFeed.Publish(entityId, kind, (ushort)System.Math.Min(displayedGain, ushort.MaxValue));
     }
 

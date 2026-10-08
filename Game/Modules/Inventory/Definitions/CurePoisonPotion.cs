@@ -31,6 +31,6 @@ public static class CurePoisonPotion
         Summary: "Removes all Poison, then grants immunity to Poison for 5 minutes.",
         GoldValue: 50,
         Activator: new PotionActivator(
-            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1),
+            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1, TargetModeAffects: TargetModeAffects.MarkedOnly),
             new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));
 }

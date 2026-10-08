@@ -1,5 +1,3 @@
-using Engine.Math;
-
 namespace Game.Modules.Actions.Components;
 
 /// <summary>
@@ -12,10 +10,11 @@ namespace Game.Modules.Actions.Components;
 /// (e.g. blocked by the shared ActionLock or an on-cooldown FreeCast) -- a one-shot request,
 /// not a standing intent to retry.
 /// </summary>
-public struct PendingActionActivationComponent(Guid actionId, Vector3Int[] targetTiles)
+/// <param name="selection">What the caster aimed at; TargetResolution turns it into tiles.</param>
+public struct PendingActionActivationComponent(Guid actionId, TargetSelection selection)
 {
     public Guid ActionId { get; set; } = actionId;
-    public Vector3Int[] TargetTiles { get; set; } = targetTiles;
+    public TargetSelection Selection { get; set; } = selection;
 
-    public override readonly string ToString() => $"ActionId : {ActionId}\nTargetTiles : [{string.Join(", ", TargetTiles)}]";
+    public override readonly string ToString() => $"ActionId : {ActionId}\nSelection : {Selection}";
 }

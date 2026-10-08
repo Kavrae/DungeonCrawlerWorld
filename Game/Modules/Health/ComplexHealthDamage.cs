@@ -26,12 +26,12 @@ namespace Game.Modules.Health;
 public static class ComplexHealthDamage
 {
     /// <returns>The damage dealt after the target's IncomingDamage modifiers, or 0 when entityId has no part to hit.</returns>
-    public static ushort Apply(
+    public static float Apply(
         PackedComponentPool<SimpleHealthComponent> health,
         EntityBodyParts bodyParts,
         EventBus eventBus,
         int entityId,
-        ushort amount,
+        float amount,
         ActionSource source,
         IPlayerQuery playerQuery,
         string damageType,
@@ -53,10 +53,7 @@ public static class ComplexHealthDamage
             return 0;
         }
 
-        var effectiveAmount = MathUtility.ClampUShort(
-            StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.IncomingDamage, amount, damageTags),
-            0,
-            ushort.MaxValue);
+        var effectiveAmount = HealthDamage.IncomingDamageOf(statModifiers, entityId, amount, damageTags);
 
         BodyPartDamageEffects.ApplyToPart(bodyParts, entityId, partId, statModifiers, effectiveAmount, now);
         BodyPartDamageEffects.PublishDamageEvents(health, bodyParts, eventBus, entityId, partId, effectiveAmount, source, playerQuery, damageType, statModifiers, deadEntities);
@@ -76,12 +73,12 @@ public static class ComplexHealthDamage
     /// on the HUD/combat log, not N separate small ones.
     /// </summary>
     /// <returns>The whole hit's damage after the target's IncomingDamage modifiers, or 0 when entityId has no parts.</returns>
-    public static ushort ApplyToAllParts(
+    public static float ApplyToAllParts(
         PackedComponentPool<SimpleHealthComponent> health,
         EntityBodyParts bodyParts,
         EventBus eventBus,
         int entityId,
-        ushort amount,
+        float amount,
         ActionSource source,
         IPlayerQuery playerQuery,
         string damageType,
@@ -97,11 +94,8 @@ public static class ComplexHealthDamage
             return 0;
         }
 
-        var effectiveAmount = MathUtility.ClampUShort(
-            StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.IncomingDamage, amount, damageTags),
-            0,
-            ushort.MaxValue);
-        var perPartAmount = (ushort)(effectiveAmount / partCount);
+        var effectiveAmount = HealthDamage.IncomingDamageOf(statModifiers, entityId, amount, damageTags);
+        var perPartAmount = effectiveAmount / partCount;
 
         for (var partId = 0; partId < partCount; partId++)
         {

@@ -5,6 +5,7 @@ using Engine.Math;
 using Engine.Utilities;
 using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
@@ -14,17 +15,18 @@ namespace Game.Modules.Actions;
 
 /// <summary>Holds the player's one pending command until it can be carried out, and is the only writer of the player's step and activation requests.</summary>
 /// <remarks>
-/// A single slot: queueing a move, action or consumable replaces whatever was there, so the command that resolves
-/// is always the newest one. A move or consumable waits for the action lock to clear; an action waits until it is
+/// A single slot: queueing a move, action or item activation replaces whatever was there, so the command that resolves
+/// is always the newest one. A move waits for the action lock to clear, and so does an item activation unless its item is
+/// FreeCast (a toggle item can be); an action waits until it is
 /// ready (ActivationQueries.FramesUntilReady: its cooldown and, unless FreeCast, the lock). A buffered command
 /// expires ExpiryFrames after it was queued, measured on the simulation clock so a pause does not age it. A command
 /// queued while it is already ready is written the same frame.
 ///
-/// An action or consumable that couldn't be ready before it expired is refused rather than buffered: nothing is
+/// An action or item activation that couldn't be ready before it expired is refused rather than buffered: nothing is
 /// queued, whatever was buffered stays, and the caller is told, so a confirm is never silently dropped.
 ///
 /// Writing a command also withdraws whatever the player had asked for earlier and the game hasn't taken yet: an
-/// action or consumable clears a step still in NextMapPosition, and a move removes a pending activation request.
+/// action or item activation clears a step still in NextMapPosition, and a move removes a pending activation request.
 ///
 /// A move is buffered as a direction, not a tile, and resolved against the player's position when it is written. A
 /// move whose tile can't be occupied clears NextMapPosition rather than leaving an older step in place.
@@ -48,7 +50,7 @@ public sealed class PlayerCommands
         None,
         Move,
         Action,
-        Consumable,
+        Item,
     }
 
     private readonly World.World _world;
@@ -56,8 +58,10 @@ public sealed class PlayerCommands
     private readonly PackedComponentPool<MovementComponent> _movementPool;
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly PackedComponentPool<PendingActionActivationComponent> _pendingActions;
-    private readonly PackedComponentPool<PendingConsumableActivationComponent> _pendingConsumables;
-    private readonly PackedComponentPool<PendingDelayedActionComponent> _pendingDelayedActions;
+    private readonly PackedComponentPool<PendingItemActivationComponent> _pendingItemActivations;
+    private readonly PackedComponentPool<PendingWindupComponent> _pendingWindups;
+    private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks;
+    private readonly ItemCatalog _itemCatalog;
     private readonly SimulationClock _simulationClock;
     private readonly EntityActions _entityActions;
 
@@ -65,7 +69,8 @@ public sealed class PlayerCommands
     private Vector3Int _moveDirection;
     private Guid _actionId;
     private uint _stackInstanceId;
-    private Vector3Int[] _targetTiles = [];
+    private HotkeySlot? _activatedFromSlot;
+    private TargetSelection _selection;
     private Vector3Int? _stepOnActivation;
     private uint _expiresAtFrame;
 
@@ -77,8 +82,10 @@ public sealed class PlayerCommands
         PackedComponentPool<MovementComponent> movementPool,
         PackedComponentPool<ActionLockComponent> actionLocks,
         PackedComponentPool<PendingActionActivationComponent> pendingActions,
-        PackedComponentPool<PendingConsumableActivationComponent> pendingConsumables,
-        PackedComponentPool<PendingDelayedActionComponent> pendingDelayedActions,
+        PackedComponentPool<PendingItemActivationComponent> pendingItemActivations,
+        PackedComponentPool<PendingWindupComponent> pendingWindups,
+        MultiComponentPool<InventoryItemStackComponent> inventoryStacks,
+        ItemCatalog itemCatalog,
         SimulationClock simulationClock,
         EntityActions entityActions,
         EventBus eventBus)
@@ -88,8 +95,10 @@ public sealed class PlayerCommands
         _movementPool = movementPool;
         _actionLocks = actionLocks;
         _pendingActions = pendingActions;
-        _pendingConsumables = pendingConsumables;
-        _pendingDelayedActions = pendingDelayedActions;
+        _pendingItemActivations = pendingItemActivations;
+        _pendingWindups = pendingWindups;
+        _inventoryStacks = inventoryStacks;
+        _itemCatalog = itemCatalog;
         _simulationClock = simulationClock;
         _entityActions = entityActions;
 
@@ -106,9 +115,9 @@ public sealed class PlayerCommands
         TryWriteBuffered();
     }
 
-    /// <summary>Buffers an activation of <paramref name="actionId"/> against <paramref name="targetTiles"/>, replacing any buffered command. Returns false, buffering nothing, when <see cref="CanQueueAction"/> is false.</summary>
+    /// <summary>Buffers an activation of <paramref name="actionId"/> against <paramref name="selection"/>, replacing any buffered command. Returns false, buffering nothing, when <see cref="CanQueueAction"/> is false.</summary>
     /// <remarks>An action that is ready now is written immediately. <paramref name="stepOnActivation"/> is a tile to step to once the action activates.</remarks>
-    public bool QueueAction(Guid actionId, Vector3Int[] targetTiles, Vector3Int? stepOnActivation = null)
+    public bool QueueAction(Guid actionId, TargetSelection selection, Vector3Int? stepOnActivation = null)
     {
         if (!CanQueueAction(actionId))
         {
@@ -117,7 +126,7 @@ public sealed class PlayerCommands
 
         Buffer(CommandKind.Action);
         _actionId = actionId;
-        _targetTiles = targetTiles;
+        _selection = selection;
         _stepOnActivation = stepOnActivation;
         TryWriteBuffered();
         return true;
@@ -128,25 +137,34 @@ public sealed class PlayerCommands
         _entityActions.TryGetEffectiveAction(_world.PlayerEntityId, actionId, out var action) &&
         ActivationQueries.FramesUntilReady(_world.PlayerEntityId, action, _entityActions, _actionLocks, _simulationClock.CurrentFrame) < ExpiryFrames;
 
-    /// <summary>Buffers an activation of the stack <paramref name="stackInstanceId"/> against <paramref name="targetTiles"/>, replacing any buffered command. Returns false, buffering nothing, when <see cref="CanQueueConsumable"/> is false.</summary>
-    public bool QueueConsumable(uint stackInstanceId, Vector3Int[] targetTiles)
+    /// <summary>Buffers an activation of the stack <paramref name="stackInstanceId"/> against <paramref name="selection"/>, replacing any buffered command. Returns false, buffering nothing, when <see cref="CanQueueItemActivation"/> is false.</summary>
+    /// <param name="activatedFromSlot">The hotkey slot the activation came from, if any: the slot that follows the unit when activating it moves it to another stack.</param>
+    public bool QueueItemActivation(uint stackInstanceId, TargetSelection selection, HotkeySlot? activatedFromSlot = null)
     {
-        if (!CanQueueConsumable())
+        if (!CanQueueItemActivation(stackInstanceId))
         {
             return false;
         }
 
-        Buffer(CommandKind.Consumable);
+        Buffer(CommandKind.Item);
         _stackInstanceId = stackInstanceId;
-        _targetTiles = targetTiles;
+        _activatedFromSlot = activatedFromSlot;
+        _selection = selection;
         TryWriteBuffered();
         return true;
     }
 
-    /// <summary>Whether the player's action lock clears before a consumable buffered now would expire.</summary>
-    public bool CanQueueConsumable() =>
-        _actionLocks.TryGetReadonly(_world.PlayerEntityId, out var actionLock) &&
-        ActionLockGate.FramesRemaining(actionLock, _simulationClock.CurrentFrame) < ExpiryFrames;
+    /// <summary>Whether an activation of the stack <paramref name="stackInstanceId"/> buffered now could be written before it expires: its item is FreeCast, or the player's action lock clears in time.</summary>
+    public bool CanQueueItemActivation(uint stackInstanceId) =>
+        IgnoresActionLock(stackInstanceId) ||
+        (_actionLocks.TryGetReadonly(_world.PlayerEntityId, out var actionLock) &&
+            ActionLockGate.FramesRemaining(actionLock, _simulationClock.CurrentFrame) < ExpiryFrames);
+
+    /// <summary>Whether the item in the player's stack <paramref name="stackInstanceId"/> is activated FreeCast, so it never waits for the action lock.</summary>
+    private bool IgnoresActionLock(uint stackInstanceId) =>
+        InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, _world.PlayerEntityId, stackInstanceId, out var stack) &&
+        InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var item) &&
+        item.Activator?.Timing.Category == ActionTimingCategory.FreeCast;
 
     /// <summary>Drops the buffered command. Returns whether there was one.</summary>
     /// <remarks>A step waiting on an activation already written is not buffered input, so it is kept.</remarks>
@@ -154,14 +172,14 @@ public sealed class PlayerCommands
     {
         var hadCommand = _kind != CommandKind.None;
         _kind = CommandKind.None;
-        _targetTiles = [];
+        _selection = default;
         _stepOnActivation = null;
         return hadCommand;
     }
 
     /// <summary>Cancels the player's windup and releases the action lock it held. Returns whether the player was winding up.</summary>
     public bool TryCancelWindup(long now) =>
-        WindupCancel.TryCancel(_pendingDelayedActions, _actionLocks, _world.PlayerEntityId, now, releaseLock: true);
+        WindupCancel.TryCancel(_pendingWindups, _actionLocks, _world.PlayerEntityId, now, releaseLock: true);
 
     /// <summary>Writes the buffered command, or else the held direction, into the game once the player's action lock has cleared.</summary>
     public void Flush(Vector3Int heldDirection)
@@ -179,7 +197,7 @@ public sealed class PlayerCommands
 
         if (ActionLockGate.IsBlocked(_actionLocks, playerEntityId, _simulationClock.CurrentFrame) ||
             _pendingActions.Has(playerEntityId) ||
-            _pendingConsumables.Has(playerEntityId) ||
+            _pendingItemActivations.Has(playerEntityId) ||
             !_transformPool.TryGetReadonly(playerEntityId, out var transform) ||
             !_movementPool.TryGetReadonly(playerEntityId, out var movement))
         {
@@ -242,7 +260,7 @@ public sealed class PlayerCommands
         }
 
         var kind = _kind;
-        var targetTiles = _targetTiles;
+        var selection = _selection;
         var stepOnActivation = _stepOnActivation;
         Clear();
 
@@ -252,10 +270,10 @@ public sealed class PlayerCommands
                 WriteMove(playerEntityId, _moveDirection);
                 break;
             case CommandKind.Action:
-                WriteAction(playerEntityId, _actionId, targetTiles, stepOnActivation);
+                WriteAction(playerEntityId, _actionId, selection, stepOnActivation);
                 break;
-            case CommandKind.Consumable:
-                WriteConsumable(playerEntityId, _stackInstanceId, targetTiles);
+            case CommandKind.Item:
+                WriteItemActivation(playerEntityId, _stackInstanceId, selection);
                 break;
         }
 
@@ -266,7 +284,8 @@ public sealed class PlayerCommands
     {
         if (_kind != CommandKind.Action)
         {
-            return !ActionLockGate.IsBlocked(_actionLocks, playerEntityId, now);
+            return (_kind == CommandKind.Item && IgnoresActionLock(_stackInstanceId)) ||
+                !ActionLockGate.IsBlocked(_actionLocks, playerEntityId, now);
         }
 
         return !_entityActions.TryGetEffectiveAction(playerEntityId, _actionId, out var action) ||
@@ -292,25 +311,25 @@ public sealed class PlayerCommands
         SetNextMapPosition(playerEntityId, target);
     }
 
-    private void WriteAction(int playerEntityId, Guid actionId, Vector3Int[] targetTiles, Vector3Int? stepOnActivation)
+    private void WriteAction(int playerEntityId, Guid actionId, TargetSelection selection, Vector3Int? stepOnActivation)
     {
         SetNextMapPosition(playerEntityId, null);
         WithdrawActivationRequests(playerEntityId);
-        _pendingActions.Merge(playerEntityId, new PendingActionActivationComponent(actionId, targetTiles));
+        _pendingActions.Merge(playerEntityId, new PendingActionActivationComponent(actionId, selection));
         _pendingActivationStep = stepOnActivation is { } destination ? (actionId, destination) : null;
     }
 
-    private void WriteConsumable(int playerEntityId, uint stackInstanceId, Vector3Int[] targetTiles)
+    private void WriteItemActivation(int playerEntityId, uint stackInstanceId, TargetSelection selection)
     {
         SetNextMapPosition(playerEntityId, null);
         WithdrawActivationRequests(playerEntityId);
-        _pendingConsumables.Merge(playerEntityId, new PendingConsumableActivationComponent(stackInstanceId, targetTiles));
+        _pendingItemActivations.Merge(playerEntityId, new PendingItemActivationComponent(stackInstanceId, selection, _activatedFromSlot));
     }
 
     private void WithdrawActivationRequests(int playerEntityId)
     {
         _pendingActions.Remove(playerEntityId);
-        _pendingConsumables.Remove(playerEntityId);
+        _pendingItemActivations.Remove(playerEntityId);
         _pendingActivationStep = null;
     }
 

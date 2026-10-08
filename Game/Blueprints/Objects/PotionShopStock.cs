@@ -32,7 +32,6 @@ public static class PotionShopStock
         new(HotkeyExpansionPotion.Build(), PreferredStockLevel: 20),
         new(DamagePotion.Build(), PreferredStockLevel: 30),
         new(ToxicPotion.Build(), PreferredStockLevel: 30),
-        new(ToxicIdol.Build(), PreferredStockLevel: 15),
         new(ImmunityTestPotion.Build(), PreferredStockLevel: 10),
         new(ResistanceTestPotion.Build(), PreferredStockLevel: 10),
     ];

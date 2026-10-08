@@ -53,6 +53,9 @@ public sealed class TerrainContactSystemTests
 
         public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) =>
             Occupants.TryGetValue((position.X, position.Y, position.Z), out var occupantIds) ? occupantIds : [];
+
+        public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) =>
+            Occupants.TryGetValue((position.X, position.Y, position.Z), out var occupantIds) ? System.Runtime.InteropServices.CollectionsMarshal.AsSpan(occupantIds) : [];
     }
 
     /// <summary>

@@ -21,7 +21,7 @@ internal static class BlueprintTestContext
     public static ActionCatalog Actions { get; } = BuiltIns.Context.Actions;
 
     public static BlueprintContext ContextFor(this EcsContext ecsContext, int entityId, int seed = 1, BlueprintRegistry? creatures = null) =>
-        new(ecsContext.ComponentManager, entityId, new MathUtility(new Random(seed)), ecsContext.EntityManager.Keys, (uint)seed, creatures ?? Definitions);
+        new(ecsContext.ComponentManager, entityId, new MathUtility(new Random(seed)), ecsContext.EntityManager.Keys, (uint)seed, creatures ?? Definitions, Actions);
 
     /// <summary>The player's blueprint (see FloorBuilder.CreatePlayer).</summary>
     public static ushort PlayerBlueprint { get; } = Definitions.GetId(Player.Id);
@@ -31,7 +31,7 @@ internal static class BlueprintTestContext
 
     /// <summary>Builds a whole blueprint, includes and all, the way EntityFactory does in the real world.</summary>
     public static void BuildBlueprint(this EcsContext ecsContext, int entityId, ushort blueprintId, int seed = 1) =>
-        new EntityBuilder(Definitions, new Game.Modules.Auras.AuraCatalog(), ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId, blueprintId, (uint)seed, now: 0);
+        new EntityBuilder(Definitions, new Game.Modules.Auras.AuraCatalog(), Actions, ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId, blueprintId, (uint)seed, now: 0);
 
     /// <summary>Builds the built-in definition registered as definitionId -- its race or class and its includes as well as its own blueprint.</summary>
     public static void BuildDefinition(this EcsContext ecsContext, int entityId, Guid definitionId, int seed = 1) =>

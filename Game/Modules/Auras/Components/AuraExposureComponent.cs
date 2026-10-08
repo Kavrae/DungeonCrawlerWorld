@@ -6,8 +6,8 @@ namespace Game.Modules.Auras.Components;
 /// <remarks>
 /// One instance per (entity, aura): an entity inside several auras holds one each, with independent
 /// ticks. AuraSystem adds it when the entity comes into range and removes it on the first tick that
-/// finds the entity out of range. Neither the strength nor the effects are stored: every tick reads
-/// the strength fresh from the aura grid and the effects from the aura's definition. A keyed
+/// finds the entity out of range. Neither the power nor the effects are stored: every tick reads
+/// the power fresh from the aura grid and the effects from the aura's definition. A keyed
 /// timer-wheel timer (IKeyedScheduledTimer), keyed by AuraId.
 /// </remarks>
 public struct AuraExposureComponent(byte auraId, uint nextTickFrame) : IKeyedScheduledTimer

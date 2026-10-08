@@ -29,23 +29,21 @@ public sealed class TestDummyAttackSystem : ISystem
     private readonly DirectComponentPool<TransformComponent> _transformPool;
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly PackedComponentPool<PendingActionActivationComponent> _pendingActivations;
-    private readonly IMapQuery _mapQuery;
     private readonly EntityStripeSet _stripeSet;
 
-    private readonly List<Vector3Int> _adjacentTilesBuffer = [];
+    /// <summary>Power Attack's Adjacent ring, which needs no aimed tile.</summary>
+    private static readonly TargetingSpec PowerAttackTargeting = PowerAttackAction.Build().Activator.Targeting;
 
     public TestDummyAttackSystem(
         PackedComponentPool<TestDummyComponent> testDummies,
         DirectComponentPool<TransformComponent> transformPool,
         PackedComponentPool<ActionLockComponent> actionLocks,
-        PackedComponentPool<PendingActionActivationComponent> pendingActivations,
-        IMapQuery mapQuery)
+        PackedComponentPool<PendingActionActivationComponent> pendingActivations)
     {
         _testDummies = testDummies;
         _transformPool = transformPool;
         _actionLocks = actionLocks;
         _pendingActivations = pendingActivations;
-        _mapQuery = mapQuery;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, testDummies);
     }
@@ -59,8 +57,7 @@ public sealed class TestDummyAttackSystem : ISystem
                 continue;
             }
 
-            TargetShapeResolver.Resolve(TargetShape.Adjacent, transform.Position, transform.Size, transform.Position, range: 0, areaSize: 0, _mapQuery.Bounds, _adjacentTilesBuffer);
-            _pendingActivations.Merge(entityId, new PendingActionActivationComponent(PowerAttackAction.Id, _adjacentTilesBuffer.ToArray()));
+            _pendingActivations.Merge(entityId, new PendingActionActivationComponent(PowerAttackAction.Id, TargetSelection.Ground(transform.Position, PowerAttackTargeting)));
         }
     }
 }

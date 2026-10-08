@@ -1,6 +1,7 @@
 using Game.Modules.AbilityScores;
 using Game.Modules.Health;
 using Game.Modules.StatModifiers;
+using Game.Resources;
 
 namespace Game.Effects.Entries;
 
@@ -25,7 +26,7 @@ namespace Game.Effects.Entries;
 /// 4. Roll a crit; on success, multiply the fully-damageWithTagModifiers result from step 3 by CritMultiplier --
 ///    crit is the last multiplier applied, matching Diablo/PoE's dominant convention (a crit
 ///    amplifies the fully-modified number, not a pre-buff base).
-/// The flat roll is multiplied by context.Magnitude (an aura's strength at the target; 1 otherwise).
+/// The flat roll is multiplied by context.Magnitude (an aura's power at the target; 1 otherwise).
 /// BodyPart says which part it lands on; Unspecified leaves it to BodyPartTargetMode (one part at
 /// random, or every part).
 /// Steps 2 to 4 read the source entity, so with none (context.SourceEntityId null: terrain, an
@@ -41,6 +42,11 @@ public sealed record DirectDamage(
     BodyPartTargeting BodyPart = default,
     BodyPartTargetMode BodyPartTargetMode = BodyPartTargetMode.SingleTarget) : IEffectEntry
 {
+    /// <remarks>Incoming is applied at HealthDamage, the chokepoint damage over time shares.</remarks>
+    private static readonly (StatModifierTarget, StatModifierTarget)[] Modifiers = [(StatModifierTarget.OutgoingDamage, StatModifierTarget.IncomingDamage)];
+
+    public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => Modifiers;
+
     public EffectOutcome Apply(in EffectContext context)
     {
         var flatRoll = MinFlatDamage == MaxFlatDamage ? MinFlatDamage : context.Services.MathUtility.Next(MinFlatDamage, MaxFlatDamage + 1);
@@ -65,7 +71,7 @@ public sealed record DirectDamage(
         {
             var statModifiers = context.Services.StatModifiers;
             var damageWithAbilityScoreScaling = baseDamage + AbilityScoreTagBonus.Compute(sourceEntityId, context.ActivatorTags, context.Services.AbilityScores);
-            damageWithTagModifiers = StatModifierMath.GetEffectiveValue(statModifiers, sourceEntityId, StatModifierTarget.OutgoingDamage, damageWithAbilityScoreScaling, context.ActivatorTags);
+            damageWithTagModifiers = EffectModifiers.ScaleOutgoing(in context, damageWithAbilityScoreScaling, StatModifierTarget.OutgoingDamage);
 
             var critChance = StatModifierMath.GetEffectiveValue(statModifiers, sourceEntityId, StatModifierTarget.CritChance, CritMath.BaseCritChance);
             isCritical = context.Services.MathUtility.NextDouble() < critChance;
@@ -76,7 +82,7 @@ public sealed record DirectDamage(
         }
 
         var targetRule = BodyPart.ResolveRule(in context);
-        HealthDamage.Apply(context.Services.Health, context.Services.EventBus, context.TargetEntityId, (ushort)damageWithTagModifiers, context.Source, context.Services.PlayerQuery, context.ActivatorName, context.Now, context.Services.StatModifiers, context.Services.BodyParts, context.Services.MathUtility, context.Services.DeadEntities, context.Services.FloatingTextFeed, DamageCategory.Direct, targetRule, context.ActivatorTags, BodyPartTargetMode, isCritical);
+        HealthDamage.Apply(context.Services.Health, context.Services.EventBus, context.TargetEntityId, damageWithTagModifiers, context.Source, context.Services.PlayerQuery, context.ActivatorName, context.Now, context.Services.StatModifiers, context.Services.BodyParts, context.Services.MathUtility, context.Services.DeadEntities, context.Services.FloatingTextFeed, ResourceLossCategory.Direct, targetRule, context.ActivatorTags, BodyPartTargetMode, isCritical);
         return EffectOutcome.Applied;
     }
 }

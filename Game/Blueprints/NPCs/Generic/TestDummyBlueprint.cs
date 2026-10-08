@@ -64,7 +64,7 @@ public static class TestDummyBlueprint
                 abilityScoreType == AbilityScoreType.Constitution ? HighRegenConstitutionBaseValue : DefaultAbilityScoreBaseValue);
         }
 
-        ActionGrantEffects.Grant(componentManager, entityId, PowerAttackAction.Id, manaCost: 0, overrideDefinition: BuildPowerAttackWithIdleCooldown());
+        ActionGrantEffects.Grant(componentManager, context.Actions, entityId, PowerAttackAction.Id, overrideDefinition: BuildPowerAttackWithIdleCooldown());
     }
 
     /// <summary>

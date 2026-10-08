@@ -85,7 +85,7 @@ public sealed class LootboxOpener(ComponentManager componentManager, LootboxCata
         {
             for (var unit = 0; unit < stack.Quantity; unit++)
             {
-                InventoryActions.ConsumeItemByStackInstanceId(componentManager, entityId, stack.StackInstanceId);
+                InventoryActions.RemoveOneUnit(componentManager, entityId, stack.StackInstanceId);
                 boxCount++;
 
                 if (definition.Contents is not { } contents)

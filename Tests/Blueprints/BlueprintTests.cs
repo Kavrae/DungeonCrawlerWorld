@@ -172,7 +172,7 @@ public sealed class BlueprintTests
         var potionItemIds = new HashSet<Guid>
         {
             HealthPotion.Build().Id, ManaPotion.Build().Id, HotkeyExpansionPotion.Build().Id, DamagePotion.Build().Id,
-            ToxicPotion.Build().Id, ToxicIdol.Build().Id, ImmunityTestPotion.Build().Id, ResistanceTestPotion.Build().Id,
+            ToxicPotion.Build().Id, ImmunityTestPotion.Build().Id, ResistanceTestPotion.Build().Id,
         };
         foreach (var stack in stacks)
         {
@@ -338,7 +338,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ActionsOf().Has(entityId, ToxicStrikeAction.Id));
 
         // Starting items: 5 Health Potions, 5 Mana Potions, 3 Hotkey Expansion Potions, 5 Volatile
-        // Concoctions (damage), 5 Toxic Flasks (Poison+Burning), 5 Toxic Idols (Poison aura toggle),
+        // Concoctions (damage), 5 Toxic Flasks (Poison+Burning), 1 Toxic Idol (Poison aura toggle),
         // 5 Scrolls of Healing, 5 Scrolls of Torch, 5 Vials of Warding (Burning+Poison immunity),
         // 5 Draughts of Insulation (Burning+Poison resistance) -- see the Effect/
         // ActionActivator plan's concrete test content. Plus a batch of 10 Wands of Fireball and
@@ -347,7 +347,7 @@ public sealed class BlueprintTests
         // item divergence work.
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-        Assert.HasCount(12, stacks);
+        Assert.HasCount(16, stacks);
 
         var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == HealthPotion.Id);
         Assert.AreEqual(5, healthPotionStack.Quantity);
@@ -358,7 +358,7 @@ public sealed class BlueprintTests
         Assert.IsFalse(manaPotionStack.IsDisabled);
 
         var hotkeyExpansionPotionStack = stacks.Single(stack => stack.ItemDefinitionId == HotkeyExpansionPotion.Id);
-        Assert.AreEqual(3, hotkeyExpansionPotionStack.Quantity);
+        Assert.AreEqual(4, hotkeyExpansionPotionStack.Quantity);
         Assert.IsFalse(hotkeyExpansionPotionStack.IsDisabled);
 
         var damagePotionStack = stacks.Single(stack => stack.ItemDefinitionId == DamagePotion.Id);
@@ -370,7 +370,7 @@ public sealed class BlueprintTests
         Assert.IsFalse(toxicPotionStack.IsDisabled);
 
         var toxicIdolStack = stacks.Single(stack => stack.ItemDefinitionId == ToxicIdol.Id);
-        Assert.AreEqual(5, toxicIdolStack.Quantity);
+        Assert.AreEqual(1, toxicIdolStack.Quantity);
         Assert.IsFalse(toxicIdolStack.IsDisabled);
 
         var scrollOfHealingStack = stacks.Single(stack => stack.ItemDefinitionId == ScrollOfHealing.Id);

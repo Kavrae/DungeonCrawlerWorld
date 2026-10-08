@@ -35,11 +35,11 @@ public sealed class StaggerTests
     {
         var (ecsContext, eventBus, targetEntityId) = Build();
         var componentManager = ecsContext.ComponentManager;
-        componentManager.Merge(targetEntityId, new PendingDelayedActionComponent(Guid.NewGuid(), [new Vector3Int(2, 2, 0)], LockedUntilFrame));
+        componentManager.Merge(targetEntityId, PendingWindupComponent.ForAction(Guid.NewGuid(), TestSelections.At(new Vector3Int(2, 2, 0)), LockedUntilFrame));
 
         eventBus.Publish(new EntityStaggeredEvent(targetEntityId, ActionSource.Admin));
 
-        Assert.IsFalse(componentManager.GetPackedPool<PendingDelayedActionComponent>().Has(targetEntityId));
+        Assert.IsFalse(componentManager.GetPackedPool<PendingWindupComponent>().Has(targetEntityId));
         Assert.AreEqual(LockedUntilFrame, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(targetEntityId).UnlockedAtFrame, "The time the windup already cost is lost, not given back.");
     }
 

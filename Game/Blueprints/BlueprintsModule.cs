@@ -30,6 +30,7 @@ public sealed class BlueprintsModule : IGameModule
         PlayerKit.Definition,
         TreasureChest.Definition,
         HealingShrine.Definition,
+        AuraAnchor.Definition,
         Shop.Definition,
         GeneralShopStock.Definition,
         PotionShopStock.Definition,
@@ -43,6 +44,7 @@ public sealed class BlueprintsModule : IGameModule
         LongDescriptionPart.Definition,
         Tiny.Definition,
         Phasing.Definition,
+        Radiant.Definition,
 
         Player.Definition,
         GoblinForeman.Definition,

@@ -9,6 +9,7 @@ using Game.Modules.Health;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Inventory.Definitions;
+using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.StatModifiers;
 using Game.World;
@@ -37,6 +38,9 @@ public static class PlayerKit
     private const ushort MagicMissileDamage = 5;
 
     private const ushort WandOfFireballStartingQuantity = 10;
+
+    /// <summary>TEMPORARY -- see Build.</summary>
+    private const float TestingStartingMana = 30;
 
     /// <summary>Charge count for the TEMPORARY Adjacent-targeting test wand below -- arbitrary, just needs to be a few shots' worth.</summary>
     private const ushort TestAdjacentWandCharges = 5;
@@ -74,14 +78,23 @@ public static class PlayerKit
         var baseWand = WandOfFireball.Build();
         var adjacentTargetingWand = baseWand with
         {
-            Activator = ((WandActivator)baseWand.Activator!) with { Targeting = new TargetingSpec(TargetShape.Adjacent, Range: 0), Charges = TestAdjacentWandCharges, MaxCharges = TestAdjacentWandCharges },
+            Activator = ((WandActivator)baseWand.Activator!) with { Targeting = new TargetingSpec(TargetShape.Adjacent, Range: 0, Modes: TargetingModes.GroundOnly), Charges = TestAdjacentWandCharges, MaxCharges = TestAdjacentWandCharges },
         };
         InventoryActions.AddDivergentItem(componentManager, entityId, adjacentTargetingWand);
 
         var magicMissileOverride = ActionOverrideEffects.OverrideFlatDamage(MagicMissileAction.Build(), MagicMissileDamage);
-        ActionGrantEffects.Grant(componentManager, entityId, HealAction.Id, HealAction.ManaCost, overrideDefinition: null);
-        ActionGrantEffects.Grant(componentManager, entityId, MagicMissileAction.Id, MagicMissileAction.ManaCost, overrideDefinition: magicMissileOverride);
-        ActionGrantEffects.Grant(componentManager, entityId, ToxicStrikeAction.Id, manaCost: 0, overrideDefinition: null);
+        var actions = context.Actions;
+        ActionGrantEffects.Grant(componentManager, actions, entityId, HealAction.Id, overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, actions, entityId, MagicMissileAction.Id, overrideDefinition: magicMissileOverride);
+        ActionGrantEffects.Grant(componentManager, actions, entityId, ToxicStrikeAction.Id, overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, actions, entityId, ToxicAuraAction.Id, overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, actions, entityId, LanternAction.Id, overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, actions, entityId, FireballAction.Id, overrideDefinition: null);
+
+        // TEMPORARY, for testing spells (Fireball costs 15): 30 mana whatever Intelligence would give. Remove once mana is balanced.
+        var mana = componentManager.GetPackedPool<ManaComponent>();
+        mana.Remove(entityId);
+        mana.Add(entityId, new ManaComponent(TestingStartingMana, TestingStartingMana));
 
         // F/Q/R are the defaults for Dodge/PowerAttack/QuickAttack (Combat Overhaul: Dodge,
         // TODO.md) -- hotkey slots are never dedicated, only defaulted when available, so this
@@ -92,6 +105,19 @@ public static class PlayerKit
         componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base1, PowerAttackAction.Id));
         componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base2, MagicMissileAction.Id));
         componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Base3, QuickAttackAction.Id));
+
+        // TEMPORARY -- nothing lets the player bind an action to a slot yet, so Toxic Aura is bound here to be
+        // usable at all. Slot 7 is a locked expansion slot until a Hotkey Expansion Potion unlocks it, like the
+        // Toxic Idol's Slot 6. Remove once a rebind UI exists.
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot7, ToxicAuraAction.Id));
+
+        // TEMPORARY, like Toxic Aura's binding above: Fireball takes the first slot nothing else is bound to (Slot8, locked until a
+        // Hotkey Expansion Potion unlocks it). Remove once a rebind UI exists.
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot8, FireballAction.Id));
+
+        // TEMPORARY, like the two above: the Lantern (test content for a toggle placing an aura anchor) on Slot9, unlocked by the fourth
+        // Hotkey Expansion Potion. Remove with LanternAction.
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot9, LanternAction.Id));
         componentManager.Merge(entityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: DefaultUnlockedExpansionSlots));
 
         StartingCurrencyGrant.GrantFixedStartingGold(componentManager, entityId);
@@ -101,14 +127,20 @@ public static class PlayerKit
         // landed in, which is what gets bound below.
         var healthPotionStackId = InventoryActions.AddItem(componentManager, entityId, HealthPotion.Id, quantity: 5);
         var manaPotionStackId = InventoryActions.AddItem(componentManager, entityId, ManaPotion.Id, quantity: 5);
-        var hotkeyExpansionPotionStackId = InventoryActions.AddItem(componentManager, entityId, HotkeyExpansionPotion.Id, quantity: 3);
+        var hotkeyExpansionPotionStackId = InventoryActions.AddItem(componentManager, entityId, HotkeyExpansionPotion.Id, quantity: 4);
         var damagePotionStackId = InventoryActions.AddItem(componentManager, entityId, DamagePotion.Id, quantity: 5);
         var toxicPotionStackId = InventoryActions.AddItem(componentManager, entityId, ToxicPotion.Id, quantity: 5);
-        var toxicIdolStackId = InventoryActions.AddItem(componentManager, entityId, ToxicIdol.Id, quantity: 5);
+        var toxicIdolStackId = InventoryActions.AddItem(componentManager, entityId, ToxicIdol.Id, quantity: 1);
         InventoryActions.AddItem(componentManager, entityId, ScrollOfHealing.Id, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, ScrollOfTorch.Id, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, ImmunityTestPotion.Id, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, ResistanceTestPotion.Id, quantity: 5);
+
+        // TEMPORARY test content for stat modifiers on every effect amount (ModifierTestPotions). Remove with them.
+        foreach (var modifierTestPotionId in (Guid[])[ModifierTestPotions.PlentyId, ModifierTestPotions.ThriftId, ModifierTestPotions.VenomId, ModifierTestPotions.RadianceId])
+        {
+            InventoryActions.AddItem(componentManager, entityId, modifierTestPotionId, quantity: 3);
+        }
 
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, healthPotionStackId));
         componentManager.Merge(entityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot2, manaPotionStackId));

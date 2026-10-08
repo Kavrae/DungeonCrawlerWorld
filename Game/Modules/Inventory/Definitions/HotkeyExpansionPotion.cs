@@ -21,6 +21,6 @@ public static class HotkeyExpansionPotion
         Summary: "Adds 5 new hotkey slots.",
         GoldValue: 12,
         Activator: new PotionActivator(
-            new TargetingSpec(Shape: TargetShape.Self, Range: 0, AreaSize: 0),
+            new TargetingSpec(Shape: TargetShape.Self, Range: 0, AreaSize: 0, TargetModeAffects: TargetModeAffects.MarkedOnly),
             new ActionTiming(ActionTimingCategory.Immediate, GameTiming.FramesForSeconds(5f), CooldownFrames: null)));
 }

@@ -92,7 +92,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     /// (ItemHotkeyBindingQueries.CanBind -- a loot box). A single divergent stack -- whether it never needed
     /// merging in the first place, or is currently shown as one of a Merged Stack's Expansion
     /// Stacks after clicking to expand -- is exactly as bindable as a base stack: it already
-    /// resolves to one exact physical StackInstanceId, the same identity ConsumableActivationSystem's
+    /// resolves to one exact physical StackInstanceId, the same identity ItemActivationSystem's
     /// own PeelWandCharge repoints a binding to automatically once a wand fires. Divergence itself
     /// was never the thing worth blocking -- ambiguity (which physical stack a merged cell's drag
     /// would even mean) is.
@@ -145,6 +145,9 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     /// </summary>
     public bool CanStageInTrade { get; set; }
 
+    /// <summary>True for a lit unit of a toggle item -- draws ToggleActiveMarker. Set after Configure, which resets it, by whatever built the cell; a pooled cell never carries it over.</summary>
+    public bool IsToggledOn { get; set; }
+
     /// <summary>
     /// cellSize is the caller's known fixed cell size (see InventoryGridContent), not ContentSize
     /// -- Configure runs immediately after CreateElement, before this cell's own layout has
@@ -172,6 +175,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         _quantity = quantity;
         _isDisabled = isDisabled;
         ShopTradeEligible = true;
+        IsToggledOn = false;
         _groupBorderTop = false;
         _groupBorderBottom = false;
         _groupBorderLeft = false;
@@ -243,6 +247,11 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 
         SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, iconSize, spriteTint);
+
+        if (IsToggledOn)
+        {
+            ToggleActiveMarker.Draw(spriteBatch, unitRectangle, bounds);
+        }
 
         return isGreyedOut;
     }

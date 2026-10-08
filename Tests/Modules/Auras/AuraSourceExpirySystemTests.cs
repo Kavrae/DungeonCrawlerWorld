@@ -29,7 +29,7 @@ public sealed class AuraSourceExpirySystemTests
     public void BeforeItsExpiryFrame_SourceAndExpiryStay()
     {
         var (system, expiries, sources, eventBus) = Build();
-        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, strength: 8);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, power: 8, size: 3);
         expiries.Add(EntityId, new AuraSourceExpiryComponent(TestAuras.LightId, expiresAtFrame: 100));
 
         system.Update(Frame(99), 0);
@@ -42,7 +42,7 @@ public sealed class AuraSourceExpirySystemTests
     public void OnItsExpiryFrame_RevokesMatchingAuraSourceAndRemovesExpiry()
     {
         var (system, expiries, sources, eventBus) = Build();
-        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, strength: 8);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, power: 8, size: 3);
         expiries.Add(EntityId, new AuraSourceExpiryComponent(TestAuras.LightId, expiresAtFrame: 100));
 
         system.Update(Frame(100), 0);
@@ -56,8 +56,8 @@ public sealed class AuraSourceExpirySystemTests
     public void OnExpiry_LeavesOtherAuraSourceTypesIntact()
     {
         var (system, expiries, sources, eventBus) = Build();
-        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, strength: 8);
-        AuraSourceEffects.Toggle(sources, eventBus, EntityId, TestAuras.PoisonId, strength: 5);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, power: 8, size: 3);
+        TestAuras.ToggleSource(sources, eventBus, EntityId, TestAuras.PoisonId, power: 5, size: 2);
         expiries.Add(EntityId, new AuraSourceExpiryComponent(TestAuras.LightId, expiresAtFrame: 1));
 
         system.Update(Frame(1), 0);
@@ -70,7 +70,7 @@ public sealed class AuraSourceExpirySystemTests
     public void RefreshedBeforeExpiry_OnlyTheNewFrameRevokes()
     {
         var (system, expiries, sources, eventBus) = Build();
-        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, strength: 8);
+        AuraSourceEffects.Apply(sources, eventBus, EntityId, TestAuras.LightId, power: 8, size: 3);
         expiries.Add(EntityId, new AuraSourceExpiryComponent(TestAuras.LightId, expiresAtFrame: 100));
         system.Update(Frame(50), 0);
 

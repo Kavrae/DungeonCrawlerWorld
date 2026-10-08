@@ -1,5 +1,7 @@
 using Game.Modules.AbilityScores;
+using Game.Modules.StatModifiers;
 using Game.Modules.Health;
+using Game.Resources;
 
 namespace Game.Effects.Entries;
 
@@ -27,7 +29,7 @@ namespace Game.Effects.Entries;
 /// BodyPartTargetMode defaults to All (every body part heals, the total split evenly across them --
 /// see ComplexHealthHeal's own doc comment for why) so every existing potion/scroll keeps its
 /// "heals everyone" behavior unless it opts into SingleTarget/LowestPercentage.
-/// FlatAmount is multiplied by context.Magnitude (an aura's strength at the target; 1 otherwise).
+/// FlatAmount is multiplied by context.Magnitude (an aura's power at the target; 1 otherwise).
 /// A target with nothing to restore is left alone and reported as NoEffect -- HealthHeal.Apply's own
 /// answer, so the check is made once.
 /// </summary>
@@ -37,6 +39,11 @@ public sealed record DirectHeal(
     BodyPartTargeting BodyPart = default,
     BodyPartTargetMode BodyPartTargetMode = BodyPartTargetMode.All) : IEffectEntry
 {
+    /// <remarks>Both are applied at HealthHeal, the chokepoint regeneration shares.</remarks>
+    private static readonly (StatModifierTarget, StatModifierTarget)[] Modifiers = [(StatModifierTarget.OutgoingHealing, StatModifierTarget.IncomingHealing)];
+
+    public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => Modifiers;
+
     public EffectOutcome Apply(in EffectContext context)
     {
         var percentageBaseHeal = 0f;
@@ -56,7 +63,7 @@ public sealed record DirectHeal(
             : baseHeal;
 
         var targetRule = BodyPart.ResolveRule(in context);
-        var healed = HealthHeal.Apply(context.Services.Health, context.TargetEntityId, percentOfMaxHealth: 0f, context.Now, context.Services.StatModifiers, context.Services.BodyParts, flatAmount: healWithAbilityScoreScaling, sourceEntityId: context.SourceEntityId, activatorTags: context.ActivatorTags, targetMode: BodyPartTargetMode, targetRule: targetRule, mathUtility: context.Services.MathUtility, eventBus: context.Services.EventBus, playerQuery: context.Services.PlayerQuery, floatingTextFeed: context.Services.FloatingTextFeed, healCategory: HealCategory.Direct, healType: context.ActivatorName);
+        var healed = HealthHeal.Apply(context.Services.Health, context.TargetEntityId, percentOfMaxHealth: 0f, context.Now, context.Services.StatModifiers, context.Services.BodyParts, flatAmount: healWithAbilityScoreScaling, sourceEntityId: context.SourceEntityId, activatorTags: context.ActivatorTags, targetMode: BodyPartTargetMode, targetRule: targetRule, mathUtility: context.Services.MathUtility, eventBus: context.Services.EventBus, playerQuery: context.Services.PlayerQuery, floatingTextFeed: context.Services.FloatingTextFeed, healCategory: ResourceGainCategory.Direct, healType: context.ActivatorName);
         return healed ? EffectOutcome.Applied : EffectOutcome.NoEffect;
     }
 }

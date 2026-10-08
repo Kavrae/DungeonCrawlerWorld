@@ -26,7 +26,7 @@ public static class StatusEffectImmunityEffects
         var extended = immunities.TryUpdateFirst(
             entityId,
             (Type: effectType, Deadline: expiresAtFrame),
-            static (ref readonly StatusEffectImmunityComponent immunity, (StatusEffectType Type, uint Deadline) state) => immunity.EffectType == state.Type,
+            static (ref readonly StatusEffectImmunityComponent immunity, (StatusEffectType Type, uint Deadline) state) => immunity.EffectType == state.Type && immunity.HeldGrantKey == StatusEffectImmunityComponent.NoHeldGrantKey,
             static (ref StatusEffectImmunityComponent immunity, (StatusEffectType Type, uint Deadline) state) =>
                 immunity.ExpiresAtFrame = System.Math.Max(immunity.ExpiresAtFrame, state.Deadline));
 
@@ -35,6 +35,19 @@ public static class StatusEffectImmunityEffects
             immunities.Add(entityId, new StatusEffectImmunityComponent(effectType, expiresAtFrame));
         }
     }
+
+    /// <summary>Makes entityId immune to effectType for as long as the toggle heldGrantKey holds it: an instance of its own, beside any other immunity to the type, which only RevokeHeld under the same key ends.</summary>
+    public static void GrantHeld(MultiComponentPool<StatusEffectImmunityComponent> immunities, int entityId, StatusEffectType effectType, uint heldGrantKey)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(heldGrantKey, StatusEffectImmunityComponent.NoHeldGrantKey);
+
+        immunities.Add(entityId, new StatusEffectImmunityComponent(effectType, FrameDeadline.Never, heldGrantKey));
+    }
+
+    /// <summary>Ends entityId's immunity to effectType held under heldGrantKey, if it has one; any other immunity to the type stays.</summary>
+    public static void RevokeHeld(MultiComponentPool<StatusEffectImmunityComponent> immunities, int entityId, StatusEffectType effectType, uint heldGrantKey) =>
+        immunities.RemoveFirst(entityId, (Type: effectType, Key: heldGrantKey),
+            static (ref readonly StatusEffectImmunityComponent immunity, (StatusEffectType Type, uint Key) state) => immunity.EffectType == state.Type && immunity.HeldGrantKey == state.Key);
 
     /// <summary>Grant with no expiry -- for an entity that is immune by what it is (see TreasureChest/Shop), not by something that was cast on it.</summary>
     public static void GrantPermanent(MultiComponentPool<StatusEffectImmunityComponent> immunities, int entityId, StatusEffectType effectType) =>

@@ -404,6 +404,17 @@ public sealed class HealthWindowTests
     }
 
     [TestMethod]
+    public void FormatModifierRow_EffectAmountModifiers_ReadAsNamedAmounts()
+    {
+        HealthWindow.ModifierRow Row(StatModifierTarget target, float magnitude) => new(target, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, magnitude, ConditionTag: default, RemainingSeconds: null);
+
+        Assert.AreEqual("-50% Mana Costs", HealthWindow.FormatModifierRow(Row(StatModifierTarget.IncomingManaDrain, -0.5f), TestGameplayTags.BuiltIn));
+        Assert.AreEqual("x2 Status Effect Stacks", HealthWindow.FormatModifierRow(Row(StatModifierTarget.OutgoingStatusStacks, 1f), TestGameplayTags.BuiltIn));
+        Assert.AreEqual("x2 Aura Size", HealthWindow.FormatModifierRow(Row(StatModifierTarget.OutgoingAuraSize, 1f), TestGameplayTags.BuiltIn));
+        Assert.AreEqual("+50% Aura Power", HealthWindow.FormatModifierRow(Row(StatModifierTarget.OutgoingAuraPower, 0.5f), TestGameplayTags.BuiltIn));
+    }
+
+    [TestMethod]
     public void FormatModifierRow_SeventyFivePercentReduction_ReadsAsSeventyFivePercent()
     {
         var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.75f, ConditionTag: GameTags.DamagePoison, RemainingSeconds: null);

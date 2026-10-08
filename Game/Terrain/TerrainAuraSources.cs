@@ -57,7 +57,7 @@ public static class TerrainAuraSources
     {
         if (registry.TryGet(typeId, out var definition) && definition.Aura is { } found)
         {
-            aura = new AuraSourceComponent(auras.Register(found.Aura), found.Strength);
+            aura = new AuraSourceComponent(auras.Register(found.Aura), found.Power, found.Size);
             return true;
         }
 

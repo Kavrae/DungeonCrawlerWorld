@@ -1,14 +1,15 @@
+using Engine.Math;
 using Engine.Tags;
 using Game.Effects;
 using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Auras;
 
-/// <summary>How an aura's strength at an entity's position reaches its effects.</summary>
+/// <summary>How an aura's value at an entity's position reaches its effects.</summary>
 public enum AuraMagnitude : byte
 {
-    /// <summary>Effects are scaled by the aura's strength there (EffectContext.Magnitude), so they weaken with distance from a source and add where sources overlap.</summary>
-    Strength,
+    /// <summary>Effects are scaled by the aura's value there (EffectContext.Magnitude), so they follow its falloff and add where sources overlap.</summary>
+    Power,
 
     /// <summary>Effects apply at their own amounts anywhere the aura reaches, however strong it is there.</summary>
     Flat,
@@ -17,28 +18,30 @@ public enum AuraMagnitude : byte
 /// <summary>One kind of aura: what it is called, the colour it glows, and what it does to an entity standing inside it.</summary>
 /// <remarks>
 /// <para>
-/// A source radiates an aura by naming its Id with a strength (AuraSourceComponent, TerrainAura,
+/// A source radiates an aura by naming its Id with a power and a size (AuraSourceComponent, TerrainAura,
 /// AuraSourceGrant); everything else about the aura is read from here, so every source of one aura
-/// glows the same colour and has the same effects.
+/// glows the same colour, falls off the same way and has the same effects.
 /// </para>
 /// <para>
 /// The effects are the same Effect lists an action or item holds, so an aura can do anything those
 /// can. AuraSystem applies them from an exposure's tick, once every AuraEffects.TickIntervalFrames
-/// while an entity stays in range, with no source entity and attributed to the aura
-/// (ActionSource.FromAura). An entry that should hold a level rather than pile up says so itself:
+/// while an entity stays in range, with no source entity, credited to the strongest contributor there
+/// (AuraField.Attribute). An entry that should hold a level rather than pile up says so itself:
 /// StatusEffectGrant with TopUpTo, StatModifierGrant with RefreshFromSameSource.
 /// </para>
 /// </remarks>
 /// <param name="Id">Stable, mod-safe identity. Registering it again replaces the definition.</param>
 /// <param name="Effects">What the aura does each tick to an entity in range; none for an aura that only glows.</param>
 /// <param name="Tags">What kind of aura this is, for modifiers conditioned on a tag.</param>
+/// <param name="Falloff">How each source's value changes from its power at the source to the edge of its size.</param>
 public sealed record AuraDefinition(
     Guid Id,
     string Name,
     Color GlowColor,
     IReadOnlyList<Effect>? Effects = null,
     GameplayTagSet Tags = default,
-    AuraMagnitude Magnitude = AuraMagnitude.Strength)
+    AuraMagnitude Magnitude = AuraMagnitude.Power,
+    AuraFalloff Falloff = AuraFalloff.Linear)
 {
     public IReadOnlyList<Effect> Effects { get; init; } = Effects ?? [];
 

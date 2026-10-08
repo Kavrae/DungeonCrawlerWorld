@@ -9,7 +9,7 @@ namespace Game.Modules.Actions.Components;
 ///
 /// Override lives here, per instance, rather than on the shared ActionDefinition it points to
 /// via ActionId -- multiple entities can share one catalog ActionDefinition while each hitting for a
-/// different amount or diverging in any other way (targeting, ManaCost, Tags). Mirrors
+/// different amount or diverging in any other way (targeting, activation effects, Tags). Mirrors
 /// InventoryItemStackComponent.Override's shape exactly: a full, nullable clone of the catalog
 /// definition built via `with`, resolved by EntityActions.TryGetEffectiveAction (Override if set,
 /// else the plain catalog lookup by ActionId) -- null means "no override," so the granted action's

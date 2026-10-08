@@ -1,9 +1,12 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Game.Effects;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
+using Game.Modules.Actions.Activators;
+using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -17,6 +20,7 @@ using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
+using Game.Modules.StatModifiers.Components;
 using Game.Modules.Race.Components;
 using Game.World;
 
@@ -75,14 +79,21 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     private readonly EntityActions _actions;
     private readonly PackedComponentPool<RaceSlotsComponent> _raceSlots;
     private readonly PackedComponentPool<PendingActionActivationComponent> _pendingActivations;
-    private readonly PackedComponentPool<PendingConsumableActivationComponent> _pendingConsumableActivations;
+    private readonly PackedComponentPool<PendingItemActivationComponent> _pendingItemActivations;
     private readonly IMapQuery _mapQuery;
     private readonly MathUtility _mathUtility;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
+    private readonly EffectServices _effectServices;
     private readonly PackedComponentPool<ManaComponent> _mana;
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
     private readonly PackedComponentPool<MeleeDisabledComponent> _meleeDisabled;
     private readonly ProcessingTierQuery _tierQuery;
     private readonly TieredEntityStripeSet _tieredStripeSet;
+    private readonly IPlayerQuery _playerQuery;
+    private readonly TargetResolution _targetResolution;
+
+    /// <summary>A Health Potion's targeting, for marking the drinker itself.</summary>
+    private static readonly IActionActivator HealthPotionActivator = HealthPotion.Build().Activator!;
 
     private readonly List<Vector3Int> _adjacentTilesBuffer = [];
 
@@ -96,14 +107,16 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         EntityActions actions,
         PackedComponentPool<RaceSlotsComponent> raceSlots,
         PackedComponentPool<PendingActionActivationComponent> pendingActivations,
-        PackedComponentPool<PendingConsumableActivationComponent> pendingConsumableActivations,
+        PackedComponentPool<PendingItemActivationComponent> pendingItemActivations,
         IMapQuery mapQuery,
         MathUtility mathUtility,
         DirectComponentPool<ProcessingTierComponent> processingTiers,
         ProcessingTierEvents processingTierEvents,
         PackedComponentPool<DeadComponent> deadEntities,
-        PackedComponentPool<ManaComponent> mana,
-        PackedComponentPool<MeleeDisabledComponent> meleeDisabled)
+        EffectServices effectServices,
+        PackedComponentPool<MeleeDisabledComponent> meleeDisabled,
+        IPlayerQuery playerQuery,
+        TargetResolution targetResolution)
     {
         _movementPool = movementPool;
         _transformPool = transformPool;
@@ -114,12 +127,16 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         _actions = actions;
         _raceSlots = raceSlots;
         _pendingActivations = pendingActivations;
-        _pendingConsumableActivations = pendingConsumableActivations;
+        _pendingItemActivations = pendingItemActivations;
         _mapQuery = mapQuery;
         _mathUtility = mathUtility;
         _deadEntities = deadEntities;
-        _mana = mana;
+        _mana = effectServices.Mana;
+        _effectServices = effectServices;
+        _statModifiers = effectServices.StatModifiers;
         _meleeDisabled = meleeDisabled;
+        _playerQuery = playerQuery;
+        _targetResolution = targetResolution;
 
         _tierQuery = new ProcessingTierQuery(processingTiers);
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementPool, processingTiers, processingTierEvents);
@@ -190,7 +207,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
             return; // Still mid-move from a previous decision -- nothing new to decide yet.
         }
 
-        if (TryDecideSelfHeal(entityId, transform) || TryDecideMeleeAttack(entityId, transform))
+        if (TryDecideSelfHeal(entityId) || TryDecideMeleeAttack(entityId, transform, now) || TryDecideRangedAttackOnPlayer(entityId, transform, now))
         {
             return;
         }
@@ -199,7 +216,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     }
 
     /// <summary>Below half health and holding at least one Health Potion -> drink it. Deliberately simple (a fixed 50% threshold, no smarter "how urgent is this" weighing) -- see this class's own doc comment on why.</summary>
-    private bool TryDecideSelfHeal(int entityId, TransformComponent transform)
+    private bool TryDecideSelfHeal(int entityId)
     {
         if (!HealthQueries.TryGetTotals(_health, _bodyParts, entityId, out var current, out var maximum) || current * 2 >= maximum)
         {
@@ -211,7 +228,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
             return false;
         }
 
-        _pendingConsumableActivations.Merge(entityId, new PendingConsumableActivationComponent(potionStack.StackInstanceId, [transform.Position]));
+        _pendingItemActivations.Merge(entityId, new PendingItemActivationComponent(potionStack.StackInstanceId, _targetResolution.SelectEntity(entityId, HealthPotionActivator, entityId)));
         ClearStep(entityId);
         return true;
     }
@@ -227,7 +244,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     /// out" pattern ActionTargetingController.TryActivateWithAutoTarget already uses for
     /// player-driven Adjacent actions.
     /// </summary>
-    private bool TryDecideMeleeAttack(int entityId, TransformComponent transform)
+    private bool TryDecideMeleeAttack(int entityId, TransformComponent transform, long now)
     {
         if (!_actions.Has(entityId, QuickAttackAction.Id))
         {
@@ -251,12 +268,49 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
 
         var actionId = _mathUtility.Next(0, 2) == 0 ? QuickAttackAction.Id : PowerAttackAction.Id;
         if (!_actions.TryGetEffectiveAction(entityId, actionId, out var action) ||
-            ActivationQueries.GetBlocker(entityId, action.Activator, action.Tags, _mana, _meleeDisabled) != ActivationBlocker.None)
+            ActivationQueries.GetBlocker(entityId, action, action.Activator, isToggledOn: false, _meleeDisabled, _effectServices, now) != ActivationBlocker.None)
         {
             return false;
         }
 
-        _pendingActivations.Merge(entityId, new PendingActionActivationComponent(actionId, _adjacentTilesBuffer.ToArray()));
+        _pendingActivations.Merge(entityId, new PendingActionActivationComponent(actionId, TargetSelection.Ground(transform.Position, action.Activator.Targeting)));
+        ClearStep(entityId);
+        return true;
+    }
+
+    /// <summary>TEMPORARY, with the rest of this system: an entity granted Magic Missile casts it at the player when the player is in range and not adjacent, aiming in Target or Ground mode at random for each cast.</summary>
+    /// <remarks>
+    /// Only at the player: ranged attacks at any hostile wait on TODO "Spatial queries for NPC
+    /// decisions". The mode is drawn from MathUtility, the session's seeded sequence this system
+    /// already rolls from, so a seeded run repeats it. Never cast without the mana for it -- the same
+    /// blocker check the melee branch makes. Adjacent counts across layers, so a Flying Fairy over the
+    /// player doesn't cast at point-blank range.
+    /// </remarks>
+    private bool TryDecideRangedAttackOnPlayer(int entityId, TransformComponent transform, long now)
+    {
+        var playerEntityId = _playerQuery.PlayerEntityId;
+        if (playerEntityId == entityId ||
+            !_actions.TryGetEffectiveAction(entityId, MagicMissileAction.Id, out var action) ||
+            !TryGetRaceId(entityId, out var casterRaceId) ||
+            !IsAttackable(playerEntityId, casterRaceId) ||
+            !_transformPool.TryGetReadonly(playerEntityId, out var playerTransform))
+        {
+            return false;
+        }
+
+        var range = action.Activator.Targeting.Range;
+        if (GridDistance.ChebyshevDistance(transform.Position, playerTransform.Position) <= 1 ||
+            GridDistance.ManhattanDistance(transform.Position, playerTransform.Position) > range ||
+            ActivationQueries.GetBlocker(entityId, action, action.Activator, isToggledOn: false, _meleeDisabled, _effectServices, now) != ActivationBlocker.None)
+        {
+            return false;
+        }
+
+        var selection = _mathUtility.Next(0, 2) == 0
+            ? _targetResolution.SelectEntity(entityId, action.Activator, playerEntityId)
+            : _targetResolution.Select(entityId, action.Activator, TargetingMode.Ground, playerTransform.Position, now);
+
+        _pendingActivations.Merge(entityId, new PendingActionActivationComponent(MagicMissileAction.Id, selection));
         ClearStep(entityId);
         return true;
     }
@@ -270,7 +324,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     {
         foreach (var tile in adjacentTiles)
         {
-            foreach (var occupantEntityId in _mapQuery.GetOccupantEntityIdsAt(tile))
+            foreach (var occupantEntityId in _mapQuery.GetOccupantEntityIdSpanAt(tile))
             {
                 if (IsAttackable(occupantEntityId, attackerRaceId))
                 {

@@ -42,25 +42,24 @@ public static class FloorBuilder
     /// <param name="squareSizeOverride">Width and height in tiles for a fixed map instead of the default window -- the "--map-size=" argument. Null, or the default window's own 3072, for the window.</param>
     public static Game.World.Map CreateMap(int floorNumber, int? squareSizeOverride = null)
     {
-        if (squareSizeOverride is null or DefaultNeighborhoodsPerSide * Game.World.Neighborhoods.SizeTiles)
+        if (squareSizeOverride is { } tiles && tiles != DefaultNeighborhoodsPerSide * Game.World.Neighborhoods.SizeTiles)
         {
-            var window = Game.World.Map.Unbounded(LayerCount);
-            for (var cellY = -1; cellY <= 1; cellY++)
-            {
-                for (var cellX = -1; cellX <= 1; cellX++)
-                {
-                    window.LoadNeighborhood(cellX, cellY);
-                }
-            }
-
-            window.CenterLookupOn(0, 0);
-            return window;
+            var neighborhoodsPerSide = (tiles + Game.World.Neighborhoods.SizeTiles - 1) >> Game.World.Neighborhoods.SizeShift;
+            var min = -Game.World.Neighborhoods.OriginOf(neighborhoodsPerSide / 2);
+            return new Game.World.Map(new MapBounds(min, min, min + tiles, min + tiles, LayerCount));
         }
 
-        var tiles = squareSizeOverride.Value;
-        var neighborhoodsPerSide = (tiles + Game.World.Neighborhoods.SizeTiles - 1) >> Game.World.Neighborhoods.SizeShift;
-        var min = -Game.World.Neighborhoods.OriginOf(neighborhoodsPerSide / 2);
-        return new Game.World.Map(new MapBounds(min, min, min + tiles, min + tiles, LayerCount));
+        var window = Game.World.Map.Unbounded(LayerCount);
+        for (var cellY = -1; cellY <= 1; cellY++)
+        {
+            for (var cellX = -1; cellX <= 1; cellX++)
+            {
+                window.LoadNeighborhood(cellX, cellY);
+            }
+        }
+
+        window.CenterLookupOn(0, 0);
+        return window;
     }
 
     /// <summary>Fills the floor's loaded neighborhoods: terrain, walls and everything spawned on them.</summary>

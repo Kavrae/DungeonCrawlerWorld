@@ -10,6 +10,7 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
+using Game.Resources;
 using Game.Spawning;
 using Game.Terrain;
 using Game.World;
@@ -44,7 +45,7 @@ public sealed class HolyGroundTests
             HealthDamage.Apply(
                 Components.GetPackedPool<SimpleHealthComponent>(), Build.EcsContext.EventBus, entityId, amount, ActionSource.Admin, Build.World, "Test", Now,
                 Components.GetMultiPool<StatModifierComponent>(), EntityBodyParts.For(Components, Build.Context.Definitions), Build.Context.MathUtility,
-                Components.GetPackedPool<DeadComponent>(), Build.Context.FloatingTextFeed, DamageCategory.Direct);
+                Components.GetPackedPool<DeadComponent>(), Build.Context.FloatingTextFeed, ResourceLossCategory.Direct);
 
         /// <summary>Every modifier Holy Ground has given entityId.</summary>
         public List<StatModifierComponent> BlessingsOf(int entityId)
@@ -130,9 +131,9 @@ public sealed class HolyGroundTests
 
     [TestMethod]
     [DataRow(0, 8)]
-    [DataRow(1, 4)]
-    [DataRow(3, 1)]
-    public void ItsHealingAura_HealsByItsStrengthAtTheEntitysDistance(int tilesAway, int healthPerSecond)
+    [DataRow(1, 6)]
+    [DataRow(3, 2)]
+    public void ItsHealingAura_HealsByItsPowerAtTheEntitysDistance(int tilesAway, int healthPerSecond)
     {
         var session = BuildSession();
         var chestId = session.SpawnChest(new Vector3Int(HolyGroundPosition.X + tilesAway, HolyGroundPosition.Y, GroundLayer));
@@ -151,10 +152,10 @@ public sealed class HolyGroundTests
     {
         var session = BuildSession();
 
-        Assert.IsTrue(session.Build.Context.AuraField.TryGetGlow(HolyGroundPosition, out var glowColor, out var totalStrength));
+        Assert.IsTrue(session.Build.Context.AuraField.TryGetGlow(HolyGroundPosition, out var glowColor, out var totalPower));
         Assert.AreEqual(Microsoft.Xna.Framework.Color.White, glowColor);
-        Assert.AreEqual(8, totalStrength);
-        Assert.AreEqual(8, session.Build.Context.AuraField.GetTotalStrengthAt(HolyGroundPosition, session.Build.Context.Auras.GetId(BuiltInTerrain.HolyGroundAura.Id)));
+        Assert.AreEqual(8, totalPower);
+        Assert.AreEqual(8, session.Build.Context.AuraField.GetTotalPowerAt(HolyGroundPosition, session.Build.Context.Auras.GetId(BuiltInTerrain.HolyGroundAura.Id)));
     }
 
     [TestMethod]

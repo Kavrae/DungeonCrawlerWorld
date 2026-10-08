@@ -19,8 +19,10 @@ public static class HealAction
         Effects: [new Effect([new DirectHeal(0.2f)])],
         Activator: new SpellActivator(
             new TargetingSpec(TargetShape.Self, Range: 0),
-            new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null),
-            ManaCost),
+            new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)),
         Description: "The user glows red while casting and immediately recovers up to 20% of their maximum health. This spell does not level up.",
-        Summary: "Heals 20% of Max Health");
+        Summary: "Heals 20% of Max Health")
+    {
+        ActivationEffects = [new Effect([new ManaDrain(ManaCost)])],
+    };
 }

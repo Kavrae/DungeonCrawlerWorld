@@ -6,9 +6,9 @@ using Game.Modules.Mana.Components;
 namespace Game.Modules.Mana;
 
 /// <summary>
-/// The "gains mana on first mana-costing action" hook -- called from ActionGrantEffects.Grant
-/// whenever the action being granted has a nonzero ManaCost. A no-op if the entity already has a
-/// ManaComponent (only the first mana-costing action actually grants one) or if it has no
+/// The "gains mana on first mana-draining action" hook -- called from ActionGrantEffects.Grant
+/// whenever the action being granted drains its user's mana (ManaUse.DrainsUsersMana). A no-op if the
+/// entity already has a ManaComponent (only the first such action actually grants one) or if it has no
 /// Intelligence ability score yet (nothing sensible to size MaximumMana from -- callers
 /// must grant ability scores before granting a mana-costing action, the same ordering
 /// PlayerKit follows). MaximumMana is a one-time snapshot of Intelligence's Total at grant

@@ -287,4 +287,44 @@ public sealed class MultiComponentPoolTests
         Assert.AreEqual(0u, pool.GetEntityVersion(3_000));
         Assert.IsLessThan(emptyBytes + 1_000, pool.EstimatedBytes);
     }
+
+    [TestMethod]
+    public void ComponentRemoving_FiresForEveryRemovalPath_WithTheInstanceStillReadable()
+    {
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
+        var removing = new List<(int EntityId, int Value)>();
+        pool.ComponentRemoving += (entityId, denseIndex) => removing.Add((entityId, pool.GetReadonlyByDenseIndex(denseIndex).Value));
+
+        pool.Add(1, new TestComponent { Value = 10 });
+        pool.Add(1, new TestComponent { Value = 11 });
+        pool.Add(2, new TestComponent { Value = 20 });
+        pool.Add(3, new TestComponent { Value = 30 });
+        pool.Add(3, new TestComponent { Value = 31 });
+        pool.Add(4, new TestComponent { Value = 40 });
+        pool.Add(4, new TestComponent { Value = 41 });
+        Assert.IsEmpty(removing, "An add is not a removal.");
+
+        pool.RemoveFirst(1, static (ref readonly TestComponent component) => component.Value == 10);
+        pool.RemoveFirst(4, 41, static (ref readonly TestComponent component, int value) => component.Value == value);
+        pool.RemoveByDenseIndex(pool.GetFirstDenseIndex(2));
+        pool.Remove(3);
+
+        CollectionAssert.AreEquivalent(new[] { (1, 10), (4, 41), (2, 20), (3, 30), (3, 31) }, removing);
+        Assert.AreEqual(1, pool.CountForEntity(1));
+        Assert.AreEqual(1, pool.CountForEntity(4));
+    }
+
+    [TestMethod]
+    public void ComponentRemoving_FiresBeforeTheEntityStopsHoldingTheInstance()
+    {
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
+        pool.Add(1, new TestComponent { Value = 10 });
+        var countSeenWhileRemoving = -1;
+        pool.ComponentRemoving += (entityId, _) => countSeenWhileRemoving = pool.CountForEntity(entityId);
+
+        pool.Remove(1);
+
+        Assert.AreEqual(1, countSeenWhileRemoving);
+        Assert.IsFalse(pool.Has(1));
+    }
 }
