@@ -191,7 +191,7 @@ public sealed class ToggleItemPresentationTests
     private static GridFixture BuildGrid(uint unlockedAtFrame = 0)
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20));
-        componentManager.Merge(GridPlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: unlockedAtFrame));
+        componentManager.Merge(GridPlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: unlockedAtFrame));
 
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();

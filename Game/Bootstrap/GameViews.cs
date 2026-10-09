@@ -19,7 +19,7 @@ public sealed class GameViews
         EntityBodyParts = EntityBodyParts.For(componentManager, context.Definitions);
         EntityActions = EntityActions.For(componentManager, context.Actions, context.Definitions);
         EntityNaming = EntityNaming.For(componentManager, context.Definitions);
-        PlayerActionGate = new PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), world, context.SimulationClock);
+        PlayerActionGate = new PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), context.EffectServices.AbilityScores, context.EffectServices.StatModifiers, world, context.SimulationClock);
         InventoryView = new InventoryView(componentManager, context.Items);
         ShopView = new ShopView(componentManager);
         CurrencyView = new CurrencyView(componentManager);

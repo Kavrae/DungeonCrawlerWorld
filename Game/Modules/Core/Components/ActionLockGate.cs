@@ -1,6 +1,5 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
-using Engine.Utilities;
 
 namespace Game.Modules.Core.Components;
 
@@ -9,20 +8,17 @@ namespace Game.Modules.Core.Components;
 /// <cleanupVersion>1</cleanupVersion>
 public static class ActionLockGate
 {
-    /// <summary>The lock duration most actions/items use -- the default an entity's own ActionLockComponent.StandardLockFrames is seeded with at construction.</summary>
-    public static readonly ushort StandardLockFrames = (ushort)GameTiming.FramesForSeconds(1f);
-
     /// <summary>Whether entityId is currently barred from acting. An entity with no ActionLockComponent at all reads as blocked, unchanged from when this was a countdown.</summary>
     public static bool IsBlocked(PackedComponentPool<ActionLockComponent> actionLocks, int entityId, long now) =>
         !actionLocks.TryGetReadonly(entityId, out var actionLock) || !FrameDeadline.IsReached(actionLock.UnlockedAtFrame, now);
 
-    /// <summary>Locks entityId for framesToWait frames from now, or for the entity's own ActionLockComponent.StandardLockFrames if null. Sets the UI's total alongside the deadline, so a fresh action always resets the fraction's denominator too.</summary>
-    public static void Lock(PackedComponentPool<ActionLockComponent> actionLocks, int entityId, long now, ushort? framesToWait = null) =>
-        actionLocks.TryUpdate(entityId, (Now: now, Frames: framesToWait), static (ref ActionLockComponent actionLock, (long Now, ushort? Frames) state) =>
+    /// <summary>Locks entityId for framesToWait frames from now. Sets the UI's total alongside the deadline, so a fresh action always resets the fraction's denominator too.</summary>
+    /// <remarks>A lock with no duration of its own is the entity's standard lock -- the caller resolves it (StandardActionLockFrames).</remarks>
+    public static void Lock(PackedComponentPool<ActionLockComponent> actionLocks, int entityId, long now, ushort framesToWait) =>
+        actionLocks.TryUpdate(entityId, (Now: now, Frames: framesToWait), static (ref ActionLockComponent actionLock, (long Now, ushort Frames) state) =>
         {
-            var resolved = state.Frames ?? actionLock.StandardLockFrames;
-            actionLock.CurrentLockTotalFrames = resolved;
-            actionLock.UnlockedAtFrame = FrameDeadline.After(state.Now, resolved);
+            actionLock.CurrentLockTotalFrames = state.Frames;
+            actionLock.UnlockedAtFrame = FrameDeadline.After(state.Now, state.Frames);
         });
 
     /// <summary>Frees entityId from its current lock as of now.</summary>

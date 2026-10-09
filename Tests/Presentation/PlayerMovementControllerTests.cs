@@ -53,7 +53,7 @@ public sealed class PlayerMovementControllerTests
 
         TestTransforms.Set(componentManager, PlayerEntityId, new TransformComponent(playerPosition ?? PlayerPosition, new Vector2Byte(1, 1)));
         componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
-        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: locked ? LockEndsAtFrame : 0u));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: locked ? LockEndsAtFrame : 0u));
 
         var clock = new SimulationClock();
         var playerCommands = new PlayerCommands(

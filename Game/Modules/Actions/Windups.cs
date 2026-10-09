@@ -35,7 +35,7 @@ public sealed class WindupResolvers
 /// <summary>Starts a windup: the one place a Delayed activation, of an action or an item, sets the lock and records what it resolves into.</summary>
 public static class Windups
 {
-    /// <summary>Sets entityId's action lock for lockFrames (the entity's standard lock when null) and records windup, ending when the lock does.</summary>
+    /// <summary>Sets entityId's action lock for lockFrames and records windup, ending when the lock does.</summary>
     /// <remarks>
     /// The windup's end is the lock's own deadline, read straight back off the component this just
     /// locked, so the pending windup and the lock can never disagree about when it resolves. The
@@ -47,7 +47,7 @@ public static class Windups
         PackedComponentPool<PendingWindupComponent> pendingWindups,
         int entityId,
         long now,
-        ushort? lockFrames,
+        ushort lockFrames,
         PendingWindupComponent windup)
     {
         ActionLockGate.Lock(actionLocks, entityId, now, lockFrames);
@@ -56,7 +56,7 @@ public static class Windups
         // blocked, so no caller gets here -- but it keeps the deadline honest if that ever changes.
         windup.ReadyAtFrame = actionLocks.TryGetReadonly(entityId, out var actionLock)
             ? actionLock.UnlockedAtFrame
-            : FrameDeadline.After(now, lockFrames ?? 0);
+            : FrameDeadline.After(now, lockFrames);
 
         pendingWindups.Merge(entityId, windup);
     }

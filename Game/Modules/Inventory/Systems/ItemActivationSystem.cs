@@ -208,7 +208,7 @@ public sealed class ItemActivationSystem : ISystem
 
                     ActivationEffectsApplier.Apply(_effectServices, entityId, item, _now);
                     ActivatePotion(item, entityId, request.Selection);
-                    ActionLockGate.Lock(_actionLocks, entityId, _now, potionActivator.Timing.ActionLockFrames);
+                    ActionLockGate.Lock(_actionLocks, entityId, _now, LockFramesFor(entityId, potionActivator.Timing));
                     break;
 
                 case ScrollActivator scrollActivator:
@@ -219,7 +219,7 @@ public sealed class ItemActivationSystem : ISystem
 
                     ActivationEffectsApplier.Apply(_effectServices, entityId, item, _now);
                     ActivateScroll(item, scrollActivator, entityId, request.Selection);
-                    ActionLockGate.Lock(_actionLocks, entityId, _now, scrollActivator.Timing.ActionLockFrames);
+                    ActionLockGate.Lock(_actionLocks, entityId, _now, LockFramesFor(entityId, scrollActivator.Timing));
                     break;
 
                 case WandActivator wandActivator:
@@ -231,7 +231,7 @@ public sealed class ItemActivationSystem : ISystem
                     ActivationEffectsApplier.Apply(_effectServices, entityId, item, _now);
                     PeelWandCharge(entityId, stack, item, wandActivator, request.ActivatedFromSlot);
                     ActivateWand(item, entityId, request.Selection);
-                    ActionLockGate.Lock(_actionLocks, entityId, _now, wandActivator.Timing.ActionLockFrames);
+                    ActionLockGate.Lock(_actionLocks, entityId, _now, LockFramesFor(entityId, wandActivator.Timing));
                     break;
 
                 case ToggleItemActivator toggleActivator:
@@ -250,7 +250,7 @@ public sealed class ItemActivationSystem : ISystem
                         // Lit only when the windup resolves (ToggleItemWindupResolver); putting one out is at once.
                         if (toggleActivator.Timing.Category == ActionTimingCategory.Delayed)
                         {
-                            Windups.Begin(_actionLocks, _pendingWindups, entityId, _now, toggleActivator.Timing.ActionLockFrames,
+                            Windups.Begin(_actionLocks, _pendingWindups, entityId, _now, LockFramesFor(entityId, toggleActivator.Timing),
                                 PendingWindupComponent.ForItem(request.StackInstanceId, request.ActivatedFromSlot, request.Selection, readyAtFrame: 0));
                             break;
                         }
@@ -263,13 +263,17 @@ public sealed class ItemActivationSystem : ISystem
 
                     if (!ignoresActionLock)
                     {
-                        ActionLockGate.Lock(_actionLocks, entityId, _now, toggleActivator.Timing.ActionLockFrames);
+                        ActionLockGate.Lock(_actionLocks, entityId, _now, LockFramesFor(entityId, toggleActivator.Timing));
                     }
 
                     break;
             }
         }
     }
+
+    /// <summary>The lock the item's timing states, or the entity's standard lock when it states none.</summary>
+    private ushort LockFramesFor(int entityId, ActionTiming timing) =>
+        StandardActionLockFrames.ResolveForEntity(_abilityScores, _statModifiers, entityId, timing.ActionLockFrames);
 
     /// <summary>Shared pre-checks + stack consumption for Potion/Scroll -- still holds the stack, action lock isn't currently blocking, then consumes one unit (per spec order, before the effect applies). Returns false (nothing consumed) if either check fails.</summary>
     private bool TryBeginActivation(int entityId, uint stackInstanceId)

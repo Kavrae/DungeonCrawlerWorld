@@ -100,7 +100,7 @@ public sealed class ActivationRefusalCursorTests
             Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: 600))));
         var harness = TestMapWindows.Create(20, 20, 1, playerPosition: new Vector3Int(5, 5, 0), actionCatalog);
         var componentManager = harness.ComponentManager;
-        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(SpellId, overrideDefinition: null));
         componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, SpellId));
         var actions = TestActionStateViews.EntityActions(componentManager, actionCatalog);

@@ -1,4 +1,6 @@
 ﻿using Engine.Modules;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.BodyPartEffects;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core;
@@ -22,7 +24,7 @@ public sealed class MovementModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, DeathModule.ModuleId, StatModifiersModule.ModuleId, BodyPartEffectsModule.ModuleId, ProcessingTierModule.ModuleId];
+    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, DeathModule.ModuleId, StatModifiersModule.ModuleId, BodyPartEffectsModule.ModuleId, ProcessingTierModule.ModuleId, AbilityScoresModule.ModuleId];
 
     public void RegisterComponents(ComponentRegistration registration)
     {
@@ -64,6 +66,7 @@ public sealed class MovementModule : IGameModule
             context.ProcessingTierEvents,
             deadEntities,
             statModifiers,
+            componentManager.GetPackedPool<AbilityScoresComponent>(),
             movementDisabled));
 
         systemManager.RegisterFrameScoped(context.MovedEntities);

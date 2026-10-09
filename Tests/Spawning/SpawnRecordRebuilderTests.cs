@@ -10,6 +10,7 @@ using Game.Spawning;
 using Game.Floors;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
+using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
@@ -131,10 +132,9 @@ public sealed class SpawnRecordRebuilderTests
         var ecs = result.EcsContext;
         var entityId = ecs.EntityManager.CreateEntity();
 
-        new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, result.Catalogs.ActionCatalog, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, Blueprint(result, Goblin.Id, Engineer.Id), seed: 1, now: 0);
+        new EntityBuilder(result.Catalogs.Definitions, result.Catalogs.Auras, result.Catalogs.ActionCatalog, ecs.EntityManager.Keys).Build(ecs.ComponentManager, entityId, Blueprint(result, Goblin.Id, Tank.Id), seed: 1, now: 0);
 
-        // Goblin's 54-frame lock, then Engineer's 10% reduction on top of it.
-        Assert.AreEqual((ushort)48, ecs.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId).StandardLockFrames);
+        Assert.IsFalse(ecs.ComponentManager.GetPackedPool<SimpleHealthComponent>().Has(entityId), "Tank found the Goblin's body parts, so it added no baseline health.");
     }
 
     [TestMethod]

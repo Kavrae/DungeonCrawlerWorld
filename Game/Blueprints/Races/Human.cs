@@ -65,7 +65,7 @@ public static class Human
         var entityId = context.EntityId;
 
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
-        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 30, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
         {

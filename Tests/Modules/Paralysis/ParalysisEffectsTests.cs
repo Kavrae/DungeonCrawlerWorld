@@ -16,7 +16,7 @@ public sealed class ParalysisEffectsTests
     private static ComponentManager CreateComponentManager()
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
-        componentManager.GetPackedPool<ActionLockComponent>().Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.GetPackedPool<ActionLockComponent>().Add(0, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         return componentManager;
     }
 

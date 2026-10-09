@@ -198,7 +198,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -215,7 +215,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile, areaSize: 1)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -231,7 +231,7 @@ public sealed class ItemActivationSystemTests
         var bodyPartWorld = BodyPartTestWorld.WithParts(componentManager, TargetEntityId, ("Head", BodyPartType.Head, 40, 40, true), ("Torso", BodyPartType.Torso, 40, 160, true));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -261,7 +261,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -278,7 +278,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new ManaComponent(currentMana: 3, maximumMana: 10));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, ManaPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -295,7 +295,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, ManaPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -313,7 +313,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 3);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -331,7 +331,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -350,7 +350,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(CasterEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(selfTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -367,7 +367,7 @@ public sealed class ItemActivationSystemTests
         componentManager.GetPackedPool<AbilityScoresComponent>().Add(TargetEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 300, total: 300));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -384,7 +384,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.GetPackedPool<PotionCooldownComponent>().Add(TargetEntityId, new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 500));
 
         PotionCooldownAbusedEvent? published = null;
@@ -407,7 +407,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         var published = false;
         eventBus.Subscribe<PotionCooldownAbusedEvent>(_ => published = true);
@@ -453,7 +453,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, unlockedAtFrame: 30));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 30, unlockedAtFrame: 30));
 
         system.Update(default, 0);
 
@@ -486,7 +486,7 @@ public sealed class ItemActivationSystemTests
         componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().Add(CasterEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 10));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, HotkeyExpansionPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -502,7 +502,7 @@ public sealed class ItemActivationSystemTests
         componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().Add(CasterEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 18));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, HotkeyExpansionPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -517,7 +517,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var originalStackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 3, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(originalStackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -549,7 +549,7 @@ public sealed class ItemActivationSystemTests
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         Assert.IsTrue(InventoryQueries.TryGetStack(stacks, CasterEntityId, WandId, out var casterStack));
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(casterStack.StackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -571,7 +571,7 @@ public sealed class ItemActivationSystemTests
         var bindings = componentManager.GetMultiPool<ItemHotkeyBindingComponent>();
         bindings.Add(CasterEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, originalStackInstanceId));
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(originalStackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -588,7 +588,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 1, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -604,7 +604,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 0, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         system.Update(default, 0);
 
@@ -621,7 +621,7 @@ public sealed class ItemActivationSystemTests
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
         var stackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 3, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
-        componentManager.Merge(CasterEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, unlockedAtFrame: 30));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 30, unlockedAtFrame: 30));
 
         system.Update(default, 0);
 

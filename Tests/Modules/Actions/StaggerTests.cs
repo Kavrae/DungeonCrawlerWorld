@@ -26,7 +26,7 @@ public sealed class StaggerTests
         var ecsContext = pass.EcsContext;
 
         var targetEntityId = ecsContext.EntityManager.CreateEntity();
-        ecsContext.ComponentManager.Merge(targetEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, unlockedAtFrame: LockedUntilFrame));
+        ecsContext.ComponentManager.Merge(targetEntityId, new ActionLockComponent(currentLockTotalFrames: 60, unlockedAtFrame: LockedUntilFrame));
         return (ecsContext, pass.Context.EventBus, targetEntityId);
     }
 

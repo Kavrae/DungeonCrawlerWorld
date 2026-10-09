@@ -62,10 +62,12 @@ internal static class TestSystems
         ProcessingTierEvents processingTierEvents,
         PackedComponentPool<DeadComponent>? deadEntities = null,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
-        PackedComponentPool<MovementDisabledComponent>? movementDisabled = null) =>
+        PackedComponentPool<MovementDisabledComponent>? movementDisabled = null,
+        PackedComponentPool<AbilityScoresComponent>? abilityScores = null) =>
         new(transformComponents, actionLocks, movementComponents, mapQuery, eventBus, entityMoveSync, movedEntities, playerQuery ?? TestPlayerQuery.NoPlayer, processingTiers, processingTierEvents,
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
+            abilityScores ?? EmptyPools.Packed<AbilityScoresComponent>(),
             movementDisabled ?? EmptyPools.Packed<MovementDisabledComponent>());
 
     public static SimpleHealthRegenSystem SimpleHealthRegenSystem(

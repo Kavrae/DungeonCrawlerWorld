@@ -37,9 +37,6 @@ public static class TestDummyBlueprint
     /// <summary>Maxes SimpleHealthRegenSystem's own Constitution-scaled regen ramp (MaxHealthRegenPerSecond at total 300) -- a training dummy should shrug off repeated test hits without needing a respawn.</summary>
     private const ushort HighRegenConstitutionBaseValue = 300;
 
-    /// <summary>Moderate, race-typical lock -- this dummy's own "speed" only ever matters for how often it re-fires Power Attack (TestDummyAttackSystem), not movement.</summary>
-    private const ushort StandardLockFrames = 48;
-
     /// <summary>How long this dummy waits after Power Attack's effect actually lands before it can act again.</summary>
     private const float IdleSecondsAfterAttack = 3f;
 
@@ -55,7 +52,7 @@ public static class TestDummyBlueprint
         var entityId = context.EntityId;
 
         componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
-        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(entityId, new TestDummyComponent());
 
         foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())

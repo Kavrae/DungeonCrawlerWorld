@@ -2,6 +2,7 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Effects;
+using Game.Modules.AbilityScores;
 using Game.Modules.Actions.Components;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
@@ -136,10 +137,10 @@ public sealed class ActionActivationSystem : ISystem
                 {
                     case ActionTimingCategory.Immediate:
                         ApplyNow(entityId, action, request.Selection, now);
-                        ActionLockGate.Lock(_actionLocks, entityId, now, timing.ActionLockFrames);
+                        ActionLockGate.Lock(_actionLocks, entityId, now, LockFramesFor(entityId, timing));
                         break;
                     case ActionTimingCategory.Delayed:
-                        Windups.Begin(_actionLocks, _pendingWindups, entityId, now, timing.ActionLockFrames, PendingWindupComponent.ForAction(action.Id, request.Selection, readyAtFrame: 0));
+                        Windups.Begin(_actionLocks, _pendingWindups, entityId, now, LockFramesFor(entityId, timing), PendingWindupComponent.ForAction(action.Id, request.Selection, readyAtFrame: 0));
                         break;
                     case ActionTimingCategory.FreeCast:
                         ApplyNow(entityId, action, request.Selection, now);
@@ -169,7 +170,7 @@ public sealed class ActionActivationSystem : ISystem
         var timing = action.Activator.Timing;
         if (!isToggledOn && timing.Category == ActionTimingCategory.Delayed)
         {
-            Windups.Begin(_actionLocks, _pendingWindups, entityId, now, timing.ActionLockFrames, PendingWindupComponent.ForAction(action.Id, selection, readyAtFrame: 0));
+            Windups.Begin(_actionLocks, _pendingWindups, entityId, now, LockFramesFor(entityId, timing), PendingWindupComponent.ForAction(action.Id, selection, readyAtFrame: 0));
             return;
         }
 
@@ -186,9 +187,13 @@ public sealed class ActionActivationSystem : ISystem
 
         if (timing.Category != ActionTimingCategory.FreeCast)
         {
-            ActionLockGate.Lock(_actionLocks, entityId, now, timing.ActionLockFrames);
+            ActionLockGate.Lock(_actionLocks, entityId, now, LockFramesFor(entityId, timing));
         }
     }
+
+    /// <summary>The lock the action's timing states, or the entity's standard lock when it states none.</summary>
+    private ushort LockFramesFor(int entityId, ActionTiming timing) =>
+        StandardActionLockFrames.ResolveForEntity(_effectServices.AbilityScores, _effectServices.StatModifiers, entityId, timing.ActionLockFrames);
 
     /// <summary>Resolves the selection into tiles now and applies the action there: an Immediate or FreeCast activation lands where its target is at the moment it is confirmed, whatever the mode.</summary>
     private void ApplyNow(int entityId, ActionDefinition action, TargetSelection selection, long now)

@@ -27,7 +27,7 @@ public sealed class EntityKeyWiringTests
         var targetPosition = new Vector3Int(11, 10, (int)MapLayer.Ground);
         var targetId = PlaceAt(world, ecs, result, targetPosition);
         ecs.ComponentManager.Merge(targetId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
-        ecs.ComponentManager.Merge(casterId, new ActionLockComponent(standardLockFrames: 30, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        ecs.ComponentManager.Merge(casterId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         ecs.ComponentManager.Merge(casterId, new ActionInstanceComponent(QuickAttackAction.Id, overrideDefinition: null));
         ecs.ComponentManager.Merge(casterId, new PendingActionActivationComponent(QuickAttackAction.Id, TestSelections.At(targetPosition)));
         ActionSource? damageSource = null;

@@ -3,6 +3,7 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Blueprints;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
@@ -10,6 +11,7 @@ using Game.Modules.Auras;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.StatModifiers.Components;
 using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.Rendering;
@@ -88,7 +90,7 @@ internal static class TestMapWindows
 
         var terrain = new Game.Terrain.TerrainRegistry();
         var mapView = new MapViewQuery(world, componentManager, resolvedActionCatalog, terrain, creatures: new BlueprintRegistry(), new SimulationClock());
-        var playerActionGate = new PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), world, new SimulationClock());
+        var playerActionGate = new PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), componentManager.GetPackedPool<AbilityScoresComponent>(), componentManager.GetMultiPool<StatModifierComponent>(), world, new SimulationClock());
         var auraGlow = new AuraGlowView(new AuraField(world, terrain, TestAuras.GlowOnlyCatalog(), eventBus));
 
         var floatingTextController = new FloatingTextController(eventBus, new SimulationClock());

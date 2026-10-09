@@ -817,7 +817,8 @@ public sealed class HealthWindow(
     /// OutgoingDamage (either operation) as "Damage" -- Additive flat ("+2 Damage"/"-1 Damage",
     /// e.g. PlayerKit's own buff), Multiplicative as a percentage ("-50% Damage", e.g.
     /// BodyPartEffectsSystem's own Arm/Hand-damage melee debuff); Multiplicative MaximumHealth the
-    /// same percentage way as a "+50% Health"; MovementLockFrames (either operation) as a
+    /// same percentage way as a "+50% Health", and Multiplicative ActionLockFrames as a
+    /// "-10% Action Lock"; MovementLockFrames (either operation) as a
     /// "Movement Penalty" --
     /// see FormatMovementPenalty's own doc comment for why that one keeps a literal "x" instead of
     /// converting to a percentage the way MaximumHealth does. Every other Target/Operation
@@ -852,6 +853,11 @@ public sealed class HealthWindow(
         if (row.Target == StatModifierTarget.MovementLockFrames)
         {
             return FormatMovementPenalty(row, gameplayTags);
+        }
+
+        if (row.Target == StatModifierTarget.ActionLockFrames && row.Operation == StatModifierOperation.Multiplicative)
+        {
+            return FormatSignedPercentage(row.Magnitude, "Action Lock", row.ConditionTag, row.RemainingSeconds, gameplayTags);
         }
 
         if (EffectAmountModifierText.SubjectOf(row.Target) is { } effectAmountSubject)

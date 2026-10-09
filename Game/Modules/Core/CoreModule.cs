@@ -74,7 +74,6 @@ public sealed class CoreModule : IGameModule
 
         componentManager.RegisterPackedPool<ActionLockComponent>(static (ref existing, incoming) =>
         {
-            existing.StandardLockFrames = MathUtility.ClampUShort(((existing.StandardLockFrames + incoming.StandardLockFrames) / 2), 0, ushort.MaxValue);
             existing.CurrentLockTotalFrames = MathUtility.ClampUShort(((existing.CurrentLockTotalFrames + incoming.CurrentLockTotalFrames) / 2), 0, ushort.MaxValue);
 
             // The later deadline wins rather than averaging: averaging two absolute frames would

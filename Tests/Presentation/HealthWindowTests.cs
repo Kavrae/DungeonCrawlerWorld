@@ -415,6 +415,15 @@ public sealed class HealthWindowTests
     }
 
     [TestMethod]
+    public void FormatModifierRow_MultiplicativeActionLockFrames_ReadsAsSignedActionLockPercentage()
+    {
+        HealthWindow.ModifierRow Row(float magnitude, StatModifierPolarity polarity) => new(StatModifierTarget.ActionLockFrames, StatModifierOperation.Multiplicative, polarity, magnitude, ConditionTag: default, RemainingSeconds: null);
+
+        Assert.AreEqual("-10% Action Lock", HealthWindow.FormatModifierRow(Row(-0.1f, StatModifierPolarity.Buff), TestGameplayTags.BuiltIn));
+        Assert.AreEqual("+80% Action Lock", HealthWindow.FormatModifierRow(Row(0.8f, StatModifierPolarity.Debuff), TestGameplayTags.BuiltIn));
+    }
+
+    [TestMethod]
     public void FormatModifierRow_SeventyFivePercentReduction_ReadsAsSeventyFivePercent()
     {
         var row = new HealthWindow.ModifierRow(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, Magnitude: -0.75f, ConditionTag: GameTags.DamagePoison, RemainingSeconds: null);

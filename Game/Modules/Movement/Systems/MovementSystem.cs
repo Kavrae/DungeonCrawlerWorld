@@ -2,6 +2,8 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Game.Modules.AbilityScores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -42,6 +44,7 @@ public sealed class MovementSystem : ITieredSystem
     private readonly IPlayerQuery _playerQuery;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
     private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
+    private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores;
     private readonly PackedComponentPool<MovementDisabledComponent> _movementDisabled;
     private readonly TieredEntityStripeSet _tieredStripeSet;
 
@@ -58,6 +61,7 @@ public sealed class MovementSystem : ITieredSystem
         ProcessingTierEvents processingTierEvents,
         PackedComponentPool<DeadComponent> deadEntities,
         MultiComponentPool<StatModifierComponent> statModifiers,
+        PackedComponentPool<AbilityScoresComponent> abilityScores,
         PackedComponentPool<MovementDisabledComponent> movementDisabled)
     {
         _transformComponents = transformComponents;
@@ -70,6 +74,7 @@ public sealed class MovementSystem : ITieredSystem
         _playerQuery = playerQuery;
         _deadEntities = deadEntities;
         _statModifiers = statModifiers;
+        _abilityScores = abilityScores;
         _movementDisabled = movementDisabled;
 
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementComponents, processingTiers, processingTierEvents);
@@ -189,7 +194,7 @@ public sealed class MovementSystem : ITieredSystem
             transformComponent.Position = newPosition;
         }))
         {
-            var baseLockFrames = _actionLocks.GetReadonly(entityId).StandardLockFrames;
+            var baseLockFrames = StandardActionLockFrames.ResolveForEntity(_abilityScores, _statModifiers, entityId);
             var standardLockFrames = MathUtility.ClampUShort(
                 StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.MovementLockFrames, baseLockFrames),
                 0,

@@ -447,17 +447,16 @@ public sealed class BlueprintTests
     }
 
     [TestMethod]
-    public void Engineer_Build_AppliesCooldownBonusWhenMovementComponentPresent()
+    public void Engineer_Build_ShortensTheStandardLockWhenActionLockComponentPresent()
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
         ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, null, null));
-        ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Add(entityId, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Add(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         ecsContext.BuildDefinition(entityId, Engineer.Id);
 
-        var actionLock = ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId);
-        Assert.AreEqual((ushort)13, actionLock.StandardLockFrames); // 15 * 0.9m rounds down to 13.
+        Assert.AreEqual((ushort)27, TestActionLocks.StandardLockOf(ecsContext.ComponentManager, entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ClassSlotsComponent>().Has(entityId));
     }
 
@@ -469,10 +468,9 @@ public sealed class BlueprintTests
 
         ecsContext.BuildDefinition(entityId, Engineer.Id);
 
-        // No race ran first, so Engineer merges its own baseline instead of silently doing
-        // nothing -- the class still functions when composed (or used) without a race.
-        var actionLock = ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId);
-        Assert.AreEqual((ushort)60, actionLock.StandardLockFrames);
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
+        Assert.AreEqual((ushort)27, TestActionLocks.StandardLockOf(ecsContext.ComponentManager, entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ClassSlotsComponent>().Has(entityId));
     }
 
@@ -628,20 +626,15 @@ public sealed class BlueprintTests
     }
 
     [TestMethod]
-    public void GoblinEngineerRecipe_Build_AppliesCompoundCooldownReductionOnTopOfEngineersOwn()
+    public void GoblinEngineerRecipe_Build_AddsItsLockReductionToEngineersOwn()
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
-        var mathUtility = new MathUtility(new Random(1));
 
         ecsContext.BuildBlueprint(entityId, BlueprintTestContext.GoblinEngineerBlueprint);
 
-        var actionLock = ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(entityId);
-        // Goblin sets a fixed StandardLockFrames of 54; Engineer applies *0.9 and casts to
-        // short (54 * 0.9m = 48.6 -> 48), then GoblinEngineerPart applies its own *0.9 to
-        // that already-truncated value and casts again (48 * 0.9m = 43.2 -> 43) -- each stage
-        // rounds down independently, not one combined multiplication.
-        Assert.AreEqual((ushort)43, actionLock.StandardLockFrames);
+        // Dexterity 5 is 29.8 frames; the two -10% modifiers add to -20%, so 23.84 rounds to 24.
+        Assert.AreEqual((ushort)24, TestActionLocks.StandardLockOf(ecsContext.ComponentManager, entityId));
     }
 
     [TestMethod]

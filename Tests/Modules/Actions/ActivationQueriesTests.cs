@@ -58,7 +58,7 @@ public sealed class ActivationQueriesTests
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
         componentManager.Merge(EntityId, new ManaComponent(currentMana, 100f));
-        componentManager.Merge(EntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: lockedUntilFrame));
+        componentManager.Merge(EntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: lockedUntilFrame));
         if (meleeDisabled)
         {
             componentManager.Merge(EntityId, new MeleeDisabledComponent());

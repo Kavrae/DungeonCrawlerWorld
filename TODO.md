@@ -1002,13 +1002,6 @@ Open: the ticket cap and radius (measure the per-bubble cost), whether an area t
 into the dropped ring when the window shifts (probably not: fall back to transit), and how ticket
 cost shows up in the diagnostics engine so it's visible when budgets are tuned.
 
-#### Dexterity scaling ActionLockComponent.StandardLockFrames
-
-Flat per-entity today (Goblin 54, Fairy/Ghost 48, Player 20, +Engineer 10%). Lerp
-`ActionLockGate.StandardLockFrames` (1s) at Dex 1 down to 0.25s at Dex 300, off
-`AbilityScoreComponent.Total` (same shape as `PotionCooldownEffects.ComputeDurationFrames`). Must
-compose with, not replace, the racial baseline -- exact composition (multiply vs. replace) undecided.
-
 #### Spell leveling
 
 Same rules as Skills (level 0-15/20, XP with use, never decreases) -- land after Skills so both share
@@ -1143,8 +1136,8 @@ adding a decaying offset is the smallest piece.
 Content that is really a table is written as C# today: loot box contents (`RandomSingleStackContents`),
 shop stock, prices, per-race baseline scores, achievement criteria. Several planned items are tables or
 curves: "Lootbox drop tables", "Preferred stock for items added to shops", "CVS (Cosmic Value Shop)
-general store", "Achievement content backlog", Dexterity → `StandardLockFrames` ("Dexterity scaling
-ActionLockComponent.StandardLockFrames"), Intelligence → durations, falloff shapes. Add a data table
+general store", "Achievement content backlog", Dexterity → standard action lock
+(`StandardActionLockFrames`), Intelligence → durations, falloff shapes. Add a data table
 facility:
 - A table is a list of rows of one struct type, keyed by name or Guid, loaded from JSON in `Content/`
   the way `SpriteManifest.json` is. Rows reference other content by Guid (items, blueprints, tags).
@@ -1721,10 +1714,12 @@ Infra landed (`IMPLEMENTATION-NOTES.md`). Remaining:
 - Split hidden ability scores (Luck/Wisdom) into composites of other hidden scores -- needs more hidden
   scores to exist first.
 - Wire the concrete "modifies" behaviors: Strength->melee damage (retire hardcoded `PunchDamage`
-  consts), Constitution->`MaximumHealth` x10 (regen/potion-cooldown already landed), Dexterity->
-  `StandardLockFrames` (own item above), Intelligence->mana (once Mana lands), Charisma->shop/charm,
-  Luck->loot/AI.
-- Non-player races get their own baseline scores instead of flat 5.
+  consts), Constitution->`MaximumHealth` x10 (regen/potion-cooldown already landed),
+  Intelligence->mana (once Mana lands), Charisma->shop/charm, Luck->loot/AI.
+- Non-player races get their own baseline scores instead of flat 5. A race's Dexterity range is now
+  what sets its speed (`StandardActionLockFrames`: 30 frames at Dex 1 down to 15 at 300): every race
+  runs at about 30 frames until this lands. Anything outside the Dex curve -- a race slower than
+  Dex 1 allows -- is a `StatModifierTarget.ActionLockFrames` modifier, as Engineer's is.
 - Level-up modifies Core scores (Hidden excluded). See the matching Presentation stats item.
 
 #### Item weight and carry capacity scaling with Strength

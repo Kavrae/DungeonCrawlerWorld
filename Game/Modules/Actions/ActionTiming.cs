@@ -8,8 +8,9 @@ namespace Game.Modules.Actions;
 /// than inventing its own flat ActionLockFrames field, the same way TargetingSpec is already
 /// reused verbatim across both domains.
 ///
-/// ActionLockFrames defaults to null, meaning "use the acting entity's own ActionLockComponent.
-/// StandardLockFrames" -- omit it entirely unless this action/item genuinely needs a different
+/// ActionLockFrames defaults to null, meaning "use the acting entity's own standard lock"
+/// (StandardActionLockFrames: its Dexterity and ActionLockFrames modifiers) -- omit it entirely
+/// unless this action/item genuinely needs a different
 /// lock duration regardless of who casts it (see HotkeyExpansionPotion for the one current
 /// override).
 ///

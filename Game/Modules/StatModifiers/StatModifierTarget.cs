@@ -25,7 +25,7 @@ public enum StatModifierTarget : byte
     /// <summary>Multiplier DirectDamage applies to a fully-scaled hit once CritChance rolls a crit, consumed via StatModifierMath.GetEffectiveValue against CritMath.BaseCritMultiplier.</summary>
     CritMultiplier,
 
-    /// <summary>ActionLockComponent.StandardLockFrames' modifier seam -- consumed by MovementSystem.TryMoveToNextMapPosition. BodyPartEffectsSystem grants a multiplicative debuff here as an entity's own Leg/Foot body parts take damage; nothing else grants it yet, but it's an ordinary target like any other -- a future Dexterity/equipment consumer could layer on top the same way.</summary>
+    /// <summary>A step's lock, layered on the entity's standard lock (StandardActionLockFrames) -- consumed by MovementSystem.TryMoveToNextMapPosition. BodyPartEffectsSystem grants a multiplicative debuff here as an entity's own Leg/Foot body parts take damage.</summary>
     MovementLockFrames,
 
     /// <summary>Heal amount a caster/source gives out, consumed at HealthHeal.Apply before IncomingHealing -- the healing counterpart to OutgoingDamage. A melee-only lifesteal-style heal buff would use ConditionTag: GameTags.DeliveryMelee here rather than a dedicated target.</summary>
@@ -103,4 +103,7 @@ public enum StatModifierTarget : byte
 
     /// <summary>Health a HealthDrain takes from whoever pays it. Damage reduction (IncomingDamage) never applies to it.</summary>
     IncomingHealthDrain,
+
+    /// <summary>The entity's standard action lock, on top of its Dexterity-derived length (StandardActionLockFrames) -- every lock that doesn't state its own duration, steps included. Negative is faster.</summary>
+    ActionLockFrames,
 }

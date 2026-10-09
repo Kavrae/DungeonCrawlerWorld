@@ -83,7 +83,7 @@ public static class Goblin
         var entityId = context.EntityId;
 
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
-        componentManager.Merge(entityId, new ActionLockComponent(standardLockFrames: 54, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
 
         TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, context.Rolls);

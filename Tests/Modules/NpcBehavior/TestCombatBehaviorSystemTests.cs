@@ -154,7 +154,7 @@ public sealed class TestCombatBehaviorSystemTests
     {
         fixture.TransformPool.Add(entityId, new TransformComponent(GoblinPosition, SingleTile));
         fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
-        fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        fixture.ActionLockPool.Add(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         fixture.HealthPool.Add(entityId, new SimpleHealthComponent(currentHealth, maximumHealth));
         // IsAttackable now compares real races -- an attacker with no race slot can never
         // decide anything is "a different race," so TryDecideMeleeAttack bails before even
@@ -174,7 +174,7 @@ public sealed class TestCombatBehaviorSystemTests
     {
         fixture.TransformPool.Add(entityId, new TransformComponent(GoblinPosition, SingleTile));
         fixture.MovementPool.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
-        fixture.ActionLockPool.Add(entityId, new ActionLockComponent(standardLockFrames: 10, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        fixture.ActionLockPool.Add(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         fixture.BodyPartWorld.Give(entityId);
         fixture.BodyParts.SetCurrentHealth(entityId, 0, headCurrent);
         if (grantMeleeActions)
@@ -349,7 +349,7 @@ public sealed class TestCombatBehaviorSystemTests
         var fixture = Build();
         fixture.TransformPool.Add(GoblinEntityId, new TransformComponent(GoblinPosition, SingleTile));
         fixture.MovementPool.Add(GoblinEntityId, new MovementComponent(MovementMode.Random, null, null));
-        fixture.ActionLockPool.Add(GoblinEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 30, unlockedAtFrame: 30));
+        fixture.ActionLockPool.Add(GoblinEntityId, new ActionLockComponent(currentLockTotalFrames: 30, unlockedAtFrame: 30));
         // Deliberately no SimpleHealthComponent/InventoryItemStackComponent/ActionInstanceComponent
         // registered for this entity -- if the system tried to read any of them before checking
         // the action lock, this would throw or behave unexpectedly instead of just skipping.

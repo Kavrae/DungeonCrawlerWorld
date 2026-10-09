@@ -652,6 +652,35 @@ behavior-composition follow-up (see TODO.md).
 (precomputed eagerly, unlike other stats). Player rolls 2-10 (cluster 3-7); every other race flat 5
 (placeholder). Consumer wiring still open (see TODO.md).
 
+### Dexterity action lock (2026-10-08)
+
+An entity's standard action lock -- every action, item and step that doesn't state its own duration --
+comes from Dexterity, replacing the per-race frame counts (Goblin 54, Fairy/Ghost 48, Human 30).
+- `StandardActionLockFrames` (`Game/Modules/AbilityScores/`): linear, 30 frames at Dex total 1 down to
+  15 at 300, so maximum Dex acts twice as often. Then `StatModifierTarget.ActionLockFrames` on top,
+  rounded to the nearest frame (truncating would drop every Dex above 1 straight to 29), floored at 1.
+  No Dexterity score reads as Dex 1.
+- Derived on read, never stored: `ActionLockComponent` has no standard length any more. The Dex
+  total and the lock modifiers change in many places (grants, base-value changes, expiry, build
+  order); a cached value would need a sync hook at each. The read happens only when an entity locks.
+- `ActionLockGate.Lock` takes a required frame count, so Core stays free of ability scores; callers
+  pass `ActionTiming.ActionLockFrames ?? StandardActionLockFrames.ResolveForEntity(...)` (a
+  `LockFramesFor` helper in `ActionActivationSystem` and `ItemActivationSystem`). `Windups.Begin` and
+  `PlayerActionGate` the same.
+- Three kinds of lock length, kept apart: `ActionLockFrames` scales the standard lock (steps
+  included); `MovementLockFrames` (leg damage) layers on top for steps only, then the diagonal
+  multiplier; an explicit `ActionTiming.ActionLockFrames`, Paralysis and the spawn stagger ignore both.
+- Speed outside the Dex curve is an `ActionLockFrames` modifier, not a Dex bonus: a Dex bonus would
+  change size as more Dex-scaled effects are added (Dodge already is one). Engineer and Goblin
+  Engineer each grant a permanent -10%. Multiplicative modifiers add rather than compound, so the two
+  together are -20%, not x0.81. A slower-than-Dex-1 race takes a positive one.
+- Races keep their score grants and get no lock modifier: every creature runs at about 30 frames
+  until race score ranges land (TODO "Stats -- consumers"). Goblins became nearly twice as fast;
+  accepted.
+- Benchmark (headless A/B, 2026-10-08, noisy session): no change beyond run-to-run spread.
+  `MovementSystem` read +9.5% inside A's 45% spread, with goblins making far more moves (different
+  world fingerprint).
+
 ### Status effect stack representation: StatusEffectStack pool deleted
 
 Full record: this session. Resolved the TODO.md "Burning/Poison stack representation" item:

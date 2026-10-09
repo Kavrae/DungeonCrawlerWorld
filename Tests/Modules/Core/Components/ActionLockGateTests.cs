@@ -14,7 +14,7 @@ public sealed class ActionLockGateTests
     private static PackedComponentPool<ActionLockComponent> PoolLockedUntil(uint unlockedAtFrame, ushort totalFrames = 5)
     {
         var pool = CreatePool();
-        pool.Add(0, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: totalFrames, unlockedAtFrame));
+        pool.Add(0, new ActionLockComponent(currentLockTotalFrames: totalFrames, unlockedAtFrame));
         return pool;
     }
 
@@ -61,16 +61,6 @@ public sealed class ActionLockGateTests
         ActionLockGate.Lock(pool, 0, now: 100, framesToWait: 42);
 
         Assert.AreEqual((ushort)42, pool.GetReadonly(0).CurrentLockTotalFrames);
-    }
-
-    [TestMethod]
-    public void Lock_NoFramesGiven_UsesTheEntitysOwnStandardLockFrames()
-    {
-        var pool = PoolLockedUntil(0, totalFrames: 0);
-
-        ActionLockGate.Lock(pool, 0, now: 10);
-
-        Assert.AreEqual(10u + ActionLockGate.StandardLockFrames, pool.GetReadonly(0).UnlockedAtFrame);
     }
 
     [TestMethod]

@@ -6,6 +6,7 @@ using Game.Blueprints.Composites;
 using Game.Bootstrap;
 using Game.Effects;
 using Game.Effects.Entries;
+using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
@@ -80,7 +81,7 @@ public sealed class ToggleWindupTests
         public void QueueAction(Guid actionId) =>
             Components.Merge(PlayerEntityId, new PendingActionActivationComponent(actionId, TestSelections.At(PlayerPosition)));
 
-        public void RunPastAWindup() => Frame(ActionLockGate.StandardLockFrames + 5);
+        public void RunPastAWindup() => Frame(StandardActionLockFrames.MaximumLockFrames + 5);
 
         public float Mana => Components.GetPackedPool<ManaComponent>().GetReadonly(PlayerEntityId).CurrentMana;
 

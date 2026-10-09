@@ -274,7 +274,7 @@ public sealed class MapViewQueryTests
             Activator: new DirectAction(new TargetingSpec(TargetShape.Adjacent, Range: 0), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 45, CooldownFrames: null))));
         fixture.Components.Merge(5, new ActionInstanceComponent(ChargingActionId, overrideDefinition: null));
         fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingActionId, default, readyAtFrame: 45));
-        fixture.Components.Merge(5, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 45, unlockedAtFrame: 45));
+        fixture.Components.Merge(5, new ActionLockComponent(currentLockTotalFrames: 45, unlockedAtFrame: 45));
 
         Assert.IsTrue(fixture.Query.TryGetChargingAction(5, out var action));
         Assert.IsNull(action.Sprite);
@@ -293,7 +293,7 @@ public sealed class MapViewQueryTests
         fixture.Actions.Register(catalogAction);
         fixture.Components.Merge(5, new ActionInstanceComponent(ChargingActionId, overrideDefinition: catalogAction with { Glyph = "?", GlyphColor = Color.Purple }));
         fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingActionId, default, readyAtFrame: 45));
-        fixture.Components.Merge(5, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 45, unlockedAtFrame: 45));
+        fixture.Components.Merge(5, new ActionLockComponent(currentLockTotalFrames: 45, unlockedAtFrame: 45));
 
         Assert.IsTrue(fixture.Query.TryGetChargingAction(5, out var action));
         Assert.AreEqual(("?", Color.Purple), (action.Glyph, action.GlyphColor));
@@ -309,7 +309,7 @@ public sealed class MapViewQueryTests
     {
         var fixture = new Fixture();
         fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingActionId, default, readyAtFrame: 160));
-        fixture.Components.Merge(5, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 60, unlockedAtFrame: 160));
+        fixture.Components.Merge(5, new ActionLockComponent(currentLockTotalFrames: 60, unlockedAtFrame: 160));
         fixture.Clock.Advance(now);
 
         Assert.AreEqual(expectedFraction, fixture.Query.GetChargeFraction(5), 0.0001f);
@@ -319,13 +319,13 @@ public sealed class MapViewQueryTests
     public void GetChargeFraction_NextWindupQueuedOnTheResolveFrame_StartsFromZero()
     {
         var fixture = new Fixture();
-        fixture.Components.Merge(5, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 60, unlockedAtFrame: 160));
+        fixture.Components.Merge(5, new ActionLockComponent(currentLockTotalFrames: 60, unlockedAtFrame: 160));
         fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingActionId, default, readyAtFrame: 160));
         fixture.Clock.Advance(159);
         Assert.AreEqual(59f / 60f, fixture.Query.GetChargeFraction(5), 0.0001f);
 
         fixture.Clock.Advance(160);
-        fixture.Components.Merge(5, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 60, unlockedAtFrame: 220));
+        fixture.Components.Merge(5, new ActionLockComponent(currentLockTotalFrames: 60, unlockedAtFrame: 220));
         fixture.Components.GetPackedPool<PendingWindupComponent>().Remove(5);
         fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingActionId, default, readyAtFrame: 220));
 
@@ -336,7 +336,7 @@ public sealed class MapViewQueryTests
     public void GetChargeFraction_NotWindingUp_IsZero()
     {
         var fixture = new Fixture();
-        fixture.Components.Merge(5, new ActionLockComponent(standardLockFrames: 15, currentLockTotalFrames: 60, unlockedAtFrame: 160));
+        fixture.Components.Merge(5, new ActionLockComponent(currentLockTotalFrames: 60, unlockedAtFrame: 160));
         fixture.Clock.Advance(130);
 
         Assert.AreEqual(0f, fixture.Query.GetChargeFraction(5));

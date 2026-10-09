@@ -70,7 +70,7 @@ public sealed class MapWindowTests
 
     /// <summary>Gives the player an ActionLockComponent that has already cleared -- PlayerCommands only writes a command once ActionLockGate reads the player as free, and a missing component reads as locked.</summary>
     private static void UnlockPlayer(ComponentManager componentManager) =>
-        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
     /// <summary>Same as BuildMapWindowWithPlayer, but also hands back the ActionCatalog MapWindow was built with -- for hotkey/action tests that need to register a test ActionDefinition before pressing anything.</summary>
     private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager, ActionCatalog ActionCatalog) BuildMapWindowWithPlayerAndActions(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int playerPosition)
@@ -965,7 +965,7 @@ public sealed class MapWindowTests
     {
         var (_, _, mapWindow, componentManager, _) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         componentManager.Merge(PlayerEntityId, PendingWindupComponent.ForAction(Guid.NewGuid(), TestSelections.At(new Vector3Int(101, 100, 0)), readyAtFrame: 60));
-        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, unlockedAtFrame: 45));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 60, unlockedAtFrame: 45));
 
         mapWindow.HandleRightClickTap(new Point(0, 0));
 
@@ -978,7 +978,7 @@ public sealed class MapWindowTests
     {
         var (_, _, mapWindow, componentManager, _) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         componentManager.Merge(PlayerEntityId, PendingWindupComponent.ForAction(Guid.NewGuid(), TestSelections.At(new Vector3Int(101, 100, 0)), readyAtFrame: 60));
-        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: ActionLockGate.StandardLockFrames, currentLockTotalFrames: 60, unlockedAtFrame: 45));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 60, unlockedAtFrame: 45));
 
         mapWindow.HandleEscape();
 
@@ -1191,7 +1191,7 @@ public sealed class MapWindowTests
     public void ContextMenuInspectOption_Selected_SetsDetailInspectionAndLocksPlayer()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
-        componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: 20, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         var targetPosition = new Vector3Int(101, 100, 0);
         var transform = new TransformComponent(targetPosition, new Vector2Byte(1, 1));
         componentManager.Merge(CorpseEntityId, transform);
@@ -1217,7 +1217,7 @@ public sealed class MapWindowTests
         try
         {
             var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
-            componentManager.Merge(PlayerEntityId, new ActionLockComponent(standardLockFrames: 20, currentLockTotalFrames: 0, unlockedAtFrame: 0));
+            componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
             var targetPosition = new Vector3Int(101, 100, 0);
             var transform = new TransformComponent(targetPosition, new Vector2Byte(1, 1));
             componentManager.Merge(CorpseEntityId, transform);

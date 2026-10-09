@@ -243,16 +243,15 @@ public sealed class EntityFactoryTests
         var components = result.EcsContext.ComponentManager;
         var goblin = SpawnGoblin(result);
         var engineerId = result.Catalogs.Definitions.GetId(Engineer.Id);
-        var lockFrames = components.GetPackedPool<ActionLockComponent>();
-        var before = lockFrames.GetReadonly(goblin).StandardLockFrames;
+        var before = TestActionLocks.StandardLockOf(components, goblin);
 
         result.Internals.Factory.Apply(goblin, engineerId);
-        var afterOnce = lockFrames.GetReadonly(goblin).StandardLockFrames;
+        var afterOnce = TestActionLocks.StandardLockOf(components, goblin);
         result.Internals.Factory.Apply(goblin, engineerId);
 
         Assert.IsTrue(components.GetPackedPool<ClassSlotsComponent>().GetReadonly(goblin).Has(engineerId));
         Assert.IsLessThan(before, afterOnce, "Engineer shortens the lock it finds.");
-        Assert.AreEqual(afterOnce, lockFrames.GetReadonly(goblin).StandardLockFrames, "A class the entity already holds is skipped.");
+        Assert.AreEqual(afterOnce, TestActionLocks.StandardLockOf(components, goblin), "A class the entity already holds is skipped.");
         StringAssert.EndsWith(Game.Spawning.EntityNaming.For(components, result.Catalogs.Definitions).NameOf(goblin), $" Goblin {Engineer.Name}");
     }
 
@@ -260,13 +259,13 @@ public sealed class EntityFactoryTests
     public void Apply_AClassToTheSpawnedEngineer_ChangesNothing()
     {
         var (result, _) = Bootstrap();
-        var lockFrames = result.EcsContext.ComponentManager.GetPackedPool<ActionLockComponent>();
+        var components = result.EcsContext.ComponentManager;
         var engineer = result.Internals.Factory.Spawn(new SpawnRequest(result.Catalogs.Definitions.GetId(GoblinEngineer.Id), 5, 5));
-        var before = lockFrames.GetReadonly(engineer).StandardLockFrames;
+        var before = TestActionLocks.StandardLockOf(components, engineer);
 
         result.Internals.Factory.Apply(engineer, result.Catalogs.Definitions.GetId(Engineer.Id));
 
-        Assert.AreEqual(before, lockFrames.GetReadonly(engineer).StandardLockFrames);
+        Assert.AreEqual(before, TestActionLocks.StandardLockOf(components, engineer));
     }
 
     /// <summary>A part already applied is never built again, so a merge policy never merges its writes into themselves -- a trait included.</summary>
