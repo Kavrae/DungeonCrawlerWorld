@@ -3,6 +3,7 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
+using Game.Modules.Health;
 using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
 using Game.World;
@@ -27,6 +28,7 @@ public sealed class DeathSystem : ISystem
     private readonly IMapQuery _mapQuery;
     private readonly EventBus _eventBus;
     private readonly MultiComponentPool<AuraSourceComponent> _auraSources;
+    private readonly DamageLedger _damageLedger;
 
     public DeathSystem(
         PackedComponentPool<DeadComponent> deadEntities,
@@ -35,7 +37,8 @@ public sealed class DeathSystem : ISystem
         IEntityMoveSync entityMoveSync,
         IMapQuery mapQuery,
         EventBus eventBus,
-        MultiComponentPool<AuraSourceComponent> auraSources)
+        MultiComponentPool<AuraSourceComponent> auraSources,
+        DamageLedger damageLedger)
     {
         _deadEntities = deadEntities;
         _nonBlockingEntities = nonBlockingEntities;
@@ -44,6 +47,7 @@ public sealed class DeathSystem : ISystem
         _mapQuery = mapQuery;
         _eventBus = eventBus;
         _auraSources = auraSources;
+        _damageLedger = damageLedger;
 
         eventBus.Subscribe<EntityDiedEvent>(OnEntityDied);
     }
@@ -78,7 +82,9 @@ public sealed class DeathSystem : ISystem
             _entityMoveSync.ConvertToNonBlocking(died.EntityId, ref transform);
         }
 
-        _deadEntities.Add(died.EntityId, new DeadComponent(died.Source, _currentFrame));
+        _damageLedger.TryGetTopContributor(died.EntityId, out var lootOwnerEntityKey);
+        _deadEntities.Add(died.EntityId, new DeadComponent(died.Source, _currentFrame, lootOwnerEntityKey));
+        _damageLedger.Clear(died.EntityId);
 
         // A source a toggle holds stays: ending it is the toggle's own decision (a lit item keeps working on a corpse).
         AuraSourceEffects.RemoveUnheld(_auraSources, _eventBus, died.EntityId);

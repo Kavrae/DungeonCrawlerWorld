@@ -1045,6 +1045,55 @@ public sealed class MapWindowTests
         Assert.IsFalse(lootButton.Enabled);
     }
 
+    private const int LootOwnerEntityId = 7;
+
+    /// <summary>A corpse beside the player that LootOwnerEntityId, alive and loaded, dealt the most damage to a moment ago.</summary>
+    private static Vector3Int PlaceCorpseReservedForAnotherEntity(Game.World.World world, ComponentManager componentManager)
+    {
+        var corpsePosition = new Vector3Int(101, 100, 0);
+        PlaceCorpse(world, componentManager, corpsePosition);
+        var lootOwnerEntityKey = world.EntityKeys.Issue(LootOwnerEntityId);
+        componentManager.GetPackedPool<DeadComponent>().TryUpdate(CorpseEntityId, lootOwnerEntityKey,
+            static (ref DeadComponent dead, Engine.ECS.Entities.EntityKey owner) => dead = dead with { LootOwnerEntityKey = owner });
+        return corpsePosition;
+    }
+
+    [TestMethod]
+    public void TryOpenEntityContextMenuAt_CorpseReservedForAnotherEntity_OffersADisabledReservedLoot()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapWindow.OnCorpseClicked = _ => { };
+        var corpsePosition = PlaceCorpseReservedForAnotherEntity(world, componentManager);
+
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
+
+        var lootButton = (Button)mapWindow.ContextMenuController.Menu.ChildElements[1];
+        Assert.AreEqual("Loot (reserved)", lootButton.LeftText);
+        Assert.IsFalse(lootButton.Enabled);
+    }
+
+    [TestMethod]
+    public void TryOpenEntityContextMenuAt_CorpseReservedForAnotherEntity_AdminModeLootsAnyway()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapWindow.OnCorpseClicked = _ => { };
+        var corpsePosition = PlaceCorpseReservedForAnotherEntity(world, componentManager);
+
+        GlobalState.IsAdminModeOn = true;
+        try
+        {
+            mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
+
+            var lootButton = mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().First(button => button.LeftText.StartsWith("Loot", StringComparison.Ordinal));
+            Assert.AreEqual("Loot", lootButton.LeftText);
+            Assert.IsTrue(lootButton.Enabled);
+        }
+        finally
+        {
+            GlobalState.IsAdminModeOn = false;
+        }
+    }
+
     [TestMethod]
     public void TryOpenEntityContextMenuAt_NoCorpseOnTile_OpensNothing()
     {

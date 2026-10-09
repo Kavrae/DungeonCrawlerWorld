@@ -103,6 +103,7 @@ public sealed class BuiltInModulesTests
             "SpawnMoves",
             "SimpleHealthRegenSystem",
             "ComplexHealthRegenSystem",
+            "DamageLedgerExpirySystem",
             "ManaRegenSystem",
             "TestCombatBehaviorSystem",
             "TestDummyAttackSystem",

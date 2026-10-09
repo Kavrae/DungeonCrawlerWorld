@@ -717,6 +717,56 @@ public sealed class InventoryActionsTests
     }
 
     [TestMethod]
+    public void LootEveryStack_ToThePlayer_MovesEveryTradeableStackAndLeavesUntradeableOnes()
+    {
+        var manager = CreateRegisteredManager();
+        var playerQuery = new TestPlayerQuery(playerEntityId: 1);
+        var untradeableItemId = Guid.NewGuid();
+        InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 3);
+        InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 1);
+        InventoryActions.AddItem(manager, entityId: 0, untradeableItemId, quantity: 1);
+
+        var lootedStackCount = InventoryActions.LootEveryStack(manager, CatalogWithUntradeable(untradeableItemId), sourceEntityId: 0, destinationEntityId: playerQuery.PlayerEntityId, playerQuery);
+
+        Assert.AreEqual(2, lootedStackCount);
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(1, pool.CountForEntity(0));
+        Assert.AreEqual(2, pool.CountForEntity(playerQuery.PlayerEntityId));
+    }
+
+    [TestMethod]
+    public void LootEveryStack_NonPlayerDestinationFillsUp_MovesOnlyWhatFits()
+    {
+        var manager = CreateRegisteredManager();
+        for (var i = 0; i < InventoryCapacity.MaxNonPlayerStackCount - 1; i++)
+        {
+            InventoryActions.AddItem(manager, entityId: 1, Guid.NewGuid(), quantity: 1);
+        }
+
+        InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 1);
+        InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 1);
+
+        var lootedStackCount = InventoryActions.LootEveryStack(manager, new ItemCatalog(), sourceEntityId: 0, destinationEntityId: 1, TestPlayerQuery.NoPlayer);
+
+        Assert.AreEqual(1, lootedStackCount);
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(1, pool.CountForEntity(0));
+        Assert.AreEqual(InventoryCapacity.MaxNonPlayerStackCount, pool.CountForEntity(1));
+    }
+
+    [TestMethod]
+    public void LootEveryStack_SameSourceAndDestination_MovesNothing()
+    {
+        var manager = CreateRegisteredManager();
+        InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 1);
+
+        var lootedStackCount = InventoryActions.LootEveryStack(manager, new ItemCatalog(), sourceEntityId: 0, destinationEntityId: 0, TestPlayerQuery.NoPlayer);
+
+        Assert.AreEqual(0, lootedStackCount);
+        Assert.AreEqual(1, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
+
+    [TestMethod]
     public void ItemHotkeyBindingQueries_CanBind_IsFalseOnlyForALootbox()
     {
         Assert.IsTrue(ItemHotkeyBindingQueries.CanBind(CreateDefinition(Guid.NewGuid(), charges: 1)));
@@ -790,6 +840,150 @@ public sealed class InventoryActionsTests
         manager.GetMultiPool<InventoryItemStackComponent>().Add(0, disabledStack);
 
         InventoryActions.MergeIntoEquivalentStack(manager, entityId: 0, disabledStack.StackInstanceId);
+
+        Assert.AreEqual(2, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
+
+    private static uint OnlyStackInstanceIdOf(ComponentManager manager, int entityId) =>
+        manager.GetMultiPool<InventoryItemStackComponent>().GetReadonlyByDenseIndex(manager.GetMultiPool<InventoryItemStackComponent>().GetFirstDenseIndex(entityId)).StackInstanceId;
+
+    [TestMethod]
+    public void TryLootStack_TopsUpTheLootersInterchangeableStack_KeepingItsIdentity()
+    {
+        var manager = CreateRegisteredManager();
+        var playerQuery = new TestPlayerQuery(playerEntityId: 1);
+        var itemId = Guid.NewGuid();
+        var playerStackInstanceId = InventoryActions.AddItem(manager, entityId: 1, itemId, quantity: 3);
+        var lootedStackInstanceId = InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 2);
+
+        var looted = InventoryActions.TryLootStack(manager, new ItemCatalog(), sourceEntityId: 0, destinationEntityId: 1, lootedStackInstanceId, playerQuery);
+
+        Assert.IsTrue(looted);
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(0, pool.CountForEntity(0));
+        Assert.AreEqual(1, pool.CountForEntity(1));
+        Assert.AreEqual(playerStackInstanceId, OnlyStackInstanceIdOf(manager, 1));
+        Assert.IsTrue(InventoryQueries.TryGetStack(pool, 1, itemId, out var mergedStack));
+        Assert.AreEqual(5, mergedStack.Quantity);
+    }
+
+    [TestMethod]
+    public void TryLootStack_DifferentOverride_MovesAsItsOwnStack()
+    {
+        var manager = CreateRegisteredManager();
+        var playerQuery = new TestPlayerQuery(playerEntityId: 1);
+        var itemId = Guid.NewGuid();
+        InventoryActions.AddItem(manager, entityId: 1, itemId, quantity: 3);
+        var lootedStackInstanceId = InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 4), quantity: 1);
+
+        InventoryActions.TryLootStack(manager, new ItemCatalog(), sourceEntityId: 0, destinationEntityId: 1, lootedStackInstanceId, playerQuery);
+
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(2, pool.CountForEntity(1));
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 1, lootedStackInstanceId, out _));
+    }
+
+    [TestMethod]
+    public void TryLootStack_PastTheStackSizeCap_TheRestBecomesItsOwnStack()
+    {
+        var manager = CreateRegisteredManager();
+        var playerQuery = new TestPlayerQuery(playerEntityId: 1);
+        manager.Merge(1, new MaxStackSizeComponent(5));
+        var itemId = Guid.NewGuid();
+        InventoryActions.AddItem(manager, entityId: 1, itemId, quantity: 4);
+        var lootedStackInstanceId = InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 3);
+
+        InventoryActions.TryLootStack(manager, new ItemCatalog(), sourceEntityId: 0, destinationEntityId: 1, lootedStackInstanceId, playerQuery);
+
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(0, pool.CountForEntity(0));
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 1, lootedStackInstanceId, out var remainder));
+        Assert.AreEqual(2, remainder.Quantity);
+    }
+
+    [TestMethod]
+    public void TryLootStack_FullNonPlayerLooter_TopsUpWhatItCarriesAndLeavesTheRest()
+    {
+        var manager = CreateRegisteredManager();
+        manager.Merge(1, new MaxStackSizeComponent(5));
+        var itemId = Guid.NewGuid();
+        InventoryActions.AddItem(manager, entityId: 1, itemId, quantity: 4);
+        for (var i = 1; i < InventoryCapacity.MaxNonPlayerStackCount; i++)
+        {
+            InventoryActions.AddItem(manager, entityId: 1, Guid.NewGuid(), quantity: 1);
+        }
+
+        var lootedStackInstanceId = InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 3);
+
+        var looted = InventoryActions.TryLootStack(manager, new ItemCatalog(), sourceEntityId: 0, destinationEntityId: 1, lootedStackInstanceId, TestPlayerQuery.NoPlayer);
+
+        Assert.IsTrue(looted);
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(InventoryCapacity.MaxNonPlayerStackCount, pool.CountForEntity(1));
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 0, lootedStackInstanceId, out var leftBehind));
+        Assert.AreEqual(2, leftBehind.Quantity);
+    }
+
+    [TestMethod]
+    public void TryLootStack_FullNonPlayerLooterWithNothingInterchangeable_MovesNothing()
+    {
+        var manager = CreateRegisteredManager();
+        for (var i = 0; i < InventoryCapacity.MaxNonPlayerStackCount; i++)
+        {
+            InventoryActions.AddItem(manager, entityId: 1, Guid.NewGuid(), quantity: 1);
+        }
+
+        var lootedStackInstanceId = InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 3);
+
+        var looted = InventoryActions.TryLootStack(manager, new ItemCatalog(), sourceEntityId: 0, destinationEntityId: 1, lootedStackInstanceId, TestPlayerQuery.NoPlayer);
+
+        Assert.IsFalse(looted);
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(manager.GetMultiPool<InventoryItemStackComponent>(), 0, lootedStackInstanceId, out var untouched));
+        Assert.AreEqual(3, untouched.Quantity);
+    }
+
+    [TestMethod]
+    public void TryLootStack_UntradeableItem_MovesNothing()
+    {
+        var manager = CreateRegisteredManager();
+        var playerQuery = new TestPlayerQuery(playerEntityId: 1);
+        var itemId = Guid.NewGuid();
+        var lootedStackInstanceId = InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 1);
+
+        var looted = InventoryActions.TryLootStack(manager, CatalogWithUntradeable(itemId), sourceEntityId: 0, destinationEntityId: 1, lootedStackInstanceId, playerQuery);
+
+        Assert.IsFalse(looted);
+        Assert.AreEqual(1, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
+
+    [TestMethod]
+    public void LootAllStacksOfItem_MergesEveryStackIntoTheLootersOne()
+    {
+        var manager = CreateRegisteredManager();
+        var playerQuery = new TestPlayerQuery(playerEntityId: 1);
+        var itemId = Guid.NewGuid();
+        InventoryActions.AddItem(manager, entityId: 1, itemId, quantity: 1);
+        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 2);
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, new ItemDefinition(itemId, "Plain", SpriteName: null, Glyph: "p", Color.White, Tags: [], Effects: []), quantity: 3);
+
+        var looted = InventoryActions.LootAllStacksOfItem(manager, new ItemCatalog(), sourceEntityId: 0, destinationEntityId: 1, itemId, playerQuery);
+
+        Assert.IsTrue(looted);
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(0, pool.CountForEntity(0));
+        Assert.AreEqual(2, pool.CountForEntity(1));
+    }
+
+    [TestMethod]
+    public void TryTransferStack_NeverMerges_SoGivingAndTradeStagingKeepWholeStacks()
+    {
+        var manager = CreateRegisteredManager();
+        var playerQuery = new TestPlayerQuery(playerEntityId: 1);
+        var itemId = Guid.NewGuid();
+        InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 3);
+        var givenStackInstanceId = InventoryActions.AddItem(manager, entityId: 1, itemId, quantity: 2);
+
+        InventoryActions.TryTransferStack(manager, new ItemCatalog(), sourceEntityId: 1, destinationEntityId: 0, givenStackInstanceId, playerQuery);
 
         Assert.AreEqual(2, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
     }

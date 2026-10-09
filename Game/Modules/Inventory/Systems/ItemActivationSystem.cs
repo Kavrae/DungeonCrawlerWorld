@@ -365,7 +365,9 @@ public sealed class ItemActivationSystem : ISystem
     /// entry no-ops gracefully on its own missing pool. Skipped entirely for a dead target -- "the
     /// target of a potion" means it landed on them, not just that a target tile happened to
     /// contain them. The cooldown-abuse check and PotionCooldownComponent reset both key off
-    /// targetEntityId, not sourceEntityId -- see this class's own doc comment for why. The
+    /// targetEntityId, not sourceEntityId -- see this class's own doc comment for why -- but the abuse poison is
+    /// credited to sourceEntityId: whoever used the potion caused it, so a thrown potion's poison is the
+    /// thrower's damage (and kill), and a drunk one's is the drinker's own. The
     /// cooldown's own duration is computed from the target's Constitution
     /// (PotionCooldownEffects.ComputeDurationFrames), falling back to the un-scaled
     /// PotionCooldownEffects.DurationFrames when _abilityScores isn't wired or the target has no
@@ -384,7 +386,7 @@ public sealed class ItemActivationSystem : ISystem
 
         if (_potionCooldowns.TryGetReadonly(targetEntityId, out var cooldown) && PotionCooldownEffects.FramesRemaining(cooldown, _now) > 0)
         {
-            PoisonEffects.ApplyStack(_componentManager, _entityKeys, targetEntityId, ActionSource.FromEntity(_componentManager, _entityKeys, targetEntityId, _creatures), PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames), _now, _eventBus, _playerQuery);
+            PoisonEffects.ApplyStack(_componentManager, _entityKeys, targetEntityId, ActionSource.FromEntity(_componentManager, _entityKeys, sourceEntityId, _creatures), PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames), _now, _eventBus, _playerQuery);
             _eventBus.Publish(new PotionCooldownAbusedEvent(targetEntityId));
         }
 

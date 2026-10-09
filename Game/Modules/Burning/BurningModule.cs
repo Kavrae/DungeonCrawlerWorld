@@ -58,6 +58,7 @@ public sealed class BurningModule : IGameModule
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
         var bodyParts = EntityBodyParts.For(componentManager, context.Definitions);
         var deadEntities = componentManager.GetPackedPool<DeadComponent>();
+        var damageLedger = DamageLedger.For(componentManager, context.EntityKeys);
 
         systemManager.Register(new BurningSystem(
             componentManager.GetPackedPool<BurningTimerComponent>(),
@@ -68,6 +69,7 @@ public sealed class BurningModule : IGameModule
             statModifiers,
             bodyParts,
             deadEntities,
+            damageLedger,
             context.FloatingTextFeed));
 
         systemManager.Register(new BodyPartBurningSystem(
@@ -78,6 +80,7 @@ public sealed class BurningModule : IGameModule
             context.PlayerQuery,
             statModifiers,
             deadEntities,
+            damageLedger,
             context.FloatingTextFeed));
     }
 }

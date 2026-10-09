@@ -14,6 +14,18 @@ public sealed class InventoryCommands(ComponentManager componentManager, ItemCat
     public bool TryTransferAllStacksOfItem(int sourceEntityId, int destinationEntityId, Guid itemDefinitionId) =>
         InventoryActions.TryTransferAllStacksOfItem(componentManager, itemCatalog, sourceEntityId, destinationEntityId, itemDefinitionId, playerQuery);
 
+    /// <inheritdoc cref="InventoryActions.TryLootStack"/>
+    public bool TryLootStack(int sourceEntityId, int destinationEntityId, uint stackInstanceId) =>
+        InventoryActions.TryLootStack(componentManager, itemCatalog, sourceEntityId, destinationEntityId, stackInstanceId, playerQuery);
+
+    /// <inheritdoc cref="InventoryActions.LootAllStacksOfItem"/>
+    public bool LootAllStacksOfItem(int sourceEntityId, int destinationEntityId, Guid itemDefinitionId) =>
+        InventoryActions.LootAllStacksOfItem(componentManager, itemCatalog, sourceEntityId, destinationEntityId, itemDefinitionId, playerQuery);
+
+    /// <inheritdoc cref="InventoryActions.LootEveryStack"/>
+    public int LootEveryStack(int sourceEntityId, int destinationEntityId) =>
+        InventoryActions.LootEveryStack(componentManager, itemCatalog, sourceEntityId, destinationEntityId, playerQuery);
+
     /// <inheritdoc cref="InventoryActions.MergeIntoEquivalentStack"/>
     public uint MergeIntoEquivalentStack(int entityId, uint stackInstanceId) =>
         InventoryActions.MergeIntoEquivalentStack(componentManager, entityId, stackInstanceId);

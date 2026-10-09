@@ -43,6 +43,7 @@ public sealed class BodyPartBurningSystem : ISystem
     private readonly IPlayerQuery _playerQuery;
     private readonly FloatingTextFeed _floatingTextFeed;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
+    private readonly DamageLedger _damageLedger;
     private readonly MultiTimerWheel<BodyPartBurningTimerComponent> _wheel;
 
     // Cached once instead of passing the Tick method group every Update -- an instance method
@@ -57,6 +58,7 @@ public sealed class BodyPartBurningSystem : ISystem
         IPlayerQuery playerQuery,
         MultiComponentPool<StatModifierComponent> statModifiers,
         PackedComponentPool<DeadComponent> deadEntities,
+        DamageLedger damageLedger,
         FloatingTextFeed floatingTextFeed)
     {
         _timers = timers;
@@ -66,6 +68,7 @@ public sealed class BodyPartBurningSystem : ISystem
         _eventBus = eventBus;
         _playerQuery = playerQuery;
         _deadEntities = deadEntities;
+        _damageLedger = damageLedger;
         _floatingTextFeed = floatingTextFeed;
         _tick = Tick;
         _wheel = new MultiTimerWheel<BodyPartBurningTimerComponent>(timers, SimulationScope.Unscoped);
@@ -89,7 +92,8 @@ public sealed class BodyPartBurningSystem : ISystem
             var effectiveAmount = HealthDamage.IncomingDamageOf(_statModifiers, entityId, stackCount, BurningDamageTags);
             var wasDead = _deadEntities.Has(entityId);
 
-            BodyPartDamageEffects.ApplyToPart(_bodyParts, entityId, timer.PartId, _statModifiers, effectiveAmount, now);
+            var healthRemoved = BodyPartDamageEffects.ApplyToPart(_bodyParts, entityId, timer.PartId, _statModifiers, effectiveAmount, now);
+            _damageLedger.Record(entityId, source, healthRemoved, now);
             // Refreshed unconditionally, not only when ApplyToPart's own 0-only lockout fires --
             // a part that gets singed but never fully disabled (a small part like a Foot against
             // a lightly-stacked burn) would otherwise have zero regen protection once the fire's

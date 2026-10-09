@@ -1,5 +1,6 @@
 using Game.Modules.Inventory;
 using Game.Modules.Shops;
+using Game.World;
 
 namespace Presentation.Input.DragDrop;
 
@@ -9,16 +10,35 @@ namespace Presentation.Input.DragDrop;
 /// feature-specific resolver (Trade, Shop) has already declined the drag. Not itself a "feature"
 /// opting in, unlike ShopDragDropResolver/TradeDragDropResolver.
 /// </summary>
-internal sealed class PlainInventoryDragDropResolver(InventoryCommands inventoryCommands, ShopCommands shopCommands) : IDragDropResolver
+/// <remarks>
+/// With trades and shops already claimed, an item dragged from another entity onto the player is
+/// taken from a corpse or a container -- looting, which merges into the player's interchangeable
+/// stacks. Every other item drag (a Give) moves the stack whole.
+/// </remarks>
+internal sealed class PlainInventoryDragDropResolver(InventoryCommands inventoryCommands, ShopCommands shopCommands, IPlayerQuery playerQuery) : IDragDropResolver
 {
     public bool TryResolve(in DragDropContext context)
     {
+        var isLooting = context.DestinationEntityId == playerQuery.PlayerEntityId && context.OriginEntityId != playerQuery.PlayerEntityId;
+
         if (context.ItemStackInstanceId is { } stackInstanceId)
         {
+            if (isLooting)
+            {
+                inventoryCommands.TryLootStack(context.OriginEntityId, context.DestinationEntityId, stackInstanceId);
+                return true;
+            }
+
             inventoryCommands.TryTransferStack(context.OriginEntityId, context.DestinationEntityId, stackInstanceId);
         }
         else if (context.MergedItemDefinitionId is { } itemDefinitionId)
         {
+            if (isLooting)
+            {
+                inventoryCommands.LootAllStacksOfItem(context.OriginEntityId, context.DestinationEntityId, itemDefinitionId);
+                return true;
+            }
+
             inventoryCommands.TryTransferAllStacksOfItem(context.OriginEntityId, context.DestinationEntityId, itemDefinitionId);
         }
         else if (context.CurrencyType is { } currencyType)

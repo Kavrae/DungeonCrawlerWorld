@@ -45,7 +45,7 @@ public sealed class HolyGroundTests
             HealthDamage.Apply(
                 Components.GetPackedPool<SimpleHealthComponent>(), Build.EcsContext.EventBus, entityId, amount, ActionSource.Admin, Build.World, "Test", Now,
                 Components.GetMultiPool<StatModifierComponent>(), EntityBodyParts.For(Components, Build.Context.Definitions), Build.Context.MathUtility,
-                Components.GetPackedPool<DeadComponent>(), Build.Context.FloatingTextFeed, ResourceLossCategory.Direct);
+                Components.GetPackedPool<DeadComponent>(), Build.Context.EffectServices.DamageLedger, Build.Context.FloatingTextFeed, ResourceLossCategory.Direct);
 
         /// <summary>Every modifier Holy Ground has given entityId.</summary>
         public List<StatModifierComponent> BlessingsOf(int entityId)

@@ -32,12 +32,14 @@ internal static class TestHealth
         GameplayTagSet damageTags = default,
         BodyPartTargetMode targetMode = BodyPartTargetMode.SingleTarget,
         FloatingTextFeed? floatingTextFeed = null,
-        ResourceLossCategory damageCategory = ResourceLossCategory.Direct) =>
+        ResourceLossCategory damageCategory = ResourceLossCategory.Direct,
+        DamageLedger? damageLedger = null) =>
         HealthDamage.Apply(health, eventBus, entityId, amount, source, playerQuery ?? TestPlayerQuery.NoPlayer, damageType, now,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),
             mathUtility,
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
+            damageLedger ?? EmptyPools.DamageLedger(deadEntities),
             floatingTextFeed ?? EmptyPools.FloatingTextFeed(), damageCategory,
             targetRule, damageTags, targetMode);
 

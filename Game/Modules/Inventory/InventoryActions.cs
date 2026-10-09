@@ -269,9 +269,8 @@ public static class InventoryActions
     /// <summary>
     /// Moves one exact stack from sourceEntityId to destinationEntityId, preserving its exact
     /// identity (StackInstanceId, Override, IsDisabled, IsDivergent) -- never merges into an
-    /// existing stack on the destination, even one matching the same item id (stack splitting/
-    /// merging is a separate, not-yet-built TODO item; duplicate stacks of the same item on one
-    /// entity are accepted for now). Refuses (returns false, no state changed) if source and
+    /// existing stack on the destination, even one matching the same item id (looting merges --
+    /// see TryLootStack; giving and trade staging don't, since staging undoes a move by StackInstanceId). Refuses (returns false, no state changed) if source and
     /// destination are the same entity -- a drop back onto the grid it came from should never
     /// remove-then-re-add a stack it's already looking at -- or if the stack isn't found, or if the
     /// destination is a non-player entity already at its stack cap (see InventoryCapacity), or if the
@@ -348,6 +347,134 @@ public static class InventoryActions
         }
 
         return true;
+    }
+
+    /// <summary>Loots one stack from sourceEntityId into destinationEntityId: tops up the destination's interchangeable stacks first, then moves whatever is left as its own stack.</summary>
+    /// <remarks>
+    /// Taking from a corpse or a container, as opposed to TryTransferStack, which never merges (trade staging undoes a
+    /// move by StackInstanceId). Stacks merged into keep their identity, so a hotkey bound to one stays bound. The
+    /// remainder keeps the looted stack's StackInstanceId and needs a free stack slot (InventoryCapacity); without one it
+    /// stays on the source with its quantity reduced, so a full NPC still tops up what it already carries. A remainder
+    /// landing on the player is re-stamped as freshly acquired, as TryTransferStack does. Refuses an untradeable item.
+    /// </remarks>
+    /// <returns>Whether any quantity moved.</returns>
+    public static bool TryLootStack(ComponentManager componentManager, ItemCatalog itemCatalog, int sourceEntityId, int destinationEntityId, uint stackInstanceId, IPlayerQuery playerQuery)
+    {
+        if (sourceEntityId == destinationEntityId)
+        {
+            return false;
+        }
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        var sourceDenseIndex = FindMatchingDenseIndex(stacks, sourceEntityId, stackInstanceId, static (stack, id) => stack.StackInstanceId == id);
+        if (sourceDenseIndex == -1)
+        {
+            return false;
+        }
+
+        var looted = stacks.GetReadonlyByDenseIndex(sourceDenseIndex);
+        if (!CanTrade(itemCatalog, in looted))
+        {
+            return false;
+        }
+
+        var remaining = TopUpInterchangeableStacks(componentManager, stacks, destinationEntityId, in looted);
+
+        if (remaining == 0)
+        {
+            stacks.RemoveByDenseIndex(sourceDenseIndex);
+            return true;
+        }
+
+        if (InventoryCapacity.HasRoomForNewStack(componentManager, destinationEntityId, playerQuery))
+        {
+            stacks.RemoveByDenseIndex(sourceDenseIndex);
+            var remainder = looted with { Quantity = remaining };
+            if (destinationEntityId == playerQuery.PlayerEntityId)
+            {
+                remainder.AcquiredSequence = InventoryItemStackComponent.NextAcquiredSequence();
+            }
+
+            InventoryGrant.EnsureInventoryComponentExists(componentManager, destinationEntityId);
+            stacks.Add(destinationEntityId, remainder);
+            return true;
+        }
+
+        if (remaining == looted.Quantity)
+        {
+            return false;
+        }
+
+        stacks.UpdateByDenseIndex(sourceDenseIndex, remaining, static (ref InventoryItemStackComponent stack, ushort left) => stack.Quantity = left);
+        return true;
+    }
+
+    /// <summary>The Merged Stack case of TryLootStack: loots every stack of itemDefinitionId sourceEntityId holds.</summary>
+    /// <remarks>Not all or nothing, unlike TryTransferAllStacksOfItem: what doesn't fit stays behind, the same as each TryLootStack.</remarks>
+    /// <returns>Whether any quantity moved.</returns>
+    public static bool LootAllStacksOfItem(ComponentManager componentManager, ItemCatalog itemCatalog, int sourceEntityId, int destinationEntityId, Guid itemDefinitionId, IPlayerQuery playerQuery)
+    {
+        var matches = new List<InventoryItemStackComponent>();
+        InventoryQueries.CopyStacksForEntity(componentManager.GetMultiPool<InventoryItemStackComponent>(), sourceEntityId, matches);
+
+        var anyLooted = false;
+        foreach (var stack in matches)
+        {
+            if (stack.ItemDefinitionId == itemDefinitionId)
+            {
+                anyLooted |= TryLootStack(componentManager, itemCatalog, sourceEntityId, destinationEntityId, stack.StackInstanceId, playerQuery);
+            }
+        }
+
+        return anyLooted;
+    }
+
+    /// <summary>Loots every stack sourceEntityId holds into destinationEntityId, each as TryLootStack would, and returns how many stacks gave up any quantity.</summary>
+    /// <remarks>Not all or nothing: a stack that can't be traded stays behind, and so does whatever a non-player destination has no room left for.</remarks>
+    public static int LootEveryStack(ComponentManager componentManager, ItemCatalog itemCatalog, int sourceEntityId, int destinationEntityId, IPlayerQuery playerQuery)
+    {
+        if (sourceEntityId == destinationEntityId)
+        {
+            return 0;
+        }
+
+        var sourceStacks = new List<InventoryItemStackComponent>();
+        InventoryQueries.CopyStacksForEntity(componentManager.GetMultiPool<InventoryItemStackComponent>(), sourceEntityId, sourceStacks);
+
+        var lootedStackCount = 0;
+        foreach (var stack in sourceStacks)
+        {
+            if (TryLootStack(componentManager, itemCatalog, sourceEntityId, destinationEntityId, stack.StackInstanceId, playerQuery))
+            {
+                lootedStackCount++;
+            }
+        }
+
+        return lootedStackCount;
+    }
+
+    /// <summary>Adds looted's units to the stacks entityId already holds that are interchangeable with them, each up to entityId's stack size cap.</summary>
+    /// <returns>The quantity that didn't fit.</returns>
+    private static ushort TopUpInterchangeableStacks(ComponentManager componentManager, MultiComponentPool<InventoryItemStackComponent> stacks, int entityId, in InventoryItemStackComponent looted)
+    {
+        var template = StackTemplate.Of(in looted);
+        var effectiveCap = GetEffectiveMaxStackSize(componentManager, entityId);
+        var remaining = looted.Quantity;
+
+        for (var denseIndex = stacks.GetFirstDenseIndex(entityId); denseIndex != -1 && remaining > 0; denseIndex = stacks.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var existing = ref stacks.GetReadonlyByDenseIndex(denseIndex);
+            if (existing.Quantity >= effectiveCap || !template.Matches(in existing))
+            {
+                continue;
+            }
+
+            var added = (ushort)System.Math.Min(remaining, effectiveCap - existing.Quantity);
+            stacks.UpdateByDenseIndex(denseIndex, added, static (ref InventoryItemStackComponent stack, ushort add) => stack.Quantity += add);
+            remaining -= added;
+        }
+
+        return remaining;
     }
 
     /// <summary>Whether stack's item may leave its owner's inventory; an item the catalog doesn't know carries no restriction.</summary>

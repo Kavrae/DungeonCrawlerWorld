@@ -82,7 +82,7 @@ public sealed record DirectDamage(
         }
 
         var targetRule = BodyPart.ResolveRule(in context);
-        HealthDamage.Apply(context.Services.Health, context.Services.EventBus, context.TargetEntityId, damageWithTagModifiers, context.Source, context.Services.PlayerQuery, context.ActivatorName, context.Now, context.Services.StatModifiers, context.Services.BodyParts, context.Services.MathUtility, context.Services.DeadEntities, context.Services.FloatingTextFeed, ResourceLossCategory.Direct, targetRule, context.ActivatorTags, BodyPartTargetMode, isCritical);
+        HealthDamage.Apply(context.Services.Health, context.Services.EventBus, context.TargetEntityId, damageWithTagModifiers, context.Source, context.Services.PlayerQuery, context.ActivatorName, context.Now, context.Services.StatModifiers, context.Services.BodyParts, context.Services.MathUtility, context.Services.DeadEntities, context.Services.DamageLedger, context.Services.FloatingTextFeed, ResourceLossCategory.Direct, targetRule, context.ActivatorTags, BodyPartTargetMode, isCritical);
         return EffectOutcome.Applied;
     }
 }

@@ -834,8 +834,8 @@ item leaves an inventory treats it the same.
   with Kind Item) or has a pending activation, during a trade, and while dead.
 - What an unloaded neighborhood does to a pile (today every entity in it is destroyed): lose the
   items, or keep piles in the neighborhood record ("Entity storage", Global).
-- Whether NPCs pick piles up ("Mobs looting corpses") and whether a pile has loot rights like a
-  corpse ("Corpse looting rights based on damage dealt").
+- Whether NPCs pick piles up (`NpcCorpseLooting`) and whether a pile has loot rights like a corpse
+  (`LootRights`, see IMPLEMENTATION-NOTES.md "Corpse loot rights and mob looting").
 - Currency: a "Drop" on the currency row, or never.
 - Destroying an item outright stays "Destroyed items", not a drop.
 
@@ -1008,16 +1008,12 @@ Same rules as Skills (level 0-15/20, XP with use, never decreases) -- land after
 one leveling primitive. A spell's level would modify its `Effect` magnitude/duration (bigger
 heal, cheaper Magic Missile) -- exact "what changes" design still open.
 
-#### Corpse looting rights based on damage dealt
+#### Mobs looting corpses by preference
 
-Currently a free-for-all (anyone adjacent can loot). Needs per-entity damage-dealt tracking against a
-target + a reset rule: on death (simple, but loses the record before looting starts unless kept
-alongside `DeadComponent`) or on a timeout since last hit (avoids crediting an old, unrelated fight).
-
-#### Mobs looting corpses
-
-V1: fill own inventory from a nearby corpse until full (`InventoryCapacity.MaxNonPlayerStackCount`), no
-preference. V2: preference by combat style/item rarity, once either concept exists.
+NPCs loot every corpse they stand on or beside, taking everything that fits (`NpcCorpseLooting`, see
+IMPLEMENTATION-NOTES.md "Corpse loot rights and mob looting"). Give them preferences -- by combat style or
+item rarity, once either concept exists -- and let them walk to a corpse rather than only loot one they
+happen to pass.
 
 #### NPCs use shops
 
@@ -1573,6 +1569,22 @@ can use EndOfLevelStairs. No companion/follower concept exists yet. Needs:
   against which clock while no floor holds it.
 - Unlock conditions: what makes an NPC eligible to follow through the stairs at all.
 
+#### Past player characters reappear as NPCs in later sessions
+
+Each time the player takes EndOfLevelStairs, snapshot the player character as they leave the floor (one
+version per floor reached), and keep those snapshots across sessions. In later sessions, playing as a new
+character, a past character's version for the current floor replaces a random NPC, so the player can
+encounter their own past characters.
+- **A survivor moves on.** If that past character survives the floor in the new session, the next floor
+  uses its next floor's version.
+- **No version for a floor** (the original session never got that far): the past character is noted as
+  killed in a spectacular fashion in the nightly summary instead of appearing.
+- Depends on EndOfLevelStairs (above), "Save and load Beyond neighborhoods" (Global) for snapshotting an
+  entity's full component set, and "Data storage" (Global) for keeping snapshots between sessions. No
+  nightly summary exists yet -- likely tied to "In-game day/time tracking" and the Crawler TV show.
+- Open: how the replaced NPC is picked (eligible blueprints, tier, neighborhood); whether a past character
+  fights, talks or trades; how many snapshots are kept per save.
+
 #### MapLayer interaction (overview)
 
 UnderGround, Ground and Flying are three layers of one floor (floors themselves are separate maps -- see
@@ -1888,8 +1900,9 @@ layer expansion or mod rows over the base table.
 A boss currently grants at most one box, and only when the player lands the killing blow
 (`BossLootboxAwarder`, see IMPLEMENTATION-NOTES.md "Loot boxes"). Award boxes per contribution instead -- different
 boxes for landing the killing blow, dealing the most damage, starting the fight, etc. -- so one fight
-can grant the player several. Needs per-fight damage/participation tracking; shares that need with
-"Corpse looting rights based on damage dealt". Also decide how an active quest's own award for killing a
+can grant the player several. Per-source damage is already tracked (`DamageLedger`; read it in
+`DeathSystem.OnEntityDied`, before the ledger is cleared); "started the fight" would need the ledger's
+first hit, which it keeps. Also decide how an active quest's own award for killing a
 specific boss (a `LootboxReward` with a content override, e.g. an item thematic to that boss and quest)
 combines with the boss's own box -- replaces it or adds to it.
 

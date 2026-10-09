@@ -25,6 +25,8 @@ public sealed class ReplacementHealthModule : IGameModule
 
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<BodyPartStateComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterMultiPool<DamageContributionComponent>();
+        componentManager.RegisterPackedPool<DamageLedgerExpiryComponent>(static (ref existing, incoming) => existing = incoming);
     }
 
     public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration) { }

@@ -341,13 +341,66 @@ target with a body-part-condition-granted one.
   containers landed), both menu-mode windows.
   `SecondaryInventoryWindowController` owns open/close/replace, written generically for chest/shop
   reuse.
-- Items drag both directions via `InventoryActions.TryTransferStack`/`TryTransferAllStacksOfItem` (no
-  auto-merge into destination). `UiInputController` locates the drop target's grid via `Element.Tag`,
-  not `Window.Content` (some grids never set Content -- was a real bug source, fixed).
+- Items drag both directions. Taking from a corpse or container merges (`InventoryActions.TryLootStack`,
+  see "Corpse loot rights and mob looting" below); giving moves the stack whole (`TryTransferStack`).
+  `UiInputController` locates the drop target's grid via `Element.Tag`, not `Window.Content` (some
+  grids never set Content -- was a real bug source, fixed).
 - Non-player inventories capped at 20 distinct stacks (`InventoryCapacity.MaxNonPlayerStackCount`);
   player unlimited.
 - No real loot table yet -- Goblins/Fairies/Ghosts get a **temporary** random 0-20-stack inventory
   (`TemporaryNpcLootGrant`).
+
+### Corpse loot rights and mob looting
+
+Landed 2026-10-09 (replaced TODO.md "Corpse looting rights based on damage dealt" and the V1 of "Mobs
+looting corpses").
+
+- **Damage ledger** (`Game/Modules/Health/DamageLedger.cs`): `DamageContributionComponent` (Multi pool,
+  one per source entity: its `ActionSource`, a float total, first-hit frame) on the victim, plus
+  `DamageLedgerExpiryComponent` (Packed, a timer). Recorded at every damage path --
+  `HealthDamage.Apply`'s Simple path, `ComplexHealthDamage`, `BodyPartBurningSystem` -- as the health
+  actually removed (after IncomingDamage, capped at what the target or the hit part had left;
+  `BodyPartDamageEffects.ApplyToPart` returns it). Only entity sources count: terrain, aura, Admin and
+  self-damage credit nobody. DoTs credit their applier. `HealthCost` records nothing (a cost isn't damage).
+- **Reset**: the whole ledger clears 30 s after the victim last took recorded damage. A hit writes only
+  `LastDamagedFrame`; `DamageLedgerExpirySystem`'s wheel re-arms the deadline from it when it fires, so
+  the wheel is rescheduled at most once per 30 s per victim, not per hit (aura DoTs hit many entities
+  every tick). A hit landing after the quiet period but before the expiry ran clears the stale ledger first.
+- **Loot owner**: `DeathSystem` writes the top contributor (ties: earliest first hit) into
+  `DeadComponent.LootOwnerEntityKey`, then clears the ledger -- the advanced boss loot box entry reads it
+  there, before the clear. `LootRights` (`Game/Modules/Death/`): only the owner for 30 s after
+  `DiedAtFrame`, then anyone; open at once with no owner, an unloaded owner or a dead owner; containers
+  are never reserved. Rights only widen, so checking when a loot starts is enough.
+- **Player**: the map's "Loot" option reads `EntityInteractionView.IsLootReservedFromPlayer` and shows a
+  disabled "Loot (reserved)"; Admin Mode ignores it. It is the only way a loot window opens.
+- **Merging**: `InventoryActions.TryLootStack` tops up the looter's interchangeable stacks (the
+  `StackTemplate` match) before moving any remainder whole, so a non-player looter with no free slot can
+  still top up what it carries. `LootAllStacksOfItem`/`LootEveryStack` (the loot window's Take All) build on
+  it. Used for Take, Take All, a plain drag from another entity onto the player, and NPC looting. Give and
+  trade staging keep `TryTransferStack` -- staging undoes a move by `StackInstanceId`.
+- **NPCs** (`NpcCorpseLooting`, a branch of `TestCombatBehaviorSystem` after heal/melee/ranged, before
+  wander): loots the first corpse on or around its footprint that is simulated, not yet looted and holds a
+  stack or currency, if `LootRights` allows -- marking it looted first, whether or not anything fits.
+  Refused everywhere: no corpse for 30 s (`CorpseLootRetryComponent`, a plain deadline). Opportunistic: no
+  pathing to corpses.
+- **Looted marking**: opening a corpse marks it looted, player or NPC, even with nothing taken. The loot
+  bag shows while a corpse or container holds a stack or any currency.
+- **Potion-abuse poison** is credited to whoever used the potion (`ItemActivationSystem.ApplyPotionToTarget`),
+  not its target: a thrown potion landing on a target still on its potion cooldown is the thrower's damage
+  and kill. Crediting the target made every such death read as "killed by itself" (found with a temporary
+  Debug self-kill stack trace, since removed).
+- **Gotcha, found by the benchmark**: a tile beside an NPC can hold an unbuilt skeleton, so the corpse
+  check reads the tier before any other pool (the Debug skeleton access guard threw). A regression test
+  needs a real skeleton across a neighborhood boundary -- placing a hand-made one on the map re-tiers and
+  builds it.
+- **Cost**: headless A/B against the commit before (Debug): `TestCombatBehaviorSystem` +25% (+0.42 ms/frame)
+  for the loot scan, Action/DelayedAction systems ~+10% (+0.02 ms each) for recording hits,
+  `DamageLedgerExpirySystem` ~0.01 ms. A first loot scan resolving tiles through `TargetShapeResolver`'s
+  de-duplicating `Adjacent | Self` union cost +61%; a direct rectangle loop replaced it.
+- Industry comparison (OSRS most-damage drops and 60 s private window, WoW first-tag, GW2 participation
+  threshold, EverQuest aggregate damage): most-damage resists tag griefing but lets a late high-DPS
+  joiner take a fight; no party pooling yet (two goblins split credit); the victim doesn't heal back on
+  reset. Melee hits every adjacent tile, allies included, so NPCs often out-damage each other.
 
 ### Storage containers and Currency
 

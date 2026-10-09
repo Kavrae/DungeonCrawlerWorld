@@ -33,6 +33,7 @@ using Game.Modules.Movement.Systems;
 using Game.Modules.NpcBehavior.Systems;
 using Game.Modules.Poison.Components;
 using Game.Modules.Poison.Systems;
+using Game.Modules.NpcBehavior;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race.Components;
@@ -107,11 +108,12 @@ internal static class TestSystems
         MathUtility mathUtility,
         MultiComponentPool<StatModifierComponent>? statModifiers = null,
         EntityBodyParts? bodyParts = null,
-        FloatingTextFeed? floatingTextFeed = null) =>
+        FloatingTextFeed? floatingTextFeed = null,
+        DamageLedger? damageLedger = null) =>
         new(timers, health, eventBus, playerQuery ?? TestPlayerQuery.NoPlayer, mathUtility,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),
-            EmptyPools.Packed<DeadComponent>(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
+            EmptyPools.Packed<DeadComponent>(), damageLedger ?? EmptyPools.DamageLedger(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static BurningSystem BurningSystem(
         PackedComponentPool<BurningTimerComponent> timers,
@@ -126,7 +128,7 @@ internal static class TestSystems
         new(timers, health, eventBus, playerQuery ?? TestPlayerQuery.NoPlayer, mathUtility,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),
-            deadEntities ?? EmptyPools.Packed<DeadComponent>(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
+            deadEntities ?? EmptyPools.Packed<DeadComponent>(), EmptyPools.DamageLedger(deadEntities), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static BodyPartBurningSystem BodyPartBurningSystem(
         MultiComponentPool<BodyPartBurningTimerComponent> timers,
@@ -139,7 +141,7 @@ internal static class TestSystems
         FloatingTextFeed? floatingTextFeed = null) =>
         new(timers, bodyParts, health, eventBus, playerQuery ?? TestPlayerQuery.NoPlayer,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
-            deadEntities ?? EmptyPools.Packed<DeadComponent>(), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
+            deadEntities ?? EmptyPools.Packed<DeadComponent>(), EmptyPools.DamageLedger(deadEntities), floatingTextFeed ?? EmptyPools.FloatingTextFeed());
 
     public static TerrainContactSystem TerrainContactSystem(
         TerrainRegistry terrain,
@@ -307,13 +309,15 @@ internal static class TestSystems
         PackedComponentPool<ManaComponent>? mana = null,
         PackedComponentPool<MeleeDisabledComponent>? meleeDisabled = null,
         IPlayerQuery? playerQuery = null,
-        EntityKeys? entityKeys = null) =>
+        EntityKeys? entityKeys = null,
+        NpcCorpseLooting? corpseLooting = null) =>
         new(movementPool, transformPool, actionLocks, health, bodyParts, inventoryStacks, actions, raceSlots, pendingActivations, pendingItemActivations, mapQuery, mathUtility, processingTiers, processingTierEvents,
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
             TestActionEffects.Services(BuiltInTestComponents.RegisterAll(new ComponentManager(16, 16)), entityKeys ?? new EntityKeys(), new EventBus(), mathUtility, deadEntities: deadEntities, mana: mana),
             meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>(),
             playerQuery ?? TestPlayerQuery.NoPlayer,
-            new TargetResolution(mapQuery, transformPool, entityKeys ?? new EntityKeys(), deadEntities ?? EmptyPools.Packed<DeadComponent>(), EmptyPools.Multi<NonBlockingComponent>(), EmptyPools.Packed<AbilityScoresComponent>()));
+            new TargetResolution(mapQuery, transformPool, entityKeys ?? new EntityKeys(), deadEntities ?? EmptyPools.Packed<DeadComponent>(), EmptyPools.Multi<NonBlockingComponent>(), EmptyPools.Packed<AbilityScoresComponent>()),
+            corpseLooting ?? new NpcCorpseLooting(BuiltInTestComponents.RegisterAll(new ComponentManager(16, 16)), new ItemCatalog(), playerQuery ?? TestPlayerQuery.NoPlayer, entityKeys ?? new EntityKeys(), mapQuery, new ProcessingTierQuery(processingTiers)));
 
     public static DeathSystem DeathSystem(
         PackedComponentPool<DeadComponent> deadEntities,
@@ -322,9 +326,10 @@ internal static class TestSystems
         IEntityMoveSync entityMoveSync,
         IMapQuery mapQuery,
         EventBus eventBus,
-        MultiComponentPool<AuraSourceComponent>? auraSources = null) =>
+        MultiComponentPool<AuraSourceComponent>? auraSources = null,
+        DamageLedger? damageLedger = null) =>
         new(deadEntities, nonBlockingEntities, transforms, entityMoveSync, mapQuery, eventBus,
-            auraSources ?? EmptyPools.Multi<AuraSourceComponent>());
+            auraSources ?? EmptyPools.Multi<AuraSourceComponent>(), damageLedger ?? EmptyPools.DamageLedger(deadEntities));
 
     public static BodyPartEffectsSystem BodyPartEffectsSystem(
         EntityBodyParts bodyParts,

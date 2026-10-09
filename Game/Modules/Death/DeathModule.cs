@@ -3,6 +3,7 @@ using Game.Modules.Core;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Death.Systems;
+using Game.Modules.Health;
 using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
 
@@ -15,7 +16,7 @@ public sealed class DeathModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, AurasModule.ModuleId];
+    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, AurasModule.ModuleId, HealthModule.ModuleId];
 
     public void RegisterComponents(ComponentRegistration registration)
     {
@@ -23,8 +24,7 @@ public sealed class DeathModule : IGameModule
 
         componentManager.RegisterPackedPool<DeadComponent>(static (ref existing, incoming) => existing = incoming);
 
-        // Rare in practice (player-action-only, seconds to minutes between uses), so initialCapacity is reduced.
-        componentManager.RegisterPackedPool<LootedComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 32);
+        componentManager.RegisterPackedPool<LootedComponent>(static (ref existing, incoming) => existing = incoming);
     }
 
     public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
@@ -42,6 +42,7 @@ public sealed class DeathModule : IGameModule
             context.EntityMoveSync,
             context.MapQuery,
             context.EventBus,
-            auraSources));
+            auraSources,
+            DamageLedger.For(componentManager, context.EntityKeys)));
     }
 }

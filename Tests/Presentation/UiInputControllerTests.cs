@@ -2506,6 +2506,86 @@ public sealed class UiInputControllerTests
         return (sourceGridWindow, destinationGridWindow, cell, componentManager, itemId, sourceEntityId, destinationEntityId);
     }
 
+    /// <summary>A corpse's grid and the player's, each holding one stack of the same item.</summary>
+    private static (Window CorpseGridWindow, Window PlayerGridWindow, ComponentManager ComponentManager, Game.World.World World, Guid ItemId, uint CorpseStackInstanceId, uint PlayerStackInstanceId) BuildLootDragHarness()
+    {
+        const int playerEntityId = 1;
+        const int corpseEntityId = 2;
+
+        var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
+        var itemId = Guid.NewGuid();
+        var itemCatalog = new ItemCatalog();
+        itemCatalog.Register(new ItemDefinition(itemId, "Test Item", null, "t", Color.White, Tags: [], Effects: []));
+        var playerStackInstanceId = InventoryActions.AddItem(componentManager, playerEntityId, itemId, quantity: 3);
+        var corpseStackInstanceId = InventoryActions.AddItem(componentManager, corpseEntityId, itemId, quantity: 2);
+
+        var fontService = TestFonts.Shared;
+        var labelRenderer = new LabelRenderer();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteRenderer = new SpriteRenderer();
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
+        var tooltipController = new TooltipController();
+        tooltipController.Initialize(windowService, new UiLayerStack());
+
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: playerEntityId);
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
+        var mapViewState = new MapViewState();
+
+        Window BuildGridWindow(int entityId, Vector2 position)
+        {
+            var window = windowService.CreateElement<Window>(null, new ElementOptions
+            {
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+                Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
+                Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
+            });
+            window.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, entityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
+            window.Initialize();
+            return window;
+        }
+
+        return (BuildGridWindow(corpseEntityId, new Vector2(0, 0)), BuildGridWindow(playerEntityId, new Vector2(500, 0)), componentManager, world, itemId, corpseStackInstanceId, playerStackInstanceId);
+    }
+
+    private static void DragCellOnto(UiInputController controller, Window originGridWindow, Window destinationGridWindow)
+    {
+        var pressPoint = originGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single().ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        var dropPoint = destinationGridWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+    }
+
+    [TestMethod]
+    public void Drag_FromACorpsesGridOntoThePlayers_MergesIntoThePlayersStack()
+    {
+        var (corpseGridWindow, playerGridWindow, componentManager, world, itemId, _, playerStackInstanceId) = BuildLootDragHarness();
+        var controller = CreateController([corpseGridWindow, playerGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world);
+
+        DragCellOnto(controller, corpseGridWindow, playerGridWindow);
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(1, stacks.CountForEntity(world.PlayerEntityId));
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(stacks, world.PlayerEntityId, playerStackInstanceId, out var playerStack));
+        Assert.AreEqual(5, playerStack.Quantity);
+    }
+
+    [TestMethod]
+    public void Drag_FromThePlayersGridOntoACorpses_GivesTheStackWhole()
+    {
+        var (corpseGridWindow, playerGridWindow, componentManager, world, _, _, playerStackInstanceId) = BuildLootDragHarness();
+        var controller = CreateController([corpseGridWindow, playerGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world);
+
+        DragCellOnto(controller, playerGridWindow, corpseGridWindow);
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(2, stacks.CountForEntity(2));
+        Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(stacks, 2, playerStackInstanceId, out _));
+    }
+
     [TestMethod]
     public void Drag_FromInventoryCellToAnotherEntitysGrid_TransfersTheStack()
     {

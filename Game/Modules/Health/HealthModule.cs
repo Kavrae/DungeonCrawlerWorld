@@ -44,6 +44,9 @@ public sealed class HealthModule : IGameModule
 
         // Only an entity something has actually happened to holds one -- see BodyPartStateComponent.
         componentManager.RegisterPackedPool<BodyPartStateComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 20_000);
+
+        componentManager.RegisterMultiPool<DamageContributionComponent>(initialCapacity: 256);
+        componentManager.RegisterPackedPool<DamageLedgerExpiryComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 256);
     }
 
     public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
@@ -80,6 +83,10 @@ public sealed class HealthModule : IGameModule
             context.EventBus,
             context.PlayerQuery,
             context.FloatingTextFeed));
+
+        systemManager.Register(new DamageLedgerExpirySystem(
+            componentManager.GetPackedPool<DamageLedgerExpiryComponent>(),
+            DamageLedger.For(componentManager, context.EntityKeys)));
 
         WireMaximumHealthShift(componentManager, context);
     }

@@ -38,6 +38,7 @@ public static class ComplexHealthDamage
         MultiComponentPool<StatModifierComponent> statModifiers,
         MathUtility mathUtility,
         PackedComponentPool<DeadComponent> deadEntities,
+        DamageLedger damageLedger,
         long now,
         BodyPartTargetRule? targetRule = null,
         GameplayTagSet damageTags = default,
@@ -55,7 +56,8 @@ public static class ComplexHealthDamage
 
         var effectiveAmount = HealthDamage.IncomingDamageOf(statModifiers, entityId, amount, damageTags);
 
-        BodyPartDamageEffects.ApplyToPart(bodyParts, entityId, partId, statModifiers, effectiveAmount, now);
+        var healthRemoved = BodyPartDamageEffects.ApplyToPart(bodyParts, entityId, partId, statModifiers, effectiveAmount, now);
+        damageLedger.Record(entityId, source, healthRemoved, now);
         BodyPartDamageEffects.PublishDamageEvents(health, bodyParts, eventBus, entityId, partId, effectiveAmount, source, playerQuery, damageType, statModifiers, deadEntities);
         return effectiveAmount;
     }
@@ -84,6 +86,7 @@ public static class ComplexHealthDamage
         string damageType,
         MultiComponentPool<StatModifierComponent> statModifiers,
         PackedComponentPool<DeadComponent> deadEntities,
+        DamageLedger damageLedger,
         long now,
         GameplayTagSet damageTags = default)
     {
@@ -97,10 +100,13 @@ public static class ComplexHealthDamage
         var effectiveAmount = HealthDamage.IncomingDamageOf(statModifiers, entityId, amount, damageTags);
         var perPartAmount = effectiveAmount / partCount;
 
+        var healthRemoved = 0f;
         for (var partId = 0; partId < partCount; partId++)
         {
-            BodyPartDamageEffects.ApplyToPart(bodyParts, entityId, partId, statModifiers, perPartAmount, now);
+            healthRemoved += BodyPartDamageEffects.ApplyToPart(bodyParts, entityId, partId, statModifiers, perPartAmount, now);
         }
+
+        damageLedger.Record(entityId, source, healthRemoved, now);
 
         BodyPartDamageEffects.PublishAggregateDamageEvents(health, bodyParts, eventBus, entityId, effectiveAmount, source, playerQuery, damageType, statModifiers, deadEntities);
         return effectiveAmount;

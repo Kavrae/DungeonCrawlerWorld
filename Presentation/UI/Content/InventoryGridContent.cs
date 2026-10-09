@@ -2,6 +2,7 @@ using Engine.ECS.Systems;
 using Engine.Tags;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
+using Game.Modules.Currency;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops;
@@ -67,6 +68,7 @@ public sealed class InventoryGridContent(
     private readonly CurrencyView _currencyView = inventoryServices.CurrencyView;
     private readonly ActionStateView _actionStateView = inventoryServices.ActionStateView;
     private readonly InventoryCommands _inventoryCommands = inventoryServices.InventoryCommands;
+    private readonly CurrencyCommands _currencyCommands = inventoryServices.CurrencyCommands;
     private readonly ShopCommands _shopCommands = inventoryServices.ShopCommands;
 
     /// <summary>50% larger than the original (24,24) for readability. internal, not private -- SecondaryInventoryWindow/ShopWindow both derive their own fixed grid width from this and CellGap rather than hand-duplicating the numbers (see their own doc comments on why that duplication was a landmine).</summary>
@@ -814,9 +816,36 @@ public sealed class InventoryGridContent(
     /// actually open right now (see InventoryWindowController.GetSecondaryTargetEntityId), so "Give"
     /// only appears while a secondary window is open. Trade-grid cells never reach this method at all
     /// (see this grid's own OnRightClicked wiring in RebuildCells): right-click there removes the stack
-    /// immediately instead.
+    /// immediately instead. A loot window's cells (see IsLootCell) also end with "Take All", on
+    /// every cell, a Merged Stack or untradeable one included.
     /// </summary>
     private List<ContextMenuOption> BuildItemContextMenu(InventoryItemStackCell cell)
+    {
+        var options = BuildStackContextMenu(cell);
+
+        if (IsLootCell(cell))
+        {
+            options.Add(new ContextMenuOption("Take All", null, Enabled: true, () => TakeAll(cell.EntityId)));
+        }
+
+        return options;
+    }
+
+    /// <summary>A cell of the open corpse or container window's own grid: the secondary target, which is neither the player nor a shop.</summary>
+    private bool IsLootCell(InventoryItemStackCell cell) =>
+        getSecondaryTargetEntityId() is { } secondaryTargetEntityId &&
+        cell.EntityId == secondaryTargetEntityId &&
+        secondaryTargetEntityId != world.PlayerEntityId &&
+        !_shopView.IsShop(secondaryTargetEntityId);
+
+    /// <summary>Moves every item and all currency lootedEntityId holds to the player.</summary>
+    private void TakeAll(int lootedEntityId)
+    {
+        _inventoryCommands.LootEveryStack(lootedEntityId, world.PlayerEntityId);
+        _currencyCommands.TryTransferAll(lootedEntityId, world.PlayerEntityId);
+    }
+
+    private List<ContextMenuOption> BuildStackContextMenu(InventoryItemStackCell cell)
     {
         List<ContextMenuOption> options = [];
 
@@ -907,7 +936,7 @@ public sealed class InventoryGridContent(
                     }
                     else
                     {
-                        _inventoryCommands.TryTransferStack(cell.EntityId, world.PlayerEntityId, stackInstanceId);
+                        _inventoryCommands.TryLootStack(cell.EntityId, world.PlayerEntityId, stackInstanceId);
                     }
                 }));
             }

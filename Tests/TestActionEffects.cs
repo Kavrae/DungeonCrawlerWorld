@@ -119,6 +119,7 @@ internal static class TestActionEffects
             health ?? EmptyPools.Packed<SimpleHealthComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
+            EmptyPools.DamageLedger(deadEntities),
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             abilityScores ?? EmptyPools.Packed<AbilityScoresComponent>(),
             mana ?? EmptyPools.Packed<ManaComponent>(),

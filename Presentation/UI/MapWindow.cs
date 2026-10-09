@@ -1290,7 +1290,8 @@ public sealed class MapWindow : Window
         // creature or a destroyed chest already gets.
         if ((isDestroyed || (interaction.IsContainer && !isShop)) && OnCorpseClicked is { } onCorpseClicked)
         {
-            options.Add(new ContextMenuOption("Loot", null, IsAdjacentToPlayer(entityId), () => onCorpseClicked.Invoke(entityId)));
+            var isLootReserved = interaction.IsLootReservedFromPlayer && !GlobalState.IsAdminModeOn;
+            options.Add(new ContextMenuOption(isLootReserved ? "Loot (reserved)" : "Loot", null, IsAdjacentToPlayer(entityId) && !isLootReserved, () => onCorpseClicked.Invoke(entityId)));
         }
 
         if (isShop && !isDestroyed && OnShopClicked is { } onShopClicked)

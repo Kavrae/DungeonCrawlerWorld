@@ -40,4 +40,5 @@ public readonly record struct TerrainView(string Name, string Description, Entit
 
 /// <summary>What the map's right-click menu needs to know about one thing on a tile.</summary>
 /// <param name="IsDestroyed">Dead -- a destroyed shop or container keeps its components, so this, not IsShop, decides whether it still trades.</param>
-public readonly record struct EntityInteractionView(string Name, bool IsShop, bool IsContainer, bool IsDestroyed);
+/// <param name="IsLootReservedFromPlayer">A corpse whose loot belongs to someone else for now (LootRights): the player may not open it yet.</param>
+public readonly record struct EntityInteractionView(string Name, bool IsShop, bool IsContainer, bool IsDestroyed, bool IsLootReservedFromPlayer);

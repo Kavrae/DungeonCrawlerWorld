@@ -43,6 +43,7 @@ public sealed class BurningSystem : ISystem
     private readonly MathUtility _mathUtility;
     private readonly EntityBodyParts _bodyParts;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
+    private readonly DamageLedger _damageLedger;
     private readonly PackedTimerWheel<BurningTimerComponent> _wheel;
 
     // Cached once instead of passing the Tick method group every Update -- an instance method
@@ -58,6 +59,7 @@ public sealed class BurningSystem : ISystem
         MultiComponentPool<StatModifierComponent> statModifiers,
         EntityBodyParts bodyParts,
         PackedComponentPool<DeadComponent> deadEntities,
+        DamageLedger damageLedger,
         FloatingTextFeed floatingTextFeed)
     {
         _timers = timers;
@@ -68,6 +70,7 @@ public sealed class BurningSystem : ISystem
         _mathUtility = mathUtility;
         _bodyParts = bodyParts;
         _deadEntities = deadEntities;
+        _damageLedger = damageLedger;
         _floatingTextFeed = floatingTextFeed;
         _tick = Tick;
         _wheel = new PackedTimerWheel<BurningTimerComponent>(timers, SimulationScope.Unscoped);
@@ -84,7 +87,7 @@ public sealed class BurningSystem : ISystem
             return true;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, _floatingTextFeed, ResourceLossCategory.StatusEffect, damageTags: BurningDamageTags);
+        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, _damageLedger, _floatingTextFeed, ResourceLossCategory.StatusEffect, damageTags: BurningDamageTags);
 
         var remainingStacks = (byte)(stackCount - 1);
         if (remainingStacks == 0)

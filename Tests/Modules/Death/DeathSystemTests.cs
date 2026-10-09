@@ -1,10 +1,13 @@
 ﻿using Engine.ECS.Components.Stores;
+using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Death.Systems;
+using Game.Modules.Health;
+using Game.Modules.Health.Components;
 using Game.Modules.Auras.Components;
 using Game.Modules.StatusEffects;
 using Game.World;
@@ -220,5 +223,40 @@ public sealed class DeathSystemTests
 
         Assert.AreEqual(1, auraSources.CountForEntity(0));
         Assert.AreEqual(4u, auraSources.GetReadonlyByDenseIndex(auraSources.GetFirstDenseIndex(0)).HeldGrantKey);
+    }
+
+    private static (PackedComponentPool<DeadComponent> DeadEntities, DamageLedger Ledger, MultiComponentPool<DamageContributionComponent> Contributions, EventBus EventBus) BuildWithLedger()
+    {
+        var deadEntities = CreateDeadPool();
+        var contributions = EmptyPools.Multi<DamageContributionComponent>();
+        var ledger = new DamageLedger(contributions, EmptyPools.Packed<DamageLedgerExpiryComponent>(), deadEntities, new EntityKeys());
+        var eventBus = new EventBus();
+        TestSystems.DeathSystem(deadEntities, CreateNonBlockingPool(), CreateTransformPool(), new RecordingEntityMoveSync(), new FakeMapQuery(), eventBus, damageLedger: ledger);
+        return (deadEntities, ledger, contributions, eventBus);
+    }
+
+    [TestMethod]
+    public void EntityDied_TheTopDamageDealerOwnsTheLoot_AndTheLedgerIsCleared()
+    {
+        var (deadEntities, ledger, contributions, eventBus) = BuildWithLedger();
+        ledger.Record(0, TestSources.Entity(1), 5, now: 0);
+        ledger.Record(0, TestSources.Entity(2), 9, now: 1);
+
+        eventBus.Publish(new EntityDiedEvent(0, TestSources.Entity(1)));
+        eventBus.DispatchBuffered<EntityDiedEvent>();
+
+        Assert.AreEqual(TestSources.KeyOf(2), deadEntities.GetReadonly(0).LootOwnerEntityKey);
+        Assert.IsFalse(contributions.Has(0));
+    }
+
+    [TestMethod]
+    public void EntityDied_NoEntityDamagedIt_NobodyOwnsTheLoot()
+    {
+        var (deadEntities, _, _, eventBus) = BuildWithLedger();
+
+        eventBus.Publish(new EntityDiedEvent(0, ActionSource.FromTerrain(1)));
+        eventBus.DispatchBuffered<EntityDiedEvent>();
+
+        Assert.IsTrue(deadEntities.GetReadonly(0).LootOwnerEntityKey.IsNone);
     }
 }

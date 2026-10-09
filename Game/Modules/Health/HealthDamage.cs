@@ -45,6 +45,7 @@ public static class HealthDamage
         EntityBodyParts bodyParts,
         MathUtility? mathUtility,
         PackedComponentPool<DeadComponent> deadEntities,
+        DamageLedger damageLedger,
         FloatingTextFeed floatingTextFeed,
         ResourceLossCategory damageCategory,
         BodyPartTargetRule? targetRule = null,
@@ -64,8 +65,8 @@ public static class HealthDamage
                 }
 
                 var complexEffectiveAmount = targetMode == BodyPartTargetMode.All
-                    ? ComplexHealthDamage.ApplyToAllParts(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, deadEntities, now, damageTags)
-                    : ComplexHealthDamage.Apply(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, mathUtility, deadEntities, now, targetRule, damageTags, targetMode);
+                    ? ComplexHealthDamage.ApplyToAllParts(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, deadEntities, damageLedger, now, damageTags)
+                    : ComplexHealthDamage.Apply(health, bodyParts, eventBus, entityId, amount, source, playerQuery, damageType, statModifiers, mathUtility, deadEntities, damageLedger, now, targetRule, damageTags, targetMode);
 
                 if (!wasDead)
                 {
@@ -95,6 +96,7 @@ public static class HealthDamage
         });
 
         health.TryGetReadonly(entityId, out var updatedHealth);
+        damageLedger.Record(entityId, source, beforeHealth.CurrentHealth - updatedHealth.CurrentHealth, now);
 
         // Only on the wasAlive -> 0 transition, not every subsequent hit against an
         // already-dead corpse -- and never for the player, who is deliberately exempted from

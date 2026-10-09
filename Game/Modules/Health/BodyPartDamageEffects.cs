@@ -18,17 +18,21 @@ public static class BodyPartDamageEffects
 
     /// <summary>Clamps the part's current health down by amount against its modifier-effective MaximumHealth, disabling the part (and locking it out of regen for a fresh 10 seconds from now) the instant it lands at 0 -- re-armed on every hit that leaves it at 0, not only the first transition into 0.</summary>
     /// <param name="now">The simulation frame this hit lands on -- the lockout is a deadline measured from it (see BodyPartStateComponent).</param>
-    public static void ApplyToPart(EntityBodyParts bodyParts, int entityId, int partId, MultiComponentPool<StatModifierComponent> statModifiers, float amount, long now)
+    /// <returns>The health the part actually lost: amount, capped at what the part had left.</returns>
+    public static float ApplyToPart(EntityBodyParts bodyParts, int entityId, int partId, MultiComponentPool<StatModifierComponent> statModifiers, float amount, long now)
     {
         ArgumentNullException.ThrowIfNull(bodyParts);
 
         if (!bodyParts.TryGet(entityId, partId, out var part))
         {
-            return;
+            return 0f;
         }
 
         var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
         bodyParts.Damage(entityId, partId, amount, effectiveMaximumHealth, now, RegenLockoutFrames);
+
+        bodyParts.TryGet(entityId, partId, out var damagedPart);
+        return MathF.Max(0f, part.CurrentHealth - damagedPart.CurrentHealth);
     }
 
     /// <summary>Unconditionally pushes the part's regen lockout out to a fresh 10 seconds from now, regardless of whether this hit actually landed the part at 0.</summary>

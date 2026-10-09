@@ -5,7 +5,6 @@ using Game.Effects;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
-using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
@@ -20,8 +19,8 @@ using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
-using Game.Modules.StatModifiers.Components;
 using Game.Modules.Race.Components;
+using Game.Modules.StatModifiers.Components;
 using Game.World;
 
 namespace Game.Modules.NpcBehavior.Systems;
@@ -91,6 +90,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     private readonly TieredEntityStripeSet _tieredStripeSet;
     private readonly IPlayerQuery _playerQuery;
     private readonly TargetResolution _targetResolution;
+    private readonly NpcCorpseLooting _corpseLooting;
 
     /// <summary>A Health Potion's targeting, for marking the drinker itself.</summary>
     private static readonly IActionActivator HealthPotionActivator = HealthPotion.Build().Activator!;
@@ -116,7 +116,8 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         EffectServices effectServices,
         PackedComponentPool<MeleeDisabledComponent> meleeDisabled,
         IPlayerQuery playerQuery,
-        TargetResolution targetResolution)
+        TargetResolution targetResolution,
+        NpcCorpseLooting corpseLooting)
     {
         _movementPool = movementPool;
         _transformPool = transformPool;
@@ -137,6 +138,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         _meleeDisabled = meleeDisabled;
         _playerQuery = playerQuery;
         _targetResolution = targetResolution;
+        _corpseLooting = corpseLooting;
 
         _tierQuery = new ProcessingTierQuery(processingTiers);
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementPool, processingTiers, processingTierEvents);
@@ -207,7 +209,10 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
             return; // Still mid-move from a previous decision -- nothing new to decide yet.
         }
 
-        if (TryDecideSelfHeal(entityId) || TryDecideMeleeAttack(entityId, transform, now) || TryDecideRangedAttackOnPlayer(entityId, transform, now))
+        if (TryDecideSelfHeal(entityId)
+            || TryDecideMeleeAttack(entityId, transform, now)
+            || TryDecideRangedAttackOnPlayer(entityId, transform, now)
+            || TryDecideLootCorpse(entityId, transform, now))
         {
             return;
         }
@@ -376,6 +381,18 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         }
 
         SetIdle(entityId, now);
+    }
+
+    /// <summary>Loots a corpse on or beside it -- see NpcCorpseLooting. Only once nothing is left to fight, so an adjacent enemy is still dealt with first.</summary>
+    private bool TryDecideLootCorpse(int entityId, TransformComponent transform, long now)
+    {
+        if (!_corpseLooting.TryLootNearbyCorpse(entityId, transform, now))
+        {
+            return false;
+        }
+
+        ClearStep(entityId);
+        return true;
     }
 
     private void ClearStep(int entityId) =>

@@ -8,6 +8,8 @@ using Game.Modules.Actions.Components;
 using Game.Modules.Containers.Components;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
+using Game.Modules.Currency.Components;
+using Game.Modules.Death;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
@@ -43,6 +45,7 @@ public sealed class MapViewQuery : IMapViewQuery
     private readonly PackedComponentPool<DeadComponent> _dead;
     private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks;
     private readonly PackedComponentPool<LootedComponent> _looted;
+    private readonly PackedComponentPool<CurrencyComponent> _currencies;
     private readonly PackedComponentPool<ContainerComponent> _containers;
     private readonly PackedComponentPool<ShopComponent> _shops;
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
@@ -51,6 +54,7 @@ public sealed class MapViewQuery : IMapViewQuery
     private readonly BlueprintRegistry _creatures;
     private readonly DirectComponentPool<SpawnRecordComponent> _spawnRecords;
     private readonly SimulationClock _simulationClock;
+    private readonly LootRights _lootRights;
 
     /// <param name="creatures">The blueprint definitions, for drawing and naming every entity that holds no visual or name of its own -- which is nearly all of them, built or skeleton.</param>
     /// <param name="simulationClock">The current simulation frame, which a windup's progress is measured against.</param>
@@ -73,6 +77,7 @@ public sealed class MapViewQuery : IMapViewQuery
         _dead = componentManager.GetPackedPool<DeadComponent>();
         _inventoryStacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         _looted = componentManager.GetPackedPool<LootedComponent>();
+        _currencies = componentManager.GetPackedPool<CurrencyComponent>();
         _containers = componentManager.GetPackedPool<ContainerComponent>();
         _shops = componentManager.GetPackedPool<ShopComponent>();
         _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
@@ -80,6 +85,7 @@ public sealed class MapViewQuery : IMapViewQuery
         _dodging = componentManager.GetPackedPool<DodgingComponent>();
         _creatures = creatures;
         _spawnRecords = componentManager.GetDirectPool<SpawnRecordComponent>();
+        _lootRights = LootRights.For(componentManager, world.EntityKeys);
     }
 
     public MapBounds Bounds => _world.Map.Bounds;
@@ -212,16 +218,20 @@ public sealed class MapViewQuery : IMapViewQuery
         return true;
     }
 
-    /// <remarks>The loot bag is only resolved for a container or a corpse, the two things that ever show one -- every live creature carries inventory stacks, and counting them for each visible occupant every frame would be wasted work.</remarks>
+    /// <remarks>The loot bag is only resolved for a container or a corpse, the two things that ever show one -- every live creature carries inventory stacks, and counting them for each visible occupant every frame would be wasted work. Either one shows it while it holds anything to loot: a stack, or any Gold or Credits.</remarks>
     public EntityStatusView GetStatus(int entityId)
     {
         var isContainer = _containers.Has(entityId);
-        var lootBag = (isContainer || _dead.Has(entityId)) && _inventoryStacks.CountForEntity(entityId) > 0
+        var lootBag = (isContainer || _dead.Has(entityId)) && HoldsLoot(entityId)
             ? _looted.Has(entityId) ? LootBagState.Looted : LootBagState.Unlooted
             : LootBagState.None;
 
         return new EntityStatusView(GetHealthBarFraction(entityId), isContainer, lootBag, _dodging.Has(entityId));
     }
+
+    private bool HoldsLoot(int entityId) =>
+        _inventoryStacks.Has(entityId) ||
+        (_currencies.TryGetReadonly(entityId, out var currency) && (currency.Gold > 0 || currency.Credits > 0));
 
     /// <summary>Current over modifier-effective maximum, or null when the bar is hidden: no health at all, a non-positive maximum, or already full.</summary>
     private float? GetHealthBarFraction(int entityId)
@@ -270,7 +280,8 @@ public sealed class MapViewQuery : IMapViewQuery
         ResolveName(entityId),
         _shops.Has(entityId),
         _containers.Has(entityId),
-        _dead.Has(entityId));
+        _dead.Has(entityId),
+        !_lootRights.CanLoot(entityId, _world.PlayerEntityKey, _simulationClock.CurrentFrame));
 
     private string ResolveName(int entityId) => _naming.NameOf(entityId);
 

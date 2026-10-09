@@ -335,7 +335,7 @@ public sealed class UiInputController
 
         resolvers.Add(new ShopDragDropResolver(_shopView, _shopCommands));
 
-        resolvers.Add(new PlainInventoryDragDropResolver(_inventoryCommands, _shopCommands));
+        resolvers.Add(new PlainInventoryDragDropResolver(_inventoryCommands, _shopCommands, _playerQuery));
 
         return resolvers;
     }

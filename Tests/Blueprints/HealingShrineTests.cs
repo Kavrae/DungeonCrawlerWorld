@@ -45,7 +45,7 @@ public sealed class HealingShrineTests
             HealthDamage.Apply(
                 Components.GetPackedPool<SimpleHealthComponent>(), Build.EcsContext.EventBus, entityId, amount, ActionSource.Admin, Build.World, "Test", Build.Context.SimulationClock.CurrentFrame,
                 Components.GetMultiPool<StatModifierComponent>(), EntityBodyParts.For(Components, Build.Context.Definitions), Build.Context.MathUtility,
-                Components.GetPackedPool<DeadComponent>(), Build.Context.FloatingTextFeed, ResourceLossCategory.Direct, targetRule, damageTags: fire ? [GameTags.DamageFire] : default);
+                Components.GetPackedPool<DeadComponent>(), Build.Context.EffectServices.DamageLedger, Build.Context.FloatingTextFeed, ResourceLossCategory.Direct, targetRule, damageTags: fire ? [GameTags.DamageFire] : default);
 
         public void RunFrames(int count)
         {

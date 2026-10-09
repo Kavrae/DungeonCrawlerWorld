@@ -1,3 +1,4 @@
+using Game.Modules.Currency.Components;
 using Game.Blueprints;
 using Game.Effects;
 using Engine.ECS.Components;
@@ -251,6 +252,26 @@ public sealed class MapViewQueryTests
     }
 
     [TestMethod]
+    public void GetStatus_CorpseCarryingOnlyCurrency_ShowsALootBag()
+    {
+        var fixture = new Fixture();
+        fixture.Components.Merge(5, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
+        fixture.Components.Merge(5, new CurrencyComponent(gold: 0, credits: 1));
+
+        Assert.AreEqual(LootBagState.Unlooted, fixture.Query.GetStatus(5).LootBag);
+    }
+
+    [TestMethod]
+    public void GetStatus_CorpseWithAnEmptyPurse_ShowsNoLootBag()
+    {
+        var fixture = new Fixture();
+        fixture.Components.Merge(5, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
+        fixture.Components.Merge(5, new CurrencyComponent(gold: 0, credits: 0));
+
+        Assert.AreEqual(LootBagState.None, fixture.Query.GetStatus(5).LootBag);
+    }
+
+    [TestMethod]
     public void GetStatus_EmptyContainer_IsAContainerWithNoLootBag()
     {
         var fixture = new Fixture();
@@ -360,7 +381,7 @@ public sealed class MapViewQueryTests
         fixture.Components.Merge(5, new ContainerComponent());
         fixture.Components.Merge(5, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
 
-        Assert.AreEqual(new EntityInteractionView("Potion Shop", IsShop: true, IsContainer: true, IsDestroyed: true), fixture.Query.GetInteraction(5));
+        Assert.AreEqual(new EntityInteractionView("Potion Shop", IsShop: true, IsContainer: true, IsDestroyed: true, IsLootReservedFromPlayer: false), fixture.Query.GetInteraction(5));
     }
 
     [TestMethod]

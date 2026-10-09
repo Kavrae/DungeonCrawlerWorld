@@ -119,7 +119,7 @@ public sealed class ItemActivationSystemTests
             eventBus,
             mathUtility,
             componentManager,
-            new EntityKeys(),
+            KeysIssuedThrough(TargetEntityId),
             statModifiers: null,
             deadEntities: componentManager.GetPackedPool<DeadComponent>(),
             mana: componentManager.GetPackedPool<ManaComponent>(),
@@ -397,6 +397,34 @@ public sealed class ItemActivationSystemTests
         Assert.AreEqual(0, StatusEffectQueries.CountStacks(displays, CasterEntityId, StatusEffectType.Poison));
         Assert.IsNotNull(published);
         Assert.AreEqual(TargetEntityId, published!.EntityId);
+    }
+
+    /// <summary>Keys for every entity id up to lastEntityId, so entity id N has key N + 1 (TestSources.KeyOf).</summary>
+    private static EntityKeys KeysIssuedThrough(int lastEntityId)
+    {
+        var entityKeys = new EntityKeys();
+        for (var entityId = 0; entityId <= lastEntityId; entityId++)
+        {
+            entityKeys.Issue(entityId);
+        }
+
+        return entityKeys;
+    }
+
+    [TestMethod]
+    public void Potion_ThrownOntoATargetStillOnCooldown_CreditsTheAbusePoisonToTheThrower()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
+        componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.GetPackedPool<PotionCooldownComponent>().Add(TargetEntityId, new PotionCooldownComponent(totalFrames: 1200, expiresAtFrame: 500));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(TestSources.KeyOf(CasterEntityId), componentManager.GetPackedPool<PoisonTimerComponent>().GetReadonly(TargetEntityId).Source.Key);
     }
 
     [TestMethod]

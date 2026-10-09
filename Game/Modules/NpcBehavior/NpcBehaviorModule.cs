@@ -18,6 +18,7 @@ using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
 using Game.Modules.NpcBehavior.Components;
 using Game.Modules.NpcBehavior.Systems;
+using Game.Modules.Currency;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race;
@@ -40,7 +41,7 @@ public sealed class NpcBehaviorModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, InventoryModule.ModuleId, ActionsModule.ModuleId, BodyPartEffectsModule.ModuleId, ManaModule.ModuleId, DeathModule.ModuleId, MovementModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId, StatModifiersModule.ModuleId, .. EffectServices.RequiredModuleIds];
+    public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, InventoryModule.ModuleId, ActionsModule.ModuleId, BodyPartEffectsModule.ModuleId, ManaModule.ModuleId, DeathModule.ModuleId, CurrencyModule.ModuleId, MovementModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId, StatModifiersModule.ModuleId, .. EffectServices.RequiredModuleIds];
 
     public IReadOnlyList<Guid> RunsBefore { get; } = [MovementModule.ModuleId];
 
@@ -49,6 +50,7 @@ public sealed class NpcBehaviorModule : IGameModule
         var componentManager = registration.ComponentManager;
 
         componentManager.RegisterPackedPool<TestDummyComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<CorpseLootRetryComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 64);
     }
 
     public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
@@ -78,7 +80,8 @@ public sealed class NpcBehaviorModule : IGameModule
             context.EffectServices,
             componentManager.GetPackedPool<MeleeDisabledComponent>(),
             context.PlayerQuery,
-            context.TargetResolution));
+            context.TargetResolution,
+            new NpcCorpseLooting(componentManager, context.Items, context.PlayerQuery, context.EntityKeys, context.MapQuery, new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>()))));
 
         systemManager.Register(new TestDummyAttackSystem(
             componentManager.GetPackedPool<TestDummyComponent>(),

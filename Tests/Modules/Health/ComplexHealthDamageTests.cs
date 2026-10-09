@@ -34,7 +34,7 @@ public sealed class ComplexHealthDamageTests
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 30, 30, true), ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
         var mathUtility = new MathUtility(new FirstPartRandom());
 
-        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), now: 0);
+        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), damageLedger: EmptyPools.DamageLedger(), now: 0);
 
         // FirstPartRandom always selects ordinal 0 -- the first part of the body plan, i.e. Head.
         bodyParts.TryGet(0, 0, out var hitPart);
@@ -52,7 +52,7 @@ public sealed class ComplexHealthDamageTests
         var bodyParts = BodyPartTestWorld.WithParts(0, ("Arm", BodyPartType.Arm, 5, 20, false)).BodyParts;
         var mathUtility = new MathUtility(new FirstPartRandom());
 
-        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), now: 0);
+        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), damageLedger: EmptyPools.DamageLedger(), now: 0);
 
         bodyParts.TryGet(0, 0, out var part);
         Assert.AreEqual(0, part.CurrentHealth);
@@ -70,7 +70,7 @@ public sealed class ComplexHealthDamageTests
         var publishCount = 0;
         eventBus.Subscribe<EntityDiedEvent>(_ => publishCount++);
 
-        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, eventBus, 1, 10, TestSources.Entity(0), new TestPlayerQuery(0), "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities, now: 0);
+        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, eventBus, 1, 10, TestSources.Entity(0), new TestPlayerQuery(0), "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities, EmptyPools.DamageLedger(deadEntities), now: 0);
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.AreEqual(1, publishCount);
@@ -78,7 +78,7 @@ public sealed class ComplexHealthDamageTests
         // Simulates DeathSystem having already marked the entity dead in response to the first EntityDiedEvent.
         deadEntities.Add(1, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
 
-        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, eventBus, 1, 10, TestSources.Entity(0), new TestPlayerQuery(0), "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities, now: 0);
+        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, eventBus, 1, 10, TestSources.Entity(0), new TestPlayerQuery(0), "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities, EmptyPools.DamageLedger(deadEntities), now: 0);
         eventBus.DispatchBuffered<EntityDiedEvent>();
 
         Assert.AreEqual(1, publishCount, "A subsequent hit against an already-dead entity must not republish EntityDiedEvent.");
@@ -90,7 +90,7 @@ public sealed class ComplexHealthDamageTests
         var bodyParts = new BodyPartTestWorld().BodyParts;
         var mathUtility = new MathUtility(new FirstPartRandom());
 
-        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), now: 0);
+        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), damageLedger: EmptyPools.DamageLedger(), now: 0);
     }
 
     [TestMethod]
@@ -102,7 +102,7 @@ public sealed class ComplexHealthDamageTests
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: false, magnitude: -5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
-        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers, mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), now: 0);
+        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers, mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), damageLedger: EmptyPools.DamageLedger(), now: 0);
 
         bodyParts.TryGet(0, 0, out var part);
         Assert.AreEqual(55, part.CurrentHealth);
@@ -117,7 +117,7 @@ public sealed class ComplexHealthDamageTests
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Additive, StatModifierPolarity.Debuff,
             canModify: false, magnitude: -55f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
-        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 0, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers, mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), now: 0);
+        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 0, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers, mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), damageLedger: EmptyPools.DamageLedger(), now: 0);
 
         bodyParts.TryGet(0, 0, out var part);
         Assert.AreEqual(5, part.CurrentHealth);
@@ -132,7 +132,7 @@ public sealed class ComplexHealthDamageTests
         EntityDamagedEvent? published = null;
         eventBus.Subscribe<EntityDamagedEvent>(e => published = e);
 
-        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, eventBus, 0, 10, ActionSource.Admin, new TestPlayerQuery(0), "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), now: 0);
+        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, eventBus, 0, 10, ActionSource.Admin, new TestPlayerQuery(0), "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), damageLedger: EmptyPools.DamageLedger(), now: 0);
 
         Assert.IsNotNull(published);
         // Torso (the selected part) drops from 60 to 50; Head stays at 30 -- summed total 80, not Torso's own 50.
@@ -149,7 +149,7 @@ public sealed class ComplexHealthDamageTests
         var published = false;
         eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
 
-        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, eventBus, 1, 10, TestSources.Entity(2), new TestPlayerQuery(0), "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), now: 0);
+        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, eventBus, 1, 10, TestSources.Entity(2), new TestPlayerQuery(0), "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), damageLedger: EmptyPools.DamageLedger(), now: 0);
 
         Assert.IsFalse(published);
     }
@@ -161,7 +161,7 @@ public sealed class ComplexHealthDamageTests
         var mathUtility = new MathUtility(new FirstPartRandom());
         var targetRule = new BodyPartTargetRule(BodyPartType.Head, BodyPartFallback.Random);
 
-        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), now: 0, targetRule: targetRule);
+        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), damageLedger: EmptyPools.DamageLedger(), now: 0, targetRule: targetRule);
 
         bodyParts.TryGet(0, BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Head), out var headPart);
         Assert.AreEqual(20, headPart.CurrentHealth);
@@ -177,7 +177,7 @@ public sealed class ComplexHealthDamageTests
         // No Foot part exists -- Bottommost fallback must select Torso, the lower-VerticalPosition of the two.
         var targetRule = new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Bottommost);
 
-        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), now: 0, targetRule: targetRule);
+        ComplexHealthDamage.Apply(CreateHealthPool(), bodyParts, new EventBus(), 0, 10, ActionSource.Admin, playerQuery: TestPlayerQuery.NoPlayer, "Test", statModifiers: EmptyPools.Multi<StatModifierComponent>(), mathUtility, deadEntities: EmptyPools.Packed<DeadComponent>(), damageLedger: EmptyPools.DamageLedger(), now: 0, targetRule: targetRule);
 
         bodyParts.TryGet(0, BodyPartSelection.PickByType(bodyParts, 0, BodyPartType.Torso), out var torsoPart);
         Assert.AreEqual(50, torsoPart.CurrentHealth);

@@ -83,6 +83,7 @@ public sealed class PoisonModule : IGameModule
             statModifiers,
             bodyParts,
             componentManager.GetPackedPool<DeadComponent>(),
+            DamageLedger.For(componentManager, context.EntityKeys),
             context.FloatingTextFeed));
     }
 }
