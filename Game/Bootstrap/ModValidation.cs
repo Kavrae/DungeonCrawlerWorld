@@ -1,5 +1,6 @@
 using Engine.Diagnostics;
 using Engine.ECS.Components;
+using Engine.ECS.Relationships;
 using Engine.Math;
 using Engine.Modules;
 using Engine.Settings;
@@ -73,7 +74,7 @@ public static class ModValidation
         }
     }
 
-    /// <summary>Each component type a module registers, with the kind of pool it registers it as (DirectComponentPool&lt;&gt; and so on).</summary>
+    /// <summary>Each component type a module registers, with the kind of pool it registers it as (DirectComponentPool&lt;&gt; and so on, or Relationship&lt;&gt; for either side of one).</summary>
     /// <remarks>Registered with the module's own settings as the real build would resolve them, so a setting that sizes or tunes a pool is compared as the player configured it.</remarks>
     private static HashSet<(Type ComponentType, Type PoolKind)> RegisteredPools(IModule module, IReadOnlyList<ISettingsSource> settingsSources)
     {
@@ -81,7 +82,9 @@ public static class ModValidation
         var settings = SettingsCatalog.Declare([module]).Resolve(settingsSources).Values;
         module.RegisterComponents(new ComponentRegistration(componentManager, settings));
 
-        return componentManager.AllPools.Select(pool => (pool.ComponentType, pool.GetType().GetGenericTypeDefinition())).ToHashSet();
+        return componentManager.AllPools
+            .Select(pool => (pool.ComponentType, componentManager.Relationships.IsRelationshipComponentType(pool.ComponentType) ? typeof(Relationship<>) : pool.GetType().GetGenericTypeDefinition()))
+            .ToHashSet();
     }
 }
 

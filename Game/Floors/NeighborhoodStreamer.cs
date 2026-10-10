@@ -438,11 +438,13 @@ public sealed class NeighborhoodStreamer : ISystem
                 }
                 else if (which is null || which(entityId))
                 {
+                    var entitiesDestroyedBefore = _entityManager.TotalEntitiesDestroyed;
                     _entityManager.DestroyEntity(entityId);
-                    TotalEntitiesDestroyed++;
+                    var entitiesDestroyed = (int)(_entityManager.TotalEntitiesDestroyed - entitiesDestroyedBefore);
+                    TotalEntitiesDestroyed += entitiesDestroyed;
                     _resolver.Forget(entityId);
                     destroyedAny = true;
-                    yield return 1;
+                    yield return entitiesDestroyed;
                 }
             }
         }

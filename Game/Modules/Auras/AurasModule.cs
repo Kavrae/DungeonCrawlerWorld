@@ -1,3 +1,5 @@
+using Engine.ECS.Components;
+using Engine.ECS.Relationships;
 using Engine.ECS.Systems;
 using Engine.Modules;
 using Game.Effects;
@@ -38,6 +40,7 @@ public sealed class AurasModule : IGameModule
         componentManager.RegisterMultiPool<AuraExposureComponent>();
         componentManager.RegisterPackedPool<AuraSourceExpiryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<AuraAnchorComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 16);
+        componentManager.RegisterRelationship<AuraAnchorOwnerLink>(new RelationshipSpec(TargetDestroyedPolicy.DestroySources), initialCapacity: 16);
     }
 
     public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
@@ -66,16 +69,22 @@ public sealed class AurasModule : IGameModule
             context.EventBus,
             context.SimulationScope));
 
-        WireAnchors(context, systemManager);
+        WireAnchors(context, systemManager, componentManager);
     }
 
-    /// <summary>Ends an anchor once its last source goes, cancels an owner's anchors when the owner is destroyed, and switches off the toggle holding an anchor that is destroyed (its neighborhood unloading).</summary>
-    private static void WireAnchors(GameModuleContext context, SystemManager systemManager)
+    /// <summary>Ends an anchor once its last source goes, and switches off the toggle holding an anchor that is destroyed (its neighborhood unloading).</summary>
+    /// <remarks>An owner's anchors are destroyed with it by the AuraAnchorOwnerLink relationship itself.</remarks>
+    private static void WireAnchors(GameModuleContext context, SystemManager systemManager, ComponentManager componentManager)
     {
         var anchors = context.EffectServices.AuraAnchors;
         context.EventBus.Subscribe<AuraSourceRemovedEvent>(removed => anchors.OnSourceRemoved(removed.EntityId));
-        context.EntityManager.EntityDestroying += entityId =>
-            anchors.OnEntityDestroying(entityId, (holderEntityId, toggleKey) => context.Toggles.SwitchOff(holderEntityId, toggleKey, context.SimulationClock.CurrentFrame));
+        componentManager.GetRelationship<AuraAnchorOwnerLink>().SourceUnlinked += (int anchorEntityId, int ownerEntityId, in AuraAnchorOwnerLink link, UnlinkReason reason) =>
+        {
+            if (anchors.EndsHoldingToggle(ownerEntityId, in link, reason))
+            {
+                context.Toggles.SwitchOff(ownerEntityId, link.HeldGrantKey, context.SimulationClock.CurrentFrame);
+            }
+        };
 
         systemManager.Register(new AuraAnchorEndingSystem(anchors));
     }

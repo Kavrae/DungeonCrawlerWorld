@@ -1,4 +1,6 @@
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Entities;
+using Engine.ECS.Relationships;
 
 namespace Engine.ECS.Components;
 
@@ -11,6 +13,7 @@ public sealed class ComponentManager
     private readonly int _initialComponentCapacity;
 
     private readonly Dictionary<Type, IComponentPool> _componentPools = [];
+    private readonly Dictionary<Type, object> _relationshipsByLinkType = [];
 
     /// <summary>Initializes a new instance of the <see cref="ComponentManager"/> class.</summary>
     /// <param name="initialEntityCapacity">The initial capacity for indexing component pools based on the estimated number of entities with the component.</param>
@@ -23,6 +26,15 @@ public sealed class ComponentManager
         _initialEntityCapacity = initialEntityCapacity;
         _initialComponentCapacity = initialComponentCapacity;
     }
+
+    /// <summary>Every entity's stable key -- see EntityKeys. EntityManager issues and releases them; relationships resolve links through it.</summary>
+    public EntityKeys Keys { get; } = new();
+
+    /// <summary>Every relationship type registered here -- see RegisterRelationship.</summary>
+    public RelationshipRegistry Relationships { get; } = new();
+
+    /// <summary>The entities EntityManager.DestroyEntity is running for. EntityManager keeps it; relationships refuse them as targets and only detach them as sources.</summary>
+    internal HashSet<int> DestroyingEntityIds { get; } = [];
 
     /// <summary>Returns true if the component type is registered to a pool.</summary>
     public bool IsRegistered<T>() where T : struct => _componentPools.ContainsKey(typeof(T));
@@ -57,6 +69,43 @@ public sealed class ComponentManager
     {
         ThrowIfAlreadyRegistered(typeof(T));
         _componentPools.Add(typeof(T), new MultiComponentPool<T>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity));
+    }
+
+    /// <summary>Registers a relationship type: a Packed pool of TLink (the links) and a Multi pool of RelatedSourceComponent&lt;TLink&gt; (each target's sources), kept in step by a Relationship.</summary>
+    /// <remarks>
+    /// A source holds one link per relationship type, so writing a link replaces the one it had. The target
+    /// side is written only by the relationship: GetMultiPool, Merge and RemoveComponent refuse it. See Relationship.
+    /// initialCapacity sizes both pools' dense storage, as in RegisterPackedPool.
+    /// </remarks>
+    public Relationship<TLink> RegisterRelationship<TLink>(RelationshipSpec spec, int? initialCapacity = null) where TLink : struct, IRelationshipLink
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        ThrowIfAlreadyRegistered(typeof(TLink));
+        ThrowIfAlreadyRegistered(typeof(RelatedSourceComponent<TLink>));
+
+        var links = new PackedComponentPool<TLink>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity, static (ref existing, incoming) => existing = incoming);
+        var relatedSources = new MultiComponentPool<RelatedSourceComponent<TLink>>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity);
+        _componentPools.Add(typeof(TLink), links);
+        _componentPools.Add(typeof(RelatedSourceComponent<TLink>), relatedSources);
+
+        var relationship = new Relationship<TLink>(spec, links, relatedSources, Keys, DestroyingEntityIds, _initialEntityCapacity);
+        _relationshipsByLinkType.Add(typeof(TLink), relationship);
+        Relationships.Add(relationship, typeof(TLink), typeof(RelatedSourceComponent<TLink>));
+        return relationship;
+    }
+
+    /// <summary>Retrieves the relationship whose links are TLink.</summary>
+    public Relationship<TLink> GetRelationship<TLink>() where TLink : struct, IRelationshipLink =>
+        _relationshipsByLinkType.TryGetValue(typeof(TLink), out var relationship)
+            ? (Relationship<TLink>)relationship
+            : throw new InvalidOperationException($"No relationship with {typeof(TLink).Name} links is registered.");
+
+    private void ThrowIfRelatedSourceComponentType(Type componentType)
+    {
+        if (Relationships.IsRelatedSourceComponentType(componentType))
+        {
+            throw new InvalidOperationException($"{componentType.Name} is kept by its relationship and can't be written directly; write the link, and read a target's sources through GetRelationship.");
+        }
     }
 
     private void ThrowIfAlreadyRegistered(Type componentType)
@@ -105,6 +154,8 @@ public sealed class ComponentManager
     /// <remarks>Used when the component is known to be registered to a multi pool.</remarks>
     public MultiComponentPool<T> GetMultiPool<T>() where T : struct
     {
+        ThrowIfRelatedSourceComponentType(typeof(T));
+
         if (!_componentPools.TryGetValue(typeof(T), out var componentPool))
         {
             throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered.");
@@ -136,6 +187,8 @@ public sealed class ComponentManager
     /// <remarks>Direct and Packed pools merge with any existing component; Multi pools have no single existing value to merge into, so every call is an Add.
     public void Merge<T>(int entityId, T component) where T : struct
     {
+        ThrowIfRelatedSourceComponentType(typeof(T));
+
         if (!_componentPools.TryGetValue(typeof(T), out var pool))
         {
             throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered.");
@@ -195,6 +248,8 @@ public sealed class ComponentManager
     /// <summary>Removes a component of the specified type from the entity</summary>
     public bool RemoveComponent<T>(int entityId) where T : struct
     {
+        ThrowIfRelatedSourceComponentType(typeof(T));
+
         if (!_componentPools.TryGetValue(typeof(T), out var componentPool))
         {
             throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered.");

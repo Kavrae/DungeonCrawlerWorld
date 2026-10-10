@@ -119,43 +119,15 @@ systems are a good shape for commands: `world.register_system(spawn_here)` retur
 system. A console command would be a registered one-shot system plus parsed arguments, so commands
 and systems share one way of reaching pools.
 
-#### Relationships -- links between entities that maintain both sides
-
-Every link from one entity to another is a one-way `EntityKey` in a component (`ActionSource`,
-`DeadComponent.KilledBy`, aura sources), and nothing can ask the other direction ("which auras is this
-entity the source of", "what's in this container") without a scan or a hand-kept index. Cleanup is by
-hand too: `GameBootstrapper` clears aura sources, map footprint and tier membership at
-`EntityDestroying`, and each new link needs its own line there. Planned features add many links:
-equipment and its wearer, container contents, companions and their leader, an aura anchor and its
-owner (`AuraAnchors`, already wired), claimed spots ("Spatial queries for NPC decisions", Game), an NPC's current
-target, a pet's bonded player ("Entity storage", Global).
-- **A relationship is a pair of component types:** the source side (on the item: "equipped by X") is
-  the one code writes; the target side (on the wearer: "items equipped") is maintained by the engine
-  whenever the source is added, changed or removed. Code never writes the target side.
-- **Cleanup policy per relationship:** when the target is destroyed, either remove the source side
-  from every linked entity (an aura's source dies, the aura stays), or destroy the linked entities too
-  (a container's contents go with it). Declared once on the relationship.
-- **Storage:** the target side is a Multi pool (many sources per target), so it costs nothing on
-  entities with no links.
-- **Across frames and saves** the source side holds an `EntityKey`, as today. Saving and loading remap
-  both sides ("Save and load Beyond neighborhoods", Global).
-- **Skeletons:** a link to a skeleton is allowed; building it doesn't touch its links.
-
-**Bevy reference:** Relationships (0.16). A component marked `#[relationship(relationship_target =
-Children)]` (the built-in `ChildOf`) automatically keeps the matching `#[relationship_target]` component
-(`Children`) on the target up to date, through component hooks. `linked_spawn` on the target side makes
-despawning the target despawn everything related to it. Custom relationships use the same attributes,
-so equipment or containers would be two small components. Bevy allows only one target per source
-component (an entity is `ChildOf` exactly one parent); a many-to-many link is several relationship
-types or an intermediate entity.
-
 #### Component lifecycle hooks and observers
 
 Code that must react when a component is added or removed on any entity has two routes today: pool
-`ComponentChanged` events (Packed and Multi pools only, change-shaped, subscribed by timer wheels and
-stripe sets) and `EntityManager.EntityDestroying` (every entity, whatever it holds). State kept outside
-the pools about an entity (map footprint, aura sources, UI selections, tier membership) has to remember
-to let go at `EntityDestroying`, and CLAUDE.md carries that as a rule because it's easy to miss.
+`ComponentChanged`/`ComponentRemoving` events (Packed and Multi pools only, subscribed by timer wheels,
+stripe sets and relationships) and `EntityManager.EntityDestroying` (every entity, whatever it holds).
+State kept outside the pools about an entity (map footprint, aura sources, UI selections, tier
+membership) has to remember to let go at `EntityDestroying`, and CLAUDE.md carries that as a rule
+because it's easy to miss. Links between entities already have their own mechanism (relationships,
+CLAUDE.md); a `Relationship` observes its link pool's events today and would move onto hooks.
 - **Hooks per component type:** on add, on insert (add or replace), on replace (before the old value
   goes), on remove, and on destroy, registered with the pool. Cleanup lives next to the component:
   the map footprint clears in `TransformComponent`'s remove hook, whoever removes it and however the
@@ -1558,10 +1530,34 @@ each NPC behavior. Companions and followers are the exception -- see the next it
 multi-tile footprint overlapping the stairs counts as entering; whether destruction leaves a corpse, loot,
 or kill credit.
 
+#### Parties
+
+No party concept exists. Two goblins fighting the player split loot credit individually ("Corpse loot
+rights", IMPLEMENTATION-NOTES), hostility is "a different race" (`IsAttackable`), and nothing groups the
+player with companions. The shape, decided with entity relationships (IMPLEMENTATION-NOTES "Entity
+relationships"):
+- **A party is an entity** (an intermediate entity, RimWorld's `Lord` pattern), holding the party's own
+  state: name, leader, shared-loot rule, formation. It sits off the map
+  (`TransformComponent.UnplacedOn`, as the trade-offer entities do) and is never drawn.
+- **`PartyMemberLink`** (member → party, a relationship with `UnlinkSources`): disbanding frees the
+  members, and a member's death or unload unlinks it. An entity is in at most one party. The party ends
+  once it has no members, on a later frame rather than inside the unlink (as an emptied aura anchor
+  does).
+- **Leader:** a key on the party's own component, or a one-to-one `PartyLeaderLink` if something needs
+  "which party do I lead" quickly.
+- **Consumers:** `DamageLedger.TryGetTopContributor` groups contributions by the contributor's party at
+  death (party pooling); `IsAttackable` treats party members as friendly until factions exist ("Factions",
+  under perception); EndOfLevelStairs carries the player's party (Companions and followers, below); the
+  party inventory UI (Presentation).
+- Open: whether a party's members share its tier (today they're near the player, so Local anyway); what
+  happens to a member left behind in a neighborhood that unloads (`UnlinkReason` doesn't tell an unload
+  from a death); whether NPC packs (goblin pack courage, raids) are parties too.
+
 #### Companions and followers travel through EndOfLevelStairs
 
 A standalone feature, larger than the stairs themselves. Unlike every other NPC, companions and followers
-can use EndOfLevelStairs. No companion/follower concept exists yet. Needs:
+can use EndOfLevelStairs. No companion/follower concept exists yet; companions are the player's party
+(Parties, above). Needs:
 - Temporary NPC storage: an NPC that takes the stairs before or after the player is held off-map with its
   exact state and restored on the next floor. See Entity storage -- suspend an entity from processing
   without per-system checks (Global).
@@ -2564,7 +2560,7 @@ window's fixed `Size` (one icon row tall) would need to grow with the active eff
 Research item. Look at Dungeon Settlers' party inventory UI and Elden Ring's inventory/equipment
 screens, and note what's worth adopting for the Inventory window and the Equipment menu (Low,
 below). Check it against the still-open Stack Controls and Partial Stacks (High, above), which
-already calls for a similar industry comparison.
+already calls for a similar industry comparison. A party's members come from Parties (Game).
 
 #### TextDivider label clipping and right-line spacing
 
@@ -3334,8 +3330,8 @@ creates new entities. References between entities are fixed up by `MapEntities`:
 implements it (or marks fields `#[entities]`, 0.16) to say which of its fields are entity references,
 and loading rewrites each one through an old-id → new-id map. That's the mechanism the **References**
 bullet above needs for anything that holds an entity id rather than an `EntityKey` -- and for
-`EntityKey`s themselves if keys are re-issued on load instead of kept. Relationships ("Relationships",
-Engine) restore their target side automatically once the source side is remapped.
+`EntityKey`s themselves if keys are re-issued on load instead of kept. A relationship's target side
+(`RelatedSourceComponent`) is never saved: it rebuilds as the links, which hold keys, are loaded.
 
 #### CI step for the performance-filtered tests
 
@@ -3410,7 +3406,12 @@ Needs: snapshot an entity's full component set into serializable form, remove it
 open questions: does this ride the general save/load system (Data storage above) or start as a narrower
 same-session freeze/thaw first; how do cross-entity references (an equipped item's owner, a pet's
 bonded player) stay valid across a storage/restore cycle (same class of problem Data storage's modded-
-content section already raises for saves generally). Motivating case: a tamed companion or caged NPC
+content section already raises for saves generally). Live links are relationships (CLAUDE.md).
+`RemoveAllComponents` is only safe inside `DestroyEntity`, which empties a relationship's target side
+first: called on its own, it removes the entity's links (raising `Unlinked`) and strips its
+`RelatedSourceComponent`s without telling the sources, which then still resolve to the stored entity's
+id. Storing must either keep the links in place (the `Disabled`-marker route below) or unlink both sides
+through the relationship and record them to restore. Motivating case: a tamed companion or caged NPC
 that can leave and rejoin the active simulation with its exact accumulated state intact.
 
 **Bevy reference:** Bevy 0.16 solved the same-session half with entity disabling. A `Disabled`

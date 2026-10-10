@@ -25,11 +25,12 @@ public sealed class SkeletonAccessGuard(CreatureSkeletons skeletons, SystemManag
     }
 
     /// <summary>Sets a guard on every registered pool a skeleton doesn't hold (see EntityFactory.SkeletonComponentTypes).</summary>
+    /// <remarks>Relationship pools are left unguarded: a link may point at or come from a skeleton, and building one never touches its links.</remarks>
     public static void Install(ComponentManager componentManager, SkeletonAccessGuard guard)
     {
         foreach (var pool in componentManager.AllPools)
         {
-            if (!EntityFactory.SkeletonComponentTypes.Contains(pool.ComponentType))
+            if (!EntityFactory.SkeletonComponentTypes.Contains(pool.ComponentType) && !componentManager.Relationships.IsRelationshipComponentType(pool.ComponentType))
             {
                 pool.AccessGuard = guard;
             }

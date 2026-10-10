@@ -85,7 +85,8 @@ public static class GameBuildPass
         var entityManager = ecsContext.EntityManager;
         int CountBuiltEntities() => entityManager.LivingEntityCount - skeletons.Count;
 
-        ecsContext.EntityPopulations = new EntityPopulationPolicy("Built", CountBuiltEntities, static componentType => EntityFactory.SkeletonComponentTypes.Contains(componentType));
+        var relationships = ecsContext.ComponentManager.Relationships;
+        ecsContext.EntityPopulations = new EntityPopulationPolicy("Built", CountBuiltEntities, componentType => EntityFactory.SkeletonComponentTypes.Contains(componentType) || relationships.IsRelationshipComponentType(componentType));
         ecsContext.Gauges.Register("Entities", "Built", GaugeKind.Level, () => CountBuiltEntities());
         ecsContext.Gauges.Register("Creatures", "Skeletons", GaugeKind.Level, () => skeletons.Count);
         ecsContext.Gauges.Register("ProcessingTier", "Local", GaugeKind.Level, () => localTierRoster.Count);

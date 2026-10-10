@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.ECS.Relationships;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints.Races;
@@ -33,6 +34,8 @@ public sealed class AuraAnchorTests
 
         /// <summary>The anchors on the map, by id.</summary>
         public int[] AnchorIds => Components.GetPackedPool<AuraAnchorComponent>().EntityIds.ToArray();
+
+        public Relationship<AuraAnchorOwnerLink> OwnerLinks => Components.GetRelationship<AuraAnchorOwnerLink>();
 
         public int Spawn(Guid blueprintId, Vector3Int position)
         {
@@ -136,13 +139,25 @@ public sealed class AuraAnchorTests
     }
 
     [TestMethod]
-    public void Torch_OwnerDestroyed_CancelsItsAnchor()
+    public void Torch_Anchor_IsLinkedToItsReader_AsATimedAnchor()
+    {
+        var session = BuildSession();
+
+        session.ReadTorch(TargetingMode.Ground, AimedTile);
+
+        var anchorId = session.AnchorIds.Single();
+        Assert.IsTrue(session.OwnerLinks.TryGetTargetEntityId(anchorId, out var ownerId));
+        Assert.AreEqual(session.CasterId, ownerId);
+        Assert.AreEqual(AuraSourceComponent.NoHeldGrantKey, session.OwnerLinks.Links.GetReadonly(anchorId).HeldGrantKey);
+    }
+
+    [TestMethod]
+    public void Torch_OwnerDestroyed_DestroysItsAnchorInTheSameDestroy()
     {
         var session = BuildSession();
         session.ReadTorch(TargetingMode.Ground, AimedTile);
 
         session.Build.EcsContext.EntityManager.DestroyEntity(session.CasterId);
-        session.RunFrames(1);
 
         Assert.IsEmpty(session.AnchorIds);
         Assert.AreEqual(0, session.PowerAt(AimedTile, ScrollOfTorch.Aura));
@@ -195,15 +210,41 @@ public sealed class AuraAnchorTests
     }
 
     [TestMethod]
-    public void Lantern_HolderDestroyed_CancelsItsAnchor()
+    public void Lantern_HolderDestroyed_DestroysItsAnchorInTheSameDestroy()
     {
         var session = BuildSession();
         session.PressLantern(TargetingMode.Ground);
 
         session.Build.EcsContext.EntityManager.DestroyEntity(session.CasterId);
-        session.RunFrames(1);
 
         Assert.IsEmpty(session.AnchorIds);
         Assert.AreEqual(0, session.PowerAt(CasterPosition, LanternAction.Aura));
+    }
+
+    [TestMethod]
+    public void Lantern_TurnedOff_EndsOnlyTheAnchorItsOwnToggleHolds()
+    {
+        var session = BuildSession();
+        session.ReadTorch(TargetingMode.Ground, AimedTile);
+        session.PressLantern(TargetingMode.Ground);
+        Assert.AreEqual(2, session.OwnerLinks.CountSources(session.CasterId), "Precondition: the torch and the lantern are both the caster's.");
+
+        session.RunFrames(FramesPerSecond);
+        session.PressLantern(TargetingMode.Ground);
+        session.RunFrames(1);
+
+        var remainingAnchorId = session.AnchorIds.Single();
+        Assert.AreEqual(AimedTile, session.Components.GetDirectPool<TransformComponent>().GetReadonly(remainingAnchorId).Position);
+        Assert.AreEqual(1, session.OwnerLinks.CountSources(session.CasterId));
+    }
+
+    [TestMethod]
+    public void TheOwnerLinkPools_AreNotSkeletonGuarded()
+    {
+        var session = BuildSession();
+
+        Assert.IsNull(session.OwnerLinks.Links.AccessGuard);
+        Assert.IsTrue(session.Components.Relationships.IsRelationshipComponentType(typeof(RelatedSourceComponent<AuraAnchorOwnerLink>)));
+        Assert.IsNull(session.Components.AllPools.Single(pool => pool.ComponentType == typeof(RelatedSourceComponent<AuraAnchorOwnerLink>)).AccessGuard);
     }
 }

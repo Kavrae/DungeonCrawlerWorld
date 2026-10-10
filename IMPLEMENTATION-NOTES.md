@@ -2438,3 +2438,69 @@ did not fall, so the removal scan a dying source pays is not what raised it, and
 count (TODO.md "Aura follow-ups"). Unloading a neighborhood with its shrines is covered by a
 teleported walk through the whole session (`AuraEvictionWalkTests`): the field afterwards matches one
 built from scratch across the border.
+
+### Entity relationships
+
+Landed 2026-10-09 (`Engine/ECS/Relationships/`); the rules are in CLAUDE.md's ECS section. Researched
+against Bevy (`Relationship`/`RelationshipTarget`, `linked_spawn`), Flecs (pairs, `OnDeleteTarget`
+cleanup traits, `Exclusive`/`Acyclic`), Unity Entities (`Parent`/`Child` plus a separate
+`LinkedEntityGroup`) and Unreal Mass (relation entities, `FRelationTypeTraits`).
+
+- **Link vs credit.** Every cross-entity reference was audited. Only aura anchors' owner key was a live
+  link (cleanup on both ends, a reverse lookup by scanning every anchor), so only it converted
+  (`AuraAnchorOwnerLink`). Kill/damage credit and effect sources must outlive what they name; a loot
+  owner's claim and a windup's marked target are short-lived and already define what "gone" means; UI
+  selections, footprint and tier membership are state about one entity, not a link (TODO.md
+  "Component lifecycle hooks and observers").
+- **Decisions.** The target side is an engine-only Multi pool, not a private index, so inspection, memory
+  reports and paging treat it like any pool. Sources are destroyed before the target's
+  `EntityDestroying` handlers (Bevy's order). One target per source per type: a group with state of its
+  own is an intermediate entity (a party), and a per-pair link with data (threat, reputation) would get a
+  non-exclusive option only when one needs cleanup or reverse queries. `UnlinkReason` doesn't tell an
+  unload from a death.
+- **Why the source keeps a key and the target side ids.** The link is what a save persists, so it holds
+  the key; the target side is the relationship's own and removed before an id is released, so ids are
+  safe there and it rebuilds from the links on load. The relationship also keeps each source's resolved
+  target id per page, because a removal (the value is gone after `EntityRemoved`) and a retarget
+  (`ComponentChanged` sees only the new value) both need the old target, and resolving a target
+  shouldn't cost a key lookup.
+- **`PackedComponentPool.ComponentRemoving`** was added for this: the hook reports the link being removed,
+  which `EntityRemoved` fires too late to read.
+- **A write straight to the link pool with a bad key** is checked by the observer after the value is
+  stored; a refusal removes the link (the source is left unlinked) and then throws, so the pool and the
+  target index never disagree. The removal is safe there because every pool write raises
+  `ComponentChanged` as its last step and the throw ends the write. `Link` checks first, so its refusal
+  leaves nothing behind, and hands the observer the target it resolved, so a link is checked once.
+- **Nothing can be linked to an entity being destroyed.** The set of entities inside `DestroyEntity` is
+  `ComponentManager.DestroyingEntityIds` (one set: `EntityManager.IsDestroying` reads it too), and a target
+  in it is refused. Without that, a link made from an `EntityDestroying` handler, after the target's
+  sources were detached, was dropped silently with the target's components and left the source pointing
+  at a recycled id.
+- **`SourceUnlinked` hands each handler a copy of the link.** A handler may destroy other entities, other
+  sources of the same target included (the target-destroying loop skips any source already detached), and
+  whatever that destroy writes can move the link pool's dense storage under a reference.
+- **No back-reference to `EntityManager`.** The first version had `EntityManager`'s constructor attach
+  itself to the registry (late-bound, with a "no `EntityManager` yet" throw and a one-manager rule that
+  broke a test helper). Now the key table lives on `ComponentManager` (`Keys`; `EntityManager.Keys`
+  reads it), the registry hands `DestroyEntity` the sources to destroy as keys (destroying one can
+  destroy another on the list first) and reads the set of entities being destroyed from `ComponentManager`, and
+  `DestroyEntity` detaches the entity's own links explicitly before `RemoveAllComponents`, so a link
+  removed outside a destroy is always `Unlinked`. The key table went on `ComponentManager` rather than
+  being created first and handed to both because 156 sites construct a `ComponentManager`.
+- **Anchors:** an owner's destruction now destroys its anchors in the same destroy instead of
+  "sources now, entity next frame"; `AuraAnchorEndingSystem` stays for a last source removed inside a
+  timer callback. `EndHeld` walks the owner's sources instead of every anchor.
+- **Cost:** headless A/B against the commit before (Debug, `pre-relationships` baseline):
+  `EcsContext.Update` +0.6%, inside the baseline's own spread; no system beyond the noise. Re-measured
+  without the back-reference (5 runs per side): +1.6% against a 3.2% spread, `DeathSystem`,
+  `NeighborhoodStreamer` and `ProcessingTierSystem` within noise. The world fingerprint differs only
+  because it hashes pool names and two pools are new.
+- **Hierarchy lookups** (`RootOf`, `CopyDescendantEntityIds`) were built ahead of a consumer, for an
+  `Acyclic` type only (any other throws: its chains needn't end). Building them exposed a gap in the
+  depth cap: it counted only the links above the new source, so attaching a node that already had
+  children could exceed `MaximumDepth`. The check now adds the longest chain below the source
+  (`LinksBelow`), and runs only when the target changes, not on every data write to a link.
+- **The depth and cycle checks are per type**: a chain built across two relationship types is never
+  checked at link time. It still ends when destroyed (an entity already being destroyed is only
+  detached). A long non-acyclic `DestroySources` chain cascades recursively, one stack frame per level;
+  nothing needs one, and the cascade could be made iterative if something does.

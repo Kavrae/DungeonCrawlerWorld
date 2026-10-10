@@ -81,6 +81,10 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// </remarks>
     public event Action<int, int>? ComponentChanged;
 
+    /// <summary>Opt-in: fired before a component is removed -- (entityId, denseIndex) -- while it can still be read.</summary>
+    /// <remarks>Raised by Remove, including RemoveAllComponents'. A handler may read the component and write other pools, but must not add to or remove from this one.</remarks>
+    public event Action<int, int>? ComponentRemoving;
+
     /// <summary> Initializes a new instance of the <see cref="PackedComponentPool{T}"/> class with the specified capacities and merge implementation. </summary>
     /// <param name="entityCapacity">The entity id space the entity index's page table starts out covering; ids beyond it grow it on demand.</param>
     /// <param name="initialCapacity">The initial dense storage size.</param>
@@ -358,6 +362,8 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         {
             return false;
         }
+
+        ComponentRemoving?.Invoke(entityId, denseIndex);
 
         var lastDenseIndex = _count - 1;
 
