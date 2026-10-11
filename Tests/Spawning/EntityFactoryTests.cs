@@ -115,6 +115,21 @@ public sealed class EntityFactoryTests
     }
 
     [TestMethod]
+    [DataRow(4, 1)]
+    [DataRow(1, 4)]
+    public void Spawn_PastTheHugeFootprintCap_ThrowsNamingTheBlueprint(int width, int height)
+    {
+        var (result, _) = Bootstrap();
+        var foremanId = result.Catalogs.Definitions.GetId(GoblinForeman.Id);
+
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() =>
+            result.Internals.Factory.Spawn(new SpawnRequest(foremanId, 8, 8) { Size = new Vector2Byte((byte)width, (byte)height) }));
+
+        StringAssert.Contains(error.Message, GoblinForeman.Name);
+        StringAssert.Contains(error.Message, "3x3");
+    }
+
+    [TestMethod]
     public void Spawn_AsACrawler_IsGivenACrawlerNumber()
     {
         var (result, _) = Bootstrap();

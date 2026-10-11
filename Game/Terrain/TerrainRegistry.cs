@@ -10,7 +10,7 @@ namespace Game.Terrain;
 /// population and before any system reads it -- the same ordering StatusEffectApplierRegistry
 /// relies on. Id 0 is reserved for "no terrain", so a zeroed cell array means an empty map.
 ///
-/// Sprite variants are resolved once per definition, on first use, rather than per cell per frame:
+/// Sprites (a wall's face and top alike) are resolved once per definition, on first use, rather than per cell per frame:
 /// the draw path reads a cached array instead of a string-keyed manifest lookup.
 /// </remarks>
 public sealed class TerrainRegistry
@@ -20,7 +20,12 @@ public sealed class TerrainRegistry
 
     private readonly List<TerrainDefinition?> _definitions = [null];
     private readonly Dictionary<string, ushort> _idsByKey = [];
-    private readonly List<SpriteComponent[]?> _spriteVariants = [null];
+    private readonly List<TerrainSpriteSet?> _spriteSets = [null];
+
+    /// <summary>Each id's link group as an int (see GetLinkGroup), resolved with its sprites; 0 until resolved.</summary>
+    private readonly List<int> _linkGroups = [0];
+
+    private readonly Dictionary<string, int> _linkGroupIdsByName = [];
 
     /// <summary>Each id's BlocksMovement, flattened out of its definition for the movement hot path.</summary>
     private readonly List<bool> _blocksMovement = [false];
@@ -38,7 +43,8 @@ public sealed class TerrainRegistry
         {
             var previous = _definitions[existingId]!;
             _definitions[existingId] = definition;
-            _spriteVariants[existingId] = null;
+            _spriteSets[existingId] = null;
+            _linkGroups[existingId] = 0;
             _blocksMovement[existingId] = definition.BlocksMovement;
             DefinitionChanged?.Invoke(existingId, previous, definition);
             return existingId;
@@ -51,7 +57,8 @@ public sealed class TerrainRegistry
 
         var id = (ushort)_definitions.Count;
         _definitions.Add(definition);
-        _spriteVariants.Add(null);
+        _spriteSets.Add(null);
+        _linkGroups.Add(0);
         _blocksMovement.Add(definition.BlocksMovement);
         _idsByKey.Add(definition.Key, id);
         return id;
@@ -95,41 +102,64 @@ public sealed class TerrainRegistry
         return new TerrainCell(typeId, variantCount > 1 ? (byte)mathUtility.Next(0, System.Math.Min(variantCount, byte.MaxValue + 1)) : (byte)0);
     }
 
-    /// <summary>How many sprite variants typeId has -- 0 for glyph-only terrain or an unknown id.</summary>
-    public int GetVariantCount(ushort typeId) => GetSpriteVariants(typeId)?.Length ?? 0;
 
-    /// <summary>The sprite for typeId's variant, if it has sprites. An out-of-range variant (a manifest that shrank) wraps rather than failing.</summary>
-    public bool TryGetSprite(TerrainCell cell, out SpriteComponent sprite)
+    /// <summary>How many sprite variants typeId has -- 0 for glyph-only terrain or an unknown id. For a linked part it counts variant sets, not pieces.</summary>
+    public int GetVariantCount(ushort typeId) => GetSpriteSet(typeId)?.VariantCount ?? 0;
+
+    /// <summary>The sprite cell draws as -- a floor's, or a wall's face -- if it has sprites. An out-of-range variant (a manifest that shrank) wraps rather than failing.</summary>
+    /// <remarks>A linked face draws the piece its set falls back to (a wall face's standalone piece): what a floor or the inspector shows. The map draws a wall's joined pieces through MapViewQuery, which picks them by its neighbours.</remarks>
+    public bool TryGetSprite(TerrainCell cell, out ManifestSprite sprite)
     {
-        if (GetSpriteVariants(cell.TypeId) is { Length: > 0 } variants)
+        if (GetSpriteSet(cell.TypeId) is { } sprites)
         {
-            sprite = variants[cell.Variant % variants.Length];
-            return true;
+            return sprites.TryGetFace(cell.Variant, mask: null, out sprite);
         }
 
         sprite = default;
         return false;
     }
 
-    private SpriteComponent[]? GetSpriteVariants(ushort typeId)
+    /// <summary>typeId's resolved sprites, for a caller that picks pieces by its own mask (MapViewQuery's joined walls).</summary>
+    public bool TryGetSpriteSet(ushort typeId, [NotNullWhen(true)] out TerrainSpriteSet? sprites)
     {
-        if (!TryGet(typeId, out var definition) || definition.SpriteName is not { } spriteName)
+        sprites = GetSpriteSet(typeId);
+        return sprites is not null;
+    }
+
+    /// <summary>
+    /// typeId's link group as an int: structures with the same one join each other. Read from the sprite entry (a wall's top's
+    /// group, else the entry's own), so a door frame joins a stone wall by sharing its group; a definition with no sprite entry
+    /// joins only itself. Comparing ints keeps the neighbour test free of string lookups.
+    /// </summary>
+    public int GetLinkGroup(ushort typeId)
+    {
+        if (typeId >= _linkGroups.Count || typeId == None)
+        {
+            return 0;
+        }
+
+        if (_linkGroups[typeId] != 0)
+        {
+            return _linkGroups[typeId];
+        }
+
+        var name = GetSpriteSet(typeId) is { } sprites ? sprites.LinkGroup : $"terrain:{_definitions[typeId]!.Key}";
+        if (!_linkGroupIdsByName.TryGetValue(name, out var linkGroup))
+        {
+            linkGroup = _linkGroupIdsByName.Count + 1;
+            _linkGroupIdsByName.Add(name, linkGroup);
+        }
+
+        return _linkGroups[typeId] = linkGroup;
+    }
+
+    private TerrainSpriteSet? GetSpriteSet(ushort typeId)
+    {
+        if (!TryGet(typeId, out var definition) || definition.SpriteName is not { } spriteName || !SpriteManifest.TryGetEntry(spriteName, out var entry))
         {
             return null;
         }
 
-        return _spriteVariants[typeId] ??= ResolveVariants(spriteName);
-    }
-
-    private static SpriteComponent[] ResolveVariants(string spriteName)
-    {
-        var count = SpriteManifest.CountCells(spriteName);
-        var variants = new SpriteComponent[count];
-        for (var index = 0; index < count; index++)
-        {
-            SpriteManifest.TryGetCell(spriteName, index, out variants[index]);
-        }
-
-        return variants;
+        return _spriteSets[typeId] ??= TerrainSpriteSet.Resolve(entry);
     }
 }

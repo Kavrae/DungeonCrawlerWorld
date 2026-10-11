@@ -1182,7 +1182,47 @@ game-over screen, a floor's contents on a floor transition). Bevy has no run-lev
 `UGameInstance`; resources simply persist across states unless removed. Pairs with "Named schedules,
 system sets and run conditions" (Engine), where "in state X" is a run condition.
 
+#### Composite buildings
+
+No entity may be bigger than Huge (3x3): the map draws everything within a reach box of 2 rows above and
+2 columns either side of an entity's anchor tile, and the row walk overscans by exactly that much
+(IMPLEMENTATION-NOTES.md "Tall sprites, wall faces and tops, and the sprite manifest"). A large
+building -- a castle, a gatehouse, a guild hall -- is therefore built from pieces, each within the
+limit: walls and wall tops (structure cells, joined by a link group), doors and windows (entities), roof
+and awning pieces (overhang pieces like wall tops). Never solve the next large building with one big
+sprite and a raised overscan.
+
+What makes those pieces one building -- its name and owner, "this is the potion shop", clicking any of its
+doors opens its trade, destroying it destroys its parts -- is a parent entity owning them:
+- **The link:** a `BuildingPartLink` (piece -> building) relationship, registered `Acyclic` with
+  `TargetDestroyedPolicy.DestroySources`, so destroying the building destroys its pieces (before its own
+  `EntityDestroying` handlers run). `RootOf` finds a piece's building, `CopyDescendantEntityIds` lists a
+  building's pieces; links to skeletons are allowed and a relationship changes no tiers.
+- **Interaction resolves to the root:** wherever an entity is chosen for interaction -- the context menu,
+  opening a shop or trade, inspection -- a piece answers as its building.
+- **A blueprint parts facet:** a building blueprint lists its parts with offsets, spawned parent first in
+  one `EntityFactory` call, within one neighborhood's plan so the building unloads and regenerates whole,
+  and like-with-like for pool paging.
+- **The parent** is an ordinary non-blocking, invisible entity at the building's origin tile (the aura
+  anchor precedent), so tiers, streaming and inspection treat it like anything else.
+
+Until then a shop or small building is a single entity up to Huge, like the 2x2 `shop-stand` shops.
+
 ### Low Priority
+
+#### Aura glow shouldn't tint wall tops
+
+`MapWindow`'s glow overlay (`DrawGlowOverlay`, from `AuraGlowView` per tile) is a translucent rect over every
+tile, blitted after the row walk -- so it lands on whatever covers that tile, including a wall's top (cached or
+live overhang) sitting over the floor the aura actually reaches. A top is the wall's roof, a row or two above
+the tile beneath it, and glowing like lava or holy ground reads wrong. The glow should tint what stands on the
+ground -- floors, occupants, a wall's face -- but not tops.
+
+- Where a top covers a tile, leave that tile out of the glow pass, or draw the glow before tops: the glow
+  cache would then go under the walls' cached tops (`MapWallPlan.CachedPieces`, tops last) and the row walk's
+  top overhangs, while still over occupants. A second glow pass split by `MapOverhang.IsTop` is one way.
+- A top covering only part of a tile (placement narrower than a tile) should leave the uncovered part glowing.
+- Check at the lava rows and Holy Ground in neighborhood (0,0), behind a wall run.
 
 #### Terrain contact as a range-0 aura -- revisit if contact needs to come from entities
 
@@ -1998,6 +2038,36 @@ than Ability Scores (a skill is already a bigger power swing). (2) A shared New 
 run banks one action into, offered as a starting choice on a fresh run. Both need a new persistent,
 save-file-level meta-progression store distinct from anything in a single `EcsContext`.
 
+#### Reactive environmental effects
+
+Tiles that visibly react to what happens on and next to them:
+- **Huge entities' first step** -- puddles splash, and floors are replaced with cracked variants the
+  first time a Huge entity steps on them.
+- **Plant growth** -- moss, vines, flowers and the like, overlaid on the ground, terrain or walls, and
+  destroyed by attacks on that tile (or next to it, for walls).
+- **Cracked walls** -- strong AOE attacks crack the walls next to them.
+- **Scorch marks** -- Fire attacks leave scorch marks on the ground and walls.
+- **Puddles** -- Ice and Water attacks leave water puddles.
+
+Investigate other tile-based games for more environmental effect options. Utilize shaders where
+appropriate (see "Sprite shaders and tinting", Presentation).
+
+To settle when designing it:
+- **Where the state lives.** Terrain and structures are `TerrainCell` flyweights per cell, so a
+  cracked floor or wall can be a variant terrain swapped in. An overlay (plants, scorch, puddles) is
+  either a second per-cell store beside terrain/structures or per-cell decal bits; it must not be an
+  entity per tile. Any terrain change goes through the existing announced path (`TerrainChangedEvent`),
+  never a second silent one.
+- **What triggers it.** Attacks resolve tiles through `TargetResolution`; damage types/tags
+  (`Damage.Fire`, Ice, Water -- see "Damage types") decide which mark is left. Huge-entity steps read
+  the frame's moves.
+- **Gameplay or cosmetic.** Whether a puddle or crack does anything (a terrain contact, slows
+  movement, conducts lightning) or is purely visual, and whether marks fade over time.
+- **Streaming and persistence.** Whether marks survive a neighborhood unload/reload, and their cost
+  per cell across a 3x3 window.
+- Overlaps with "Gameplay Cues -- presentation feedback raised by gameplay" (Medium) for the splash
+  itself.
+
 ## Presentation
 
 ### High Priority
@@ -2198,6 +2268,11 @@ entry. Two parts:
   activation). Could drive off `IMapViewQuery.GetChargeFraction`, which the charge fill already
   reads.
 
+- **Draw row while moving**: the map draws each row top to bottom, anything standing in the row of its
+  footprint's lowest tile (`MapDrawOrder`). A walking entity must draw in the bucket of its lower visual
+  row -- its destination when moving south, its origin when moving north -- or it pops between rows
+  mid-step, briefly drawing under a neighbour it should be in front of.
+
 Needs a frame-sequence concept `SpriteComponent`/`SpriteManifest` don't have yet (one cell per
 entity today, chosen once at build). Scope to Local tier -- nothing off-screen should pay for
 animation state. Pairs with the AI-generated sprite item (Medium, below), which would be the natural
@@ -2221,9 +2296,12 @@ two are ever separated -- but keeping "previous position" and "current position"
 walking lerp keeps that door open. Sprite-sheet animation in Bevy is a `TextureAtlas` index advanced by
 game code (an example, not a built-in); `bevy_animation`'s curves and animation graphs target 3D.
 
-#### SpriteDefinition: tint, scale and multi-tile footprint on the sprite itself
+#### SpriteDefinition: tint on the sprite itself
 
-A sprite is only a name today: whatever draws it decides its tint, size and footprint. Introduce a
+Part of `EPIC-sprites-ui-engine-and-dev-tools.md` (child 2).
+
+A sprite's size and footprint already come from its manifest entry (pixels per tile and pivot), but its tint is
+still decided by whatever draws it. Introduce a
 `SpriteDefinition` (the natural home is the data-driven `Content/SpriteManifest.json` /
 `SpriteManifest`) that carries everything about how a sprite draws, so it's self-contained and works
 wherever the sprite is used -- items, entities, terrain, UI icons -- rather than being re-declared by
@@ -2235,77 +2313,31 @@ each kind of thing that shows one.
   `ItemIconElement` read it, nothing else does. A tinted variant becomes its own sprite definition
   (e.g. "Chest-Bronze" pointing at the chest cells with a bronze tint), and `LootboxCatalog` names it
   instead of setting a tint. Remove `SpriteTint` from `ItemDefinition` and `AreEquivalentOverrides`.
-- **Scale** (was "Per-entity sprite scale"): `SpriteRenderer.Draw` always stretches to fill the tile
-  footprint exactly -- wrong for character sprites (confirmed in-game: player needs to render larger,
-  goblins smaller). A scale factor on the sprite definition, applied in `MapWindow.TryDrawEntityVisual`
-  and every other sprite draw.
-- **Multi-tile footprint** (was "Multi-tile sprites"): no sprite spans more than one tile today --
-  `TransformComponent.Size` already carries a footprint (a corpse/tiny-entity grid already reasons
-  about it), but `MapWindow`'s draw path always renders one sprite stretched to exactly one tile's own
-  `CurrentTileSize`, never a single sprite spanning the whole footprint. `Shop`'s `"Shop-1x1"` is a
-  deliberately-named 1x1 placeholder; a real "Shop-2x2" is the concrete first implementation.
 
 Every draw site (`SpriteOrGlyphRenderer`, `MapWindow`, the inventory/hotbar/details icons, the drag
-ghost) then reads the definition instead of taking tint/size as separate parameters. Pairs with
-"Sprites taller than one tile" just below, which needs the same footprint/scale information.
-
-#### Sprites taller than one tile, and two-tile walls (front + top)
-
-Inspired by Dungeon Settlers. Two related wants: character sprites that extend above their own tile,
-and walls drawn as a front face on their own tile plus a top face on the tile above. Both need the
-map drawn top-down (row-outer), so a lower row's sprite overlaps the row above it rather than the
-other way round.
-
-Two things in `MapWindow` stand in the way today:
-- `DrawOccupants` walks column-outer, row-inner. Within a column that's already top-down, but column
-  c+1's row r-1 draws after column c's row r, so anything wider than one tile (see the SpriteDefinition
-  item's scale, above) gets overdrawn by its upper-right neighbour. Its own remarks say row-major measured no
-  performance difference and was only left alone because it would change overlap order for no gain.
-  This is that gain.
-- Walls are terrain (`Map`'s separate `TerrainLayer` array), rendered into the `MapTileLayerCache`
-  texture before any occupant. A wall's top face covering the tile above has to occlude an entity
-  standing behind it (north), so wall tops can't live in that cache -- they need to draw in the
-  row-ordered occupant pass, after the row above. That cache's remarks explain why terrain was pulled
-  out of the per-tile loop in the first place (multi-tile footprints), so this needs a real design,
-  not just moving the wall draw.
-
-Tall terrain goes semi-transparent while the player or the inspected entity is behind it: when
-either stands on a tile that a wall's top face (or any other tall terrain sprite) draws over, render
-that sprite at reduced alpha so the entity stays visible. "Inspected" is
-`MapViewState.InspectedEntityId` (Detail/Admin inspection's followed entity, the same one
-`DrawFollowedEntityHighlight` tracks), and it should cover every tile of that entity's footprint
-(`TransformComponent.Size`), not just its origin tile. The occupant draw path already carries an
-alpha multiplier (`TryDrawEntityVisual`'s `alphaMultiplier`, used for Phasing), so this is a
-per-tile "is the player or inspected entity under this sprite's overhang" check at draw time, once
-tall terrain draws in the occupant pass at all -- at most two entities to check, so no spatial index
-needed.
-
-Related: "SpriteDefinition: tint, scale and multi-tile footprint" (High, just above) -- a larger player sprite is the
-first real consumer of this.
-
-**Godot reference:** already researched in `PLAN-tall-sprites-and-wall-tops.md`, which cites Godot's
-Y-sort (`y_sort_enabled`: siblings draw in order of their origin's Y, so the sprite's origin must be its
-feet, not its top-left). The other Godot pieces that apply: `z_index` for things that must break the
-row order on purpose (a flying creature's shadow under everything, a spell effect over everything),
-and `CanvasLayer` for layers that never sort with the world (the HUD). "Autotiling with terrain sets"
-(below) extends the plan's Phase 5 linked wall tops beyond walls.
+ghost) then reads the definition instead of taking tint/size as separate parameters. Manifest cells
+already carry a `Tint` of their own (IMPLEMENTATION-NOTES.md "Tall sprites, wall faces and tops, and the
+sprite manifest"), multiplied into whatever a draw site passes -- the chest's rarity variants can be
+manifest entries tinted that way.
 
 #### Autotiling with terrain sets
 
-`PLAN-tall-sprites-and-wall-tops.md` Phase 5 joins wall tops with a 4-bit neighbour mask (16
-variants, N/E/S/W). Everything else is still one sprite per `TerrainCell` regardless of what's next
-to it: a lava pool is a grid of identical squares, and where floor meets water there's no edge. Real
+Walls already join: a top by a 4-bit neighbour mask (16 pieces, N/E/S/W), a face by a 2-bit one (left
+end, right end, middle, standalone), computed when the map's cached image is rebuilt rather than
+stored (`StructureLinks`; IMPLEMENTATION-NOTES.md "Tall sprites, wall faces and tops, and the sprite
+manifest"). Floors are still one sprite per `TerrainCell` regardless of what's next to it: a lava pool is a grid of identical squares, and where floor meets water there's no edge. Real
 map generation ("Real map generation -- neighborhood templates", Game) will make this much more
 visible, since generated shapes are irregular.
 - **Terrain sets:** a terrain type (water, lava, moss, dirt) declares a set of variants keyed by which
-  neighbours share its terrain. Sides only (16 variants, the Phase 5 case), or corners and sides (the
+  neighbours share its terrain. Sides only (16 variants, as wall tops do), or corners and sides (the
   47-variant "blob" set, needed for concave corners to look right).
 - **Transitions between terrains:** several terrains in one set (floor, dirt, water), with variants
   for where two of them meet, so a water edge is drawn from the water side onto the floor.
 - **Chosen when the cell changes, not every frame:** the variant is computed when a neighborhood
   loads (on the worker, in the plan) and recomputed for a cell and its 8 neighbours when a cell
   changes (destructible terrain), then stored in `TerrainCell.Variant` the way random variants are
-  today. Drawing stays a lookup, and `MapTileLayerCache` invalidates as it does now.
+  today -- or computed at cache rebuild as walls are, which needs no fix-up on a change and costs a
+  few reads per cell per rebuild. Drawing stays a lookup, and `MapTileLayerCache` invalidates as it does now.
 - **Across neighborhood edges:** a cell on the border needs its neighbour's terrain. Either plan the
   border row with the adjacent record's decided edge (the rolling plan already decides shared
   edges), or re-tile border cells when the neighbour loads.
@@ -2316,7 +2348,8 @@ visible, since generated shapes are irregular.
 - **Tile animation:** a terrain can declare frames with durations (lava, water, torches on walls),
   advanced by presentation time with a per-cell random start so a pool doesn't pulse in unison.
   Needs `MapTileLayerCache` to redraw animated cells, or to draw them in a separate pass.
-- `DevTools/SpriteManifestBuilder` needs an editor for these sets, the way Phase 5 adds linked sets.
+- `DevTools/SpriteManifestBuilder` already edits 16-slot linked sets and link groups; terrain sets
+  need corner slots and multi-terrain transitions on top of that.
 
 **Godot reference:** a Godot `TileSet` has *terrain sets*, each in one of three modes -- match corners
 and sides, match corners, or match sides -- containing one or more terrains. Each tile is painted with
@@ -2837,6 +2870,8 @@ the perception item stays the source of truth.
 
 #### Sprite shaders and tinting
 
+Part of `EPIC-sprites-ui-engine-and-dev-tools.md` (child 7).
+
 No custom shaders exist; every sprite draws with `SpriteBatch`'s default effect, tinted at most by a
 colour multiply. Several items want per-sprite effects: "Investigate mask-based recoloring for shared
 sprites" (Low -- palette swaps), hit feedback ("Gameplay Cues", Game -- a white flash), selection and
@@ -2942,6 +2977,8 @@ events, so a drag from the inventory onto a map tile is one drag, not two system
 
 #### Split Presentation into Presentation + UIEngine projects
 
+Part of `EPIC-sprites-ui-engine-and-dev-tools.md` (child 4).
+
 Mirrors the Engine->Game split one layer up. Dependency rule: `UIEngine` references only `Engine`;
 `Presentation` references `UIEngine`/`Engine`/`Game`; never the reverse. Clearly-`UIEngine` and
 clearly-stays-`Presentation` sets are both fairly obvious (generic Element/window framework vs.
@@ -2968,7 +3005,7 @@ A blood pool drawn under a corpse on every tile of its footprint (`TransformComp
 per-tile loop `DrawFollowedEntityHighlight` uses), colored per entity. Nothing carries a blood color
 today -- add one per race blueprint (a field or small component, e.g. red for Human/Goblin), and
 decide what a Ghost leaves (none, or ectoplasm). Draw it under the corpse in the occupant pass
-(`DrawUnderlayOccupants`, before the corpse sprite), not after. Pairs with Red X marker above (both
+(`MapWindow.DrawOccupants`, before the corpse sprite), not after. Pairs with Red X marker above (both
 make a corpse read as dead) and Corpse decay/destruction (Game) -- the pool should go when the
 corpse does.
 

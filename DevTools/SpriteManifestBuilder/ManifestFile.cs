@@ -24,10 +24,17 @@ public static class ManifestFile
         File.WriteAllText(path, json);
     }
 
-    /// <summary>Replaces any existing entry with the same Name, otherwise appends -- the save button's behavior when editing an entry that already exists.</summary>
+    /// <summary>Replaces any existing entry with the same Name where it stands, otherwise appends -- so re-saving an unchanged entry rewrites the file byte for byte.</summary>
     public static List<ManifestEntry> Upsert(IReadOnlyList<ManifestEntry> entries, ManifestEntry newEntry)
     {
-        var result = entries.Where(entry => entry.Name != newEntry.Name).ToList();
+        var result = entries.ToList();
+        var existingIndex = result.FindIndex(entry => entry.Name == newEntry.Name);
+        if (existingIndex >= 0)
+        {
+            result[existingIndex] = newEntry;
+            return result;
+        }
+
         result.Add(newEntry);
         return result;
     }

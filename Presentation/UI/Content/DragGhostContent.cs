@@ -96,7 +96,7 @@ public sealed class DragGhostContent(
         }
 
         var size = state.SourceSize;
-        SpriteComponent? sprite = spriteName is not null && SpriteManifest.TryGetFirst(spriteName, out var spriteComponent) ? spriteComponent : null;
+        SpriteView? sprite = spriteName is not null && SpriteViews.TryGetFirst(spriteName, out var spriteView) ? spriteView : null;
         var font = fontService.GetFont((int)(size.Y * FontChrome.DragGhostGlyphFontFraction));
         var mousePosition = state.CursorPosition;
 

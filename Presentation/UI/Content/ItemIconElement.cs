@@ -1,10 +1,9 @@
-using Game.Modules.Core.Components;
-using Microsoft.Xna.Framework;
 using FontStashSharp;
+using Game.Views;
+using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
-using Game.Sprites;
 
 namespace Presentation.UI.Content;
 
@@ -37,7 +36,7 @@ public sealed class ItemIconElement(FontService fontService, ElementPoolService 
 
     public override void DrawContent(GameTime gameTime)
     {
-        SpriteComponent? sprite = _spriteName is not null && SpriteManifest.TryGetFirst(_spriteName, out var spriteComponent) ? spriteComponent : null;
+        SpriteView? sprite = _spriteName is not null && SpriteViews.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
 
         SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _glyphFont, _glyph, _glyphColor, ContentAbsolutePosition, ContentSize, _spriteTint ?? Color.White);
     }

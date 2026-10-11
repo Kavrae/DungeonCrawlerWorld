@@ -1,8 +1,8 @@
 # Tall Sprites and Two-Tile Walls
 
-(Pre-implementation. Replaces TODO.md's "Sprites taller than one tile, and two-tile walls (front +
-top)" entry, and absorbs "Per-entity sprite scale" (Low). Both are deleted when the phase that lands
-them is done.)
+(Landed 2026-10-11, all 8 phases; durable notes in IMPLEMENTATION-NOTES.md "Tall sprites, wall faces and
+tops, and the sprite manifest". Replaced TODO.md's "Sprites taller than one tile, and two-tile walls (front +
+top)" entry and absorbed "Per-entity sprite scale" and "Multi-tile sprites"; all three are deleted.)
 
 ## Context
 
@@ -72,15 +72,31 @@ the batch sort. It doesn't fit this renderer:
 
 An explicit row walk gets the same order deterministically, and the loop already has that shape.
 
+**Tile and level editors** (RPG Maker, Godot 4 TileSet, Unity Rule Tile, Tiled, LDtk), looked at during Phase 1 for
+how walls, tall art and joined tiles are authored:
+- *Walls are two pictures.* RPG Maker's wall sheet (A4) splits each wall into a ceiling (top) section and a side (face)
+  section, from different parts of the sheet: the ceiling joins in every direction, the face joins left and right with
+  end caps. LDtk derives several rule layers from one "this cell is a wall" grid. Nobody draws a joined wall as one tall
+  sprite per cell. This plan does the same: one wall entry, a face and a top authored separately.
+- *Joining.* Godot's "Match Sides" and Tiled's Edge sets are the 16-piece set used here; "Match Corners and Sides" is
+  the 47-piece upgrade path, and Godot users report how many more pieces it needs.
+- *Turns and mirrors are expected.* Godot gives every tile `flip_h`/`flip_v`/`transpose` (the same 8 orientations as
+  rotation + flip here), Unity Rule Tile can try a rule's sprite rotated or mirrored, and Tiled's maintainer notes many
+  tilesets leave out orientations because users are expected to flip or rotate. So the builder can fill a set's missing
+  pieces by mirroring or turning the ones it has.
+- *Origin is per tile.* Godot's `texture_origin` (draw offset) and advice to shift tall art so its base sits on the
+  tile match the pivot here; its separate `y_sort_origin` is this plan's anchor-tile rule.
+
 ## Design
 
 ### The rule
 
 **Draw the map by rows, top to bottom. Within a row, draw left to right. Anything that stands up
 draws in the row of its lowest footprint tile, and its sprite may extend upward (and sideways)
-past its footprint.** A later row's sprite overlaps an earlier row's, never the reverse. Walls are
-split into a front (their own tile, still drawn from the cache) and a top (the tile above, drawn in
-the row walk when something could stand under it).
+past its footprint.** A later row's sprite overlaps an earlier row's, never the reverse. A wall
+is one manifest entry with two separately authored parts: a face standing on the wall's own tile
+(one or two rows tall) and a top on the tile above the face. Whatever covers a tile something can
+stand on is drawn in the row walk; whatever covers only walls stays in the cache.
 
 ### The row walk
 
@@ -118,7 +134,17 @@ pixels-per-unit and pivot do.
   means 1, so every existing entry reads unchanged. One option's source rectangle is then
   `CellWidth × ColumnSpan` by `CellHeight × RowSpan`, starting at its (Column, Row) grid cell. An
   option is still a single contiguous rectangle, so it is still one `SpriteView` and one draw.
-  `SpriteManifest.ToSprite` is the only runtime reader that changes.
+  `SpriteManifest.ToSprite` is the only runtime reader that changes. (Landed in Phase 1.)
+- **Turns and flips, per cell** (landed in Phase 1). `SpriteManifestCell` gains `Rotation` (0, 90,
+  180, 270, clockwise) and `FlipHorizontal`/`FlipVertical`, all omitted when unset. Flips apply
+  first, then the rotation -- the order `SpriteBatch` applies `SpriteEffects` and rotation in, so
+  the drawing phases pass them straight through. A quarter turn needs a square cell (the drawn
+  size must not change), checked at load. Pivot and placement are measured on the turned picture.
+  Both flips together are always written as a 180 turn, so equal pictures compare equal. Drawing
+  them is the drawing phases' job: until then a turned cell draws unturned.
+- **Unfinished linked sets** (landed in Phase 1). A linked set may be saved with empty slots, held
+  as `null` cells, so a set can be finished across sessions. Every lookup treats an empty slot as
+  a miss; only a linked set may hold one.
 - **Drawn rectangle.**
   - **Size** is `sourceSize / PixelsPerTile * CurrentTileSize`, scaled per axis by the footprint
     (`Size.X`, `Size.Y`). Placement is authored for a 1x1 footprint, and a 2x2 or Huge (3x3)
@@ -146,34 +172,56 @@ pixels-per-unit and pivot do.
   cursor, never "the sprite you probably meant", which follows the core principle of removing
   ambiguity. This matches RimWorld and Stardew.
 
-### Wall fronts and tops
+### Wall faces and tops
 
-- `TerrainDefinition` gains `TopSpriteName` (string?, the face drawn on the tile directly above).
-  `StoneWall` becomes `SpriteName: "Wall-Front", TopSpriteName: "Wall-Top"`. `TerrainRegistry`
-  caches top variants beside the base variants and picks one by the same `TerrainCell.Variant`.
-  `IMapViewQuery` gains `TryGetStructureTopVisual(x, y, layer, out EntityVisualView)`. A definition
-  with no top behaves exactly as today, which covers glyph-only walls and mods.
-- `Wall-Top` is already a linked set when this lands (Phase 1 authors it that way). Until joining
-  lands, a linked top draws its fully-joined piece (all four sides), so walls read as one
-  continuous mass rather than as random pieces.
-- **Where each top draws depends on what is under it:**
-  - *The tile above is also a structure, or is off the map.* Nothing can stand there (walls block
-    every mover but Phasing, and Phasing already draws translucently on top of walls). The top goes
-    into `_terrainCache`, in a **second pass** after every floor and front. A thick wall reads as
-    all tops with one row of fronts at the bottom, and the cache's walk order stops mattering.
-  - *The tile above is open.* Something can stand behind the wall, so the top must occlude it. It
-    goes on an **overhang list**, `(mapX, mapY, SpriteView)`, rebuilt inside the same cache-render
+- **One entry, two parts** (data landed in Phase 1). A wall is a manifest entry whose own cells are
+  its **face** and whose `Top` (`SpriteManifestPart`: cells, placement, linking, link group) is its
+  **top**, authored separately -- usually from different areas of the sheet, as RPG Maker's wall
+  sheet does. One name pairs them, so `TerrainDefinition` needs nothing new: `StoneWall` keeps
+  `SpriteName`, pointed at the wall entry (`"StoneWall"`), and a definition whose entry has no
+  `Top` behaves exactly as today (glyph-only walls, mods). `TerrainRegistry` caches top variants
+  beside the face variants (`SpriteManifest.CountTopCells`/`TryGetTopCell`) and picks one by the
+  same `TerrainCell.Variant`. `IMapViewQuery` gains `TryGetStructureTopVisual(x, y, layer, out
+  EntityVisualView)`.
+- **The face** is a 4-piece `Horizontal` set -- standalone, left end, right end, middle -- with
+  variant sets for variety (see "Face end caps"). Its height comes from its placement like any
+  sprite's: a 16x32 face at 16 px per tile stands two rows tall on the wall's
+  tile. Stretched, it is one tile. It draws only on a wall tile whose south neighbour isn't a wall
+  of the same link group, so a thick wall shows faces only along its exposed south edge.
+- **The top** is a 16-slot linked set, drawn on every wall tile, on the tile directly above the
+  face's highest row: `SpriteManifestPart.HeightRows()` of the face (its own tile plus every row it
+  reaches above, a part row counting whole) is how many rows the top is raised. The same raise
+  applies whether or not that tile draws a face, so a column of wall tiles reads as tops with the
+  face rows at its bottom.
+- **Face + top ≤ 3 rows.** The top is checked against the reach box raised by the face's height
+  (`SpriteReach.Of(..., raisedRows)`): with a one-tile top, a face may be at most two rows tall.
+  Manifest load and the builder both refuse more, naming the entry and "(top, on an N-row face)".
+  A wall's picture therefore reaches up to two rows north of the tiles that block movement; the
+  gain is that a tall wall hides whoever stands behind it. (RPG Maker avoids the mismatch by making
+  tall walls more rows of blocking cells; our walls are one cell thick, so that would be a map
+  generation change, not this plan.)
+- Until joining lands, a linked top draws its fully-joined piece (all four sides), so walls read as
+  one continuous mass rather than as random pieces.
+- **Cached or live, per piece, by what it covers:**
+  - *Every tile it covers is a structure or off the map.* Nothing can stand there (walls block
+    every mover but Phasing, and Phasing already draws translucently on top of walls). It goes into
+    `_terrainCache`: faces in the first pass with the floor, tops in a **second pass** after every
+    floor and face, so the cache's walk order stops mattering. A one-row face covers only its own
+    wall tile, so it is always cached.
+  - *It covers a tile something can stand on.* A top over an open tile, or a two-row face whose
+    upper row is open, must occlude whoever stands there. It goes on an **overhang list**,
+    `(mapX, mapY, SpriteView)` keyed by the wall's own tile, rebuilt inside the same cache-render
     callback. The list has exactly the cache's invalidation (structures, terrain streaming, scroll,
     zoom, layer), so there is nothing new to keep in sync. The uncached fallback path rebuilds it
     every frame it runs.
-- **Where the row walk draws them.** A wall in row `r+1` belongs to row `r+1`'s bucket. The walk
-  draws that row's overhangs first, then row `r+1`'s occupants. The top therefore lands over
-  everything standing in row `r` (behind the wall), and a tall entity standing beside the wall in
-  row `r+1` still draws over it. The overhang list is sorted by row once when it is built, and the
-  walk advances an index through it. There are no per-tile structure reads added to the occupant
-  pass: only boundary walls in view reach the list, typically a few dozen.
-- Fronts stay in the cache. Something south of a wall is in a later row and draws over the front
-  anyway. Something north never reaches the front, because walls are only ever one tile tall.
+- **Where the row walk draws them.** A wall in row `r` belongs to row `r`'s bucket. The walk draws
+  that row's overhangs first (its faces, then its tops), then row `r`'s occupants. Its face's upper
+  row and its top therefore land over everything standing in rows `r-1` and `r-2` (behind the
+  wall), and a tall entity standing beside the wall in row `r` still draws over them. The overhang
+  list is sorted by row once when it is built, and the walk advances an index through it. There
+  are no per-tile structure reads added to the occupant pass: only boundary walls in view reach
+  the list, typically a few dozen.
+- Something south of a wall is in a later row and draws over the face anyway.
 - Glow still draws over everything after the walk, so a wall top under an aura glows like the floor.
 - The Admin "Regenerate" and neighborhood streaming paths already invalidate the cache, so they
   need nothing new.
@@ -185,10 +233,10 @@ pixels-per-unit and pivot do.
   rectangle from the sprite placement, which for a 1x1 stretched sprite is exactly the footprint the
   TODO describes. It also covers a wide sprite peeking into the next column and a tall one's head.
   There are at most two rectangles, so no spatial index.
-- **What fades.** An overhang (wall top, or any future tall-terrain part) whose destination
-  rectangle intersects a watched rectangle draws at `OverhangFadeAlpha` (0.4), through the existing
-  `alphaMultiplier`. Only live overhangs can fade. Cached tops sit over walls, where nobody stands,
-  and a Phasing entity inside a wall already draws over it.
+- **What fades.** An overhang (a wall top, a tall face's live upper row, or any future tall-terrain
+  part) whose destination rectangle intersects a watched rectangle draws at `OverhangFadeAlpha`
+  (0.7, raised from 0.4 after the in-game check: the wall stays readable), through the existing `alphaMultiplier`. Only live overhangs can fade. Cached pieces sit
+  over walls, where nobody stands, and a Phasing entity inside a wall already draws over it.
 - The fade is instant rather than lerped, because a lerp needs per-cell state for a cosmetic
   nicety. Revisit only if it reads as popping.
 
@@ -198,11 +246,13 @@ RimWorld's linked-atlas idea, applied to the top face. Without it, every wall to
 self-contained piece, so a wall run reads as a row of separate blocks rather than one wall.
 
 - **Declared on the art, not the terrain.**
-  - `SpriteManifestEntry` gains `Linking` (`None` | `Cardinal`, default `None`) and `LinkGroup`
-    (string?, defaulting to the entry's own `Name`). Both are authored in SpriteManifestBuilder.
+  - `SpriteManifestEntry` and `SpriteManifestPart` (a wall's `Top`) carry `Linking` (`None` |
+    `Cardinal`, default `None`) and `LinkGroup` (string?, defaulting to the entry's own `Name`).
+    Both are authored in SpriteManifestBuilder. For a wall it is the top part's group that decides
+    which walls join.
   - Linking is purely visual, and which pieces join depends on how the art was drawn, so it
-    belongs with the art. `TerrainDefinition` needs nothing beyond `TopSpriteName`.
-  - Two structures link when their top sprites' entries share a `LinkGroup`. That lets a later
+    belongs with the art. `TerrainDefinition` needs nothing new.
+  - Two structures link when their wall entries' tops share a `LinkGroup`. That lets a later
     door frame or pillar join a stone wall by sharing its group, while unrelated structures stay
     separate.
   - `TerrainRegistry` flattens each type id's link group to an int, alongside the cached variants,
@@ -213,13 +263,14 @@ self-contained piece, so a wall run reads as a row of separate blocks rather tha
   flag). Without it, a wall running off the map or into an unloaded neighborhood would get a
   rounded end cap, which would then pop to a straight run when the neighbour streams in.
 - **The art.**
-  - The `Wall-Top` entry holds `16 × k` cells, in mask order, in `k` groups of 16.
+  - The wall entry's `Top` holds `16 × k` cells, in mask order, in `k` groups of 16.
   - `TerrainCell.Variant % k` picks the group, so random variety still works alongside linking.
-  - Cells may repeat: a mask the pack has no exact piece for reuses the nearest one. For example,
-    the pack has no isolated-pillar top, so it reuses the end cap.
-  - `SpriteManifest` validates at load: a linked entry whose cell count isn't a multiple of 16
+  - Cells may repeat, turned or mirrored: a mask the pack has no exact piece for reuses the nearest
+    one (the pack has no isolated-pillar top, so it reuses the end cap), or a piece that mirrors
+    or turns into it -- the builder's "Fill empty..." does that.
+  - `SpriteManifest` validates at load: a linked part whose cell count isn't a multiple of 16
     throws, naming the entry, so a broken manifest fails at startup instead of drawing wrong
-    pieces.
+    pieces. An empty slot of an unfinished set loads, and draws as the fully-joined piece.
   - Authored as slots in SpriteManifestBuilder (see below), never by hand-counting JSON.
 - **Computed, not stored.**
   - The mask is worked out in the cache's top pass and in the overhang-list build. Both run only on
@@ -231,10 +282,22 @@ self-contained piece, so a wall run reads as a row of separate blocks rather tha
     runtime re-links its neighbours with nothing new.
   - `InvalidateTerrainCachesIfVisible` widens its test by one tile. A neighborhood loading just
     outside the grid can change the mask of a wall on the grid's edge.
-- **Fronts are not linked.** A front only shows where the south neighbour isn't a wall. Its left
-  and right ends are covered well enough by the tops above them, and the brick front art in the
-  pack tiles seamlessly. If end caps turn out to read badly, that is a separate, 2-bit (E/W)
-  version of the same mechanism, not part of this plan.
+- **Face end caps** (data and builder landed in Phase 1; drawn from Phase 4, joined in Phase 6). A
+  face only shows where the south neighbour isn't a wall, so only its left and right neighbours
+  matter, as with RPG Maker's faces. `SpriteLinking.Horizontal` is four slots per variant set, in
+  mask order east 1, west 2:
+  - **standalone** (0): no wall to the left or right;
+  - **left end** (1): no wall to the left, a wall to the right;
+  - **right end** (2): a wall to the left, no wall to the right;
+  - **middle** (3): walls on both sides.
+
+  A neighbour counts when it is a structure of the same link group (the wall's, which is its top's
+  group), whether or not it shows a face itself; off-map and unloaded neighbours count, as for tops.
+  **Only the standalone piece is required**: manifest load and the builder refuse a variant set
+  without one, and an empty left end, right end or middle falls back to it
+  (`SpriteLinks.CellIndexFor`, which also gives a Cardinal set's empty slot its fully joined piece).
+  So a face with only a standalone piece behaves like a plain repeating face. Until Phase 6 joins
+  them, every face draws its standalone piece.
 - **Inner corners are out of scope.** Four bits can't see diagonals. An L-shaped wall's concave
   corner uses the plain piece for its mask, not a notched one, the way RimWorld's walls do. A
   47-piece "blob" tileset (8 neighbours) is the upgrade path if that corner reads wrong at 36 px.
@@ -303,87 +366,126 @@ that grows to fit the content.
 
 ### SpriteManifestBuilder
 
-`DevTools/SpriteManifestBuilder` is the only way manifest entries get authored. Today an entry is a
-flat list of cells: you click a grid cell to add it, and every cell is an alternative the game
-picks from at random. That has no way to say "these four cells are *one* 2x2 picture" or "these
-16 cells are one joined-up set". The builder gains both, plus the placement fields. Its
-`ManifestCell`/`ManifestEntry` mirrors gain the same fields as the Game records.
+`DevTools/SpriteManifestBuilder` is the only way manifest entries get authored. Its
+`ManifestCell`/`ManifestEntry`/`ManifestPart` mirrors carry the same fields as the Game records,
+plus two pieces of authoring state the game skips: the span each part was authored at
+(`ColumnSpan`/`RowSpan` on the entry and on `Top`). Everything below landed in Phase 1.
 
-**Options versus multi-tile: one gesture each, no mode switch.**
-- **Click** a grid cell to add a one-cell *option*, exactly as today.
-- **Drag** across a rectangle of grid cells to add *one* multi-cell option spanning all of them,
-  saved as a single cell with `ColumnSpan`/`RowSpan`.
-- **Click inside an existing option** (single or multi-cell) to remove it. A drag that starts
-  inside an existing option still adds, because a drag is never a remove.
-- A drag that would add a rectangle identical to an existing option is refused with a warning,
-  rather than adding a duplicate that would silently double its odds. Partly overlapping
-  rectangles are allowed; the sheet decides what is sensible.
-- **On the sheet**, each option is drawn as one outlined rectangle with its number (`#1`, `#2` …),
-  so a 2x2 option reads as one box, not four. The options list shows each option's span: "#2
-  Wall_Tiles (6,21) 1x2 cells".
-- **The rule the tool enforces:** every option of an entry has the same span. Save refuses a
-  mix ("#3 is 2x2, the others are 1x1") because placement is per entry. Two options of different
-  shapes would draw at different sizes, and that almost always means a cell was clicked when a drag
-  was meant. If a real need for mixed shapes shows up, relax this deliberately.
-- **Legend.** A one-line legend under the entry fields reads "Options: 3, each 2x2 cells". That
-  makes "several choices" versus "one big picture" explicit at a glance.
+**Kinds and selection spaces.**
+- **Kind**: `Options` (the game picks one at random), `Linked set` (16 slots, one per combination
+  of joined sides) or `Wall (face + top)`.
+- A wall has two **separate selection spaces**, switched by an "Editing: Face | Top" toggle: the
+  face is a 4-slot row (left end, middle, right end, standalone -- the standalone slot marked
+  required while empty), the top a 16-slot linked set. The sheet, the span, the placement panel
+  and the turn/flip buttons act only on the part being edited, and the sheet outlines only that
+  part's cells, so a face cell can never land in the top or the reverse. Each part keeps its own
+  span, placement, link group and variant sets. The pair saves as one entry.
 
-**Placement fields.**
-- A `Pixels per tile` numeric has a "stretch to footprint" checkbox. Checked, the default, means
-  no value is saved.
-- **Pivot** has two numerics, plus a "Set pivot" toggle. With the toggle on, the next click on the
-  preview sets the pivot to that pixel, instead of adding or removing on the sheet.
-- **Preview panel.** The selected option is drawn at zoom, with tile lines every `PixelsPerTile`
-  source pixels and a crosshair at the pivot. The footprint tile is shaded, and the reach box
-  is a boundary line. That shows how much of the sprite overhangs its tile, and whether that is
-  allowed, before anything is run in game. Save refuses an entry outside the box at 1x1, with the same
-  message the game's load check gives. A footprint picker (1x1, 2x2, 3x3) redraws the preview at
-  that size with the draw-time clamp applied, so you can see how a Huge variant of the creature
-  will look.
+**Span and gestures.**
+- Each part's **span** (columns x rows of grid cells) is chosen right under Kind. A **click**
+  places a span-sized option, or fills the selected slot, with the clicked cell as its top-left; a
+  span that would run off the sheet is refused with a warning. A **drag** places exactly the
+  dragged cells. A **click inside an existing option** removes it. A drag that would add an
+  option identical to an existing one (same pixels, same turn and flip) is refused with a warning.
+- A cell that doesn't fit its part's span is **marked, not refused**: a warning icon on its slot
+  (bottom-right), on its row in the options list, and beside its entry in Existing entries. The
+  legend counts them. Save writes unfinished work as it is -- mismatched cells and empty slots --
+  so a sheet can be fixed partway through a set without losing anything; the save message says
+  what is left.
+- On the sheet, each option is one outlined, numbered rectangle (`#1`, `#2` ...), and the options
+  list describes each: "#2 Wall_Tiles.png (6,21) 1x2 cells of 16x16, turned 90°".
+- **Delete selected...** (or the Delete key) removes the selected existing entries after a confirmation that defaults to
+  No; Delete in the options list removes the selected options. Every list selects with Shift+click and Ctrl+click, and
+  every number box selects its value when focused, through `StandardControlBehaviors` -- applied to each window, not
+  wired per control. An entry opens for editing only while it is the one selected.
+  Save replaces an entry where it stands, so re-saving an unchanged entry rewrites the file byte
+  for byte.
+
+**Turns and flips.** "Turn or flip the selected one" (⟲ 90°, ⟳ 90°, Flip ↔, Flip ↕, Reset) acts
+on the selected option or slot, as the picture looks now. A quarter turn of a non-square cell is
+refused. Thumbnails and both previews draw cells turned and flipped.
+
+**Placement.**
+- A `Pixels per tile` numeric with a "stretch to footprint" checkbox (checked, the default, saves
+  no value), and a pivot with a "Pivot at bottom-centre" default, two numerics and a "Set pivot"
+  toggle: with it on, the next click on the preview sets the pivot to that pixel.
+- **Preview panel**: the selected option drawn at zoom on a grid of map tiles, a crosshair at the
+  pivot, the footprint tile shaded and the reach box as a boundary line. A footprint picker (1x1,
+  2x2, 3x3) redraws it at that size with the draw-time clamp applied. A wall's top is drawn raised
+  onto its face, with the face drawn faintly beneath.
+- Save refuses anything outside the reach box at 1x1 -- a wall's top counted on top of its face --
+  with the same message the game's load check gives. That is the one refusal kept on purpose: the
+  game would otherwise fail at startup.
 
 **Linked sets and link groups.**
-- **Kind** selector: `Options` (default) or `Linked set`.
-- **Linked set layout.** The option list is replaced by a 4×4 grid of 16 **slots**. Each slot is
-  labelled with a small tile diagram whose bars show its connected sides, and none mentions bit
-  numbers. Select a slot, then click (or drag, for multi-cell) on the sheet to fill it. A filled
-  slot shows its piece as a thumbnail.
-  - **Filling slots:** "Copy to…" copies the selected slot's piece to other slots, for pieces the
-    pack doesn't have. "Add variant set" adds another 16-slot page (the `k` above).
-  - **Saving:** save writes the slots in mask order. It is refused while any slot is empty, and
-    the refusal names the empty slots.
-- **Link group** field: a combo box of every `LinkGroup` already in the manifest, editable to type
-  a new one. It defaults to the entry's name. Beside it, a read-only "Also in this group:" line
-  lists the other entries in the group, so joining two structures' art is a visible choice.
-- **Link preview.** A small canvas draws a fixed test layout: a horizontal run, a vertical run,
-  L, T and + junctions, a 3×3 block, and a lone pillar. It uses the current slots, so a wrong
-  piece shows up before saving. It uses the same mask function the game uses. The builder doesn't
-  reference Game, so the few lines are duplicated beside the other mirrored types, with the same
-  "keep in sync" note.
+- **Slots**: a 4×4 grid laid out as a 3x3 room, a vertical run, a horizontal run and a pillar, each
+  slot labelled with a small diagram whose bars show its joined sides (hover for the words; no bit
+  numbers). Select a slot, then click or drag on the sheet to fill it. A filled slot shows its
+  piece as a thumbnail.
+- **Copy to...** copies the selected slot's piece to any slots ticked in a dialog, "as it is",
+  turned or mirrored. **Fill empty...** fills every empty slot from a filled one by mirroring
+  left-right (on by default), top-bottom, or turning -- breadth first, fewest steps, never
+  overwriting -- so a set can be authored from as few as six pieces. Art lit from above usually
+  survives only a left-right mirror, hence the default. **Add variant set** adds another 16-slot
+  page (the `k` above); **Clear slot** and **Remove this set** undo.
+- **Link group** sits above the slots: a combo box of every group already in the manifest,
+  editable to type a new one, defaulting to (and following) the entry's name, with an "Also in
+  this group:" line listing the other entries in it. It isn't the name: the name identifies the
+  entry, the group decides which other walls this one joins (a later door frame joins stone walls
+  by sharing `stone-wall`).
+- **Link preview**: a fixed test layout -- horizontal and vertical runs, L, T and + junctions, a
+  3×3 block and a lone pillar -- drawn with the current slots by the same mask the game uses, each
+  piece at its own placement, row by row top to bottom like the map's row walk. For a wall it draws
+  the face on every wall tile open to the south and the top raised onto it, so a tall face's
+  occlusion of the rows behind shows before anything runs in game. Stretched pieces that aren't
+  square get a note: the game squeezes them into one tile too.
+
+**Deferred until a sheet needs them:** animation entries (a frame sequence with timing, which
+"Walking and action animations" will need), and grid margin/offset for sheets with padding between
+cells. Not part of this plan.
 
 The builder has no test project. Its logic that matters stays in small plain classes, which can
-move under test if it grows: option hit-testing and span validation, slot-to-mask ordering, and
-the mask function. The round trip is covered from the Game side (see Tests).
+move under test if it grows: `EntryRules` (hit-testing, duplicates, span fit), `LinkMask` (mask
+order and display layout), `SlotFiller`, `SpritePlacementRules` (reach, raise, clamp, face
+height) and `ManifestCell`'s turn/flip algebra. A scratch harness checked the turn/flip algebra on
+all 8 orientations and that every filled slot's piece joins exactly its slot's sides. The round
+trip is covered from the Game side (see Tests).
 
 ## Decisions (approved)
 
-1. **Wall art.** You pick the `Wall-Front` and `Wall-Top` cells in SpriteManifestBuilder (grey
-   stone to match today). Both are authored in Phase 1, `Wall-Top` directly as its 16 linked
-   slots.
+1. **Wall art.** You pick the wall's face and top cells in SpriteManifestBuilder (grey stone to
+   match today), as one `StoneWall` wall entry: the face as its 4 pieces (standalone required), and the top directly as its 16 linked
+   slots in group `stone-wall`. Authored in Phase 1.
 2. **Four-bit linking, not a 47-piece blob.** Inner (concave) corners use the plain piece. Upgrade
    only if they read wrong in game.
 3. **Off-map and unloaded neighbours count as linked.**
 4. **Linking and link groups live in the sprite manifest**, authored in the builder, not on
    `TerrainDefinition`.
-5. **Click adds an option, drag adds one multi-cell option.** There is no mode switch, and every
-   option in an entry must share one span.
+5. **Spans are chosen up front, per part.** A click places a span-sized option or fills a slot
+   from the clicked cell; a drag places exactly the dragged cells; there is no mode switch. A cell
+   that doesn't fit its part's span is marked, not refused. (Replaces "click adds a 1x1 option"
+   and "save refuses mixed spans".)
 6. **Tall creatures in front of the player don't fade.** The TODO scopes the fade to tall terrain.
    A big creature south of the player covering them can join the fade later by adding its drawn
    rectangle to the overhang test.
-7. **The fade is 0.4 alpha and instant.**
+7. **The fade is 0.7 alpha and instant** (0.4 read as too faint in game).
 8. **Clicks stay tile-based.** A tall sprite's head isn't a click target for its entity.
 9. **Corpses keep a top-row anchor** (floor-level). A corpse's own sprite placement can still
    overhang upward over the row above. That is accepted, and "Blood pool under dead entities" can
    revisit floor decals.
+10. **A wall is one entry with a face and a top, authored in separate selection spaces.** Face =
+    options on the wall's tile, top = a linked set on the tile above the face. Not two entries
+    named from `TerrainDefinition` (no `TopSpriteName`), and not one tall linked sprite per cell.
+11. **The face's height is its placement; the top is raised by it; face + top ≤ 3 rows.** A face
+    may be two rows tall with a one-row top. Its upper row is a live overhang wherever it covers an
+    open tile, and fades like a top.
+12. **Faces have standalone, left end, right end and middle pieces** (`SpriteLinking.Horizontal`): the piece for a wall on neither, the right, the left or both sides; only the standalone piece is required, and an empty one falls back to it. Data and builder in Phase 1, drawn joined in Phase 6.
+13. **Cells can be turned and flipped** (flip, then a clockwise turn; quarter turns only on square
+    cells), and the builder fills empty slots by mirroring left-right by default, top-bottom and
+    turns on request.
+14. **Unfinished work saves.** Empty slots (as `null`) and cells that don't fit the span are saved
+    as they are; the game loads them, treating an empty slot as a miss. Only a reach-box breach is
+    refused, because the game would fail at startup.
 
 ## Phases
 
@@ -392,27 +494,38 @@ Each phase ends with a manual in-game check before the next starts.
 1. **SpriteManifestBuilder and the manifest format.** This comes first so that every later phase
    has real sprites to test with.
    - Build (builder): everything in "SpriteManifestBuilder" above:
-     - click/drag options with spans, numbered outlines, the same-span rule and legend;
-     - the pixels-per-tile and pivot fields, "Set pivot", and the preview with the reach box;
-     - the Kind selector, the 16-slot linked set with side diagrams, "Copy to…" and "Add variant
-       set";
-     - the link-group combo box with "Also in this group:", and the link preview.
+     - the Options, Linked set and Wall kinds, the wall's separate Face/Top selection spaces;
+     - per-part span, click/drag, numbered outlines, misfit warnings, partial saves, Delete;
+     - turn/flip, "Copy to…" with "Copy as", "Fill empty…", "Add variant set";
+     - pixels per tile, pivot, "Set pivot", and the placement preview with the reach box (a top
+       raised onto its face);
+     - the link group above the slots with "Also in this group:", and the link preview drawn in
+       row order with the wall's face.
    - Build (game, data only, no drawing changes):
-     - `SpriteManifestEntry`/`SpriteManifestCell` gain the placement, span, `Linking` and
-       `LinkGroup` fields, and `SpriteManifest.ToSprite` honours spans;
-     - load validation: a linked entry must be a multiple of 16, and no entry may pass the
-       reach box at a 1x1 footprint;
-     - the lookups return placement beside the cell, read by nothing yet.
+     - `SpriteManifestCell` gains spans, `Rotation` and flips; `SpriteManifestEntry` gains
+       placement, `Linking`, `LinkGroup` and `Top` (`SpriteManifestPart`); `ToSprite` honours spans;
+     - load validation: linked parts in whole sets of 16 (empty slots allowed), quarter turns only
+       on square cells, nothing outside the reach box at 1x1, a top raised by its face's height;
+     - the lookups return placement beside the cell (`TryGetFirst`/`TryGetCell`, and
+       `CountTopCells`/`TryGetTopCell`), read by nothing yet.
 
      This is so that whatever the builder writes loads, and is checked, from day one.
-   - Art: author Player and Goblin placement, `Wall-Front`, and `Wall-Top` as a 16-slot linked set
-     in group `stone-wall`, plus a `Shop-2x2` entry as one 2x2 option. The existing `"Wall"` entry
-     stays until the walls phase switches over.
+   - Art: author Player and Goblin placement, the `StoneWall` wall entry (face as standalone, left, right and middle pieces, top as a
+     16-slot linked set in group `stone-wall`), and a `Shop-2x2` entry as one 2x2 option. The
+     existing `"Wall"` entry stays until the walls phase switches over.
    - Check (builder):
-     - a drag makes one 2x2 option and a click makes a 1x1; clicking inside the 2x2 removes it;
-     - a mixed-span save, an incomplete linked set, and an entry outside the reach box are each refused
+     - a click places a span-sized option and a drag places the dragged cells; clicking inside an
+       option removes it;
+     - a cell that doesn't fit its span is marked on its slot, its option row and its entry, and
+       an unfinished set saves and reopens as it was;
+     - an entry outside the reach box, and a wall whose face and top pass three rows, are refused
        with a reason;
-     - the link preview joins the test layout cleanly;
+     - face and top keep separate cells, spans and placement when switching between them;
+     - a face saves with only its standalone piece, is refused without one, and the link preview
+       draws left ends, right ends and middles on runs, standalone pieces on pillars, and the
+       standalone piece wherever another is empty;
+     - "Fill empty…" from six pieces with turns fills all 16, and the link preview joins the test
+       layout cleanly, faces along exposed south edges and tops raised onto them;
      - existing entries open and re-save byte-identical.
    - Check (game): it starts, and every map sprite looks exactly as before.
 2. **Row walk.**
@@ -429,47 +542,80 @@ Each phase ends with a manual in-game check before the next starts.
      - compare MapWindow draw time with the diagnostics engine before and after.
 3. **Sprite placement (game).**
    - Build: `SpritePlacement`/`SpriteView.Placement`, `SpritePlacementMath` (footprint scaling and
-     the reach-box clamp), `DrawVisual`, and the health-bar and charging-badge anchoring. Delete
-     TODO "Per-entity sprite scale".
+     the reach-box clamp), `DrawVisual`, cell turns and flips passed to `SpriteBatch`, and the
+     health-bar and charging-badge anchoring. Delete TODO "Per-entity sprite scale".
    - Check:
      - the player is larger with feet on its tile, and the goblin is smaller;
      - 2x2 and Huge goblins draw the same art scaled up, a Huge one inside its own 3x3, and they
        match the builder's footprint preview;
      - the player's head overlapping the row above draws over a goblin there;
      - a goblin south of the player draws over the player's feet, not under them;
+     - a turned or flipped option draws turned or flipped, as in the builder;
      - inventory and hotbar icons are unchanged.
 
      Point `Shop` at `Shop-2x2` and spawn one 2x2. If it looks right, "Multi-tile sprites" (Low)
      is done; delete that TODO.
-4. **Wall fronts and tops.**
-   - Build: `TopSpriteName`, registry top variants (a linked top draws its fully-joined piece for
-     now), `TryGetStructureTopVisual`, the cache's second pass, the overhang list, and the walk's
-     per-row overhang draw. Switch `StoneWall` to `Wall-Front`/`Wall-Top`, and remove the old
-     `"Wall"` entry.
+4. **Wall faces and tops.**
+   - Build: registry top variants (a linked top draws its fully-joined piece for now, an empty slot
+     too), the face's height and the top's raise, `TryGetStructureTopVisual`, the cache's second
+     pass, the overhang list (tops and tall faces' live rows), and the walk's per-row overhang draw.
+     Point `StoneWall` at the `StoneWall` wall entry, and remove the old `"Wall"` entry.
    - Check:
-     - walk behind (north of) a wall and the top covers you; walk in front and you cover the front;
-     - thick walls read as tops with one front row;
+     - walk behind (north of) a wall and the top -- and a two-row face's upper row -- covers you;
+       walk in front and you cover the face;
+     - thick walls read as tops with one face row;
      - check at zoom, during drag-scroll, across a neighborhood boundary while streaming, and after
        Admin Regenerate.
 5. **Fade.**
    - Build: watched rectangles and the overhang fade.
    - Check:
-     - the wall top goes translucent over the player and stays opaque elsewhere;
+     - the wall top, and a tall face's upper row, go translucent over the player and stay opaque
+       elsewhere;
      - the same happens for a Detail-inspected goblin walking behind a wall;
      - in Basic mode it doesn't happen for the goblin.
-6. **Joined-up wall tops (game).**
+6. **Joined-up wall tops and face end caps (game and builder).**
    - Build: the registry's per-type link-group int, the mask computation shared by the cache top
      pass and the overhang-list build, `16 × k` variant selection, and the widened visibility test.
+     Face end caps: the 2-bit face mask (a same-group wall left or right, off-map counting) and the standalone fallback, shared by the cache and the overhang list.
    - Check:
      - the in-game walls match the builder's link preview for the same slots;
      - a straight horizontal run, a vertical run, a thick block, an isolated pillar, and T, L and +
        junctions all join cleanly;
+     - a face run ends in caps, including where the wall turns north;
      - Admin-spawned or removed walls re-link their neighbours;
      - a wall crossing a neighborhood boundary has no cap before or after the neighbour streams in;
      - joined tops still fade over the player.
-7. **Notes.**
+7. **Tile tinting (game and builder).** Added after Phase 3, at the end of the feature so the notes
+   cover it.
+   - **What carries a tint.** A tint is a colour multiplied into the sprite (`#RRGGBB` or
+     `#RRGGBBAA`, omitted when white), the same multiply `SpriteBatch` already applies.
+     - *An option* has one tint, applied equally to every cell it spans: a 2x2 option is one picture,
+       so its four cells can't differ.
+     - *A linked set or a wall* has one tint per variant set, applied to every slot of that set, so
+       a second set can be the same pieces in another colour (moss-stained stone) without new art.
+       A wall's face and top sets are tinted separately.
+   - **Data.** `SpriteManifestCell` gains `Tint` (string?, omitted when unset); the builder writes a
+     set's tint onto each of its cells, so the game reads one per cell and has no set-level shape to
+     learn. A `Color Tint` beside the transform on `ManifestSprite` and `SpriteView` carries it
+     to the renderer, which multiplies it into the tint it already applies (a corpse's grey, a
+     Phasing occupant's alpha). Load validation refuses a malformed colour, naming the entry. Icons
+     read it too: a tinted option looks the same in the inventory as on the map.
+   - **Builder.** A "Tint..." button (colour dialog) and a "Clear tint" beside the turn/flip row:
+     for options it sets every selected option's tint; for a linked set or a wall part it sets the
+     current variant set's. The sheet outlines, slot thumbnails, placement preview and link preview
+     all draw tinted, and the options list and set selector show a colour swatch.
+   - **Relation to TODO "SpriteDefinition: tint on the sprite itself".** This is that entry's
+     mechanism. Moving `ItemDefinition.SpriteTint` (loot-box rarity chests) onto tinted manifest
+     entries is a follow-up that entry keeps; delete the entry only if that move is done here.
+   - Check:
+     - a tinted option, a tinted 2x2 option and a tinted variant set look the same in the builder's
+       previews and in game;
+     - two variant sets of one wall, tinted differently, both appear across a long wall;
+     - Clear tint restores the art exactly, and untinted entries re-save byte-identical.
+8. **Notes.**
    - Add an `IMPLEMENTATION-NOTES.md` entry covering the row-walk rule, anchor rules, placement,
-     the reach box and the Huge size cap, the static/live overhang split, and linking (the mask is computed, not
+     the reach box and the Huge size cap, walls as face + top (height, raise, three-row budget), the
+     static/live overhang split, turns and flips, tinting, and linking (the mask is computed, not
      stored, and off-map counts as linked).
    - Delete the TODO entry.
    - Update "Walking and action animations": a moving entity draws in the bucket of its lower
@@ -503,34 +649,43 @@ Each phase ends with a manual in-game check before the next starts.
     to fit exactly. One that already fits is untouched.
   - No result ever leaves rows `anchor − 2 … anchor` or columns `anchor − 2 … anchor + 2`. This is
     checked over every footprint from 1x1 to 3x3 against the checked-in manifest.
+  - A turn or flip reaches `SpriteBatch` as the matching rotation and `SpriteEffects`.
   - The health-bar anchor clamps to the footprint top.
 - **Footprint cap:** a blueprint whose default `Size` is 4 on either axis fails `ResolveAll`, naming
   it, and a mod with one fails its dry run. A `SpawnRequest` with `Size` 4 throws. 3x3 is accepted.
-- **`SpriteManifest`:**
-  - Entries without the new fields deserialize unchanged: span 1x1, no placement, not linked.
-  - Placement, spans, `Linking` and `LinkGroup` round trip.
+- **`SpriteManifest`** (landed in Phase 1, `SpriteManifestFormatTests`):
+  - Entries without the new fields deserialize unchanged: span 1x1, no placement, not linked, no top.
+  - Placement, spans, turns, flips, `Linking`, `LinkGroup` and `Top` round trip, and are omitted
+    when unset.
   - A 2x1-span option's source rectangle is two cells wide from its origin cell.
-  - A linked entry with 15 or 17 cells throws at load, naming the entry.
+  - A linked part with 0, 15 or 17 cells throws at load, naming the entry; an unfinished one with
+    `null` slots loads; an options entry with a `null` cell throws.
+  - A rotation other than 0/90/180/270, or a quarter turn of a non-square cell, throws.
   - At a 1x1 footprint, an entry whose placement reaches 3 rows above, 3 columns to one side, or
     below the footprint throws at load, naming the entry and its reach. Exactly 2 rows and 2
     columns loads.
-  - Every entry in the checked-in manifest is within the reach box at 1x1.
-  - An omitted `LinkGroup` defaults to the entry name.
-  - `SpriteManifestTests`' Wall rows become Wall-Front and Wall-Top.
-  - The checked-in `Content/SpriteManifest.json` loads, which catches a builder that wrote a shape
-    the game can't read.
-- **`TerrainRegistry`:** the top variant follows `Variant` like the base, and a definition with no
-  top gives none. For `MapViewQuery.TryGetStructureTopVisual`: none with no structure, none with no
-  top.
+  - A wall's face height counts every row it reaches; a top on a face that together pass three
+    rows throws naming "(top", and 1+1, 2+1 and 1+2 load.
+  - An omitted `LinkGroup` (entry or top) defaults to the entry name.
+  - The builder's authoring-only spans on an entry are skipped.
+  - The checked-in `Content/SpriteManifest.json` loads, every entry within the reach box, which
+    catches a builder that wrote a shape the game can't read.
+  - `SpriteManifestTests`' Wall rows become the `StoneWall` wall entry (Phase 4, when it exists).
+- **`TerrainRegistry`:** the top variant follows `Variant` like the face, and a definition whose
+  entry has no top gives none. For `MapViewQuery.TryGetStructureTopVisual`: none with no structure,
+  none with no top.
 - **Overhang list build** (pure, from an `IMapViewQuery` fake):
-  - A wall under open floor goes to the list.
-  - A wall under another wall, or under an off-map tile, goes to the cached pass.
+  - A top over open floor goes to the list; one over another wall, or over an off-map tile, goes
+    to the cached pass.
+  - A two-row face whose upper row is open goes to the list; a one-row face never does.
+  - A face draws only where the south neighbour isn't a same-group wall.
+  - A top is raised by its face's height whether or not its tile draws a face.
   - The list is sorted by row.
-- **Walk with overhangs:** a wall in row r+1 yields its top after row r's occupants and before row
-  r+1's.
+- **Walk with overhangs:** a wall in row r yields its face and top after row r-1's occupants and
+  before row r's.
 - **Fade:**
-  - The player's rectangle intersecting an overhang gives the fade alpha, and one next to it gives
-    full alpha.
+  - The player's rectangle intersecting an overhang (top or tall face) gives the fade alpha, and
+    one next to it gives full alpha.
   - The inspected entity counts only in Detail or Admin mode.
   - A 2x2 inspected entity counts on every tile.
 - **Wall linking**, the pure mask function over an `IMapViewQuery` fake:
@@ -538,8 +693,10 @@ Each phase ends with a manual in-game check before the next starts.
   - A same-group structure links, and a different-group one doesn't.
   - An off-map or unloaded neighbour links.
   - The mask is read from the wall's own neighbours, not those of the tile its top draws on.
-  - `Variant % k` picks the group, and a 16-cell entry always gives group 0.
-- **Linked `TerrainRegistry`:** two definitions whose top entries share a `LinkGroup` get the same
+  - `Variant % k` picks the group, and a 16-cell part always gives group 0.
+  - Face end caps: each of the 4 east/west layouts gives its piece (standalone, left end, right end, middle), a missing piece falls back to standalone, and a same-group wall to either side links whether or not it shows a face
+    itself.
+- **Linked `TerrainRegistry`:** two definitions whose tops share a `LinkGroup` get the same
   link-group int, and different groups get different ints. An unlinked top ignores the mask.
 - **Overhang list with linking:** a live overhang and a cached top of the same wall run get masks
   that agree at the boundary between them.

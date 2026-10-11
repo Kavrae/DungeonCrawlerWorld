@@ -1,3 +1,4 @@
+using Game.Views;
 using FontStashSharp;
 using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
@@ -23,7 +24,7 @@ public sealed class RadialFillRenderer(LabelRenderer labelRenderer, SpriteSheetS
     public float FillPercentage { get; set; }
 
     /// <summary>Drawn instead of Glyph when set (see SpriteOrGlyphRenderer's own sprite-first-glyph-fallback convention) -- reset to null between draws by callers that don't always have one (see HotbarContent.DrawActionSlot).</summary>
-    public SpriteComponent? Sprite { get; set; }
+    public SpriteView? Sprite { get; set; }
 
     /// <summary>Tint applied to Sprite only -- GlyphColor plays the equivalent role for Glyph, kept separate since SpriteOrGlyphRenderer.Draw itself takes them as two independent parameters.</summary>
     public Color SpriteTint { get; set; } = Color.White;

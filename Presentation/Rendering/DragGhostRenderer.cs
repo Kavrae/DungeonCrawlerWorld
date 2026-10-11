@@ -1,3 +1,4 @@
+using Game.Views;
 using FontStashSharp;
 using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
@@ -24,7 +25,7 @@ public static class DragGhostRenderer
         SpriteRenderer spriteRenderer,
         LabelRenderer labelRenderer,
         SpriteFontBase glyphFont,
-        SpriteComponent? sprite,
+        SpriteView? sprite,
         string glyph,
         Color glyphColor,
         Vector2 centerPosition,

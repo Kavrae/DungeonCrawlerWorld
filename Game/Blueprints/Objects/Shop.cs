@@ -1,3 +1,4 @@
+using Engine.Math;
 using Game.Modules.Containers.Components;
 using Game.Modules.Currency.Components;
 using Game.Modules.Health.Components;
@@ -30,7 +31,8 @@ public static class Shop
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
         Build = Build,
-        Appearance = new() { Name = Name, Description = Description, Glyph = "S", GlyphColor = Color.DarkBlue, SpriteName = "Shop-1x1" }
+        Appearance = new() { Name = Name, Description = Description, Glyph = "S", GlyphColor = Color.DarkBlue, SpriteName = "shop-stand" },
+        Size = new Vector2Byte(2, 2)
     };
 
     private static void Build(BlueprintContext context)

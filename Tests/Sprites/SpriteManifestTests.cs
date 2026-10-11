@@ -24,12 +24,13 @@ public sealed class SpriteManifestTests
         return JsonSerializer.Deserialize<List<SpriteManifestEntry>>(json) ?? [];
     }
 
-    private static bool Matches(SpriteComponent sprite, SpriteManifestCell cell) =>
+    private static bool Matches(SpriteComponent sprite, SpriteManifestCell? cell) =>
+        cell is not null &&
         cell.SheetPath == sprite.SheetPath &&
-        sprite.SourceRectangle == new Rectangle(cell.Column * cell.CellWidth, cell.Row * cell.CellHeight, cell.CellWidth, cell.CellHeight);
+        sprite.SourceRectangle == cell.SourceRectangle;
 
     [TestMethod]
-    [DataRow("Wall")]
+    [DataRow("Dirt")]
     [DataRow("Grass")]
     [DataRow("Player")]
     [DataRow("Goblin")]
@@ -44,7 +45,7 @@ public sealed class SpriteManifestTests
     }
 
     [TestMethod]
-    [DataRow("Wall")]
+    [DataRow("Dirt")]
     [DataRow("Grass")]
     [DataRow("Player")]
     [DataRow("Goblin")]

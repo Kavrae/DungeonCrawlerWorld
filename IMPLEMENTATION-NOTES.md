@@ -1816,6 +1816,106 @@ scrolling back off post-`Initialize()` if `MaxScrollOffset` is 0.
   is held, or over its horizontal bar -- each only if horizontal scrolling is allowed at all.
 - **Not planned**: keyboard scrolling (PageUp/PageDown/Home/End), arrow buttons on bars.
 
+### Tall sprites, wall faces and tops, and the sprite manifest
+
+Sprites that reach above and beside their tile, walls drawn as a face plus a top that join their neighbours,
+turned/flipped/tinted cells, and the builder that authors all of it. Design and research (RimWorld, Stardew,
+RPG Maker, Godot, Unity, Tiled, LDtk) are in `PLAN-tall-sprites-and-wall-tops.md`.
+
+**The row walk** (`Presentation.UI.MapDrawOrder`, a pure planner MapWindow renders).
+- Rows top to bottom, each left to right. Anything that stands up is drawn in the row of the lowest tile
+  of its footprint, so a later row overlaps an earlier one and never the reverse: a goblin south of the
+  player draws over the player's feet, the player's head over the row above. The order is chosen for what
+  overlaps what -- row-major and column-major measured the same.
+- Anchors: Blocking and Phasing occupants from the bottom-left tile of their footprint (a multi-tile
+  Phasing entity draws once). A corpse lies on the floor and keeps its top-left anchor, so it draws ahead of
+  anything standing on its lower tiles. The Tiny sub-grid is single-tile.
+- Overscan: `SpriteReach.MaximumRowsAbove` (2) rows below the grid and `MaximumColumnsBeside` (2) columns
+  either side, so something anchored just outside still draws the part that reaches in. Tiny occupants and
+  layer badges are only planned inside the grid, and badges come after every occupant.
+- A wall's live pieces (below) are drawn at the start of their wall's row, ahead of that row's occupants.
+- Clicks stay tile-based: a tall sprite's head isn't a click target for its entity.
+- A moving entity, once walking animations exist, must draw in the bucket of its lower visual row (its
+  destination moving south, its origin moving north), or it pops between rows mid-step.
+
+**The reach box and the Huge cap.**
+- Everything an entity draws stays inside 2 rows above and 2 columns either side of its anchor tile, and
+  nothing below its own tile -- the overscan's size. It is a rule content follows, not a number that grows
+  to fit content: manifest load refuses an entry outside it at 1x1 (`SpriteReach`), naming the entry and its
+  reach; the builder refuses it at Save with the same message.
+- Huge (3x3) fills the box, so no footprint is larger: `ResolvedBlueprint.RequireFootprintWithinCap`, at
+  `BlueprintRegistry.Resolve` and `EntityFactory.Spawn`. Anything bigger is built from pieces (TODO
+  "Composite buildings").
+
+**Placement** (`SpritePlacementMath`).
+- Art decides how big a sprite draws: a manifest entry's `PixelsPerTile` and pivot (default bottom-centre).
+  The pivot lands on the footprint's bottom-centre; a larger footprint scales the 1x1 placement per axis
+  (2x2 doubles it, 1x2 doubles only its height). A sprite that scaling carries out of the reach box is
+  shrunk uniformly about its pivot until it fits -- never clipped. No `PixelsPerTile` stretches to the
+  footprint, as before.
+- Placement is on the entry, not the cell: every option of an entry shares one canvas layout. It rides on
+  `SpriteView.Placement`, filled for blueprint appearances and terrain; a per-instance `SpriteComponent`
+  override has none. Only the map reads it -- icons always fill their cells.
+- The health bar and charging badge sit at the drawn sprite's top (never lower than the footprint's); the
+  loot badge and dodge glow stay on the footprint.
+
+**Walls are one entry with two parts.**
+- A wall's manifest entry is its face (its own cells, a `Horizontal` set: standalone, left end, right end,
+  middle) and `Top` (a `SpriteManifestPart`, a 16-slot `Cardinal` set). One name pairs them, so
+  `TerrainDefinition.SpriteName` is all a wall needs.
+- The face's height is its placement (a 16x32 face at 16 px per tile is two rows); the top sits on the tile
+  above the face's highest row (`SpriteManifestPart.HeightRows`), whether or not that tile draws a face.
+  Face + top must fit three rows -- the top is checked raised by the face's height.
+- Under a top, a face shows only where the tile south of it isn't a wall, so thick walls read as tops with
+  one face row. A wall with no top (glyph-only, a mod's) draws its face on every tile, as walls always did.
+
+**Static versus live** (`MapWallPlan`, a pure planner).
+- A face or top whose picture touches only walls and off-map tiles can't hide anything standing, so it goes
+  into the cached terrain image -- faces first, then tops. One over a tile something can stand on is an
+  overhang: drawn live, in its wall's row, so it covers whoever stands behind and is covered by whoever
+  stands in front. A one-row face is always cached.
+- The overhang list is rebuilt exactly when the cached image is, so it has the cache's invalidation and
+  nothing new to keep in sync. Streaming invalidates for areas up to the overscan plus one tile outside the
+  grid.
+- Overhangs over the player's drawn sprite -- and the inspected entity's, in Detail or Admin inspection --
+  draw at 0.7 alpha (`OverhangFade`), instantly. 0.4 read as too faint in game.
+
+**Joining** (`StructureLinks`, computed in `MapViewQuery`).
+- A top's piece comes from the wall's four neighbours (north 1, east 2, south 4, west 8), a face's from left
+  and right (east 1, west 2). A neighbour joins when it is a structure in the same link group
+  (`TerrainRegistry.GetLinkGroup`: the wall entry's top group, interned to an int), or off the loaded map --
+  so a wall running off the map or into an unloaded neighborhood never shows an end cap that would pop.
+- The mask is computed, never stored in `TerrainCell`: neighbours change after a cell's variant is rolled,
+  and a stored mask would need fixing at every structure write. It is worked out only when the cached image
+  is rebuilt. Read from the wall's own neighbours, not the tile its top is drawn on.
+- An empty slot falls back (`SpriteLinks.CellIndexFor`): a face to its standalone piece (the one required
+  piece), a top to its fully joined one.
+- Variant sets (`SpriteLinks.SetIndexFor`): with no chances saved, `TerrainCell.Variant % sets` picks one,
+  separately for face and top. A linked part may give each set a chance in whole percent
+  (`VariantWeights`, adding up to 100, checked at load and refused at the builder's Save); a type with any
+  chances rolls a percentile (0..99) into the variant instead, and each part maps it through its own
+  cumulative chances. Face and top read the same roll, so matching chances pick matching sets. An even
+  split is saved as no chances, so types without chances keep their old rolls and seeded worlds don't move.
+- Inner corners use the plain piece (4 bits can't see diagonals); the 47-piece blob set is the upgrade path.
+
+**Turns, flips and tints** (per manifest cell).
+- `Rotation` (0/90/180/270, clockwise) and `FlipHorizontal`/`FlipVertical`, applied flip first, then turn --
+  the order `SpriteBatch` applies `SpriteEffects` and rotation in, so they pass straight through
+  (`TransformedDrawArguments`). Quarter turns need a square cell. Both flips are written as a 180 turn.
+- `Tint` (`#RRGGBB`/`#RRGGBBAA`) is multiplied into whatever tint the sprite draws with. An option's cells
+  share one; a linked set's tint is per variant set, written onto each of its cells, so the game reads one
+  per cell. Icons read turns and tints too (`SpriteViews.TryGetFirst`).
+
+**The manifest file and the builder.**
+- Everything new is omitted when unset, so an untouched entry re-saves byte for byte; the builder replaces
+  an edited entry where it stands. Unfinished linked sets save with `null` empty slots and load; cells that
+  don't fit their part's span are marked, not refused. The builder writes each part's span as authoring
+  state the game skips.
+- The builder mirrors the game's records and rules by hand (no project reference): reach check and message,
+  placement clamp, link masks, tint parsing. Keep the two in sync.
+- `Tests/Sprites/SpriteManifestFormatTests` parses the checked-in `Content/SpriteManifest.json`, which
+  catches a builder that wrote a shape the game can't read.
+
 ## Pause modality
 
 `UiLayerStack`'s "menu mode" already implements the generalized modal concept TODO.md's old "Pause

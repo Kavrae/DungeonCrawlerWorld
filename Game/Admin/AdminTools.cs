@@ -14,4 +14,6 @@ public sealed class AdminTools(GameSession gameSession, NeighborhoodStreamer nei
     public NeighborhoodAdminCommands NeighborhoodAdminCommands { get; } = new(neighborhoodStreamer);
 
     public TeleportAdminCommands TeleportAdminCommands { get; } = new(gameSession.Internals.Teleporter, gameSession.World);
+
+    public StructureAdminCommands StructureAdminCommands { get; } = new(gameSession.World);
 }

@@ -243,7 +243,10 @@ public sealed class BlueprintRegistry
             }
         }
 
-        return new ResolvedBlueprint(Get(id), [.. buildOrder], [.. races], [.. classes], [.. actions], [.. auras], [.. nonBlocking], appearance.Build(), layer ?? MapLayer.Ground, size ?? new Vector2Byte(1, 1), lootbox);
+        var resolvedSize = size ?? new Vector2Byte(1, 1);
+        ResolvedBlueprint.RequireFootprintWithinCap(resolvedSize, $"Blueprint '{Get(id).Name}'");
+
+        return new ResolvedBlueprint(Get(id), [.. buildOrder], [.. races], [.. classes], [.. actions], [.. auras], [.. nonBlocking], appearance.Build(), layer ?? MapLayer.Ground, resolvedSize, lootbox);
     }
 
     /// <summary>Appends id's includes depth-first, then id itself, skipping any already appended.</summary>

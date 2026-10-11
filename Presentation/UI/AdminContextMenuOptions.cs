@@ -9,12 +9,13 @@ namespace Presentation.UI;
 /// <remarks>Adds its entries unconditionally; the caller decides whether Admin Mode is on.</remarks>
 public sealed class AdminContextMenuOptions(AdminTools adminTools)
 {
-    /// <summary>Appends the tile's admin entries: the neighborhood under it with "Regenerate", "Spawn here", and "Teleport here".</summary>
+    /// <summary>Appends the tile's admin entries: the neighborhood under it with "Regenerate", "Spawn here", "Build stone wall" or "Remove wall", and "Teleport here".</summary>
     public void AddTileOptions(List<ContextMenuOption> options, Vector3Int tilePosition)
     {
         AddNeighborhoodGroup(options, Neighborhoods.CellOf(tilePosition.X), Neighborhoods.CellOf(tilePosition.Y));
 
         options.Add(ContextMenuOption.Opening("Spawn here", SpawnChoices(tilePosition)));
+        AddWallOption(options, tilePosition);
 
         var teleportAdminCommands = adminTools.TeleportAdminCommands;
         options.Add(new ContextMenuOption("Teleport here", null, teleportAdminCommands.CanTeleportPlayer(tilePosition), () => teleportAdminCommands.TryTeleportPlayer(tilePosition)));
@@ -35,6 +36,20 @@ public sealed class AdminContextMenuOptions(AdminTools adminTools)
         var neighborhoodAdminCommands = adminTools.NeighborhoodAdminCommands;
         var canRegenerate = neighborhoodAdminCommands.CanRegenerate(cellX, cellY, out var reason);
         options.Add(new ContextMenuOption(canRegenerate ? "Regenerate" : $"Regenerate ({reason})", null, canRegenerate, () => neighborhoodAdminCommands.TryRegenerate(cellX, cellY)));
+    }
+
+    /// <summary>"Remove wall" on a tile with a structure; otherwise "Build stone wall", disabled with the reason when it can't be built (an occupant standing there).</summary>
+    private void AddWallOption(List<ContextMenuOption> options, Vector3Int tilePosition)
+    {
+        var structureAdminCommands = adminTools.StructureAdminCommands;
+        if (structureAdminCommands.CanRemoveStructure(tilePosition))
+        {
+            options.Add(new ContextMenuOption("Remove wall", null, true, () => structureAdminCommands.TryRemoveStructure(tilePosition)));
+            return;
+        }
+
+        var canBuild = structureAdminCommands.CanBuildStoneWall(tilePosition, out var reason);
+        options.Add(new ContextMenuOption(canBuild ? "Build stone wall" : $"Build stone wall ({reason})", null, canBuild, () => structureAdminCommands.TryBuildStoneWall(tilePosition)));
     }
 
     /// <summary>Every spawnable blueprint, spawned on the tile and layer the menu was opened on.</summary>

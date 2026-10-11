@@ -1,3 +1,4 @@
+using Game.Views;
 using FontStashSharp;
 using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
@@ -177,7 +178,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         // never wired -- see this class's own doc comment on why they're optional).
         if (_spriteName is not null && spriteSheetService is not null && spriteRenderer is not null)
         {
-            SpriteComponent? sprite = SpriteManifest.TryGetFirst(_spriteName, out var spriteComponent) ? spriteComponent : null;
+            SpriteView? sprite = SpriteViews.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
             var spriteTint = Enabled ? Color.White : Color.Gray;
             SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, ContentFont, LeftText, textColor, ContentAbsolutePosition, ContentSize, spriteTint);
         }

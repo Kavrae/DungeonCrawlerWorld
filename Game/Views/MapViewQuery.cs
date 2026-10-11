@@ -106,11 +106,65 @@ public sealed class MapViewQuery : IMapViewQuery
     public bool TryGetTerrain(int x, int y, int layer, out TerrainView terrain) =>
         TryGetView(_world.GetTerrainAt(new Vector3Int(x, y, layer)), out terrain);
 
-    public bool TryGetStructureVisual(int x, int y, int layer, out EntityVisualView visual) =>
-        TryGetVisual(_world.GetStructureAt(new Vector3Int(x, y, layer)), out visual);
+    /// <remarks>A linked face draws the piece its left and right neighbours pick (StructureLinks), falling back to its standalone piece.</remarks>
+    public bool TryGetStructureVisual(int x, int y, int layer, out EntityVisualView visual)
+    {
+        var cell = _world.GetStructureAt(new Vector3Int(x, y, layer));
+        if (!cell.IsEmpty && _terrain.TryGetSpriteSet(cell.TypeId, out var sprites) && sprites.FaceLinking != Sprites.SpriteLinking.None)
+        {
+            var links = new StructureNeighbourLinks(_world, _terrain, layer, _terrain.GetLinkGroup(cell.TypeId));
+            if (sprites.TryGetFace(cell.Variant, StructureLinks.MaskFor(sprites.FaceLinking, links, x, y), out var face))
+            {
+                visual = new EntityVisualView(SpriteView.From(face), string.Empty, default, IsDead: false);
+                return true;
+            }
+        }
+
+        return TryGetVisual(cell, out visual);
+    }
 
     public bool TryGetStructure(int x, int y, int layer, out TerrainView structure) =>
         TryGetView(_world.GetStructureAt(new Vector3Int(x, y, layer)), out structure);
+
+    public bool HasStructure(int x, int y, int layer)
+    {
+        var position = new Vector3Int(x, y, layer);
+        return _world.IsOnMap(position) && !_world.GetStructureAt(position).IsEmpty;
+    }
+
+    /// <remarks>A linked top draws the piece its four neighbours pick (StructureLinks), falling back to its fully joined piece.</remarks>
+    public bool TryGetStructureTopVisual(int x, int y, int layer, out StructureTopView top)
+    {
+        var cell = _world.GetStructureAt(new Vector3Int(x, y, layer));
+        if (!cell.IsEmpty && _terrain.TryGetSpriteSet(cell.TypeId, out var sprites) && sprites.HasTop)
+        {
+            var links = new StructureNeighbourLinks(_world, _terrain, layer, _terrain.GetLinkGroup(cell.TypeId));
+            if (sprites.TryGetTop(cell.Variant, StructureLinks.MaskFor(sprites.TopLinking, links, x, y), out var sprite))
+            {
+                top = new StructureTopView(new EntityVisualView(SpriteView.From(sprite), string.Empty, default, IsDead: false), sprites.TopRaisedRows);
+                return true;
+            }
+        }
+
+        top = default;
+        return false;
+    }
+
+    /// <summary>A wall's neighbour joins it when it is a structure in the same link group, or off the loaded map: a wall running off the map, or into a neighbourhood not yet loaded, keeps a straight run instead of an end cap that would pop when the neighbour streams in.</summary>
+    private readonly struct StructureNeighbourLinks(World.World world, TerrainRegistry terrain, int layer, int linkGroup) : INeighbourLinks
+    {
+        public bool LinksTo(int x, int y)
+        {
+            var position = new Vector3Int(x, y, layer);
+            if (!world.IsOnMap(position))
+            {
+                return true;
+            }
+
+            var neighbour = world.GetStructureAt(position);
+            return !neighbour.IsEmpty && terrain.GetLinkGroup(neighbour.TypeId) == linkGroup;
+        }
+    }
 
     private bool TryGetVisual(TerrainCell cell, out EntityVisualView visual)
     {
@@ -150,7 +204,7 @@ public sealed class MapViewQuery : IMapViewQuery
     /// <remarks>Sprite wins over glyph, the same rule entity visuals follow.</remarks>
     private EntityVisualView TerrainVisual(TerrainCell cell, TerrainDefinition definition) =>
         _terrain.TryGetSprite(cell, out var sprite)
-            ? new EntityVisualView(new SpriteView(sprite.SheetPath, sprite.SourceRectangle), string.Empty, default, IsDead: false)
+            ? new EntityVisualView(SpriteView.From(sprite), string.Empty, default, IsDead: false)
             : new EntityVisualView(null, definition.Glyph, definition.GlyphColor, IsDead: false);
 
     public Color GetBackgroundColor(int x, int y, int layer)
@@ -194,7 +248,7 @@ public sealed class MapViewQuery : IMapViewQuery
 
         if (TryGetBlueprintAppearance(entityId, out var record, out var appearance))
         {
-            SpriteView? blueprintSprite = appearance.TryGetSprite(record.Seed, out var spriteCell) ? new SpriteView(spriteCell.SheetPath, spriteCell.SourceRectangle) : null;
+            SpriteView? blueprintSprite = appearance.TryGetSprite(record.Seed, out var spriteCell) ? SpriteView.From(spriteCell) : null;
             if (blueprintSprite is not null || appearance.Glyph.Length > 0)
             {
                 visual = new EntityVisualView(blueprintSprite, appearance.Glyph, appearance.GlyphColor, isDead);

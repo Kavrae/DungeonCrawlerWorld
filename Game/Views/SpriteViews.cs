@@ -8,9 +8,9 @@ public static class SpriteViews
     /// <summary>The first cell listed under name in SpriteManifest -- the stable choice, for a sprite that must look the same everywhere it's drawn.</summary>
     public static bool TryGetFirst(string name, out SpriteView sprite)
     {
-        if (SpriteManifest.TryGetFirst(name, out var resolved))
+        if (SpriteManifest.TryResolveFirst(name, out var resolved))
         {
-            sprite = new SpriteView(resolved.SheetPath, resolved.SourceRectangle);
+            sprite = SpriteView.From(resolved);
             return true;
         }
 

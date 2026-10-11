@@ -42,6 +42,12 @@ public interface IMapViewQuery
     /// <summary>The structure standing on MapLayer layer at (x, y) -- name, description and look -- if there is one.</summary>
     bool TryGetStructure(int x, int y, int layer, out TerrainView structure);
 
+    /// <summary>Whether a structure stands on MapLayer layer at (x, y); false off the map.</summary>
+    bool HasStructure(int x, int y, int layer);
+
+    /// <summary>The top of the wall standing on MapLayer layer at (x, y), if its sprite has one, and how many rows above (x, y) it sits.</summary>
+    bool TryGetStructureTopVisual(int x, int y, int layer, out StructureTopView top);
+
     /// <summary>The background wash for (x, y) on layer: the Blocking occupant's own background if it has one, else the structure's, else the terrain's, else white; black off the map.</summary>
     Color GetBackgroundColor(int x, int y, int layer);
 

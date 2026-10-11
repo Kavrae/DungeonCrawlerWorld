@@ -79,7 +79,7 @@ public static class BuiltInTerrain
 
     /// <summary>A structure: it stands on a MapLayer over stone floor, so it keeps the floor's background.</summary>
     public static readonly TerrainDefinition StoneWall = new(
-        StoneWallKey, "Wall", "Basic wall. Default implementation.", Color.LightGray, "[][]", Color.DarkGray, SpriteName: "Wall",
+        StoneWallKey, "Wall", "Basic wall. Default implementation.", Color.LightGray, "[][]", Color.DarkGray, SpriteName: "wall-stone",
         BlocksMovement: true);
 
     public static void RegisterAll(TerrainRegistry registry)

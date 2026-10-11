@@ -105,6 +105,17 @@ public sealed class BlueprintTests
     }
 
     [TestMethod]
+    public void Shops_AreTwoByTwo()
+    {
+        var definitions = BlueprintTestContext.Definitions;
+
+        foreach (var shopId in new[] { Shop.Id, GeneralShop.Id, PotionShop.Id })
+        {
+            Assert.AreEqual(new Vector2Byte(2, 2), definitions.Resolve(definitions.GetId(shopId)).Size, $"{shopId} should be 2x2.");
+        }
+    }
+
+    [TestMethod]
     public void Shop_Build_IsNamedAndDrawnByItsDefinition_AndSetsTransformHealthContainerCurrencyAndImmunities()
     {
         var ecsContext = BuildEcsContext();
@@ -117,7 +128,7 @@ public sealed class BlueprintTests
         var appearance = BlueprintTestContext.AppearanceOf(Shop.Id);
         Assert.AreEqual("S", appearance.Glyph);
         Assert.AreEqual(Microsoft.Xna.Framework.Color.DarkBlue, appearance.GlyphColor);
-        Assert.AreEqual("Shop-1x1", appearance.SpriteName);
+        Assert.AreEqual("shop-stand", appearance.SpriteName);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 

@@ -55,6 +55,25 @@ public sealed class ResolvedBlueprint
     /// <summary>The footprint an entity of it spawns with unless the spawn names one, decided the same way as Layer; 1x1 when none does.</summary>
     public Vector2Byte Size { get; }
 
+    /// <summary>The widest and tallest footprint any entity may have: Huge, 3x3.</summary>
+    /// <remarks>
+    /// The map draws everything inside a reach box of SpriteReach.MaximumRowsAbove rows above and
+    /// SpriteReach.MaximumColumnsBeside columns beside the footprint's bottom-left tile, and the row walk overscans by
+    /// exactly that much; a Huge footprint fills the box. Anything bigger is built from pieces, never as one entity.
+    /// </remarks>
+    public const byte MaximumFootprintTiles = Sprites.SpriteReach.MaximumRowsAbove + 1;
+
+    /// <summary>Throws when size is past MaximumFootprintTiles on either axis, naming whatever asked for it.</summary>
+    /// <exception cref="InvalidOperationException">size is too big; the message names subject and the limit.</exception>
+    public static void RequireFootprintWithinCap(Vector2Byte size, string subject)
+    {
+        if (size.X > MaximumFootprintTiles || size.Y > MaximumFootprintTiles)
+        {
+            throw new InvalidOperationException(
+                $"{subject} is {size.X}x{size.Y} tiles; the largest footprint is {MaximumFootprintTiles}x{MaximumFootprintTiles} (Huge). Build anything bigger from pieces.");
+        }
+    }
+
     /// <summary>The loot box its killer is granted: the last definition in build order to declare one; null when none does.</summary>
     public LootboxReward? Lootbox { get; }
 

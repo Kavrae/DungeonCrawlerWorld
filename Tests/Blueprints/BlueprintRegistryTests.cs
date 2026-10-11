@@ -15,6 +15,43 @@ public sealed class BlueprintRegistryTests
     private static BlueprintDefinition Plain(Guid id, string name, params Guid[] includes) => new(id, name) { Includes = includes };
 
     [TestMethod]
+    [DataRow(4, 1)]
+    [DataRow(1, 4)]
+    public void ResolveAll_ABlueprintPastTheHugeFootprintCap_ThrowsNamingIt(int width, int height)
+    {
+        var definitions = new BlueprintRegistry();
+        definitions.Register(new BlueprintDefinition(FirstId, "Colossus") { Size = new Engine.Math.Vector2Byte((byte)width, (byte)height) });
+
+        var error = Assert.ThrowsExactly<InvalidOperationException>(definitions.ResolveAll);
+
+        StringAssert.Contains(error.Message, "'Colossus'");
+        StringAssert.Contains(error.Message, "3x3");
+    }
+
+    [TestMethod]
+    public void ResolveAll_ABlueprintPastTheCapThroughAnInclude_ThrowsNamingTheOneThatIncludesIt()
+    {
+        var definitions = new BlueprintRegistry();
+        definitions.Register(new BlueprintDefinition(FirstId, "Giant Part") { Size = new Engine.Math.Vector2Byte(4, 4) });
+        definitions.Register(Plain(SecondId, "Giant", FirstId));
+
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() => definitions.Resolve(definitions.GetId(SecondId)));
+
+        StringAssert.Contains(error.Message, "'Giant'");
+    }
+
+    [TestMethod]
+    public void ResolveAll_AHugeBlueprint_Resolves()
+    {
+        var definitions = new BlueprintRegistry();
+        var id = definitions.Register(new BlueprintDefinition(FirstId, "Huge") { Size = new Engine.Math.Vector2Byte(3, 3) });
+
+        definitions.ResolveAll();
+
+        Assert.AreEqual(new Engine.Math.Vector2Byte(3, 3), definitions.Resolve(id).Size);
+    }
+
+    [TestMethod]
     public void Register_AssignsIdsFromOne_LeavingZeroAsNone()
     {
         var definitions = new BlueprintRegistry();

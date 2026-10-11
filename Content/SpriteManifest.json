@@ -4,12 +4,17 @@
     "Cells": [
       {
         "SheetPath": "Pixel Crawler - Free Pack/Entities/Characters/Body_A/Animations/Idle_Base/Idle_Down-Sheet.png",
-        "Column": 0,
+        "Column": 1,
         "Row": 0,
-        "CellWidth": 64,
-        "CellHeight": 64
+        "CellWidth": 24,
+        "CellHeight": 24,
+        "RowSpan": 2
       }
-    ]
+    ],
+    "PixelsPerTile": 16,
+    "PivotX": 8,
+    "PivotY": 48,
+    "RowSpan": 2
   },
   {
     "Name": "Grass",
@@ -88,25 +93,6 @@
         "Row": 0,
         "CellWidth": 32,
         "CellHeight": 32
-      }
-    ]
-  },
-  {
-    "Name": "Wall",
-    "Cells": [
-      {
-        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Wall_Tiles.png",
-        "Column": 6,
-        "Row": 21,
-        "CellWidth": 16,
-        "CellHeight": 16
-      },
-      {
-        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Wall_Tiles.png",
-        "Column": 6,
-        "Row": 22,
-        "CellWidth": 16,
-        "CellHeight": 16
       }
     ]
   },
@@ -315,5 +301,232 @@
         "CellHeight": 16
       }
     ]
+  },
+  {
+    "Name": "wall-stone",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 3,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "RowSpan": 2
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 2,
+        "Row": 5,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "RowSpan": 2
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 2,
+        "Row": 5,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "RowSpan": 2
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 1,
+        "Row": 5,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "RowSpan": 2
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 3,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "RowSpan": 2
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 0,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "RowSpan": 2
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 2,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "RowSpan": 2
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+        "Column": 1,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "RowSpan": 2
+      }
+    ],
+    "PixelsPerTile": 16,
+    "Linking": "Horizontal",
+    "Top": {
+      "Cells": [
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 0,
+          "Row": 0,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 0,
+          "Row": 4,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 0,
+          "Row": 4,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 0,
+          "Row": 4,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 0,
+          "Row": 3,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 4,
+          "Row": 5,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 0,
+          "Row": 3,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 4,
+          "Row": 5,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 2,
+          "Row": 4,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 2,
+          "Row": 4,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 1,
+          "Row": 4,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 1,
+          "Row": 4,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 2,
+          "Row": 3,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 3,
+          "Row": 5,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 1,
+          "Row": 3,
+          "CellWidth": 16,
+          "CellHeight": 16
+        },
+        {
+          "SheetPath": "Pixel Crawler - Free Pack/Environment/Tilesets/Dungeon_Tiles.png",
+          "Column": 7,
+          "Row": 5,
+          "CellWidth": 16,
+          "CellHeight": 16
+        }
+      ],
+      "Linking": "Cardinal"
+    },
+    "RowSpan": 2,
+    "VariantWeights": [
+      10,
+      90
+    ]
+  },
+  {
+    "Name": "shop-stand",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Stations/Workbench/Workbench.png",
+        "Column": 0,
+        "Row": 5,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "ColumnSpan": 2,
+        "RowSpan": 2
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Stations/Workbench/Workbench.png",
+        "Column": 0,
+        "Row": 8,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "ColumnSpan": 2,
+        "RowSpan": 2
+      },
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Structures/Stations/Workbench/Workbench.png",
+        "Column": 0,
+        "Row": 1,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "ColumnSpan": 2,
+        "RowSpan": 2
+      }
+    ],
+    "ColumnSpan": 2,
+    "RowSpan": 2
   }
 ]

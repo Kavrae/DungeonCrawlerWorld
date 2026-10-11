@@ -65,7 +65,7 @@ public sealed class EntityAppearance
             : $"{name} {_nameSuffix}";
     }
 
-    public bool TryGetSprite(uint seed, out SpriteComponent sprite)
+    public bool TryGetSprite(uint seed, out ManifestSprite sprite)
     {
         var count = SpriteName is null ? 0 : SpriteManifest.CountCells(SpriteName);
         if (count == 0)
@@ -74,7 +74,7 @@ public sealed class EntityAppearance
             return false;
         }
 
-        return SpriteManifest.TryGetCell(SpriteName!, Variant(seed, SpriteSalt, count), out sprite);
+        return SpriteManifest.TryResolveCell(SpriteName!, Variant(seed, SpriteSalt, count), out sprite);
     }
 
     private static int Variant(uint seed, uint salt, int count)

@@ -106,7 +106,7 @@ public sealed class EntityFactory
     public int Spawn(Guid blueprint, int x, int y) => Spawn(new SpawnRequest(_definitions.GetId(blueprint), x, y));
 
     /// <summary>Creates, builds (or defers) and places one entity, returning its id -- or <see cref="NoEntity"/> when it landed off the map and was destroyed again.</summary>
-    /// <exception cref="InvalidOperationException">The blueprint can't be spawned on its own (see ResolvedBlueprint.IsSpawnable), or the request is a Crawler and this factory was given no crawler numbers. Nothing is created.</exception>
+    /// <exception cref="InvalidOperationException">The blueprint can't be spawned on its own (see ResolvedBlueprint.IsSpawnable), the request is a Crawler and this factory was given no crawler numbers, or the footprint is past ResolvedBlueprint.MaximumFootprintTiles. Nothing is created.</exception>
     public int Spawn(in SpawnRequest request)
     {
         var world = _world;
@@ -121,6 +121,7 @@ public sealed class EntityFactory
 
         var position = new Vector3Int(request.X, request.Y, (int)(request.Layer ?? resolved.Layer));
         var size = request.Size ?? resolved.Size;
+        ResolvedBlueprint.RequireFootprintWithinCap(size, $"A spawn of '{resolved.Definition.Name}'");
         var seed = request.Seed ?? _runtimeSeeds.NextSeed();
         var flags = request.Crawler && _crawlerNumbers is { IsExhausted: false } ? SpawnFlags.Crawler : SpawnFlags.None;
         var entityId = request.ReservedEntityId ?? _tierResolver.CreateEntityAt(entityManager, position);

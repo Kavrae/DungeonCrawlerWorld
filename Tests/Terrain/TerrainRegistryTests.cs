@@ -22,6 +22,99 @@ public sealed class TerrainRegistryTests
     private static TerrainDefinition Definition(string key, string name = "Sand", string? spriteName = null) =>
         new(key, name, "", Color.Tan, "~", Color.White, SpriteName: spriteName);
 
+    /// <summary>The checked-in wall entry the built-in stone wall draws with; the expectations below are read from it, so editing its art doesn't break them.</summary>
+    private const string WallSpriteName = "wall-stone";
+
+    [TestMethod]
+    public void GetLinkGroup_DefinitionsDrawnWithTheSameWallEntry_ShareOne_AndOthersDont()
+    {
+        var registry = new TerrainRegistry();
+        var stone = registry.Register(Definition("test:stone", spriteName: WallSpriteName));
+        var moreStone = registry.Register(Definition("test:more-stone", spriteName: WallSpriteName));
+        var dirt = registry.Register(Definition("test:dirt", spriteName: "Dirt"));
+        var pillar = registry.Register(Definition("test:pillar"));
+        var otherPillar = registry.Register(Definition("test:other-pillar"));
+
+        Assert.AreEqual(registry.GetLinkGroup(stone), registry.GetLinkGroup(moreStone));
+        Assert.AreNotEqual(registry.GetLinkGroup(stone), registry.GetLinkGroup(dirt));
+        Assert.AreNotEqual(registry.GetLinkGroup(pillar), registry.GetLinkGroup(otherPillar));
+        Assert.AreNotEqual(registry.GetLinkGroup(pillar), registry.GetLinkGroup(stone));
+    }
+
+    [TestMethod]
+    public void GetLinkGroup_ReplacingADefinition_ReReadsItsGroup()
+    {
+        var registry = new TerrainRegistry();
+        var wall = registry.Register(Definition("test:wall", spriteName: WallSpriteName));
+        var stone = registry.Register(Definition("test:stone", spriteName: WallSpriteName));
+        Assert.AreEqual(registry.GetLinkGroup(stone), registry.GetLinkGroup(wall));
+
+        registry.Register(Definition("test:wall", spriteName: "Dirt"));
+
+        Assert.AreNotEqual(registry.GetLinkGroup(stone), registry.GetLinkGroup(wall));
+    }
+
+    [TestMethod]
+    public void SpriteSet_ADefinitionWithNoTop_HasNone()
+    {
+        var registry = new TerrainRegistry();
+        var id = registry.Register(Definition("test:dirt", spriteName: "Dirt"));
+
+        Assert.IsTrue(registry.TryGetSpriteSet(id, out var sprites));
+        Assert.IsFalse(sprites.HasTop);
+        Assert.IsFalse(sprites.TryGetTop(0, mask: null, out _));
+    }
+
+    [TestMethod]
+    public void SpriteSet_AWallsTop_FollowsTheVariant_FallsBackToItsFullyJoinedPiece_RaisedByItsFacesHeight()
+    {
+        var registry = new TerrainRegistry();
+        var id = registry.Register(Definition("test:wall", spriteName: WallSpriteName));
+        Assert.IsTrue(SpriteManifest.TryGetEntry(WallSpriteName, out var entry));
+        var top = entry.Top!;
+
+        for (var variant = 0; variant < registry.GetVariantCount(id); variant++)
+        {
+            var expectedIndex = SpriteLinks.CellIndexFor(top, variant, SpriteLinks.FallbackMask(top.Linking));
+            Assert.IsTrue(SpriteManifest.TryResolveTopCell(WallSpriteName, expectedIndex, out var expected));
+
+            Assert.IsTrue(registry.TryGetSpriteSet(id, out var sprites));
+            Assert.IsTrue(sprites.TryGetTop(variant, mask: null, out var sprite));
+            Assert.AreEqual(expected, sprite);
+            Assert.AreEqual(entry.Face.HeightRows(), sprites.TopRaisedRows);
+        }
+    }
+
+    [TestMethod]
+    public void GetVariantCount_AWall_CountsVariantSets_TheLargerOfFaceAndTop()
+    {
+        var registry = new TerrainRegistry();
+        var id = registry.Register(Definition("test:wall", spriteName: WallSpriteName));
+        Assert.IsTrue(SpriteManifest.TryGetEntry(WallSpriteName, out var entry));
+
+        var faceSets = entry.Cells.Count / SpriteLinks.CellsPerSet(entry.Linking);
+        var topSets = entry.Top!.Cells.Count / SpriteLinks.CellsPerSet(entry.Top.Linking);
+
+        Assert.AreEqual(System.Math.Max(faceSets, topSets), registry.GetVariantCount(id));
+    }
+
+    [TestMethod]
+    public void TryGetSprite_AWallFace_IsItsStandalonePieceForTheVariantsSet()
+    {
+        var registry = new TerrainRegistry();
+        var id = registry.Register(Definition("test:wall", spriteName: WallSpriteName));
+        Assert.IsTrue(SpriteManifest.TryGetEntry(WallSpriteName, out var entry));
+
+        for (var variant = 0; variant < registry.GetVariantCount(id); variant++)
+        {
+            var expectedIndex = SpriteLinks.CellIndexFor(entry.Face, variant, SpriteLinks.FallbackMask(entry.Linking));
+            Assert.IsTrue(SpriteManifest.TryResolveCell(WallSpriteName, expectedIndex, out var expected));
+
+            Assert.IsTrue(registry.TryGetSprite(new TerrainCell(id, (byte)variant), out var sprite));
+            Assert.AreEqual(expected, sprite);
+        }
+    }
+
     [TestMethod]
     public void Register_AssignsIdsFromOne_AndNoneIsNeverAValidId()
     {
@@ -106,7 +199,7 @@ public sealed class TerrainRegistryTests
     {
         var registry = new TerrainRegistry();
         var id = registry.Register(Definition("test:grass", spriteName: "Grass"));
-        SpriteManifest.TryGetCell("Grass", 1, out var expected);
+        SpriteManifest.TryResolveCell("Grass", 1, out var expected);
 
         Assert.IsTrue(registry.TryGetSprite(new TerrainCell(id, 1), out var sprite));
         Assert.AreEqual(expected, sprite);

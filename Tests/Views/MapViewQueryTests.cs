@@ -13,6 +13,7 @@ using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops.Components;
+using Game.Sprites;
 using Game.Terrain;
 using Game.Views;
 using Game.World;
@@ -61,6 +62,96 @@ public sealed class MapViewQueryTests
             var typeId = Terrain.Register(new TerrainDefinition($"test:structure-{Terrain.Count}", "Pillar", "Holds up the ceiling.", background, "#", Color.Gray, BlocksMovement: true));
             World.PopulateStructure(position, new TerrainCell(typeId, 0));
         }
+
+        /// <summary>A wall drawn with the checked-in wall entry, variant 0.</summary>
+        public void PlaceWall(int x, int y)
+        {
+            var typeId = Terrain.Register(new TerrainDefinition("test:wall", "Wall", "", Color.Gray, "#", Color.Gray, SpriteName: WallSpriteName, BlocksMovement: true));
+            World.PopulateStructure(new Vector3Int(x, y, Ground), new TerrainCell(typeId, 0));
+        }
+    }
+
+    private const string WallSpriteName = "wall-stone";
+
+    /// <summary>The top piece the checked-in wall entry's variant 0 draws for mask, read from the entry itself so editing its art doesn't break these tests.</summary>
+    private static SpriteView ExpectedTop(int mask)
+    {
+        Assert.IsTrue(SpriteManifest.TryGetEntry(WallSpriteName, out var entry));
+        Assert.IsTrue(SpriteManifest.TryResolveTopCell(WallSpriteName, SpriteLinks.CellIndexFor(entry.Top!, 0, mask), out var sprite));
+        return SpriteView.From(sprite);
+    }
+
+    private static SpriteView ExpectedFace(int mask)
+    {
+        Assert.IsTrue(SpriteManifest.TryGetEntry(WallSpriteName, out var entry));
+        Assert.IsTrue(SpriteManifest.TryResolveCell(WallSpriteName, SpriteLinks.CellIndexFor(entry.Face, 0, mask), out var sprite));
+        return SpriteView.From(sprite);
+    }
+
+    private static SpriteView? TopAt(Fixture fixture, int x, int y) =>
+        fixture.Query.TryGetStructureTopVisual(x, y, Ground, out var top) ? top.Visual.Sprite : null;
+
+    private static SpriteView? FaceAt(Fixture fixture, int x, int y) =>
+        fixture.Query.TryGetStructureVisual(x, y, Ground, out var face) ? face.Sprite : null;
+
+    [TestMethod]
+    public void TryGetStructureTopVisual_AWallRun_JoinsEachTopToItsSameGroupNeighbours()
+    {
+        var fixture = new Fixture();
+        fixture.PlaceWall(3, 5);
+        fixture.PlaceWall(4, 5);
+        fixture.PlaceWall(5, 5);
+        fixture.PlaceWall(4, 6);
+
+        Assert.AreEqual(ExpectedTop(SpriteLinks.East), TopAt(fixture, 3, 5));
+        Assert.AreEqual(ExpectedTop(SpriteLinks.East | SpriteLinks.West | SpriteLinks.South), TopAt(fixture, 4, 5));
+        Assert.AreEqual(ExpectedTop(SpriteLinks.West), TopAt(fixture, 5, 5));
+        Assert.AreEqual(ExpectedTop(SpriteLinks.North), TopAt(fixture, 4, 6));
+    }
+
+    [TestMethod]
+    public void TryGetStructureTopVisual_AStructureInAnotherLinkGroup_DoesNotJoin()
+    {
+        var fixture = new Fixture();
+        fixture.PlaceWall(4, 5);
+        fixture.PlaceStructure(new Vector3Int(5, 5, Ground));
+
+        Assert.AreEqual(ExpectedTop(0), TopAt(fixture, 4, 5));
+    }
+
+    [TestMethod]
+    public void TryGetStructureTopVisual_AnOffMapNeighbour_Joins()
+    {
+        var fixture = new Fixture();
+        fixture.PlaceWall(0, 5);
+
+        Assert.AreEqual(ExpectedTop(SpriteLinks.West), TopAt(fixture, 0, 5));
+    }
+
+    [TestMethod]
+    public void TryGetStructureTopVisual_TheMask_IsReadFromTheWallsOwnNeighbours_NotFromTheTileItsTopIsDrawnOn()
+    {
+        var fixture = new Fixture();
+        fixture.PlaceWall(4, 5);
+        fixture.PlaceWall(4, 3);
+        fixture.PlaceWall(3, 4);
+
+        Assert.AreEqual(ExpectedTop(0), TopAt(fixture, 4, 5));
+    }
+
+    [TestMethod]
+    public void TryGetStructureVisual_AWallRunsFaces_AreLeftEndMiddleRightEnd_AndALoneWallsIsStandalone()
+    {
+        var fixture = new Fixture();
+        fixture.PlaceWall(3, 5);
+        fixture.PlaceWall(4, 5);
+        fixture.PlaceWall(5, 5);
+        fixture.PlaceWall(8, 2);
+
+        Assert.AreEqual(ExpectedFace(SpriteLinks.HorizontalEast), FaceAt(fixture, 3, 5));
+        Assert.AreEqual(ExpectedFace(SpriteLinks.HorizontalEast | SpriteLinks.HorizontalWest), FaceAt(fixture, 4, 5));
+        Assert.AreEqual(ExpectedFace(SpriteLinks.HorizontalWest), FaceAt(fixture, 5, 5));
+        Assert.AreEqual(ExpectedFace(SpriteLinks.Standalone), FaceAt(fixture, 8, 2));
     }
 
     // --- Backgrounds. -----------------------------------------------------------------------
@@ -188,6 +279,27 @@ public sealed class MapViewQueryTests
         Assert.AreEqual("#", visual.Glyph);
         Assert.IsFalse(fixture.Query.TryGetStructure(2, 2, Ground, out _));
         Assert.IsFalse(fixture.Query.TryGetTerrain(2, 2, Flying, out _));
+    }
+
+    [TestMethod]
+    public void TryGetStructureTopVisual_NoStructure_OrAStructureWithNoTop_IsFalse()
+    {
+        var fixture = new Fixture();
+        fixture.PlaceStructure(new Vector3Int(2, 2, Ground));
+
+        Assert.IsFalse(fixture.Query.TryGetStructureTopVisual(3, 3, Ground, out _));
+        Assert.IsFalse(fixture.Query.TryGetStructureTopVisual(2, 2, Ground, out _));
+    }
+
+    [TestMethod]
+    public void HasStructure_IsTrueOnlyWhereAStructureStands()
+    {
+        var fixture = new Fixture();
+        fixture.PlaceStructure(new Vector3Int(2, 2, Ground));
+
+        Assert.IsTrue(fixture.Query.HasStructure(2, 2, Ground));
+        Assert.IsFalse(fixture.Query.HasStructure(3, 2, Ground));
+        Assert.IsFalse(fixture.Query.HasStructure(-5, -5, Ground));
     }
 
     [TestMethod]
