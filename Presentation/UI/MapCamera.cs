@@ -11,9 +11,9 @@ namespace Presentation.UI;
 /// <remarks>
 /// Every method that repositions the camera (UpdateScrollPosition/ApplyDrag/EndDrag) returns
 /// the actually-applied delta rather than reaching out to invalidate anything itself -- the
-/// background-color cache these deltas drive is MapWindow's own rendering concern, not this
-/// class's, so MapCamera stays ignorant of it and MapWindow's existing UpdateScrollPosition/
-/// ResetBackgroundColorCache wrappers remain the single commit points.
+/// terrain caches these deltas drive are MapWindow's own rendering concern, not this class's, so
+/// MapCamera stays ignorant of them and MapWindow's UpdateScrollPosition wrapper remains the
+/// single commit point.
 /// </remarks>
 public sealed class MapCamera
 {

@@ -23,7 +23,7 @@ public sealed class AuraFieldTests
     private static readonly Vector3Int SourcePosition = new(10, 10, 0);
 
     private static readonly TerrainDefinition GlowingTerrain = new(
-        "test:glowing", "Glowing", "", default, "~", default,
+        "test:glowing", "Glowing", "", "~", default,
         Aura: new TerrainAura(OrangeAura, 8, 3));
 
     private static AuraCatalog BuildAuras()
@@ -176,7 +176,7 @@ public sealed class AuraFieldTests
     {
         var terrain = new TerrainRegistry();
         var world = TestWorlds.Create(new Map(MapSize));
-        world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(terrain.Register(GlowingTerrain), 0));
+        world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(terrain.Register(GlowingTerrain)));
         var field = BuildField(world, terrain);
 
         field.EnsureBuilt();
@@ -190,7 +190,7 @@ public sealed class AuraFieldTests
     {
         var terrain = new TerrainRegistry();
         var world = TestWorlds.Create(new Map(MapSize));
-        world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(terrain.Register(GlowingTerrain), 0));
+        world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(terrain.Register(GlowingTerrain)));
         var glowView = new AuraGlowView(BuildField(world, terrain));
 
         Assert.IsTrue(glowView.TryGetGlow(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out var glowColor, out _));
@@ -204,19 +204,19 @@ public sealed class AuraFieldTests
         var eventBus = new EventBus();
         var terrain = new TerrainRegistry();
         var glowing = terrain.Register(GlowingTerrain);
-        var plain = terrain.Register(new TerrainDefinition("test:plain", "Plain", "", default, ".", default));
+        var plain = terrain.Register(new TerrainDefinition("test:plain", "Plain", "", ".", default));
         var world = TestWorlds.Create(new Map(MapSize), eventBus: eventBus);
-        world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(glowing, 0));
+        world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(glowing));
         var field = BuildField(world, terrain, eventBus);
         field.EnsureBuilt();
         var announced = new List<string>();
         field.TerrainAuraAdded += (position, source) => announced.Add($"added {position.X},{position.Y} power {source.Power} size {source.Size}");
         field.TerrainAuraRemoved += (position, source) => announced.Add($"removed {position.X},{position.Y} power {source.Power} size {source.Size}");
 
-        world.SetTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(plain, 0));
+        world.SetTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(plain));
         Assert.IsFalse(field.TryGetGlow(SourcePosition, out _, out _));
 
-        world.SetTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(glowing, 0));
+        world.SetTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(glowing));
         Assert.IsTrue(field.TryGetGlow(SourcePosition, out _, out _));
 
         CollectionAssert.AreEqual(new[] { "removed 10,10 power 8 size 3", "added 10,10 power 8 size 3" }, announced);
@@ -228,7 +228,7 @@ public sealed class AuraFieldTests
     {
         var eventBus = new EventBus();
         var terrain = new TerrainRegistry();
-        var glowing = new TerrainCell(terrain.Register(GlowingTerrain), 0);
+        var glowing = new TerrainCell(terrain.Register(GlowingTerrain));
         var world = TestWorlds.Create(new Map(new MapBounds(0, 0, 2048, 10, 1)));
         world.PopulateTerrain(1024, 5, TerrainLayer.UnderGround, glowing);
         var auras = BuildAuras();
@@ -310,7 +310,7 @@ public sealed class AuraFieldTests
     {
         var eventBus = new EventBus();
         var terrain = new TerrainRegistry();
-        var glowing = new TerrainCell(terrain.Register(GlowingTerrain), 0);
+        var glowing = new TerrainCell(terrain.Register(GlowingTerrain));
         var world = TestWorlds.Create(Map.Unbounded(depth: 1), eventBus: eventBus);
         world.Map.LoadNeighborhood(0, 0);
         world.PopulateTerrain(1023, 5, TerrainLayer.UnderGround, glowing);
@@ -330,7 +330,7 @@ public sealed class AuraFieldTests
         var terrain = new TerrainRegistry();
         var glowing = terrain.Register(GlowingTerrain);
         var world = TestWorlds.Create(new Map(MapSize), eventBus: eventBus);
-        world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(glowing, 0));
+        world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(glowing));
         var field = BuildField(world, terrain, eventBus);
         field.EnsureBuilt();
         var announced = new List<string>();
@@ -470,7 +470,7 @@ public sealed class AuraFieldTests
         var terrain = new TerrainRegistry();
         var glowing = terrain.Register(GlowingTerrain);
         var world = TestWorlds.Create(new Map(MapSize));
-        world.PopulateTerrain(position.X, position.Y, TerrainLayer.UnderGround, new TerrainCell(glowing, 0));
+        world.PopulateTerrain(position.X, position.Y, TerrainLayer.UnderGround, new TerrainCell(glowing));
         var field = new AuraField(world, terrain, BuildAuras(), new EventBus());
         field.EnsureBuilt();
         return (field, glowing, terrain, world);
@@ -510,7 +510,7 @@ public sealed class AuraFieldTests
     {
         var (field, _, terrain, world) = BuildFieldWithGlowingTerrainAt(SourcePosition);
         var otherGlowing = terrain.Register(GlowingTerrain with { Key = "test:glowing-too" });
-        world.SetTerrain(SourcePosition.X + 1, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(otherGlowing, 0));
+        world.SetTerrain(SourcePosition.X + 1, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(otherGlowing));
 
         Assert.AreEqual(ActionSource.FromAura(OrangeAuraId), field.Attribute(SourcePosition, OrangeAuraId, entityId: 9));
     }

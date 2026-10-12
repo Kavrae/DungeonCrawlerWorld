@@ -3,7 +3,7 @@ using System.Drawing.Drawing2D;
 namespace SpriteManifestBuilder;
 
 /// <summary>A sprite to draw in the placement preview: a cell and the placement it draws by.</summary>
-public sealed record PlacedCell(ManifestCell Cell, int? PixelsPerTile, Point Pivot, int RaisedRows);
+public sealed record PlacedCell(SpriteManifestCell Cell, int? PixelsPerTile, Point Pivot, int RaisedRows);
 
 /// <summary>
 /// Draws one option as the map will: on a grid of map tiles around its anchor tile, the footprint shaded, the reach box
@@ -76,7 +76,7 @@ public static class PlacementPreviewRenderer
     /// <summary>Where the cell's pixels land on the canvas, for drawing it and for turning a click on it back into a source pixel.</summary>
     public static RectangleF DrawnRectangle(Size canvasSize, PlacedCell placed, int footprintTiles) =>
         ToPixels(
-            SpritePlacementRules.DrawnTiles(placed.Cell.SourceRectangle.Size, placed.PixelsPerTile, placed.Pivot, footprintTiles, placed.RaisedRows),
+            SpritePlacementRules.DrawnTiles(placed.Cell.SourceSize(), placed.PixelsPerTile, placed.Pivot, footprintTiles, placed.RaisedRows),
             TilePixels(canvasSize));
 
     /// <summary>Whether inner lies inside outer, give or take rounding.</summary>

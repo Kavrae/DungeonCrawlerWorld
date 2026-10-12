@@ -46,7 +46,7 @@ public sealed class EffectContentValidationTests
     [TestMethod]
     public void TerrainContact_WhoseEffectNamesAnUndeclaredTag_ThrowsNamingTheTerrainAndTag()
     {
-        var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", default, "~", default,
+        var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", "~", default,
             Contact: new TerrainContact([ModifierConditionedOn(UndeclaredTag)]))));
 
         Assert.Contains("Terrain 'Bog'", exception.Message);
@@ -56,7 +56,7 @@ public sealed class EffectContentValidationTests
     [TestMethod]
     public void Aura_WhoseOwnTagIsUndeclared_ThrowsNamingTheAuraAndTag()
     {
-        var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", default, "~", default,
+        var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", "~", default,
             Aura: new TerrainAura(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, Tags: [UndeclaredTag]), 4, 2))));
 
         Assert.Contains("Aura 'Miasma'", exception.Message);
@@ -66,7 +66,7 @@ public sealed class EffectContentValidationTests
     [TestMethod]
     public void Aura_WhoseEffectNamesAnUndeclaredTag_ThrowsNamingTheAuraAndTag()
     {
-        var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", default, "~", default,
+        var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", "~", default,
             Aura: new TerrainAura(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, [ModifierConditionedOn(UndeclaredTag)]), 4, 2))));
 
         Assert.Contains("Aura 'Miasma'", exception.Message);
@@ -121,7 +121,7 @@ public sealed class EffectContentValidationTests
     [TestMethod]
     public void AuraNamedOnlyByATerrainContact_HasItsOwnEffectsChecked()
     {
-        var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", default, "~", default,
+        var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", "~", default,
             Contact: new TerrainContact([GrantOf(AuraWithAnUndeclaredTagInside)]))));
 
         Assert.Contains("Aura 'Hidden Blight'", exception.Message);
@@ -132,7 +132,7 @@ public sealed class EffectContentValidationTests
     [TestMethod]
     public void AuraNamedOnlyByAnotherAurasEffects_HasItsOwnEffectsChecked()
     {
-        var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", default, "~", default,
+        var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", "~", default,
             Aura: new TerrainAura(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, [GrantOf(AuraWithAnUndeclaredTagInside)]), 4, 2))));
 
         Assert.Contains("Aura 'Hidden Blight'", exception.Message);

@@ -36,7 +36,6 @@ public sealed class MapViewQuery : IMapViewQuery
     private readonly DirectComponentPool<TransformComponent> _transforms;
     private readonly PackedComponentPool<GlyphComponent> _glyphs;
     private readonly PackedComponentPool<SpriteComponent> _sprites;
-    private readonly PackedComponentPool<BackgroundComponent> _backgrounds;
     private readonly EntityNaming _naming;
     private readonly MultiComponentPool<NonBlockingComponent> _nonBlocking;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
@@ -68,7 +67,6 @@ public sealed class MapViewQuery : IMapViewQuery
         _transforms = componentManager.GetDirectPool<TransformComponent>();
         _glyphs = componentManager.GetPackedPool<GlyphComponent>();
         _sprites = componentManager.GetPackedPool<SpriteComponent>();
-        _backgrounds = componentManager.GetPackedPool<BackgroundComponent>();
         _naming = EntityNaming.For(componentManager, creatures);
         _nonBlocking = componentManager.GetMultiPool<NonBlockingComponent>();
         _health = componentManager.GetPackedPool<SimpleHealthComponent>();
@@ -100,160 +98,50 @@ public sealed class MapViewQuery : IMapViewQuery
 
     public byte GetOccupiedLayerMask(int x, int y) => _world.Map.GetOccupiedLayerMask(x, y);
 
-    public bool TryGetTerrainVisual(int x, int y, int layer, out EntityVisualView visual) =>
-        TryGetVisual(_world.GetTerrainAt(new Vector3Int(x, y, layer)), out visual);
+    public TerrainRegistry Terrain => _terrain;
+
+    public void CopyCells(int minX, int minY, int width, int height, int mapLayer, World.MapCellBuffer cells) =>
+        _world.Map.CopyCells(minX, minY, width, height, mapLayer, cells);
 
     public bool TryGetTerrain(int x, int y, int layer, out TerrainView terrain) =>
-        TryGetView(_world.GetTerrainAt(new Vector3Int(x, y, layer)), out terrain);
-
-    /// <remarks>A linked face draws the piece its left and right neighbours pick (StructureLinks), falling back to its standalone piece.</remarks>
-    public bool TryGetStructureVisual(int x, int y, int layer, out EntityVisualView visual)
-    {
-        var cell = _world.GetStructureAt(new Vector3Int(x, y, layer));
-        if (!cell.IsEmpty && _terrain.TryGetSpriteSet(cell.TypeId, out var sprites) && sprites.FaceLinking != Sprites.SpriteLinking.None)
-        {
-            var links = new StructureNeighbourLinks(_world, _terrain, layer, _terrain.GetLinkGroup(cell.TypeId));
-            if (sprites.TryGetFace(cell.Variant, StructureLinks.MaskFor(sprites.FaceLinking, links, x, y), out var face))
-            {
-                visual = new EntityVisualView(SpriteView.From(face), string.Empty, default, IsDead: false);
-                return true;
-            }
-        }
-
-        return TryGetVisual(cell, out visual);
-    }
+        TryGetView(_world.GetTerrainAt(new Vector3Int(x, y, layer)), _world.GetTerrainSeedAt(new Vector3Int(x, y, layer)), out terrain);
 
     public bool TryGetStructure(int x, int y, int layer, out TerrainView structure) =>
-        TryGetView(_world.GetStructureAt(new Vector3Int(x, y, layer)), out structure);
+        TryGetView(_world.GetStructureAt(new Vector3Int(x, y, layer)), _world.GetStructureSeedAt(new Vector3Int(x, y, layer)), out structure);
 
-    public bool HasStructure(int x, int y, int layer)
+    private bool TryGetView(TerrainCell cell, uint seed, out TerrainView view)
     {
-        var position = new Vector3Int(x, y, layer);
-        return _world.IsOnMap(position) && !_world.GetStructureAt(position).IsEmpty;
-    }
-
-    /// <remarks>A linked top draws the piece its four neighbours pick (StructureLinks), falling back to its fully joined piece.</remarks>
-    public bool TryGetStructureTopVisual(int x, int y, int layer, out StructureTopView top)
-    {
-        var cell = _world.GetStructureAt(new Vector3Int(x, y, layer));
-        if (!cell.IsEmpty && _terrain.TryGetSpriteSet(cell.TypeId, out var sprites) && sprites.HasTop)
-        {
-            var links = new StructureNeighbourLinks(_world, _terrain, layer, _terrain.GetLinkGroup(cell.TypeId));
-            if (sprites.TryGetTop(cell.Variant, StructureLinks.MaskFor(sprites.TopLinking, links, x, y), out var sprite))
-            {
-                top = new StructureTopView(new EntityVisualView(SpriteView.From(sprite), string.Empty, default, IsDead: false), sprites.TopRaisedRows);
-                return true;
-            }
-        }
-
-        top = default;
-        return false;
-    }
-
-    /// <summary>A wall's neighbour joins it when it is a structure in the same link group, or off the loaded map: a wall running off the map, or into a neighbourhood not yet loaded, keeps a straight run instead of an end cap that would pop when the neighbour streams in.</summary>
-    private readonly struct StructureNeighbourLinks(World.World world, TerrainRegistry terrain, int layer, int linkGroup) : INeighbourLinks
-    {
-        public bool LinksTo(int x, int y)
-        {
-            var position = new Vector3Int(x, y, layer);
-            if (!world.IsOnMap(position))
-            {
-                return true;
-            }
-
-            var neighbour = world.GetStructureAt(position);
-            return !neighbour.IsEmpty && terrain.GetLinkGroup(neighbour.TypeId) == linkGroup;
-        }
-    }
-
-    private bool TryGetVisual(TerrainCell cell, out EntityVisualView visual)
-    {
-        if (!TryGetDefinition(cell, out var definition))
-        {
-            visual = default;
-            return false;
-        }
-
-        visual = TerrainVisual(cell, definition);
-        return true;
-    }
-
-    private bool TryGetView(TerrainCell cell, out TerrainView view)
-    {
-        if (!TryGetDefinition(cell, out var definition))
+        if (cell.IsEmpty || !_terrain.TryGet(cell.TypeId, out var definition))
         {
             view = default;
             return false;
         }
 
-        view = new TerrainView(definition.Name, definition.Description, TerrainVisual(cell, definition));
+        view = new TerrainView(definition.Name, definition.Description, new TerrainVisualView(definition.SpriteName, seed, definition.Glyph, definition.GlyphColor));
         return true;
     }
 
-    private bool TryGetDefinition(TerrainCell cell, out TerrainDefinition definition)
-    {
-        if (cell.IsEmpty || !_terrain.TryGet(cell.TypeId, out definition))
-        {
-            definition = null!;
-            return false;
-        }
-
-        return true;
-    }
-
-    /// <remarks>Sprite wins over glyph, the same rule entity visuals follow.</remarks>
-    private EntityVisualView TerrainVisual(TerrainCell cell, TerrainDefinition definition) =>
-        _terrain.TryGetSprite(cell, out var sprite)
-            ? new EntityVisualView(SpriteView.From(sprite), string.Empty, default, IsDead: false)
-            : new EntityVisualView(null, definition.Glyph, definition.GlyphColor, IsDead: false);
-
-    public Color GetBackgroundColor(int x, int y, int layer)
-    {
-        if (!_world.IsOnMap(new Vector3Int(x, y, 0)))
-        {
-            return Color.Black;
-        }
-
-        var occupantEntityId = _world.Map.GetBlockingEntityId(new Vector3Int(x, y, layer));
-        if (occupantEntityId != -1 && _backgrounds.TryGetReadonly(occupantEntityId, out var occupantBackground))
-        {
-            return occupantBackground.BackgroundColor;
-        }
-
-        var position = new Vector3Int(x, y, layer);
-        if (TryGetDefinition(_world.GetStructureAt(position), out var structure))
-        {
-            return structure.BackgroundColor;
-        }
-
-        return TryGetDefinition(_world.GetTerrainAt(position), out var terrain) ? terrain.BackgroundColor : Color.White;
-    }
-
-    /// <remarks>An entity's own SpriteComponent or GlyphComponent -- a per-instance override -- wins over its blueprint's appearance. The glyph pool is only read when there is no sprite: every skipped read is a scattered access into an entity-indexed array on the per-tile draw path. The blueprint path carries the glyph beside the sprite (renderers draw the sprite when there is one), so a reader that only shows glyphs still gets one.</remarks>
+    /// <remarks>An entity's own SpriteComponent or GlyphComponent -- a per-instance override -- wins over its blueprint's appearance. The glyph pool is only read when there is no sprite: every skipped read is a scattered access into an entity-indexed array on the per-tile draw path. The blueprint path carries the glyph beside the sprite name (a reader draws the glyph when the manifest has no such sprite), so a reader that only shows glyphs still gets one.</remarks>
     public bool TryGetVisual(int entityId, out EntityVisualView visual)
     {
         var isDead = _dead.Has(entityId);
 
         if (_sprites.TryGetReadonly(entityId, out var sprite))
         {
-            visual = new EntityVisualView(new SpriteView(sprite.SheetPath, sprite.SourceRectangle), string.Empty, default, isDead);
+            visual = new EntityVisualView(sprite.SpriteName, sprite.Seed, string.Empty, default, isDead);
             return true;
         }
 
         if (_glyphs.TryGetReadonly(entityId, out var glyph))
         {
-            visual = new EntityVisualView(null, glyph.Glyph, glyph.GlyphColor, isDead);
+            visual = new EntityVisualView(null, 0, glyph.Glyph, glyph.GlyphColor, isDead);
             return true;
         }
 
-        if (TryGetBlueprintAppearance(entityId, out var record, out var appearance))
+        if (TryGetBlueprintAppearance(entityId, out var record, out var appearance) && (appearance.SpriteName is not null || appearance.Glyph.Length > 0))
         {
-            SpriteView? blueprintSprite = appearance.TryGetSprite(record.Seed, out var spriteCell) ? SpriteView.From(spriteCell) : null;
-            if (blueprintSprite is not null || appearance.Glyph.Length > 0)
-            {
-                visual = new EntityVisualView(blueprintSprite, appearance.Glyph, appearance.GlyphColor, isDead);
-                return true;
-            }
+            visual = new EntityVisualView(appearance.SpriteName, record.Seed, appearance.Glyph, appearance.GlyphColor, isDead);
+            return true;
         }
 
         visual = default;
@@ -272,10 +160,10 @@ public sealed class MapViewQuery : IMapViewQuery
         return true;
     }
 
-    /// <remarks>The loot bag is only resolved for a container or a corpse, the two things that ever show one -- every live creature carries inventory stacks, and counting them for each visible occupant every frame would be wasted work. Either one shows it while it holds anything to loot: a stack, or any Gold or Credits.</remarks>
+    /// <remarks>The loot bag is only resolved for a container or a corpse, the two things that ever show one -- every live creature carries inventory stacks, and counting them for each visible occupant every frame would be wasted work. Either one shows it while it holds anything to loot: a stack, or any Gold or Credits. A shop is a container only so its destruction wipes its stock; standing, it trades rather than being looted, so it shows a bag only once destroyed, as a corpse does.</remarks>
     public EntityStatusView GetStatus(int entityId)
     {
-        var isContainer = _containers.Has(entityId);
+        var isContainer = _containers.Has(entityId) && !_shops.Has(entityId);
         var lootBag = (isContainer || _dead.Has(entityId)) && HoldsLoot(entityId)
             ? _looted.Has(entityId) ? LootBagState.Looted : LootBagState.Unlooted
             : LootBagState.None;
@@ -308,11 +196,7 @@ public sealed class MapViewQuery : IMapViewQuery
             return false;
         }
 
-        SpriteView? sprite = definition.SpriteName is { } spriteName && SpriteViews.TryGetFirst(spriteName, out var resolved)
-            ? resolved
-            : null;
-
-        action = new ChargingActionView(sprite, definition.Glyph, definition.GlyphColor);
+        action = new ChargingActionView(definition.SpriteName, definition.Glyph, definition.GlyphColor);
         return true;
     }
 

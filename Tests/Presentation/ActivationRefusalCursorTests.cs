@@ -68,7 +68,7 @@ public sealed class ActivationRefusalCursorTests
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog,
-            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), ScreenSize, simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), ScreenSize, simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
@@ -134,7 +134,7 @@ public sealed class ActivationRefusalCursorTests
         var itemCatalog = new ItemCatalog();
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog,
-            TestFonts.Shared, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), ScreenSize, simulationClock: new SimulationClock());
+            TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), ScreenSize, simulationClock: new SimulationClock());
 
         Assert.IsTrue(hotbar.TryGetSlotSummary(HotkeySlot.Slot1, out _, out _, out var usableBlocker));
         Assert.AreEqual(ActivationBlocker.None, usableBlocker);

@@ -58,9 +58,6 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     /// <summary>Chance any given rolled NPC (see BuildRaceEntity) is also a Crawler -- deliberately small; most NPCs are not.</summary>
     private const int CrawlerPercent = 2;
 
-    /// <summary>The terrain registry, with the sprite variants of every terrain this builder writes already resolved -- on the main thread, at construction -- so Plan's TerrainRegistry.CreateCell only reads the registry's cache from a worker.</summary>
-    private readonly TerrainRegistry _terrain = WithVariantsResolved(terrain, BuiltInTerrain.StoneFloorKey, BuiltInTerrain.StoneWallKey, BuiltInTerrain.DirtKey, BuiltInTerrain.LavaKey, BuiltInTerrain.GrassKey, BuiltInTerrain.HolyGroundKey);
-
     private readonly ushort _stoneFloor = terrain.GetId(BuiltInTerrain.StoneFloorKey);
     private readonly ushort _stoneWall = terrain.GetId(BuiltInTerrain.StoneWallKey);
     private readonly ushort _dirt = terrain.GetId(BuiltInTerrain.DirtKey);
@@ -186,7 +183,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     /// <param name="planningCancellation">Checked once a row: a plan no longer wanted stops early and throws OperationCanceledException.</param>
     public NeighborhoodPlan Plan(Map map, NeighborhoodRecord record, int populationSeed, CancellationToken planningCancellation = default)
     {
-        var neighborhoodLayout = map.CreateLayout(record.CellX, record.CellY);
+        var neighborhoodLayout = map.CreateLayout(record.CellX, record.CellY, record.Seed);
         var layoutRolls = new MathUtility(new SeededRandom((ulong)(uint)record.Seed));
         for (var row = neighborhoodLayout.MinY; row < neighborhoodLayout.MaxY; row++)
         {
@@ -218,7 +215,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
             spawnRowEnds.Add(population.Spawns.Count);
         }
 
-        return new NeighborhoodPlan(neighborhoodLayout, TerrainAuraSources.ByRow(neighborhoodLayout, _terrain, auras), population.Spawns, spawnRowEnds);
+        return new NeighborhoodPlan(neighborhoodLayout, TerrainAuraSources.ByRow(neighborhoodLayout, terrain, auras), population.Spawns, spawnRowEnds);
     }
 
     /// <summary>Spawns neighborhoodPlan's shrines and creatures in order, a batch at a time, once its layout is loaded. Main thread only.</summary>
@@ -246,16 +243,6 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
         public List<SpawnRequest> Spawns { get; } = [];
     }
 
-    private static TerrainRegistry WithVariantsResolved(TerrainRegistry terrainRegistry, params string[] terrainKeys)
-    {
-        foreach (var terrainKey in terrainKeys)
-        {
-            terrainRegistry.GetVariantCount(terrainRegistry.GetId(terrainKey));
-        }
-
-        return terrainRegistry;
-    }
-
     /// <summary>
     /// Ground: stone floor under a wall where the starting neighborhood's hallway cross runs, randomized
     /// terrain everywhere else (see PickGroundTerrain). UnderGround: a randomized dirt/lava mixture --
@@ -265,17 +252,17 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     {
         if (IsHallwayWall(column, row))
         {
-            BuildTerrain(neighborhoodLayout, layoutRolls, _stoneFloor, column, row, TerrainLayer.Ground);
-            BuildWall(neighborhoodLayout, layoutRolls, column, row, MapLayer.Ground);
+            BuildTerrain(neighborhoodLayout, _stoneFloor, column, row, TerrainLayer.Ground);
+            BuildWall(neighborhoodLayout, column, row, MapLayer.Ground);
         }
         else
         {
             // Rolled even where Holy Ground replaces it, so every other cell keeps the terrain its seed gave it.
             var rolledGroundTerrain = PickGroundTerrain(layoutRolls);
-            BuildTerrain(neighborhoodLayout, layoutRolls, IsHolyGround(column, row) ? _holyGround : rolledGroundTerrain, column, row, TerrainLayer.Ground);
+            BuildTerrain(neighborhoodLayout, IsHolyGround(column, row) ? _holyGround : rolledGroundTerrain, column, row, TerrainLayer.Ground);
         }
 
-        BuildTerrain(neighborhoodLayout, layoutRolls, layoutRolls.Next(0, 20) == 0 ? _lava : _dirt, column, row, TerrainLayer.UnderGround);
+        BuildTerrain(neighborhoodLayout, layoutRolls.Next(0, 20) == 0 ? _lava : _dirt, column, row, TerrainLayer.UnderGround);
     }
 
     /// <summary>Plans the neighborhood's Healing Shrines: one Ground cell in GroundCellsPerHealingShrine, anywhere but on a wall -- lava included.</summary>
@@ -434,14 +421,14 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
 
     /// <summary>
     /// Terrain (the floor an entity stands on) is a cell, not an entity -- see TerrainDefinition.
-    /// The sprite variant is rolled here, once, the way a blueprint used to roll its sprite.
+    /// How it looks is picked from the cell's seed (CellSeeds), never rolled here, so the layout doesn't depend on the art.
     /// </summary>
-    private void BuildTerrain(NeighborhoodLayout neighborhoodLayout, MathUtility layoutRolls, ushort terrainTypeId, int column, int row, TerrainLayer terrainLayer) =>
-        neighborhoodLayout.SetTerrain(column, row, terrainLayer, _terrain.CreateCell(terrainTypeId, layoutRolls));
+    private static void BuildTerrain(NeighborhoodLayout neighborhoodLayout, ushort terrainTypeId, int column, int row, TerrainLayer terrainLayer) =>
+        neighborhoodLayout.SetTerrain(column, row, terrainLayer, new TerrainCell(terrainTypeId));
 
     /// <summary>A wall is a structure cell, not an entity -- the same flyweight as terrain, on its own MapLayer store.</summary>
-    private void BuildWall(NeighborhoodLayout neighborhoodLayout, MathUtility layoutRolls, int column, int row, MapLayer mapLayer) =>
-        neighborhoodLayout.SetStructure(new Vector3Int(column, row, (int)mapLayer), _terrain.CreateCell(_stoneWall, layoutRolls));
+    private void BuildWall(NeighborhoodLayout neighborhoodLayout, int column, int row, MapLayer mapLayer) =>
+        neighborhoodLayout.SetStructure(new Vector3Int(column, row, (int)mapLayer), new TerrainCell(_stoneWall));
 
     /// <summary>Lava 1%, dirt 39%, grass 60% -- a 0-99 roll.</summary>
     private ushort PickGroundTerrain(MathUtility layoutRolls)

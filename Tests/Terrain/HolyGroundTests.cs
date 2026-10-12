@@ -80,7 +80,7 @@ public sealed class HolyGroundTests
         var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(HolyGroundPosition);
         var holyGroundTypeId = build.Context.Terrain.GetId(BuiltInTerrain.HolyGroundKey);
-        build.World.PopulateTerrain(HolyGroundPosition.X, HolyGroundPosition.Y, TerrainLayer.Ground, new TerrainCell(holyGroundTypeId, 0));
+        build.World.PopulateTerrain(HolyGroundPosition.X, HolyGroundPosition.Y, TerrainLayer.Ground, new TerrainCell(holyGroundTypeId));
         return new Session(build, holyGroundTypeId);
     }
 

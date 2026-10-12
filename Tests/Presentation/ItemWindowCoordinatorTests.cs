@@ -65,7 +65,7 @@ public sealed class ItemWindowCoordinatorTests
 
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
-        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var spriteRenderer = new SpriteRenderer();
         var elementPool = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var layers = new UiLayerStack();

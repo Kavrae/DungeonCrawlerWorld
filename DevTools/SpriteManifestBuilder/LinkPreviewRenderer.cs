@@ -2,7 +2,7 @@ namespace SpriteManifestBuilder;
 
 /// <summary>A wall's face, as the link preview draws it under the top: a Horizontal set of standalone, left, right and middle pieces.</summary>
 /// <param name="HeightRows">Rows the face covers; the top sits on the tile above them.</param>
-public sealed record WallFacePreview(ManifestCell?[] Slots, int? PixelsPerTile, Func<ManifestCell, Point> PivotFor, int HeightRows);
+public sealed record WallFacePreview(SpriteManifestCell?[] Slots, int? PixelsPerTile, Func<SpriteManifestCell, Point> PivotFor, int HeightRows);
 
 /// <summary>
 /// Draws a fixed test layout of walls with a linked set's pieces, chosen by the same masks the game uses, so a wrong piece shows before saving.
@@ -35,7 +35,7 @@ public static class LinkPreviewRenderer
 
     /// <param name="topPivotFor">The pivot a top piece is placed by, in its source pixels.</param>
     /// <param name="face">The wall's face, or null to preview a plain linked set on its own tiles.</param>
-    public static void Paint(Graphics graphics, Size canvasSize, ManifestCell?[] topSlots, int? topPixelsPerTile, Func<ManifestCell, Point> topPivotFor, WallFacePreview? face, SheetImageCache sheets)
+    public static void Paint(Graphics graphics, Size canvasSize, SpriteManifestCell?[] topSlots, int? topPixelsPerTile, Func<SpriteManifestCell, Point> topPivotFor, WallFacePreview? face, SheetImageCache sheets)
     {
         var tilePixels = Math.Max(1, Math.Min(canvasSize.Width / TestLayout[0].Length, canvasSize.Height / TestLayout.Length));
         var raisedRows = face?.HeightRows ?? 0;
@@ -54,14 +54,14 @@ public static class LinkPreviewRenderer
 
                 if (face is not null && !IsWall(x, y + 1) && LinkLayout.Horizontal.PieceFor(face.Slots, LinkLayout.Horizontal.Compute(IsWall, x, y)) is { } facePiece)
                 {
-                    var faceTiles = SpritePlacementRules.DrawnTiles(facePiece.SourceRectangle.Size, face.PixelsPerTile, face.PivotFor(facePiece), 1);
+                    var faceTiles = SpritePlacementRules.DrawnTiles(facePiece.SourceSize(), face.PixelsPerTile, face.PivotFor(facePiece), 1);
                     CellDrawing.Draw(graphics, sheets, facePiece, ToPixels(faceTiles, x, y, tilePixels));
                 }
 
                 var topPiece = LinkLayout.Cardinal.PieceFor(topSlots, LinkLayout.Cardinal.Compute(IsWall, x, y));
                 var topTiles = topPiece is null
                     ? SpritePlacementRules.DrawnTiles(new Size(1, 1), null, Point.Empty, 1, raisedRows)
-                    : SpritePlacementRules.DrawnTiles(topPiece.SourceRectangle.Size, topPixelsPerTile, topPivotFor(topPiece), 1, raisedRows);
+                    : SpritePlacementRules.DrawnTiles(topPiece.SourceSize(), topPixelsPerTile, topPivotFor(topPiece), 1, raisedRows);
                 CellDrawing.Draw(graphics, sheets, topPiece, ToPixels(topTiles, x, y, tilePixels));
             }
         }

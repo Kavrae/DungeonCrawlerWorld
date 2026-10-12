@@ -124,7 +124,7 @@ public sealed class HealthWindowControllerTests
     public void HoveringATerrainSourcedModifierRow_ShowsTheTerrainsName_AndMovingOffHidesIt()
     {
         var harness = BuildHarness();
-        var holyGroundId = harness.Terrain.Register(new TerrainDefinition("test:holy", "Holy Ground", "", default, ".", default));
+        var holyGroundId = harness.Terrain.Register(new TerrainDefinition("test:holy", "Holy Ground", "", ".", default));
         harness.ComponentManager.GetMultiPool<StatModifierComponent>().Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.FromTerrain(holyGroundId)));
         var window = OpenWindow(harness);

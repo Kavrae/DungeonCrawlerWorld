@@ -3,11 +3,15 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Presentation.Rendering;
 
 /// <summary>
-/// Loads and caches spritesheet textures by relative path. Mirrors FontService's directory/
-/// AppContext.BaseDirectory resolution convention. Construction does no I/O and never touches
-/// graphicsDevice -- both happen lazily inside GetTexture, on first request for a given path --
-/// so this type is safe to construct in headless tests that never call GetTexture.
+/// Where sprites come from: the manifest that turns a sprite name into its cell (Sprites), and
+/// the spritesheet textures those cells are cut from, loaded and cached by relative path.
 /// </summary>
+/// <remarks>
+/// Mirrors FontService's directory/AppContext.BaseDirectory resolution convention. Construction
+/// does no texture I/O and never touches graphicsDevice -- both happen lazily inside GetTexture,
+/// on first request for a given path -- so this type is safe to construct in headless tests that
+/// never call GetTexture.
+/// </remarks>
 public sealed class SpriteSheetService
 {
     private readonly GraphicsDevice? _graphicsDevice;
@@ -24,13 +28,18 @@ public sealed class SpriteSheetService
     /// Resolved against <see cref="AppContext.BaseDirectory"/> rather than the process's
     /// current working directory, same as FontService's fontsDirectory.
     /// </param>
-    public SpriteSheetService(GraphicsDevice? graphicsDevice, string spritesheetsDirectory)
+    /// <param name="sprites">The loaded sprite manifest every sprite name is looked up in.</param>
+    public SpriteSheetService(GraphicsDevice? graphicsDevice, string spritesheetsDirectory, SpriteManifestResolver sprites)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(spritesheetsDirectory);
 
         _graphicsDevice = graphicsDevice;
         _spritesheetsDirectory = spritesheetsDirectory;
+        Sprites = sprites;
     }
+
+    /// <summary>The loaded sprite manifest: a sprite name to the cell it draws as.</summary>
+    public SpriteManifestResolver Sprites { get; }
 
     public Texture2D GetTexture(string relativePath)
     {

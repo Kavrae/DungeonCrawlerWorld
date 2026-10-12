@@ -35,7 +35,7 @@ public sealed class ActionSourceNamingTests
     public void Describe_Terrain_IsTheTerrainsName()
     {
         var terrain = new TerrainRegistry();
-        var holyGroundId = terrain.Register(new TerrainDefinition("test:holy", "Holy Ground", "", default, ".", default));
+        var holyGroundId = terrain.Register(new TerrainDefinition("test:holy", "Holy Ground", "", ".", default));
 
         Assert.AreEqual("Holy Ground", TestActionSources.Naming(terrain).Describe(ActionSource.FromTerrain(holyGroundId)));
     }
@@ -62,11 +62,11 @@ public sealed class ActionSourceNamingTests
     public void Describe_TerrainRegisteredAgainUnderTheSameKey_IsTheNewName()
     {
         var terrain = new TerrainRegistry();
-        var terrainId = terrain.Register(new TerrainDefinition("test:holy", "Holy Ground", "", default, ".", default));
+        var terrainId = terrain.Register(new TerrainDefinition("test:holy", "Holy Ground", "", ".", default));
         var naming = TestActionSources.Naming(terrain);
         var source = ActionSource.FromTerrain(terrainId);
 
-        terrain.Register(new TerrainDefinition("test:holy", "Hallowed Ground", "", default, ".", default));
+        terrain.Register(new TerrainDefinition("test:holy", "Hallowed Ground", "", ".", default));
 
         Assert.AreEqual("Hallowed Ground", naming.Describe(source));
     }

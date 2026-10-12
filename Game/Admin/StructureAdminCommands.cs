@@ -36,7 +36,7 @@ public sealed class StructureAdminCommands(World.World world)
         return true;
     }
 
-    /// <summary>Builds a stone wall at position, its variant rolled from the position so the same tile always gets the same look; false when CanBuildStoneWall refuses.</summary>
+    /// <summary>Builds a stone wall at position (its look comes from the cell's seed, so the same tile always gets the same one); false when CanBuildStoneWall refuses.</summary>
     public bool TryBuildStoneWall(Vector3Int position)
     {
         if (!CanBuildStoneWall(position, out _))
@@ -45,8 +45,7 @@ public sealed class StructureAdminCommands(World.World world)
         }
 
         var stoneWall = world.Terrain.GetId(BuiltInTerrain.StoneWallKey);
-        var variantRolls = VariantRollsFor(position);
-        world.SetStructure(position, world.Terrain.CreateCell(stoneWall, variantRolls));
+        world.SetStructure(position, new TerrainCell(stoneWall));
         return true;
     }
 
@@ -67,13 +66,9 @@ public sealed class StructureAdminCommands(World.World world)
         if (World.Map.TerrainLayerFor(position.Z) is { } terrainLayer)
         {
             var grass = world.Terrain.GetId(BuiltInTerrain.GrassKey);
-            world.SetTerrain(position.X, position.Y, terrainLayer, world.Terrain.CreateCell(grass, VariantRollsFor(position)));
+            world.SetTerrain(position.X, position.Y, terrainLayer, new TerrainCell(grass));
         }
 
         return true;
     }
-
-    /// <summary>A variant roll seeded by the tile, so the same tile always gets the same look.</summary>
-    private static MathUtility VariantRollsFor(Vector3Int position) =>
-        new(new Random(HashCode.Combine(position.X, position.Y, position.Z)));
 }

@@ -85,7 +85,7 @@ public sealed class AuraSystemTests
         }
 
         public int GetEntityIdAt(Vector3Int position) => _occupantByPosition.TryGetValue((position.X, position.Y, position.Z), out var id) ? id : -1;
-        public void SetTerrain(Vector3Int position, ushort terrainTypeId) => _terrainByPosition[(position.X, position.Y, position.Z)] = new TerrainCell(terrainTypeId, 0);
+        public void SetTerrain(Vector3Int position, ushort terrainTypeId) => _terrainByPosition[(position.X, position.Y, position.Z)] = new TerrainCell(terrainTypeId);
 
         public TerrainCell GetTerrainAt(Vector3Int position) => _terrainByPosition.TryGetValue((position.X, position.Y, position.Z), out var cell) ? cell : default;
 
@@ -311,7 +311,7 @@ public sealed class AuraSystemTests
     {
         var terrain = new TerrainRegistry();
         var typeId = terrain.Register(new TerrainDefinition(
-            "test:glowing", "Glowing", "", default, "~", default,
+            "test:glowing", "Glowing", "", "~", default,
             Aura: new TerrainAura(TestAuras.Burning, 8, 3)));
         return (terrain, typeId);
     }

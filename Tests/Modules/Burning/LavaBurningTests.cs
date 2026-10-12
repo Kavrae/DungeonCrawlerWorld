@@ -65,7 +65,7 @@ public sealed class LavaBurningTests
     {
         var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(LavaPosition);
-        build.World.PopulateTerrain(LavaPosition.X, LavaPosition.Y, TerrainLayer.Ground, new TerrainCell(build.Context.Terrain.GetId(BuiltInTerrain.LavaKey), 0));
+        build.World.PopulateTerrain(LavaPosition.X, LavaPosition.Y, TerrainLayer.Ground, new TerrainCell(build.Context.Terrain.GetId(BuiltInTerrain.LavaKey)));
 
         var position = new Vector3Int(LavaPosition.X + tilesEastOfLava, LavaPosition.Y, LavaPosition.Z);
         var entityId = build.Factory.Spawn(SpawnRequest.At(build.Context.Definitions.GetId(Goblin.Id), position) with { Seed = 1 });

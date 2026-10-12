@@ -150,12 +150,13 @@ public sealed class Map
             throw new InvalidOperationException($"Neighborhood ({cellX}, {cellY}) is already loaded.");
         }
 
-        LoadNeighborhood(CreateLayout(cellX, cellY));
+        LoadNeighborhood(CreateLayout(cellX, cellY, layoutSeed: 0));
     }
 
     /// <summary>New, empty stores for neighborhood (cellX, cellY), not yet part of the map -- to be filled, on any thread, and handed to LoadNeighborhood.</summary>
     /// <remarks>Reads only what never changes about the map (its depth and declared rectangle), so it is safe off the main thread.</remarks>
-    public NeighborhoodLayout CreateLayout(int cellX, int cellY)
+    /// <param name="layoutSeed">The seed the layout is generated from, which every cell's look is picked from (CellSeeds).</param>
+    public NeighborhoodLayout CreateLayout(int cellX, int cellY, int layoutSeed)
     {
         var neighborhoodWidth = Neighborhoods.SizeTiles;
         var neighborhoodHeight = Neighborhoods.SizeTiles;
@@ -169,7 +170,7 @@ public sealed class Map
             }
         }
 
-        return new NeighborhoodLayout(cellX, cellY, new MapNeighborhood(neighborhoodWidth, neighborhoodHeight, _depth));
+        return new NeighborhoodLayout(cellX, cellY, new MapNeighborhood(neighborhoodWidth, neighborhoodHeight, _depth, layoutSeed));
     }
 
     /// <summary>Loads layout's neighborhood with layout's terrain and structures.</summary>
@@ -191,9 +192,8 @@ public sealed class Map
             }
 
             layoutCellStores.TerrainTypeIds.CopyTo(loadedCellStores.TerrainTypeIds, 0);
-            layoutCellStores.TerrainVariants.CopyTo(loadedCellStores.TerrainVariants, 0);
             layoutCellStores.StructureTypeIds.CopyTo(loadedCellStores.StructureTypeIds, 0);
-            layoutCellStores.StructureVariants.CopyTo(loadedCellStores.StructureVariants, 0);
+            loadedCellStores.LayoutSeed = layoutCellStores.LayoutSeed;
             return;
         }
 
@@ -482,7 +482,7 @@ public sealed class Map
         }
 
         var index = TerrainIndex(neighborhood, x, y, terrainLayer);
-        return new TerrainCell(neighborhood.TerrainTypeIds[index], neighborhood.TerrainVariants[index]);
+        return new TerrainCell(neighborhood.TerrainTypeIds[index]);
     }
 
     /// <summary>Writes the terrain at (x, y) on terrainLayer. Map stores only; World.SetTerrain is what tells anyone.</summary>
@@ -491,8 +491,11 @@ public sealed class Map
         var neighborhood = LoadedNeighborhoodAt(x, y);
         var index = TerrainIndex(neighborhood, x, y, terrainLayer);
         neighborhood.TerrainTypeIds[index] = cell.TypeId;
-        neighborhood.TerrainVariants[index] = cell.Variant;
     }
+
+    /// <summary>The seed the look of the terrain at (x, y) on terrainLayer is picked from (CellSeeds); 0 where the neighborhood is unloaded.</summary>
+    public uint GetTerrainSeed(int x, int y, TerrainLayer terrainLayer) =>
+        NeighborhoodAt(x, y) is { } neighborhood ? CellSeeds.ForTerrain(neighborhood.LayoutSeed, x, y, terrainLayer) : 0;
 
     /// <summary>The structure at position -- an empty cell where nothing was set or the neighborhood is unloaded.</summary>
     public TerrainCell GetStructure(Vector3Int position)
@@ -504,10 +507,10 @@ public sealed class Map
         }
 
         var index = CellIndex(neighborhood, position);
-        return new TerrainCell(neighborhood.StructureTypeIds[index], neighborhood.StructureVariants[index]);
+        return new TerrainCell(neighborhood.StructureTypeIds[index]);
     }
 
-    /// <summary>The structure's type id at position, without its variant, for the blocking check.</summary>
+    /// <summary>The structure's type id at position, for the blocking check.</summary>
     public ushort GetStructureTypeId(Vector3Int position)
     {
         var neighborhood = NeighborhoodAt(position.X, position.Y);
@@ -525,7 +528,52 @@ public sealed class Map
         var neighborhood = LoadedNeighborhoodAt(position.X, position.Y);
         var index = CellIndex(neighborhood, position);
         neighborhood.StructureTypeIds[index] = cell.TypeId;
-        neighborhood.StructureVariants[index] = cell.Variant;
+    }
+
+    /// <summary>The seed the look of the structure at position is picked from (CellSeeds), its face and top alike; 0 where the neighborhood is unloaded.</summary>
+    public uint GetStructureSeed(Vector3Int position) =>
+        NeighborhoodAt(position.X, position.Y) is { } neighborhood ? CellSeeds.ForStructure(neighborhood.LayoutSeed, position.X, position.Y, position.Z) : 0;
+
+    /// <summary>Copies the cells of a rectangle on mapLayer into cells: terrain and structure type ids, their seeds, and which cells are on the map.</summary>
+    /// <remarks>Finds each neighborhood once per row segment it covers rather than once per cell, and allocates nothing once cells is as large as the rectangle.</remarks>
+    public void CopyCells(int minX, int minY, int width, int height, int mapLayer, MapCellBuffer cells)
+    {
+        cells.Reset(minX, minY, width, height, mapLayer);
+        if ((uint)mapLayer >= (uint)_depth)
+        {
+            return;
+        }
+
+        var terrainLayer = TerrainLayerFor(mapLayer);
+        var maxX = minX + width;
+        for (var row = 0; row < height; row++)
+        {
+            var y = minY + row;
+            var x = minX;
+            while (x < maxX)
+            {
+                var segmentEnd = System.Math.Min(maxX, Neighborhoods.OriginOf(Neighborhoods.CellOf(x) + 1));
+                if (NeighborhoodAt(x, y) is { } neighborhood && (y & CellMask) < neighborhood.Height)
+                {
+                    var neighborhoodEnd = System.Math.Min(segmentEnd, Neighborhoods.OriginOf(Neighborhoods.CellOf(x)) + neighborhood.Width);
+                    var structureBase = mapLayer * neighborhood.PlaneSize;
+                    for (; x < neighborhoodEnd; x++)
+                    {
+                        var columnIndex = ColumnIndex(neighborhood, x, y);
+                        var terrainTypeId = terrainLayer is { } floor ? neighborhood.TerrainTypeIds[columnIndex + (int)floor * neighborhood.PlaneSize] : (ushort)0;
+                        var terrainSeed = terrainLayer is { } seededFloor ? CellSeeds.ForTerrain(neighborhood.LayoutSeed, x, y, seededFloor) : 0;
+                        cells.Write(
+                            (x - minX) + row * width,
+                            terrainTypeId,
+                            terrainSeed,
+                            neighborhood.StructureTypeIds[columnIndex + structureBase],
+                            CellSeeds.ForStructure(neighborhood.LayoutSeed, x, y, mapLayer));
+                    }
+                }
+
+                x = segmentEnd;
+            }
+        }
     }
 
     /// <summary>Maps a MapLayer to its corresponding TerrainLayer, if any.</summary>

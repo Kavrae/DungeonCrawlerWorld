@@ -1,51 +1,46 @@
 namespace SpriteManifestBuilder;
 
 /// <summary>
-/// One kind of linked set: how many slots it has, how the slot grid lays them out, what each mask means, which piece an
-/// empty slot falls back to, and how a mask changes when its piece is mirrored or turned. Mirrors Game/Sprites/SpriteLinks.cs;
-/// keep the two in sync by hand.
+/// One kind of linked set as this tool shows and edits it: how the slot grid lays out its slots, what each mask is called, which
+/// piece is required, and how its masks change when a piece is mirrored or turned (SpriteLinks).
 /// </summary>
 public sealed class LinkLayout
 {
-    /// <summary>A wall's top: 16 slots, one per combination of joined sides (LinkMask). An empty slot falls back to the fully joined piece.</summary>
+    /// <summary>A wall's top: 16 slots, one per combination of joined sides, laid out as a 3x3 room top-left, a vertical run down the right, a horizontal run along the bottom, and the lone pillar in the corner. An empty slot falls back to the fully joined piece.</summary>
     public static readonly LinkLayout Cardinal = new(
         SpriteLinking.Cardinal,
-        LinkMask.SlotCount,
-        LinkMask.DisplayLayout,
-        fallbackMask: LinkMask.North | LinkMask.East | LinkMask.South | LinkMask.West,
+        new[,]
+        {
+            { SpriteLinks.East | SpriteLinks.South, SpriteLinks.East | SpriteLinks.South | SpriteLinks.West, SpriteLinks.South | SpriteLinks.West, SpriteLinks.South },
+            { SpriteLinks.North | SpriteLinks.East | SpriteLinks.South, SpriteLinks.North | SpriteLinks.East | SpriteLinks.South | SpriteLinks.West, SpriteLinks.North | SpriteLinks.South | SpriteLinks.West, SpriteLinks.North | SpriteLinks.South },
+            { SpriteLinks.North | SpriteLinks.East, SpriteLinks.North | SpriteLinks.East | SpriteLinks.West, SpriteLinks.North | SpriteLinks.West, SpriteLinks.North },
+            { SpriteLinks.East, SpriteLinks.East | SpriteLinks.West, SpriteLinks.West, 0 },
+        },
         requiredMask: null,
-        LinkMask.Describe,
-        static mask => ((mask & LinkMask.North) != 0, (mask & LinkMask.East) != 0, (mask & LinkMask.South) != 0, (mask & LinkMask.West) != 0),
-        LinkMask.Compute,
-        mirrorLeftRight: static mask => SwapBits(mask, LinkMask.East, LinkMask.West),
-        mirrorTopBottom: static mask => SwapBits(mask, LinkMask.North, LinkMask.South),
-        turnClockwise: static mask =>
-            ((mask & LinkMask.North) != 0 ? LinkMask.East : 0) |
-            ((mask & LinkMask.East) != 0 ? LinkMask.South : 0) |
-            ((mask & LinkMask.South) != 0 ? LinkMask.West : 0) |
-            ((mask & LinkMask.West) != 0 ? LinkMask.North : 0));
-
-    public const int HorizontalEast = 1;
-    public const int HorizontalWest = 2;
-    public const int Standalone = 0;
+        DescribeCardinal,
+        static mask => ((mask & SpriteLinks.North) != 0, (mask & SpriteLinks.East) != 0, (mask & SpriteLinks.South) != 0, (mask & SpriteLinks.West) != 0),
+        static (isLinked, x, y) =>
+            (isLinked(x, y - 1) ? SpriteLinks.North : 0) |
+            (isLinked(x + 1, y) ? SpriteLinks.East : 0) |
+            (isLinked(x, y + 1) ? SpriteLinks.South : 0) |
+            (isLinked(x - 1, y) ? SpriteLinks.West : 0),
+        mirrorTopBottom: SpriteLinks.MirroredTopBottom,
+        turnClockwise: SpriteLinks.TurnedClockwise);
 
     /// <summary>A wall's face: standalone (no wall either side), left end (a wall only to the east), right end (only to the west) and middle. Only the standalone piece is required; the others fall back to it.</summary>
     public static readonly LinkLayout Horizontal = new(
         SpriteLinking.Horizontal,
-        4,
-        new[,] { { HorizontalEast, HorizontalEast | HorizontalWest, HorizontalWest, Standalone } },
-        fallbackMask: Standalone,
-        requiredMask: Standalone,
+        new[,] { { SpriteLinks.HorizontalEast, SpriteLinks.HorizontalEast | SpriteLinks.HorizontalWest, SpriteLinks.HorizontalWest, SpriteLinks.Standalone } },
+        requiredMask: SpriteLinks.Standalone,
         static mask => mask switch
         {
-            HorizontalEast => "left end",
-            HorizontalWest => "right end",
-            HorizontalEast | HorizontalWest => "middle",
+            SpriteLinks.HorizontalEast => "left end",
+            SpriteLinks.HorizontalWest => "right end",
+            SpriteLinks.HorizontalEast | SpriteLinks.HorizontalWest => "middle",
             _ => "standalone",
         },
-        static mask => (false, (mask & HorizontalEast) != 0, false, (mask & HorizontalWest) != 0),
-        static (isLinked, x, y) => (isLinked(x + 1, y) ? HorizontalEast : 0) | (isLinked(x - 1, y) ? HorizontalWest : 0),
-        mirrorLeftRight: static mask => SwapBits(mask, HorizontalEast, HorizontalWest),
+        static mask => (false, (mask & SpriteLinks.HorizontalEast) != 0, false, (mask & SpriteLinks.HorizontalWest) != 0),
+        static (isLinked, x, y) => (isLinked(x + 1, y) ? SpriteLinks.HorizontalEast : 0) | (isLinked(x - 1, y) ? SpriteLinks.HorizontalWest : 0),
         mirrorTopBottom: null,
         turnClockwise: null);
 
@@ -55,26 +50,23 @@ public sealed class LinkLayout
 
     private LinkLayout(
         SpriteLinking linking,
-        int slotCount,
         int[,] displayLayout,
-        int fallbackMask,
         int? requiredMask,
         Func<int, string> describe,
         Func<int, (bool North, bool East, bool South, bool West)> sidesOf,
         Func<Func<int, int, bool>, int, int, int> compute,
-        Func<int, int> mirrorLeftRight,
         Func<int, int>? mirrorTopBottom,
         Func<int, int>? turnClockwise)
     {
         Linking = linking;
-        SlotCount = slotCount;
+        SlotCount = SpriteLinks.CellsPerSet(linking);
         DisplayLayout = displayLayout;
-        FallbackMask = fallbackMask;
+        FallbackMask = SpriteLinks.FallbackMask(linking);
         RequiredMask = requiredMask;
         _describe = describe;
         _sidesOf = sidesOf;
         _compute = compute;
-        MirrorLeftRight = mirrorLeftRight;
+        MirrorLeftRight = mask => SpriteLinks.MirroredLeftRight(linking, mask);
         MirrorTopBottom = mirrorTopBottom;
         TurnClockwise = turnClockwise;
     }
@@ -107,15 +99,39 @@ public sealed class LinkLayout
 
     public (bool North, bool East, bool South, bool West) SidesOf(int mask) => _sidesOf(mask);
 
+    /// <summary>The mask of the piece drawn at (x, y): one bit per side whose neighbour isLinked says joins it.</summary>
     public int Compute(Func<int, int, bool> isLinked, int x, int y) => _compute(isLinked, x, y);
 
     /// <summary>The piece a set draws for mask: its own slot, else the fallback's, else null.</summary>
-    public ManifestCell? PieceFor(ManifestCell?[] slots, int mask) => slots[mask] ?? slots[FallbackMask];
+    public SpriteManifestCell? PieceFor(SpriteManifestCell?[] slots, int mask) => slots[mask] ?? slots[FallbackMask];
 
-    public ManifestCell?[] NewVariantSet() => new ManifestCell?[SlotCount];
+    public SpriteManifestCell?[] NewVariantSet() => new SpriteManifestCell?[SlotCount];
 
-    private static int SwapBits(int mask, int first, int second) =>
-        (mask & ~(first | second)) |
-        ((mask & first) != 0 ? second : 0) |
-        ((mask & second) != 0 ? first : 0);
+    private static string DescribeCardinal(int mask)
+    {
+        if (mask == 0)
+        {
+            return "joined nowhere";
+        }
+
+        var sides = new List<string>(4);
+        if ((mask & SpriteLinks.North) != 0)
+        {
+            sides.Add("north");
+        }
+        if ((mask & SpriteLinks.East) != 0)
+        {
+            sides.Add("east");
+        }
+        if ((mask & SpriteLinks.South) != 0)
+        {
+            sides.Add("south");
+        }
+        if ((mask & SpriteLinks.West) != 0)
+        {
+            sides.Add("west");
+        }
+
+        return $"joined {string.Join("+", sides)}";
+    }
 }

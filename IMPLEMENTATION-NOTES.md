@@ -1854,8 +1854,8 @@ RPG Maker, Godot, Unity, Tiled, LDtk) are in `PLAN-tall-sprites-and-wall-tops.md
   shrunk uniformly about its pivot until it fits -- never clipped. No `PixelsPerTile` stretches to the
   footprint, as before.
 - Placement is on the entry, not the cell: every option of an entry shares one canvas layout. It rides on
-  `SpriteView.Placement`, filled for blueprint appearances and terrain; a per-instance `SpriteComponent`
-  override has none. Only the map reads it -- icons always fill their cells.
+  `SpriteView.Placement` (Presentation), resolved from the entry for every sprite, a per-instance
+  `SpriteComponent` override included. Only the map reads it -- icons always fill their cells.
 - The health bar and charging badge sit at the drawn sprite's top (never lower than the footprint's); the
   loot badge and dodge glow stay on the footprint.
 
@@ -1880,22 +1880,56 @@ RPG Maker, Godot, Unity, Tiled, LDtk) are in `PLAN-tall-sprites-and-wall-tops.md
 - Overhangs over the player's drawn sprite -- and the inspected entity's, in Detail or Admin inspection --
   draw at 0.7 alpha (`OverhangFade`), instantly. 0.4 read as too faint in game.
 
-**Joining** (`StructureLinks`, computed in `MapViewQuery`).
+**Joining** (the group is Game's, the mask Presentation's: `MapTerrainCells`).
 - A top's piece comes from the wall's four neighbours (north 1, east 2, south 4, west 8), a face's from left
   and right (east 1, west 2). A neighbour joins when it is a structure in the same link group
-  (`TerrainRegistry.GetLinkGroup`: the wall entry's top group, interned to an int), or off the loaded map --
-  so a wall running off the map or into an unloaded neighborhood never shows an end cap that would pop.
-- The mask is computed, never stored in `TerrainCell`: neighbours change after a cell's variant is rolled,
-  and a stored mask would need fixing at every structure write. It is worked out only when the cached image
-  is rebuilt. Read from the wall's own neighbours, not the tile its top is drawn on.
+  (`TerrainRegistry.GetLinkGroup`: the definition's `LinkGroup`, else its `SpriteName`, else its key,
+  interned to an int), or off the loaded map -- so a wall running off the map or into an unloaded
+  neighborhood never shows an end cap that would pop. Which structures belong together is content; which
+  picture that makes a wall draw is a display rule.
+- The mask is computed, never stored: neighbours change after a cell is written, and a stored mask would
+  need fixing at every structure write. It is worked out only when the cached image is rebuilt, from the
+  copied cell buffer. Read from the wall's own neighbours, not the tile its top is drawn on.
 - An empty slot falls back (`SpriteLinks.CellIndexFor`): a face to its standalone piece (the one required
   piece), a top to its fully joined one.
-- Variant sets (`SpriteLinks.SetIndexFor`): with no chances saved, `TerrainCell.Variant % sets` picks one,
-  separately for face and top. A linked part may give each set a chance in whole percent
-  (`VariantWeights`, adding up to 100, checked at load and refused at the builder's Save); a type with any
-  chances rolls a percentile (0..99) into the variant instead, and each part maps it through its own
-  cumulative chances. Face and top read the same roll, so matching chances pick matching sets. An even
-  split is saved as no chances, so types without chances keep their old rolls and seeded worlds don't move.
+- Variant sets (`SpriteLinks.SetIndexFor`): with no chances saved, the cell's seed modulo the larger set
+  count picks the variant, and each part wraps it by its own set count. A linked part may give each set a
+  chance in whole percent (`VariantWeights`, adding up to 100, checked at load and refused at the builder's
+  Save); a type with any chances reduces the seed to a percentile (0..99) instead, and each part maps it
+  through its own cumulative chances. Face and top read the same seed, so matching chances pick matching
+  sets.
+
+**Variants are seeds, not rolls.** A cell's look is picked from `Game.World.CellSeeds` -- a hash of its
+neighborhood's `LayoutSeed`, its position and its store (terrain per `TerrainLayer`, structures per
+`MapLayer`) -- computed on read; nothing is stored per cell (the variant bytes were 5 MiB per neighborhood,
+~46 MB live at startup). Generation never asks how many pictures a terrain has, so adding art never shifts a
+seeded world, and a tile looks the same on every visit and after an admin edit. An entity's variant comes
+from its spawn record's seed through the same hash it always had (`SpriteManifestResolver.TryGetForEntity`),
+so creatures kept their looks when it moved out of Game.
+
+**Where the manifest lives** (`PLAN-sprite-format-and-manifest-out-of-game.md`).
+- `SpriteFormat` (root project, no references) holds the format and its rules; Presentation loads the file
+  into `SpriteManifestResolver` (`SpriteSheetService.Sprites`); Game only names sprites and hands out seeds,
+  and never references the library. Views carry a sprite name and seed (`EntityVisualView`,
+  `TerrainVisualView`, `ChargingActionView`), never a picture.
+- **One model, edited and loaded, no translation file.** Researched against Unreal (editor-only data stripped
+  on cook), Unity (source assets + `.meta`, imported artifacts never checked in; editor-only fields on a
+  serialized type cause layout mismatches), Godot (`.import`) and Bevy (asset processor): engines translate
+  foreign or heavy formats, and load their own data assets as edited. So fields only a tool reads are allowed
+  on the records when they are content the next edit needs (spans, an unfinished set's empty slots); editor
+  state (layout, zoom, selection) goes in user settings or a sidecar, never a content file; the runtime shape
+  is built in memory at load. The same rule applies to every IDE tab's content.
+- A sprite name the manifest lacks draws its glyph and is reported once at startup (`MissingSpriteCheck`,
+  `Console.Error`); it is never a build failure, since a mod's trial build can't see the manifest. Built-in
+  actions awaiting art: QuickAttack, PowerAttack, Dodge, Wand (`MissingSpriteCheckTests` pins the list).
+- A terrain's sprite is its background: there is no colour wash under any tile and no entity background.
+  Terrain without a sprite (lava, Holy Ground, stone floor) shows its glyph, if any, on the map's flat fill
+  under its aura's glow.
+- The terrain image reads an area: `MapTerrainCells` copies the grid plus a margin through
+  `IMapViewQuery.CopyCells` once per rebuild and resolves looks per type id. Measured on a seeded 256x160
+  map, one rebuild's reads went 0.62 -> 0.34 ms (48x28 grid) and 3.68 -> 2.10 ms (180x100) in Release; the
+  benchmark can't see it (its player never moves the camera), so the "Map / Terrain cache rebuild" frame
+  cost is for the F3 window.
 - Inner corners use the plain piece (4 bits can't see diagonals); the 47-piece blob set is the upgrade path.
 
 **Turns, flips and tints** (per manifest cell).
@@ -1904,17 +1938,18 @@ RPG Maker, Godot, Unity, Tiled, LDtk) are in `PLAN-tall-sprites-and-wall-tops.md
   (`TransformedDrawArguments`). Quarter turns need a square cell. Both flips are written as a 180 turn.
 - `Tint` (`#RRGGBB`/`#RRGGBBAA`) is multiplied into whatever tint the sprite draws with. An option's cells
   share one; a linked set's tint is per variant set, written onto each of its cells, so the game reads one
-  per cell. Icons read turns and tints too (`SpriteViews.TryGetFirst`).
+  per cell. Icons read turns and tints too (`SpriteManifestResolver.TryGetFirst`).
 
 **The manifest file and the builder.**
 - Everything new is omitted when unset, so an untouched entry re-saves byte for byte; the builder replaces
   an edited entry where it stands. Unfinished linked sets save with `null` empty slots and load; cells that
   don't fit their part's span are marked, not refused. The builder writes each part's span as authoring
-  state the game skips.
-- The builder mirrors the game's records and rules by hand (no project reference): reach check and message,
-  placement clamp, link masks, tint parsing. Keep the two in sync.
-- `Tests/Sprites/SpriteManifestFormatTests` parses the checked-in `Content/SpriteManifest.json`, which
-  catches a builder that wrote a shape the game can't read.
+  state the game ignores.
+- The builder references `SpriteFormat` and nothing else: the same records, JSON, reach check and message,
+  placement and link masks the game loads with, and Save runs the game's own load check last. Link groups
+  are not in the manifest (they are `TerrainDefinition.LinkGroup`); an old file's `LinkGroup` is dropped.
+- `Tests/SpriteManifestFormat` parses the checked-in `Content/SpriteManifest.json` and re-serializes it
+  byte for byte.
 
 ## Pause modality
 

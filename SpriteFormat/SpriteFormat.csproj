@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The sprite manifest's format and rules: the model and its JSON, the load checks, the reach box, linked-set
+    masks, placement in tiles and the tint text. No package or project references, so the game's Presentation,
+    the tests and DevTools/SpriteManifestBuilder (WinForms) all share it. Game never references it: Game only
+    names sprites.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

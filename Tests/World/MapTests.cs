@@ -63,13 +63,13 @@ public sealed class MapTests
     }
 
     [TestMethod]
-    public void SetTerrain_ThenGetTerrain_RoundTripsTypeAndVariant()
+    public void SetTerrain_ThenGetTerrain_RoundTripsTheType()
     {
         var map = new Map(new Vector3Int(3, 3, 3));
 
-        map.SetTerrain(1, 1, TerrainLayer.Ground, new TerrainCell(4, 2));
+        map.SetTerrain(1, 1, TerrainLayer.Ground, new TerrainCell(4));
 
-        Assert.AreEqual(new TerrainCell(4, 2), map.GetTerrain(1, 1, TerrainLayer.Ground));
+        Assert.AreEqual(new TerrainCell(4), map.GetTerrain(1, 1, TerrainLayer.Ground));
     }
 
     /// <summary>Terrain and creature occupancy are independent stores, so a wall standing on stone floor at the same (x,y) disturbs neither.</summary>
@@ -78,10 +78,10 @@ public sealed class MapTests
     {
         var map = new Map(new Vector3Int(3, 3, 3));
 
-        map.SetTerrain(1, 1, TerrainLayer.Ground, new TerrainCell(4, 0)); // e.g. StoneFloor.
+        map.SetTerrain(1, 1, TerrainLayer.Ground, new TerrainCell(4)); // e.g. StoneFloor.
         map.SetBlockingEntityId(new Vector3Int(1, 1, (int)MapLayer.Ground), 9); // e.g. Wall.
 
-        Assert.AreEqual(new TerrainCell(4, 0), map.GetTerrain(1, 1, TerrainLayer.Ground));
+        Assert.AreEqual(new TerrainCell(4), map.GetTerrain(1, 1, TerrainLayer.Ground));
         Assert.AreEqual(9, map.GetBlockingEntityId(new Vector3Int(1, 1, (int)MapLayer.Ground)));
     }
 
@@ -91,13 +91,13 @@ public sealed class MapTests
         var map = new Map(new Vector3Int(3, 3, 3));
         var groundCell = new Vector3Int(1, 1, (int)MapLayer.Ground);
 
-        map.SetTerrain(1, 1, TerrainLayer.Ground, new TerrainCell(4, 0));
+        map.SetTerrain(1, 1, TerrainLayer.Ground, new TerrainCell(4));
         map.SetBlockingEntityId(groundCell, 9);
-        map.SetStructure(groundCell, new TerrainCell(5, 2));
+        map.SetStructure(groundCell, new TerrainCell(5));
 
-        Assert.AreEqual(new TerrainCell(5, 2), map.GetStructure(groundCell));
+        Assert.AreEqual(new TerrainCell(5), map.GetStructure(groundCell));
         Assert.AreEqual((ushort)5, map.GetStructureTypeId(groundCell));
-        Assert.AreEqual(new TerrainCell(4, 0), map.GetTerrain(1, 1, TerrainLayer.Ground));
+        Assert.AreEqual(new TerrainCell(4), map.GetTerrain(1, 1, TerrainLayer.Ground));
         Assert.AreEqual(9, map.GetBlockingEntityId(groundCell));
         Assert.IsTrue(map.GetStructure(new Vector3Int(1, 1, (int)MapLayer.Flying)).IsEmpty);
     }
@@ -113,15 +113,15 @@ public sealed class MapTests
         {
             map.SetBlockingEntityId(cells[i], 100 + i);
             map.AddOccupantEntityId(cells[i], 200 + i);
-            map.SetStructure(cells[i], new TerrainCell((ushort)(300 + i), (byte)i));
-            map.SetTerrain(cells[i].X, cells[i].Y, TerrainLayer.Ground, new TerrainCell((ushort)(400 + i), 0));
+            map.SetStructure(cells[i], new TerrainCell((ushort)(300 + i)));
+            map.SetTerrain(cells[i].X, cells[i].Y, TerrainLayer.Ground, new TerrainCell((ushort)(400 + i)));
         }
 
         for (var i = 0; i < cells.Length; i++)
         {
             Assert.AreEqual(100 + i, map.GetBlockingEntityId(cells[i]));
             CollectionAssert.AreEqual(new[] { 200 + i }, map.GetOccupantEntityIdsAt(cells[i]).ToArray());
-            Assert.AreEqual(new TerrainCell((ushort)(300 + i), (byte)i), map.GetStructure(cells[i]));
+            Assert.AreEqual(new TerrainCell((ushort)(300 + i)), map.GetStructure(cells[i]));
             Assert.AreEqual((ushort)(400 + i), map.GetTerrain(cells[i].X, cells[i].Y, TerrainLayer.Ground).TypeId);
         }
 
@@ -148,8 +148,8 @@ public sealed class MapTests
     {
         var map = new Map(new Vector3Int(3, 3, 3));
 
-        map.SetTerrain(1, 1, TerrainLayer.UnderGround, new TerrainCell(1, 0));
-        map.SetTerrain(1, 1, TerrainLayer.Ground, new TerrainCell(2, 0));
+        map.SetTerrain(1, 1, TerrainLayer.UnderGround, new TerrainCell(1));
+        map.SetTerrain(1, 1, TerrainLayer.Ground, new TerrainCell(2));
 
         Assert.AreEqual((ushort)1, map.GetTerrain(1, 1, TerrainLayer.UnderGround).TypeId);
         Assert.AreEqual((ushort)2, map.GetTerrain(1, 1, TerrainLayer.Ground).TypeId);
@@ -166,15 +166,15 @@ public sealed class MapTests
         {
             map.SetBlockingEntityId(cells[i], 100 + i);
             map.AddOccupantEntityId(cells[i], 200 + i);
-            map.SetStructure(cells[i], new TerrainCell((ushort)(300 + i), (byte)i));
-            map.SetTerrain(cells[i].X, cells[i].Y, TerrainLayer.Ground, new TerrainCell((ushort)(400 + i), 0));
+            map.SetStructure(cells[i], new TerrainCell((ushort)(300 + i)));
+            map.SetTerrain(cells[i].X, cells[i].Y, TerrainLayer.Ground, new TerrainCell((ushort)(400 + i)));
         }
 
         for (var i = 0; i < cells.Length; i++)
         {
             Assert.AreEqual(100 + i, map.GetBlockingEntityId(cells[i]));
             CollectionAssert.AreEqual(new[] { 200 + i }, map.GetOccupantEntityIdsAt(cells[i]).ToArray());
-            Assert.AreEqual(new TerrainCell((ushort)(300 + i), (byte)i), map.GetStructure(cells[i]));
+            Assert.AreEqual(new TerrainCell((ushort)(300 + i)), map.GetStructure(cells[i]));
             Assert.AreEqual((ushort)(400 + i), map.GetTerrain(cells[i].X, cells[i].Y, TerrainLayer.Ground).TypeId);
         }
 
@@ -207,7 +207,7 @@ public sealed class MapTests
         var cell = new Vector3Int(-5, 5, 1);
         map.SetBlockingEntityId(cell, 7);
         map.AddOccupantEntityId(cell, 7);
-        map.SetTerrain(cell.X, cell.Y, TerrainLayer.Ground, new TerrainCell(3, 0));
+        map.SetTerrain(cell.X, cell.Y, TerrainLayer.Ground, new TerrainCell(3));
 
         map.UnloadNeighborhood(-1, 0);
 

@@ -464,6 +464,13 @@ public sealed class World(
     public TerrainCell GetTerrainAt(Vector3Int position) =>
         Map.TerrainLayerFor(position.Z) is { } terrainLayer && IsOnMap(position) ? Map.GetTerrain(position.X, position.Y, terrainLayer) : default;
 
+    /// <summary>The seed the look of the terrain under MapLayer position.Z at position is picked from (CellSeeds); 0 off the map or on a layer with no floor.</summary>
+    public uint GetTerrainSeedAt(Vector3Int position) =>
+        Map.TerrainLayerFor(position.Z) is { } terrainLayer && IsOnMap(position) ? Map.GetTerrainSeed(position.X, position.Y, terrainLayer) : 0;
+
+    /// <summary>The seed the look of the structure at position is picked from (CellSeeds); 0 off the map.</summary>
+    public uint GetStructureSeedAt(Vector3Int position) => IsOnMap(position) ? Map.GetStructureSeed(position) : 0;
+
     /// <summary>
     /// Row-major (X fastest-varying) batched occupant scan -- box.Size.Z is ignored, every
     /// cell is read at box.Position.Z. One batched call instead of one interface call per

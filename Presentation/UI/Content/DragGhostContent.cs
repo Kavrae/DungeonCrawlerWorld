@@ -1,8 +1,6 @@
 using Game.Modules.Actions;
-using Game.Modules.Core.Components;
 using Game.Modules.Currency;
 using Game.Modules.Inventory;
-using Game.Sprites;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -96,7 +94,7 @@ public sealed class DragGhostContent(
         }
 
         var size = state.SourceSize;
-        SpriteView? sprite = spriteName is not null && SpriteViews.TryGetFirst(spriteName, out var spriteView) ? spriteView : null;
+        SpriteView? sprite = spriteName is not null && spriteSheetService.Sprites.TryGetFirst(spriteName, out var spriteView) ? spriteView : null;
         var font = fontService.GetFont((int)(size.Y * FontChrome.DragGhostGlyphFontFraction));
         var mousePosition = state.CursorPosition;
 

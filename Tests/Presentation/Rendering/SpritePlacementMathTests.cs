@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Engine.Math;
-using Game.Sprites;
+using SpriteFormat;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Rendering;
@@ -61,9 +61,9 @@ public sealed class SpritePlacementMathTests
         var twoByTwo = SpritePlacementMath.DrawnTiles(new Vector2Byte(2, 2), source, placement);
         var oneByTwo = SpritePlacementMath.DrawnTiles(new Vector2Byte(1, 2), source, placement);
 
-        Assert.AreEqual(new SpritePlacementMath.TileArea(0, 0, 1, 1), oneByOne);
-        Assert.AreEqual(new SpritePlacementMath.TileArea(0, 0, 2, 2), twoByTwo);
-        Assert.AreEqual(new SpritePlacementMath.TileArea(0, 0, 1, 2), oneByTwo);
+        Assert.AreEqual(new SpriteTileArea(0, 0, 1, 1), oneByOne);
+        Assert.AreEqual(new SpriteTileArea(0, 0, 2, 2), twoByTwo);
+        Assert.AreEqual(new SpriteTileArea(0, 0, 1, 2), oneByTwo);
     }
 
     [TestMethod]
@@ -75,7 +75,7 @@ public sealed class SpritePlacementMathTests
         var atOneByOne = SpritePlacementMath.DrawnTiles(OneByOne, source, placement);
         var atHuge = SpritePlacementMath.DrawnTiles(new Vector2Byte(3, 3), source, placement);
 
-        Assert.AreEqual(new SpritePlacementMath.TileArea(0, -2, 1, 1), atOneByOne);
+        Assert.AreEqual(new SpriteTileArea(0, -2, 1, 1), atOneByOne);
         Assert.AreEqual(0, atHuge.Top, Tolerance);
         Assert.AreEqual(3, atHuge.Bottom, Tolerance);
         Assert.AreEqual(1, atHuge.Left, Tolerance);
@@ -87,7 +87,7 @@ public sealed class SpritePlacementMathTests
     {
         var area = SpritePlacementMath.DrawnTiles(new Vector2Byte(3, 3), new Point(16, 16), new SpritePlacement(16, 8, 16));
 
-        Assert.AreEqual(new SpritePlacementMath.TileArea(0, 0, 3, 3), area);
+        Assert.AreEqual(new SpriteTileArea(0, 0, 3, 3), area);
     }
 
     /// <summary>The row walk overscans by the reach box, so nothing in the checked-in manifest may draw outside it at any footprint up to Huge.</summary>

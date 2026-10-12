@@ -1,9 +1,10 @@
+using Engine.Diagnostics;
 using Engine.Events;
 using Engine.Math;
 using Engine.Utilities;
 using FontStashSharp;
 using Game.Modules.Actions.Definitions.DirectActions;
-using Game.Sprites;
+using SpriteFormat;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -19,10 +20,10 @@ namespace Presentation.UI;
 
 /// <summary>Displays a scrollable/zoomable viewport onto a single MapLayer of the game map at a time.</summary>
 /// <remarks>
-/// The map-rendering composition root: owns the draw order (background, glyphs/sprites, glow,
+/// The map-rendering composition root: owns the draw order (flat fill, terrain, glyphs/sprites, glow,
 /// targeting/selection highlights) and routes its own input hooks (hotkeys, clicks, right-drag)
-/// to whichever collaborator actually owns that concern -- MapCamera (pan/zoom), MapBackgroundCache
-/// (per-tile background color), AuraGlowView (aura glow), ActionTargetingController (arm/target/
+/// to whichever collaborator actually owns that concern -- MapCamera (pan/zoom),
+/// AuraGlowView (aura glow), ActionTargetingController (arm/target/
 /// confirm), PlayerMovementController (WASD movement). MapWindow itself should stay thin glue
 /// over those, not accumulate gameplay logic of its own.
 ///
@@ -67,7 +68,6 @@ public sealed class MapWindow : Window
     private readonly PlayerMovementController _playerMovement;
     private readonly ContextMenuController _contextMenuController;
     private readonly AdminContextMenuOptions _adminContextMenuOptions;
-    private readonly MapBackgroundCache _backgroundCache;
     private readonly FloatingTextController _floatingTextController;
     private readonly FloatingTextRenderer _floatingTextRenderer;
 
@@ -85,7 +85,6 @@ public sealed class MapWindow : Window
     /// <summary>This frame's "an earlier hotkey handler already used this key" set -- cleared and repopulated every OnHotkeysAction call, before PlayerMovementController.HandleInput reads it. See that class's own doc comment for why this exists (today: Dodge's directional confirm claiming WASD ahead of plain movement).</summary>
     private readonly HashSet<Keys> _claimedKeysThisFrame = [];
 
-    private readonly TileRenderer _tileRenderer;
     private readonly LabelRenderer _labelRenderer;
     private readonly SpriteSheetService _spriteSheetService;
     private readonly SpriteRenderer _spriteRenderer;
@@ -98,7 +97,10 @@ public sealed class MapWindow : Window
     /// <summary>Halves the glow so a full-strength one still lets whatever's standing on that tile -- terrain, an occupant sprite/glyph -- read through, rather than washing it out at the source tile itself.</summary>
     private const float GlowOpacityMultiplier = 0.5f;
 
-    private static readonly Color MapBackgroundColor = new(40, 40, 40);
+    private static readonly Color MapFillColor = new(40, 40, 40);
+
+    /// <summary>What a tile off the loaded map is drawn as, so the edge of the world reads as an edge rather than as floor with nothing on it.</summary>
+    private static readonly Color OffMapColor = Color.Black;
 
     private SpriteFontBase _mediumFont = null!;
     private SpriteFontBase _largeFont = null!;
@@ -119,6 +121,9 @@ public sealed class MapWindow : Window
 
     /// <summary>Which walls' faces and tops are cached and which the row walk draws live; re-planned whenever the cached terrain image is rendered (DrawStructures), so its overhangs always match the image.</summary>
     private readonly MapWallPlan _wallPlan = new();
+
+    /// <summary>The terrain and structures around the grid, read once per rebuild of the cached terrain image (DrawTerrainDirectly) and resolved for drawing.</summary>
+    private readonly MapTerrainCells _terrainCells;
 
     /// <summary>The entities whose drawn sprites overhangs fade over this frame, and those sprites' rectangles (OverhangFade). Fields so they aren't reallocated per frame.</summary>
     private readonly List<int> _watchedEntityIds = [];
@@ -167,12 +172,6 @@ public sealed class MapWindow : Window
     internal ContextMenuController ContextMenuController => _contextMenuController;
 
     /// <summary>Constructs the map viewport, wired to the world/camera/targeting/movement collaborators it renders and delegates input to.</summary>
-    /// <remarks>
-    /// MapBackgroundCache is constructed here, not injected, unlike every other dependency -- it is
-    /// MapWindow-private derived state (a per-cell background-color cache) with no other consumer,
-    /// so there's nothing to gain from resolving it through ShellBootstrapper the way the shared
-    /// services above are.
-    /// </remarks>
     public MapWindow(
         FontService fontService,
         ElementPoolService elementPoolService,
@@ -181,7 +180,6 @@ public sealed class MapWindow : Window
         MapViewState mapViewState,
         AuraGlowView auraGlow,
         EventBus eventBus,
-        TileRenderer tileRenderer,
         LabelRenderer labelRenderer,
         SpriteSheetService spriteSheetService,
         SpriteRenderer spriteRenderer,
@@ -196,7 +194,6 @@ public sealed class MapWindow : Window
         _mapView = mapView;
         _playerActionGate = playerActionGate;
         _mapViewState = mapViewState;
-        _tileRenderer = tileRenderer;
         _labelRenderer = labelRenderer;
         _spriteSheetService = spriteSheetService;
         _spriteRenderer = spriteRenderer;
@@ -207,7 +204,7 @@ public sealed class MapWindow : Window
         _contextMenuController = contextMenuController;
         _adminContextMenuOptions = adminContextMenuOptions;
         _auraGlow = auraGlow;
-        _backgroundCache = new MapBackgroundCache(mapView, mapViewState, _camera);
+        _terrainCells = new MapTerrainCells(mapView, spriteSheetService.Sprites);
         _floatingTextController = floatingTextController;
         _floatingTextRenderer = floatingTextRenderer;
 
@@ -222,8 +219,8 @@ public sealed class MapWindow : Window
         _tileDepth = mapView.Bounds.Depth;
     }
 
-    /// <summary>One-time setup once this window's own content size is known -- font loading, camera/background-cache sizing, and the initial camera position.</summary>
-    /// <remarks>Snaps the camera to the player's spawn position if it already exists at this point, otherwise resets the background cache to its empty state instead. In real gameplay the player already exists by the time this ever runs -- WorldSessionBootstrapper.Build spawns it before ShellBootstrapper.Build ever constructs a MapWindow -- but this still has to tolerate the player not existing, for a MapWindow built directly (e.g. tests) without going through that same sequence.</remarks>
+    /// <summary>One-time setup once this window's own content size is known -- font loading, camera sizing, and the initial camera position.</summary>
+    /// <remarks>Snaps the camera to the player's spawn position if it already exists at this point, otherwise invalidates the terrain caches instead. In real gameplay the player already exists by the time this ever runs -- WorldSessionBootstrapper.Build spawns it before ShellBootstrapper.Build ever constructs a MapWindow -- but this still has to tolerate the player not existing, for a MapWindow built directly (e.g. tests) without going through that same sequence.</remarks>
     public override void Initialize()
     {
         base.Initialize();
@@ -235,9 +232,8 @@ public sealed class MapWindow : Window
         _badgeFont = FontService.GetFont(FontChrome.MapBadgeFontSize); // Double _tinyFont, for the up/down layer-occupancy badges -- legible at a glance without competing with the main glyph.
 
         _camera.Initialize(ContentSize);
-        _backgroundCache.Resize();
 
-        _lootBagSprite = SpriteViews.TryGetFirst(LootBagSpriteName, out var lootBagSprite) ? lootBagSprite : null;
+        _lootBagSprite = _spriteSheetService.Sprites.TryGetFirst(LootBagSpriteName, out var lootBagSprite) ? lootBagSprite : null;
 
         SetCurrentMapLayer(_mapViewState.CurrentMapLayer);
 
@@ -317,7 +313,7 @@ public sealed class MapWindow : Window
             _camera.TileColumns,
             _camera.TileRows,
             _camera.CurrentTileSize,
-            DrawTerrainAndBackgroundsIntoCache);
+            DrawTerrainIntoCache);
 
         _glowCache?.EnsureRendered(
             ElementPoolService.SpriteBatch,
@@ -330,12 +326,11 @@ public sealed class MapWindow : Window
     /// <summary>
     /// The single place both terrain-derived caches are invalidated together. They have identical
     /// dependencies -- scroll position, zoom, current map layer, and the terrain itself -- so
-    /// invalidating them as a pair is what stops the background wash and the terrain image from
-    /// ever disagreeing about which cells they describe.
+    /// invalidating them as a pair is what stops the terrain image and the glow from ever
+    /// disagreeing about which cells they describe.
     /// </summary>
     private void InvalidateTerrainCaches()
     {
-        _backgroundCache.Reset();
         _terrainCache?.Invalidate();
         _glowCache?.Invalidate();
     }
@@ -385,16 +380,17 @@ public sealed class MapWindow : Window
         _mapViewState.CurrentMapLayer = MathUtility.ClampInt(layer, 0, _tileDepth - 1);
     }
 
-    /// <summary>Draws one frame of the map viewport: background, tile backgrounds, glyphs/sprites, glow overlay, then targeting/selection highlights, in that order.</summary>
+    /// <summary>Draws one frame of the map viewport: the flat fill, terrain, glyphs/sprites, glow overlay, then targeting/selection highlights, in that order.</summary>
     /// <remarks>
     /// Draw order is significant, not incidental -- each pass lands on top of the previous one with
     /// no depth buffer (SpriteSortMode.Deferred submits in call order), so highlights/glow have to
-    /// come after the glyphs/sprites they're meant to sit on top of, and the flat background wash
-    /// has to come first so everything else has something to draw over.
+    /// come after the glyphs/sprites they're meant to sit on top of, and the flat fill has to come
+    /// first so everything else has something to draw over. A terrain's sprite is its background:
+    /// terrain with none shows the flat fill under its glyph.
     ///
-    /// The first two of those passes (tile backgrounds, then terrain) come from MapTileLayerCache as
+    /// Terrain (floors, walls, and black for off-map tiles) comes from MapTileLayerCache as
     /// a single blit rather than being re-submitted tile-by-tile -- see that class for why terrain
-    /// is the one thing here that can be cached as an image. DrawTerrainAndBackgroundsDirectly is
+    /// is the one thing here that can be cached as an image. DrawTerrainDirectly is
     /// the fallback for the frame or two before the cache's first render lands (and for a headless
     /// MapWindow that never got a GraphicsDevice), producing byte-identical output at the old cost.
     /// </remarks>
@@ -403,11 +399,11 @@ public sealed class MapWindow : Window
         var spriteBatch = ElementPoolService.SpriteBatch;
         var unitRectangle = ElementPoolService.UnitRectangle;
 
-        spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, _camera.TileColumns * _camera.CurrentTileSize.X, _camera.TileRows * _camera.CurrentTileSize.Y), MapBackgroundColor);
+        spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, _camera.TileColumns * _camera.CurrentTileSize.X, _camera.TileRows * _camera.CurrentTileSize.Y), MapFillColor);
 
         if (_terrainCache?.Draw(spriteBatch, -_camera.RenderPixelOffset) != true)
         {
-            DrawTerrainAndBackgroundsDirectly(spriteBatch, _camera.RenderPixelOffset);
+            DrawTerrainDirectly(spriteBatch, _camera.RenderPixelOffset);
         }
 
         DrawOccupants(spriteBatch, unitRectangle);
@@ -432,14 +428,8 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>
-    /// The auras' glow (see AuraGlowView), drawn as a translucent overlay
-    /// on top of terrain/occupant sprites rather than blended into the background color
-    /// underneath them. Blending it into the background (the old approach) only ever showed
-    /// through a small, mostly-transparent glyph -- a full-tile opaque sprite hides an
-    /// underlying background color completely, which silently broke the glow the moment
-    /// terrain/entities started rendering as sprites. Drawing the same tint as its own
-    /// translucent rect on top means it shows over a sprite exactly the way it used to show
-    /// over a flat background color.
+    /// The auras' glow (see AuraGlowView), drawn as a translucent overlay on top of terrain and
+    /// occupant sprites, so it shows the same over a full-tile sprite as over a glyph on the flat fill.
     /// </summary>
     /// <summary>Renders the glow overlay at whole-tile positions with no sub-tile offset, for MapTileLayerCache to capture -- the caller applies the offset once when blitting.</summary>
     private void DrawGlowOverlayIntoCache(SpriteBatch spriteBatch) =>
@@ -635,7 +625,7 @@ public sealed class MapWindow : Window
     /// A uniform translucent borderColor wash (TargetSelectionMaskAlpha alpha) over the whole
     /// tile -- shared by the inspector's single-tile Gold selection and DrawTargetingHighlights'
     /// per-tile ability-targeting colors. Drawn after DrawGlyphs/DrawGlowOverlay (not before,
-    /// like the tile backgrounds) so it lands on top of whatever's actually on the tile --
+    /// like terrain) so it lands on top of whatever's actually on the tile --
     /// terrain/occupant sprite, glyph, or glow -- rather than getting hidden underneath an opaque
     /// sprite the way this used to. The whole tile is translucent (not just an inset "mask" with
     /// a solid opaque border ring, the earlier technique) specifically so the sprite stays
@@ -701,9 +691,9 @@ public sealed class MapWindow : Window
     /// <summary>Switches the single MapLayer this window renders, by delta layers.</summary>
     /// <remarks>
     /// Stored on MapViewState.CurrentMapLayer, not locally, so SelectionWindowContent can scope
-    /// the inspector to the same layer this window is actually showing. Background depends on
-    /// the current layer's terrain (see MapBackgroundCache), so the cache must be rebuilt on
-    /// every change, the same as a zoom-level change. Called from OnHotkeysAction (Page Up/Down).
+    /// the inspector to the same layer this window is actually showing. The terrain image is the
+    /// current layer's, so it must be rebuilt on every change, the same as a zoom-level change.
+    /// Called from OnHotkeysAction (Page Up/Down).
     /// </remarks>
     /// <param name="delta">Layers to move by -- positive moves up, negative moves down (clamped to the map's own depth by SetCurrentMapLayer).</param>
     public void ChangeLayer(int delta)
@@ -713,7 +703,7 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>
-    /// Renders the tile backgrounds and terrain at whole-tile positions with no sub-tile offset,
+    /// Renders the terrain at whole-tile positions with no sub-tile offset,
     /// for MapTileLayerCache to capture into its texture -- the caller applies the offset once when
     /// blitting that texture instead of every tile applying it individually.
     /// </summary>
@@ -726,15 +716,19 @@ public sealed class MapWindow : Window
     /// blitted before any occupant, that separation is structural rather than something the loop
     /// order has to keep getting right.
     /// </remarks>
-    private void DrawTerrainAndBackgroundsIntoCache(SpriteBatch spriteBatch) =>
-        DrawTerrainAndBackgroundsDirectly(spriteBatch, Vector2.Zero);
-
-    /// <summary>The uncached path: the same backgrounds, floors and walls MapTileLayerCache captures, drawn straight to the screen at the given sub-tile offset. Used to render into the cache (offset zero) and as DrawContent's fallback before the cache's first render lands. Either way it rebuilds the overhang list the row walk draws, so the list always matches the image.</summary>
-    private void DrawTerrainAndBackgroundsDirectly(SpriteBatch spriteBatch, Vector2 pixelOffset)
+    private void DrawTerrainIntoCache(SpriteBatch spriteBatch)
     {
-        var currentMapLayer = _mapViewState.CurrentMapLayer;
+        using (EngineHooks.FrameCost(FrameCostCategory.Update, "Map", "Terrain cache rebuild"))
+        {
+            DrawTerrainDirectly(spriteBatch, Vector2.Zero);
+        }
+    }
 
-        _tileRenderer.DrawBackgrounds(spriteBatch, ElementPoolService.UnitRectangle, _backgroundCache.Colors, _camera.TileColumns, _camera.TileRows, _camera.CurrentTileSize, pixelOffset);
+    /// <summary>The uncached path: the same floors, walls and off-map black MapTileLayerCache captures, drawn straight to the screen at the given sub-tile offset. Used to render into the cache (offset zero) and as DrawContent's fallback before the cache's first render lands. Either way it rebuilds the overhang list the row walk draws, so the list always matches the image.</summary>
+    private void DrawTerrainDirectly(SpriteBatch spriteBatch, Vector2 pixelOffset)
+    {
+        var tileSize = _camera.CurrentTileSize;
+        _terrainCells.Read(_camera.CurrentScrollPosition, _camera.TileColumns, _camera.TileRows, _mapViewState.CurrentMapLayer);
 
         for (var columnIndex = 0; columnIndex < _camera.TileColumns; columnIndex++)
         {
@@ -742,24 +736,25 @@ public sealed class MapWindow : Window
             {
                 var mapNodeX = columnIndex + _camera.CurrentScrollPosition.X;
                 var mapNodeY = rowIndex + _camera.CurrentScrollPosition.Y;
+                var tileOrigin = new Vector2(columnIndex * tileSize.X, rowIndex * tileSize.Y) - pixelOffset;
 
-                if (!_mapView.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)))
+                if (!_terrainCells.IsOnMap(mapNodeX, mapNodeY))
                 {
+                    spriteBatch.Draw(ElementPoolService.UnitRectangle, new Rectangle((int)tileOrigin.X, (int)tileOrigin.Y, tileSize.X, tileSize.Y), OffMapColor);
                     continue;
                 }
 
-                var tileOrigin = new Vector2(columnIndex * _camera.CurrentTileSize.X, rowIndex * _camera.CurrentTileSize.Y) - pixelOffset;
-                DrawFloor(spriteBatch, currentMapLayer, mapNodeX, mapNodeY, tileOrigin);
+                DrawFloor(spriteBatch, mapNodeX, mapNodeY, tileOrigin);
             }
         }
 
-        DrawStructures(spriteBatch, currentMapLayer, pixelOffset);
+        DrawStructures(spriteBatch, pixelOffset);
     }
 
     /// <summary>Every wall's face and top that MapWallPlan caches, faces then tops; the rest it leaves on its Overhangs for the row walk.</summary>
-    private void DrawStructures(SpriteBatch spriteBatch, int mapLayer, Vector2 pixelOffset)
+    private void DrawStructures(SpriteBatch spriteBatch, Vector2 pixelOffset)
     {
-        _wallPlan.Plan(_mapView, _camera.CurrentScrollPosition, _camera.TileColumns, _camera.TileRows, mapLayer);
+        _wallPlan.Plan(_terrainCells, _camera.CurrentScrollPosition, _camera.TileColumns, _camera.TileRows);
 
         foreach (var piece in _wallPlan.CachedPieces)
         {
@@ -853,7 +848,7 @@ public sealed class MapWindow : Window
 
             var footprintTopLeft = TileOrigin(occupant.Position.X - scroll.X, occupant.Position.Y - scroll.Y);
             var footprintSize = new Vector2(occupant.Size.X * _camera.CurrentTileSize.X, occupant.Size.Y * _camera.CurrentTileSize.Y);
-            _watchedRectangles.Add(OverhangFade.WatchedRectangle(footprintTopLeft, footprintSize, occupant.Size, visual.Sprite));
+            _watchedRectangles.Add(OverhangFade.WatchedRectangle(footprintTopLeft, footprintSize, occupant.Size, _spriteSheetService.Sprites.Resolve(visual).Sprite));
         }
     }
 
@@ -874,12 +869,12 @@ public sealed class MapWindow : Window
     private bool TryDrawEntityVisual(SpriteBatch spriteBatch, int entityId, SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize, Vector2Byte footprintTiles, out float drawnTop, float alphaMultiplier = 1f)
     {
         drawnTop = footprintTopLeft.Y;
-        return _mapView.TryGetVisual(entityId, out var visual) && DrawVisual(spriteBatch, visual, font, footprintTopLeft, footprintSize, footprintTiles, out drawnTop, alphaMultiplier);
+        return _mapView.TryGetVisual(entityId, out var visual) && DrawVisual(spriteBatch, _spriteSheetService.Sprites.Resolve(visual), font, footprintTopLeft, footprintSize, footprintTiles, out drawnTop, alphaMultiplier);
     }
 
     /// <summary>The one place that turns a resolved visual into a draw, shared by every per-tile visual draw below. A sprite with a placement is sized and positioned by it (SpritePlacementMath) -- it may reach above and beside its footprint -- and one without fills the footprint, as a glyph does. A corpse draws with a flat Color.Gray tint instead of its normal color -- a color-multiply override, not a true desaturation shader (no shader/Effect infrastructure exists here). Delegates the actual draw to SpriteOrGlyphRenderer, shared with Folder/inventory item cells.</summary>
     /// <param name="footprintTiles">The footprint in tiles, which a placed sprite scales with; null draws a sprite stretched to the footprint whatever its placement (terrain, until walls draw their faces and tops by placement).</param>
-    private bool DrawVisual(SpriteBatch spriteBatch, EntityVisualView visual, SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize, Vector2Byte? footprintTiles, out float drawnTop, float alphaMultiplier = 1f)
+    private bool DrawVisual(SpriteBatch spriteBatch, MapVisual visual, SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize, Vector2Byte? footprintTiles, out float drawnTop, float alphaMultiplier = 1f)
     {
         drawnTop = footprintTopLeft.Y;
         if (visual.Sprite is not { } sprite)
@@ -906,14 +901,13 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>The tile's floor, stretched to its tile -- static, so it belongs in the cached terrain texture. Walls are DrawStructures'.</summary>
-    private void DrawFloor(SpriteBatch spriteBatch, int mapLayer, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
+    private void DrawFloor(SpriteBatch spriteBatch, int mapNodeX, int mapNodeY, Vector2 tileOrigin)
     {
-        if (_mapView.TryGetTerrainVisual(mapNodeX, mapNodeY, mapLayer, out var terrain))
+        if (_terrainCells.TryGetFloor(mapNodeX, mapNodeY, out var floor))
         {
-            DrawVisual(spriteBatch, terrain, _mediumFont, tileOrigin, new Vector2(_camera.CurrentTileSize.X, _camera.CurrentTileSize.Y), footprintTiles: null, out _);
+            DrawVisual(spriteBatch, floor, _mediumFont, tileOrigin, new Vector2(_camera.CurrentTileSize.X, _camera.CurrentTileSize.Y), footprintTiles: null, out _);
         }
     }
-
 
     /// <summary>A Blocking occupant, its health bar and loot badge, its charging badge and its dodge glow. The health bar and charging badge follow the drawn sprite (a tall sprite's head would otherwise cover them); the loot badge and dodge glow are about the footprint and stay on it.</summary>
     private void DrawPrimaryOccupant(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, Vector2Byte size, Vector2 footprintTopLeft, Vector2 footprintSize)
@@ -989,7 +983,8 @@ public sealed class MapWindow : Window
         var badgeSize = new Vector2(_camera.CurrentTileSize.X, _camera.CurrentTileSize.Y) * ChargingBadgeSizeFraction;
         var badgePosition = new Vector2(footprintTopLeft.X + (footprintSize.X - badgeSize.X) / 2f, cueTop - badgeSize.Y);
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, action.Sprite, _badgeFont, action.Glyph, action.GlyphColor, badgePosition, badgeSize, Color.White, outline: true);
+        SpriteView? actionSprite = action.SpriteName is { } spriteName && _spriteSheetService.Sprites.TryGetFirst(spriteName, out var icon) ? icon : null;
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, actionSprite, _badgeFont, action.Glyph, action.GlyphColor, badgePosition, badgeSize, Color.White, outline: true);
     }
 
     private void DrawEntityIcons(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, EntityStatusView status, Vector2 footprintTopLeft, Vector2 footprintSize, float cueTop)
@@ -1063,24 +1058,22 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>Sets the camera to a specific zoom level directly, as opposed to CycleZoom's relative +/-1 step.</summary>
-    /// <remarks>Resizes and resets the background cache afterward -- the visible tile count changes with zoom, so the cache's own buffer size and cached colors are both stale until rebuilt, the same cache-invalidation reasoning ChangeLayer/CenterCameraOn/CycleZoom each apply for their own trigger. No production caller yet (only MapWindowTests exercises this today) -- a candidate hook for a future zoom UI control (see the Minimap TODO item).</remarks>
+    /// <remarks>Invalidates the terrain caches afterward -- the visible tile count changes with zoom, the same cache-invalidation reasoning ChangeLayer/CenterCameraOn/CycleZoom each apply for their own trigger. No production caller yet (only MapWindowTests exercises this today) -- a candidate hook for a future zoom UI control (see the Minimap TODO item).</remarks>
     /// <param name="newZoomLevel">The zoom level to switch to.</param>
     public void UpdateZoomLevel(ZoomLevel newZoomLevel)
     {
         _camera.UpdateZoomLevel(newZoomLevel, ContentSize);
-        _backgroundCache.Resize();
         InvalidateTerrainCaches();
     }
 
     private void CycleZoom(int direction)
     {
         _camera.CycleZoom(direction, ContentSize);
-        _backgroundCache.Resize();
         InvalidateTerrainCaches();
     }
 
-    /// <summary>Scrolls the camera by scrollChange tiles, keeping the background cache in sync.</summary>
-    /// <remarks>MapCamera.UpdateScrollPosition clamps against the map edge and returns how much of the requested delta was actually applied -- _backgroundCache.ApplyScroll shifts the cache's existing colors by exactly that applied amount rather than rebuilding wholesale, so a clamped scroll (e.g. dragging past the map edge) doesn't shift the cache further than the camera itself actually moved.</remarks>
+    /// <summary>Scrolls the camera by scrollChange tiles, keeping the terrain caches in sync.</summary>
+    /// <remarks>MapCamera.UpdateScrollPosition clamps against the map edge and returns how much of the requested delta was actually applied, so a clamped scroll (e.g. dragging past the map edge) that didn't move the camera rebuilds nothing.</remarks>
     /// <param name="scrollChange">The requested scroll delta, in tiles.</param>
     public void UpdateScrollPosition(Point scrollChange)
     {
@@ -1089,16 +1082,13 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>
-    /// Shifts the per-visible-tile caches by a scroll delta the camera has already applied --
-    /// shared by every camera move (drag, drag-end snap, and camera-follow's own re-centre), so
-    /// they all get the same incremental treatment rather than one of them rebuilding wholesale.
+    /// Brings the per-visible-tile caches along with a scroll delta the camera has already applied --
+    /// shared by every camera move (drag, drag-end snap, and camera-follow's own re-centre).
     /// </summary>
     /// <remarks>
-    /// The background cache shifts its known cells and re-resolves only what scrolled into view.
-    /// The two render-target caches can't do that -- their content is a texture, not an array of
-    /// resolved values -- so they simply rebuild, but only when the camera genuinely moved. A
-    /// no-op delta (the common case while standing still, and every step taken along a map edge)
-    /// leaves all three untouched.
+    /// The two render-target caches hold a texture, not an array of resolved values, so they
+    /// rebuild, but only when the camera genuinely moved. A no-op delta (the common case while
+    /// standing still, and every step taken along a map edge) leaves both untouched.
     /// </remarks>
     /// <param name="appliedDelta">The scroll change the camera actually applied, in tiles.</param>
     private void ApplyCameraScrollToCaches(Point appliedDelta)
@@ -1108,7 +1098,6 @@ public sealed class MapWindow : Window
             return;
         }
 
-        _backgroundCache.ApplyScroll(appliedDelta.X, appliedDelta.Y);
         _terrainCache?.Invalidate();
         _glowCache?.Invalidate();
     }
@@ -1321,18 +1310,13 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>
-    /// Re-centres the camera and brings the per-visible-tile caches with it -- incrementally when
-    /// the camera actually moved, and not at all when it didn't.
+    /// Re-centres the camera and brings the per-visible-tile caches with it -- only when the
+    /// camera actually moved.
     /// </summary>
     /// <remarks>
     /// Camera-follow calls this on every player step, so this is the hottest invalidation path in
-    /// the window. It used to unconditionally call MapBackgroundCache.Reset -- a full re-resolve of
-    /// every visible cell, each costing an IsOnMap check plus up to two BackgroundComponent pool
-    /// reads -- for what is almost always a one-tile shift, while the very same class already had
-    /// ApplyScroll for exactly this case. Routing through UpdateScrollPosition instead means a
-    /// player step shifts the known cells and re-resolves only the newly-exposed row or column, and
-    /// a step that doesn't move the camera at all (against a map edge, or the follow already
-    /// centred) costs nothing.
+    /// the window: a step that doesn't move the camera at all (against a map edge, or the follow
+    /// already centred) costs nothing.
     /// </remarks>
     private void CenterCameraOn(Vector3Int position)
     {

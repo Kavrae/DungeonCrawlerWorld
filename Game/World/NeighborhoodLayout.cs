@@ -34,6 +34,9 @@ public sealed class NeighborhoodLayout
     /// <summary>One past the last row.</summary>
     public int MaxY => MinY + NeighborhoodCellStores.Height;
 
+    /// <summary>The seed it is generated from, which every cell's look is picked from (CellSeeds).</summary>
+    public int LayoutSeed => NeighborhoodCellStores.LayoutSeed;
+
     /// <summary>How many MapLayers it covers: the map's depth.</summary>
     public int Depth => NeighborhoodCellStores.StructureTypeIds.Length / NeighborhoodCellStores.PlaneSize;
 
@@ -43,20 +46,18 @@ public sealed class NeighborhoodLayout
     public TerrainCell GetTerrain(int x, int y, TerrainLayer terrainLayer)
     {
         var terrainIndex = Map.TerrainIndex(NeighborhoodCellStores, x, y, terrainLayer);
-        return new TerrainCell(NeighborhoodCellStores.TerrainTypeIds[terrainIndex], NeighborhoodCellStores.TerrainVariants[terrainIndex]);
+        return new TerrainCell(NeighborhoodCellStores.TerrainTypeIds[terrainIndex]);
     }
 
     public void SetTerrain(int x, int y, TerrainLayer terrainLayer, TerrainCell terrainCell)
     {
         var terrainIndex = Map.TerrainIndex(NeighborhoodCellStores, x, y, terrainLayer);
         NeighborhoodCellStores.TerrainTypeIds[terrainIndex] = terrainCell.TypeId;
-        NeighborhoodCellStores.TerrainVariants[terrainIndex] = terrainCell.Variant;
     }
 
     public void SetStructure(Vector3Int position, TerrainCell structureCell)
     {
         var structureIndex = Map.CellIndex(NeighborhoodCellStores, position);
         NeighborhoodCellStores.StructureTypeIds[structureIndex] = structureCell.TypeId;
-        NeighborhoodCellStores.StructureVariants[structureIndex] = structureCell.Variant;
     }
 }

@@ -232,7 +232,7 @@ public sealed class HealingShrineTests
     {
         var session = BuildSession();
         var terrain = session.Build.Context.Terrain;
-        session.Build.World.PopulateTerrain(ShrinePosition.X, ShrinePosition.Y, TerrainLayer.Ground, new TerrainCell(terrain.GetId(BuiltInTerrain.LavaKey), 0));
+        session.Build.World.PopulateTerrain(ShrinePosition.X, ShrinePosition.Y, TerrainLayer.Ground, new TerrainCell(terrain.GetId(BuiltInTerrain.LavaKey)));
         var shrineId = session.Spawn(HealingShrine.Id, ShrinePosition);
 
         session.RunFrames(5 * FramesPerSecond);

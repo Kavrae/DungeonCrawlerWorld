@@ -6,6 +6,7 @@ using Engine.Utilities;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Bootstrap;
+using Presentation.Rendering;
 
 namespace DungeonCrawlerWorld;
 
@@ -93,7 +94,8 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
         using (EngineHooks.DiagnosticScope("Presentation Bootstrap"))
         {
-            _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts", "Spritesheets");
+            _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts", "Spritesheets", "SpriteManifest.json");
+            MissingSpriteCheck.Report(_worldSession.GameSession.Views.ContentSpriteNames, _presentation.SpriteSheetService.Sprites, Console.Error);
         }
 
         var screenSize = new Vector2(_graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);

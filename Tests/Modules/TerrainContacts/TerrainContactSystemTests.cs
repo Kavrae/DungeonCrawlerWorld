@@ -42,7 +42,7 @@ public sealed class TerrainContactSystemTests
         public int GetEntityIdAt(Vector3Int position) => -1;
         public bool IsBlocking(int entityId) => true;
 
-        public void SetTerrain(Vector3Int position, ushort terrainTypeId) => _terrainByPosition[(position.X, position.Y, position.Z)] = new TerrainCell(terrainTypeId, 0);
+        public void SetTerrain(Vector3Int position, ushort terrainTypeId) => _terrainByPosition[(position.X, position.Y, position.Z)] = new TerrainCell(terrainTypeId);
 
         public TerrainCell GetTerrainAt(Vector3Int position) =>
             _terrainByPosition.TryGetValue((position.X, position.Y, position.Z), out var cell) ? cell : default;
@@ -96,7 +96,7 @@ public sealed class TerrainContactSystemTests
     private static readonly Vector3Int OnHazard = new(5, 5, 0);
 
     private static TerrainDefinition HazardTerrain(string key, BodyPartType? preferredTargetType = null) =>
-        new(key, "Test hazard", "", default, "~", default, Contact: new TerrainContact([Damage(10)], RepeatEveryFrames: TickIntervalFrames, GroundContactBodyPart: preferredTargetType));
+        new(key, "Test hazard", "", "~", default, Contact: new TerrainContact([Damage(10)], RepeatEveryFrames: TickIntervalFrames, GroundContactBodyPart: preferredTargetType));
 
     private static Effect Damage(short amount) => new([new DirectDamage(amount, amount, BodyPart: BodyPartTargeting.GroundContact)]);
 
@@ -358,7 +358,7 @@ public sealed class TerrainContactSystemTests
         var exposures = CreateExposurePool();
         var mapQuery = new FakeMapQuery();
         var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
-        var terrainTypeId = terrain.Register(new TerrainDefinition("test:contact", "Test contact", "", default, ".", default, Contact: contact));
+        var terrainTypeId = terrain.Register(new TerrainDefinition("test:contact", "Test contact", "", ".", default, Contact: contact));
         mapQuery.SetTerrain(OnOtherTerrain, terrainTypeId);
 
         var transforms = CreateTransformPool();
@@ -419,9 +419,9 @@ public sealed class TerrainContactSystemTests
         var exposures = CreateExposurePool();
         var mapQuery = new FakeMapQuery();
         var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
-        mapQuery.SetTerrain(OnHazard, terrain.Register(new TerrainDefinition("test:repeating", "Repeating", "", default, ".", default,
+        mapQuery.SetTerrain(OnHazard, terrain.Register(new TerrainDefinition("test:repeating", "Repeating", "", ".", default,
             Contact: new TerrainContact([Recording("repeating", applications)], RepeatEveryFrames: TickIntervalFrames))));
-        mapQuery.SetTerrain(OnOtherTerrain, terrain.Register(new TerrainDefinition("test:once", "Once", "", default, ".", default,
+        mapQuery.SetTerrain(OnOtherTerrain, terrain.Register(new TerrainDefinition("test:once", "Once", "", ".", default,
             Contact: new TerrainContact([Recording("once", applications)]))));
         var transforms = CreateTransformPool();
         var harness = new Harness(
@@ -450,7 +450,7 @@ public sealed class TerrainContactSystemTests
         var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 200, initialCapacity: 4);
         health.Add(MoverEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         statModifiers.Add(MoverEntityId, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: true, magnitude: -0.5f, FrameDeadline.Never, ActionSource.Admin, GameTags.DamageFire));
-        mapQuery.SetTerrain(OnHazard, terrain.Register(new TerrainDefinition("test:hazard", "Test hazard", "", default, ".", default,
+        mapQuery.SetTerrain(OnHazard, terrain.Register(new TerrainDefinition("test:hazard", "Test hazard", "", ".", default,
             Contact: new TerrainContact([Damage(10)], Tags: damageIsFire ? [GameTags.DamageFire] : [GameTags.DamagePoison]))));
         var transforms = CreateTransformPool();
         var harness = new Harness(
@@ -474,7 +474,7 @@ public sealed class TerrainContactSystemTests
         PackedComponentPool<SimpleHealthComponent> Health,
         TestFloatingText FloatingText)
     {
-        public ushort Plain { get; } = Terrain.Register(new TerrainDefinition("test:plain", "Plain", "", default, ".", default));
+        public ushort Plain { get; } = Terrain.Register(new TerrainDefinition("test:plain", "Plain", "", ".", default));
 
         /// <summary>Puts the mover on position without a move, the way an entity is simply standing somewhere.</summary>
         public void Stand(Vector3Int position)
@@ -567,7 +567,7 @@ public sealed class TerrainContactSystemTests
     {
         var fixture = BuildForChanges();
         fixture.MapQuery.SetTerrain(OnHazard, fixture.Terrain.Register(HazardTerrain("test:hazard")));
-        var strongerHazard = fixture.Terrain.Register(new TerrainDefinition("test:stronger", "Stronger", "", default, "~", default,
+        var strongerHazard = fixture.Terrain.Register(new TerrainDefinition("test:stronger", "Stronger", "", "~", default,
             Contact: new TerrainContact([Damage(25)], RepeatEveryFrames: TickIntervalFrames)));
         fixture.Harness.Move(OffHazard, OnHazard);
         fixture.Harness.Step();
@@ -588,7 +588,7 @@ public sealed class TerrainContactSystemTests
         fixture.Harness.Move(OffHazard, OnHazard);
         fixture.Harness.Step();
 
-        fixture.Terrain.Register(new TerrainDefinition("test:hazard", "Test hazard", "", default, "~", default,
+        fixture.Terrain.Register(new TerrainDefinition("test:hazard", "Test hazard", "", "~", default,
             Contact: new TerrainContact([Damage(25)], RepeatEveryFrames: TickIntervalFrames)));
         fixture.Harness.StepThrough(fixture.Harness.Frame + FirstTickDelay);
 
@@ -599,7 +599,7 @@ public sealed class TerrainContactSystemTests
     public void DefinitionGainsAContact_WhoeverStandsOnThatTerrainStepsOntoIt()
     {
         var fixture = BuildForChanges();
-        var terrainTypeId = fixture.Terrain.Register(new TerrainDefinition("test:hazard", "Test hazard", "", default, "~", default));
+        var terrainTypeId = fixture.Terrain.Register(new TerrainDefinition("test:hazard", "Test hazard", "", "~", default));
         fixture.MapQuery.SetTerrain(OnHazard, terrainTypeId);
         fixture.Stand(OnHazard);
         fixture.Harness.Step();
@@ -618,7 +618,7 @@ public sealed class TerrainContactSystemTests
         fixture.Harness.Move(OffHazard, OnHazard);
         fixture.Harness.Step();
 
-        fixture.Terrain.Register(new TerrainDefinition("test:hazard", "Test hazard", "", default, "~", default));
+        fixture.Terrain.Register(new TerrainDefinition("test:hazard", "Test hazard", "", "~", default));
         fixture.Harness.StepThrough(fixture.Harness.Frame + 2 * TickIntervalFrames);
 
         Assert.IsFalse(fixture.Exposures.Has(MoverEntityId));
@@ -635,7 +635,7 @@ public sealed class TerrainContactSystemTests
         appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, components.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks,
             (entityId, count, source, now, announcesRefusal) => PoisonEffects.ApplyStacks(components, new EntityKeys(), entityId, count, source, durationInTicks: 5, now, fixture.EventBus, new TestPlayerQuery(MoverEntityId), announcesRefusal)));
         StatusEffectImmunityEffects.GrantPermanent(components.GetMultiPool<StatusEffectImmunityComponent>(), MoverEntityId, StatusEffectType.Poison);
-        fixture.MapQuery.SetTerrain(OnHazard, fixture.Terrain.Register(new TerrainDefinition("test:swamp", "Swamp", "", default, "~", default,
+        fixture.MapQuery.SetTerrain(OnHazard, fixture.Terrain.Register(new TerrainDefinition("test:swamp", "Swamp", "", "~", default,
             Contact: new TerrainContact([new Effect([new StatusEffectGrant(StatusEffectType.Poison, StackCount: 3)])], RepeatEveryFrames: TickIntervalFrames))));
         var blockedEvents = 0;
         fixture.EventBus.Subscribe<StatusEffectImmunityBlockedEvent>(_ => blockedEvents++);
@@ -657,7 +657,7 @@ public sealed class TerrainContactSystemTests
         var components = fixture.Components;
         appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, components.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks,
             (entityId, count, source, now, announcesRefusal) => PoisonEffects.ApplyStacks(components, new EntityKeys(), entityId, count, source, durationInTicks: 5, now, fixture.EventBus, TestPlayerQuery.NoPlayer, announcesRefusal)));
-        var swamp = fixture.Terrain.Register(new TerrainDefinition("test:swamp", "Swamp", "", default, "~", default,
+        var swamp = fixture.Terrain.Register(new TerrainDefinition("test:swamp", "Swamp", "", "~", default,
             Contact: new TerrainContact([new Effect([new StatusEffectGrant(StatusEffectType.Poison, StackCount: 3, StatusEffectGrantMode.TopUpTo)])], RepeatEveryFrames: TickIntervalFrames)));
         fixture.MapQuery.SetTerrain(OnHazard, swamp);
 
@@ -677,7 +677,7 @@ public sealed class TerrainContactSystemTests
         const ushort BlessingFrames = 600;
         var fixture = BuildForChanges();
         var statModifiers = fixture.Components.GetMultiPool<StatModifierComponent>();
-        fixture.MapQuery.SetTerrain(OnHazard, fixture.Terrain.Register(new TerrainDefinition("test:blessed", "Blessed", "", default, "*", default,
+        fixture.MapQuery.SetTerrain(OnHazard, fixture.Terrain.Register(new TerrainDefinition("test:blessed", "Blessed", "", "*", default,
             Contact: new TerrainContact(
                 [new Effect([new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, CanModify: true, -0.1f, BlessingFrames, Stacking: StatModifierStacking.RefreshFromSameSource)])],
                 RepeatEveryFrames: TickIntervalFrames))));

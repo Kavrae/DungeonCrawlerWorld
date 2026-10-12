@@ -13,7 +13,7 @@ using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops.Components;
-using Game.Sprites;
+
 using Game.Terrain;
 using Game.Views;
 using Game.World;
@@ -51,166 +51,138 @@ public sealed class MapViewQueryTests
             World.PlaceEntityOnMap(entityId, position, ref Components.GetDirectPool<TransformComponent>().Get(entityId));
         }
 
-        public void PlaceTerrain(int x, int y, TerrainLayer layer, Color background = default, string glyph = "~", Color glyphColor = default)
+        public void PlaceTerrain(int x, int y, TerrainLayer layer, string glyph = "~", Color glyphColor = default)
         {
-            var typeId = Terrain.Register(new TerrainDefinition($"test:terrain-{Terrain.Count}", "Sand", "Loose and warm.", background, glyph, glyphColor));
-            World.PopulateTerrain(x, y, layer, new TerrainCell(typeId, 0));
+            var typeId = Terrain.Register(new TerrainDefinition($"test:terrain-{Terrain.Count}", "Sand", "Loose and warm.", glyph, glyphColor));
+            World.PopulateTerrain(x, y, layer, new TerrainCell(typeId));
         }
 
-        public void PlaceStructure(Vector3Int position, Color background = default)
+        public void PlaceStructure(Vector3Int position)
         {
-            var typeId = Terrain.Register(new TerrainDefinition($"test:structure-{Terrain.Count}", "Pillar", "Holds up the ceiling.", background, "#", Color.Gray, BlocksMovement: true));
-            World.PopulateStructure(position, new TerrainCell(typeId, 0));
+            var typeId = Terrain.Register(new TerrainDefinition($"test:structure-{Terrain.Count}", "Pillar", "Holds up the ceiling.", "#", Color.Gray, BlocksMovement: true));
+            World.PopulateStructure(position, new TerrainCell(typeId));
         }
 
-        /// <summary>A wall drawn with the checked-in wall entry, variant 0.</summary>
-        public void PlaceWall(int x, int y)
+    }
+
+    // --- Terrain and structures. ------------------------------------------------------------
+
+    [TestMethod]
+    public void CopyCells_ReadsTerrainAndStructuresOfTheLayer_WithTheirSeeds()
+    {
+        var fixture = new Fixture();
+        fixture.PlaceTerrain(2, 2, TerrainLayer.Ground);
+        fixture.PlaceStructure(new Vector3Int(3, 2, Ground));
+        var cells = new MapCellBuffer();
+
+        fixture.Query.CopyCells(1, 1, 4, 3, Ground, cells);
+
+        Assert.AreEqual(fixture.World.GetTerrainAt(new Vector3Int(2, 2, Ground)).TypeId, cells.TerrainTypeIdAt(2, 2));
+        Assert.AreEqual(fixture.World.GetTerrainSeedAt(new Vector3Int(2, 2, Ground)), cells.TerrainSeedAt(2, 2));
+        Assert.AreEqual(fixture.World.GetStructureAt(new Vector3Int(3, 2, Ground)).TypeId, cells.StructureTypeIdAt(3, 2));
+        Assert.AreEqual(fixture.World.GetStructureSeedAt(new Vector3Int(3, 2, Ground)), cells.StructureSeedAt(3, 2));
+        Assert.AreEqual((ushort)0, cells.StructureTypeIdAt(2, 2));
+        Assert.IsTrue(cells.IsOnMap(4, 3));
+    }
+
+    [TestMethod]
+    public void CopyCells_ALayerWithNoFloor_HasNoTerrain_ButItsOwnStructures()
+    {
+        var fixture = new Fixture();
+        fixture.PlaceTerrain(2, 2, TerrainLayer.Ground);
+        fixture.PlaceStructure(new Vector3Int(2, 2, Flying));
+        var cells = new MapCellBuffer();
+
+        fixture.Query.CopyCells(0, 0, 5, 5, Flying, cells);
+
+        Assert.AreEqual((ushort)0, cells.TerrainTypeIdAt(2, 2));
+        Assert.AreNotEqual((ushort)0, cells.StructureTypeIdAt(2, 2));
+    }
+
+    [TestMethod]
+    public void CopyCells_CellsOffTheMap_AreOffTheMapAndEmpty()
+    {
+        var fixture = new Fixture();
+        var cells = new MapCellBuffer();
+
+        fixture.Query.CopyCells(-2, -2, 15, 15, Ground, cells);
+
+        Assert.IsFalse(cells.IsOnMap(-1, 5));
+        Assert.IsFalse(cells.IsOnMap(10, 5));
+        Assert.IsTrue(cells.IsOnMap(9, 9));
+        Assert.IsFalse(cells.IsOnMap(50, 50), "Outside the copied rectangle reads as off the map.");
+    }
+
+    [TestMethod]
+    public void CopyCells_AcrossANeighborhoodBorderAndAnUnloadedOne_MatchesTheMapCellByCell()
+    {
+        var components = BuiltInTestComponents.RegisterAll(new ComponentManager(32, 16));
+        var terrain = new TerrainRegistry();
+        var grass = terrain.Register(new TerrainDefinition("test:grass", "Grass", "", ",", Color.Green));
+        var wall = terrain.Register(new TerrainDefinition("test:wall", "Wall", "", "#", Color.Gray, BlocksMovement: true));
+        var map = Map.Unbounded(depth: 3);
+        map.LoadNeighborhood(map.CreateLayout(0, 0, layoutSeed: 11));
+        map.LoadNeighborhood(map.CreateLayout(1, 0, layoutSeed: 12));
+        var world = TestWorlds.Over(map, components, terrain: terrain);
+        for (var x = 1018; x < 1030; x++)
         {
-            var typeId = Terrain.Register(new TerrainDefinition("test:wall", "Wall", "", Color.Gray, "#", Color.Gray, SpriteName: WallSpriteName, BlocksMovement: true));
-            World.PopulateStructure(new Vector3Int(x, y, Ground), new TerrainCell(typeId, 0));
+            world.PopulateTerrain(x, 4, TerrainLayer.Ground, new TerrainCell(grass));
+            world.PopulateStructure(new Vector3Int(x, 5, Ground), new TerrainCell(wall));
         }
+
+        var query = new MapViewQuery(world, components, new ActionCatalog(), terrain, new BlueprintRegistry(), new SimulationClock());
+        var cells = new MapCellBuffer();
+        query.CopyCells(1016, 2, 20, 6, Ground, cells);
+
+        for (var y = 2; y < 8; y++)
+        {
+            for (var x = 1016; x < 1036; x++)
+            {
+                var position = new Vector3Int(x, y, Ground);
+                Assert.AreEqual(world.IsOnMap(position), cells.IsOnMap(x, y), $"({x}, {y}) on the map");
+                Assert.AreEqual(world.GetTerrainAt(position).TypeId, cells.TerrainTypeIdAt(x, y), $"({x}, {y}) terrain");
+                Assert.AreEqual(world.GetTerrainSeedAt(position), cells.TerrainSeedAt(x, y), $"({x}, {y}) terrain seed");
+                Assert.AreEqual(world.GetStructureAt(position).TypeId, cells.StructureTypeIdAt(x, y), $"({x}, {y}) structure");
+                Assert.AreEqual(world.GetStructureSeedAt(position), cells.StructureSeedAt(x, y), $"({x}, {y}) structure seed");
+            }
+        }
+
+        Assert.IsTrue(cells.IsOnMap(1030, 4));
+        Assert.IsFalse(cells.IsOnMap(2048, 4), "Neighborhood (2, 0) isn't loaded.");
     }
-
-    private const string WallSpriteName = "wall-stone";
-
-    /// <summary>The top piece the checked-in wall entry's variant 0 draws for mask, read from the entry itself so editing its art doesn't break these tests.</summary>
-    private static SpriteView ExpectedTop(int mask)
-    {
-        Assert.IsTrue(SpriteManifest.TryGetEntry(WallSpriteName, out var entry));
-        Assert.IsTrue(SpriteManifest.TryResolveTopCell(WallSpriteName, SpriteLinks.CellIndexFor(entry.Top!, 0, mask), out var sprite));
-        return SpriteView.From(sprite);
-    }
-
-    private static SpriteView ExpectedFace(int mask)
-    {
-        Assert.IsTrue(SpriteManifest.TryGetEntry(WallSpriteName, out var entry));
-        Assert.IsTrue(SpriteManifest.TryResolveCell(WallSpriteName, SpriteLinks.CellIndexFor(entry.Face, 0, mask), out var sprite));
-        return SpriteView.From(sprite);
-    }
-
-    private static SpriteView? TopAt(Fixture fixture, int x, int y) =>
-        fixture.Query.TryGetStructureTopVisual(x, y, Ground, out var top) ? top.Visual.Sprite : null;
-
-    private static SpriteView? FaceAt(Fixture fixture, int x, int y) =>
-        fixture.Query.TryGetStructureVisual(x, y, Ground, out var face) ? face.Sprite : null;
 
     [TestMethod]
-    public void TryGetStructureTopVisual_AWallRun_JoinsEachTopToItsSameGroupNeighbours()
+    public void CopyCells_ABoundedMapNarrowerThanANeighborhood_StopsAtItsEdge()
     {
         var fixture = new Fixture();
-        fixture.PlaceWall(3, 5);
-        fixture.PlaceWall(4, 5);
-        fixture.PlaceWall(5, 5);
-        fixture.PlaceWall(4, 6);
+        var cells = new MapCellBuffer();
 
-        Assert.AreEqual(ExpectedTop(SpriteLinks.East), TopAt(fixture, 3, 5));
-        Assert.AreEqual(ExpectedTop(SpriteLinks.East | SpriteLinks.West | SpriteLinks.South), TopAt(fixture, 4, 5));
-        Assert.AreEqual(ExpectedTop(SpriteLinks.West), TopAt(fixture, 5, 5));
-        Assert.AreEqual(ExpectedTop(SpriteLinks.North), TopAt(fixture, 4, 6));
+        fixture.Query.CopyCells(8, 0, 4, 1, Ground, cells);
+
+        Assert.IsTrue(cells.IsOnMap(9, 0));
+        Assert.IsFalse(cells.IsOnMap(10, 0));
     }
 
     [TestMethod]
-    public void TryGetStructureTopVisual_AStructureInAnotherLinkGroup_DoesNotJoin()
-    {
-        var fixture = new Fixture();
-        fixture.PlaceWall(4, 5);
-        fixture.PlaceStructure(new Vector3Int(5, 5, Ground));
-
-        Assert.AreEqual(ExpectedTop(0), TopAt(fixture, 4, 5));
-    }
-
-    [TestMethod]
-    public void TryGetStructureTopVisual_AnOffMapNeighbour_Joins()
-    {
-        var fixture = new Fixture();
-        fixture.PlaceWall(0, 5);
-
-        Assert.AreEqual(ExpectedTop(SpriteLinks.West), TopAt(fixture, 0, 5));
-    }
-
-    [TestMethod]
-    public void TryGetStructureTopVisual_TheMask_IsReadFromTheWallsOwnNeighbours_NotFromTheTileItsTopIsDrawnOn()
-    {
-        var fixture = new Fixture();
-        fixture.PlaceWall(4, 5);
-        fixture.PlaceWall(4, 3);
-        fixture.PlaceWall(3, 4);
-
-        Assert.AreEqual(ExpectedTop(0), TopAt(fixture, 4, 5));
-    }
-
-    [TestMethod]
-    public void TryGetStructureVisual_AWallRunsFaces_AreLeftEndMiddleRightEnd_AndALoneWallsIsStandalone()
-    {
-        var fixture = new Fixture();
-        fixture.PlaceWall(3, 5);
-        fixture.PlaceWall(4, 5);
-        fixture.PlaceWall(5, 5);
-        fixture.PlaceWall(8, 2);
-
-        Assert.AreEqual(ExpectedFace(SpriteLinks.HorizontalEast), FaceAt(fixture, 3, 5));
-        Assert.AreEqual(ExpectedFace(SpriteLinks.HorizontalEast | SpriteLinks.HorizontalWest), FaceAt(fixture, 4, 5));
-        Assert.AreEqual(ExpectedFace(SpriteLinks.HorizontalWest), FaceAt(fixture, 5, 5));
-        Assert.AreEqual(ExpectedFace(SpriteLinks.Standalone), FaceAt(fixture, 8, 2));
-    }
-
-    // --- Backgrounds. -----------------------------------------------------------------------
-
-    [TestMethod]
-    public void GetBackgroundColor_OffTheMap_IsBlack() =>
-        Assert.AreEqual(Color.Black, new Fixture().Query.GetBackgroundColor(50, 50, Ground));
-
-    [TestMethod]
-    public void GetBackgroundColor_TerrainWithABackground_IsTheTerrains()
-    {
-        var fixture = new Fixture();
-        fixture.PlaceTerrain(2, 2, TerrainLayer.Ground, background: Color.Tan);
-
-        Assert.AreEqual(Color.Tan, fixture.Query.GetBackgroundColor(2, 2, Ground));
-    }
-
-    [TestMethod]
-    public void GetBackgroundColor_BlockingOccupantWithItsOwnBackground_WinsOverTerrain()
-    {
-        var fixture = new Fixture();
-        fixture.PlaceTerrain(2, 2, TerrainLayer.Ground, background: Color.Tan);
-        fixture.Place(4, new Vector3Int(2, 2, Ground));
-        fixture.Components.Merge(4, new BackgroundComponent(Color.Purple));
-
-        Assert.AreEqual(Color.Purple, fixture.Query.GetBackgroundColor(2, 2, Ground));
-    }
-
-    [TestMethod]
-    public void GetBackgroundColor_StructureOverTerrain_IsTheStructures()
-    {
-        var fixture = new Fixture();
-        fixture.PlaceTerrain(2, 2, TerrainLayer.Ground, background: Color.Tan);
-        fixture.PlaceStructure(new Vector3Int(2, 2, Ground), background: Color.SlateGray);
-
-        Assert.AreEqual(Color.SlateGray, fixture.Query.GetBackgroundColor(2, 2, Ground));
-        Assert.AreEqual(Color.White, fixture.Query.GetBackgroundColor(2, 2, UnderGround));
-    }
-
-    [TestMethod]
-    public void GetBackgroundColor_NoTerrainOrLayerWithNoFloor_IsWhite()
+    public void Terrain_IsTheRegistryTheTypeIdsReferTo()
     {
         var fixture = new Fixture();
 
-        Assert.AreEqual(Color.White, fixture.Query.GetBackgroundColor(2, 2, Ground));
-        Assert.AreEqual(Color.White, fixture.Query.GetBackgroundColor(2, 2, Flying));
+        Assert.AreSame(fixture.Terrain, fixture.Query.Terrain);
     }
 
     // --- Visuals. ---------------------------------------------------------------------------
 
     [TestMethod]
-    public void TryGetVisual_SpriteAndGlyph_SpriteWins()
+    public void TryGetVisual_SpriteOverride_WinsOverAGlyph_ByNameAndSeed()
     {
         var fixture = new Fixture();
-        fixture.Components.Merge(5, new SpriteComponent("sheet.png", new Rectangle(16, 0, 16, 16)));
+        fixture.Components.Merge(5, new SpriteComponent("Goblin", 42));
         fixture.Components.Merge(5, new GlyphComponent("g", Color.Red));
 
         Assert.IsTrue(fixture.Query.TryGetVisual(5, out var visual));
-        Assert.AreEqual(new SpriteView("sheet.png", new Rectangle(16, 0, 16, 16)), visual.Sprite);
+        Assert.AreEqual("Goblin", visual.SpriteName);
+        Assert.AreEqual(42u, visual.SpriteSeed);
         Assert.AreEqual(string.Empty, visual.Glyph);
     }
 
@@ -221,7 +193,7 @@ public sealed class MapViewQueryTests
         fixture.Components.Merge(5, new GlyphComponent("g", Color.Red));
 
         Assert.IsTrue(fixture.Query.TryGetVisual(5, out var visual));
-        Assert.IsNull(visual.Sprite);
+        Assert.IsNull(visual.SpriteName);
         Assert.AreEqual("g", visual.Glyph);
         Assert.AreEqual(Color.Red, visual.GlyphColor);
     }
@@ -242,28 +214,18 @@ public sealed class MapViewQueryTests
         Assert.IsFalse(new Fixture().Query.TryGetVisual(5, out _));
 
     [TestMethod]
-    public void TryGetTerrainVisual_ReadsTheTerrainUnderTheLayer_AndNothingForAFloorlessLayer()
+    public void TryGetTerrain_ReportsTheDefinitionsNameDescriptionAndLook_WithTheCellsSeed()
     {
         var fixture = new Fixture();
-        fixture.PlaceTerrain(2, 2, TerrainLayer.UnderGround, glyph: "~", glyphColor: Color.Yellow);
-
-        Assert.IsTrue(fixture.Query.TryGetTerrainVisual(2, 2, UnderGround, out var terrain));
-        Assert.AreEqual("~", terrain.Glyph);
-        Assert.AreEqual(Color.Yellow, terrain.GlyphColor);
-        Assert.IsFalse(fixture.Query.TryGetTerrainVisual(2, 2, Ground, out _));
-        Assert.IsFalse(fixture.Query.TryGetTerrainVisual(2, 2, Flying, out _));
-    }
-
-    [TestMethod]
-    public void TryGetTerrain_ReportsTheDefinitionsNameAndDescription()
-    {
-        var fixture = new Fixture();
-        fixture.PlaceTerrain(2, 2, TerrainLayer.Ground);
+        fixture.PlaceTerrain(2, 2, TerrainLayer.Ground, glyph: "~", glyphColor: Color.Yellow);
 
         Assert.IsTrue(fixture.Query.TryGetTerrain(2, 2, Ground, out var terrain));
         Assert.AreEqual("Sand", terrain.Name);
         Assert.AreEqual("Loose and warm.", terrain.Description);
         Assert.AreEqual("~", terrain.Visual.Glyph);
+        Assert.AreEqual(Color.Yellow, terrain.Visual.GlyphColor);
+        Assert.AreEqual(fixture.World.GetTerrainSeedAt(new Vector3Int(2, 2, Ground)), terrain.Visual.Seed);
+        Assert.IsFalse(fixture.Query.TryGetTerrain(2, 2, Flying, out _));
     }
 
     [TestMethod]
@@ -275,31 +237,9 @@ public sealed class MapViewQueryTests
         Assert.IsTrue(fixture.Query.TryGetStructure(2, 2, Flying, out var structure));
         Assert.AreEqual("Pillar", structure.Name);
         Assert.AreEqual("Holds up the ceiling.", structure.Description);
-        Assert.IsTrue(fixture.Query.TryGetStructureVisual(2, 2, Flying, out var visual));
-        Assert.AreEqual("#", visual.Glyph);
+        Assert.AreEqual("#", structure.Visual.Glyph);
         Assert.IsFalse(fixture.Query.TryGetStructure(2, 2, Ground, out _));
         Assert.IsFalse(fixture.Query.TryGetTerrain(2, 2, Flying, out _));
-    }
-
-    [TestMethod]
-    public void TryGetStructureTopVisual_NoStructure_OrAStructureWithNoTop_IsFalse()
-    {
-        var fixture = new Fixture();
-        fixture.PlaceStructure(new Vector3Int(2, 2, Ground));
-
-        Assert.IsFalse(fixture.Query.TryGetStructureTopVisual(3, 3, Ground, out _));
-        Assert.IsFalse(fixture.Query.TryGetStructureTopVisual(2, 2, Ground, out _));
-    }
-
-    [TestMethod]
-    public void HasStructure_IsTrueOnlyWhereAStructureStands()
-    {
-        var fixture = new Fixture();
-        fixture.PlaceStructure(new Vector3Int(2, 2, Ground));
-
-        Assert.IsTrue(fixture.Query.HasStructure(2, 2, Ground));
-        Assert.IsFalse(fixture.Query.HasStructure(3, 2, Ground));
-        Assert.IsFalse(fixture.Query.HasStructure(-5, -5, Ground));
     }
 
     [TestMethod]
@@ -395,6 +335,32 @@ public sealed class MapViewQueryTests
         Assert.AreEqual(LootBagState.None, status.LootBag);
     }
 
+    [TestMethod]
+    public void GetStatus_StandingShopWithStock_IsNotLootableAndShowsNoLootBag()
+    {
+        var fixture = new Fixture();
+        fixture.Components.Merge(5, new ShopComponent(acceptedItems: null, buyMultiplier: 1f, sellMultiplier: 1f));
+        fixture.Components.Merge(5, new ContainerComponent());
+        fixture.Components.GetMultiPool<InventoryItemStackComponent>().Add(5, new InventoryItemStackComponent(Guid.NewGuid(), quantity: 1));
+
+        var status = fixture.Query.GetStatus(5);
+
+        Assert.IsFalse(status.IsContainer);
+        Assert.AreEqual(LootBagState.None, status.LootBag);
+    }
+
+    [TestMethod]
+    public void GetStatus_DestroyedShopWithStock_ShowsALootBag()
+    {
+        var fixture = new Fixture();
+        fixture.Components.Merge(5, new ShopComponent(acceptedItems: null, buyMultiplier: 1f, sellMultiplier: 1f));
+        fixture.Components.Merge(5, new ContainerComponent());
+        fixture.Components.Merge(5, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
+        fixture.Components.GetMultiPool<InventoryItemStackComponent>().Add(5, new InventoryItemStackComponent(Guid.NewGuid(), quantity: 1));
+
+        Assert.AreEqual(LootBagState.Unlooted, fixture.Query.GetStatus(5).LootBag);
+    }
+
     // --- Charging and interaction. ----------------------------------------------------------
 
     [TestMethod]
@@ -410,7 +376,7 @@ public sealed class MapViewQueryTests
         fixture.Components.Merge(5, new ActionLockComponent(currentLockTotalFrames: 45, unlockedAtFrame: 45));
 
         Assert.IsTrue(fixture.Query.TryGetChargingAction(5, out var action));
-        Assert.IsNull(action.Sprite);
+        Assert.IsNull(action.SpriteName);
         Assert.AreEqual("!", action.Glyph);
         Assert.AreEqual(Color.Orange, action.GlyphColor);
     }

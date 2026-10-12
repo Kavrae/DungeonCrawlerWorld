@@ -1,4 +1,4 @@
-using Game.Sprites;
+using SpriteFormat;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 

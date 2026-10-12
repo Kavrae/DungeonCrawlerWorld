@@ -32,9 +32,13 @@ public sealed class GameViews
         TransformView = new TransformView(componentManager);
         AuraGlow = new AuraGlowView(context.AuraField);
         ActionSourceNaming = new ActionSourceNaming(context.Terrain, context.Auras);
+        ContentSpriteNames = new ContentSpriteNames(context.Definitions, context.Terrain, context.Actions, context.Items, context.Lootboxes);
     }
 
     public IMapViewQuery MapView { get; }
+
+    /// <summary>Every sprite name the content declares, for Presentation to check against the manifest it loaded.</summary>
+    public ContentSpriteNames ContentSpriteNames { get; }
 
     public EntityBodyParts EntityBodyParts { get; }
 

@@ -1,5 +1,4 @@
 using FontStashSharp;
-using Game.Views;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
@@ -241,7 +240,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         }
 
         var isGreyedOut = _isDisabled || CompareState == CellCompareState.Ineligible || !ShopTradeEligible;
-        SpriteView? sprite = _spriteName is not null && SpriteViews.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
+        SpriteView? sprite = _spriteName is not null && spriteSheetService.Sprites.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
         var spriteTint = isGreyedOut ? Color.Gray : _spriteTint ?? Color.White;
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 

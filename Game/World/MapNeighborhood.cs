@@ -14,10 +14,11 @@ internal sealed class MapNeighborhood
 
     private static readonly int TerrainLayerCount = Enum.GetValues<TerrainLayer>().Length;
 
-    public MapNeighborhood(int width, int height, int depth)
+    public MapNeighborhood(int width, int height, int depth, int layoutSeed)
     {
         Width = width;
         Height = height;
+        LayoutSeed = layoutSeed;
         PlaneSize = width * height;
 
         var volume = PlaneSize * depth;
@@ -31,15 +32,16 @@ internal sealed class MapNeighborhood
         OccupiedLayerMaskByColumn = new byte[PlaneSize];
 
         TerrainTypeIds = new ushort[PlaneSize * TerrainLayerCount];
-        TerrainVariants = new byte[PlaneSize * TerrainLayerCount];
 
         StructureTypeIds = new ushort[volume];
-        StructureVariants = new byte[volume];
     }
 
     public int Width { get; }
 
     public int Height { get; }
+
+    /// <summary>The seed its layout was generated from, which every cell's look is picked from (CellSeeds); 0 for a neighborhood loaded empty.</summary>
+    public int LayoutSeed { get; set; }
 
     /// <summary>Width * Height: the offset of one MapLayer's cells from the next.</summary>
     public int PlaneSize { get; }
@@ -58,9 +60,5 @@ internal sealed class MapNeighborhood
 
     public ushort[] TerrainTypeIds { get; }
 
-    public byte[] TerrainVariants { get; }
-
     public ushort[] StructureTypeIds { get; }
-
-    public byte[] StructureVariants { get; }
 }

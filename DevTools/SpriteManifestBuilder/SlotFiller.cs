@@ -13,10 +13,10 @@ namespace SpriteManifestBuilder;
 /// </remarks>
 public static class SlotFiller
 {
-    private readonly record struct Step(Func<int, int> TransformMask, Func<ManifestCell, ManifestCell> TransformPiece, bool IsQuarterTurn);
+    private readonly record struct Step(Func<int, int> TransformMask, Func<SpriteManifestCell, SpriteManifestCell> TransformPiece, bool IsQuarterTurn);
 
     /// <returns>How many empty slots were filled.</returns>
-    public static int FillEmptySlots(LinkLayout layout, ManifestCell?[] slots, bool mirrorLeftRight, bool mirrorTopBottom, bool turns)
+    public static int FillEmptySlots(LinkLayout layout, SpriteManifestCell?[] slots, bool mirrorLeftRight, bool mirrorTopBottom, bool turns)
     {
         var steps = new List<Step>(3);
         if (mirrorLeftRight)
@@ -32,7 +32,7 @@ public static class SlotFiller
             steps.Add(new Step(turnClockwiseMask, static piece => piece.RotatedClockwise(), IsQuarterTurn: true));
         }
 
-        var reached = new Queue<(int Mask, ManifestCell Piece)>();
+        var reached = new Queue<(int Mask, SpriteManifestCell Piece)>();
         for (var mask = 0; mask < slots.Length; mask++)
         {
             if (slots[mask] is { } piece)

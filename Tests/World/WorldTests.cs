@@ -17,8 +17,8 @@ public sealed class WorldTests
     private static (Game.World.World World, ushort WallId, ushort OpenArchId) CreateWorldWithStructures()
     {
         var world = CreateWorld();
-        var wallId = world.Terrain.Register(new TerrainDefinition("test:wall", "Wall", "", Color.Gray, "#", Color.Gray, BlocksMovement: true));
-        var archId = world.Terrain.Register(new TerrainDefinition("test:arch", "Arch", "", Color.Gray, "n", Color.Gray));
+        var wallId = world.Terrain.Register(new TerrainDefinition("test:wall", "Wall", "", "#", Color.Gray, BlocksMovement: true));
+        var archId = world.Terrain.Register(new TerrainDefinition("test:arch", "Arch", "", "n", Color.Gray));
         return (world, wallId, archId);
     }
 
@@ -26,7 +26,7 @@ public sealed class WorldTests
     public void PlaceEntityOnMap_BlockingEntityIntoBlockingStructure_IsRefused()
     {
         var (world, wallId, _) = CreateWorldWithStructures();
-        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId, 0));
+        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId));
         var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
 
         world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
@@ -39,7 +39,7 @@ public sealed class WorldTests
     public void PlaceEntityOnMap_MultiTileFootprintOverlappingBlockingStructure_IsRefused()
     {
         var (world, wallId, _) = CreateWorldWithStructures();
-        world.PopulateStructure(new Vector3Int(4, 4, 1), new TerrainCell(wallId, 0));
+        world.PopulateStructure(new Vector3Int(4, 4, 1), new TerrainCell(wallId));
         var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(2, 2));
 
         world.PlaceEntityOnMap(1, new Vector3Int(3, 3, 1), ref transform);
@@ -51,7 +51,7 @@ public sealed class WorldTests
     public void PlaceEntityOnMap_TinyEntityIntoBlockingStructure_IsRefused()
     {
         var (world, wallId, _) = CreateWorldWithStructures();
-        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId, 0));
+        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId));
         var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(1, new NonBlockingComponent(NonBlockingKind.Tiny));
         var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
@@ -66,7 +66,7 @@ public sealed class WorldTests
     public void PlaceEntityOnMap_PhasingEntityIntoBlockingStructure_IsPlaced()
     {
         var (world, wallId, _) = CreateWorldWithStructures();
-        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId, 0));
+        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId));
         var nonBlockingPool = world.NonBlockingComponents;
         nonBlockingPool.Add(1, new NonBlockingComponent(NonBlockingKind.Phasing));
         var transform = new TransformComponent(new Vector3Int(), new Vector2Byte(1, 1));
@@ -95,7 +95,7 @@ public sealed class WorldTests
     public void IsCellBlocked_StructureWithoutBlocksMovement_IsFalse()
     {
         var (world, _, archId) = CreateWorldWithStructures();
-        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(archId, 0));
+        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(archId));
 
         Assert.IsFalse(world.IsCellBlocked(new Vector3Int(3, 3, 1)));
     }
@@ -104,7 +104,7 @@ public sealed class WorldTests
     public void IsCellBlocked_FloorThatBlocksMovement_IsTrue_AndOnlyOnItsOwnLayer()
     {
         var (world, wallId, _) = CreateWorldWithStructures();
-        world.PopulateTerrain(3, 3, TerrainLayer.UnderGround, new TerrainCell(wallId, 0));
+        world.PopulateTerrain(3, 3, TerrainLayer.UnderGround, new TerrainCell(wallId));
 
         Assert.IsTrue(world.IsCellBlocked(new Vector3Int(3, 3, (int)MapLayer.UnderGround)));
         Assert.IsFalse(world.IsCellBlocked(new Vector3Int(3, 3, (int)MapLayer.Ground)));
@@ -126,14 +126,14 @@ public sealed class WorldTests
         world.EventBus.Subscribe<StructureChangedEvent>(published.Add);
         var position = new Vector3Int(3, 3, 1);
 
-        world.SetStructure(position, new TerrainCell(wallId, 0));
-        world.SetStructure(position, new TerrainCell(wallId, 0));
-        world.SetStructure(position, new TerrainCell(archId, 0));
+        world.SetStructure(position, new TerrainCell(wallId));
+        world.SetStructure(position, new TerrainCell(wallId));
+        world.SetStructure(position, new TerrainCell(archId));
 
         Assert.HasCount(2, published);
         Assert.AreEqual(new StructureChangedEvent(position, TerrainRegistry.None, wallId), published[0]);
         Assert.AreEqual(new StructureChangedEvent(position, wallId, archId), published[1]);
-        Assert.AreEqual(new TerrainCell(archId, 0), world.GetStructureAt(position));
+        Assert.AreEqual(new TerrainCell(archId), world.GetStructureAt(position));
     }
 
     [TestMethod]
@@ -143,7 +143,7 @@ public sealed class WorldTests
         var publishedCount = 0;
         world.EventBus.Subscribe<StructureChangedEvent>(_ => publishedCount++);
 
-        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId, 0));
+        world.PopulateStructure(new Vector3Int(3, 3, 1), new TerrainCell(wallId));
 
         Assert.AreEqual(0, publishedCount);
         Assert.AreEqual(wallId, world.GetStructureAt(new Vector3Int(3, 3, 1)).TypeId);

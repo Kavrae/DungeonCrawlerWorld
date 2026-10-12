@@ -19,7 +19,7 @@ public sealed class FolderTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer()));
         return windowService;
     }
 

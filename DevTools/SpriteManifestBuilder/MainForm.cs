@@ -46,8 +46,6 @@ public sealed class MainForm : Form
     private readonly FlowLayoutPanel _variantSetList = new() { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
     private readonly List<(FlowLayoutPanel Container, RadioButton Choice, NumericUpDown Chance, Panel Swatch)> _variantSetRows = [];
     private readonly Label _variantChanceTotalLabel = new() { AutoSize = true };
-    private readonly ComboBox _linkGroupComboBox = new() { DropDownStyle = ComboBoxStyle.DropDown, Width = 220 };
-    private readonly Label _alsoInGroupLabel = new() { AutoSize = true, MaximumSize = new Size(SectionWidth, 0) };
     private readonly PictureBox _linkPreviewBox = new() { BackColor = Color.Black, Size = LinkPreviewRenderer.PreferredSize(15) };
     private readonly Label _linkPreviewNoteLabel = new() { AutoSize = true, ForeColor = Color.DarkOrange, MaximumSize = new Size(SectionWidth, 0) };
 
@@ -69,7 +67,7 @@ public sealed class MainForm : Form
     private readonly EntryPart _mainPart = new(LinkLayout.Cardinal);
     private readonly EntryPart _facePart = new(LinkLayout.Horizontal);
     private readonly EntryPart _topPart = new(LinkLayout.Cardinal);
-    private List<ManifestEntry> _allEntries;
+    private List<SpriteManifestEntry> _allEntries;
 
     private Image? _sheetImage;
     private string? _currentRelativeSheetPath;
@@ -77,7 +75,6 @@ public sealed class MainForm : Form
     private Point? _dragStartCell;
     private Point _dragCurrentCell;
     private bool _isSyncingControls;
-    private string _previousName = "";
 
     public MainForm()
     {
@@ -85,7 +82,7 @@ public sealed class MainForm : Form
         Width = 1500;
         Height = 900;
 
-        _allEntries = ManifestFile.Load(RepoPaths.ManifestFilePath);
+        _allEntries = SpriteManifest.ReadEntries(RepoPaths.ManifestFilePath);
         _slotGrid = new SlotGridControl(_sheets, multiSelect: false);
         _wallPartRow = BuildWallPartRow();
         _optionsSection = BuildOptionsSection();
@@ -95,7 +92,6 @@ public sealed class MainForm : Form
         BuildLayout();
         StandardControlBehaviors.Apply(this);
         RefreshEntriesListBox();
-        RefreshLinkGroupChoices();
         LoadActivePartIntoControls();
     }
 
@@ -110,14 +106,14 @@ public sealed class MainForm : Form
 
     private bool IsActivePartLinked => IsWall || IsMainPartLinked;
 
-    /// <summary>The part whose link group the combo box edits and whose slots the link preview draws joined: a wall's top (its face joins by the same group), or the entry itself.</summary>
-    private EntryPart GroupPart => IsWall ? _topPart : _mainPart;
+    /// <summary>The part whose slots the link preview draws joined: a wall's top (its face drawn under it), or the entry itself.</summary>
+    private EntryPart LinkPreviewPart => IsWall ? _topPart : _mainPart;
 
     private Size SelectedSpan => new((int)_spanColumnsUpDown.Value, (int)_spanRowsUpDown.Value);
 
     private int FootprintTiles => _footprintComboBox.SelectedIndex + 1;
 
-    private int FaceHeightRows => SpritePlacementRules.HeightRows(_facePart.Cells(linked: true), _facePart.PixelsPerTile, _facePart.PivotFor);
+    private int FaceHeightRows => _facePart.ToManifestPart(linked: true).HeightRows();
 
     private int ActiveRaisedRows => IsEditingTop ? FaceHeightRows : 0;
 
@@ -166,8 +162,6 @@ public sealed class MainForm : Form
         spanRow.Controls.Add(_spanColumnsUpDown);
         spanRow.Controls.Add(new Label { Text = "x", AutoSize = true, Padding = new Padding(2, 6, 2, 0) });
         spanRow.Controls.Add(_spanRowsUpDown);
-
-        _nameTextBox.TextChanged += (_, _) => OnNameChanged();
 
         var saveButton = new Button { Text = "Save", AutoSize = true };
         saveButton.Click += (_, _) => Save();
@@ -284,21 +278,7 @@ public sealed class MainForm : Form
         slotButtonRow.Controls.Add(clearSlotButton);
         slotButtonRow.Controls.Add(removeVariantSetButton);
 
-        _linkGroupComboBox.TextChanged += (_, _) =>
-        {
-            if (!_isSyncingControls)
-            {
-                GroupPart.LinkGroup = _linkGroupComboBox.Text.Trim();
-            }
-
-            RefreshAlsoInGroup();
-        };
-
         var section = NewColumn();
-        section.Controls.Add(new Label { Text = "Link group (structures sharing one join each other):", AutoSize = true, MaximumSize = new Size(SectionWidth, 0) });
-        section.Controls.Add(_linkGroupComboBox);
-        section.Controls.Add(_alsoInGroupLabel);
-        section.Controls.Add(NewSeparator());
         section.Controls.Add(new Label { Text = "Slots (pick one, then click or drag on the sheet to fill it):", AutoSize = true, MaximumSize = new Size(SectionWidth, 0) });
         section.Controls.Add(variantSetRow);
         section.Controls.Add(_slotGrid);
@@ -312,9 +292,9 @@ public sealed class MainForm : Form
         _linkPreviewBox.Paint += (_, e) => LinkPreviewRenderer.Paint(
             e.Graphics,
             _linkPreviewBox.ClientSize,
-            GroupPart.CurrentVariantSet,
-            GroupPart.PixelsPerTile,
-            GroupPart.PivotFor,
+            LinkPreviewPart.CurrentVariantSet,
+            LinkPreviewPart.PixelsPerTile,
+            LinkPreviewPart.PivotFor,
             IsWall ? new WallFacePreview(_facePart.CurrentVariantSet, _facePart.PixelsPerTile, _facePart.PivotFor, FaceHeightRows) : null,
             _sheets);
 
@@ -396,7 +376,7 @@ public sealed class MainForm : Form
         return row;
     }
 
-    private void AddTransformButton(FlowLayoutPanel row, string text, string toolTip, Func<ManifestCell, ManifestCell> transform, bool isQuarterTurn)
+    private void AddTransformButton(FlowLayoutPanel row, string text, string toolTip, Func<SpriteManifestCell, SpriteManifestCell> transform, bool isQuarterTurn)
     {
         var button = new Button { Text = text, AutoSize = true };
         _toolTip.SetToolTip(button, toolTip);
@@ -475,7 +455,7 @@ public sealed class MainForm : Form
         if (_dragStartCell is not null && PendingCell() is { } pending)
         {
             using var dragPen = new Pen(Color.Yellow, 2) { DashStyle = DashStyle.Dash };
-            e.Graphics.DrawRectangle(dragPen, ToDisplay(pending.SourceRectangle));
+            e.Graphics.DrawRectangle(dragPen, ToDisplay(pending.SourceRectangle.ToDrawingRectangle()));
         }
     }
 
@@ -492,7 +472,7 @@ public sealed class MainForm : Form
                 continue;
             }
 
-            var displayRectangle = ToDisplay(option.SourceRectangle);
+            var displayRectangle = ToDisplay(option.SourceRectangle.ToDrawingRectangle());
             graphics.DrawRectangle(optionPen, displayRectangle);
 
             var label = $"#{index + 1}";
@@ -513,13 +493,13 @@ public sealed class MainForm : Form
         {
             if (variantSet[mask] is { } cell && cell.SheetPath == _currentRelativeSheetPath && mask != part.SelectedMask)
             {
-                graphics.DrawRectangle(filledPen, ToDisplay(cell.SourceRectangle));
+                graphics.DrawRectangle(filledPen, ToDisplay(cell.SourceRectangle.ToDrawingRectangle()));
             }
         }
 
         if (variantSet[part.SelectedMask] is { } selected && selected.SheetPath == _currentRelativeSheetPath)
         {
-            graphics.DrawRectangle(selectedPen, ToDisplay(selected.SourceRectangle));
+            graphics.DrawRectangle(selectedPen, ToDisplay(selected.SourceRectangle.ToDrawingRectangle()));
         }
     }
 
@@ -549,7 +529,7 @@ public sealed class MainForm : Form
     }
 
     /// <summary>What releasing now would place: a span-sized cell from the pressed cell for a click, exactly the dragged cells for a drag. Null when a click's span would run off the sheet.</summary>
-    private ManifestCell? PendingCell()
+    private SpriteManifestCell? PendingCell()
     {
         if (_dragStartCell is not { } dragStartCell || _currentRelativeSheetPath is null || _sheetImage is null)
         {
@@ -560,7 +540,7 @@ public sealed class MainForm : Form
         var cellHeight = (int)_cellHeightUpDown.Value;
         return dragStartCell == _dragCurrentCell
             ? EntryRules.SpanningFrom(_currentRelativeSheetPath, dragStartCell, SelectedSpan, cellWidth, cellHeight, _sheetImage.Size)
-            : ManifestCell.Spanning(_currentRelativeSheetPath, dragStartCell, _dragCurrentCell, cellWidth, cellHeight);
+            : SpriteManifestCell.Spanning(_currentRelativeSheetPath, dragStartCell.X, dragStartCell.Y, _dragCurrentCell.X, _dragCurrentCell.Y, cellWidth, cellHeight);
     }
 
     private void PictureBox_MouseDown(object? sender, MouseEventArgs e)
@@ -621,7 +601,7 @@ public sealed class MainForm : Form
         RefreshAll();
     }
 
-    private void AddOption(EntryPart part, ManifestCell option)
+    private void AddOption(EntryPart part, SpriteManifestCell option)
     {
         if (EntryRules.FindIdenticalOption(part.Options, option) is var existingIndex and >= 0)
         {
@@ -635,11 +615,11 @@ public sealed class MainForm : Form
     }
 
     /// <summary>Checked against the manifest as loaded at startup (refreshed after each Save) -- informational only: the same pixels may be used by more than one entry.</summary>
-    private void ShowAlreadyUsedWarningIfAny(ManifestCell cell)
+    private void ShowAlreadyUsedWarningIfAny(SpriteManifestCell cell)
     {
         var usedByNames = _allEntries
             .Where(entry => entry.Name != _nameTextBox.Text.Trim() && entry.Cells.Concat(entry.Top?.Cells ?? []).Any(existing =>
-                existing is not null && existing.SheetPath == cell.SheetPath && existing.SourceRectangle.IntersectsWith(cell.SourceRectangle)))
+                existing is not null && existing.SheetPath == cell.SheetPath && existing.SourceRectangle.ToDrawingRectangle().IntersectsWith(cell.SourceRectangle.ToDrawingRectangle())))
             .Select(entry => entry.Name)
             .ToList();
 
@@ -708,26 +688,6 @@ public sealed class MainForm : Form
         _warningLabel.Text = "";
         SyncControls(() => _setPivotToggle.Checked = false);
         LoadActivePartIntoControls();
-    }
-
-    /// <summary>A link group that still reads as the entry's own name (the default) follows the name as it is typed.</summary>
-    private void OnNameChanged()
-    {
-        var name = _nameTextBox.Text.Trim();
-        if (!_isSyncingControls)
-        {
-            foreach (var part in new[] { _mainPart, _topPart })
-            {
-                if (part.LinkGroup.Length == 0 || part.LinkGroup == _previousName)
-                {
-                    part.LinkGroup = name;
-                }
-            }
-
-            SyncLinkGroupText();
-        }
-
-        _previousName = name;
     }
 
     private void OnSpanChanged()
@@ -809,13 +769,10 @@ public sealed class MainForm : Form
 
             _optionsListBox.ClearSelected();
         });
-        SyncLinkGroupText();
         SyncVariantSetControls();
 
         RefreshAll();
     }
-
-    private void SyncLinkGroupText() => SyncControls(() => _linkGroupComboBox.Text = GroupPart.LinkGroup);
 
     private void SyncVariantSetControls()
     {
@@ -930,9 +887,9 @@ public sealed class MainForm : Form
             : SelectedOptionIndices() is [var firstSelected, ..] ? part.Options[firstSelected].Tint : null;
 
         using var colorDialog = new ColorDialog { FullOpen = true, AnyColor = true };
-        if (current is { } currentText && Tints.TryParse(currentText, out var currentColor))
+        if (current is { } currentText && SpriteTint.TryParse(currentText, out var currentColor))
         {
-            colorDialog.Color = currentColor;
+            colorDialog.Color = currentColor.ToDrawingColor();
         }
 
         if (!IsActivePartLinked && SelectedOptionIndices().Count == 0)
@@ -943,7 +900,7 @@ public sealed class MainForm : Form
 
         if (colorDialog.ShowDialog(this) == DialogResult.OK)
         {
-            ApplyTint(Tints.Format(Color.FromArgb(255, colorDialog.Color)));
+            ApplyTint(SpriteTint.Format(Color.FromArgb(255, colorDialog.Color).ToSpriteColor()));
         }
     }
 
@@ -1019,7 +976,7 @@ public sealed class MainForm : Form
     }
 
     /// <summary>Applies transform to the selected slot, or to every selected option, of the part being edited; a quarter turn of a non-square cell is refused (the game would refuse to load it), and a refused option is left as it was while the others turn.</summary>
-    private void TransformSelected(Func<ManifestCell, ManifestCell> transform, bool isQuarterTurn)
+    private void TransformSelected(Func<SpriteManifestCell, SpriteManifestCell> transform, bool isQuarterTurn)
     {
         var part = ActivePart;
         if (IsActivePartLinked)
@@ -1032,7 +989,7 @@ public sealed class MainForm : Form
 
             if (isQuarterTurn && !slotCell.CanQuarterTurn)
             {
-                _warningLabel.Text = $"Only a square cell can be turned a quarter; this one is {slotCell.SourceRectangle.Width}x{slotCell.SourceRectangle.Height} pixels.";
+                _warningLabel.Text = $"Only a square cell can be turned a quarter; this one is {slotCell.SourceWidth}x{slotCell.SourceHeight} pixels.";
                 return;
             }
 
@@ -1066,7 +1023,7 @@ public sealed class MainForm : Form
     }
 
     /// <summary>The option or slot the placement preview shows: the selected one (the first, when several are), else the first there is.</summary>
-    private ManifestCell? SelectedCellForPlacement()
+    private SpriteManifestCell? SelectedCellForPlacement()
     {
         var part = ActivePart;
         if (IsActivePartLinked)
@@ -1086,7 +1043,7 @@ public sealed class MainForm : Form
     }
 
     private PlacedCell? FaceBeneathForPreview() =>
-        IsEditingTop && LinkLayout.Horizontal.PieceFor(_facePart.CurrentVariantSet, LinkLayout.Standalone) is { } face
+        IsEditingTop && LinkLayout.Horizontal.PieceFor(_facePart.CurrentVariantSet, SpriteLinks.Standalone) is { } face
             ? new PlacedCell(face, _facePart.PixelsPerTile, _facePart.PivotFor(face), 0)
             : null;
 
@@ -1106,7 +1063,7 @@ public sealed class MainForm : Form
             return;
         }
 
-        var source = placed.Cell.SourceRectangle.Size;
+        var source = placed.Cell.SourceSize();
         var pivotX = (int)Math.Round((e.X - drawn.Left) / drawn.Width * source.Width);
         var pivotY = (int)Math.Round((e.Y - drawn.Top) / drawn.Height * source.Height);
 
@@ -1128,7 +1085,7 @@ public sealed class MainForm : Form
             return;
         }
 
-        DrawListItem(e, $"#{e.Index + 1} {options[e.Index].Describe()}", !EntryRules.Fits(options[e.Index], ActivePart.Span), options[e.Index].TintColor);
+        DrawListItem(e, $"#{e.Index + 1} {options[e.Index].Describe()}", !EntryRules.Fits(options[e.Index], ActivePart.Span), options[e.Index].TintColor?.ToDrawingColor());
     }
 
     private void EntriesListBox_DrawItem(object? sender, DrawItemEventArgs e)
@@ -1145,7 +1102,7 @@ public sealed class MainForm : Form
     /// <summary>Fills swatch with tint ("#RRGGBB"), or leaves it empty when there is none, with a tooltip saying which.</summary>
     private void ShowTintSwatch(Panel swatch, string? tint)
     {
-        swatch.BackColor = tint is { } text && Tints.TryParse(text, out var color) ? color : SystemColors.Control;
+        swatch.BackColor = tint is { } text && SpriteTint.TryParse(text, out var color) ? color.ToDrawingColor() : SystemColors.Control;
         _toolTip.SetToolTip(swatch, tint is null ? "This variant set is untinted" : $"This variant set is tinted {tint}");
     }
 
@@ -1191,7 +1148,6 @@ public sealed class MainForm : Form
         _selectedSlotLabel.Text = $"Selected: {linkedPart.Layout.Describe(linkedPart.SelectedMask)}" +
             (linkedPart.CurrentVariantSet[linkedPart.SelectedMask] is { } slotCell ? $" -- {slotCell.Describe()}" : " -- empty");
         _legendLabel.Text = Legend();
-        RefreshAlsoInGroup();
         _linkPreviewBox.Invalidate();
         _pictureBox.Invalidate();
         RefreshPlacement();
@@ -1272,7 +1228,7 @@ public sealed class MainForm : Form
                 : ActivePart.PixelsPerTile is null ? IsEditingTop ? $"Stretched to the tile above a {FaceHeightRows}-row face." : "Stretched to its footprint."
                 : "Inside the reach box.");
 
-        _linkPreviewNoteLabel.Text = GroupPart.PixelsPerTile is null && GroupPart.CurrentVariantSet.Any(slot => slot is not null && slot.SourceRectangle.Width != slot.SourceRectangle.Height)
+        _linkPreviewNoteLabel.Text = LinkPreviewPart.PixelsPerTile is null && LinkPreviewPart.CurrentVariantSet.Any(slot => slot is not null && slot.SourceWidth != slot.SourceHeight)
             ? "Stretch to footprint squeezes each piece into one tile, as the game would. Set Pixels per tile to see pieces at their own size."
             : "";
         _placementPreviewBox.Invalidate();
@@ -1305,45 +1261,8 @@ public sealed class MainForm : Form
         return null;
     }
 
-    private static string? DescribeReachProblem(string name, string? partName, EntryPart part, bool linked, int raisedRows)
-    {
-        foreach (var cell in part.Cells(linked).OfType<ManifestCell>())
-        {
-            if (SpritePlacementRules.DescribeOutsideReachBox(name, partName, cell.SourceRectangle.Size, part.PixelsPerTile, part.PivotFor(cell), raisedRows) is { } problem)
-            {
-                return problem;
-            }
-        }
-
-        return null;
-    }
-
-    private void RefreshLinkGroupChoices()
-    {
-        SyncControls(() =>
-        {
-            var text = _linkGroupComboBox.Text;
-            _linkGroupComboBox.Items.Clear();
-            foreach (var group in _allEntries.SelectMany(entry => entry.LinkGroups).Distinct().Order())
-            {
-                _linkGroupComboBox.Items.Add(group);
-            }
-
-            _linkGroupComboBox.Text = text;
-        });
-    }
-
-    private void RefreshAlsoInGroup()
-    {
-        var group = _linkGroupComboBox.Text.Trim();
-        var name = _nameTextBox.Text.Trim();
-        var others = _allEntries
-            .Where(entry => entry.Name != name && entry.LinkGroups.Contains(group))
-            .Select(entry => entry.Name)
-            .ToList();
-
-        _alsoInGroupLabel.Text = $"Also in this group: {(others.Count == 0 ? "nothing else" : string.Join(", ", others))}";
-    }
+    private static string? DescribeReachProblem(string name, string? partName, EntryPart part, bool linked, int raisedRows) =>
+        SpriteManifestValidation.FindReachProblem(name, partName, part.ToManifestPart(linked), raisedRows);
 
     private void RefreshEntriesListBox()
     {
@@ -1369,15 +1288,14 @@ public sealed class MainForm : Form
         if (entry.Top is { } top)
         {
             _mainPart.Clear();
-            _facePart.Load(entry.Cells, linked: true, savedAsOptions: entry.Linking == SpriteLinking.None, entry.PixelsPerTile, entry.PivotX, entry.PivotY, "", span, entry.VariantWeights);
-            _topPart.Load(top.Cells, linked: true, savedAsOptions: false, top.PixelsPerTile, top.PivotX, top.PivotY, entry.EffectiveTopLinkGroup, EntryRules.SpanOf(top.Cells, top.ColumnSpan, top.RowSpan), top.VariantWeights);
+            _facePart.Load(entry.Cells, linked: true, savedAsOptions: entry.Linking == SpriteLinking.None, entry.PixelsPerTile, entry.PivotX, entry.PivotY, span, entry.VariantWeights);
+            _topPart.Load(top.Cells, linked: true, savedAsOptions: false, top.PixelsPerTile, top.PivotX, top.PivotY, EntryRules.SpanOf(top.Cells, top.ColumnSpan, top.RowSpan), top.VariantWeights);
         }
         else
         {
-            _mainPart.Load(entry.Cells, linked: kindIndex == LinkedSetKindIndex, savedAsOptions: false, entry.PixelsPerTile, entry.PivotX, entry.PivotY, entry.EffectiveLinkGroup, span, entry.VariantWeights);
+            _mainPart.Load(entry.Cells, linked: kindIndex == LinkedSetKindIndex, savedAsOptions: false, entry.PixelsPerTile, entry.PivotX, entry.PivotY, span, entry.VariantWeights);
             _facePart.Clear();
             _topPart.Clear();
-            _topPart.LinkGroup = entry.Name;
         }
 
         SyncControls(() =>
@@ -1387,13 +1305,12 @@ public sealed class MainForm : Form
             _faceRadioButton.Checked = true;
             _setPivotToggle.Checked = false;
         });
-        _previousName = entry.Name;
         _warningLabel.Text = "";
 
         // Auto-load the first cell's sheet/resolution so its cells show highlighted right away, the
         // same as if they had just been clicked -- without this, an entry's saved cells sit in the
         // working list but nothing highlights until the matching sheet is reopened by hand.
-        if (entry.Cells.Concat(entry.Top?.Cells ?? []).OfType<ManifestCell>().FirstOrDefault() is { } firstCell)
+        if (entry.Cells.Concat(entry.Top?.Cells ?? []).OfType<SpriteManifestCell>().FirstOrDefault() is { } firstCell)
         {
             _cellWidthUpDown.Value = Math.Clamp((decimal)firstCell.CellWidth, _cellWidthUpDown.Minimum, _cellWidthUpDown.Maximum);
             _cellHeightUpDown.Value = Math.Clamp((decimal)firstCell.CellHeight, _cellHeightUpDown.Minimum, _cellHeightUpDown.Maximum);
@@ -1416,7 +1333,6 @@ public sealed class MainForm : Form
             _setPivotToggle.Checked = false;
             _entriesListBox.ClearSelected();
         });
-        _previousName = "";
         _warningLabel.Text = "";
         LoadActivePartIntoControls();
     }
@@ -1443,12 +1359,11 @@ public sealed class MainForm : Form
             return;
         }
 
-        var updatedEntries = ManifestFile.Load(RepoPaths.ManifestFilePath).Where(entry => !names.Contains(entry.Name)).ToList();
-        ManifestFile.Save(RepoPaths.ManifestFilePath, updatedEntries);
+        var updatedEntries = SpriteManifest.ReadEntries(RepoPaths.ManifestFilePath).Where(entry => !names.Contains(entry.Name)).ToList();
+        SpriteManifest.Write(RepoPaths.ManifestFilePath, updatedEntries);
 
         _allEntries = updatedEntries;
         RefreshEntriesListBox();
-        RefreshLinkGroupChoices();
         ClearWorkingEntry();
     }
 
@@ -1460,14 +1375,12 @@ public sealed class MainForm : Form
             return;
         }
 
-        var currentEntries = ManifestFile.Load(RepoPaths.ManifestFilePath);
-        var updatedEntries = ManifestFile.Upsert(currentEntries, newEntry);
-        ManifestFile.Save(RepoPaths.ManifestFilePath, updatedEntries);
+        var currentEntries = SpriteManifest.ReadEntries(RepoPaths.ManifestFilePath);
+        var updatedEntries = Upsert(currentEntries, newEntry);
+        SpriteManifest.Write(RepoPaths.ManifestFilePath, updatedEntries);
 
         _allEntries = updatedEntries;
         RefreshEntriesListBox();
-        RefreshLinkGroupChoices();
-        RefreshAlsoInGroup();
 
         var misfits = EntryRules.CountMisfits(newEntry.Cells, (IsWall ? _facePart : _mainPart).Span) + (newEntry.Top is { } top ? EntryRules.CountMisfits(top.Cells, _topPart.Span) : 0);
         var emptySlots = newEntry.Cells.Concat(newEntry.Top?.Cells ?? []).Count(cell => cell is null);
@@ -1477,10 +1390,10 @@ public sealed class MainForm : Form
 
     /// <summary>
     /// The entry Save writes, or null with the reason it refuses: no name, nothing selected at all, a wall face without its
-    /// standalone piece in every variant set, or a cell outside the reach box (both of which the game would refuse to load).
-    /// Other empty slots and cells that don't fit the span are saved as they are, so unfinished work isn't lost.
+    /// standalone piece in every variant set, chances that don't add up, a cell outside the reach box, or anything else the game would refuse
+    /// to load (SpriteManifestValidation, the game's own check). Other empty slots and cells that don't fit the span are saved as they are, so unfinished work isn't lost.
     /// </summary>
-    private ManifestEntry? BuildEntry(out string refusal)
+    private SpriteManifestEntry? BuildEntry(out string refusal)
     {
         var name = _nameTextBox.Text.Trim();
         if (name.Length == 0)
@@ -1514,37 +1427,41 @@ public sealed class MainForm : Form
             return null;
         }
 
-        refusal = "";
-        var mainPart = IsWall ? _facePart : _mainPart;
-        var linking = IsWall ? SpriteLinking.Horizontal : IsMainPartLinked ? SpriteLinking.Cardinal : SpriteLinking.None;
-        return new ManifestEntry(
+        var face = (IsWall ? _facePart : _mainPart).ToManifestPart(IsActivePartLinked);
+        var entry = new SpriteManifestEntry(
             name,
-            [.. mainPart.Cells(IsActivePartLinked)],
-            mainPart.PixelsPerTile,
-            mainPart.PivotX,
-            mainPart.PivotY,
-            linking,
-            IsMainPartLinked ? SavedLinkGroup(_mainPart, name) : null,
-            IsWall ? BuildTop(name) : null,
-            SavedSpan(mainPart.Span.Width),
-            SavedSpan(mainPart.Span.Height),
-            IsActivePartLinked ? mainPart.SavedVariantWeights() : null);
+            face.Cells,
+            face.PixelsPerTile,
+            face.PivotX,
+            face.PivotY,
+            face.Linking,
+            IsWall ? _topPart.ToManifestPart(linked: true) : null,
+            face.ColumnSpan,
+            face.RowSpan,
+            face.VariantWeights);
+
+        if (SpriteManifestValidation.FindProblem(entry) is { } loadProblem)
+        {
+            refusal = loadProblem;
+            return null;
+        }
+
+        refusal = "";
+        return entry;
     }
 
-    private ManifestPart BuildTop(string name) =>
-        new(
-            [.. _topPart.Cells(linked: true)],
-            _topPart.PixelsPerTile,
-            _topPart.PivotX,
-            _topPart.PivotY,
-            SpriteLinking.Cardinal,
-            SavedLinkGroup(_topPart, name),
-            SavedSpan(_topPart.Span.Width),
-            SavedSpan(_topPart.Span.Height),
-            _topPart.SavedVariantWeights());
+    /// <summary>Replaces any existing entry with the same Name where it stands, otherwise appends -- so re-saving an unchanged entry rewrites the file byte for byte.</summary>
+    private static List<SpriteManifestEntry> Upsert(IReadOnlyList<SpriteManifestEntry> entries, SpriteManifestEntry newEntry)
+    {
+        var result = entries.ToList();
+        var existingIndex = result.FindIndex(entry => entry.Name == newEntry.Name);
+        if (existingIndex >= 0)
+        {
+            result[existingIndex] = newEntry;
+            return result;
+        }
 
-    /// <summary>A group equal to the entry's name is the default, so it is left out.</summary>
-    private static string? SavedLinkGroup(EntryPart part, string name) => part.LinkGroup.Length > 0 && part.LinkGroup != name ? part.LinkGroup : null;
-
-    private static int SavedSpan(int span) => span == 1 ? 0 : span;
+        result.Add(newEntry);
+        return result;
+    }
 }

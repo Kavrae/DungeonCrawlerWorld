@@ -1,6 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using Game.Modules.Core.Components;
-using Game.Sprites;
 
 namespace Game.Terrain;
 
@@ -9,9 +7,6 @@ namespace Game.Terrain;
 /// Filled during IGameModule.Configure (TerrainModule for the built-ins, and any mod's own), before
 /// population and before any system reads it -- the same ordering StatusEffectApplierRegistry
 /// relies on. Id 0 is reserved for "no terrain", so a zeroed cell array means an empty map.
-///
-/// Sprites (a wall's face and top alike) are resolved once per definition, on first use, rather than per cell per frame:
-/// the draw path reads a cached array instead of a string-keyed manifest lookup.
 /// </remarks>
 public sealed class TerrainRegistry
 {
@@ -20,9 +15,8 @@ public sealed class TerrainRegistry
 
     private readonly List<TerrainDefinition?> _definitions = [null];
     private readonly Dictionary<string, ushort> _idsByKey = [];
-    private readonly List<TerrainSpriteSet?> _spriteSets = [null];
 
-    /// <summary>Each id's link group as an int (see GetLinkGroup), resolved with its sprites; 0 until resolved.</summary>
+    /// <summary>Each id's link group as an int (see GetLinkGroup); 0 until first asked for.</summary>
     private readonly List<int> _linkGroups = [0];
 
     private readonly Dictionary<string, int> _linkGroupIdsByName = [];
@@ -43,7 +37,6 @@ public sealed class TerrainRegistry
         {
             var previous = _definitions[existingId]!;
             _definitions[existingId] = definition;
-            _spriteSets[existingId] = null;
             _linkGroups[existingId] = 0;
             _blocksMovement[existingId] = definition.BlocksMovement;
             DefinitionChanged?.Invoke(existingId, previous, definition);
@@ -57,7 +50,6 @@ public sealed class TerrainRegistry
 
         var id = (ushort)_definitions.Count;
         _definitions.Add(definition);
-        _spriteSets.Add(null);
         _linkGroups.Add(0);
         _blocksMovement.Add(definition.BlocksMovement);
         _idsByKey.Add(definition.Key, id);
@@ -95,41 +87,10 @@ public sealed class TerrainRegistry
     public ushort GetId(string key) =>
         _idsByKey.TryGetValue(key, out var typeId) ? typeId : throw new KeyNotFoundException($"No terrain registered under '{key}'.");
 
-    /// <summary>A cell of typeId with its sprite variant rolled, the way SpriteManifest.TryGetRandom rolls a blueprint's sprite: a single-variant or glyph-only terrain doesn't draw from mathUtility at all, so seeded maps don't shift.</summary>
-    public TerrainCell CreateCell(ushort typeId, Engine.Math.MathUtility mathUtility)
-    {
-        var variantCount = GetVariantCount(typeId);
-        return new TerrainCell(typeId, variantCount > 1 ? (byte)mathUtility.Next(0, System.Math.Min(variantCount, byte.MaxValue + 1)) : (byte)0);
-    }
-
-
-    /// <summary>How many sprite variants typeId has -- 0 for glyph-only terrain or an unknown id. For a linked part it counts variant sets, not pieces.</summary>
-    public int GetVariantCount(ushort typeId) => GetSpriteSet(typeId)?.VariantCount ?? 0;
-
-    /// <summary>The sprite cell draws as -- a floor's, or a wall's face -- if it has sprites. An out-of-range variant (a manifest that shrank) wraps rather than failing.</summary>
-    /// <remarks>A linked face draws the piece its set falls back to (a wall face's standalone piece): what a floor or the inspector shows. The map draws a wall's joined pieces through MapViewQuery, which picks them by its neighbours.</remarks>
-    public bool TryGetSprite(TerrainCell cell, out ManifestSprite sprite)
-    {
-        if (GetSpriteSet(cell.TypeId) is { } sprites)
-        {
-            return sprites.TryGetFace(cell.Variant, mask: null, out sprite);
-        }
-
-        sprite = default;
-        return false;
-    }
-
-    /// <summary>typeId's resolved sprites, for a caller that picks pieces by its own mask (MapViewQuery's joined walls).</summary>
-    public bool TryGetSpriteSet(ushort typeId, [NotNullWhen(true)] out TerrainSpriteSet? sprites)
-    {
-        sprites = GetSpriteSet(typeId);
-        return sprites is not null;
-    }
-
     /// <summary>
-    /// typeId's link group as an int: structures with the same one join each other. Read from the sprite entry (a wall's top's
-    /// group, else the entry's own), so a door frame joins a stone wall by sharing its group; a definition with no sprite entry
-    /// joins only itself. Comparing ints keeps the neighbour test free of string lookups.
+    /// typeId's link group as an int: structures with the same one join each other. Read from the definition (its LinkGroup,
+    /// else its SpriteName, else its own key), so a door frame joins a stone wall by sharing its group; a definition with
+    /// neither joins only itself. Comparing ints keeps the neighbour test free of string lookups.
     /// </summary>
     public int GetLinkGroup(ushort typeId)
     {
@@ -143,7 +104,8 @@ public sealed class TerrainRegistry
             return _linkGroups[typeId];
         }
 
-        var name = GetSpriteSet(typeId) is { } sprites ? sprites.LinkGroup : $"terrain:{_definitions[typeId]!.Key}";
+        var definition = _definitions[typeId]!;
+        var name = definition.LinkGroup ?? definition.SpriteName ?? $"terrain:{definition.Key}";
         if (!_linkGroupIdsByName.TryGetValue(name, out var linkGroup))
         {
             linkGroup = _linkGroupIdsByName.Count + 1;
@@ -151,15 +113,5 @@ public sealed class TerrainRegistry
         }
 
         return _linkGroups[typeId] = linkGroup;
-    }
-
-    private TerrainSpriteSet? GetSpriteSet(ushort typeId)
-    {
-        if (!TryGet(typeId, out var definition) || definition.SpriteName is not { } spriteName || !SpriteManifest.TryGetEntry(spriteName, out var entry))
-        {
-            return null;
-        }
-
-        return _spriteSets[typeId] ??= TerrainSpriteSet.Resolve(entry);
     }
 }

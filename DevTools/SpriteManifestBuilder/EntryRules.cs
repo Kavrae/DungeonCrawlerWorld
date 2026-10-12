@@ -4,11 +4,11 @@ namespace SpriteManifestBuilder;
 public static class EntryRules
 {
     /// <summary>The topmost (most recently added) option on sheetPath containing sourcePixel, or -1.</summary>
-    public static int FindOptionAt(IReadOnlyList<ManifestCell> options, string sheetPath, Point sourcePixel)
+    public static int FindOptionAt(IReadOnlyList<SpriteManifestCell> options, string sheetPath, Point sourcePixel)
     {
         for (var index = options.Count - 1; index >= 0; index--)
         {
-            if (options[index].SheetPath == sheetPath && options[index].SourceRectangle.Contains(sourcePixel))
+            if (options[index].SheetPath == sheetPath && options[index].SourceRectangle.ToDrawingRectangle().Contains(sourcePixel))
             {
                 return index;
             }
@@ -18,10 +18,10 @@ public static class EntryRules
     }
 
     /// <summary>Whether an option already draws exactly the same picture -- the same pixels, flipped, turned and tinted the same way. Adding it again would silently double its odds.</summary>
-    public static bool HasIdenticalOption(IReadOnlyList<ManifestCell> options, ManifestCell candidate) =>
+    public static bool HasIdenticalOption(IReadOnlyList<SpriteManifestCell> options, SpriteManifestCell candidate) =>
         FindIdenticalOption(options, candidate) >= 0;
 
-    public static int FindIdenticalOption(IReadOnlyList<ManifestCell> options, ManifestCell candidate)
+    public static int FindIdenticalOption(IReadOnlyList<SpriteManifestCell> options, SpriteManifestCell candidate)
     {
         for (var index = 0; index < options.Count; index++)
         {
@@ -37,14 +37,14 @@ public static class EntryRules
         return -1;
     }
 
-    public static bool Fits(ManifestCell cell, Size span) =>
+    public static bool Fits(SpriteManifestCell cell, Size span) =>
         cell.EffectiveColumnSpan == span.Width && cell.EffectiveRowSpan == span.Height;
 
-    public static int CountMisfits(IEnumerable<ManifestCell?> cells, Size span) =>
+    public static int CountMisfits(IEnumerable<SpriteManifestCell?> cells, Size span) =>
         cells.Count(cell => cell is not null && !Fits(cell, span));
 
     /// <summary>The span a part was authored at: the one saved with it, else (one saved before spans were) its most common cell span, else 1x1.</summary>
-    public static Size SpanOf(IEnumerable<ManifestCell?> cells, int savedColumnSpan, int savedRowSpan)
+    public static Size SpanOf(IEnumerable<SpriteManifestCell?> cells, int savedColumnSpan, int savedRowSpan)
     {
         if (savedColumnSpan > 0 || savedRowSpan > 0)
         {
@@ -52,7 +52,7 @@ public static class EntryRules
         }
 
         return cells
-            .OfType<ManifestCell>()
+            .OfType<SpriteManifestCell>()
             .GroupBy(cell => new Size(cell.EffectiveColumnSpan, cell.EffectiveRowSpan))
             .OrderByDescending(group => group.Count())
             .Select(group => group.Key)
@@ -61,12 +61,12 @@ public static class EntryRules
     }
 
     /// <summary>Whether any cell of the entry, or of a wall's top, doesn't fit the span its part was authored at.</summary>
-    public static bool HasMisfit(ManifestEntry entry) =>
+    public static bool HasMisfit(SpriteManifestEntry entry) =>
         CountMisfits(entry.Cells, SpanOf(entry.Cells, entry.ColumnSpan, entry.RowSpan)) > 0 ||
         entry.Top is { } top && CountMisfits(top.Cells, SpanOf(top.Cells, top.ColumnSpan, top.RowSpan)) > 0;
 
     /// <summary>The span-sized option whose top-left grid cell is topLeft, or null when it would run off the sheet.</summary>
-    public static ManifestCell? SpanningFrom(string sheetPath, Point topLeft, Size span, int cellWidth, int cellHeight, Size sheetSize)
+    public static SpriteManifestCell? SpanningFrom(string sheetPath, Point topLeft, Size span, int cellWidth, int cellHeight, Size sheetSize)
     {
         var bottomRight = new Point(topLeft.X + span.Width - 1, topLeft.Y + span.Height - 1);
         if ((bottomRight.X + 1) * cellWidth > sheetSize.Width || (bottomRight.Y + 1) * cellHeight > sheetSize.Height)
@@ -74,6 +74,6 @@ public static class EntryRules
             return null;
         }
 
-        return ManifestCell.Spanning(sheetPath, topLeft, bottomRight, cellWidth, cellHeight);
+        return SpriteManifestCell.Spanning(sheetPath, topLeft.X, topLeft.Y, bottomRight.X, bottomRight.Y, cellWidth, cellHeight);
     }
 }

@@ -1,5 +1,6 @@
 using System.Reflection;
 using Game.Modules.Core.Components;
+using Game.Modules.Movement.Components;
 using Presentation.UI;
 
 namespace Tests.Presentation;
@@ -20,10 +21,6 @@ public sealed class MapWindowArchitectureTests
     [TestMethod]
     public void MapWindow_ReferencesNoGameComponentType() =>
         AssertNoComponentReferences(typeof(MapWindow));
-
-    [TestMethod]
-    public void MapBackgroundCache_ReferencesNoGameComponentType() =>
-        AssertNoComponentReferences(typeof(MapBackgroundCache));
 
     [TestMethod]
     public void FloatingTextController_ReferencesNoGameComponentType() =>
@@ -131,11 +128,11 @@ public sealed class MapWindowArchitectureTests
 
         public static int ReadsLocal()
         {
-            var sprite = new SpriteComponent("sheet", default);
-            return sprite.SheetPath.Length;
+            var sprite = new SpriteComponent("sheet", 0);
+            return sprite.SpriteName.Length;
         }
 
-        public static BackgroundComponent ReturnsComponent() => default;
+        public static MovementComponent ReturnsComponent() => default;
 
         public static Func<int> CapturesInClosure()
         {

@@ -16,7 +16,7 @@ public sealed class SlotGridControl : Control
     private readonly SheetImageCache _sheets;
     private readonly ToolTip _toolTip = new();
     private LinkLayout _layout = LinkLayout.Cardinal;
-    private ManifestCell?[] _slots = LinkLayout.Cardinal.NewVariantSet();
+    private SpriteManifestCell?[] _slots = LinkLayout.Cardinal.NewVariantSet();
     private int _hoveredMask = -1;
 
     public SlotGridControl(SheetImageCache sheets, bool multiSelect)
@@ -41,7 +41,7 @@ public sealed class SlotGridControl : Control
 
     public event EventHandler? SelectedMaskChanged;
 
-    public void SetSlots(LinkLayout layout, ManifestCell?[] slots)
+    public void SetSlots(LinkLayout layout, SpriteManifestCell?[] slots)
     {
         if (layout != _layout)
         {
@@ -79,7 +79,7 @@ public sealed class SlotGridControl : Control
                 e.Graphics.FillRectangle(emptyBrush, slotRectangle);
                 if (cell is not null)
                 {
-                    CellDrawing.Draw(e.Graphics, _sheets, cell, CellDrawing.Fit(cell.SourceRectangle.Size, slotRectangle));
+                    CellDrawing.Draw(e.Graphics, _sheets, cell, CellDrawing.Fit(cell.SourceSize(), slotRectangle));
                     if (!EntryRules.Fits(cell, ExpectedSpan))
                     {
                         WarningIcon.Draw(e.Graphics, slotRectangle.Right - WarningIcon.Pixels - 2, slotRectangle.Bottom - WarningIcon.Pixels - 2);

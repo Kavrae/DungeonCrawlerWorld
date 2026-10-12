@@ -23,7 +23,7 @@ public sealed class EntityIconElement(
     : Element(fontService, elementPoolService, labelRenderer)
 {
     private int _entityId;
-    private EntityVisualView? _fixedVisual;
+    private MapVisual? _fixedVisual;
     private SpriteFontBase _glyphFont = null!;
 
     public void Configure(int entityId, Vector2 iconSize)
@@ -33,11 +33,11 @@ public sealed class EntityIconElement(
         _glyphFont = FontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction));
     }
 
-    /// <summary>Shows a visual that belongs to no entity -- a terrain cell's.</summary>
-    public void Configure(EntityVisualView visual, Vector2 iconSize)
+    /// <summary>Shows a visual that belongs to no entity -- a terrain or structure cell's, as one picture.</summary>
+    public void Configure(TerrainVisualView visual, Vector2 iconSize)
     {
         _entityId = -1;
-        _fixedVisual = visual;
+        _fixedVisual = spriteSheetService.Sprites.Resolve(visual);
         _glyphFont = FontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction));
     }
 
@@ -49,8 +49,9 @@ public sealed class EntityIconElement(
             return;
         }
 
-        if (mapView.TryGetVisual(_entityId, out var entityVisual))
+        if (mapView.TryGetVisual(_entityId, out var entityView))
         {
+            var entityVisual = spriteSheetService.Sprites.Resolve(entityView);
             SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, entityVisual.Sprite, _glyphFont, entityVisual.Glyph, entityVisual.GlyphColor, ContentAbsolutePosition, ContentSize, Color.White);
         }
     }

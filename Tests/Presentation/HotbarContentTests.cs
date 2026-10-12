@@ -68,7 +68,7 @@ public sealed class HotbarContentTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, new ItemCatalog()), TestActionStateViews.Over(componentManager), new HotkeyBindingCommands(componentManager, new ItemCatalog(), new EventBus()), new ActionCatalog(), new ItemCatalog(),
-            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), ScreenSize, simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), ScreenSize, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

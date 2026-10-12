@@ -1,8 +1,5 @@
-using Engine.Math;
-using Game.Sprites;
-using Game.Views;
 using Microsoft.Xna.Framework;
-using Presentation.Rendering;
+using SpriteFormat;
 
 namespace Presentation.UI;
 
@@ -42,8 +39,9 @@ public sealed class MapWallPlan
     /// <summary>The last Plan's live pieces, sorted by MapOverhang.CompareDrawOrder for the row walk.</summary>
     public IReadOnlyList<MapOverhang> Overhangs => _overhangs;
 
+    /// <param name="cells">The terrain around the grid, read (MapTerrainCells.Read) for the same scroll and size.</param>
     /// <param name="scroll">The map tile at the grid's top-left.</param>
-    public void Plan(IMapViewQuery map, Point scroll, int tileColumns, int tileRows, int mapLayer)
+    public void Plan(MapTerrainCells cells, Point scroll, int tileColumns, int tileRows)
     {
         _cachedPieces.Clear();
         _cachedTops.Clear();
@@ -55,20 +53,20 @@ public sealed class MapWallPlan
             {
                 var mapX = scroll.X + columnIndex;
                 var mapY = scroll.Y + rowIndex;
-                if (!map.HasStructure(mapX, mapY, mapLayer))
+                if (!cells.HasStructure(mapX, mapY))
                 {
                     continue;
                 }
 
-                var hasTop = map.TryGetStructureTopVisual(mapX, mapY, mapLayer, out var top);
-                if ((!hasTop || !IsWallOrOffMap(map, mapX, mapY + 1, mapLayer)) && map.TryGetStructureVisual(mapX, mapY, mapLayer, out var face))
+                var hasTop = cells.TryGetTop(mapX, mapY, out var top, out var raisedRows);
+                if ((!hasTop || !IsWallOrOffMap(cells, mapX, mapY + 1)) && cells.TryGetFace(mapX, mapY, out var face))
                 {
-                    Place(map, new MapOverhang(mapX, mapY, mapX, mapY, face, IsTop: false), mapLayer);
+                    Place(cells, new MapOverhang(mapX, mapY, mapX, mapY, face, IsTop: false));
                 }
 
                 if (hasTop)
                 {
-                    Place(map, new MapOverhang(mapX, mapY, mapX, mapY - top.RaisedRows, top.Visual, IsTop: true), mapLayer);
+                    Place(cells, new MapOverhang(mapX, mapY, mapX, mapY - raisedRows, top, IsTop: true));
                 }
             }
         }
@@ -78,14 +76,14 @@ public sealed class MapWallPlan
     }
 
     /// <summary>Which tiles piece's drawn picture touches, relative to the tile it sits on.</summary>
-    public static SpritePlacementMath.TileArea AreaOf(MapOverhang piece) =>
+    public static SpriteTileArea AreaOf(MapOverhang piece) =>
         piece.Visual.Sprite is { } sprite
-            ? SpritePlacementMath.DrawnTiles(new Vector2Byte(1, 1), new Point(sprite.SourceRectangle.Width, sprite.SourceRectangle.Height), sprite.Placement)
-            : new SpritePlacementMath.TileArea(0, 0, 1, 1);
+            ? SpritePlacementTiles.DrawnTiles(1, 1, sprite.SourceRectangle.Width, sprite.SourceRectangle.Height, sprite.Placement)
+            : new SpriteTileArea(0, 0, 1, 1);
 
-    private void Place(IMapViewQuery map, MapOverhang piece, int mapLayer)
+    private void Place(MapTerrainCells cells, MapOverhang piece)
     {
-        if (!CoversOnlyWalls(map, piece, mapLayer))
+        if (!CoversOnlyWalls(cells, piece))
         {
             _overhangs.Add(piece);
         }
@@ -99,14 +97,14 @@ public sealed class MapWallPlan
         }
     }
 
-    private static bool CoversOnlyWalls(IMapViewQuery map, MapOverhang piece, int mapLayer)
+    private static bool CoversOnlyWalls(MapTerrainCells cells, MapOverhang piece)
     {
         var area = AreaOf(piece);
         for (var row = (int)MathF.Floor(area.Top); row < (int)MathF.Ceiling(area.Bottom); row++)
         {
             for (var column = (int)MathF.Floor(area.Left); column < (int)MathF.Ceiling(area.Right); column++)
             {
-                if (!IsWallOrOffMap(map, piece.AnchorX + column, piece.AnchorY + row, mapLayer))
+                if (!IsWallOrOffMap(cells, piece.AnchorX + column, piece.AnchorY + row))
                 {
                     return false;
                 }
@@ -116,6 +114,6 @@ public sealed class MapWallPlan
         return true;
     }
 
-    private static bool IsWallOrOffMap(IMapViewQuery map, int mapX, int mapY, int mapLayer) =>
-        !map.IsOnMap(new Vector3Int(mapX, mapY, mapLayer)) || map.HasStructure(mapX, mapY, mapLayer);
+    private static bool IsWallOrOffMap(MapTerrainCells cells, int mapX, int mapY) =>
+        !cells.IsOnMap(mapX, mapY) || cells.HasStructure(mapX, mapY);
 }

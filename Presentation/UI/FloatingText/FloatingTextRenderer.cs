@@ -1,6 +1,5 @@
 using FontStashSharp;
 using Game.Modules.StatusEffects;
-using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -141,7 +140,7 @@ public sealed class FloatingTextRenderer(
     {
         if (!_statusEffectSprites.TryGetValue(effectType, out var sprite))
         {
-            sprite = SpriteViews.TryGetFirst($"StatusEffect-{effectType}", out var found) ? found : null;
+            sprite = _spriteSheetService.Sprites.TryGetFirst($"StatusEffect-{effectType}", out var found) ? found : null;
             _statusEffectSprites[effectType] = sprite;
         }
 

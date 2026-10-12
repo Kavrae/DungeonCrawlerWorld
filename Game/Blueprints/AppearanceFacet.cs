@@ -30,6 +30,6 @@ public sealed record AppearanceFacet
 
     public Color? GlyphColor { get; init; }
 
-    /// <summary>The SpriteManifest entry an entity draws a cell of, picked by its seed, or <see cref="NoSprite"/>.</summary>
+    /// <summary>The sprite manifest entry an entity draws as, its cell picked by its seed in Presentation, or <see cref="NoSprite"/>.</summary>
     public string? SpriteName { get; init; }
 }

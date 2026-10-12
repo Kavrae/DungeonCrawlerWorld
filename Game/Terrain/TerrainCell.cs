@@ -1,9 +1,8 @@
 namespace Game.Terrain;
 
-/// <summary>One cell's terrain: which definition, and which of its sprite variants.</summary>
+/// <summary>One cell's terrain: which definition. How it looks is picked from the cell's seed (World.CellSeeds), not stored.</summary>
 /// <param name="TypeId">TerrainRegistry id; <see cref="TerrainRegistry.None"/> for no terrain.</param>
-/// <param name="Variant">Index into the definition's sprite cells, rolled once when the cell is set.</param>
-public readonly record struct TerrainCell(ushort TypeId, byte Variant)
+public readonly record struct TerrainCell(ushort TypeId)
 {
     public bool IsEmpty => TypeId == TerrainRegistry.None;
 }

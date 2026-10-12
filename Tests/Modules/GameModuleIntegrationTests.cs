@@ -26,7 +26,6 @@ public sealed class GameModuleIntegrationTests
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<TransformComponent>());
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<DisplayTextComponent>());
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<GlyphComponent>());
-        Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<BackgroundComponent>());
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<ActionLockComponent>());
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<SimpleHealthComponent>());
         Assert.IsTrue(ecsContext.ComponentManager.IsRegistered<MovementComponent>());

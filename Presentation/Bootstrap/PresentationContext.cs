@@ -10,7 +10,6 @@ public sealed class PresentationContext(
     FontService fontService,
     SpriteBatchRenderer spriteBatchRenderer,
     LabelRenderer labelRenderer,
-    TileRenderer tileRenderer,
     SpriteSheetService spriteSheetService,
     SpriteRenderer spriteRenderer,
     ElementPoolService elementPoolService)
@@ -18,7 +17,6 @@ public sealed class PresentationContext(
     public FontService FontService { get; } = fontService;
     public SpriteBatchRenderer SpriteBatchRenderer { get; } = spriteBatchRenderer;
     public LabelRenderer LabelRenderer { get; } = labelRenderer;
-    public TileRenderer TileRenderer { get; } = tileRenderer;
     public SpriteSheetService SpriteSheetService { get; } = spriteSheetService;
     public SpriteRenderer SpriteRenderer { get; } = spriteRenderer;
     public ElementPoolService ElementPoolService { get; } = elementPoolService;

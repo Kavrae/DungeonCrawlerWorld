@@ -33,7 +33,7 @@ public sealed class NotificationCenterTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer()));
         return windowService;
     }
 
@@ -137,7 +137,7 @@ public sealed class NotificationCenterTests
         Folder? capturedFolder = null;
         windowService.RegisterFactory<Folder>(() =>
         {
-            capturedFolder = new Folder(fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer());
+            capturedFolder = new Folder(fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer());
             return capturedFolder;
         });
         return (windowService, () => capturedFolder ?? throw new InvalidOperationException("Folder not created yet."));
@@ -324,7 +324,7 @@ public sealed class NotificationCenterTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer()));
         var capturedPopups = new List<TextWindow>();
 
         // Overrides WindowService's default TextWindow factory just to capture each created
@@ -371,7 +371,7 @@ public sealed class NotificationCenterTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer()));
         var capturedPopups = new List<TextWindow>();
         windowService.RegisterFactory<TextWindow>(() =>
         {

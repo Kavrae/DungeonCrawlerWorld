@@ -1,5 +1,4 @@
 using Game.Modules.Core.Components;
-using Game.Sprites;
 using Microsoft.Xna.Framework;
 
 namespace Game.Blueprints;
@@ -9,7 +8,7 @@ namespace Game.Blueprints;
 /// A pure function of (appearance, seed), read wherever an entity is drawn or named (MapViewQuery,
 /// EntityNaming) rather than written to each entity: an entity holds a GlyphComponent,
 /// SpriteComponent or DisplayTextComponent only when that one entity differs from its blueprint -- a
-/// destroyed container, say. Variants are picked by hashing the seed, never by drawing from
+/// destroyed container, say. Names are picked by hashing the seed (and so is the sprite variant, by Presentation, from SpriteName and the same seed), never by drawing from
 /// BlueprintContext.Rolls, so they don't depend on what the blueprint rolled, and an entity that has
 /// never been built looks exactly like the one it will be.
 /// </remarks>
@@ -17,7 +16,6 @@ namespace Game.Blueprints;
 public sealed class EntityAppearance
 {
     private const uint NameSalt = 0x9E3779B9;
-    private const uint SpriteSalt = 0x85EBCA6B;
 
     private readonly string? _name;
     private readonly IReadOnlyList<string> _displayNames;
@@ -42,7 +40,7 @@ public sealed class EntityAppearance
 
     public Color GlyphColor { get; }
 
-    /// <summary>The SpriteManifest entry a cell is picked from, or null for glyph only.</summary>
+    /// <summary>The sprite manifest entry the entity draws as, its variant picked from its seed by Presentation, or null for glyph only.</summary>
     public string? SpriteName { get; }
 
     /// <summary>Whether the blueprint declares the entity's whole name, which nothing composed onto it -- a class, a suffix -- extends.</summary>
@@ -63,18 +61,6 @@ public sealed class EntityAppearance
         return _nameSuffix.Length == 0 ? name
             : name.Length == 0 ? _nameSuffix
             : $"{name} {_nameSuffix}";
-    }
-
-    public bool TryGetSprite(uint seed, out ManifestSprite sprite)
-    {
-        var count = SpriteName is null ? 0 : SpriteManifest.CountCells(SpriteName);
-        if (count == 0)
-        {
-            sprite = default;
-            return false;
-        }
-
-        return SpriteManifest.TryResolveCell(SpriteName!, Variant(seed, SpriteSalt, count), out sprite);
     }
 
     private static int Variant(uint seed, uint salt, int count)

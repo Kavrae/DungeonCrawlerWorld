@@ -1,6 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Game.Sprites;
+using SpriteFormat;
 
 namespace Presentation.UI;
 

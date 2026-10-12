@@ -1,13 +1,10 @@
-using Game.Views;
 using FontStashSharp;
-using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
-using Game.Sprites;
 
 namespace Presentation.UI;
 
@@ -178,7 +175,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         // never wired -- see this class's own doc comment on why they're optional).
         if (_spriteName is not null && spriteSheetService is not null && spriteRenderer is not null)
         {
-            SpriteView? sprite = SpriteViews.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
+            SpriteView? sprite = spriteSheetService.Sprites.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
             var spriteTint = Enabled ? Color.White : Color.Gray;
             SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, ContentFont, LeftText, textColor, ContentAbsolutePosition, ContentSize, spriteTint);
         }

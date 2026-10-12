@@ -14,19 +14,21 @@ namespace Presentation.Bootstrap;
 /// </summary>
 public static class PresentationBootstrapper
 {
-    public static PresentationContext Build(GraphicsDevice graphicsDevice, string fontsDirectory, string spritesheetsDirectory)
+    /// <param name="spriteManifestFileName">The sprite manifest, relative to the exe's output directory; loaded and checked here, so a broken file stops startup naming its entry.</param>
+    public static PresentationContext Build(GraphicsDevice graphicsDevice, string fontsDirectory, string spritesheetsDirectory, string spriteManifestFileName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fontsDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(spritesheetsDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(spriteManifestFileName);
 
         var fontService = new FontService(fontsDirectory);
         var spriteBatchRenderer = new SpriteBatchRenderer(graphicsDevice);
         var labelRenderer = new LabelRenderer();
-        var tileRenderer = new TileRenderer();
-        var spriteSheetService = new SpriteSheetService(graphicsDevice, spritesheetsDirectory);
+        var sprites = SpriteManifestResolver.Load(Path.Combine(AppContext.BaseDirectory, spriteManifestFileName));
+        var spriteSheetService = new SpriteSheetService(graphicsDevice, spritesheetsDirectory, sprites);
         var spriteRenderer = new SpriteRenderer();
         var elementPoolService = new ElementPoolService();
 
-        return new PresentationContext(fontService, spriteBatchRenderer, labelRenderer, tileRenderer, spriteSheetService, spriteRenderer, elementPoolService);
+        return new PresentationContext(fontService, spriteBatchRenderer, labelRenderer, spriteSheetService, spriteRenderer, elementPoolService);
     }
 }

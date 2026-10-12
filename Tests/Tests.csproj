@@ -23,6 +23,7 @@
     <ProjectReference Include="..\Engine\Engine.csproj" />
     <ProjectReference Include="..\Game\Game.csproj" />
     <ProjectReference Include="..\Presentation\Presentation.csproj" />
+    <ProjectReference Include="..\SpriteFormat\SpriteFormat.csproj" />
     <!--
       Build-order only: GameBootstrapperTests/ModuleLoaderTests load Mods.ExampleMod.dll at
       runtime via reflection (the real modding pipeline), not by compile-time reference.

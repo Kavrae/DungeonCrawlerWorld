@@ -3,7 +3,7 @@ namespace SpriteManifestBuilder;
 /// <summary>Ticks the slots a piece is copied into -- as it is, turned or mirrored -- for combinations of sides the pack has no piece for.</summary>
 public sealed class CopyToSlotsDialog : Form
 {
-    private static readonly (string Label, Func<ManifestCell, ManifestCell> Apply, bool IsQuarterTurn, bool IsVertical)[] CopyTransforms =
+    private static readonly (string Label, Func<SpriteManifestCell, SpriteManifestCell> Apply, bool IsQuarterTurn, bool IsVertical)[] CopyTransforms =
     [
         ("As it is", static cell => cell, false, false),
         ("Turned 90° clockwise", static cell => cell.RotatedClockwise(), true, true),
@@ -15,9 +15,9 @@ public sealed class CopyToSlotsDialog : Form
 
     private readonly SlotGridControl _slotGrid;
     private readonly ComboBox _copyAsComboBox = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
-    private readonly ManifestCell _piece;
+    private readonly SpriteManifestCell _piece;
 
-    public CopyToSlotsDialog(SheetImageCache sheets, LinkLayout layout, ManifestCell?[] slots, int sourceMask, Size expectedSpan)
+    public CopyToSlotsDialog(SheetImageCache sheets, LinkLayout layout, SpriteManifestCell?[] slots, int sourceMask, Size expectedSpan)
     {
         _piece = slots[sourceMask] ?? throw new ArgumentException("The source slot is empty.", nameof(slots));
 
@@ -68,7 +68,7 @@ public sealed class CopyToSlotsDialog : Form
     public IReadOnlyCollection<int> TargetMasks => _slotGrid.CheckedMasks;
 
     /// <summary>The piece as it lands in each target slot, with the chosen turn or mirror applied.</summary>
-    public ManifestCell CopiedPiece
+    public SpriteManifestCell CopiedPiece
     {
         get
         {

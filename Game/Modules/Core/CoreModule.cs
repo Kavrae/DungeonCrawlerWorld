@@ -37,12 +37,6 @@ public sealed class CoreModule : IGameModule
     {
         var componentManager = registration.ComponentManager;
 
-
-        componentManager.RegisterPackedPool<BackgroundComponent>(static (ref existing, incoming) =>
-        {
-            existing.BackgroundColor = Color.Lerp(existing.BackgroundColor, incoming.BackgroundColor, 0.5f);
-        });
-
         // Rare: an entity is named and drawn by its blueprint's appearance (see EntityNaming and
         // EntityAppearance), so only one that differs from it -- a destroyed container -- holds any
         // of the three below.

@@ -1,8 +1,9 @@
 using Engine.Math;
 using Game.Modules.Core.Components;
-using Game.Sprites;
+using SpriteFormat;
 using Game.Views;
 using Microsoft.Xna.Framework;
+using Presentation.Rendering;
 
 namespace Presentation.UI;
 
@@ -37,7 +38,7 @@ public readonly record struct MapDrawItem(MapDrawItemKind Kind, int EntityId, in
 /// <summary>A wall's face or top drawn live, in the row walk, because it covers a tile something can stand on.</summary>
 /// <param name="WallX">The wall's own tile, whose row the piece is drawn in.</param>
 /// <param name="AnchorX">The tile the piece sits on: the wall's own for a face, RaisedRows above it for a top.</param>
-public readonly record struct MapOverhang(int WallX, int WallY, int AnchorX, int AnchorY, EntityVisualView Visual, bool IsTop)
+public readonly record struct MapOverhang(int WallX, int WallY, int AnchorX, int AnchorY, MapVisual Visual, bool IsTop)
 {
     /// <summary>Row by row, then faces before tops (a top sits on its face), then left to right -- the order the walk draws them in.</summary>
     public static int CompareDrawOrder(MapOverhang first, MapOverhang second)

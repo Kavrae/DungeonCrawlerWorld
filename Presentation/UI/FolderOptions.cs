@@ -5,7 +5,7 @@ namespace Presentation.UI;
 /// <summary>Folder-specific configuration -- same "independent option group" pattern as TextOptions for TextWindow (see WindowOptions).</summary>
 public sealed class FolderOptions
 {
-    /// <summary>Looked up via Game.Blueprints.SpriteManifest. Falls back to FallbackGlyph if the name isn't found there.</summary>
+    /// <summary>Looked up in the sprite manifest (SpriteSheetService.Sprites). Falls back to FallbackGlyph if the name isn't found there.</summary>
     public string? SpriteName { get; set; }
 
     public string? FallbackGlyph { get; set; }

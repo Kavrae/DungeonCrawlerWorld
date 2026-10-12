@@ -1,11 +1,11 @@
 using Engine.Utilities;
+using Game.Effects;
+using Game.Effects.Entries;
 using Game.Modules.Auras;
 using Game.Modules.Health;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffects;
 using Game.Tags;
-using Game.Effects;
-using Game.Effects.Entries;
 using Microsoft.Xna.Framework;
 
 namespace Game.Terrain;
@@ -34,16 +34,16 @@ public static class BuiltInTerrain
     private const int LavaContactBurningStacks = 8;
 
     public static readonly TerrainDefinition StoneFloor = new(
-        StoneFloorKey, "Stone floor", "Roughly shaped stone floor.", Color.LightGray, string.Empty, Color.White);
+        StoneFloorKey, "Stone floor", "Roughly shaped stone floor.", "][", Color.White);
 
     public static readonly TerrainDefinition Dirt = new(
-        DirtKey, "Dirt", "Ordinary dirt. Nothing special.", Color.Tan, string.Empty, Color.White, SpriteName: "Dirt");
+        DirtKey, "Dirt", "Ordinary dirt. Nothing special.", "..", Color.White, SpriteName: "Dirt");
 
     public static readonly TerrainDefinition Grass = new(
-        GrassKey, "Grass", "Ordinary grass. Nothing special.", Color.ForestGreen, ",", Color.LawnGreen, SpriteName: "Grass");
+        GrassKey, "Grass", "Ordinary grass. Nothing special.", ",,", Color.LawnGreen, SpriteName: "Grass");
 
     public static readonly TerrainDefinition Lava = new(
-        LavaKey, "Lava", "Hot lava. I do not recommend stepping on it.", Color.OrangeRed, "~", Color.Yellow,
+        LavaKey, "Lava", "Hot lava. I do not recommend stepping on it.", "~~", Color.Yellow,
         Contact: new TerrainContact(
             [new Effect(
             [
@@ -70,7 +70,7 @@ public static class BuiltInTerrain
         [new Effect([new DirectHeal(PercentOfMaxHealth: 0f, FlatAmount: 1f, BodyPartTargetMode: BodyPartTargetMode.LowestPercentage)])]);
 
     public static readonly TerrainDefinition HolyGround = new(
-        HolyGroundKey, "Holy Ground", "Hallowed earth. Standing on it mends wounds and turns blows aside for a while after.", Color.PaleGoldenrod, "*", Color.White,
+        HolyGroundKey, "Holy Ground", "Hallowed earth. Standing on it mends wounds and turns blows aside for a while after.", "*", Color.White,
         Contact: new TerrainContact(
             [new Effect([new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, CanModify: true, -HolyGroundDamageReduction, HolyGroundBlessingFrames,
                 Stacking: StatModifierStacking.RefreshFromSameSource)])],
@@ -79,7 +79,7 @@ public static class BuiltInTerrain
 
     /// <summary>A structure: it stands on a MapLayer over stone floor, so it keeps the floor's background.</summary>
     public static readonly TerrainDefinition StoneWall = new(
-        StoneWallKey, "Wall", "Basic wall. Default implementation.", Color.LightGray, "[][]", Color.DarkGray, SpriteName: "wall-stone",
+        StoneWallKey, "Wall", "Basic wall. Default implementation.", "[][]", Color.DarkGray, SpriteName: "wall-stone",
         BlocksMovement: true);
 
     public static void RegisterAll(TerrainRegistry registry)

@@ -329,6 +329,10 @@ compiling a C# project, which excludes most would-be modders, and there's no way
   the mod's name, and the game falls back to the base file.
 - Pairs with "Reload mods without restarting" (above): content can reload in place, since it has no
   type identity to leak.
+- **Sprite manifests merge in one place:** Presentation loads the manifest into one
+  `SpriteManifestResolver` (`SpriteSheetService.Sprites`, built by `PresentationBootstrapper`); a mod's
+  `SpriteManifest.json` entries merge there by name, checked by `SpriteManifestValidation` like the base
+  file, and the startup missing-sprite check (`MissingSpriteCheck`) then sees the merged set.
 
 **Godot reference:** resource packs. `ProjectSettings.load_resource_pack("mod.pck", replace_files =
 true)` mounts a `.pck` or `.zip` into the virtual `res://` file system, and its files replace the
@@ -2472,6 +2476,25 @@ already: Fairies roll the mode for each Magic Missile (TEMPORARY content).
   player, so the Skill only replaces that check.
 - The windup's selection already carries the mode (`PendingWindupComponent.Selection`), so this is a
   view method (`TargetingView`) and a draw change in `MapWindow`, nothing new in the simulation.
+
+#### Camera dead zone
+
+While following the player, the map view recentres on every step (`MapWindow` calls
+`MapCamera.CenterCameraOn` whenever the player's position changes), so a player moving back and forth
+within a few tiles sees the whole map shift each time. Investigate a dead zone: a rectangle around the
+view's centre the player can move inside without the camera moving, the camera scrolling only enough to
+keep them inside it once they step past its edge.
+- **Size.** In tiles or as a fraction of the visible columns/rows, and whether it changes with
+  `ZoomLevel` (a 3-tile zone at `Team` is a different feel from one at a zoomed-out level). Possibly a
+  player setting.
+- **Cost.** Every scroll change re-resolves the visible cells' backgrounds and shifts the terrain/glow
+  caches (`CenterCameraOn`'s return value), so fewer recentres should also mean fewer cache shifts --
+  measure it.
+- **Interactions.** Map-edge clamping, `ResumeFollowingPlayer` after a right-drag (snap to centre, or
+  only far enough to bring the player inside the zone), zoom changes, teleports and window shifts (snap
+  to centre), and check for anything that assumes the player is at the view's centre.
+- Smoothing the scroll (see the screen-shake note, which also needs a camera offset) is a separate
+  question; decide whether the two share the same offset first.
 
 #### Buff and debuff icons below the mana bar
 

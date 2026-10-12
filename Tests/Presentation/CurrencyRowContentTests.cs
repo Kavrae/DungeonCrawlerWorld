@@ -31,7 +31,7 @@ public sealed class CurrencyRowContentTests
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
 
@@ -108,7 +108,7 @@ public sealed class CurrencyRowContentTests
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
 

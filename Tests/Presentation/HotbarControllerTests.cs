@@ -87,7 +87,7 @@ public sealed class HotbarControllerTests
             simulationClock: new SimulationClock());
 
         var fontService = TestFonts.Shared;
-        var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
+        var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting, new TooltipController());
 
         return (hotbarController, mapViewState, componentManager);

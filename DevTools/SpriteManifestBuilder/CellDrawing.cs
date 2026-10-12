@@ -6,7 +6,7 @@ namespace SpriteManifestBuilder;
 /// <remarks>Each Graphics transform call applies to drawn points before the earlier ones, so the calls below flip, then rotate, then move into place -- the order SpriteBatch applies them in.</remarks>
 public static class CellDrawing
 {
-    public static void Draw(Graphics graphics, SheetImageCache sheets, ManifestCell? cell, RectangleF destination, float opacity = 1f)
+    public static void Draw(Graphics graphics, SheetImageCache sheets, SpriteManifestCell? cell, RectangleF destination, float opacity = 1f)
     {
         if (cell is null || sheets.Get(cell.SheetPath) is not { } sheet)
         {
@@ -26,10 +26,10 @@ public static class CellDrawing
         var width = isQuarterTurn ? destination.Height : destination.Width;
         var height = isQuarterTurn ? destination.Width : destination.Height;
         var target = new RectangleF(-width / 2, -height / 2, width, height);
-        var tint = cell.TintColor ?? Color.White;
+        var tint = cell.TintColor?.ToDrawingColor() ?? Color.White;
         if (opacity >= 1f && cell.TintColor is null)
         {
-            graphics.DrawImage(sheet, target, cell.SourceRectangle, GraphicsUnit.Pixel);
+            graphics.DrawImage(sheet, target, cell.SourceRectangle.ToDrawingRectangle(), GraphicsUnit.Pixel);
         }
         else
         {
@@ -42,7 +42,7 @@ public static class CellDrawing
                 Matrix33 = tint.A / 255f * opacity,
             });
             PointF[] corners = [new(target.Left, target.Top), new(target.Right, target.Top), new(target.Left, target.Bottom)];
-            graphics.DrawImage(sheet, corners, cell.SourceRectangle, GraphicsUnit.Pixel, attributes);
+            graphics.DrawImage(sheet, corners, cell.SourceRectangle.ToDrawingRectangle(), GraphicsUnit.Pixel, attributes);
         }
 
         graphics.Restore(state);

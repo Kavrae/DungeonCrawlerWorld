@@ -3,14 +3,14 @@ using Game.Modules.Core.Components;
 using Game.Views;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Game.Sprites;
+using SpriteFormat;
 
 namespace Presentation.Rendering;
 
 /// <summary>
 /// The sprite-vs-glyph decision, shared by every per-icon draw site: MapWindow (map entities),
 /// Folder (HUD icons), and inventory item cells. sprite is already resolved -- callers decide
-/// how (the map view for map entities, SpriteViews.TryGetFirst by name for HUD/item icons)
+/// how (the map view for map entities, SpriteSheetService.Sprites.TryGetFirst by name for HUD/item icons)
 /// -- so this stays ignorant of where sprite data comes from, which is the only real difference
 /// between call sites. Which tint/glyphColor to pass (e.g. gray for dead/disabled) is each
 /// caller's own decision too -- kept out of here so this stays a pure draw primitive. The
@@ -38,7 +38,7 @@ public static class SpriteOrGlyphRenderer
         if (sprite is { } spriteView)
         {
             var texture = spriteSheetService.GetTexture(spriteView.SheetPath);
-            var tint = spriteView.Tint is { } cellTint ? SpriteTint.Multiply(spriteTint, cellTint) : spriteTint;
+            var tint = spriteView.Tint is { } cellTint ? Multiply(spriteTint, cellTint) : spriteTint;
             spriteRenderer.Draw(spriteBatch, texture, spriteView.SourceRectangle, topLeft, size, tint * alphaMultiplier, spriteView.Transform);
             return true;
         }
@@ -51,4 +51,8 @@ public static class SpriteOrGlyphRenderer
 
         return false;
     }
+
+    /// <summary>Each channel of first multiplied by the same channel of second, as SpriteBatch does a sprite's pixels by its colour.</summary>
+    private static Color Multiply(Color first, Color second) =>
+        new((byte)(first.R * second.R / 255), (byte)(first.G * second.G / 255), (byte)(first.B * second.B / 255), (byte)(first.A * second.A / 255));
 }

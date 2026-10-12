@@ -94,11 +94,11 @@ internal static class TestMapWindows
         var auraGlow = new AuraGlowView(new AuraField(world, terrain, TestAuras.GlowOnlyCatalog(), eventBus));
 
         var floatingTextController = new FloatingTextController(eventBus, new SimulationClock());
-        var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, fontService, new Game.Modules.StatusEffects.StatusEffectDisplayRegistry(), new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new LabelRenderer());
+        var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, fontService, new Game.Modules.StatusEffects.StatusEffectDisplayRegistry(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new LabelRenderer());
 
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(
-            fontService, windowService, mapView, playerActionGate, mapViewState, auraGlow, eventBus, new TileRenderer(), new LabelRenderer(),
-            new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), camera, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer, new AdminContextMenuOptions(TestAdminTools.Create())));
+            fontService, windowService, mapView, playerActionGate, mapViewState, auraGlow, eventBus, new LabelRenderer(),
+            new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), camera, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer, new AdminContextMenuOptions(TestAdminTools.Create())));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions
         {

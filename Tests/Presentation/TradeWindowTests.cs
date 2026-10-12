@@ -61,7 +61,7 @@ public sealed class TradeWindowTests
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
         windowService.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(fontService, windowService, labelRenderer));
@@ -497,7 +497,7 @@ public sealed class TradeWindowTests
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
         // ShopItemStackCell too -- mapViewState.OpenShopEntityId is already set (from Build()'s own
@@ -567,7 +567,7 @@ public sealed class TradeWindowTests
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
         windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));

@@ -6,7 +6,6 @@ using Game.Modules.Actions.Activators;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Sprites;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -606,7 +605,7 @@ public sealed class HotbarContent(
     /// <summary>The one place a SlotVisual actually gets drawn -- radial fill/icon, then its costs (bottom-left), its quantity (bottom-center) and countdown, if any. Shared by both BuildActionVisual and BuildItemVisual outputs, regardless of which kind produced them.</summary>
     private void DrawSlotVisual(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Rectangle contentBounds, SlotVisual visual, float alpha)
     {
-        _radialFill.Sprite = visual.SpriteName is not null && SpriteViews.TryGetFirst(visual.SpriteName, out var sprite) ? sprite : null;
+        _radialFill.Sprite = visual.SpriteName is not null && spriteSheetService.Sprites.TryGetFirst(visual.SpriteName, out var sprite) ? sprite : null;
         _radialFill.SpriteTint = Color.White;
         _radialFill.Glyph = visual.Glyph;
         _radialFill.GlyphColor = visual.GlyphColor;

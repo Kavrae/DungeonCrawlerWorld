@@ -10,9 +10,9 @@ public sealed class EntryPart(LinkLayout layout)
 {
     public LinkLayout Layout { get; } = layout;
 
-    public List<ManifestCell> Options { get; } = [];
+    public List<SpriteManifestCell> Options { get; } = [];
 
-    public List<ManifestCell?[]> VariantSets { get; } = [layout.NewVariantSet()];
+    public List<SpriteManifestCell?[]> VariantSets { get; } = [layout.NewVariantSet()];
 
     public int CurrentVariantSetIndex { get; set; }
 
@@ -28,10 +28,7 @@ public sealed class EntryPart(LinkLayout layout)
 
     public int? PivotY { get; set; }
 
-    /// <summary>Empty follows the entry's name.</summary>
-    public string LinkGroup { get; set; } = "";
-
-    public ManifestCell?[] CurrentVariantSet => VariantSets[Math.Clamp(CurrentVariantSetIndex, 0, VariantSets.Count - 1)];
+    public SpriteManifestCell?[] CurrentVariantSet => VariantSets[Math.Clamp(CurrentVariantSetIndex, 0, VariantSets.Count - 1)];
 
     /// <summary>Each variant set's tint ("#RRGGBB"), parallel to VariantSets: written onto every cell of its set, so a second set can be the same pieces in another colour. Null for none.</summary>
     public List<string?> VariantSetTints { get; } = [null];
@@ -52,10 +49,22 @@ public sealed class EntryPart(LinkLayout layout)
 
     public bool HasExplicitPivot => PivotX is not null || PivotY is not null;
 
-    public Point PivotFor(ManifestCell cell) =>
-        new(PivotX ?? cell.SourceRectangle.Width / 2, PivotY ?? cell.SourceRectangle.Height);
+    public Point PivotFor(SpriteManifestCell cell) =>
+        new(PivotX ?? cell.SourceWidth / 2, PivotY ?? cell.SourceHeight);
 
-    public IEnumerable<ManifestCell?> Cells(bool linked) => linked ? VariantSets.SelectMany(set => set) : Options;
+    public IEnumerable<SpriteManifestCell?> Cells(bool linked) => linked ? VariantSets.SelectMany(set => set) : Options;
+
+    /// <summary>This part as the manifest saves it: its cells (linked, in mask order with empty slots, or its options), placement, span and chances.</summary>
+    public SpriteManifestPart ToManifestPart(bool linked) =>
+        new(
+            [.. Cells(linked)],
+            PixelsPerTile,
+            PivotX,
+            PivotY,
+            linked ? Layout.Linking : SpriteLinking.None,
+            Span.Width == 1 ? 0 : Span.Width,
+            Span.Height == 1 ? 0 : Span.Height,
+            linked ? SavedVariantWeights() : null);
 
     /// <summary>The variant sets (numbered from 1) missing the layout's required piece.</summary>
     public List<int> SetsMissingRequiredPiece() =>
@@ -77,7 +86,6 @@ public sealed class EntryPart(LinkLayout layout)
         PixelsPerTile = null;
         PivotX = null;
         PivotY = null;
-        LinkGroup = "";
     }
 
     /// <summary>Sets every variant set's chance: saved when it has one per set, otherwise 100 split evenly.</summary>
@@ -130,30 +138,29 @@ public sealed class EntryPart(LinkLayout layout)
     }
 
     /// <summary>piece carrying the current variant set's tint, for a piece about to go into that set.</summary>
-    public ManifestCell WithCurrentSetTint(ManifestCell piece) => piece with { Tint = CurrentSetTint };
+    public SpriteManifestCell WithCurrentSetTint(SpriteManifestCell piece) => piece with { Tint = CurrentSetTint };
 
     /// <summary>Fills this part from saved cells: options as they are, or a linked set's cells split into variant sets in mask order.</summary>
     /// <param name="savedAsOptions">For a linked part, cells saved as plain options: each becomes its own set's fallback piece.</param>
     /// <param name="variantWeights">The saved chances, one per variant set; null (or the wrong count) splits 100 evenly.</param>
-    public void Load(IReadOnlyList<ManifestCell?> cells, bool linked, bool savedAsOptions, int? pixelsPerTile, int? pivotX, int? pivotY, string linkGroup, Size span, IReadOnlyList<int>? variantWeights = null)
+    public void Load(IReadOnlyList<SpriteManifestCell?> cells, bool linked, bool savedAsOptions, int? pixelsPerTile, int? pivotX, int? pivotY, Size span, IReadOnlyList<int>? variantWeights = null)
     {
         Clear();
         PixelsPerTile = pixelsPerTile;
         PivotX = pivotX;
         PivotY = pivotY;
-        LinkGroup = linkGroup;
         Span = span;
 
         if (!linked)
         {
-            Options.AddRange(cells.OfType<ManifestCell>());
+            Options.AddRange(cells.OfType<SpriteManifestCell>());
             return;
         }
 
         VariantSets.Clear();
         if (savedAsOptions)
         {
-            foreach (var option in cells.OfType<ManifestCell>())
+            foreach (var option in cells.OfType<SpriteManifestCell>())
             {
                 var variantSet = Layout.NewVariantSet();
                 variantSet[Layout.FallbackMask] = option;
@@ -180,7 +187,7 @@ public sealed class EntryPart(LinkLayout layout)
         }
 
         VariantSetTints.Clear();
-        VariantSetTints.AddRange(VariantSets.Select(set => set.OfType<ManifestCell>().FirstOrDefault()?.Tint));
+        VariantSetTints.AddRange(VariantSets.Select(set => set.OfType<SpriteManifestCell>().FirstOrDefault()?.Tint));
         ResetVariantWeights(variantWeights);
     }
 }

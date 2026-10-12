@@ -1,13 +1,16 @@
 using Engine.Math;
 using Game.Modules.Core.Components;
+using Game.Terrain;
 using Game.Views;
+using Game.World;
 using Microsoft.Xna.Framework;
 
 namespace Tests.Presentation;
 
 /// <summary>
 /// A map view over a handful of occupants and walls, for the map's draw planners. An occupant occupies every tile of its
-/// footprint, a Blocking one as that tile's Blocking occupant. Everything inside 0..1023 is on the map.
+/// footprint, a Blocking one as that tile's Blocking occupant. A wall is a structure drawn with the named sprite, every cell's seed 0.
+/// Everything inside 0..1023 is on the map.
 /// </summary>
 internal sealed class FakeMapView : IMapViewQuery
 {
@@ -17,7 +20,7 @@ internal sealed class FakeMapView : IMapViewQuery
     private readonly Dictionary<(int X, int Y), List<int>> _occupantsByTile = [];
     private readonly Dictionary<(int X, int Y), int> _blockingByTile = [];
     private readonly Dictionary<(int X, int Y), byte> _layerMasks = [];
-    private readonly Dictionary<(int X, int Y), (EntityVisualView Face, StructureTopView? Top)> _walls = [];
+    private readonly Dictionary<(int X, int Y), ushort> _walls = [];
 
     public MapBounds Bounds => new(0, 0, MapSize, MapSize, 3);
 
@@ -29,9 +32,30 @@ internal sealed class FakeMapView : IMapViewQuery
 
     public void SetOccupiedLayers(int x, int y, byte mask) => _layerMasks[(x, y)] = mask;
 
-    /// <summary>A wall at (x, y) drawn with face and, when given, top raised raisedRows above it.</summary>
-    public void AddWall(int x, int y, EntityVisualView face, EntityVisualView? top = null, int raisedRows = 1) =>
-        _walls[(x, y)] = (face, top is { } topVisual ? new StructureTopView(topVisual, raisedRows) : null);
+    public TerrainRegistry Terrain { get; } = new();
+
+    /// <summary>A wall at (x, y) drawn with the sprite manifest entry spriteName; walls of one name are one terrain type, and so join each other.</summary>
+    public void AddWall(int x, int y, string spriteName)
+    {
+        var key = $"test:{spriteName}";
+        _walls[(x, y)] = Terrain.TryGetId(key, out var typeId) ? typeId : Terrain.Register(new TerrainDefinition(key, spriteName, "", "#", Color.Gray, SpriteName: spriteName, BlocksMovement: true));
+    }
+
+    public void CopyCells(int minX, int minY, int width, int height, int mapLayer, MapCellBuffer cells)
+    {
+        cells.Reset(minX, minY, width, height, mapLayer);
+        for (var row = 0; row < height; row++)
+        {
+            for (var column = 0; column < width; column++)
+            {
+                var position = new Vector3Int(minX + column, minY + row, mapLayer);
+                if (IsOnMap(position))
+                {
+                    cells.Write(column + row * width, 0, 0, _walls.TryGetValue((position.X, position.Y), out var wall) ? wall : (ushort)0, 0);
+                }
+            }
+        }
+    }
 
     public bool IsOnMap(Vector3Int position) => position.X >= 0 && position.Y >= 0 && position.X < MapSize && position.Y < MapSize;
 
@@ -44,34 +68,9 @@ internal sealed class FakeMapView : IMapViewQuery
 
     public bool TryGetOccupant(int entityId, out OccupantView occupant) => _occupants.TryGetValue(entityId, out occupant);
 
-    public bool HasStructure(int x, int y, int layer) => _walls.ContainsKey((x, y));
-
-    public bool TryGetStructureVisual(int x, int y, int layer, out EntityVisualView visual)
-    {
-        var found = _walls.TryGetValue((x, y), out var wall);
-        visual = wall.Face;
-        return found;
-    }
-
-    public bool TryGetStructureTopVisual(int x, int y, int layer, out StructureTopView top)
-    {
-        if (_walls.TryGetValue((x, y), out var wall) && wall.Top is { } wallTop)
-        {
-            top = wallTop;
-            return true;
-        }
-
-        top = default;
-        return false;
-    }
-
-    public bool TryGetTerrainVisual(int x, int y, int layer, out EntityVisualView visual) => throw new NotSupportedException();
-
     public bool TryGetTerrain(int x, int y, int layer, out TerrainView terrain) => throw new NotSupportedException();
 
     public bool TryGetStructure(int x, int y, int layer, out TerrainView structure) => throw new NotSupportedException();
-
-    public Color GetBackgroundColor(int x, int y, int layer) => throw new NotSupportedException();
 
     public bool TryGetVisual(int entityId, out EntityVisualView visual) => throw new NotSupportedException();
 

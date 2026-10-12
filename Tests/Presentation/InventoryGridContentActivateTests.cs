@@ -32,7 +32,7 @@ public sealed class InventoryGridContentActivateTests
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));

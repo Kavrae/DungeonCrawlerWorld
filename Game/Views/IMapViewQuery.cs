@@ -1,5 +1,6 @@
 using Engine.Math;
-using Microsoft.Xna.Framework;
+using Game.Terrain;
+using Game.World;
 
 namespace Game.Views;
 
@@ -9,9 +10,10 @@ namespace Game.Views;
 /// first). Every answer is read live on each call, so there is nothing to invalidate and nothing to
 /// go stale, and input resolved through it sees the same state gameplay does.
 ///
-/// Terrain and structures are cells, not entities, so they are
-/// exposed only as TerrainViews and a background colour -- never as an id anything could look
-/// components up by.
+/// Terrain and structures are cells, not entities: the map reads them a rectangle at a time (CopyCells)
+/// as terrain type ids and seeds against Terrain, the inspector one cell at a time as TerrainViews --
+/// never as an id anything could look components up by. Nothing here says which picture anything
+/// draws as: sprites are named, with the seed their variant is picked from, and Presentation resolves them.
 /// </remarks>
 public interface IMapViewQuery
 {
@@ -30,26 +32,17 @@ public interface IMapViewQuery
     /// <summary>Bit N set when MapLayer N holds an occupant at (x, y).</summary>
     byte GetOccupiedLayerMask(int x, int y);
 
-    /// <summary>How the terrain under MapLayer layer at (x, y) looks, if that layer has a floor and anything is there.</summary>
-    bool TryGetTerrainVisual(int x, int y, int layer, out EntityVisualView visual);
-
     /// <summary>The terrain under MapLayer layer at (x, y) -- name, description and look -- if that layer has a floor and anything is there.</summary>
     bool TryGetTerrain(int x, int y, int layer, out TerrainView terrain);
-
-    /// <summary>How the structure standing on MapLayer layer at (x, y) looks, if there is one.</summary>
-    bool TryGetStructureVisual(int x, int y, int layer, out EntityVisualView visual);
 
     /// <summary>The structure standing on MapLayer layer at (x, y) -- name, description and look -- if there is one.</summary>
     bool TryGetStructure(int x, int y, int layer, out TerrainView structure);
 
-    /// <summary>Whether a structure stands on MapLayer layer at (x, y); false off the map.</summary>
-    bool HasStructure(int x, int y, int layer);
+    /// <summary>The terrain definitions every type id CopyCells hands out refers to.</summary>
+    TerrainRegistry Terrain { get; }
 
-    /// <summary>The top of the wall standing on MapLayer layer at (x, y), if its sprite has one, and how many rows above (x, y) it sits.</summary>
-    bool TryGetStructureTopVisual(int x, int y, int layer, out StructureTopView top);
-
-    /// <summary>The background wash for (x, y) on layer: the Blocking occupant's own background if it has one, else the structure's, else the terrain's, else white; black off the map.</summary>
-    Color GetBackgroundColor(int x, int y, int layer);
+    /// <summary>Copies a rectangle of mapLayer into cells: per cell its terrain and structure type ids, their seeds, and whether it is on the map.</summary>
+    void CopyCells(int minX, int minY, int width, int height, int mapLayer, MapCellBuffer cells);
 
     bool TryGetVisual(int entityId, out EntityVisualView visual);
 

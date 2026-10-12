@@ -1,5 +1,4 @@
 using FontStashSharp;
-using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.Fonts;
 using Presentation.Rendering;
@@ -36,7 +35,7 @@ public sealed class ItemIconElement(FontService fontService, ElementPoolService 
 
     public override void DrawContent(GameTime gameTime)
     {
-        SpriteView? sprite = _spriteName is not null && SpriteViews.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
+        SpriteView? sprite = _spriteName is not null && spriteSheetService.Sprites.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
 
         SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _glyphFont, _glyph, _glyphColor, ContentAbsolutePosition, ContentSize, _spriteTint ?? Color.White);
     }

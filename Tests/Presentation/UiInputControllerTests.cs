@@ -2204,7 +2204,7 @@ public sealed class UiInputControllerTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
-            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer()));
 
         var cell = windowService.CreateElement<InventoryItemStackCell>(null, new ElementOptions
         {
@@ -2217,7 +2217,7 @@ public sealed class UiInputControllerTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, itemCatalog: itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), new ActionCatalog(), itemCatalog,
-            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
@@ -2246,7 +2246,7 @@ public sealed class UiInputControllerTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
-            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer()));
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer()));
 
         var cell = windowService.CreateElement<InventoryItemStackCell>(null, new ElementOptions
         {
@@ -2259,7 +2259,7 @@ public sealed class UiInputControllerTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, itemCatalog: itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), new ActionCatalog(), itemCatalog,
-            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
@@ -2474,7 +2474,7 @@ public sealed class UiInputControllerTests
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
@@ -2522,7 +2522,7 @@ public sealed class UiInputControllerTests
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
@@ -2710,7 +2710,7 @@ public sealed class UiInputControllerTests
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
         windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
@@ -2856,7 +2856,7 @@ public sealed class UiInputControllerTests
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
         windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
@@ -3178,7 +3178,7 @@ public sealed class UiInputControllerTests
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
 
@@ -3372,7 +3372,7 @@ public sealed class UiInputControllerTests
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        var spriteSheetService = new SpriteSheetService(null, "Spritesheets");
+        var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var spriteRenderer = new SpriteRenderer();
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
         windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, labelRenderer));
@@ -3484,7 +3484,7 @@ public sealed class UiInputControllerTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, new ItemCatalog()), TestActionStateViews.Over(componentManager, actionCatalog), new HotkeyBindingCommands(componentManager, new ItemCatalog(), new EventBus()), actionCatalog, new ItemCatalog(),
-            fontService, new SpriteSheetService(null, "Spritesheets"), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },

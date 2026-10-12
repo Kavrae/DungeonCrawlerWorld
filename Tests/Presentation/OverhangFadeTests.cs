@@ -1,6 +1,7 @@
 using Engine.Math;
-using Game.Sprites;
+using SpriteFormat;
 using Game.Views;
+using Presentation.Rendering;
 using Microsoft.Xna.Framework;
 using Presentation.UI;
 
