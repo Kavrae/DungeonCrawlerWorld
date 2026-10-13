@@ -1216,7 +1216,7 @@ Until then a shop or small building is a single entity up to Huge, like the 2x2 
 
 #### Aura glow shouldn't tint wall tops
 
-`MapWindow`'s glow overlay (`DrawGlowOverlay`, from `AuraGlowView` per tile) is a translucent rect over every
+`MapWindow`'s glow overlay (`DrawGlowOverlay`, from `AuraGlowBlend` per tile) is a translucent rect over every
 tile, blitted after the row walk -- so it lands on whatever covers that tile, including a wall's top (cached or
 live overhang) sitting over the floor the aura actually reaches. A top is the wall's roof, a row or two above
 the tile beneath it, and glowing like lava or holy ground reads wrong. The glow should tint what stands on the
@@ -2256,7 +2256,7 @@ edge tiles). So "tile count" is a function of tile size and the map window's lay
 `ShellBootstrapper`, and both may need to change. Start by measuring Dungeon Settlers' visible
 columns x rows and tile pixel size at a common resolution, then decide whether to match size, count,
 or both. Things that scale with tile size and need a visual check afterward: sprite legibility (pairs
-with AI-generated sprites and "SpriteDefinition" sprite scale), map fonts/badges, `HudMetrics`, and
+with AI-generated sprites and each manifest entry's `PixelsPerTile`), map fonts/badges, `HudMetrics`, and
 per-frame cost -- larger tiles means fewer visible tiles and a cheaper `DrawOccupants`; smaller means
 the reverse.
 
@@ -2299,30 +2299,6 @@ stays at 60. Here the simulation and rendering share FNA's fixed step, so this o
 two are ever separated -- but keeping "previous position" and "current position" as the inputs to the
 walking lerp keeps that door open. Sprite-sheet animation in Bevy is a `TextureAtlas` index advanced by
 game code (an example, not a built-in); `bevy_animation`'s curves and animation graphs target 3D.
-
-#### SpriteDefinition: tint on the sprite itself
-
-Part of `EPIC-sprites-ui-engine-and-dev-tools.md` (child 2).
-
-A sprite's size and footprint already come from its manifest entry (pixels per tile and pivot), but its tint is
-still decided by whatever draws it. Introduce a
-`SpriteDefinition` (the natural home is the data-driven `Content/SpriteManifest.json` /
-`SpriteManifest`) that carries everything about how a sprite draws, so it's self-contained and works
-wherever the sprite is used -- items, entities, terrain, UI icons -- rather than being re-declared by
-each kind of thing that shows one.
-
-- **Tint**: move `ItemDefinition.SpriteTint` off the item and onto the sprite. It's on the item today
-  only because loot boxes needed one (each rarity tints the chest sprite its color, see
-  IMPLEMENTATION-NOTES.md "Loot boxes"), and it only works for items: `InventoryItemStackCell` and
-  `ItemIconElement` read it, nothing else does. A tinted variant becomes its own sprite definition
-  (e.g. "Chest-Bronze" pointing at the chest cells with a bronze tint), and `LootboxCatalog` names it
-  instead of setting a tint. Remove `SpriteTint` from `ItemDefinition` and `AreEquivalentOverrides`.
-
-Every draw site (`SpriteOrGlyphRenderer`, `MapWindow`, the inventory/hotbar/details icons, the drag
-ghost) then reads the definition instead of taking tint/size as separate parameters. Manifest cells
-already carry a `Tint` of their own (IMPLEMENTATION-NOTES.md "Tall sprites, wall faces and tops, and the
-sprite manifest"), multiplied into whatever a draw site passes -- the chest's rarity variants can be
-manifest entries tinted that way.
 
 #### Autotiling with terrain sets
 
@@ -3277,8 +3253,8 @@ through a palette texture, one palette row per variant, selected per sprite.
 
 #### Aura glows pulse outward from the source
 
-An aura's glow is a static tint today: `AuraField.TryGetGlow` hands `MapWindow` one colour per cell
-(the aura colours there, weighted by strength) through `GameViews.AuraGlow`. Animate it instead as a
+An aura's glow is a static tint today: `AuraGlowBlend` gives `MapWindow` one colour per cell
+(the aura colours there, weighted by strength, from `GameViews.AuraPower`). Animate it instead as a
 pulse that travels outward from the source, drawn as a gradient within each tile rather than one flat
 colour per tile, so the wave reads as continuous across tile edges.
 
@@ -3286,8 +3262,9 @@ colour per tile, so the wave reads as continuous across tile edges.
   strength falloff uses), so the wave front moves outward ring by ring.
 - Each aura has its own pulse interval, so several auras on one entity pulse out of step with each
   other. The interval belongs on the `AuraDefinition` beside the glow colour, never on the source.
-- That needs the glow per aura at a cell, not the single blended colour `TryGetGlow` returns today --
-  each aura's contribution has to be drawn (or blended) at its own phase.
+- That needs the glow per aura at a cell, not the single blended colour `AuraGlowBlend` returns today --
+  each aura's contribution has to be drawn (or blended) at its own phase. `AuraPowerView` already reports
+  power per aura per cell, so this is a Presentation change only.
 - Purely visual: it is driven by render time and changes nothing about when an exposure ticks.
 
 Related: "Animation primitives -- flipbooks, tweens and curves" and "Visual 2D lighting" (Medium).

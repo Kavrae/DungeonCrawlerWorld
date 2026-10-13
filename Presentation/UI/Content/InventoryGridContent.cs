@@ -1068,7 +1068,7 @@ public sealed class InventoryGridContent(
                     ? elementPoolService.CreateElement<ShopItemStackCell>(_hostWindow, options)
                     : elementPoolService.CreateElement<InventoryItemStackCell>(_hostWindow, options);
 
-            cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Definition.SpriteTint, entry.Quantity, entry.IsDisabled, entry.IsDivergent, entry.MergedStackBadgeVisible, entry.Definition.CanTrade, ItemHotkeyBindingQueries.CanBind(entry.Definition), cellSize);
+            cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Quantity, entry.IsDisabled, entry.IsDivergent, entry.MergedStackBadgeVisible, entry.Definition.CanTrade, ItemHotkeyBindingQueries.CanBind(entry.Definition), cellSize);
             cell.IsToggledOn = entry.StackInstanceId is not null && ToggleText.IsLit(entry.Definition);
 
             if (cell is ShopItemStackCell shopCell)

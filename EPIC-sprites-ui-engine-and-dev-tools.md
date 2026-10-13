@@ -1,6 +1,6 @@
 # Epic: Sprites out of Game, a UIEngine, and the Engine IDE
 
-(Epic -- a plan of plans. Child 1 landed 2026-10-11; the rest are not started. Each child below gets its own
+(Epic -- a plan of plans. Child 1 landed 2026-10-11, child 2 2026-10-13; the rest are not started. Each child below gets its own
 `PLAN-*.md` when it starts, and is phased and tested in-game like any other plan. Decided 2026-10-11.)
 
 ## Why
@@ -90,8 +90,8 @@ Each is its own plan; numbering is the order. Arrows are hard dependencies.
    how "Content-only mods" (TODO.md) merge authoring vs runtime files, and whether the same split applies to
    the other content the IDE will edit (actions and items, map layouts). The result decides the pattern for
    every IDE tab, not only sprites.
-2. **Rarity tints and aura glow out of Game** (→1). "SpriteDefinition: tint on the sprite itself";
-   `AuraGlowView` reports power, Presentation blends.
+2. **Rarity tints and aura glow out of Game** (→1). Landed 2026-10-13 (`PLAN-rarity-tints-and-aura-glow-out-of-game.md`; notes in IMPLEMENTATION-NOTES "Loot boxes" and "Auras, terrain contact, Healing Shrine, Holy Ground"). A loot box rarity is a tinted manifest entry ("Lootbox-Bronze");
+   `AuraPowerView` reports power, Presentation blends (`AuraGlowBlend`).
 3. **Map renderer out of `MapWindow`** (→1). Row walk, wall plan, overhang fade, glow, caches, drawn from
    `IMapViewQuery` + camera; `MapWindow` becomes input, state and hosting. Fold in "Review MapWindow for
    properties that belong on MapViewState instead" (TODO.md, Presentation, Low).

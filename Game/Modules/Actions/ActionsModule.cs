@@ -38,7 +38,7 @@ namespace Game.Modules.Actions;
 /// Game.Modules.Auras (AuraSourceGrant/AuraSourceExpiryComponent/
 /// AuraSourceExpirySystem) -- it's a AuraSourceComponent grant like any other, not a
 /// bespoke Actions-owned component, specifically so MapWindow never needs ability-specific
-/// rendering knowledge (see AuraGlowView, which already draws any aura generically).
+/// rendering knowledge (see AuraPowerView, from which Presentation draws any aura generically).
 /// </summary>
 public sealed class ActionsModule : IGameModule
 {

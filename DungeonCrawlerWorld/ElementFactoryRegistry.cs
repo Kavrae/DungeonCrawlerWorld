@@ -65,7 +65,7 @@ public static class ElementFactoryRegistry
             mapView,
             views.PlayerActionGate,
             mapViewState,
-            views.AuraGlow,
+            views.AuraPower,
             ecsContext.EventBus,
             presentationContext.LabelRenderer,
             presentationContext.SpriteSheetService,

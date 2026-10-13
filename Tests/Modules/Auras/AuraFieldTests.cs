@@ -39,29 +39,27 @@ public sealed class AuraFieldTests
         new(world ?? TestWorlds.Create(new Map(MapSize)), terrain ?? new TerrainRegistry(), BuildAuras(), eventBus ?? new EventBus());
 
     [TestMethod]
-    public void AddSource_GlowsItsAurasColourAtItsStrengthAtTheSource()
+    public void AddSource_ReachesWithItsPowerAtTheSource()
     {
         var field = BuildField();
 
         field.AddSource(SourcePosition, new AuraSourceComponent(OrangeAuraId, power: 8, size: 3));
 
-        Assert.IsTrue(field.TryGetGlow(SourcePosition, out var glowColor, out var totalPower));
-        Assert.AreEqual(Color.Orange, glowColor);
-        Assert.AreEqual(8, totalPower);
+        Assert.IsTrue(field.AnyAuraReaches(SourcePosition));
         Assert.AreEqual(8, field.GetTotalPowerAt(SourcePosition, OrangeAuraId));
     }
 
     [TestMethod]
-    public void TryGetGlow_OutsideEverySourcesReach_ReturnsFalse()
+    public void OutsideEverySourcesReach_NothingReaches()
     {
         var field = BuildField();
         field.AddSource(SourcePosition, new AuraSourceComponent(OrangeAuraId, power: 8, size: 3));
 
-        Assert.IsFalse(field.TryGetGlow(new Vector3Int(SourcePosition.X + 50, SourcePosition.Y, SourcePosition.Z), out _, out _));
+        Assert.IsFalse(field.AnyAuraReaches(new Vector3Int(SourcePosition.X + 50, SourcePosition.Y, SourcePosition.Z)));
     }
 
     [TestMethod]
-    public void RemoveSource_LeavesNoGlowBehind()
+    public void RemoveSource_LeavesNothingBehind()
     {
         var field = BuildField();
         var source = new AuraSourceComponent(OrangeAuraId, power: 8, size: 3);
@@ -69,26 +67,25 @@ public sealed class AuraFieldTests
 
         field.RemoveSource(SourcePosition, source);
 
-        Assert.IsFalse(field.TryGetGlow(SourcePosition, out _, out _));
+        Assert.IsFalse(field.AnyAuraReaches(SourcePosition));
         Assert.AreEqual(0, field.GetTotalPowerAt(SourcePosition, OrangeAuraId));
     }
 
     [TestMethod]
-    public void TwoAurasOverlapping_GlowIsTheirColoursWeightedByPower()
+    public void TwoAurasOverlapping_EachKeepsItsOwnPowerAtTheCell()
     {
         var field = BuildField();
         field.AddSource(SourcePosition, new AuraSourceComponent(RedAuraId, power: 8, size: 3));
         field.AddSource(new Vector3Int(SourcePosition.X + 2, SourcePosition.Y, SourcePosition.Z), new AuraSourceComponent(GreenAuraId, power: 4, size: 2));
 
         // At the first source: power 8 of Red (distance 0), 2 of Green (distance 2 of size 2: 4 * 1 / 3, rounded up).
-        Assert.IsTrue(field.TryGetGlow(SourcePosition, out var glowColor, out var totalPower));
-        Assert.AreEqual(new Color((byte)(255 * 8 / 10f), (byte)(128 * 2 / 10f), (byte)0), glowColor);
-        Assert.AreEqual(10, totalPower);
+        Assert.AreEqual(8, field.GetTotalPowerAt(SourcePosition, RedAuraId));
+        Assert.AreEqual(2, field.GetTotalPowerAt(SourcePosition, GreenAuraId));
     }
 
-    /// <summary>One source radiating two auras: each keeps its own reach and colour, and taking one away leaves the other exactly as it was.</summary>
+    /// <summary>One source radiating two auras: each keeps its own reach, and taking one away leaves the other exactly as it was.</summary>
     [TestMethod]
-    public void TwoAurasAtOnePosition_BlendAndAreRemovedIndependently()
+    public void TwoAurasAtOnePosition_AreRemovedIndependently()
     {
         var field = BuildField();
         var redSource = new AuraSourceComponent(RedAuraId, power: 8, size: 3);
@@ -97,20 +94,16 @@ public sealed class AuraFieldTests
         field.AddSource(SourcePosition, greenSource);
 
         var threeAway = new Vector3Int(SourcePosition.X + 3, SourcePosition.Y, SourcePosition.Z);
-        Assert.IsTrue(field.TryGetGlow(threeAway, out var edgeColor, out var edgePower));
-        Assert.AreEqual(Color.Red, edgeColor, "Only the stronger aura reaches this far.");
-        Assert.AreEqual(2, edgePower, "Power 8 at the edge of size 3: 8 * 1 / 4.");
-
-        Assert.IsTrue(field.TryGetGlow(SourcePosition, out var blendedColor, out var blendedPower));
-        Assert.AreEqual(new Color((byte)(255 * 8 / 10f), (byte)(128 * 2 / 10f), (byte)0), blendedColor);
-        Assert.AreEqual(10, blendedPower);
+        Assert.AreEqual(2, field.GetTotalPowerAt(threeAway, RedAuraId), "Power 8 at the edge of size 3: 8 * 1 / 4.");
+        Assert.AreEqual(0, field.GetTotalPowerAt(threeAway, GreenAuraId), "Only the stronger aura reaches this far.");
+        Assert.AreEqual(8, field.GetTotalPowerAt(SourcePosition, RedAuraId));
+        Assert.AreEqual(2, field.GetTotalPowerAt(SourcePosition, GreenAuraId));
 
         field.RemoveSource(SourcePosition, redSource);
 
-        Assert.IsTrue(field.TryGetGlow(SourcePosition, out var remainingColor, out var remainingPower));
-        Assert.AreEqual(Color.Green, remainingColor);
-        Assert.AreEqual(2, remainingPower);
-        Assert.IsFalse(field.TryGetGlow(threeAway, out _, out _));
+        Assert.AreEqual(0, field.GetTotalPowerAt(SourcePosition, RedAuraId));
+        Assert.AreEqual(2, field.GetTotalPowerAt(SourcePosition, GreenAuraId));
+        Assert.IsFalse(field.AnyAuraReaches(threeAway));
     }
 
     /// <summary>The "any aura here at all" answer covers exactly the cells some aura reaches, and follows each aura leaving a cell on its own.</summary>
@@ -184,17 +177,20 @@ public sealed class AuraFieldTests
         Assert.AreEqual(8, field.GetTotalPowerAt(SourcePosition, OrangeAuraId));
     }
 
-    /// <summary>The glow view needs no separate build: asking for a glow is enough.</summary>
+    /// <summary>The power view needs no separate build: asking it anything is enough.</summary>
     [TestMethod]
-    public void GlowView_BeforeAnythingBuiltTheField_SeesTerrainAuras()
+    public void PowerView_BeforeAnythingBuiltTheField_SeesTerrainAuras()
     {
         var terrain = new TerrainRegistry();
         var world = TestWorlds.Create(new Map(MapSize));
         world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(terrain.Register(GlowingTerrain)));
-        var glowView = new AuraGlowView(BuildField(world, terrain));
+        var auras = BuildAuras();
+        var powerView = new AuraPowerView(new AuraField(world, terrain, auras, new EventBus()), auras);
 
-        Assert.IsTrue(glowView.TryGetGlow(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out var glowColor, out _));
-        Assert.AreEqual(Color.Orange, glowColor);
+        Assert.IsTrue(powerView.AnyAuraReaches(SourcePosition.X, SourcePosition.Y, SourcePosition.Z));
+        Assert.AreEqual(8, powerView.PowerAt(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, OrangeAuraId));
+        CollectionAssert.AreEqual(new[] { OrangeAuraId }, powerView.AuraIdsInField.ToArray());
+        Assert.AreEqual(Color.Orange, powerView.GlowColorOf(OrangeAuraId));
     }
 
     /// <summary>A runtime terrain change swaps the cell's aura and says where, so exposures around it can follow.</summary>
@@ -214,10 +210,10 @@ public sealed class AuraFieldTests
         field.TerrainAuraRemoved += (position, source) => announced.Add($"removed {position.X},{position.Y} power {source.Power} size {source.Size}");
 
         world.SetTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(plain));
-        Assert.IsFalse(field.TryGetGlow(SourcePosition, out _, out _));
+        Assert.IsFalse(field.AnyAuraReaches(SourcePosition));
 
         world.SetTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(glowing));
-        Assert.IsTrue(field.TryGetGlow(SourcePosition, out _, out _));
+        Assert.IsTrue(field.AnyAuraReaches(SourcePosition));
 
         CollectionAssert.AreEqual(new[] { "removed 10,10 power 8 size 3", "added 10,10 power 8 size 3" }, announced);
     }
@@ -233,22 +229,22 @@ public sealed class AuraFieldTests
         world.PopulateTerrain(1024, 5, TerrainLayer.UnderGround, glowing);
         var auras = BuildAuras();
         var field = new AuraField(world, terrain, auras, eventBus);
+        field.EnsureBuilt();
         var acrossTheBorder = new Vector3Int(1022, 5, 0);
-        Assert.IsTrue(field.TryGetGlow(acrossTheBorder, out var colorBefore, out var strengthBefore), "Precondition: the aura reaches across the border.");
+        var powerBefore = field.GetTotalPowerAt(acrossTheBorder, OrangeAuraId);
+        Assert.IsTrue(powerBefore > 0, "Precondition: the aura reaches across the border.");
 
         eventBus.Publish(new TerrainUnloadingEvent(Neighborhoods.AreaOf(1, 0, 1)));
         world.Map.UnloadNeighborhood(1, 0);
 
-        Assert.IsFalse(field.TryGetGlow(acrossTheBorder, out _, out _));
+        Assert.IsFalse(field.AnyAuraReaches(acrossTheBorder));
 
         world.Map.LoadNeighborhood(1, 0);
         world.PopulateTerrain(1024, 5, TerrainLayer.UnderGround, glowing);
         Assert.IsTrue(TerrainAuraSources.TryGetAura(terrain, auras, glowing.TypeId, out var aura));
         eventBus.Publish(new TerrainLoadedEvent(Neighborhoods.AreaOf(1, 0, 1), [new TerrainAuraCell(new Vector3Int(1024, 5, (int)MapLayer.UnderGround), aura)]));
 
-        Assert.IsTrue(field.TryGetGlow(acrossTheBorder, out var colorAfter, out var strengthAfter));
-        Assert.AreEqual(colorBefore, colorAfter);
-        Assert.AreEqual(strengthBefore, strengthAfter);
+        Assert.AreEqual(powerBefore, field.GetTotalPowerAt(acrossTheBorder, OrangeAuraId));
     }
 
     /// <summary>On an unbounded map, lava at the edge of the only loaded neighborhood already reaches into the neighbor when that neighbor loads.</summary>
@@ -260,7 +256,7 @@ public sealed class AuraFieldTests
 
         world.Map.LoadNeighborhood(1, 0);
 
-        Assert.IsTrue(field.TryGetGlow(acrossTheSeam, out _, out var totalPower));
+        var totalPower = field.GetTotalPowerAt(acrossTheSeam, OrangeAuraId);
         Assert.AreEqual(4, totalPower);
     }
 
@@ -347,20 +343,20 @@ public sealed class AuraFieldTests
         Assert.IsFalse(field.AnyAuraReaches(SourcePosition));
     }
 
-    /// <summary>The glow's colour is read from the aura's definition when it is asked for, so a replaced definition recolours what is already in the field and says the glow changed.</summary>
+    /// <summary>The colour is read from the aura's definition when it is asked for, so a replaced definition recolours what is already in the field and says the field changed.</summary>
     [TestMethod]
-    public void AuraDefinitionReplaced_TheGlowTakesItsNewColourAndTheVersionMoves()
+    public void AuraDefinitionReplaced_TheViewGivesItsNewColourAndTheVersionMoves()
     {
         var auras = BuildAuras();
         var field = new AuraField(TestWorlds.Create(new Map(MapSize)), new TerrainRegistry(), auras, new EventBus());
+        var powerView = new AuraPowerView(field, auras);
         field.AddSource(SourcePosition, new AuraSourceComponent(OrangeAuraId, power: 8, size: 3));
-        var versionBefore = field.Version;
+        var versionBefore = powerView.Version;
 
         auras.Register(new AuraDefinition(OrangeAuraGuid, "Orange", Color.Purple));
 
-        Assert.IsTrue(field.TryGetGlow(SourcePosition, out var glowColor, out _));
-        Assert.AreEqual(Color.Purple, glowColor);
-        Assert.AreNotEqual(versionBefore, field.Version);
+        Assert.AreEqual(Color.Purple, powerView.GlowColorOf(OrangeAuraId));
+        Assert.AreNotEqual(versionBefore, powerView.Version);
     }
 
     private static readonly AuraDefinition SteadyAura = new(new Guid("00000000-0000-0000-0000-0000000000a9"), "Steady", Color.Blue, Falloff: AuraFalloff.None);

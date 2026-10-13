@@ -1,6 +1,7 @@
 using Engine.Modules;
 using Game.Modules.Inventory;
 using Game.Tags;
+using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Lootboxes;
 
@@ -15,8 +16,9 @@ namespace Game.Modules.Lootboxes;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class LootboxCatalog(ItemCatalog itemCatalog) : Catalog<LootboxTypeDefinition>(static definition => definition.Id), IItemDefinitionSource
 {
-    public const string DefaultSpriteName = "Inventory";
+    public const string DefaultSpriteName = "Lootbox";
     public const string DefaultGlyph = "L";
+    public static readonly Color DefaultGlyphColor = Color.Gold;
 
     private static readonly Guid ItemIdNamespace = new("5b0e7c1a-3f42-4d8e-9a61-7c2d4e8f1b30");
 
@@ -42,6 +44,9 @@ public sealed class LootboxCatalog(ItemCatalog itemCatalog) : Catalog<LootboxTyp
         return new Guid(hash[..16], bigEndian: true);
     }
 
+    /// <summary>The sprite a box of type and rarity shows: the type's base name and the rarity, "Lootbox-Bronze".</summary>
+    public static string SpriteNameFor(LootboxTypeDefinition type, LootboxRarity rarity) => $"{type.SpriteName ?? DefaultSpriteName}-{rarity}";
+
     /// <summary>"Bronze Adventurer Box".</summary>
     public string DisplayName(LootboxKind kind) => $"{kind.Rarity} {GetTypeDefinition(kind.TypeId).Name} Box";
 
@@ -57,16 +62,15 @@ public sealed class LootboxCatalog(ItemCatalog itemCatalog) : Catalog<LootboxTyp
         var itemDefinition = new ItemDefinition(
             ItemIdFor(kind),
             DisplayName(kind),
-            type.SpriteName ?? DefaultSpriteName,
+            SpriteNameFor(type, kind.Rarity),
             type.Glyph ?? DefaultGlyph,
-            LootboxRarityColors.For(kind.Rarity),
+            type.GlyphColor ?? DefaultGlyphColor,
             Tags: [GameTags.ItemLootbox],
             Effects: [],
             Description: $"A {kind.Rarity} {type.Name} loot box. Opening any loot box opens every loot box you're holding.",
             Summary: "Open to receive its rewards.",
             Contents: RandomSingleStackContents.Instance,
-            CanTrade: false,
-            SpriteTint: LootboxRarityColors.For(kind.Rarity));
+            CanTrade: false);
 
         _itemDefinitionsByKind.Add(kind, itemDefinition);
         _kindsByItemDefinitionId[itemDefinition.Id] = kind;

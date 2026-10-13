@@ -256,7 +256,7 @@ public sealed class HealingShrineTests
 
         Assert.IsTrue(session.Components.GetPackedPool<DeadComponent>().Has(shrineId));
         Assert.AreEqual(0, session.Build.Context.AuraField.GetTotalPowerAt(beside, healingAuraId));
-        Assert.IsFalse(session.Build.Context.AuraField.TryGetGlow(beside, out _, out _));
+        Assert.IsFalse(session.Build.Context.AuraField.AnyAuraReaches(beside));
     }
 
     /// <summary>Applying the shrine's blueprint to an entity already on the map gives it the aura, in the field at once, with nothing to announce it.</summary>

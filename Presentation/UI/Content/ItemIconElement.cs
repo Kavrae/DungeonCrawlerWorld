@@ -21,12 +21,10 @@ public sealed class ItemIconElement(FontService fontService, ElementPoolService 
     private string? _spriteName;
     private string _glyph = string.Empty;
     private Color _glyphColor;
-    private Color? _spriteTint;
     private SpriteFontBase _glyphFont = null!;
 
-    public void Configure(string? spriteName, string glyph, Color glyphColor, Vector2 iconSize, Color? spriteTint = null)
+    public void Configure(string? spriteName, string glyph, Color glyphColor, Vector2 iconSize)
     {
-        _spriteTint = spriteTint;
         _spriteName = spriteName;
         _glyph = glyph;
         _glyphColor = glyphColor;
@@ -37,6 +35,6 @@ public sealed class ItemIconElement(FontService fontService, ElementPoolService 
     {
         SpriteView? sprite = _spriteName is not null && spriteSheetService.Sprites.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
 
-        SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _glyphFont, _glyph, _glyphColor, ContentAbsolutePosition, ContentSize, _spriteTint ?? Color.White);
+        SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _glyphFont, _glyph, _glyphColor, ContentAbsolutePosition, ContentSize, Color.White);
     }
 }

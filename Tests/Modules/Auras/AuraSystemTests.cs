@@ -1204,7 +1204,7 @@ public sealed class AuraSystemTests
         MoveObserverTo(system, movedEntities, SourcePosition, SourcePosition, SourceEntityId);
 
         Assert.AreEqual(8, _auraField.GetTotalPowerAt(SourcePosition, TestAuras.BurningId));
-        Assert.IsTrue(_auraField.TryGetGlow(SourcePosition, out _, out _));
+        Assert.IsTrue(_auraField.AnyAuraReaches(SourcePosition));
     }
 
     /// <summary>A source added straight to the pool of an entity already on the map -- a blueprint applied to a live entity -- needs no event to reach the field.</summary>
@@ -1238,9 +1238,9 @@ public sealed class AuraSystemTests
         Assert.AreEqual(0, _auraField.GetTotalPowerAt(movedTo, TestAuras.BurningId));
     }
 
-    /// <summary>Toggle on, walk, toggle off: the glow follows the carrier and nothing is left at either end.</summary>
+    /// <summary>Toggle on, walk, toggle off: the reach follows the carrier and nothing is left at either end.</summary>
     [TestMethod]
-    public void LocalSourceTogglesOnThenMovesThenTogglesOff_GlowFollowsAndLeavesNothingBehind()
+    public void LocalSourceTogglesOnThenMovesThenTogglesOff_ReachFollowsAndLeavesNothingBehind()
     {
         var (system, componentManager, _, movedEntities, eventBus) = Build();
         var sourcePool = componentManager.GetMultiPool<AuraSourceComponent>();
@@ -1248,19 +1248,18 @@ public sealed class AuraSystemTests
         TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(SourcePosition, UnitSize));
 
         TestAuras.ToggleSource(sourcePool, eventBus, SourceEntityId, TestAuras.PoisonId, power: 8, size: 3);
-        Assert.IsTrue(_auraField.TryGetGlow(SourcePosition, out var glowColor, out _));
-        Assert.AreEqual(Color.DarkGreen, glowColor);
+        Assert.AreEqual(8, _auraField.GetTotalPowerAt(SourcePosition, TestAuras.PoisonId));
 
         var movedTo = new Vector3Int(SourcePosition.X + 20, SourcePosition.Y, SourcePosition.Z);
         TestTransforms.Set(componentManager, SourceEntityId, new TransformComponent(movedTo, UnitSize));
         MoveObserverTo(system, movedEntities, SourcePosition, movedTo, SourceEntityId);
-        Assert.IsFalse(_auraField.TryGetGlow(SourcePosition, out _, out _), "The glow must leave the old position.");
-        Assert.IsTrue(_auraField.TryGetGlow(movedTo, out _, out _));
+        Assert.IsFalse(_auraField.AnyAuraReaches(SourcePosition), "The reach must leave the old position.");
+        Assert.IsTrue(_auraField.AnyAuraReaches(movedTo));
 
         TestAuras.ToggleSource(sourcePool, eventBus, SourceEntityId, TestAuras.PoisonId, power: 8, size: 3);
 
-        Assert.IsFalse(_auraField.TryGetGlow(SourcePosition, out _, out _));
-        Assert.IsFalse(_auraField.TryGetGlow(movedTo, out _, out _));
+        Assert.IsFalse(_auraField.AnyAuraReaches(SourcePosition));
+        Assert.IsFalse(_auraField.AnyAuraReaches(movedTo));
     }
 
     /// <summary>A second aura added to an entity the field already holds joins the first where the field has it, and each is removed on its own.</summary>

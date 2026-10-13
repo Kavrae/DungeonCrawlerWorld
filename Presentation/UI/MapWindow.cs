@@ -23,7 +23,7 @@ namespace Presentation.UI;
 /// The map-rendering composition root: owns the draw order (flat fill, terrain, glyphs/sprites, glow,
 /// targeting/selection highlights) and routes its own input hooks (hotkeys, clicks, right-drag)
 /// to whichever collaborator actually owns that concern -- MapCamera (pan/zoom),
-/// AuraGlowView (aura glow), ActionTargetingController (arm/target/
+/// AuraGlowBlend (aura glow, from AuraPowerView), ActionTargetingController (arm/target/
 /// confirm), PlayerMovementController (WASD movement). MapWindow itself should stay thin glue
 /// over those, not accumulate gameplay logic of its own.
 ///
@@ -77,10 +77,11 @@ public sealed class MapWindow : Window
     /// <summary>The aura glow overlay's own cached rendering -- a separate texture from _terrainCache rather than the same one because it is blitted on the other side of the occupants (see DrawGlowOverlay).</summary>
     private MapTileLayerCache? _glowCache;
 
-    /// <summary>The AuraGlowView.Version _glowCache was last rendered against -- the glow texture depends on the aura field's contents as well as on the camera, so a source appearing, moving or expiring has to invalidate it even though nothing about the camera changed.</summary>
+    /// <summary>The AuraPowerView.Version _glowCache was last rendered against -- the glow texture depends on the aura field's contents as well as on the camera, so a source appearing, moving or expiring has to invalidate it even though nothing about the camera changed.</summary>
     private int _renderedGlowVersion = -1;
 
-    private readonly AuraGlowView _auraGlow;
+    private readonly AuraPowerView _auraPower;
+    private readonly AuraGlowBlend _auraGlowBlend;
 
     /// <summary>This frame's "an earlier hotkey handler already used this key" set -- cleared and repopulated every OnHotkeysAction call, before PlayerMovementController.HandleInput reads it. See that class's own doc comment for why this exists (today: Dodge's directional confirm claiming WASD ahead of plain movement).</summary>
     private readonly HashSet<Keys> _claimedKeysThisFrame = [];
@@ -178,7 +179,7 @@ public sealed class MapWindow : Window
         IMapViewQuery mapView,
         PlayerActionGate playerActionGate,
         MapViewState mapViewState,
-        AuraGlowView auraGlow,
+        AuraPowerView auraPower,
         EventBus eventBus,
         LabelRenderer labelRenderer,
         SpriteSheetService spriteSheetService,
@@ -203,7 +204,8 @@ public sealed class MapWindow : Window
         _playerMovement = playerMovement;
         _contextMenuController = contextMenuController;
         _adminContextMenuOptions = adminContextMenuOptions;
-        _auraGlow = auraGlow;
+        _auraPower = auraPower;
+        _auraGlowBlend = new AuraGlowBlend(auraPower);
         _terrainCells = new MapTerrainCells(mapView, spriteSheetService.Sprites);
         _floatingTextController = floatingTextController;
         _floatingTextRenderer = floatingTextRenderer;
@@ -296,9 +298,9 @@ public sealed class MapWindow : Window
             _glowCache = new MapTileLayerCache(graphicsDevice);
         }
 
-        if (_renderedGlowVersion != _auraGlow.Version)
+        if (_renderedGlowVersion != _auraPower.Version)
         {
-            _renderedGlowVersion = _auraGlow.Version;
+            _renderedGlowVersion = _auraPower.Version;
             _glowCache?.Invalidate();
         }
 
@@ -428,7 +430,7 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>
-    /// The auras' glow (see AuraGlowView), drawn as a translucent overlay on top of terrain and
+    /// The auras' glow (see AuraGlowBlend), drawn as a translucent overlay on top of terrain and
     /// occupant sprites, so it shows the same over a full-tile sprite as over a glyph on the flat fill.
     /// </summary>
     /// <summary>Renders the glow overlay at whole-tile positions with no sub-tile offset, for MapTileLayerCache to capture -- the caller applies the offset once when blitting.</summary>
@@ -438,6 +440,7 @@ public sealed class MapWindow : Window
     private void DrawGlowOverlay(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 pixelOffset)
     {
         var currentMapLayer = _mapViewState.CurrentMapLayer;
+        _auraGlowBlend.BeginPass();
 
         for (var columnIndex = 0; columnIndex < _camera.TileColumns; columnIndex++)
         {
@@ -446,7 +449,7 @@ public sealed class MapWindow : Window
                 var mapNodeX = columnIndex + _camera.CurrentScrollPosition.X;
                 var mapNodeY = rowIndex + _camera.CurrentScrollPosition.Y;
 
-                if (!_mapView.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)) || !_auraGlow.TryGetGlow(mapNodeX, mapNodeY, currentMapLayer, out var glowColor, out var totalPower))
+                if (!_mapView.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)) || !_auraGlowBlend.TryGetGlow(mapNodeX, mapNodeY, currentMapLayer, out var glowColor, out var totalPower))
                 {
                     continue;
                 }

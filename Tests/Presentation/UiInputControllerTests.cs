@@ -2212,7 +2212,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(24, 24), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        cell.Configure(playerEntityId, itemId, stackInstanceId, null, "t", Color.White, spriteTint: null, quantity: 1, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, canTrade: true, itemCanBindToHotbar: true, cellSize: new Vector2(24, 24));
+        cell.Configure(playerEntityId, itemId, stackInstanceId, null, "t", Color.White, quantity: 1, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, canTrade: true, itemCanBindToHotbar: true, cellSize: new Vector2(24, 24));
         cell.Initialize();
 
         var hotbar = new HotbarContent(
@@ -2254,7 +2254,7 @@ public sealed class UiInputControllerTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, 0), Size = new Vector2(24, 24), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        cell.Configure(corpseEntityId, itemId, stackInstanceId, null, "t", Color.White, spriteTint: null, quantity: 1, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, canTrade: true, itemCanBindToHotbar: true, cellSize: new Vector2(24, 24));
+        cell.Configure(corpseEntityId, itemId, stackInstanceId, null, "t", Color.White, quantity: 1, isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, canTrade: true, itemCanBindToHotbar: true, cellSize: new Vector2(24, 24));
         cell.Initialize();
 
         var hotbar = new HotbarContent(

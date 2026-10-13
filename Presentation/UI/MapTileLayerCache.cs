@@ -61,7 +61,7 @@ public sealed class MapTileLayerCache : IDisposable
     /// Marks the cached image stale so the next EnsureRendered call rebuilds it. Called from
     /// MapWindow's existing camera-commit points (scroll, zoom, layer change) plus whatever
     /// content event the particular pass depends on -- TerrainChangedEvent for the terrain
-    /// texture, an AuraGlowView version change for the glow one.
+    /// texture, an AuraPowerView version change for the glow one.
     /// </summary>
     public void Invalidate() => _isDirty = true;
 

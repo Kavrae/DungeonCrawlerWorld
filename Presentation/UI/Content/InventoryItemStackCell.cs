@@ -58,7 +58,6 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     protected string? _spriteName;
     protected string _glyph = string.Empty;
     protected Color _glyphColor;
-    private Color? _spriteTint;
     private int _quantity;
     protected bool _isDisabled;
     private bool _itemCanBindToHotbar;
@@ -156,7 +155,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     /// this way). SetGroupBorderEdges, called separately afterward, is the only thing that turns
     /// any of them back on for this Configure's cell.
     /// </summary>
-    public void Configure(int entityId, Guid itemDefinitionId, uint? stackInstanceId, string? spriteName, string glyph, Color glyphColor, Color? spriteTint, int quantity, bool isDisabled, bool isDivergent, bool mergedStackBadgeVisible, bool canTrade, bool itemCanBindToHotbar, Vector2 cellSize)
+    public void Configure(int entityId, Guid itemDefinitionId, uint? stackInstanceId, string? spriteName, string glyph, Color glyphColor, int quantity, bool isDisabled, bool isDivergent, bool mergedStackBadgeVisible, bool canTrade, bool itemCanBindToHotbar, Vector2 cellSize)
     {
         CanTrade = canTrade;
         _itemCanBindToHotbar = itemCanBindToHotbar;
@@ -168,7 +167,6 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         _spriteName = spriteName;
         _glyph = glyph;
         _glyphColor = glyphColor;
-        _spriteTint = spriteTint;
         IsDragSource = true;
         _quantity = quantity;
         _isDisabled = isDisabled;
@@ -241,7 +239,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
 
         var isGreyedOut = _isDisabled || CompareState == CellCompareState.Ineligible || !ShopTradeEligible;
         SpriteView? sprite = _spriteName is not null && spriteSheetService.Sprites.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
-        var spriteTint = isGreyedOut ? Color.Gray : _spriteTint ?? Color.White;
+        var spriteTint = isGreyedOut ? Color.Gray : Color.White;
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 
         SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, iconSize, spriteTint);

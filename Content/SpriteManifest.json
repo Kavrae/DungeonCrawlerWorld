@@ -171,6 +171,84 @@
     ]
   },
   {
+    "Name": "Lootbox-Bronze",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Furniture.png",
+        "Column": 47,
+        "Row": 11,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "Tint": "#CD7F32"
+      }
+    ]
+  },
+  {
+    "Name": "Lootbox-Silver",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Furniture.png",
+        "Column": 47,
+        "Row": 11,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "Tint": "#C0C0C0"
+      }
+    ]
+  },
+  {
+    "Name": "Lootbox-Gold",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Furniture.png",
+        "Column": 47,
+        "Row": 11,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "Tint": "#FFD700"
+      }
+    ]
+  },
+  {
+    "Name": "Lootbox-Platinum",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Furniture.png",
+        "Column": 47,
+        "Row": 11,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "Tint": "#A0E6E1"
+      }
+    ]
+  },
+  {
+    "Name": "Lootbox-Legendary",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Furniture.png",
+        "Column": 47,
+        "Row": 11,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "Tint": "#FF8000"
+      }
+    ]
+  },
+  {
+    "Name": "Lootbox-Celestial",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Furniture.png",
+        "Column": 47,
+        "Row": 11,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "Tint": "#BE8CFF"
+      }
+    ]
+  },
+  {
     "Name": "Spell-Weak",
     "Cells": [
       {

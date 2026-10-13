@@ -17,7 +17,7 @@ namespace Game.Modules.Inventory.Definitions;
 /// runtime instead of looking one up.
 ///
 /// Effect is AuraSourceGrant's timed mode granting the scroll's own light aura (Aura) -- a purely
-/// cosmetic map glow today (MapWindow draws it generically from AuraGlowView, the same pipeline
+/// cosmetic map glow today (MapWindow draws it generically from AuraPowerView, the same pipeline
 /// Lava's own Burning glow already uses, with zero Torch-specific knowledge anywhere in
 /// Presentation). The grant is placed once per activation (AuraSourceGrant): read at someone in Target
 /// mode the light follows them; read at the ground, or at an empty tile, it is anchored there

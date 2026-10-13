@@ -1464,9 +1464,16 @@ record in Achievements.
   registered type x 6 rarities, ids only, re-indexed when types were added) and creates the definition.
   Only a loaded save needs this today; it keeps the id scheme save-safe.
 - A box's definition: "{Rarity} {Type} Box", `[Tag.Lootbox]` (the inventory tab), `CanTrade: false`,
-  `GoldValue` 0, the placeholder contents, the type's sprite (the chest, "Inventory", by default) tinted
-  by the new generic `ItemDefinition.SpriteTint` in the rarity's color (`LootboxRarityColors`, also the
-  glyph color), and no `Activator`.
+  `GoldValue` 0, the placeholder contents, the sprite `"{type base}-{Rarity}"` (`LootboxCatalog.
+  SpriteNameFor`; the default base is "Lootbox"), the type's glyph and glyph color (default gold, the
+  same for every rarity), and no `Activator`.
+- **Rarity is a sprite name, not a tint** (2026-10-13, epic child 2): each rarity is its own manifest
+  entry, `Lootbox-Bronze`..`Lootbox-Celestial`, today the chest cell with a cell `Tint` in the rarity's
+  color; real per-rarity art replaces an entry's cell and drops its tint, nothing else changes. A mod type
+  with its own base ships six entries; a missing one draws the glyph and warns at startup
+  (`ContentSpriteNames` lists every type once per rarity). `ItemDefinition.SpriteTint` and
+  `LootboxRarityColors` are deleted. The rarity colors for text (results headers) are Presentation's,
+  `LootboxChrome.RarityColor`; they match the manifest tints by choice, and no test ties them.
 - Same type and rarity stack through plain `InventoryActions.AddItem`.
 
 **Contents, and overriding them per box**
@@ -1482,8 +1489,7 @@ record in Achievements.
   stacks only with boxes carrying equal contents, and never stacks with the usual box of its kind.
   Opening reads each stack's effective definition, so overridden boxes need no special path.
 - Side fix: plain `AddItem` now only merges into a stack with no `Override` (it used to merge into an
-  overridden stack of the same item id). `AreEquivalentOverrides` compares `Contents`, `CanTrade` and
-  `SpriteTint` too.
+  overridden stack of the same item id). `AreEquivalentOverrides` compares `Contents` and `CanTrade` too.
 
 **Untradeable items and the hotbar**
 - `ItemDefinition.CanTrade` (default true), not the tag, is the "can't be traded, looted, sold, bought,
@@ -2445,7 +2451,11 @@ What was built:
 Decisions:
 1. **Glow colour belongs to the aura, not the source.** It is what lets the glow be read from the
    gameplay grid: a cell's tint is the auras' colours weighted by their strength there. One source may
-   carry several auras, each with its own reach and colour.
+   carry several auras, each with its own reach and colour. Since 2026-10-13 (epic child 2) the blend is
+   Presentation's: Game reports power per aura per cell through `AuraPowerView` (`GameViews.AuraPower`),
+   with each aura's colour as content, and `AuraGlowBlend` mixes them; `AuraField.TryGetGlow` is gone.
+   `AuraGlowBlend.BeginPass` reads each aura's colour once per render of the glow cache, so a replaced
+   definition shows on the next render, which the field's `Version` moving starts.
 2. **Every aura applies on its one-second tick only**, never on entering range -- Healing, Burning and
    Poison alike. Decided for healing (stepping in and out would heal faster than once a second) and
    applied to all for one rule. A fast or lucky entity crosses an aura untouched. This reversed

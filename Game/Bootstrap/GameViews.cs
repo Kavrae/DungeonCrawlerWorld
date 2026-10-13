@@ -30,7 +30,7 @@ public sealed class GameViews
         ActionStateView = new ActionStateView(componentManager, EntityActions, context.Items, localTierRoster, context.EffectServices, context.Toggles, context.SimulationClock);
         TargetingView = new TargetingView(context.TargetResolution, EntityActions, context.Items, componentManager);
         TransformView = new TransformView(componentManager);
-        AuraGlow = new AuraGlowView(context.AuraField);
+        AuraPower = new AuraPowerView(context.AuraField, context.Auras);
         ActionSourceNaming = new ActionSourceNaming(context.Terrain, context.Auras);
         ContentSpriteNames = new ContentSpriteNames(context.Definitions, context.Terrain, context.Actions, context.Items, context.Lootboxes);
     }
@@ -69,8 +69,8 @@ public sealed class GameViews
 
     public TransformView TransformView { get; }
 
-    /// <summary>The glow auras cast on the map.</summary>
-    public AuraGlowView AuraGlow { get; }
+    /// <summary>Where auras reach on the map and how strongly.</summary>
+    public AuraPowerView AuraPower { get; }
 
     /// <summary>The name shown for what caused an effect: an entity, a terrain, an aura.</summary>
     public ActionSourceNaming ActionSourceNaming { get; }

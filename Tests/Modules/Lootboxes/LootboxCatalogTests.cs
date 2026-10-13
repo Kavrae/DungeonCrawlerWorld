@@ -66,6 +66,33 @@ public sealed class LootboxCatalogTests
     }
 
     [TestMethod]
+    public void CreatedDefinition_ShowsItsRaritysSprite_UnderTheDefaultBase_WithTheDefaultGlyphColor()
+    {
+        var (_, lootboxCatalog) = CreateCatalogs();
+
+        var definition = lootboxCatalog.GetOrCreateItem(new LootboxKind(LootboxTypes.Alchemist.Id, LootboxRarity.Platinum));
+
+        Assert.AreEqual("Lootbox-Platinum", definition.SpriteName);
+        Assert.AreEqual(LootboxCatalog.DefaultGlyphColor, definition.GlyphColor);
+    }
+
+    [TestMethod]
+    public void CreatedDefinition_OfATypeWithItsOwnBaseAndGlyphColor_UsesThemForEveryRarity()
+    {
+        var (_, lootboxCatalog) = CreateCatalogs();
+        var modType = new LootboxTypeDefinition(Guid.NewGuid(), "Modded", SpriteName: "Crate", GlyphColor: Microsoft.Xna.Framework.Color.Teal);
+        lootboxCatalog.Register(modType);
+
+        var bronze = lootboxCatalog.GetOrCreateItem(new LootboxKind(modType.Id, LootboxRarity.Bronze));
+        var celestial = lootboxCatalog.GetOrCreateItem(new LootboxKind(modType.Id, LootboxRarity.Celestial));
+
+        Assert.AreEqual("Crate-Bronze", bronze.SpriteName);
+        Assert.AreEqual("Crate-Celestial", celestial.SpriteName);
+        Assert.AreEqual(Microsoft.Xna.Framework.Color.Teal, bronze.GlyphColor);
+        Assert.AreEqual(Microsoft.Xna.Framework.Color.Teal, celestial.GlyphColor);
+    }
+
+    [TestMethod]
     public void ItemCatalogLookup_OfAKindNothingCreatedYet_CreatesItThroughTheLootboxCatalog()
     {
         var (itemCatalog, _) = CreateCatalogs();

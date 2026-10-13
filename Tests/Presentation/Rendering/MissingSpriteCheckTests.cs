@@ -66,6 +66,20 @@ public sealed class MissingSpriteCheckTests
     }
 
     [TestMethod]
+    public void Report_ALootboxTypeWithoutItsRarityEntries_IsReportedOncePerRarity_NamingTheType()
+    {
+        var items = new ItemCatalog();
+        var lootboxes = new LootboxCatalog(items);
+        lootboxes.Register(new LootboxTypeDefinition(Guid.NewGuid(), "Modded", SpriteName: "No such crate"));
+
+        var missing = MissingSpriteCheck.Report(new ContentSpriteNames(new BlueprintRegistry(), new TerrainRegistry(), new ActionCatalog(), items, lootboxes), TestSprites.Resolver, TextWriter.Null);
+
+        CollectionAssert.AreEqual(
+            Enum.GetValues<LootboxRarity>().Select(rarity => new DeclaredSpriteName($"No such crate-{rarity}", "loot box type Modded")).ToArray(),
+            missing.ToArray());
+    }
+
+    [TestMethod]
     public void Report_TerrainAndActionNames_AreChecked()
     {
         var terrain = new TerrainRegistry();

@@ -329,7 +329,7 @@ public sealed class ItemDetailsWindow(
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
-        icon.Configure(definition.SpriteName, definition.Glyph, definition.GlyphColor, new Vector2(IconSize, IconSize), definition.SpriteTint);
+        icon.Configure(definition.SpriteName, definition.Glyph, definition.GlyphColor, new Vector2(IconSize, IconSize));
         row.AddChild(icon);
 
         // row's own content width is width - ContentPadding*2 (see the width comment above), not

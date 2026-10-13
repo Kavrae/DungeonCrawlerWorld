@@ -5,15 +5,14 @@ using Engine.Math;
 using Game.Modules.Auras.Components;
 using Game.Terrain;
 using Game.World;
-using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Auras;
 
-/// <summary>Where every aura reaches: each cell's total power per aura, summed over every source, and the glow that follows from it.</summary>
+/// <summary>Where every aura reaches: each cell's total power per aura, summed over every source.</summary>
 /// <remarks>
 /// <para>
 /// The one structure that holds aura reach. Gameplay (AuraSystem) reads a cell's power for an
-/// aura from it, and the map's glow (AuraGlowView) is derived from the same totals, so what is drawn
+/// aura from it, and the map's glow (AuraPowerView, blended in Presentation) is derived from the same totals, so what is drawn
 /// is what applies by construction.
 /// </para>
 /// <para>
@@ -247,49 +246,6 @@ public sealed class AuraField
         }
 
         return byAuraId[auraId];
-    }
-
-    /// <summary>The glow at position: the colours of the auras reaching it, averaged by each one's power there, and their summed power.</summary>
-    /// <remarks>False where no aura reaches. Two auras overlapping -- from one source or several -- blend toward whichever is stronger at the cell.</remarks>
-    public bool TryGetGlow(Vector3Int position, out Color glowColor, out int totalPower)
-    {
-        EnsureBuilt();
-
-        if (!_auraGrid.IsCovered(position))
-        {
-            glowColor = default;
-            totalPower = 0;
-            return false;
-        }
-
-        var red = 0f;
-        var green = 0f;
-        var blue = 0f;
-        totalPower = 0;
-
-        foreach (var auraId in _auraIdsInField)
-        {
-            var power = _auraGrid.GetTotalPowerAt(position, auraId);
-            if (power <= 0)
-            {
-                continue;
-            }
-
-            var auraGlowColor = _auras.Get(auraId).GlowColor;
-            red += auraGlowColor.R * power;
-            green += auraGlowColor.G * power;
-            blue += auraGlowColor.B * power;
-            totalPower += power;
-        }
-
-        if (totalPower <= 0)
-        {
-            glowColor = default;
-            return false;
-        }
-
-        glowColor = new Color((byte)(red / totalPower), (byte)(green / totalPower), (byte)(blue / totalPower));
-        return true;
     }
 
     /// <summary>Swaps a changed cell's terrain aura: the previous terrain's out, the new terrain's in. Before the terrain is scanned there is nothing to update; the scan will see the new terrain.</summary>

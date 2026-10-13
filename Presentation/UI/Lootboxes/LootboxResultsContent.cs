@@ -115,7 +115,7 @@ public sealed class LootboxResultsContent(
                 Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, y), Size = new Vector2(columns * cellStep.X, LootboxChrome.HeaderHeight), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
                 Content = new ElementContentOptions { ContentColor = Color.Transparent },
-                Text = new TextOptions { Text = HeaderText(group), TextColor = LootboxChrome.HeaderColor(group.Kind.Rarity) },
+                Text = new TextOptions { Text = HeaderText(group), TextColor = LootboxChrome.RarityColor(group.Kind.Rarity) },
             });
             _hostWindow.AddChild(header);
             y += LootboxChrome.HeaderHeight;
@@ -136,7 +136,7 @@ public sealed class LootboxResultsContent(
                     Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
                     Content = new ElementContentOptions { ContentColor = Color.Transparent },
                 });
-                cell.Configure(playerEntityId, definition.Id, reward.StackInstanceId, definition.SpriteName, definition.Glyph, definition.GlyphColor, definition.SpriteTint, reward.Quantity,
+                cell.Configure(playerEntityId, definition.Id, reward.StackInstanceId, definition.SpriteName, definition.Glyph, definition.GlyphColor, reward.Quantity,
                     isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, canTrade: definition.CanTrade, itemCanBindToHotbar: false, cellSize);
                 cell.IsDragSource = false;
                 cell.Clicked += _ => onRewardClicked(reward);

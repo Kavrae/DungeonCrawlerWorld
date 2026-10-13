@@ -76,7 +76,6 @@ public static class InventoryActions
         a.SpriteName == b.SpriteName &&
         a.Glyph == b.Glyph &&
         a.GlyphColor == b.GlyphColor &&
-        a.SpriteTint == b.SpriteTint &&
         a.Description == b.Description &&
         a.Summary == b.Summary &&
         Equals(a.Activator, b.Activator) &&

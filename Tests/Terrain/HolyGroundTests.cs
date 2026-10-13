@@ -152,10 +152,12 @@ public sealed class HolyGroundTests
     {
         var session = BuildSession();
 
-        Assert.IsTrue(session.Build.Context.AuraField.TryGetGlow(HolyGroundPosition, out var glowColor, out var totalPower));
-        Assert.AreEqual(Microsoft.Xna.Framework.Color.White, glowColor);
-        Assert.AreEqual(8, totalPower);
-        Assert.AreEqual(8, session.Build.Context.AuraField.GetTotalPowerAt(HolyGroundPosition, session.Build.Context.Auras.GetId(BuiltInTerrain.HolyGroundAura.Id)));
+        var context = session.Build.Context;
+        var holyGroundAuraId = context.Auras.GetId(BuiltInTerrain.HolyGroundAura.Id);
+        var powerView = new Game.Views.AuraPowerView(context.AuraField, context.Auras);
+
+        Assert.AreEqual(8, powerView.PowerAt(HolyGroundPosition.X, HolyGroundPosition.Y, HolyGroundPosition.Z, holyGroundAuraId));
+        Assert.AreEqual(Microsoft.Xna.Framework.Color.White, powerView.GlowColorOf(holyGroundAuraId));
     }
 
     [TestMethod]

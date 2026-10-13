@@ -10,6 +10,7 @@ using Microsoft.Xna.Framework.Input;
 using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI;
+using Presentation.UI.Chrome;
 using Presentation.UI.Content;
 using Presentation.UI.Lootboxes;
 
@@ -106,8 +107,8 @@ public sealed class LootboxResultsContentTests
         var harness = Build();
 
         CollectionAssert.AreEqual(new[] { "Bronze Alchemist Box", "Silver Adventurer Box x3" }, harness.Headers.Select(header => header.OriginalText).ToArray());
-        Assert.AreEqual(LootboxRarityColors.For(LootboxRarity.Bronze), harness.Headers[0].TextColor);
-        Assert.AreEqual(LootboxRarityColors.For(LootboxRarity.Silver), harness.Headers[1].TextColor);
+        Assert.AreEqual(LootboxChrome.RarityColor(LootboxRarity.Bronze), harness.Headers[0].TextColor);
+        Assert.AreEqual(LootboxChrome.RarityColor(LootboxRarity.Silver), harness.Headers[1].TextColor);
     }
 
     [TestMethod]

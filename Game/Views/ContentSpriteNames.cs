@@ -59,7 +59,10 @@ public sealed class ContentSpriteNames(BlueprintRegistry blueprints, TerrainRegi
 
         foreach (var lootboxType in lootboxes.Definitions)
         {
-            Add(lootboxType.SpriteName ?? LootboxCatalog.DefaultSpriteName, $"loot box type {lootboxType.Name}");
+            foreach (var rarity in Enum.GetValues<LootboxRarity>())
+            {
+                Add(LootboxCatalog.SpriteNameFor(lootboxType, rarity), $"loot box type {lootboxType.Name}");
+            }
         }
 
         return declared;

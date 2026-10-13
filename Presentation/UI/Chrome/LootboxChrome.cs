@@ -28,6 +28,16 @@ public static class LootboxChrome
     /// <summary>Kept free beside the cells so a scrollbar appearing doesn't drop a column.</summary>
     public static float ScrollbarAllowance = 14f;
 
-    /// <summary>A section header's text color: its boxes' rarity color.</summary>
-    public static Color HeaderColor(LootboxRarity rarity) => LootboxRarityColors.For(rarity);
+    /// <summary>The color that identifies a loot box rarity in text and chrome -- a section header's text, for one.</summary>
+    /// <remarks>Never a sprite's: a box's look is its manifest entry's ("Lootbox-Bronze"), whose tint matches these today by choice, not by rule.</remarks>
+    public static Color RarityColor(LootboxRarity rarity) => rarity switch
+    {
+        LootboxRarity.Bronze => new Color(205, 127, 50),
+        LootboxRarity.Silver => new Color(192, 192, 192),
+        LootboxRarity.Gold => new Color(255, 215, 0),
+        LootboxRarity.Platinum => new Color(160, 230, 225),
+        LootboxRarity.Legendary => new Color(255, 128, 0),
+        LootboxRarity.Celestial => new Color(190, 140, 255),
+        _ => Color.White,
+    };
 }

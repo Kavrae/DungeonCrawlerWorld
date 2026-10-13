@@ -91,13 +91,14 @@ internal static class TestMapWindows
         var terrain = new Game.Terrain.TerrainRegistry();
         var mapView = new MapViewQuery(world, componentManager, resolvedActionCatalog, terrain, creatures: new BlueprintRegistry(), new SimulationClock());
         var playerActionGate = new PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), componentManager.GetPackedPool<AbilityScoresComponent>(), componentManager.GetMultiPool<StatModifierComponent>(), world, new SimulationClock());
-        var auraGlow = new AuraGlowView(new AuraField(world, terrain, TestAuras.GlowOnlyCatalog(), eventBus));
+        var auras = TestAuras.GlowOnlyCatalog();
+        var auraPower = new AuraPowerView(new AuraField(world, terrain, auras, eventBus), auras);
 
         var floatingTextController = new FloatingTextController(eventBus, new SimulationClock());
         var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, fontService, new Game.Modules.StatusEffects.StatusEffectDisplayRegistry(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new LabelRenderer());
 
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(
-            fontService, windowService, mapView, playerActionGate, mapViewState, auraGlow, eventBus, new LabelRenderer(),
+            fontService, windowService, mapView, playerActionGate, mapViewState, auraPower, eventBus, new LabelRenderer(),
             new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), camera, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer, new AdminContextMenuOptions(TestAdminTools.Create())));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions

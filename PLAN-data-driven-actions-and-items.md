@@ -19,7 +19,7 @@ What exists today:
 - **The shape to serialize** (all immutable records):
   - `ActivatableDefinition` (Id, Name, SpriteName, Glyph, GlyphColor, Tags, Effects, Description,
     Summary, Toggle) → `ActionDefinition` (+ Activator) and `ItemDefinition` (+ optional Activator,
-    GoldValue, MaximumShopStock, Contents, CanTrade, SpriteTint).
+    GoldValue, MaximumShopStock, Contents, CanTrade).
   - `Tags` already includes the activator's implied tags (unioned in the constructor): **the declared
     tags are not kept anywhere**, so they can't be written back out as authored.
   - Activators: `DirectAction`, `SpellActivator` (ManaCost), `PotionActivator`, `ScrollActivator`
