@@ -10,6 +10,7 @@ using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Input;
+using Presentation.MapRendering;
 
 namespace Presentation.UI;
 

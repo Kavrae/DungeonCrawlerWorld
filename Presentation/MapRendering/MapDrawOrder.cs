@@ -5,7 +5,7 @@ using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.Rendering;
 
-namespace Presentation.UI;
+namespace Presentation.MapRendering;
 
 /// <summary>What a MapDrawItem draws.</summary>
 public enum MapDrawItemKind : byte
@@ -55,7 +55,7 @@ public readonly record struct MapOverhang(int WallX, int WallY, int AnchorX, int
 }
 
 /// <summary>
-/// Decides what the map's occupant pass draws and in what order, so MapWindow only renders it and the order can be
+/// Decides what the map's occupant pass draws and in what order, so MapRenderer only renders it and the order can be
 /// tested without a window.
 /// </summary>
 /// <remarks>
@@ -76,7 +76,7 @@ public readonly record struct MapOverhang(int WallX, int WallY, int AnchorX, int
 /// </para>
 /// <para>
 /// <b>Walls' overhangs first in their row.</b> A wall's face or top that covers a tile something can stand on (see
-/// MapWindow's structure pass) is drawn at the start of the wall's own row: over everything standing behind it in the
+/// MapRenderer's structure pass) is drawn at the start of the wall's own row: over everything standing behind it in the
 /// rows above, under anything standing beside it in its own row.
 /// </para>
 /// <para>

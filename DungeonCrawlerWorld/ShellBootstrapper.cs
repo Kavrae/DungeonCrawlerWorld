@@ -10,6 +10,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Bootstrap;
 using Presentation.Input;
+using Presentation.MapRendering;
 using Presentation.UI;
 using Presentation.UI.AbilityScores;
 using Presentation.UI.Chrome;
@@ -45,7 +46,7 @@ public static class ShellBootstrapper
         var shellServices = new ShellServices(
             new UiLayerStack(),
             new MapViewState { ReservedEntityIds = worldSession.ReservedEntityIds },
-            new MapCamera(world),
+            new MapCamera(views.MapView),
             new ContextMenuController(presentation.ElementPoolService),
             new TooltipController(),
             pointerState,

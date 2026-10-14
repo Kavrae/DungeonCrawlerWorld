@@ -1,9 +1,9 @@
 using Engine.Math;
-using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.Rendering;
+using Presentation.UI;
 
-namespace Presentation.UI;
+namespace Presentation.MapRendering;
 
 /// <summary>Which live wall pieces fade so whoever is behind them stays visible: any overhang drawn over a watched entity's drawn sprite.</summary>
 /// <remarks>

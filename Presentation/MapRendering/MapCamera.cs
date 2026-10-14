@@ -1,19 +1,18 @@
 using Engine.Math;
-using Game.World;
+using Game.Views;
 using Microsoft.Xna.Framework;
 
-namespace Presentation.UI;
+namespace Presentation.MapRendering;
 
 /// <summary>
-/// MapWindow's own scroll/zoom/pan viewport bookkeeping -- tile-space camera state entirely
-/// local to a single MapWindow instance (nothing else reads it)
+/// A map viewport: which tiles are visible, at what size, scrolled and dragged where, and the screen to tile math over them.
 /// </summary>
 /// <remarks>
-/// Every method that repositions the camera (UpdateScrollPosition/ApplyDrag/EndDrag) returns
-/// the actually-applied delta rather than reaching out to invalidate anything itself -- the
-/// terrain caches these deltas drive are MapWindow's own rendering concern, not this class's, so
-/// MapCamera stays ignorant of them and MapWindow's UpdateScrollPosition wrapper remains the
-/// single commit point.
+/// Reads the map only through IMapViewQuery (its bounds and which tiles are on it), so it serves a live session and an
+/// authored layout alike. Every method that repositions the camera (UpdateScrollPosition/ApplyDrag/EndDrag) returns
+/// the actually-applied delta rather than reaching out to invalidate anything itself -- the terrain caches these
+/// deltas drive are MapRenderer's concern, not this class's. Whether the camera follows anyone is its
+/// host's business.
 /// </remarks>
 public sealed class MapCamera
 {
@@ -26,7 +25,7 @@ public sealed class MapCamera
         [ZoomLevel.Borough] = new Point(BaseTileSizePixels / 4, BaseTileSizePixels / 4),
     };
 
-    private readonly World _world;
+    private readonly IMapViewQuery _mapView;
 
     private ZoomLevel _currentZoomLevel = ZoomLevel.Team;
     private Point _currentTileSize;
@@ -36,12 +35,14 @@ public sealed class MapCamera
     private Point _minScrollPosition;
     private Point _maxScrollPosition;
     private Vector2 _renderPixelOffset;
-    private bool _cameraFollowsPlayer = true;
     private Point _rightDragStartScrollPosition;
 
-    public MapCamera(World world)
+    /// <summary>The map bounds the scroll limits were last computed from -- the sliding window changes them as neighborhoods load and unload.</summary>
+    private MapBounds _scrollLimitBounds;
+
+    public MapCamera(IMapViewQuery mapView)
     {
-        _world = world;
+        _mapView = mapView;
     }
 
     public Point CurrentTileSize => _currentTileSize;
@@ -49,11 +50,7 @@ public sealed class MapCamera
     public int TileRows => _tileRows;
     public Point CurrentScrollPosition => _currentScrollPosition;
     public Vector2 RenderPixelOffset => _renderPixelOffset;
-    public bool FollowsPlayer => _cameraFollowsPlayer;
     public ZoomLevel CurrentZoomLevel => _currentZoomLevel;
-
-    /// <summary>The last map position the camera actively followed the player to -- MapWindow.Update compares against this every frame to notice player movement.</summary>
-    public Vector3Int LastKnownPlayerPosition { get; set; }
 
     public void Initialize(Vector2 contentSize)
     {
@@ -61,11 +58,26 @@ public sealed class MapCamera
         UpdateScrollLimits();
     }
 
-    public void ResumeFollowingPlayer() => _cameraFollowsPlayer = true;
-
-    /// <summary>The screen position of a tile's top-left corner, given its column/row within the visible viewport -- shared by every MapWindow draw method so _renderPixelOffset's smooth drag shift only ever needs applying in one place.</summary>
+    /// <summary>The screen position of a tile's top-left corner, given its column/row within the visible viewport -- shared by every map draw method so _renderPixelOffset's smooth drag shift only ever needs applying in one place.</summary>
     public Vector2 TileOrigin(int columnIndex, int rowIndex) =>
         new Vector2(columnIndex * _currentTileSize.X, rowIndex * _currentTileSize.Y) - _renderPixelOffset;
+
+    /// <summary>The on-screen rectangle of a map tile, or false when it is outside the visible grid.</summary>
+    public bool TryGetTileRectangle(int mapX, int mapY, out Rectangle tileRectangle)
+    {
+        var column = mapX - _currentScrollPosition.X;
+        var row = mapY - _currentScrollPosition.Y;
+
+        if (column < 0 || column >= _tileColumns || row < 0 || row >= _tileRows)
+        {
+            tileRectangle = Rectangle.Empty;
+            return false;
+        }
+
+        var origin = TileOrigin(column, row);
+        tileRectangle = new Rectangle((int)origin.X, (int)origin.Y, _currentTileSize.X, _currentTileSize.Y);
+        return true;
+    }
 
     /// <summary>The screen position of a point in map tile coordinates, where a whole number is a tile's top-left corner.</summary>
     public Vector2 TileToScreen(Vector2 tilePosition) =>
@@ -123,16 +135,23 @@ public sealed class MapCamera
         UpdateZoomLevel(zoomLevels[newIndex], contentSize);
     }
 
-    /// <summary>Recomputes the scroll limits from the map's current bounds and keeps the scroll position inside them.</summary>
-    public void RefreshScrollLimits()
+    /// <summary>Recomputes the scroll limits and keeps the scroll position inside them when the map's bounds have changed since they were last computed.</summary>
+    /// <returns>Whether the bounds had changed.</returns>
+    public bool RefreshScrollLimitsIfBoundsChanged()
     {
+        if (_mapView.Bounds == _scrollLimitBounds)
+        {
+            return false;
+        }
+
         UpdateScrollLimits();
         _currentScrollPosition = new Point(
             MathUtility.ClampInt(_currentScrollPosition.X, _minScrollPosition.X, _maxScrollPosition.X),
             MathUtility.ClampInt(_currentScrollPosition.Y, _minScrollPosition.Y, _maxScrollPosition.Y));
+        return true;
     }
 
-    /// <summary>Applies a clamped scroll delta and returns how much actually changed, so the caller can shift/rebuild whatever per-tile state it caches (e.g. MapWindow's background color cache) by exactly that amount instead of rebuilding it wholesale.</summary>
+    /// <summary>Applies a clamped scroll delta and returns how much actually changed, so a caller can tell a clamped scroll that didn't move from one that did.</summary>
     public Point UpdateScrollPosition(Point scrollChange)
     {
         var previousScrollPosition = _currentScrollPosition;
@@ -156,8 +175,6 @@ public sealed class MapCamera
     /// </summary>
     public Point ApplyDrag(Vector2 totalPixelDeltaSinceStart)
     {
-        _cameraFollowsPlayer = false;
-
         var continuousPixelPosition = new Vector2(
              MathHelper.Clamp(_rightDragStartScrollPosition.X * _currentTileSize.X - totalPixelDeltaSinceStart.X, _minScrollPosition.X * _currentTileSize.X, _maxScrollPosition.X * _currentTileSize.X),
              MathHelper.Clamp(_rightDragStartScrollPosition.Y * _currentTileSize.Y - totalPixelDeltaSinceStart.Y, _minScrollPosition.Y * _currentTileSize.Y, _maxScrollPosition.Y * _currentTileSize.Y));
@@ -214,7 +231,7 @@ public sealed class MapCamera
         // _tileColumns/_tileRows are the visible viewport grid, which can be larger than
         // the actual map -- a click (or hover) can land within the viewport but past the map's
         // real edge.
-        if (!_world.IsOnMap(new Vector3Int(mapPosition.X, mapPosition.Y, 0)))
+        if (!_mapView.IsOnMap(new Vector3Int(mapPosition.X, mapPosition.Y, 0)))
         {
             mapPosition = default;
             return false;
@@ -228,18 +245,19 @@ public sealed class MapCamera
         _currentTileSize = TileSizesByZoomLevel[_currentZoomLevel];
 
         // +2 to account for partial tile rendering and scrolling jitter
-        _tileColumns = (int)System.Math.Floor(contentSize.X / _currentTileSize.X) + 2;
-        _tileRows = (int)System.Math.Floor(contentSize.Y / _currentTileSize.Y) + 2;
+        _tileColumns = (int)Math.Floor(contentSize.X / _currentTileSize.X) + 2;
+        _tileRows = (int)Math.Floor(contentSize.Y / _currentTileSize.Y) + 2;
     }
 
     private void UpdateScrollLimits()
     {
         // Never below the minimum: a map smaller than the viewport has nowhere to scroll, not a
         // negative amount to scroll -- ClampInt(current, min, max) requires max >= min.
-        var bounds = _world.Map.Bounds;
+        var bounds = _mapView.Bounds;
+        _scrollLimitBounds = bounds;
         _minScrollPosition = new Point(bounds.MinX, bounds.MinY);
         _maxScrollPosition = new Point(
-            System.Math.Max(bounds.MinX, bounds.MaxX - _tileColumns),
-            System.Math.Max(bounds.MinY, bounds.MaxY - _tileRows));
+            Math.Max(bounds.MinX, bounds.MaxX - _tileColumns),
+            Math.Max(bounds.MinY, bounds.MaxY - _tileRows));
     }
 }

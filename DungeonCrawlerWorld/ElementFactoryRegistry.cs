@@ -2,6 +2,7 @@ using Game.Admin;
 using Game.Bootstrap;
 using Presentation.Bootstrap;
 using Presentation.Fonts;
+using Presentation.MapRendering;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.AbilityScores;
@@ -59,18 +60,19 @@ public static class ElementFactoryRegistry
         // for the Register helper above to pull its weight.
         var floatingTextController = new FloatingTextController(ecsContext.EventBus, gameSession.SimulationClock);
         var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, presentationContext.FontService, statusEffectDisplays, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer, presentationContext.LabelRenderer);
+        var mapRenderer = new MapRenderer(mapView, views.AuraPower, camera, elementPool, presentationContext.FontService, presentationContext.SpriteSheetService, presentationContext.SpriteRenderer, presentationContext.LabelRenderer);
+        var mapGameOverlay = new MapGameOverlay(mapView, mapViewState, camera, actionTargetingController, presentationContext.FontService, presentationContext.LabelRenderer);
         elementPool.RegisterFactory<MapWindow>(() => new MapWindow(
             presentationContext.FontService,
             elementPool,
             mapView,
             views.PlayerActionGate,
             mapViewState,
-            views.AuraPower,
             ecsContext.EventBus,
             presentationContext.LabelRenderer,
-            presentationContext.SpriteSheetService,
-            presentationContext.SpriteRenderer,
             camera,
+            mapRenderer,
+            mapGameOverlay,
             actionTargetingController,
             playerMovementController,
             contextMenuController,

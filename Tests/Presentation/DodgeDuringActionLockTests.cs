@@ -97,7 +97,7 @@ public sealed class DodgeDuringActionLockTests
         var actionTargeting = new ActionTargetingController(
             world,
             new MapViewState(),
-            new MapCamera(world),
+            TestMapCameras.Over(world),
             new UiLayerStack(),
             result.Catalogs.ActionCatalog,
             result.Catalogs.ItemCatalog,

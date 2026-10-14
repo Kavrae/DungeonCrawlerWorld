@@ -1,18 +1,17 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using SpriteFormat;
 
-namespace Presentation.UI;
+namespace Presentation.MapRendering;
 
 /// <summary>
-/// One full-viewport pass of MapWindow's draw order, rendered into an off-screen texture and
+/// One full-viewport pass of MapRenderer's draw order, rendered into an off-screen texture and
 /// blitted as a single draw call per frame instead of being re-submitted tile-by-tile.
 /// </summary>
 /// <remarks>
 /// Used for the two passes whose content only changes on an explicit event rather than
 /// continuously: the tile backgrounds plus terrain (blitted under everything) and the aura glow
 /// overlay (blitted over the occupants, which is the whole reason it can't simply be folded into
-/// the terrain texture -- see MapWindow.DrawGlowOverlay's own note on why the glow has to land on
+/// the terrain texture -- see MapRenderer.DrawGlowOverlay's own note on why the glow has to land on
 /// top of an opaque occupant sprite rather than beneath it).
 ///
 /// Both qualify for the same reason. Terrain only changes through World.SetTerrain, which raises
@@ -33,7 +32,7 @@ namespace Presentation.UI;
 ///
 /// Rendered with no sub-tile offset and blitted at -RenderPixelOffset, so a right-drag's smooth
 /// scroll costs nothing extra: only a whole-tile scroll actually changes what a texture should
-/// contain, and that already goes through MapWindow's own invalidation points. Rendering happens
+/// contain, and that changes the image's key (MapImageKey). Rendering happens
 /// during Update, not Draw, because Draw runs inside GameLoop's already-active SpriteBatch pass
 /// and swapping render targets mid-pass would mean unwinding and restoring ambient state that
 /// ElementPoolService's Push/PopRenderState stack deliberately owns.
@@ -48,9 +47,7 @@ public sealed class MapTileLayerCache : IDisposable
 
     private RenderTarget2D? _target;
     private bool _isDirty = true;
-    private int _renderedTileColumns;
-    private int _renderedTileRows;
-    private Point _renderedTileSize;
+    private MapImageKey _renderedKey;
 
     public MapTileLayerCache(GraphicsDevice graphicsDevice)
     {
@@ -58,41 +55,35 @@ public sealed class MapTileLayerCache : IDisposable
     }
 
     /// <summary>
-    /// Marks the cached image stale so the next EnsureRendered call rebuilds it. Called from
-    /// MapWindow's existing camera-commit points (scroll, zoom, layer change) plus whatever
-    /// content event the particular pass depends on -- TerrainChangedEvent for the terrain
-    /// texture, an AuraPowerView version change for the glow one.
+    /// Marks the cached image stale so the next EnsureRendered call rebuilds it, for a change the image's key can't
+    /// see -- the terrain itself for the terrain image, an AuraPowerView version change for the glow one.
     /// </summary>
     public void Invalidate() => _isDirty = true;
 
     /// <summary>
-    /// Rebuilds the cached texture if it is stale, or if the camera's tile grid no longer
-    /// matches what was rendered. Must be called outside any active SpriteBatch pass -- see this
-    /// class's own remarks. Does nothing at all on a frame where the image is still valid, which
-    /// is the overwhelming majority of them.
+    /// Rebuilds the cached texture if it was invalidated or was rendered for a different key. Must be called outside
+    /// any active SpriteBatch pass -- see this class's own remarks. Does nothing at all on a frame where the image is
+    /// still valid, which is the overwhelming majority of them.
     /// </summary>
     /// <param name="spriteBatch">The batch to render the tiles with -- begun and ended internally, so it must not already be active.</param>
-    /// <param name="tileColumns">The camera's current visible tile column count.</param>
-    /// <param name="tileRows">The camera's current visible tile row count.</param>
-    /// <param name="tileSize">The camera's current tile size in pixels.</param>
-    /// <param name="drawTiles">Renders the grid at whole-tile positions with no sub-tile offset -- MapWindow supplies the pass itself here rather than this type knowing anything about Map, entities or pools.</param>
-    public void EnsureRendered(SpriteBatch spriteBatch, int tileColumns, int tileRows, Point tileSize, Action<SpriteBatch> drawTiles)
+    /// <param name="key">What the image should show now.</param>
+    /// <param name="drawTiles">Renders the grid key describes at whole-tile positions with no sub-tile offset -- the renderer supplies the pass itself rather than this type knowing anything about the map.</param>
+    public void EnsureRendered(SpriteBatch spriteBatch, MapImageKey key, Action<SpriteBatch, MapImageKey> drawTiles)
     {
-        if (tileColumns <= 0 || tileRows <= 0 || tileSize.X <= 0 || tileSize.Y <= 0)
+        if (key.TileColumns <= 0 || key.TileRows <= 0 || key.TileSize.X <= 0 || key.TileSize.Y <= 0)
         {
             return;
         }
-
-        var gridChanged = tileColumns != _renderedTileColumns || tileRows != _renderedTileRows || tileSize != _renderedTileSize;
 
         // IsContentLost covers a device reset (alt-tab from fullscreen, driver recovery) silently
         // discarding the texture behind our back -- without it the map would render as whatever
         // garbage the reclaimed surface held, with no invalidation ever raised to explain why.
-        if (!_isDirty && !gridChanged && _target is { IsDisposed: false, IsContentLost: false })
+        if (!_isDirty && key == _renderedKey && _target is { IsDisposed: false, IsContentLost: false })
         {
             return;
         }
 
+        var gridChanged = key.TileColumns != _renderedKey.TileColumns || key.TileRows != _renderedKey.TileRows || key.TileSize != _renderedKey.TileSize;
         if (gridChanged || _target is null || _target.IsDisposed)
         {
             _target?.Dispose();
@@ -101,17 +92,13 @@ public sealed class MapTileLayerCache : IDisposable
             // to survive untouched across the many frames between rebuilds.
             _target = new RenderTarget2D(
                 _graphicsDevice,
-                tileColumns * tileSize.X,
-                tileRows * tileSize.Y,
+                key.TileColumns * key.TileSize.X,
+                key.TileRows * key.TileSize.Y,
                 mipMap: false,
                 SurfaceFormat.Color,
                 DepthFormat.None,
                 preferredMultiSampleCount: 0,
                 RenderTargetUsage.PreserveContents);
-
-            _renderedTileColumns = tileColumns;
-            _renderedTileRows = tileRows;
-            _renderedTileSize = tileSize;
         }
 
         // Captured and restored rather than assuming the backbuffer was bound: this runs during
@@ -128,7 +115,7 @@ public sealed class MapTileLayerCache : IDisposable
         // particular, since every glyph here comes from a font atlas that crops under linear
         // sampling (see LabelRenderer's own note on point sampling and fractional positions).
         spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, Matrix.Identity);
-        drawTiles(spriteBatch);
+        drawTiles(spriteBatch, key);
         spriteBatch.End();
 
         if (previousTargets is { Length: > 0 })
@@ -140,18 +127,20 @@ public sealed class MapTileLayerCache : IDisposable
             _graphicsDevice.SetRenderTarget(null);
         }
 
+        _renderedKey = key;
         _isDirty = false;
     }
 
     /// <summary>
     /// Blits the cached image. position is where the grid's own (0,0) tile corner belongs on
-    /// screen -- MapWindow passes -RenderPixelOffset, reproducing exactly the shift every tile
+    /// screen -- the renderer passes -RenderPixelOffset, reproducing exactly the shift every tile
     /// used to apply individually.
     /// </summary>
-    /// <returns>Whether anything was drawn -- false before the first successful render, so the caller can fall back to drawing the tiles directly rather than showing an empty viewport for a frame.</returns>
-    public bool Draw(SpriteBatch spriteBatch, Vector2 position)
+    /// <param name="key">What the image must show; an image rendered for anything else isn't drawn.</param>
+    /// <returns>Whether anything was drawn -- false before the first successful render, and when the camera has moved since the image was rendered, so the caller can draw the tiles directly rather than show a stale or empty viewport for a frame.</returns>
+    public bool Draw(SpriteBatch spriteBatch, MapImageKey key, Vector2 position)
     {
-        if (_target is null || _target.IsDisposed || _isDirty)
+        if (_target is null || _target.IsDisposed || _isDirty || key != _renderedKey)
         {
             return false;
         }

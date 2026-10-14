@@ -74,7 +74,7 @@ public sealed class ItemWindowCoordinatorTests
         var shellServices = new ShellServices(
             layers,
             mapViewState,
-            new MapCamera(world),
+            TestMapCameras.Over(world),
             TestElementPoolServiceFactory.CreateContextMenuController(elementPool, layers),
             tooltipController,
             pointerState,

@@ -21,6 +21,7 @@ using Game.Views;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Fonts;
+using Presentation.MapRendering;
 using Presentation.Rendering;
 using Presentation.UI;
 

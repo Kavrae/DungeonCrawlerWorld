@@ -46,7 +46,7 @@ public sealed class ActionTargetingControllerDodgeTests
         actionCatalog.Register(DodgeAction.Build());
         var itemCatalog = new ItemCatalog();
 
-        var camera = new MapCamera(world);
+        var camera = TestMapCameras.Over(world);
         var clock = new SimulationClock();
         var eventBus = new EventBus();
         var playerCommands = new PlayerCommands(

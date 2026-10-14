@@ -7,9 +7,10 @@ using Game.Terrain;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
+using Presentation.MapRendering;
 using Presentation.Rendering;
 
-namespace Tests.Presentation.Rendering;
+namespace Tests.Presentation.MapRendering;
 
 [TestClass]
 public sealed class AuraGlowBlendTests

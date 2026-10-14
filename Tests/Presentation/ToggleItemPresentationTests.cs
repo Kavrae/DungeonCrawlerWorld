@@ -93,7 +93,7 @@ public sealed class ToggleItemPresentationTests
         var actionTargeting = new ActionTargetingController(
             world,
             mapViewState,
-            new MapCamera(world),
+            TestMapCameras.Over(world),
             new UiLayerStack(),
             session.Catalogs.ActionCatalog,
             session.Catalogs.ItemCatalog,

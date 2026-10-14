@@ -1,10 +1,10 @@
 using Game.Terrain;
 using Microsoft.Xna.Framework;
+using Presentation.MapRendering;
 using Presentation.Rendering;
-using Presentation.UI;
 using SpriteFormat;
 
-namespace Tests.Presentation;
+namespace Tests.Presentation.MapRendering;
 
 [TestClass]
 public sealed class MapTerrainCellsTests

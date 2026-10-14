@@ -1,11 +1,12 @@
 using Engine.Math;
+using Presentation.MapRendering;
 using SpriteFormat;
 using Game.Views;
 using Presentation.Rendering;
 using Microsoft.Xna.Framework;
 using Presentation.UI;
 
-namespace Tests.Presentation;
+namespace Tests.Presentation.MapRendering;
 
 [TestClass]
 public sealed class OverhangFadeTests

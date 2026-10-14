@@ -14,6 +14,7 @@ using Game.Modules.Movement.Components;
 using Game.Modules.StatModifiers.Components;
 using Game.Views;
 using Microsoft.Xna.Framework;
+using Presentation.MapRendering;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.FloatingText;
@@ -56,7 +57,9 @@ internal static class TestMapWindows
 
         var resolvedActionCatalog = actionCatalog ?? new ActionCatalog();
         var resolvedItemCatalog = itemCatalog ?? new ItemCatalog();
-        var camera = new MapCamera(world);
+        var terrain = new Game.Terrain.TerrainRegistry();
+        var mapView = new MapViewQuery(world, componentManager, resolvedActionCatalog, terrain, creatures: new BlueprintRegistry(), new SimulationClock());
+        var camera = new MapCamera(mapView);
         var eventBus = new EventBus();
         var playerCommands = new PlayerCommands(
             world,
@@ -88,8 +91,6 @@ internal static class TestMapWindows
 
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
 
-        var terrain = new Game.Terrain.TerrainRegistry();
-        var mapView = new MapViewQuery(world, componentManager, resolvedActionCatalog, terrain, creatures: new BlueprintRegistry(), new SimulationClock());
         var playerActionGate = new PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), componentManager.GetPackedPool<AbilityScoresComponent>(), componentManager.GetMultiPool<StatModifierComponent>(), world, new SimulationClock());
         var auras = TestAuras.GlowOnlyCatalog();
         var auraPower = new AuraPowerView(new AuraField(world, terrain, auras, eventBus), auras);
@@ -97,9 +98,12 @@ internal static class TestMapWindows
         var floatingTextController = new FloatingTextController(eventBus, new SimulationClock());
         var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, fontService, new Game.Modules.StatusEffects.StatusEffectDisplayRegistry(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new LabelRenderer());
 
+        var mapRenderer = new MapRenderer(mapView, auraPower, camera, windowService, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new LabelRenderer());
+        var mapGameOverlay = new MapGameOverlay(mapView, mapViewState, camera, actionTargeting, fontService, new LabelRenderer());
+
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(
-            fontService, windowService, mapView, playerActionGate, mapViewState, auraPower, eventBus, new LabelRenderer(),
-            new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), camera, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer, new AdminContextMenuOptions(TestAdminTools.Create())));
+            fontService, windowService, mapView, playerActionGate, mapViewState, eventBus, new LabelRenderer(),
+            camera, mapRenderer, mapGameOverlay, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer, new AdminContextMenuOptions(TestAdminTools.Create())));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions
         {

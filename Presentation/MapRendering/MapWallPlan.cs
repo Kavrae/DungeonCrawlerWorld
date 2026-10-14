@@ -1,11 +1,11 @@
 using Microsoft.Xna.Framework;
 using SpriteFormat;
 
-namespace Presentation.UI;
+namespace Presentation.MapRendering;
 
 /// <summary>
 /// Decides, for every wall around the visible grid, which faces and tops go into the cached terrain image and which are
-/// drawn live by the row walk -- so MapWindow only draws the result and the decision can be tested without a window.
+/// drawn live by the row walk -- so MapRenderer only draws the result and the decision can be tested without a window.
 /// </summary>
 /// <remarks>
 /// <para>

@@ -5,7 +5,7 @@ using Microsoft.Xna.Framework;
 using Presentation.Rendering;
 using SpriteFormat;
 
-namespace Presentation.UI;
+namespace Presentation.MapRendering;
 
 /// <summary>The terrain and structures around the visible grid, read once per rebuild of the terrain image and resolved for drawing: each cell's floor, a wall's face and top, and which neighbours a wall joins.</summary>
 /// <remarks>

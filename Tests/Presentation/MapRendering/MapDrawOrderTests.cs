@@ -2,9 +2,9 @@ using Engine.Math;
 using Game.Modules.Core.Components;
 using Game.Views;
 using Microsoft.Xna.Framework;
-using Presentation.UI;
+using Presentation.MapRendering;
 
-namespace Tests.Presentation;
+namespace Tests.Presentation.MapRendering;
 
 [TestClass]
 public sealed class MapDrawOrderTests

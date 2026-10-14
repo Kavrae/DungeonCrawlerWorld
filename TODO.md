@@ -1216,7 +1216,7 @@ Until then a shop or small building is a single entity up to Huge, like the 2x2 
 
 #### Aura glow shouldn't tint wall tops
 
-`MapWindow`'s glow overlay (`DrawGlowOverlay`, from `AuraGlowBlend` per tile) is a translucent rect over every
+`MapRenderer`'s glow overlay (`DrawGlowOverlay`, from `AuraGlowBlend` per tile) is a translucent rect over every
 tile, blitted after the row walk -- so it lands on whatever covers that tile, including a wall's top (cached or
 live overhang) sitting over the floor the aura actually reaches. A top is the wall's roof, a row or two above
 the tile beneath it, and glowing like lava or holy ground reads wrong. The glow should tint what stands on the
@@ -1709,7 +1709,7 @@ Part of MapLayer interaction (overview). Diggers are hidden from the player unti
 future skills and actions (none exist yet -- see Skills), at two levels: low (something is there) and
 high (what it is). Hidden means hidden everywhere, not just undrawn: inspection and selection, tooltips,
 targeting (never a valid target), and the per-column occupied-layer mask behind
-`MapWindow.DrawLayerBadges`, which today would give a digger away with a `v` badge. Needs a per-digger
+`MapRenderer.DrawLayerBadges`, which today would give a digger away with a `v` badge. Needs a per-digger
 detection level against the player, and when it lapses (a deadline, per the `FrameDeadline`
 convention). Open: player-only or NPCs too; whether surfacing reveals a digger. See Digger detection
 (Presentation).
@@ -2451,11 +2451,11 @@ already: Fairies roll the mode for each Magic Missile (TEMPORARY content).
   today; with it, the mode too. Build the display first, behind a plain check that reads the
   player, so the Skill only replaces that check.
 - The windup's selection already carries the mode (`PendingWindupComponent.Selection`), so this is a
-  view method (`TargetingView`) and a draw change in `MapWindow`, nothing new in the simulation.
+  view method (`TargetingView`) and a draw change in `MapGameOverlay` (the telegraphs), nothing new in the simulation.
 
 #### Camera dead zone
 
-While following the player, the map view recentres on every step (`MapWindow` calls
+While following the player, the map view recentres on every step (`MapWindow.Update` calls
 `MapCamera.CenterCameraOn` whenever the player's position changes), so a player moving back and forth
 within a few tiles sees the whole map shift each time. Investigate a dead zone: a rectangle around the
 view's centre the player can move inside without the camera moving, the camera scrolling only enough to
@@ -2463,10 +2463,10 @@ keep them inside it once they step past its edge.
 - **Size.** In tiles or as a fraction of the visible columns/rows, and whether it changes with
   `ZoomLevel` (a 3-tile zone at `Team` is a different feel from one at a zoomed-out level). Possibly a
   player setting.
-- **Cost.** Every scroll change re-resolves the visible cells' backgrounds and shifts the terrain/glow
-  caches (`CenterCameraOn`'s return value), so fewer recentres should also mean fewer cache shifts --
+- **Cost.** Every scroll change changes the cached terrain and glow images' key (`MapImageKey`), so each
+  recentre re-renders both; fewer recentres should mean fewer re-renders --
   measure it.
-- **Interactions.** Map-edge clamping, `ResumeFollowingPlayer` after a right-drag (snap to centre, or
+- **Interactions.** Map-edge clamping, Home resuming follow after a right-drag (snap to centre, or
   only far enough to bring the player inside the zone), zoom changes, teleports and window shifts (snap
   to centre), and check for anything that assumes the player is at the view's centre.
 - Smoothing the scroll (see the screen-shake note, which also needs a camera offset) is a separate
@@ -2563,7 +2563,7 @@ neighborhood against the frozen ring would make a crossing, and phase 6's smeare
 visible while testing rather than something to infer.
 
 Draw both through the debug drawing service in "Debug drawing and an AI debugger" (Medium, below)
-rather than as `MapWindow` special cases, so later overlays (paths, flow fields, perception ranges) use
+rather than as `MapGameOverlay` special cases, so later overlays (paths, flow fields, perception ranges) use
 the same mechanism.
 
 #### AI-generated sprites with a hovered state
@@ -2669,7 +2669,7 @@ are the standard model.
 - **No information leaks through the UI:** hidden creatures can't be hovered, selected, inspected
   (`SelectionWindowContent`, tooltips) or targeted. Targeting outside Local is already refused under
   the plan; fog extends the same refusal to "inside Local but not visible".
-- **Rendering:** `MapWindow` skips occupants outside the visible set, and the terrain/background
+- **Rendering:** `MapRenderer` skips occupants outside the visible set, and the terrain/glow
   caches (`MapTileLayerCache`) draw unexplored tiles as blank and invalidate on reveal. The minimap
   and zoom-out levels read explored only.
 - **Admin Mode (F12) bypasses fog.**
@@ -2810,7 +2810,7 @@ neighborhood borders and the Local radius in Admin Mode", pathfinding (paths, fl
 perception (sight cones, last-known locations), NPC behavior (utility scores per behavior, commitment
 deadlines), and spatial queries (candidate tiles and scores).
 - **Debug draw service:** any code in any layer can request a line, tile outline, filled tile, text
-  label or circle at world coordinates, for one frame or a duration, in a category. `MapWindow` draws
+  label or circle at world coordinates, for one frame or a duration, in a category. An overlay beside `MapGameOverlay` draws
   the queue over the map in Admin Mode, and a category can be toggled. Requests from Game go through an
   Engine-level interface, so Game doesn't reference Presentation. Compiled or gated out of release
   builds.
@@ -2921,6 +2921,20 @@ FontStashSharp's measuring is enough.
 
 ### Low Priority
 
+#### Map glyphs overflow their tiles when zoomed out
+
+`MapRenderer` and `MapGameOverlay` draw glyphs and badges with fixed font sizes (`FontChrome.MapMediumFontSize`
+24, `MapLargeFontSize`, `MapHugeFontSize`, `MapTinyFontSize`, `MapBadgeFontSize`) tuned for `ZoomLevel.Team`'s
+36 px tiles, so at Neighborhood (18 px) and Borough (9 px) a glyph is larger than its tile and spills into its
+neighbours. Most of the spill is covered by later draws; what shows is a white mark in the row south of every wall
+at Borough -- the bottom of Stone floor's `][` glyph under the wall, poking out below the wall's face into the
+previous column (the terrain image is drawn column by column, top to bottom). Layer badges and entity glyphs
+overflow the same way.
+- Scale the map fonts with the tile size (`MapCamera.CurrentTileSize` against the 36 px base), with a minimum size
+  so a glyph never vanishes, and pick them again when the zoom changes. Fixes every overflow; glyphs get smaller
+  zoomed out.
+- Separately or as well: skip drawing the floor of a tile with a structure on it, which is hidden anyway.
+
 #### Change the cursor to a targeting mode indicator while armed
 
 While an action or item is armed, the cursor over the map should show the player's targeting mode
@@ -2995,16 +3009,16 @@ not error-prone -- low priority.
 
 #### Red X marker over dead entities
 
-`MapWindow.TryDrawEntityVisual` has no `DeadComponent` check -- a corpse looks identical to a
+`MapRenderer.TryDrawEntityVisual` has no `DeadComponent` check -- a corpse looks identical to a
 just-motionless living entity. Draw a red X overlay when `DeadComponent` is present.
 
 #### Blood pool under dead entities
 
 A blood pool drawn under a corpse on every tile of its footprint (`TransformComponent.Size`, same
-per-tile loop `DrawFollowedEntityHighlight` uses), colored per entity. Nothing carries a blood color
+per-tile loop `MapGameOverlay.DrawFollowedEntityHighlight` uses), colored per entity. Nothing carries a blood color
 today -- add one per race blueprint (a field or small component, e.g. red for Human/Goblin), and
 decide what a Ghost leaves (none, or ectoplasm). Draw it under the corpse in the occupant pass
-(`MapWindow.DrawOccupants`, before the corpse sprite), not after. Pairs with Red X marker above (both
+(`MapRenderer.DrawOccupants`, before the corpse sprite), not after. Pairs with Red X marker above (both
 make a corpse read as dead) and Corpse decay/destruction (Game) -- the pool should go when the
 corpse does.
 
@@ -3033,7 +3047,7 @@ sprite), which also stays correct for tall sprites that overhang their tile.
 
 #### Circle selection under the entity instead of a tile border
 
-Inspired by Dungeon Settlers. `MapWindow.DrawSelectedTileGlow` marks the selected/followed tile with
+Inspired by Dungeon Settlers. `MapGameOverlay.DrawSelectedTileGlow` marks the selected/followed tile with
 an interior-fade glow over the whole tile. Replace it with a circle (ellipse) on the ground under the
 entity, drawn *before* the entity sprite rather than on top. That needs it inside the occupant pass,
 not after it the way highlights draw today. Pairs with the tall-sprite item (High, above): once
@@ -3046,7 +3060,7 @@ targeting. There's no circle primitive yet -- `unitRectangle` plus `GlowRenderer
 `PlayerHealthBarContent`/`PlayerManaBarContent` are near-duplicates (same outline+inset-fill+tick-mark
 shape and centred "current / maximum" value text via `ResourceBarValueText`, differing only in
 backing component, palette and how the current value rounds). Tolerable at two copies -- abstract into one
-generic element if a third shows up (e.g. Soul Essence). `MapWindow.DrawHealthBar` is arguably a lighter
+generic element if a third shows up (e.g. Soul Essence). `MapRenderer.DrawHealthBar` is arguably a lighter
 third instance already (same fraction math, no ticks, per-any-entity) -- include it in scope if this is
 ever picked up.
 
@@ -3158,12 +3172,6 @@ end for a pair of scroll buttons (◀ ▶ / ▲ ▼) instead. Such an element wo
 `ScrollbarVisibility.Hidden` today. Show the buttons only while that axis overflows, disable each one at
 its end of the range, and scroll a step per click, repeating while held.
 
-#### Review MapWindow for properties that belong on MapViewState instead
-
-MapWindow has accumulated its own instance fields (camera/zoom state, hotkey bookkeeping, hover
-buffers) alongside `MapViewState`, the established home for state other windows/content read. Worth a
-pass checking whether any should move, particularly as more Presentation work needs to read that state.
-
 #### Window minimize completeness
 
 Two standing gaps: minimized windows don't hide/show their children (still draw underneath); sibling
@@ -3253,7 +3261,7 @@ through a palette texture, one palette row per variant, selected per sprite.
 
 #### Aura glows pulse outward from the source
 
-An aura's glow is a static tint today: `AuraGlowBlend` gives `MapWindow` one colour per cell
+An aura's glow is a static tint today: `AuraGlowBlend` gives `MapRenderer` one colour per cell
 (the aura colours there, weighted by strength, from `GameViews.AuraPower`). Animate it instead as a
 pulse that travels outward from the source, drawn as a gradient within each tile rather than one flat
 colour per tile, so the wave reads as continuous across tile edges.

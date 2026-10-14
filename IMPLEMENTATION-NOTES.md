@@ -1828,7 +1828,7 @@ Sprites that reach above and beside their tile, walls drawn as a face plus a top
 turned/flipped/tinted cells, and the builder that authors all of it. Design and research (RimWorld, Stardew,
 RPG Maker, Godot, Unity, Tiled, LDtk) are in `PLAN-tall-sprites-and-wall-tops.md`.
 
-**The row walk** (`Presentation.UI.MapDrawOrder`, a pure planner MapWindow renders).
+**The row walk** (`Presentation.MapRendering.MapDrawOrder`, a pure planner `MapRenderer` draws).
 - Rows top to bottom, each left to right. Anything that stands up is drawn in the row of the lowest tile
   of its footprint, so a later row overlaps an earlier one and never the reverse: a goblin south of the
   player draws over the player's feet, the player's head over the row above. The order is chosen for what
@@ -1882,7 +1882,7 @@ RPG Maker, Godot, Unity, Tiled, LDtk) are in `PLAN-tall-sprites-and-wall-tops.md
   stands in front. A one-row face is always cached.
 - The overhang list is rebuilt exactly when the cached image is, so it has the cache's invalidation and
   nothing new to keep in sync. Streaming invalidates for areas up to the overscan plus one tile outside the
-  grid.
+  grid (`MapRenderer.TouchesDrawnArea`).
 - Overhangs over the player's drawn sprite -- and the inspected entity's, in Detail or Admin inspection --
   draw at 0.7 alpha (`OverhangFade`), instantly. 0.4 read as too faint in game.
 
@@ -1912,6 +1912,26 @@ neighborhood's `LayoutSeed`, its position and its store (terrain per `TerrainLay
 seeded world, and a tile looks the same on every visit and after an admin edit. An entity's variant comes
 from its spawn record's seed through the same hash it always had (`SpriteManifestResolver.TryGetForEntity`),
 so creatures kept their looks when it moved out of Game.
+
+**Where the map is drawn** (`PLAN-map-renderer-out-of-map-window.md`, `Presentation.MapRendering`).
+- `MapRenderer` draws the world through a `MapCamera`: the flat fill, the cached terrain image, the row walk
+  (with health bars, loot and charging badges and the dodge glow, drawn in the entity's turn so a later row
+  covers them), the cached glow. It reads only `IMapViewQuery`, `AuraPowerView`, the camera and the manifest --
+  not the World, the store or the bus (`MapWindowArchitectureTests`) -- so the map tab can hand it an authored
+  layout. Which entities overhangs fade over is its host's input.
+- `MapGameOverlay` draws the player's intent over it (targeting, windup fills and telegraphs, Dodge's hints,
+  selection); `MapWindow` hosts both, plus floating text, and owns input, pause and camera follow.
+- The cached images key themselves on what they show (`MapImageKey`: scroll, grid, tile size, layer). A stale key
+  re-renders in `Update`, and `Draw` refuses an image rendered for another key (it draws the uncached path that
+  frame), so no camera move has to invalidate anything; the call-site invalidation it replaced had to be repeated
+  at every way of moving the camera. Terrain and aura changes are told: `InvalidateTerrain`/`InvalidateTerrainIn`
+  (MapWindow forwards the four terrain events, and drops both images when the map's bounds change) and
+  `AuraPowerView.Version`.
+- `MapCamera` reads `IMapViewQuery` (bounds, on-map), refreshes its own scroll limits, and owns tile rectangles;
+  following the player is MapWindow's.
+- Known, not fixed: map fonts are fixed sizes tuned for 36 px tiles, so at Borough zoom (9 px) a glyph overflows
+  its tile -- Stone floor's `][` under a wall shows as a white mark in the row below (TODO.md "Map glyphs
+  overflow their tiles when zoomed out").
 
 **Where the manifest lives** (`PLAN-sprite-format-and-manifest-out-of-game.md`).
 - `SpriteFormat` (root project, no references) holds the format and its rules; Presentation loads the file

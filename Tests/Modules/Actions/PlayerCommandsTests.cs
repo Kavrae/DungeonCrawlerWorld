@@ -18,6 +18,7 @@ using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
+using Tests.Presentation;
 
 namespace Tests.Modules.Actions;
 
@@ -117,7 +118,7 @@ public sealed class PlayerCommandsTests
         var actionTargeting = new ActionTargetingController(
             world,
             mapViewState,
-            new MapCamera(world),
+            TestMapCameras.Over(world),
             new UiLayerStack(),
             actionCatalog,
             new ItemCatalog(),

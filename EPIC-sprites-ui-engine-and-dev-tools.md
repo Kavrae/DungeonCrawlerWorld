@@ -1,6 +1,6 @@
 # Epic: Sprites out of Game, a UIEngine, and the Engine IDE
 
-(Epic -- a plan of plans. Child 1 landed 2026-10-11, child 2 2026-10-13; the rest are not started. Each child below gets its own
+(Epic -- a plan of plans. Child 1 landed 2026-10-11, child 2 2026-10-13, child 3 2026-10-14; the rest are not started. Each child below gets its own
 `PLAN-*.md` when it starts, and is phased and tested in-game like any other plan. Decided 2026-10-11.)
 
 ## Why
@@ -92,7 +92,7 @@ Each is its own plan; numbering is the order. Arrows are hard dependencies.
    every IDE tab, not only sprites.
 2. **Rarity tints and aura glow out of Game** (→1). Landed 2026-10-13 (`PLAN-rarity-tints-and-aura-glow-out-of-game.md`; notes in IMPLEMENTATION-NOTES "Loot boxes" and "Auras, terrain contact, Healing Shrine, Holy Ground"). A loot box rarity is a tinted manifest entry ("Lootbox-Bronze");
    `AuraPowerView` reports power, Presentation blends (`AuraGlowBlend`).
-3. **Map renderer out of `MapWindow`** (→1). Row walk, wall plan, overhang fade, glow, caches, drawn from
+3. **Map renderer out of `MapWindow`** (→1). Landed 2026-10-14 (`PLAN-map-renderer-out-of-map-window.md`; notes in IMPLEMENTATION-NOTES "Tall sprites, wall faces and tops, and the sprite manifest", "Where the map is drawn"): `MapRenderer`, `MapGameOverlay` and `MapCamera` in `Presentation.MapRendering`. Row walk, wall plan, overhang fade, glow, caches, drawn from
    `IMapViewQuery` + camera; `MapWindow` becomes input, state and hosting. Fold in "Review MapWindow for
    properties that belong on MapViewState instead" (TODO.md, Presentation, Low).
 4. **Presentation / UIEngine split** (→1). "Split Presentation into Presentation + UIEngine projects"

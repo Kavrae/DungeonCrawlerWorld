@@ -58,7 +58,7 @@ public sealed class HotbarControllerTests
                 new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         var itemCatalog = new ItemCatalog();
 
-        var camera = new MapCamera(world);
+        var camera = TestMapCameras.Over(world);
         var actionTargeting = new ActionTargetingController(
             world,
             mapViewState,

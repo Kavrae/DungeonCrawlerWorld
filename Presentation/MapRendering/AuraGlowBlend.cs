@@ -1,7 +1,7 @@
 using Game.Views;
 using Microsoft.Xna.Framework;
 
-namespace Presentation.Rendering;
+namespace Presentation.MapRendering;
 
 /// <summary>The glow auras cast on a map cell: the colours of the auras reaching it, blended by each one's power there.</summary>
 /// <remarks>
