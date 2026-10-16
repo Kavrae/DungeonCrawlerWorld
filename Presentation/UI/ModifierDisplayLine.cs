@@ -1,7 +1,4 @@
-using Engine.ECS.Components;
-using Engine.ECS.Components.Stores;
 using Engine.Utilities;
-using Game.Modules.Core.Components;
 using Game.Modules.StatModifiers;
 using Game.Views;
 using Game.World;
@@ -29,11 +26,19 @@ public static class ModifierDisplayFormatting
     /// <summary>The hover popup for one effect and where it came from: the source's name as the title, then the effect and how long it has left.</summary>
     /// <param name="effectText">The effect alone, with no source and no duration.</param>
     public static (string Title, string Body) SourcePopup(ActionSourceNaming actionSourceNaming, ActionSource source, string effectText, int? remainingDurationFrames) =>
-        (actionSourceNaming.Describe(source), $"{effectText}\n{FormatDuration(remainingDurationFrames)}");
+        SourcePopupShowingSeconds(actionSourceNaming, source, effectText, RemainingSecondsShown(remainingDurationFrames));
+
+    /// <summary>SourcePopup from the remaining duration as shown (RemainingSecondsShown) -- for a caller that keys a cache on it, so the popup is rebuilt once a second rather than every frame.</summary>
+    public static (string Title, string Body) SourcePopupShowingSeconds(ActionSourceNaming actionSourceNaming, ActionSource source, string effectText, int? remainingSeconds) =>
+        (actionSourceNaming.Describe(source), $"{effectText}\n{FormatRemainingSeconds(remainingSeconds)}");
 
     /// <summary>"Permanent" when null (a StatModifierComponent whose ExpiresAtFrame is FrameDeadline.Never), else "{n}s remaining" -- n = Ceiling(frames / GameTiming.FramesPerSecond), the same rounding convention PotionCooldownEffects.RemainingSeconds already uses.</summary>
-    public static string FormatDuration(int? remainingDurationFrames) =>
-        remainingDurationFrames is not { } frames
-            ? "Permanent"
-            : $"{(int)System.Math.Ceiling(frames / (float)GameTiming.FramesPerSecond)}s remaining";
+    public static string FormatDuration(int? remainingDurationFrames) => FormatRemainingSeconds(RemainingSecondsShown(remainingDurationFrames));
+
+    /// <summary>The whole seconds a remaining duration is shown as (see FormatDuration) -- null for a permanent one.</summary>
+    public static int? RemainingSecondsShown(int? remainingDurationFrames) =>
+        remainingDurationFrames is { } frames ? (int)System.Math.Ceiling(frames / (float)GameTiming.FramesPerSecond) : null;
+
+    private static string FormatRemainingSeconds(int? remainingSeconds) =>
+        remainingSeconds is not { } seconds ? "Permanent" : $"{seconds}s remaining";
 }

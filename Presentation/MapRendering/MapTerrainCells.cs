@@ -4,6 +4,7 @@ using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Rendering;
 using SpriteFormat;
+using UIEngine.Rendering;
 
 namespace Presentation.MapRendering;
 

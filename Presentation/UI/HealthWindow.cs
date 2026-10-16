@@ -16,11 +16,16 @@ using Game.Modules.StatusEffects.Components;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
-using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.Chrome;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI;
 
@@ -359,13 +364,13 @@ public sealed class HealthWindow(
 
         if (hoveredRow is not { } row
             || _hoveredFrames < HudChrome.HoverTooltipDelayFrames
-            || !TryDescribeRowSource(row, out var source, out var effectText, out var remainingDurationFrames))
+            || !TryDescribeRowSource(row, out var sourcePopupKey))
         {
             tooltipController.Hide(this);
             return;
         }
 
-        var (title, body) = ModifierDisplayFormatting.SourcePopup(actionSourceNaming, source, effectText, remainingDurationFrames);
+        var (title, body) = _sourcePopup.Get(sourcePopupKey, this, static (key, window) => window.BuildSourcePopup(key));
         tooltipController.Show(this, rowRectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, PopupChrome.HoverPopupMaximumSize, body, title);
     }
 
@@ -428,71 +433,89 @@ public sealed class HealthWindow(
         return null;
     }
 
-    /// <summary>What the row shows as of now: its source, the effect without its duration, and the duration in frames. False when the row's effect is gone or records no source.</summary>
-    private bool TryDescribeRowSource(HoveredRow row, out ActionSource source, out string effectText, out int? remainingDurationFrames)
+    /// <summary>Everything the source popup for a row is built from: its source, the effect with no duration (a modifier row or a status effect row), and the remaining duration as shown -- the cache key for that popup, so it's rebuilt once a second, not every frame.</summary>
+    private readonly record struct SourcePopupKey(ActionSource Source, ModifierRow? Modifier, StatusEffectRow? StatusEffect, int? RemainingSeconds);
+
+    private (string Title, string Body) BuildSourcePopup(SourcePopupKey key)
     {
-        source = default;
-        effectText = string.Empty;
-        remainingDurationFrames = null;
+        var effectText = key.Modifier is { } modifierRow
+            ? FormatModifierRow(modifierRow, gameplayTags)
+            : FormatStatusEffectRow(key.StatusEffect!.Value);
+        return ModifierDisplayFormatting.SourcePopupShowingSeconds(actionSourceNaming, key.Source, effectText, key.RemainingSeconds);
+    }
+
+    /// <summary>The hovered row's source popup -- see SourcePopupKey.</summary>
+    private readonly KeyedCache<SourcePopupKey, (string Title, string Body)> _sourcePopup = new();
+
+    /// <summary>What the row shows as of now, as the source popup's key (see SourcePopupKey). False when the row's effect is gone or records no source.</summary>
+    private bool TryDescribeRowSource(HoveredRow row, out SourcePopupKey key)
+    {
+        key = default;
 
         switch (row.Kind)
         {
             case HoveredRowKind.Buff:
             case HoveredRowKind.Debuff:
-            {
-                var modifierRows = row.Kind == HoveredRowKind.Buff ? _buffRows : _debuffRows;
-                BuildModifierRows(modifierRows, ReadStatModifiers(), row.Kind == HoveredRowKind.Buff ? StatModifierPolarity.Buff : StatModifierPolarity.Debuff, CurrentFrame);
-                if (row.Index >= modifierRows.Count)
                 {
-                    return false;
-                }
-
-                var modifierRow = modifierRows[row.Index];
-                source = modifierRow.Source;
-                effectText = FormatModifierRow(modifierRow with { RemainingSeconds = null }, gameplayTags);
-                remainingDurationFrames = modifierRow.RemainingDurationFrames;
-                return true;
-            }
-
-            case HoveredRowKind.StatusEffect:
-            {
-                BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, CurrentFrame);
-                if (row.Index >= _statusEffectRows.Count
-                    || !statusEffectDisplays.TryGet(_statusEffectRows[row.Index].Type, out var display)
-                    || display.GetSource(_entityId) is not { } statusEffectSource)
-                {
-                    return false;
-                }
-
-                source = statusEffectSource;
-                effectText = FormatStatusEffectRow(_statusEffectRows[row.Index] with { RemainingSeconds = null });
-                remainingDurationFrames = display.GetRemainingDurationFrames(_entityId, CurrentFrame);
-                return true;
-            }
-
-            case HoveredRowKind.BodyPartBurning:
-            {
-                if (row.Index >= _bodyPartRows.Count)
-                {
-                    return false;
-                }
-
-                var partId = _bodyPartRows[row.Index].PartId;
-                foreach (var timer in ReadBodyPartBurningTimers())
-                {
-                    if (timer.PartId != partId)
+                    var modifierRows = row.Kind == HoveredRowKind.Buff ? _buffRows : _debuffRows;
+                    BuildModifierRows(modifierRows, ReadStatModifiers(), row.Kind == HoveredRowKind.Buff ? StatModifierPolarity.Buff : StatModifierPolarity.Debuff, CurrentFrame);
+                    if (row.Index >= modifierRows.Count)
                     {
-                        continue;
+                        return false;
                     }
 
-                    source = timer.Source;
-                    effectText = FormatStatusEffectRow(new StatusEffectRow(StatusEffectType.Burning, RemainingSeconds: null, timer.StackCount));
-                    remainingDurationFrames = BurningModule.RemainingFrames(timer.NextTickFrame, timer.StackCount, CurrentFrame);
+                    var modifierRow = modifierRows[row.Index];
+                    key = new SourcePopupKey(
+                        modifierRow.Source,
+                        modifierRow with { RemainingSeconds = null, RemainingDurationFrames = null },
+                        StatusEffect: null,
+                        ModifierDisplayFormatting.RemainingSecondsShown(modifierRow.RemainingDurationFrames));
                     return true;
                 }
 
-                return false;
-            }
+            case HoveredRowKind.StatusEffect:
+                {
+                    BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, CurrentFrame);
+                    if (row.Index >= _statusEffectRows.Count
+                        || !statusEffectDisplays.TryGet(_statusEffectRows[row.Index].Type, out var display)
+                        || display.GetSource(_entityId) is not { } statusEffectSource)
+                    {
+                        return false;
+                    }
+
+                    key = new SourcePopupKey(
+                        statusEffectSource,
+                        Modifier: null,
+                        _statusEffectRows[row.Index] with { RemainingSeconds = null },
+                        ModifierDisplayFormatting.RemainingSecondsShown(display.GetRemainingDurationFrames(_entityId, CurrentFrame)));
+                    return true;
+                }
+
+            case HoveredRowKind.BodyPartBurning:
+                {
+                    if (row.Index >= _bodyPartRows.Count)
+                    {
+                        return false;
+                    }
+
+                    var partId = _bodyPartRows[row.Index].PartId;
+                    foreach (var timer in ReadBodyPartBurningTimers())
+                    {
+                        if (timer.PartId != partId)
+                        {
+                            continue;
+                        }
+
+                        key = new SourcePopupKey(
+                            timer.Source,
+                            Modifier: null,
+                            new StatusEffectRow(StatusEffectType.Burning, RemainingSeconds: null, timer.StackCount),
+                            ModifierDisplayFormatting.RemainingSecondsShown(BurningModule.RemainingFrames(timer.NextTickFrame, timer.StackCount, CurrentFrame)));
+                        return true;
+                    }
+
+                    return false;
+                }
 
             default:
                 return false;
@@ -689,7 +712,7 @@ public sealed class HealthWindow(
 
     private static float ComputeFraction(BodyPartRow row) => row.MaximumHealth > 0 ? MathHelper.Clamp(row.CurrentHealth / row.MaximumHealth, 0f, 1f) : 0f;
 
-    private static (int Current, int Maximum) DisplayedValues(BodyPartRow row) => (ResourceBarValueText.DisplayedHealth(row.CurrentHealth), ResourceBarValueText.DisplayedMaximum(row.MaximumHealth));
+    private static (int Current, int Maximum) DisplayedValues(BodyPartRow row) => (ResourceBarRounding.DisplayedHealth(row.CurrentHealth), ResourceBarRounding.DisplayedMaximum(row.MaximumHealth));
 
     /// <summary>
     /// Section-opening divider -- a single labeled TextDivider row, the same 95%-width/12.5%-label-position
@@ -718,7 +741,7 @@ public sealed class HealthWindow(
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
         parent.AddChild(divider);
-        divider.Configure(label, WindowPalette.HeaderTextColor, DividerWidthFraction, DividerLabelTextPosition);
+        divider.Configure(label, GameWindowPalette.HeaderTextColor, DividerWidthFraction, DividerLabelTextPosition);
     }
 
     private TextWindow AddTextRow(Window parent, string text, Color textColor)

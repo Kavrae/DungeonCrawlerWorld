@@ -5,6 +5,8 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Input;
 using Presentation.UI;
+using UIEngine.Input;
+using UIEngine.UI;
 
 namespace Tests.Presentation;
 

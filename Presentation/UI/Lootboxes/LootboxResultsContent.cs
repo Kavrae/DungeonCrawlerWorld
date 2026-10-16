@@ -4,6 +4,9 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI.Chrome;
 using Presentation.UI.Content;
+using UIEngine;
+using UIEngine.UI;
+using UIEngine.UI.Chrome;
 
 namespace Presentation.UI.Lootboxes;
 
@@ -32,6 +35,9 @@ public sealed class LootboxResultsContent(
     private Window _hostWindow = null!;
     private InventoryItemStackCell? _hoveredCell;
     private int _hoveredFrames;
+
+    /// <summary>The hovered reward's summary, built once per definition rather than every frame the popup is up.</summary>
+    private readonly KeyedCache<ItemDefinition, string> _hoverSummary = new();
     private bool _isRebuilding;
     private bool _isRebuildRequestedDuringRebuild;
 
@@ -182,6 +188,6 @@ public sealed class LootboxResultsContent(
             return;
         }
 
-        tooltipController.Show(this, candidate.Rectangle, PopupAnchor.East, PopupGap, PopupChrome.HoverPopupMaximumSize, ItemHoverSummary.For(definition, showCharges: false), definition.Name);
+        tooltipController.Show(this, candidate.Rectangle, PopupAnchor.East, PopupGap, PopupChrome.HoverPopupMaximumSize, _hoverSummary.Get(definition, static itemDefinition => ItemHoverSummary.For(itemDefinition, showCharges: false)), definition.Name);
     }
 }

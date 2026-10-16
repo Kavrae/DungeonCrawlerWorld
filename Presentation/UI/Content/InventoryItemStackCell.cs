@@ -1,9 +1,14 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Presentation.Fonts;
+using Presentation.Input.DragDrop;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
+using UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Presentation.UI.Content;
 
@@ -22,9 +27,8 @@ public enum CellCompareState
 /// bottom-right corner for price. A plain Element (not Window) -- no title/
 /// chrome needed, same reasoning Folder/Button use. IsDisabled gray-tints the icon, mirroring
 /// Folder's own disabled tint and MapWindow's dead-entity tint (all three now share the same
-/// SpriteOrGlyphRenderer draw primitive). ItemDefinitionId is exposed publicly so
-/// UiInputController can read it directly (no Element-level drag hook needed -- see its own
-/// content-drag state machine) when a press starts a drag from this cell toward a hotbar slot.
+/// SpriteOrGlyphRenderer draw primitive). A drag source (TryBeginContentDrag): a press picks up
+/// its stack, or a Merged Stack's shared item, as a DragPayload.
 ///
 /// Once per-slot item divergence exists (see InventoryGridContent's own GroupDivergedStacks),
 /// this cell shows one of three things -- terms this codebase uses consistently for all three:
@@ -39,14 +43,13 @@ public enum CellCompareState
 /// InventoryGridContent.OnCellClicked/RebuildCells). CanBindToHotbar is false only for the Merged
 /// Stack case -- a Diverging item stack (whether standalone or currently shown as one of a Merged
 /// Stack's Expansion Stacks) is exactly as bindable as a Base one (see that property's own doc
-/// comment for why). A Merged Stack can still be dragged (see UiInputController's own content-drag
-/// path) -- just never dropped onto a hotbar slot -- so a future manual-sort gesture has something
+/// comment for why). A Merged Stack can still be dragged (see TryBeginContentDrag) -- just never dropped onto a hotbar slot -- so a future manual-sort gesture has something
 /// to build on; it's the one case that gets the disabled-cursor treatment while hovering a hotbar
 /// slot mid-drag.
 /// </summary>
 /// <summary>Not sealed -- ShopItemStackCell subclasses this for the shop-mode grid (sprite+name+price layout instead of icon+quantity-badge), reusing Configure/the base fill+hover/selected/eligible-glow drawing via its own DrawContent override. See that class's own doc comment.</summary>
-public class InventoryItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
-    : Element(fontService, elementPoolService, labelRenderer)
+public class InventoryItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService)
+    : Element(fontService, elementPoolService, labelRenderer), IContentDragSource
 {
     private static readonly Color GroupBorderColor = Color.Black;
     private const float GroupBorderThickness = 2f;
@@ -68,6 +71,16 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     protected SpriteFontBase _iconGlyphFont = null!;
     protected SpriteFontBase _quantityFont = null!;
     protected SpriteFontBase _badgeFont = null!;
+
+    private const string MergedStackBadgeText = "+";
+
+    /// <summary>MergedStackBadgeText's width in _badgeFont, measured when the font is set, not per draw.</summary>
+    private float _mergedStackBadgeWidth;
+
+    /// <summary>The quantity badge's text, rebuilt only when the quantity changes.</summary>
+    private readonly KeyedCache<int, string> _quantityBadgeText = new();
+
+    private readonly TextSizeCache _quantityBadgeTextSize = new();
 
     public Guid ItemDefinitionId { get; private set; }
 
@@ -116,7 +129,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     /// CompareState by InventoryGridContent.UpdateShopEligibilityState -- true when this item can be
     /// traded with the open shop (ShopActions.CanTrade tag match) AND whichever side would be paying
     /// Gold can currently afford it. False greys the icon out (see DrawBaseAndIcon) and blocks a
-    /// direct drag/Give/Take/Sell All/Buy All (see UiInputController.TryStartContentDrag and
+    /// direct drag/Give/Take/Sell All/Buy All (see InventoryTransferDropHandler.AllowsDragStart and
     /// BuildItemContextMenu's isShopIneligible) -- closes the currency-drain-style exploit a naive
     /// reuse of plain Give/Take would otherwise open for wrong-tag or unaffordable trades. Distinct
     /// from CanStageInTrade (tag match only, ignoring affordability, see its own doc comment) -- an
@@ -136,7 +149,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     /// unaffordable-but-tradeable item still reads ShopTradeEligible false (greyed out, still blocked
     /// from a direct buy/sell -- ShopActions.TryBuyFromShop/TrySellToShop's own affordability check
     /// refuses it with no state changed either way) but CanStageInTrade true, so
-    /// TryStartContentDrag/BuildItemContextMenu's "Add to trade" can still let it be picked up and
+    /// InventoryTransferDropHandler.AllowsDragStart/BuildItemContextMenu's "Add to trade" can still let it be picked up and
     /// staged in the trade window -- only a wrong-tag item (CanTrade false) or a Merged Stack (no
     /// single stack to trade) is ever fully blocked from that. False outside shop mode entirely.
     /// </summary>
@@ -176,9 +189,10 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         _groupBorderBottom = false;
         _groupBorderLeft = false;
         _groupBorderRight = false;
-        _iconGlyphFont = FontService.GetFont((int)(cellSize.Y * FontChrome.InventoryStackIconGlyphFontFraction));
-        _quantityFont = FontService.GetFont((int)(cellSize.Y * FontChrome.InventoryStackQuantityFontFraction));
-        _badgeFont = FontService.GetFont((int)(cellSize.Y * FontChrome.InventoryStackBadgeFontFraction));
+        _iconGlyphFont = FontService.GetFont((int)(cellSize.Y * GameFontChrome.InventoryStackIconGlyphFontFraction));
+        _quantityFont = FontService.GetFont((int)(cellSize.Y * GameFontChrome.InventoryStackQuantityFontFraction));
+        _badgeFont = FontService.GetFont((int)(cellSize.Y * GameFontChrome.InventoryStackBadgeFontFraction));
+        _mergedStackBadgeWidth = _badgeFont.MeasureString(MergedStackBadgeText).X;
     }
 
     /// <summary>
@@ -205,13 +219,16 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
 
         DrawBaseAndIcon(spriteBatch, unitRectangle, bounds, ContentSize);
 
-        ItemIconRenderer.DrawQuantityBadge(spriteBatch, _quantityFont, _quantity, ContentAbsolutePosition, ContentSize);
+        if (_quantity > 1)
+        {
+            var quantityText = _quantityBadgeText.Get(_quantity, static quantity => quantity.ToString());
+            ItemIconRenderer.DrawQuantityBadge(spriteBatch, _quantityFont, quantityText, _quantityBadgeTextSize.SizeOf(_quantityFont, quantityText), ContentAbsolutePosition, ContentSize);
+        }
 
         if (MergedStackBadgeVisible)
         {
-            var badgeSize = _badgeFont.MeasureString("+");
-            var badgePosition = new Vector2(ContentAbsolutePosition.X + ContentSize.X - badgeSize.X, ContentAbsolutePosition.Y);
-            ContrastTextRenderer.Draw(spriteBatch, _badgeFont, "+", badgePosition);
+            var badgePosition = new Vector2(ContentAbsolutePosition.X + ContentSize.X - _mergedStackBadgeWidth, ContentAbsolutePosition.Y);
+            ContrastTextRenderer.Draw(spriteBatch, _badgeFont, MergedStackBadgeText, badgePosition);
         }
 
         DrawGroupBorder(spriteBatch, unitRectangle);
@@ -242,7 +259,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         var spriteTint = isGreyedOut ? Color.Gray : Color.White;
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, iconSize, spriteTint);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, LabelRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, iconSize, spriteTint);
 
         if (IsToggledOn)
         {
@@ -275,5 +292,31 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
             _groupBorderBottom ? bottom : Rectangle.Empty,
             _groupBorderLeft ? left : Rectangle.Empty,
             _groupBorderRight ? right : Rectangle.Empty);
+    }
+
+    /// <summary>
+    /// Picks up this cell's stack, or a Merged Stack's shared item (no single stack -- tracked so it can still move between
+    /// inventories as a batch, refused only where it would bind to a hotbar slot). An item that can neither leave its
+    /// owner's inventory nor bind to the hotbar (a loot box) has nowhere a drop could send it, and a display-only cell (a
+    /// loot box reward) stands for an item rather than holding it -- neither starts a drag.
+    /// </summary>
+    /// <remarks>
+    /// The ghost is square at the cell's smaller side whatever the cell's shape -- a ShopItemStackCell is 4x wider than
+    /// tall, and the ghost draws only the item's icon, which stretched to the cell's width read as squashed (confirmed live).
+    /// </remarks>
+    public bool TryBeginContentDrag(Point pressPosition, out ContentDragStart start)
+    {
+        if (!IsDragSource || (!CanTrade && !CanBindToHotbar))
+        {
+            start = default;
+            return false;
+        }
+
+        var payload = StackInstanceId is { } stackInstanceId
+            ? new DragPayload(DragPayloadOrigin.InventoryCell, ItemStackInstanceId: stackInstanceId, OriginEntityId: EntityId, CanStageInTrade: CanStageInTrade)
+            : new DragPayload(DragPayloadOrigin.InventoryCell, MergedItemDefinitionId: ItemDefinitionId, OriginEntityId: EntityId, CanStageInTrade: CanStageInTrade);
+        var ghostDimension = System.Math.Min(CurrentSize.X, CurrentSize.Y);
+        start = new ContentDragStart(payload, new Vector2(ghostDimension, ghostDimension));
+        return true;
     }
 }

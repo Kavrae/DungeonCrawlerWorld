@@ -4,33 +4,21 @@ using Game.Modules.Inventory;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
-using Presentation.Input;
+
+using Presentation.Input.DragDrop;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
+using UIEngine.Fonts;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Presentation.UI.Content;
 
 /// <summary>
-/// The live content-drag state DragGhostContent needs to draw a frame -- see PointerState.ContentDrag.
-/// Bundles what UiInputController's own content-drag fields expose (ContentDragGhostVisible,
-/// ContentDragItemStackInstanceId, ContentDragMergedItemDefinitionId, ContentDragActionId,
-/// ContentDragCurrencyType, ContentDragOriginEntityId, ContentDragSourceSize, CurrentMousePosition) into one snapshot
-/// instead of DragGhostContent holding a live UiInputController reference just to pull seven
-/// unrelated properties off it every frame. MergedItemDefinitionId is the icon fallback for a
-/// Merged Stack drag (see InventoryItemStackCell's own doc comment for the Base/Diverging/Merged
-/// vocabulary) -- it has no single StackInstanceId to resolve an icon through, only its own
-/// shared ItemDefinitionId. OriginEntityId is null for a hotbar-origin drag (always the player's
-/// own item/action either way) -- only an InventoryItemStackCell-origin drag sets it, and it may
-/// belong to any entity's own inventory, not just the player's.
-/// </summary>
-public readonly record struct DragGhostState(bool Visible, uint? ItemStackInstanceId, Guid? MergedItemDefinitionId, Guid? ActionId, CurrencyType? CurrencyType, int? OriginEntityId, Vector2 SourceSize, Point CursorPosition);
-
-/// <summary>
-/// A cursor-following copy of a dragged item's or action's icon while UiInputController's
-/// content-drag (inventory cell/bound hotbar slot &lt;-&gt; hotbar slot, see its own doc comment)
-/// is in progress -- purely visual feedback, no gameplay state of its own. Sized to the dragged
-/// element's own on-screen size (see DragGhostState.SourceSize) -- rather than one fixed size for
+/// A cursor-following copy of a dragged item's or action's icon while a content drag
+/// carrying a DragPayload is in progress (see PointerState.ContentDrag) -- purely visual feedback, no gameplay state of its own. Sized to the dragged
+/// element's own on-screen size (see ContentDragState.SourceSize) -- rather than one fixed size for
 /// every drag, so the ghost doesn't visibly jump in scale relative to wherever it was picked up
 /// from. Hosted in a minimal (zero-size, fully transparent) User-tier Window -- see
 /// ShellBootstrapper.BuildUserWindows -- since everything this draws is positioned directly at the live
@@ -44,7 +32,6 @@ public sealed class DragGhostContent(
     InventoryView inventoryView,
     FontService fontService,
     SpriteSheetService spriteSheetService,
-    SpriteRenderer spriteRenderer,
     LabelRenderer labelRenderer) : IElementContent
 {
     private Window _hostWindow = null!;
@@ -56,7 +43,7 @@ public sealed class DragGhostContent(
     public void DrawContent(GameTime gameTime)
     {
         var state = pointerState.ContentDrag;
-        if (!state.Visible)
+        if (!state.Visible || state.Payload is not DragPayload drag)
         {
             return;
         }
@@ -65,21 +52,21 @@ public sealed class DragGhostContent(
         string glyph;
         Color glyphColor;
 
-        if (state.ItemStackInstanceId is { } stackInstanceId &&
-            inventoryView.TryGetStack(state.OriginEntityId ?? world.PlayerEntityId, stackInstanceId, out var stack) &&
+        if (drag.ItemStackInstanceId is { } stackInstanceId &&
+            inventoryView.TryGetStack(drag.OriginEntityId ?? world.PlayerEntityId, stackInstanceId, out var stack) &&
             InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item))
         {
             (spriteName, glyph, glyphColor) = (item.SpriteName, item.Glyph, item.GlyphColor);
         }
-        else if (state.MergedItemDefinitionId is { } mergedItemDefinitionId && itemCatalog.TryGet(mergedItemDefinitionId, out var mergedItem))
+        else if (drag.MergedItemDefinitionId is { } mergedItemDefinitionId && itemCatalog.TryGet(mergedItemDefinitionId, out var mergedItem))
         {
             (spriteName, glyph, glyphColor) = (mergedItem.SpriteName, mergedItem.Glyph, mergedItem.GlyphColor);
         }
-        else if (state.ActionId is { } actionId && actionCatalog.TryGet(actionId, out var action))
+        else if (drag.ActionId is { } actionId && actionCatalog.TryGet(actionId, out var action))
         {
             (spriteName, glyph, glyphColor) = (action.SpriteName, action.Glyph, action.GlyphColor);
         }
-        else if (state.CurrencyType is { } currencyType)
+        else if (drag.CurrencyType is { } currencyType)
         {
             (spriteName, glyph, glyphColor) = currencyType switch
             {
@@ -95,11 +82,11 @@ public sealed class DragGhostContent(
 
         var size = state.SourceSize;
         SpriteView? sprite = spriteName is not null && spriteSheetService.Sprites.TryGetFirst(spriteName, out var spriteView) ? spriteView : null;
-        var font = fontService.GetFont((int)(size.Y * FontChrome.DragGhostGlyphFontFraction));
+        var font = fontService.GetFont((int)(size.Y * GameFontChrome.DragGhostGlyphFontFraction));
         var mousePosition = state.CursorPosition;
 
         DragGhostRenderer.Draw(
-            _hostWindow.ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, labelRenderer, font,
+            _hostWindow.ElementPoolService.SpriteBatch, spriteSheetService, labelRenderer, font,
             sprite, glyph, glyphColor, new Vector2(mousePosition.X, mousePosition.Y), size);
     }
 }

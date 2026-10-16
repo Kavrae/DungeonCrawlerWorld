@@ -8,11 +8,14 @@ using Game.Modules.Shops;
 using Game.Tags;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
+using Tests.UIEngine;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.Content;
 
 namespace Tests.Presentation;
 
@@ -46,12 +49,11 @@ public sealed class InventoryManagementWindowTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        var spriteRenderer = new SpriteRenderer();
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
         windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, labelRenderer));
         windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, labelRenderer));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
-        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = new ContextMenuController(windowService);

@@ -6,14 +6,18 @@ using Game.Modules.Currency;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Shops;
+using Game.Modules.Shops.Components;
 using Game.Tags;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI.Chrome;
-using Presentation.UI.ColorPalettes;
 using Presentation.UI.Inventory;
+using UIEngine;
+using UIEngine.UI;
+using UIEngine.UI.Chrome;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
 
@@ -85,7 +89,7 @@ public sealed class InventoryGridContent(
     /// <summary>Popup sits just to the right of whatever's hovered, vertically centered against it -- see PopupPositioning.GetPosition(East).</summary>
     private static readonly Vector2 PopupGap = new(1, 1);
 
-    /// <summary>Same LightGreen/LightCoral pair ShopItemStackCell's own price-line color and ItemDetailsWindow's BetterColor/WorseColor already use (LightCoral, not IndianRed -- see ItemDetailsWindow.WorseColor's own doc comment for why) -- see ComputeHoverRows' own doc comment for the favorable/unfavorable-per-grid-direction rule these color.</summary>
+    /// <summary>Same LightGreen/LightCoral pair ShopItemStackCell's own price-line color and ItemDetailsWindow's BetterColor/WorseColor already use (LightCoral, not IndianRed -- see ItemDetailsWindow.WorseColor's own doc comment for why) -- see ComputeShopRows' own doc comment for the favorable/unfavorable-per-grid-direction rule these color.</summary>
     private static readonly Color FavorableStatusColor = Color.LightGreen;
 
     private static readonly Color UnfavorableStatusColor = Color.LightCoral;
@@ -102,6 +106,10 @@ public sealed class InventoryGridContent(
 
     private InventoryItemStackCell? _hoveredCell;
     private int _hoveredFrames;
+
+    /// <summary>The hovered item's summary and rows, rebuilt only when what they're built from changes -- the popup stays up for many frames.</summary>
+    private readonly KeyedCache<(ItemDefinition Definition, bool ShowCharges), string> _hoverSummary = new();
+    private readonly KeyedCache<HoverRowsKey, IReadOnlyList<TooltipRow>?> _hoverRows = new();
     private bool _closeHookupSubscribed;
     private bool _isRebuildingCells;
     private bool _isRebuildCellsRequestedDuringRebuild;
@@ -406,7 +414,7 @@ public sealed class InventoryGridContent(
     /// shop's own grid checks the player's Gold (a purchase), the player's own grid checks the
     /// shop's Gold (a sale). A Merged Stack cell (no single stack to price) is always false. False
     /// cells grey out (existing isGreyedOut logic) and refuse to drag/Give/Take/Sell All/Buy All
-    /// (see UiInputController.TryStartContentDrag and BuildItemContextMenu below) -- closes the
+    /// (see InventoryTransferDropHandler.AllowsDragStart and BuildItemContextMenu below) -- closes the
     /// currency-drain-style exploit a naive reuse of plain Give/Take would otherwise open for
     /// wrong-tag or unaffordable trades. Computed entirely independently of CompareState (Item
     /// Details Comparison's own eligibility, above) -- the two coexist on the same cell rather than
@@ -515,17 +523,27 @@ public sealed class InventoryGridContent(
         // Charges only makes sense for one specific physical stack -- a merged cell could be
         // averaging over several different charge counts, so it's suppressed there entirely
         // rather than showing a misleading single number.
-        var summary = ItemHoverSummary.For(definition, showCharges: isSingleStack, inventoryServices.GameplayTags);
+        var summary = _hoverSummary.Get((definition, isSingleStack), inventoryServices.GameplayTags, static (key, gameplayTags) => ItemHoverSummary.For(key.Definition, key.ShowCharges, gameplayTags));
 
-        var rows = ComputeHoverRows(definition, stackQuantity);
         var blocker = candidate.StackInstanceId is { } blockedStackInstanceId && entityId == world.PlayerEntityId && definition.Activator is not null
             ? _actionStateView.GetItemBlocker(world.PlayerEntityId, blockedStackInstanceId)
             : ActivationBlocker.None;
+        var hasShopRows = TryGetShopRowsInputs(definition, out var shopRowsInputs);
+        var rows = _hoverRows.Get(new HoverRowsKey(definition, stackQuantity, blocker, hasShopRows, shopRowsInputs), static key => WithBlockerRows(key.Blocker, key.HasShopRows ? ComputeShopRows(key.Definition, key.StackQuantity, key.ShopRowsInputs) : null));
 
         // Shop mode's band table needs a guaranteed-wide-enough box for its range-annotated rows
         // (e.g. "Understocked (10-14)") -- a plain description tooltip still shrinks to content as
         // before.
-        tooltipController.Show(this, candidate.Rectangle, PopupAnchor.East, PopupGap, PopupChrome.HoverPopupMaximumSize, summary, definition.Name, WithBlockerRows(blocker, rows), useFixedWidth: rows is not null);
+        tooltipController.Show(this, candidate.Rectangle, PopupAnchor.East, PopupGap, PopupChrome.HoverPopupMaximumSize, summary, definition.Name, rows, useFixedWidth: hasShopRows);
+    }
+
+    /// <summary>Everything the hover popup's rows are built from -- the cache key for them, so they're rebuilt only when one changes.</summary>
+    private readonly record struct HoverRowsKey(ItemDefinition Definition, ushort? StackQuantity, ActivationBlocker Blocker, bool HasShopRows, ShopRowsInputs ShopRowsInputs);
+
+    /// <summary>What ComputeShopRows reads from the open shop for one item: the shop as this player trades with it (its accepted items and multipliers), which side this grid is, and the stock levels pricing reads.</summary>
+    private readonly record struct ShopRowsInputs(GameplayTagQuery? AcceptedItems, float BuyMultiplier, float SellMultiplier, bool IsThisGridTheShop, int EffectiveStock, byte PreferredStockLevel)
+    {
+        public ShopComponent Shop => new(AcceptedItems, BuyMultiplier, SellMultiplier);
     }
 
     /// <summary>The reason the player can't use this item (see ActivationBlockerText) ahead of whatever rows shop mode adds -- only the player's own activatable stacks ever have one; a sword with no activation isn't "deactivated".</summary>
@@ -572,19 +590,13 @@ public sealed class InventoryGridContent(
     /// again as a one-line "receipt" would be redundant). Omitted entirely only when there's no
     /// concrete quantity to price at all (a merged cell with no single stack behind it).
     /// </summary>
-    private IReadOnlyList<TooltipRow>? ComputeHoverRows(ItemDefinition definition, ushort? stackQuantity)
+    private static IReadOnlyList<TooltipRow> ComputeShopRows(ItemDefinition definition, ushort? stackQuantity, ShopRowsInputs inputs)
     {
-        if (!_isShopMode || mapViewState.OpenShopEntityId is not { } shopEntityId || !_shopView.TryGetShop(shopEntityId, out var shop))
-        {
-            return null;
-        }
-
-        shop = _shopView.ResolveEffectiveShop(shop, world.PlayerEntityId);
-
-        var isThisGridTheShop = IsThisGridTheShop(shopEntityId);
+        var shop = inputs.Shop;
+        var isThisGridTheShop = inputs.IsThisGridTheShop;
         var neutralColor = WindowPalette.TitleTextColor; // The shared Tooltip's own default TextColor (see Tooltip.Build) -- no caller overrides it.
 
-        var effectiveStock = EffectiveStockForThisGrid(shopEntityId, definition.Id);
+        var effectiveStock = inputs.EffectiveStock;
 
         if (!isThisGridTheShop)
         {
@@ -595,7 +607,7 @@ public sealed class InventoryGridContent(
             }
         }
 
-        var preferredStockLevel = _shopView.GetPreferredStockLevel(shopEntityId, definition.Id);
+        var preferredStockLevel = inputs.PreferredStockLevel;
         var maxStock = definition.MaximumShopStock ?? ShopStockPricing.DefaultMaximumShopStock;
         var (e1, e2, e3, e4) = ShopStockPricing.GetBandEdges(preferredStockLevel, maxStock);
         var currentBand = ShopStockPricing.GetStockStatus(effectiveStock, e1, e2, e3, e4);
@@ -633,6 +645,26 @@ public sealed class InventoryGridContent(
         }
 
         return rows;
+    }
+
+    /// <summary>Reads what ComputeShopRows needs from the open shop -- false outside shop mode, where there are no shop rows.</summary>
+    private bool TryGetShopRowsInputs(ItemDefinition definition, out ShopRowsInputs inputs)
+    {
+        if (!_isShopMode || mapViewState.OpenShopEntityId is not { } shopEntityId || !_shopView.TryGetShop(shopEntityId, out var shop))
+        {
+            inputs = default;
+            return false;
+        }
+
+        shop = _shopView.ResolveEffectiveShop(shop, world.PlayerEntityId);
+        inputs = new ShopRowsInputs(
+            shop.AcceptedItems,
+            shop.BuyMultiplier,
+            shop.SellMultiplier,
+            IsThisGridTheShop(shopEntityId),
+            EffectiveStockForThisGrid(shopEntityId, definition.Id),
+            _shopView.GetPreferredStockLevel(shopEntityId, definition.Id));
+        return true;
     }
 
     /// <summary>Fixed color for whichever band is the shop's own *current* one on the band table -- green for Desperate/Understocked, red for Overstocked/Flooded, white for Normal. Unlike ShopItemStackCell.PriceIsFavorable/PriceIsUnfavorable, this does not flip with which grid is being drawn -- the band table always describes the shop's own stock, not a buy/sell direction.</summary>

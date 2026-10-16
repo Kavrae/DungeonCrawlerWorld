@@ -1,6 +1,6 @@
-using Microsoft.Xna.Framework;
-using Presentation.Fonts;
-using Presentation.Rendering;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Presentation.UI;
 
@@ -42,13 +42,5 @@ public sealed class InspectionWindow(FontService fontService, ElementPoolService
     }
 
     /// <summary>Preserves the window's full configured width while minimized -- only Window.MinimumHeaderWidth's shrink-to-fit-text behavior is skipped, matching Folder's own per-subclass override of the same hook (RecalculateMinimizedSize is protected virtual specifically so subclasses can do this).</summary>
-    protected override void RecalculateMinimizedSize()
-    {
-        var textSize = TitleFont.MeasureString(TitleText);
-
-        _headerState.Size = new Vector2(_geometry.OriginalSize.X, textSize.Y + TitlePadding.Y * 2);
-        _contentState.Size = Vector2.Zero;
-        _contentState.BackgroundSize = Vector2.Zero;
-        _geometry.CurrentSize = new Vector2(_geometry.OriginalSize.X, _headerState.Size.Y + BorderInsetDoubled.Y);
-    }
+    protected override void RecalculateMinimizedSize() => ApplyMinimizedSize(OriginalSize.X, OriginalSize.X);
 }

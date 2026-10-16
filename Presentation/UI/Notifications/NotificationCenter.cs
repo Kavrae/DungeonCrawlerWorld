@@ -3,6 +3,8 @@ using Game.Notifications;
 using Microsoft.Xna.Framework;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Notifications;
 

@@ -3,11 +3,11 @@ using Game.Modules.StatusEffects;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Presentation.Fonts;
 using Presentation.MapRendering;
-using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
 
 namespace Presentation.UI.FloatingText;
 
@@ -28,7 +28,6 @@ public sealed class FloatingTextRenderer(
     FontService fontService,
     StatusEffectDisplayRegistry statusEffectDisplays,
     SpriteSheetService spriteSheetService,
-    SpriteRenderer spriteRenderer,
     LabelRenderer labelRenderer)
 {
     private const int MaxCachedAmount = 9999;
@@ -43,7 +42,6 @@ public sealed class FloatingTextRenderer(
     private readonly FontService _fontService = fontService;
     private readonly StatusEffectDisplayRegistry _statusEffectDisplays = statusEffectDisplays;
     private readonly SpriteSheetService _spriteSheetService = spriteSheetService;
-    private readonly SpriteRenderer _spriteRenderer = spriteRenderer;
     private readonly LabelRenderer _labelRenderer = labelRenderer;
 
     private readonly string?[] _amountTexts = new string?[MaxCachedAmount + 1];
@@ -54,8 +52,8 @@ public sealed class FloatingTextRenderer(
     {
         var baseFontSize = _camera.CurrentZoomLevel switch
         {
-            ZoomLevel.Team => FontChrome.FloatingTextFontSize,
-            ZoomLevel.Neighborhood => FontChrome.FloatingTextNeighborhoodFontSize,
+            ZoomLevel.Team => GameFontChrome.FloatingTextFontSize,
+            ZoomLevel.Neighborhood => GameFontChrome.FloatingTextNeighborhoodFontSize,
             _ => 0,
         };
 
@@ -110,7 +108,7 @@ public sealed class FloatingTextRenderer(
             cursorX += markerWidth;
         }
 
-        ContrastTextRenderer.Draw(spriteBatch, font, label, new Vector2(MathF.Round(cursorX), rowTop), alpha, FloatingTextPalette.GetColor(text.Kind, text.EffectType));
+        ContrastTextRenderer.Draw(spriteBatch, font, label, new Vector2(cursorX, rowTop), alpha, FloatingTextPalette.GetColor(text.Kind, text.EffectType));
     }
 
     private bool IsNearViewport(Vector2 tilePosition)
@@ -124,17 +122,8 @@ public sealed class FloatingTextRenderer(
 
     private void DrawStatusEffectIcon(SpriteBatch spriteBatch, SpriteFontBase font, StatusEffectType effectType, Vector2 topLeft, float size, float alpha)
     {
-        var iconSize = new Vector2(size, size);
-
-        if (GetStatusEffectSprite(effectType) is { } sprite)
-        {
-            _spriteRenderer.Draw(spriteBatch, _spriteSheetService.GetTexture(sprite.SheetPath), sprite.SourceRectangle, topLeft, iconSize, Color.White * alpha);
-            return;
-        }
-
         var glyph = _statusEffectDisplays.TryGet(effectType, out var display) ? display.Glyph : "?";
-        var glyphPosition = _labelRenderer.GetCenteredPosition(font, glyph, topLeft, iconSize);
-        ContrastTextRenderer.Draw(spriteBatch, font, glyph, new Vector2(MathF.Round(glyphPosition.X), MathF.Round(glyphPosition.Y)), alpha, FloatingTextPalette.GetStatusEffectColor(effectType));
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _labelRenderer, GetStatusEffectSprite(effectType), font, glyph, FloatingTextPalette.GetStatusEffectColor(effectType), topLeft, new Vector2(size, size), Color.White, alpha, outline: true);
     }
 
     private SpriteView? GetStatusEffectSprite(StatusEffectType effectType)

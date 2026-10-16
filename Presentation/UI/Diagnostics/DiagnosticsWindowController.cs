@@ -1,9 +1,10 @@
 using Presentation.UI.Chrome;
-using Presentation.UI.ColorPalettes;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Diagnostics;
 
-/// <summary>Opens and closes the Diagnostics window (F3 -- see UiInputController.HandleWindowToggleHotkeys).</summary>
+/// <summary>Opens and closes the Diagnostics window (F3 -- a KeyPressInputHandler registered in ShellBootstrapper).</summary>
 /// <remarks>
 /// Not a menu window, unlike Inventory or Ability Scores: menu mode pauses the simulation, and this
 /// window exists to watch it run. It is marked menu-mode-exempt before it's added, so opening it

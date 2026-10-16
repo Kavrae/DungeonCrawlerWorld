@@ -6,11 +6,14 @@ using Game.Modules.Inventory;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
-using Presentation.Rendering;
+
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.Chrome;
 
 namespace Presentation.UI.Inventory;
 
@@ -88,7 +91,7 @@ public sealed class ItemDetailsWindow(
     private readonly SpriteFontBase _bodyFont = fontService.GetFont(FontChrome.DefaultFontSize);
 
     /// <summary>See _bodyFont's own doc comment -- BuildNameRow's own doubled-size counterpart.</summary>
-    private readonly SpriteFontBase _nameFont = fontService.GetFont(FontChrome.ItemDetailsNameFontSize);
+    private readonly SpriteFontBase _nameFont = fontService.GetFont(GameFontChrome.ItemDetailsNameFontSize);
 
     private ItemDefinition? _definition;
     private float _contentWidth;
@@ -212,7 +215,7 @@ public sealed class ItemDetailsWindow(
 
         if (ToggleText.IsLit(_definition))
         {
-            BuildFixedTextLine(width, ToggleText.Active, WindowPalette.ToggleActiveText);
+            BuildFixedTextLine(width, ToggleText.Active, GameWindowPalette.ToggleActiveText);
         }
 
         _displayedBlocker = ComputeBlocker();
@@ -566,7 +569,7 @@ public sealed class ItemDetailsWindow(
         AddChild(line);
     }
 
-    /// <summary>Section-opening divider -- a single TextDivider row, always 95% width, in WindowPalette.HeaderTextColor. Plain (mirroring InspectionWindowContent.BuildSpacer) when label/textPosition are left at their defaults; labeled, with the line broken at textPosition, when a section has its own label (Effects/Activation).</summary>
+    /// <summary>Section-opening divider -- a single TextDivider row, always 95% width, in GameWindowPalette.HeaderTextColor. Plain (mirroring InspectionWindowContent.BuildSpacer) when label/textPosition are left at their defaults; labeled, with the line broken at textPosition, when a section has its own label (Effects/Activation).</summary>
     private void BuildDivider(float width, string label = "", float textPosition = 0f)
     {
         var divider = ElementPoolService.CreateElement<TextDivider>(this, new ElementOptions
@@ -577,6 +580,6 @@ public sealed class ItemDetailsWindow(
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
         AddChild(divider);
-        divider.Configure(label, WindowPalette.HeaderTextColor, 0.95f, textPosition);
+        divider.Configure(label, GameWindowPalette.HeaderTextColor, 0.95f, textPosition);
     }
 }

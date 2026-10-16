@@ -1,6 +1,6 @@
 # Epic: Sprites out of Game, a UIEngine, and the Engine IDE
 
-(Epic -- a plan of plans. Child 1 landed 2026-10-11, child 2 2026-10-13, child 3 2026-10-14; the rest are not started. Each child below gets its own
+(Epic -- a plan of plans. Child 1 landed 2026-10-11, child 2 2026-10-13, child 3 2026-10-14, child 4 2026-10-14 (ahead of child 5 by choice); the rest are not started. Each child below gets its own
 `PLAN-*.md` when it starts, and is phased and tested in-game like any other plan. Decided 2026-10-11.)
 
 ## Why
@@ -95,10 +95,11 @@ Each is its own plan; numbering is the order. Arrows are hard dependencies.
 3. **Map renderer out of `MapWindow`** (→1). Landed 2026-10-14 (`PLAN-map-renderer-out-of-map-window.md`; notes in IMPLEMENTATION-NOTES "Tall sprites, wall faces and tops, and the sprite manifest", "Where the map is drawn"): `MapRenderer`, `MapGameOverlay` and `MapCamera` in `Presentation.MapRendering`. Row walk, wall plan, overhang fade, glow, caches, drawn from
    `IMapViewQuery` + camera; `MapWindow` becomes input, state and hosting. Fold in "Review MapWindow for
    properties that belong on MapViewState instead" (TODO.md, Presentation, Low).
-4. **Presentation / UIEngine split** (→1). "Split Presentation into Presentation + UIEngine projects"
-   (TODO.md, Presentation, Low) is the scoping note: `UiInputController`'s game-specific branches behind a
-   UIEngine hook, `ColorPalettes`/`Chrome` judged. Started when child 5 starts, so the split is shaped by a
-   real second consumer rather than guessed.
+4. **Presentation / UIEngine split** (→1). Landed 2026-10-14, ahead of child 5 by choice
+   (`PLAN-presentation-uiengine-split.md`; notes in IMPLEMENTATION-NOTES "UIEngine: the window framework out of
+   Presentation"): a `UIEngine` project on Engine + SpriteFormat; `UiInputController`'s game branches behind
+   `IUiInputHandler`, `IContentDragSource` and `IContentDropHandler`; `UiLayerHost` out of the exe; palettes and
+   font sizes split by reader.
 5. **The IDE shell and its Actions & Items tab** (→4). The IDE executable: a tab host on UIEngine +
    Presentation + a Game build, the place every later tool goes. Its first tab edits actions and items and
    reuses Item Details and `TargetShapePreviewElement`/`TargetShapePreviewGeometry` as they are. Pairs with
@@ -121,7 +122,7 @@ Each is its own plan; numbering is the order. Arrows are hard dependencies.
    debugger", TODO.md) follow whichever it picks.
 
 1 and 2 can land long before any tool exists and fix the determinism leak on their own. 3 is worth doing
-for `MapWindow`'s sake alone. 4 waits for 5. 6, 7 and 8 are independent of each other once 5 exists.
+for `MapWindow`'s sake alone. 4 landed ahead of 5. 6, 7 and 8 are independent of each other once 5 exists.
 
 ## Open questions (for the child plans, not this one)
 

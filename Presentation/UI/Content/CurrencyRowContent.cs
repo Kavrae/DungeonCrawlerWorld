@@ -1,4 +1,3 @@
-using Engine.ECS.Components.Stores;
 using Game.Modules.Currency;
 using Game.Modules.Shops;
 using Game.Views;
@@ -6,6 +5,7 @@ using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI.Inventory;
+using UIEngine.UI;
 
 namespace Presentation.UI.Content;
 
@@ -15,7 +15,7 @@ namespace Presentation.UI.Content;
 /// read-only TextWindow. Hosted via Window.SetFooterContent (see its own doc comment) rather than
 /// built by hand -- Initialize mirrors InventoryGridContent.Initialize's own shape exactly,
 /// including setting hostWindow.Tag = this so IInventoryDropTarget resolution
-/// (UiInputController.FindDropTargetEntityId) finds this row regardless of whether the drop
+/// (InventoryTransferDropHandler.FindDropTargetEntityId) finds this row regardless of whether the drop
 /// landed on a grid cell or a currency element.
 /// </summary>
 public sealed class CurrencyRowContent(

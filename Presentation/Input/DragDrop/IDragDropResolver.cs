@@ -1,10 +1,10 @@
 namespace Presentation.Input.DragDrop;
 
 /// <summary>
-/// One feature's self-contained drag-drop resolution strategy -- UiInputController.ResolveContentDrag
+/// One feature's self-contained drag-drop resolution strategy -- InventoryTransferDropHandler.TryDrop
 /// tries each registered resolver in a fixed priority order and stops at the first one that claims
 /// the drag, instead of accumulating every feature's eligibility rules inline. See
-/// UiInputController's own _dragDropResolvers construction for registration order.
+/// InventoryTransferDropHandler's constructor for registration order.
 /// </summary>
 internal interface IDragDropResolver
 {

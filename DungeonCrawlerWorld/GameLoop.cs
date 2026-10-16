@@ -5,8 +5,10 @@ using Engine.Settings;
 using Engine.Utilities;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Presentation.Bootstrap;
 using Presentation.Rendering;
+using UIEngine.Bootstrap;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace DungeonCrawlerWorld;
 
@@ -35,7 +37,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     private readonly GraphicsDeviceManager _graphics;
 
     private WorldSessionContext _worldSession = null!;
-    private PresentationContext _presentation = null!;
+    private UiEngineContext _uiEngine = null!;
     private ShellContext _shell = null!;
     private readonly DiagnosticsEngine _diagnostics;
     private int _frameCount;
@@ -94,14 +96,14 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
         using (EngineHooks.DiagnosticScope("Presentation Bootstrap"))
         {
-            _presentation = PresentationBootstrapper.Build(GraphicsDevice, "Fonts", "Spritesheets", "SpriteManifest.json");
-            MissingSpriteCheck.Report(_worldSession.GameSession.Views.ContentSpriteNames, _presentation.SpriteSheetService.Sprites, Console.Error);
+            _uiEngine = UiEngineBootstrapper.Build(GraphicsDevice, "Fonts", "Spritesheets", "SpriteManifest.json");
+            MissingSpriteCheck.Report(_worldSession.GameSession.Views.ContentSpriteNames, _uiEngine.SpriteSheetService.Sprites, Console.Error);
         }
 
         var screenSize = new Vector2(_graphics.PreferredBackBufferWidth, _graphics.PreferredBackBufferHeight);
         using (EngineHooks.DiagnosticScope("Window/Shell Setup"))
         {
-            _shell = ShellBootstrapper.Build(_presentation, _worldSession, screenSize, _diagnostics);
+            _shell = ShellBootstrapper.Build(_uiEngine, _worldSession, screenSize, _diagnostics);
         }
 
         Window.Title = TitleWithSeed();
@@ -111,15 +113,14 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
     protected override void LoadContent()
     {
-        // Local, not a field -- nothing outside this method reads it anymore. _presentation and
-        // _shell each cache their own copy (see PresentationContext.LoadContent/
-        // ShellContext.LoadContent) rather than needing it passed into Update/Draw.
+        // Local, not a field -- nothing outside this method reads it anymore. ElementPoolService
+        // keeps it (see UiEngineContext.LoadContent), and every element and UiLayerHost draw with it.
         var unitRectangle = new Texture2D(GraphicsDevice, 1, 1);
         unitRectangle.SetData([Color.White]);
 
-        _presentation.LoadContent(GraphicsDevice, unitRectangle);
+        _uiEngine.LoadContent(GraphicsDevice, unitRectangle);
 
-        _shell.LoadContent(GraphicsDevice, _presentation.SpriteBatchRenderer.GetSpriteBatch(), unitRectangle);
+        _shell.LoadContent();
 
         base.LoadContent();
     }
@@ -163,8 +164,8 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     {
         GraphicsDevice.Clear(Color.LightGray);
 
-        _presentation.SpriteBatchRenderer.StartSpriteBatch();
-        _presentation.ElementPoolService.ResetRenderState();
+        _uiEngine.SpriteBatchRenderer.StartSpriteBatch();
+        _uiEngine.ElementPoolService.ResetRenderState();
 
         using (EngineHooks.FrameCost(FrameCostCategory.Draw, "GameLoop", "Shell.Draw"))
         {
@@ -173,7 +174,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
         using (EngineHooks.FrameCost(FrameCostCategory.Draw, "GameLoop", "SpriteBatch.End"))
         {
-            _presentation.SpriteBatchRenderer.EndSpriteBatch();
+            _uiEngine.SpriteBatchRenderer.EndSpriteBatch();
         }
 
         base.Draw(gameTime);

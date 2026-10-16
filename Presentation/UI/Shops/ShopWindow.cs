@@ -2,12 +2,13 @@ using Engine.Tags;
 using Game.Spawning;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
-using Presentation.Rendering;
-using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Shops;
 

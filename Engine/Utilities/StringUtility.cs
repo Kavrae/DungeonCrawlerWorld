@@ -130,7 +130,7 @@ public static class StringUtility
         while (low < high)
         {
             var mid = (low + high + 1) / 2;
-            if (textMeasurer.MeasureWidth(text[..mid]) + ellipsisWidth <= maximumWidth)
+            if (textMeasurer.MeasureWidth(text.AsSpan(0, mid)) + ellipsisWidth <= maximumWidth)
             {
                 low = mid;
             }
@@ -140,7 +140,7 @@ public static class StringUtility
             }
         }
 
-        return low <= 0 ? ellipsis : text[..low] + ellipsis;
+        return low <= 0 ? ellipsis : string.Concat(text.AsSpan(0, low), ellipsis);
     }
 
     /// <summary>Small text boxes don't have room for hyphenation and use a simpler word wrap.</summary>
@@ -258,19 +258,15 @@ public static class StringUtility
         var remainingLineWidth = criteria.MaximumPixelWidth;
 
         // Walk space-or-newline-delimited words directly (matching string.Split(' ')'s
-        // inclusion of empty entries between consecutive spaces) instead of materializing the
-        // whole words array up front -- avoids that one array allocation per call. Each word
-        // still becomes its own string when sliced out below: FontStashSharp's
-        // MeasureString has no ReadOnlySpan<char> overload (checked directly against the
-        // installed package), so a per-word string is unavoidable regardless of how the
-        // words are found.
+        // inclusion of empty entries between consecutive spaces) as spans of the original text --
+        // no words array and no string per word, since ITextMeasurer measures a span.
         var wordStartIndex = 0;
         while (true)
         {
             var nextBoundaryIndex = originalText.IndexOfAny(WordBoundaryChars, wordStartIndex);
             var word = nextBoundaryIndex < 0
-                ? originalText[wordStartIndex..]
-                : originalText[wordStartIndex..nextBoundaryIndex];
+                ? originalText.AsSpan(wordStartIndex)
+                : originalText.AsSpan(wordStartIndex, nextBoundaryIndex - wordStartIndex);
             var boundaryIsForcedBreak = nextBoundaryIndex >= 0 && originalText[nextBoundaryIndex] == '\n';
 
             if (remainingLineWidth != criteria.MaximumPixelWidth)
@@ -309,7 +305,7 @@ public static class StringUtility
                         MinimumCharactersBeforeLineBreak,
                         remainingWord.Length - MinimumCharactersAfterLineBreak
                     );
-                    stringBuilder.Append(remainingWord.AsSpan(0, substringLength)).Append('-');
+                    stringBuilder.Append(remainingWord[..substringLength]).Append('-');
 
                     // Estimate the hyphenated substring's width proportionally from the
                     // already-measured wordSize instead of calling MeasureWidth again --
@@ -375,9 +371,19 @@ public static class StringUtility
         }
 
         var widest = 0f;
-        foreach (var line in text.Split('\n'))
+        var remainingText = text.AsSpan();
+        while (true)
         {
+            var lineBreakIndex = remainingText.IndexOf('\n');
+            var line = lineBreakIndex < 0 ? remainingText : remainingText[..lineBreakIndex];
             widest = System.Math.Max(widest, textMeasurer.MeasureWidth(line.TrimEnd('\r')));
+
+            if (lineBreakIndex < 0)
+            {
+                break;
+            }
+
+            remainingText = remainingText[(lineBreakIndex + 1)..];
         }
 
         return widest;

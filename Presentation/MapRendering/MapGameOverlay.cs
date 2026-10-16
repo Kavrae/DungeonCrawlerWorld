@@ -4,11 +4,13 @@ using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Views;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Presentation.Fonts;
-using Presentation.Rendering;
+
 using Presentation.UI;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Presentation.MapRendering;
 
@@ -35,7 +37,7 @@ public sealed class MapGameOverlay
         _camera = camera;
         _actionTargeting = actionTargeting;
         _labelRenderer = labelRenderer;
-        _badgeFont = fontService.GetFont(FontChrome.MapBadgeFontSize);
+        _badgeFont = fontService.GetFont(GameFontChrome.MapBadgeFontSize);
     }
 
     /// <summary>Draws the targeting highlights, then the selection's: the followed entity's in Detail inspection, the selected tile's otherwise.</summary>
@@ -255,7 +257,7 @@ public sealed class MapGameOverlay
         }
 
         spriteBatch.Draw(unitRectangle, tileRectangle, fillColor * TargetSelectionMaskAlpha * ChargeBackdropAlphaFraction);
-        TileFillRenderer.DrawBottomUpFill(spriteBatch, unitRectangle, tileRectangle, fillFraction, fillColor * TargetSelectionMaskAlpha);
+        TileFillRenderer.DrawFill(spriteBatch, unitRectangle, tileRectangle, fillFraction, TileFillDirection.BottomToTop, fillColor * TargetSelectionMaskAlpha);
     }
 
     /// <summary>The inspector's own "this tile is selected" highlight -- a light-blue interior-fade glow (see GridSquareRenderer's own use of the same GlowMode.InteriorFade for inventory cells, so the two read as the same visual language) rather than DrawMaskedTileHighlight's flat wash, so terrain/sprites underneath stay fully legible through the ring gaps instead of being tinted.</summary>
@@ -266,6 +268,6 @@ public sealed class MapGameOverlay
             return;
         }
 
-        GlowRenderer.Draw(spriteBatch, unitRectangle, tileRectangle, WindowPalette.Selected, GlowMode.InteriorFade);
+        GlowRenderer.Draw(spriteBatch, unitRectangle, tileRectangle, GameWindowPalette.Selected, GlowMode.InteriorFade);
     }
 }

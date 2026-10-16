@@ -6,6 +6,7 @@ using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Inventory.Definitions;
 using Presentation.UI;
 using Presentation.UI.Content;
+using UIEngine.UI;
 
 namespace Tests.Presentation;
 

@@ -9,12 +9,14 @@ using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
-using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Chrome;
 using Presentation.UI.Content;
 using System.Linq;
+using Tests.UIEngine;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Tests.Presentation;
 

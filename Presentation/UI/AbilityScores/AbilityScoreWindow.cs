@@ -3,12 +3,19 @@ using Engine.Utilities;
 using Game.Modules.AbilityScores;
 using Game.Modules.StatModifiers;
 using Game.Views;
+using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
-using Presentation.Input;
-using Presentation.Rendering;
+
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Geometry;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.Chrome;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.AbilityScores;
 
@@ -37,7 +44,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     /// <summary>See SeparatorBar -- the divider itself is drawn at 75% width; this is just the element's own full-width, 1px-tall footprint in the vertical tile chain.</summary>
     private const float SeparatorHeight = 1f;
 
-    public static readonly Color ColumnColor = WindowPalette.AbilityScoreColumnBackground;
+    public static readonly Color ColumnColor = GameWindowPalette.AbilityScoreColumnBackground;
 
     private static readonly AbilityScoreType[] CoreTypes = Enum.GetValues<AbilityScoreType>()
         .Where(static type => !AbilityScoreCategory.IsHidden(type))
@@ -63,6 +70,9 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
     private Element? _hoveredCandidate;
     private int _hoveredFrames;
+
+    /// <summary>The hovered modifier row's source popup, rebuilt only when its source, effect or shown remaining seconds change.</summary>
+    private readonly KeyedCache<(ActionSource Source, string ModifierText, int? RemainingSeconds), (string Title, string Body)> _sourcePopup = new();
 
     /// <summary>Mirrors GlobalState.IsAdminModeOn as of the last BuildColumns -- Update rebuilds (not just refreshes) whenever this goes stale, since toggling admin mode changes the column *count*, not just their contents.</summary>
     private bool _lastAdminModeOn;
@@ -137,7 +147,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     /// the same way HotbarController.UpdateHover gates its own Armed Hotkey Summary popup,
     /// against the same shared HudChrome.HoverTooltipDelayFrames -- but hides immediately on candidate change/
     /// loss (no delay on hiding, only on showing, same convention MapViewState.HoverSlot uses).
-    /// Known, accepted gap: unlike HandleHotbarHover, this doesn't suppress itself during an
+    /// Known, accepted gap: unlike HotbarInputHandler.OnPointerUpdate, this doesn't suppress itself during an
     /// active drag of this window's own title bar -- not worth the extra plumbing unless it
     /// turns out to actually be noticeable.
     /// </summary>
@@ -183,7 +193,10 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         }
         else if (candidate is AbilityScoreModifierRow row)
         {
-            var (title, body) = ModifierDisplayFormatting.SourcePopup(actionSourceNaming, row.Source!.Value, row.ModifierText!, row.RemainingDurationFrames);
+            var (title, body) = _sourcePopup.Get(
+                (row.Source!.Value, row.ModifierText!, ModifierDisplayFormatting.RemainingSecondsShown(row.RemainingDurationFrames)),
+                actionSourceNaming,
+                static (key, naming) => ModifierDisplayFormatting.SourcePopupShowingSeconds(naming, key.Source, key.ModifierText, key.RemainingSeconds));
             _tooltipController.Show(this, row.Rectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, PopupChrome.HoverPopupMaximumSize, body, title);
         }
     }
@@ -256,7 +269,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         // A window that grows to the right could otherwise end up partly off-screen -- the same
         // clamp AbilityScoreWindowController's own initial placement already applies.
         var screenBounds = ElementPoolService.GraphicsDevice.Viewport.Bounds;
-        SetRelativePosition(ScreenBoundsClamp.Clamp(RelativePosition, CurrentSize, new Vector2(screenBounds.Width, screenBounds.Height)));
+        SetRelativePosition(RectangleClamp.ClampInside(RelativePosition, CurrentSize, screenBounds));
     }
 
     private void BuildColumns()

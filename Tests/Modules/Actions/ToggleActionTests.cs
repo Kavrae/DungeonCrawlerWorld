@@ -13,9 +13,7 @@ using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Auras;
-using Game.Modules.Auras.Components;
 using Game.Modules.Core.Components;
-using Game.Modules.Death;
 using Game.Modules.Death.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -24,7 +22,6 @@ using Game.Modules.Mana.Components;
 using Game.Spawning;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.UI;
 
 namespace Tests.Modules.Actions;
 

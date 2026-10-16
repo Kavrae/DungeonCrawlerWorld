@@ -1,8 +1,7 @@
-using Game.Views;
 using FontStashSharp;
-using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using UIEngine.Rendering;
 
 namespace Presentation.Rendering;
 
@@ -22,7 +21,6 @@ public static class DragGhostRenderer
     public static void Draw(
         SpriteBatch spriteBatch,
         SpriteSheetService spriteSheetService,
-        SpriteRenderer spriteRenderer,
         LabelRenderer labelRenderer,
         SpriteFontBase glyphFont,
         SpriteView? sprite,
@@ -32,6 +30,6 @@ public static class DragGhostRenderer
         Vector2 size)
     {
         var topLeft = centerPosition - size / 2f;
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, labelRenderer, sprite, glyphFont, glyph, glyphColor, topLeft, size, Color.White, Alpha);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, labelRenderer, sprite, glyphFont, glyph, glyphColor, topLeft, size, Color.White, Alpha);
     }
 }

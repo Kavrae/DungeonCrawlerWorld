@@ -1,8 +1,10 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
-using Presentation.Rendering;
+
 using Presentation.UI.Chrome;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Presentation.UI.Content;
 
@@ -15,7 +17,7 @@ namespace Presentation.UI.Content;
 /// sprite/glyph directly rather than resolving them from an entity's own component pools -- an
 /// item has no entity id of its own to look up.
 /// </summary>
-public sealed class ItemIconElement(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
+public sealed class ItemIconElement(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService)
     : Element(fontService, elementPoolService, labelRenderer)
 {
     private string? _spriteName;
@@ -28,13 +30,13 @@ public sealed class ItemIconElement(FontService fontService, ElementPoolService 
         _spriteName = spriteName;
         _glyph = glyph;
         _glyphColor = glyphColor;
-        _glyphFont = FontService.GetFont((int)(iconSize.Y * FontChrome.IconGlyphFontFraction));
+        _glyphFont = FontService.GetFont((int)(iconSize.Y * GameFontChrome.IconGlyphFontFraction));
     }
 
     public override void DrawContent(GameTime gameTime)
     {
         SpriteView? sprite = _spriteName is not null && spriteSheetService.Sprites.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
 
-        SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _glyphFont, _glyph, _glyphColor, ContentAbsolutePosition, ContentSize, Color.White);
+        SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, LabelRenderer, sprite, _glyphFont, _glyph, _glyphColor, ContentAbsolutePosition, ContentSize, Color.White);
     }
 }

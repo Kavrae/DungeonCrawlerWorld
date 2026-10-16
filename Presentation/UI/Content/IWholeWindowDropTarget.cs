@@ -6,7 +6,7 @@ namespace Presentation.UI.Content;
 /// Implemented by a top-level receiving window that accepts a drop anywhere within its own
 /// bounds -- not just its specific grid/currency-row child -- so a drop landing on its title bar,
 /// border padding, or any other empty space still resolves to the right entity instead of
-/// silently failing. Checked by UiInputController.FindDropTargetEntityId only as a fallback, once
+/// silently failing. Checked by InventoryTransferDropHandler.FindDropTargetEntityId only as a fallback, once
 /// the narrower IInventoryDropTarget check has already failed for every ancestor below this one --
 /// landing exactly on a grid cell or currency element still resolves through that more specific,
 /// unchanged path, so this interface only ever matters for "the drop point was somewhere in this

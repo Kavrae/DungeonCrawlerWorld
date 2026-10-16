@@ -1,10 +1,14 @@
 using Engine.Tags;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
-using Presentation.Rendering;
-using Presentation.UI.ColorPalettes;
+
 using Presentation.UI.Content;
+using UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
+using UIEngine.UI.Content;
 
 namespace Presentation.UI.Inventory;
 

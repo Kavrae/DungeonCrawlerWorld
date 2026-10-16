@@ -1,14 +1,12 @@
 using Engine.ECS.Components;
+using Engine.Math;
 using Game.Effects;
 using Game.Effects.Entries;
-using Engine.Math;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Mana;
 using Game.Modules.Mana.Components;
-using Game.Modules.StatModifiers;
 
 namespace Tests.Modules.Actions;
 

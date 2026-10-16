@@ -9,6 +9,11 @@ using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Tests.UIEngine;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.Content;
 
 namespace Tests.Presentation;
 

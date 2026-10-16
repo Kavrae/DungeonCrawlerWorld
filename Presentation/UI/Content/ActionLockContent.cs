@@ -5,9 +5,11 @@ using Game.Modules.Core.Components;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Presentation.UI.Content;
 
@@ -32,7 +34,7 @@ public sealed class ActionLockContent(World world, ActionStateView actionStateVi
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
-        _font = fontService.GetFont((int)(Size.Y * FontChrome.ActionLockGlyphFontFraction));
+        _font = fontService.GetFont((int)(Size.Y * GameFontChrome.ActionLockGlyphFontFraction));
     }
 
     /// <summary>Whether the player currently has an action lock to show, and its fill fraction, is decided here -- Draw only reads the cached result and turns it into pixels.</summary>

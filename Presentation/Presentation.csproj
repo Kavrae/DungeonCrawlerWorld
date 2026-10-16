@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Engine\Engine.csproj" />
+    <ProjectReference Include="..\UIEngine\UIEngine.csproj" />
     <ProjectReference Include="..\Game\Game.csproj" />
     <ProjectReference Include="..\Content\Content.csproj" />
     <ProjectReference Include="..\SpriteFormat\SpriteFormat.csproj" />

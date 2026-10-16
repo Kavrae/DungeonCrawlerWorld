@@ -10,10 +10,12 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Views;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Tests.UIEngine;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Tests.Presentation;
 
@@ -68,7 +70,7 @@ public sealed class HotbarContentTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, new ItemCatalog()), TestActionStateViews.Over(componentManager), new HotkeyBindingCommands(componentManager, new ItemCatalog(), new EventBus()), new ActionCatalog(), new ItemCatalog(),
-            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), ScreenSize, simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), ScreenSize, simulationClock: new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

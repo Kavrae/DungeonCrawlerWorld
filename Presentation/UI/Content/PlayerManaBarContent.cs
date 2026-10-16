@@ -2,10 +2,14 @@ using Game.Modules.StatModifiers;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.Chrome;
 
 namespace Presentation.UI.Content;
 
@@ -21,7 +25,10 @@ public sealed class PlayerManaBarContent(World world, ActionStateView actionStat
 {
     public static readonly Vector2 Size = PlayerHealthBarContent.Size;
 
-    private readonly ResourceBarValueText _valueText = new();
+    /// <summary>The "current / maximum" text drawn, rebuilt only when either number changes.</summary>
+    private readonly KeyedCache<(int Current, int Maximum), string> _valueTextCache = new();
+    private string _valueText = string.Empty;
+    private readonly TextSizeCache _valueTextSize = new();
 
     private Window _hostWindow = null!;
 
@@ -29,7 +36,7 @@ public sealed class PlayerManaBarContent(World world, ActionStateView actionStat
     private float _manaFraction = 1f;
 
     /// <summary>The "current / maximum" text the bar draws, or null when the player has no mana to show.</summary>
-    internal string? ValueText => _hasMana ? _valueText.Text : null;
+    internal string? ValueText => _hasMana ? _valueText : null;
 
     public void Initialize(Window hostWindow) => _hostWindow = hostWindow;
 
@@ -49,7 +56,7 @@ public sealed class PlayerManaBarContent(World world, ActionStateView actionStat
         _manaFraction = effectiveMaximumMana > 0
             ? MathHelper.Clamp(mana.CurrentMana / effectiveMaximumMana, 0f, 1f)
             : 1f;
-        _valueText.Update(ResourceBarValueText.DisplayedMana(mana.CurrentMana), ResourceBarValueText.DisplayedMaximum(effectiveMaximumMana));
+        _valueText = _valueTextCache.Get((ResourceBarRounding.DisplayedMana(mana.CurrentMana), ResourceBarRounding.DisplayedMaximum(effectiveMaximumMana)), static key => ResourceBarValueText.Format(key.Current, key.Maximum));
     }
 
     public void DrawContent(GameTime gameTime)
@@ -69,7 +76,8 @@ public sealed class PlayerManaBarContent(World world, ActionStateView actionStat
 
         if (_hasMana)
         {
-            ResourceBarRenderer.DrawCenteredValueText(spriteBatch, fontService.GetFont((int)(outerRectangle.Height * FontChrome.ResourceBarValueFontFraction)), outerRectangle, _valueText.Text);
+            var valueFont = fontService.GetFont((int)(outerRectangle.Height * FontChrome.ResourceBarValueFontFraction));
+            ResourceBarRenderer.DrawCenteredValueText(spriteBatch, valueFont, outerRectangle, _valueText, _valueTextSize.SizeOf(valueFont, _valueText).X);
         }
     }
 }

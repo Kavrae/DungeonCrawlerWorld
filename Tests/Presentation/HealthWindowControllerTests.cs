@@ -3,12 +3,6 @@ using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Modules.Auras;
-using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
-using Game.Terrain;
-using Game.World;
-using Microsoft.Xna.Framework.Input;
-using Presentation.Input;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
 using Game.Modules.Health.Components;
@@ -17,14 +11,24 @@ using Game.Modules.Paralysis;
 using Game.Modules.Paralysis.Components;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
+using Game.Terrain;
 using Game.Views;
+using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
+using Microsoft.Xna.Framework.Input;
+using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Chrome;
 using System.Linq;
+using Tests.UIEngine;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Tests.Presentation;
 
@@ -132,7 +136,7 @@ public sealed class HealthWindowControllerTests
         var tooltip = FindTooltip(harness.Layers);
 
         HoverFor(harness, window, row.Rectangle.Center, 1);
-        Assert.AreEqual(global::Presentation.UI.ColorPalettes.WindowPalette.HighlightColor, row.ContentColor);
+        Assert.AreEqual(global::UIEngine.UI.ColorPalettes.WindowPalette.HighlightColor, row.ContentColor);
 
         HoverFor(harness, window, row.Rectangle.Center, HudChrome.HoverTooltipDelayFrames - 2);
         Assert.IsFalse(tooltip.IsVisible);

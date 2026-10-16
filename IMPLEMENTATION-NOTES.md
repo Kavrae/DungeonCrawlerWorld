@@ -161,7 +161,7 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
 ### Enemy Attack Indicator + follow-up combat/performance work
 
 The charge-fill indicator: TODO.md's own top-priority
-"Enemy Attack Indicator" -- a bottom-up per-tile fill (`Presentation/Rendering/TileFillRenderer.cs`)
+"Enemy Attack Indicator" -- a bottom-up per-tile fill (`UIEngine/Rendering/TileFillRenderer.cs`)
 showing a Delayed action's windup progress (0% at charge start -> 100% at activation), layered over
 the existing flat telegraph wash from Combat Overhaul: Dodge above. Two further fixes landed
 alongside it, found while chasing the framerate regressions that surfaced during that work:
@@ -1994,7 +1994,7 @@ GameLoop code) -- built in a past session, just never reflected back into the TO
   (`RouteHotkeysToFocusedElement` via `IsReachableDuringMenuMode`), Escape (`BroadcastToElements` sweep
   skipped).
 - Dim: `MenuModeDimRenderer.Draw` -- one `Color.Black * 0.55f` full-viewport quad, drawn by
-  `ShellContext.Draw` right before `Layers.BottommostMenuWindow`.
+  `UiLayerHost.Draw` right before `Layers.BottommostMenuWindow`.
 - `MarkMenuModeExempt(element)`: 4 call sites -- hotbar window, Notification folder tile, Inventory
   folder tile, Health window's opening button (persistent HUD entry points that must stay reachable).
 
@@ -2045,7 +2045,7 @@ needed no changes -- its 35 `Drag_*` tests drive the real `Update` input pipelin
 
 ### Global U/I/O window-toggle hotkeys landed
 
-`UiInputController.HandleWindowToggleHotkeys` -- U/I/O toggle Health/Inventory/Ability Score,
+A `KeyPressInputHandler` per key, registered in `ShellBootstrapper` (was `UiInputController.HandleWindowToggleHotkeys`) -- U/I/O toggle Health/Inventory/Ability Score,
 unconditional/edge-triggered like Tab/Escape/F12, gated on `!IsTextBoxFocused` since (unlike those)
 they're printable characters. Each controller (`HealthWindowController`/`InventoryWindowController`/
 `AbilityScoreWindowController`) got a new public `Toggle*Window()` wrapping its existing private
@@ -2669,3 +2669,90 @@ cleanup traits, `Exclusive`/`Acyclic`), Unity Entities (`Parent`/`Child` plus a 
   checked at link time. It still ends when destroyed (an entity already being destroyed is only
   detached). A long non-acyclic `DestroySources` chain cascades recursively, one stack frame per level;
   nothing needs one, and the cascade could be made iterative if something does.
+
+### UIEngine: the window framework out of Presentation
+
+Landed 2026-10-14 (`PLAN-presentation-uiengine-split.md`, child 4 of `EPIC-sprites-ui-engine-and-dev-tools.md`; started ahead
+of child 5, the IDE shell, by choice). `UIEngine` is a project of its own that references only Engine, SpriteFormat, FNA and
+FontStashSharp; Presentation, the exe and Tests reference it.
+
+- **Where the line is.** A type goes to UIEngine if a non-game tool would want it unchanged: `Element`, `Window` and the
+  controls, layers, `UiLayerHost`, `UiInputController`, tooltips, context menus, fonts, sprite drawing by name
+  (`SpriteManifestResolver`, `SpriteSheetService`, `TerrainSpriteSet`, `SpriteOrGlyphRenderer`), and the bootstrapper
+  (`UiEngineBootstrapper`/`UiEngineContext`). A type that names a game concept stays in Presentation even when it touches
+  no Game type: `InventoryItemStackCell`, `HotkeySlotLayout`, `ToggleActiveMarker`, `TargetShapePreviewElement`,
+  `InspectionWindow`, the map renderer. Before the move a scan followed every type reference between Presentation files to
+  Game; the framework reached it through only four seams, cut first.
+- **The four seams.** The manifest resolver's two `Resolve(...)` overloads over Game view records became extension methods
+  in Presentation (`MapVisualResolution`, beside `MapVisual`). `SpriteOrGlyphRenderer` dropped Game usings it never used.
+  `PointerState.ContentDrag` became `ContentDragState` with an opaque payload. `UiInputController`'s game half moved behind
+  hooks (next bullets).
+- **Content drag is UIEngine's, its meaning the game's.** The controller owns the gesture: capture on press, the tap
+  threshold, the ghost's delay, skipping the origin's click once the drag is real, ending the drag on every release. What a
+  press picks up is the pressed element's or the pressed window content's (`IContentDragSource` -- the controller asks no
+  further up the tree, as the old type tests never did). What a drop means is a list of `IContentDropHandler`s, tried in
+  order until one claims it; any of them may refuse a drag before it starts (`AllowsDragStart`), which is where a rule
+  that needs world state lives (the shop-open stage check, a shop's own Gold) -- a source's own rules stay on the source.
+  The game's payload is one record, `DragPayload`; its handlers are `InventoryTransferDropHandler` (the Trade/Shop/Plain
+  resolver chain, unchanged inside) and `HotbarBindingDropHandler`.
+- **Everything else the game does with raw input is an `IUiInputHandler`**, one small handler per concern with only
+  required dependencies: a `KeyPressInputHandler` (UIEngine) per hotkey -- U/I/O/F3 and Left Alt --,
+  `AdminModeInputHandler` (F12), `ItemDetailsOutsideClickInputHandler` (a press it consumes),
+  `ItemComparisonDisarmInputHandler`, `HotbarInputHandler` (the hotbar's tap and hover) and
+  `ActivationRefusalInputHandler` (the refusal cursor). It started as one `GameInputHandler` with every controller
+  optional, which existed only so tests could leave them out; split, a test registers only the handlers it exercises
+  (`TestUiInputController`) and nothing is nullable. Handlers receive an `Element`, never the internal
+  `ElementInteraction`. What the cursor is over is resolved once a frame by the controller's own hit test (re-run only
+  when the mouse moved) and handed to `OnPointerUpdate`, `IsInputRefusedAt` and `IsDropRefusedAt` as the hovered
+  element -- before, each handler scanned the StaticHud and Base layers for the hotbar or map itself, three times a frame,
+  ignoring whatever was drawn over them. A handler needing one specific element (the hotbar) gets it at registration;
+  `OnRelease` keeps a hit-test delegate for the release point. The hooks' members have default bodies, so a drifted
+  handler signature compiles silently as an unrelated method -- `InputHookImplementationTests` fails one. Escape, focus,
+  menu mode and the context menu stay the framework's.
+- **The hotbar answers the cursor's questions cheaply.** `HotbarContent` keeps its slot rectangles, rebuilt only when
+  its content origin or unlocked Expansion slots change, and remembers its last `TryGetSlotAt` answer (asked by the
+  refusal cursor, the hover and a drag's refusal each frame); the old `yield return` walk allocated an iterator per
+  call. `IsSlotBound` and `TryGetSlotBlocker` answer "is it bound" and "why is it blocked" without building summary
+  text, which the hover check and `HotbarController.UpdateSummary` used to build every frame a slot was hovered or
+  armed; the text is now built only when the popup changes.
+- **The layer loop left the exe.** `UiLayerHost` loads, updates and draws every layer bottom to top with the menu-mode dim
+  and its exempt elements, reading the render services from `ElementPoolService` -- which removed `ShellContext`'s
+  duplicate `GraphicsDevice`/`SpriteBatch`/unit rectangle (deferred since 2026-08-20). Frame-cost row names are unchanged.
+- **Mixed tables split by reader.** A field the framework reads stayed in `WindowPalette`/`FontChrome`; the rest moved to
+  `GameWindowPalette`/`GameFontChrome`. `ResourceBarValueText` (the "cur / max" text a `FractionBarElement` draws, kept
+  in a `KeyedCache` by each bar) is UIEngine's; how health and mana round before it is the game's (`ResourceBarRounding`).
+- **Subclasses outside UIEngine get hooks, not state.** `InspectionWindow` sized its minimized bar by writing `Element`'s
+  internal state objects; it now calls `Window.ApplyMinimizedSize(headerWidth, windowWidth)`, which `Window`'s own
+  `RecalculateMinimizedSize` uses too. Members Presentation already used became `public` (`Element.FontService`,
+  `ElementPoolService`, `LabelRenderer`, `SetBounds`, `WasKeyPressed`, `Window.BuildTitleButton`,
+  `UiInputController.DoubleClickWindowFrames`, `WindowPalette`, `WindowChrome`); `SettleScrollbarsOutsideMeasure` became
+  `protected`.
+- **Tests.** Framework tests and their helpers (`TestFonts`, `TestSprites`, `TestElementPoolServiceFactory`) live in
+  `Tests/UIEngine`, namespace `Tests.UIEngine`. `UIEngineArchitectureTests` holds the dependency rule. Every class that
+  touches `TestFonts` must be `[DoNotParallelize]` -- `MapRendererTests` and `WindupTelegraphTests` weren't, and the shared
+  FontStashSharp atlas threw under parallel access once the moved tests changed the scheduling.
+- **Measuring text allocates nothing per call.** `ITextMeasurer.MeasureWidth` takes a `ReadOnlySpan<char>`, so
+  `StringUtility` measures words, prefixes and lines as spans of the original text (word-wrap no longer slices a string
+  per word; truncation's binary search no longer slices one per probe). FontStashSharp measures only a `string` or a
+  `StringBuilder` (no public span or `StringSegment` overload -- checked against the installed package), so
+  `FontStashTextMeasurer` copies the span into one reused `StringBuilder`. `FontService.GetTextMeasurer(font)` hands out
+  one measurer per font, kept. `ITextMeasurer` gains a member only when Engine code needs one -- everything else UIEngine
+  does with a font uses `SpriteFontBase` directly.
+- **Text is built when what it shows changes, never per frame.** Two halves. The framework's text sinks skip unchanged
+  input: `TextWindow.UpdateText` returns at once on equal text (a subclass whose other content changes its size calls
+  `RelayoutText`), and `Tooltip.ShowNear` re-lays-out only when its text, title, rows (compared by value, copied into a
+  list it owns) or sizing changed, and moves only when its position did. Text built from values -- a hover summary, a
+  cost badge, a price, a truncated title -- is a `KeyedCache<TKey, TValue>` field (UIEngine): one entry, the last key and
+  its value; nothing is declared ahead, the caller passes its current inputs as the key each time and the static builder
+  runs only when the key differs. The key holds every input at the precision shown (`RemainingSecondsShown`, not frames;
+  a `ModifierRow` with its frame count nulled), and constants (a registry, the asking element, a `FontService`) go in as
+  state. One field per thing shown, never one on `Element`: an element shows several things of different types, many
+  callers are window contents, and a pooled element's content-keyed field needs no clearing. A string already held is
+  fine in a key (equality checks the reference first); building a string to key on is not. Keying on a pooled element
+  itself is not either -- its content changes under the same reference. This replaced the hand-written ones
+  (`TruncatedTextCache`, `ResourceBarValueText`'s own cache, Admin Mode's title fields).
+- **Which hover timers tick.** A popup over a menu window (Inventory, Ability Scores, Health, loot, shop, trade) needs no
+  countdown: menu mode pauses the simulation, so a duration read once is still right (Ability Scores shows the one its
+  row was built with). The hotbar is menu-mode exempt and hovered while the game runs, so a timer in its summary must
+  tick: `HotbarController.UpdateSummary` rebuilds only when its gate changes (slot, bound, blocker), so a timer added to
+  the summary adds its shown seconds to that gate. None is shown there today -- cooldowns draw on the slot itself.

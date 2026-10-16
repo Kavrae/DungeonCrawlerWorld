@@ -1,8 +1,8 @@
 using Engine.ECS.Components;
-using Game.Effects;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Game.Effects;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
@@ -18,6 +18,10 @@ using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Tests.UIEngine;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Tests.Presentation;
 
@@ -68,7 +72,7 @@ public sealed class ActivationRefusalCursorTests
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog,
-            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), ScreenSize, simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), ScreenSize, simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
@@ -134,7 +138,7 @@ public sealed class ActivationRefusalCursorTests
         var itemCatalog = new ItemCatalog();
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog,
-            TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), ScreenSize, simulationClock: new SimulationClock());
+            TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), ScreenSize, simulationClock: new SimulationClock());
 
         Assert.IsTrue(hotbar.TryGetSlotSummary(HotkeySlot.Slot1, out _, out _, out var usableBlocker));
         Assert.AreEqual(ActivationBlocker.None, usableBlocker);

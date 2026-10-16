@@ -19,6 +19,9 @@ using Microsoft.Xna.Framework;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Tests.UIEngine;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Tests.Presentation;
 
@@ -197,8 +200,7 @@ public sealed class ToggleItemPresentationTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        var spriteRenderer = new SpriteRenderer();
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
         windowService.RegisterFactory<ContextMenu>(() => new ContextMenu(fontService, windowService, labelRenderer));
 

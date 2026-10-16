@@ -1,15 +1,17 @@
-using Engine.ECS.Components.Stores;
-using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.StatModifiers;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
-using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.Chrome;
 
 namespace Presentation.UI.Content;
 
@@ -45,7 +47,10 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
     private Window _hostWindow = null!;
     private Window _hoverPopup = null!;
 
-    private readonly ResourceBarValueText _valueText = new();
+    /// <summary>The "current / maximum" text drawn, rebuilt only when either number changes.</summary>
+    private readonly KeyedCache<(int Current, int Maximum), string> _valueTextCache = new();
+    private string _valueText = string.Empty;
+    private readonly TextSizeCache _valueTextSize = new();
 
     private bool _hasHealth;
     private float _healthFraction = 1f;
@@ -56,7 +61,7 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
     internal Window HoverPopup => _hoverPopup;
 
     /// <summary>The "current / maximum" text the bar draws, or null when the player has no health to show.</summary>
-    internal string? ValueText => _hasHealth ? _valueText.Text : null;
+    internal string? ValueText => _hasHealth ? _valueText : null;
 
     public void Initialize(Window hostWindow)
     {
@@ -105,7 +110,7 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
             _healthFraction = effectiveMaximumHealth > 0
                 ? MathHelper.Clamp(currentHealth / effectiveMaximumHealth, 0f, 1f)
                 : 1f;
-            _valueText.Update(ResourceBarValueText.DisplayedHealth(currentHealth), ResourceBarValueText.DisplayedMaximum(effectiveMaximumHealth));
+            _valueText = _valueTextCache.Get((ResourceBarRounding.DisplayedHealth(currentHealth), ResourceBarRounding.DisplayedMaximum(effectiveMaximumHealth)), static key => ResourceBarValueText.Format(key.Current, key.Maximum));
         }
 
         UpdateHover(mouseState, screenBounds);
@@ -149,7 +154,8 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
 
         if (_hasHealth)
         {
-            ResourceBarRenderer.DrawCenteredValueText(spriteBatch, fontService.GetFont((int)(barRectangle.Height * FontChrome.ResourceBarValueFontFraction)), barRectangle, _valueText.Text);
+            var valueFont = fontService.GetFont((int)(barRectangle.Height * FontChrome.ResourceBarValueFontFraction));
+            ResourceBarRenderer.DrawCenteredValueText(spriteBatch, valueFont, barRectangle, _valueText, _valueTextSize.SizeOf(valueFont, _valueText).X);
         }
     }
 }

@@ -1,6 +1,9 @@
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
 using Presentation.Rendering;
+using UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Presentation.UI.Content;
 
@@ -12,7 +15,7 @@ namespace Presentation.UI.Content;
 /// price + quantity both shown at first, but confirmed live that even the smaller
 /// CompactStatFontSizeFraction reads cramped once a 3-digit-or-more quantity has to share the row
 /// with a price string) -- the player already saw the price once, while dragging the item in from
-/// their own inventory, and can still see it again on hover (ShopStockPricing.ComputeHoverRows
+/// their own inventory, and can still see it again on hover (InventoryGridContent.ComputeShopRows
 /// applies to every cell in this grid uniformly, price included, regardless of what's drawn inline
 /// here), so it isn't needed a second time just to glance at what's currently offered. The trade
 /// grid is a third, distinct level of detail from the other two: the inventory grid is a glance-and-sort view (sprite + count, no price), the shop
@@ -25,9 +28,11 @@ namespace Presentation.UI.Content;
 /// ShopItemStackCell's own wide layout entirely, the same way that class's own DrawContent already
 /// replaces InventoryItemStackCell's.
 /// </summary>
-public sealed class TradeItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
-    : ShopItemStackCell(fontService, elementPoolService, labelRenderer, spriteSheetService, spriteRenderer)
+public sealed class TradeItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService)
+    : ShopItemStackCell(fontService, elementPoolService, labelRenderer, spriteSheetService)
 {
+    private readonly TextSizeCache _quantityTextSize = new();
+
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = ElementPoolService.SpriteBatch;
@@ -46,6 +51,7 @@ public sealed class TradeItemStackCell(FontService fontService, ElementPoolServi
         // inventory cell's lone quantity badge, is too large once this cell's own small square
         // needs to fit a 3-digit-or-more quantity legibly.
         var quantityFont = FontService.GetFont((int)(ContentSize.Y * CompactStatFontSizeFraction));
-        ItemIconRenderer.DrawBottomAligned(spriteBatch, quantityFont, _quantity.ToString(), ContentAbsolutePosition, ContentSize, alignRight: false, Color.White);
+        var quantityText = _quantityText.Get(_quantity, static quantity => quantity.ToString());
+        ItemIconRenderer.DrawBottomAligned(spriteBatch, quantityFont, quantityText, _quantityTextSize.SizeOf(quantityFont, quantityText), ContentAbsolutePosition, ContentSize, alignRight: false, Color.White);
     }
 }

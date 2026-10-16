@@ -1,9 +1,9 @@
 using Engine.ECS.Components;
-using Game.Effects;
-using Game.Effects.Entries;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Game.Effects;
+using Game.Effects.Entries;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
@@ -22,6 +22,10 @@ using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
+using Tests.UIEngine;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Tests.Presentation;
 
@@ -141,7 +145,7 @@ public sealed class DisabledActionInputTests
             playerCommands,
             simulationClock: clock);
 
-        var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), actionStateView, new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog, TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: clock);
+        var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), actionStateView, new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog, TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: clock);
         var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting, new TooltipController());
 
         return new Harness

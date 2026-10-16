@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Presentation.UI.Inventory;
+using UIEngine.UI;
 
 namespace Presentation.UI;
 

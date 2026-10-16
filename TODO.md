@@ -1,25 +1,3 @@
-### Combat Overhaul : Dodge
-
-**Core mechanic landed** -- see `IMPLEMENTATION-NOTES.md`'s own "Combat Overhaul: Dodge" section for
-what's built. Still open below: Block, Counterspell, the AdvancedDodge buff (Low Priority, this file),
-and independently validating the 0.5s-1.0s window against Dark Souls 3/other games' dodge timings.
-
-# Clean these up
-Keep Movement, QuickAttack, and magic missle as immediate actions, Dodge as the only FreeCast action, and change all others to delayed. Immediate and FreeCast actions should be rare. 
-All delayed actions keep the target shape drawn on the map (so enemies show their attack target area) until they activate. Adjust the colors to make it clear which are enemy vs player. Red for enemy target shapes that cannot be dodged and yellow for ones that can be dodged. Light green for player arm and dark green for player target.
-While an entity is charging an action/item, put that action/item's sprite as a badge above their sprite on the map.
-This allows FreeCast actions like dodge, block, parry, counterspell, etc to have a purpose and timing.
-This makes combat slower and more deliberate instead of spamming actions. Shifting to more of a 2d souls-like game
-The windup path now carries items as well as actions (`PendingWindupComponent` with `Kind` Item, started by `Windups.Begin`, resolved through `WindupResolvers`), so making a potion, scroll or wand Delayed is its timing plus a resolver that applies it: today's item resolver (`ToggleItemWindupResolver`) only lights toggle items, and `ItemActivationSystem` only winds up a toggle.
-Lower enemy count to make this more deliberate and punishing combat style work.
-Give every entity three default core actions. QuickAttack, PowerAttack, and Dodge.
-	QuickAttack is an immediate adjacent-target action (so can't be dodged) with low damage. No cooldown besides global. This replaces Punch, defaulting to the R key.
-	PowerAttack is a delayed adjacent-target action with a 1 second delay (so can be dodged) with high damage. No cooldown besides global. Default to the Q key.
-	Dodge is a FreeCast action to avoid attacks. Its own flat 4 second cooldown (not an increased global cooldown) prevents Dodge from being used as a safer form of movement. Default to the F key. Not all attacks can be dodged; such as auto-targeting attacks like Magic Missile or AOE attacks like explosions. Mark PowerAttack as CanBeDodged (find a better name for this). After dodge is armed (adjacent+self), it can be activated with the same key, click, or directional movement key. Same key or clicking on the player will dodge in-place. Directional movement or clicking an adjacent tile will dodge while moving to that tile (if not occupied. If occupied, the entity will dodge in place). After activating Dodge, any action or item with CanBeDodged will not affect the dodging entity.
-Dexterity increases dodge's activation time from 0.5 seconds at dexterity 1 to 1 second at dexterity 300. Check the values used by games like Dark Souls 3, and other games with a dodge mechanic, to validate these activation times.
-Block (such as via a shield) will be added later as another FreeCast action with a longer duration but does not fully block damage and effects.
-Counterspell will be added later as another FreeCast action that will attempt to cancel delayedAction spells. Determine a way to make this fair for both the source and target.
-
 ### Stances and Toggles
 Stances: a set of toggle actions that boost one specialty while weakening another. 
 Add a visual element to toggle actions/items to indicate when they're toggled on. Compare a rotating inner-fade glow to industry standard.
@@ -370,21 +348,34 @@ Toxic Potion. Name the action or item as well: "Draught of Thrift (Player1)".
 - **Display:** `ActionSourceNaming.Describe` prints "{cause} ({entity})" for an entity source with a
   cause, the entity alone without one.
 
-#### AOE vs targeted melee attacks (experimental)
+#### Melee targeting shapes -- Strike, Sweep and Whirlwind
 
 Every melee attack today is an Adjacent ring (`QuickAttackAction`, `PowerAttackAction`): it hits
-everyone around the attacker, and an NPC queues the whole ring (`TestCombatBehaviorSystem`). Try
-splitting melee into two kinds and see whether it plays better:
-- **Targeted melee:** one adjacent tile, chosen like Dodge's (`TargetShape.SingleTarget`, Range 1,
-  `DistanceMetric.Chebyshev`) -- a stab or a jab that only hits who it's aimed at.
-- **AOE melee:** the Adjacent ring as now, or a Cone -- a sweep or a cleave, usually slower or
-  weaker per target.
-- Melee stays Ground only (`TargetingModes.GroundOnly`, enforced by `TargetingContentValidation`):
-  a targeted melee aims at a tile, not an entity that could step away.
-- Which of QuickAttack/PowerAttack becomes which, and whether NPCs pick the target tile (the
-  adjacent hostile) or keep swinging the ring.
-Separate from the rest of the melee work because it is an experiment: if it doesn't feel better in
-play, revert to the all-ring melee.
+everyone around the attacker, and an NPC swings the whole ring (`TestCombatBehaviorSystem`). Give
+melee three shapes, all reaching only the tiles adjacent to the attacker's footprint, so a melee
+action can be built to suit what it is:
+- **Strike** (single target): one adjacent tile -- a stab or a jab that hits only what it's aimed
+  at. Today's nearest equivalent is Dodge's pick (`TargetShape.SingleTarget`, Range 1,
+  `DistanceMetric.Chebyshev`).
+- **Sweep** (directional arc): the adjacent tiles on one side of the attacker, centred on the aimed
+  tile -- a cleave. A new shape: `TargetShape.Cone` uses an angle threshold over a Chebyshev range, so
+  either an adjacent-only arc is its own shape or Cone gains an adjacent-only form. Decide the arc's
+  width (3 tiles for a 1x1 attacker?) and how it follows a larger footprint's edge.
+- **Whirlwind** (circle): the whole adjacent ring, today's `TargetShape.Adjacent` and every current
+  melee attack's shape. Stays Ground only.
+- **Targeting modes:** Strike and Sweep follow the player's Target/Ground mode like any other aimed
+  action. In Target mode they mark the adjacent entity; a Delayed one lands on the marked entity's
+  tile, or the adjacent tile toward it if it stepped away (the "clamped to the farthest tile in range
+  toward it" rule at Range 1), and Sweep centres its arc there. In Ground mode they hit whoever stands
+  on the aimed tiles when they land. This lifts the "melee is Ground only" rule in
+  `TargetingContentValidation` (and `TargetingModes.GroundOnly`'s doc comment) for Strike and Sweep;
+  Whirlwind and other Adjacent shapes stay Ground only.
+- **Content:** decide which shape QuickAttack and PowerAttack get, and whether more melee actions
+  should show the other shapes.
+- **NPCs** choose between them (aim Strike and Sweep at the adjacent hostile, Whirlwind when several
+  are adjacent), so `TestCombatBehaviorSystem` stops always swinging the ring.
+
+Replaces the former "AOE vs targeted melee attacks (experimental)" entry, which kept melee Ground only.
 
 #### ProcessingTierResolver.PromotionsHeld set after the session is assembled
 
@@ -2076,6 +2067,63 @@ To settle when designing it:
 
 ### High Priority
 
+#### Replace the text outline with SDF glyphs and an outline shader
+
+Every outlined text draw (`ContrastTextRenderer`: map glyphs, badges, hotbar and HUD numbers, floating text) is 9
+`DrawString` calls -- 8 offset copies in black, then the fill. Draw it once instead: glyphs from a signed distance
+field atlas, and a pixel shader that turns distance into fill and outline (fill colour, outline colour and thickness,
+alpha as parameters). A distance field also stays sharp when scaled, so one atlas size could serve every font size
+`FontService` now keeps a font per pixel size for.
+- **Where the atlas comes from.** `FNA.NET.FontStashSharp` 2.0.0 has no SDF mode (upstream added one in 1.5.8,
+  after the fork branched; no fork version has it). The fork already rasterizes through FreeType, which renders SDF
+  glyphs itself (`FT_RENDER_MODE_SDF`, FreeType 2.11+) -- a rasterizer setting or patch there, or an atlas of our
+  own built from FreeType's SDF bitmaps. Upstream's SDF mode and its `SDFTextBatch.DrawStrokeString` (thickness,
+  smoothness) are the reference.
+- **The shader.** Nothing here loads an `Effect` yet (`MapRenderer` tints corpses grey for want of one), so this
+  brings in effect compilation and loading: find what shader format FNA.NET's graphics backend takes and how it's
+  built.
+- **Batching and order.** Outlined glyphs draw among sprites (the map's row walk), and an effect is set per
+  `SpriteBatch.Begin`, so either outlined text gets its own pass -- changing draw order and adding flushes and
+  scissor resets -- or one shader draws both sprites and SDF text. The atlas wants linear sampling where every pass
+  here uses `SamplerState.PointClamp`.
+- **The look.** The outline is a hard 1 px pixel-art edge today; the shader's edge must match it (no soft
+  falloff unless chosen), at every font size drawn.
+- Decide whether plain, unoutlined text moves to the same path.
+
+Try it on the map glyphs first and compare with the 9-draw outline for look and frame cost (benchmark at a busy zoom)
+before moving every caller. Separately, `FNA.NET.FontStashSharp` 2.1.1 (Feb 2026) needs FNA.NET >= 2.2.1.2602; take
+it with the next FNA.NET upgrade.
+
+#### Investigate breaking UiInputController into smaller pieces
+
+`UIEngine/Input/UiInputController.cs` is ~1750 lines and 127 members. The UIEngine split moved its game half out
+(`IUiInputHandler`, `IContentDragSource`, `IContentDropHandler`), but the framework half is still one class doing
+every job at once:
+- hit-testing across layers and menu mode (`TryHitTestInteraction`, `TryHitTestWhere`), and the cached hovered
+  element (`RefreshHoveredInteraction`);
+- keyboard focus: focus, Tab cycling, focus redirect on close or minimize, the ancestor chain it watches;
+- keyboard routing: hotkeys to the focused element, key presses, text input (`TextInputEXT`), Escape and its
+  per-layer behaviour, hold-to-close-all;
+- clicks: press/release, raise to front, the active window, pending single clicks versus double clicks;
+- window move and resize drags, with their bounds-clamping math (`ComputeResize`, `ClampResizeToBounds`);
+- scrollbars: thumb drag, track paging with repeat, the mouse wheel and its horizontal rules;
+- the TextBox selection drag;
+- right-drag versus right-click tap;
+- the content-drag gesture (capture, tap threshold, ghost delay, drop dispatch);
+- the cursor (resize, move, refusal, I-beam) and the hover highlights on buttons and scrollbars;
+- dispatch to the input and drop handlers, and `PointerState` publishing.
+Investigate which of these are separable without passing the whole controller around -- e.g. a focus manager, a
+click/double-click tracker, a window drag/resize interaction, a scrollbar interaction, the content-drag gesture, the
+cursor selector, and pure static math (resize/clamp) -- each owning its own state, with the controller left as the
+per-frame orchestrator that orders them. Watch the ordering rules that live in `Update` today (key routing before
+mouse; press consumption before hit-testing; content-drag capture before handlers' `OnPress`; cursor before
+`OnPointerUpdate`), the cross-talk between pieces (closing an element cancels its pending click and redirects focus;
+a scrollbar press must not click; a real content drag suppresses the origin's click), and the tests that drive the
+controller end to end (`UiInputControllerTests`, `ScrollbarInputTests`, `TextBoxTests` and others go through
+`Update(keyboard, mouse)`), which should keep passing unchanged as the proof nothing moved. The outcome may be
+"split these N, leave the rest"; the point is a controller small enough that a new input feature has one obvious
+home -- the engine IDE (epic child 5) will add its own.
+
 #### Read the player's effective actions, not the bare catalog
 
 `HotbarContent` (slot drawing, `TryGetSlotSummary`) and `ActionTargetingController` (the toggle check,
@@ -2263,9 +2311,28 @@ the reverse.
 #### Walking and action animations
 
 Inspired by Dungeon Settlers. Supersedes the former Medium "Lerp movement animation between tiles"
-entry. Two parts:
+entry. Three parts:
+- **Movement on its own cooldown**: today a step sets the shared `ActionLockComponent`
+  (`MovementSystem` through `ActionLockGate.Lock`, ×√2 on a diagonal), so an entity either moves or
+  acts. Give movement a separate cooldown -- a plain `uint` "can step again at" frame compared at the
+  reader, the "nothing happens, it just stops gating" timer shape -- so an entity can attack, cast or
+  use an item while walking, which speeds up the pace of play. Movement stops reading and writing the
+  action lock; actions stop being gated by a step. Decided rules:
+  - **Delayed windups**: a windup starts once the current step's walk animation has finished, and
+    blocks walking until it completes or is cancelled.
+  - **Dodge**: sets its own cooldown and the movement cooldown, never the action lock (it is FreeCast).
+  - **Stagger**: sets both the movement cooldown and the action lock, so the entity can neither move
+    nor act.
+  - **Movement speed**: one value sets both the walk animation's duration and the movement cooldown,
+    so the two always match. It scales off Dexterity on a curve of its own -- like the action lock's
+    (Dex 1 → 30 / 300 → 15 frames) but separate so it can be tuned separately -- and doesn't read
+    `ActionLockFrames`. The diagonal ×√2 and the Legs/Feet penalties in `BodyPartEffectsSystem` move
+    onto it.
+  - **NPCs** follow the same rules (their utility AI picks a move and an action independently).
+  Still open: how the input buffer holds one move and one action at the same time. Melee and
+  Target-mode resolution must hold up against a target that is mid-step more often than today.
 - **Walking**: entities teleport between tiles on-screen today. Lerp the sprite's rendered position
-  across the move's `ActionLockComponent`-driven frame count, plus a walk-cycle frame sequence where
+  over the movement-speed duration (above), plus a walk-cycle frame sequence where
   a sprite has one. Purely visual -- grid position/occupancy still change instantly on the same
   frame as today.
 - **Actions**: a short per-action animation (windup during a Delayed action's charge, a strike on
@@ -2421,6 +2488,17 @@ as if a key were pressed, a ready shape for "Replay by recording input" and "In-
 (Global).
 
 ### Medium Priority
+
+#### Separate the drawing of backgrounds, borders, content and titles across UI elements
+
+`Element.Draw` draws in a fixed order with a few hooks (`DrawHeader`, `DrawContent`, scrollbars), but
+many elements and window contents override `Draw` or `DrawContent` and draw their own background, border,
+glow or title text alongside their content, each in its own order. Do a cleanup pass over every UI
+element and window content so each layer -- background, border, title/header, content, scrollbars,
+overlays such as glows and markers -- is drawn in its own step, in one consistent order. Where the same
+logic repeats, consolidate it into `Element` or `Window` (for example a background or border step an
+element configures rather than draws itself), leaving overrides only for what is truly the element's own
+content.
 
 #### Clean up item and action tooltips
 
@@ -2919,11 +2997,47 @@ frame), and `visible_characters` gives a typewriter reveal. Text shaping, BiDi a
 handled by the `TextServer`, which is the part hardest to replicate; for Latin-script languages,
 FontStashSharp's measuring is enough.
 
+#### Inspection panel's minimize alternates between two looks
+
+Repeatedly toggling the inspection panel's minimize/restore button cycles through four states instead of two:
+restored -> minimized with no title -> restored -> minimized with the title -> (repeat). A minimized panel should look
+the same every time.
+
+Leads, not yet confirmed:
+- Minimizing clears the inspection target and the title in `InspectionWindow.OnDisplayModeChanged`, which runs on
+  `DisplayModeChanged` -- after `SetDisplayMode` has already laid out the minimized bar (`RecalculateMinimizedSize`)
+  with the old title -- so whether a title shows depends on the order of layout, the handler and whatever re-titles
+  the panel (`InspectionWindowContent` from `MapViewState.InspectionMode`) on the next restore.
+- The panel also sizes its collapsed bar by its own rule (`ApplyMinimizedSize(OriginalSize.X, OriginalSize.X)`: a
+  header as wide as the whole window, where every other window's is the window minus its border inset, and no
+  `MinimumSize`/`MaximumSize` clamp); `Folder` has a third rule. Once the cycle is fixed, consider one rule for a
+  minimized window's width (e.g. a `Window` option "keep the restored width when minimized") so no subclass computes
+  header and window sizes by hand.
+Check the title buttons' positions and the panel's width against `PlayerHealthBarContent` (`HudChrome`) in both modes.
+
+#### Investigate one rule set for what can be dragged and where it can drop
+
+The "can't drag this" and "can't drop that here" rules are spread across five places, each deciding part of it:
+- `DragPayload.CanBindToHotbar`: a Merged Stack or currency never binds to a hotbar slot.
+- `InventoryItemStackCell`: `CanBindToHotbar` (a single stack whose item passes `ItemHotkeyBindingQueries.CanBind`)
+  and `CanTrade` (`ItemDefinition.CanTrade` -- false for a loot box); `TryBeginContentDrag` refuses a cell that
+  can do neither (a loot box) and a display-only cell (`IsDragSource` false: a loot box reward).
+- `HotbarBindingDropHandler`: also refuses an item from another entity's inventory, and shows the refusal cursor.
+- `InventoryTransferDropHandler.AllowsDragStart`: refuses a cell that can't be staged while a shop is open
+  (`CanStageInTrade`), and a shop's own currency unless that shop is open.
+- The `IDragDropResolver`s and `ShopActions.CanTrade`: what a drop onto a shop or trade column actually does.
+Investigate whether these should become one statement of what a payload *is* allowed to do -- e.g. the payload
+carrying the item's own capabilities (can bind, can trade, can leave its owner) computed once at pickup, and every
+gate (start, refusal cursor, drop) asking the payload rather than re-deriving from the cell, the item definition or
+the handler's own type tests. Weigh it against keeping each rule beside the feature that owns it (the handler split
+from the UIEngine work, `IContentDropHandler`). The outcome may be "no change"; the point is that a new restriction
+(an equipped item, a quest item, a bound-to-owner item) has one obvious place to go.
+
 ### Low Priority
 
 #### Map glyphs overflow their tiles when zoomed out
 
-`MapRenderer` and `MapGameOverlay` draw glyphs and badges with fixed font sizes (`FontChrome.MapMediumFontSize`
+`MapRenderer` and `MapGameOverlay` draw glyphs and badges with fixed font sizes (`GameFontChrome.MapMediumFontSize`
 24, `MapLargeFontSize`, `MapHugeFontSize`, `MapTinyFontSize`, `MapBadgeFontSize`) tuned for `ZoomLevel.Team`'s
 36 px tiles, so at Neighborhood (18 px) and Borough (9 px) a glyph is larger than its tile and spills into its
 neighbours. Most of the spill is covered by later draws; what shows is a white mark in the row south of every wall
@@ -2987,19 +3101,6 @@ hovered, respecting `Pickable { should_block_lower, is_hoverable }`. It then emi
 `Pointer<DragDrop>` and friends as entity-targeted events that bubble up `ChildOf` to parents through
 observers, where a handler can stop propagation. Map entities and UI elements go through the same
 events, so a drag from the inventory onto a map tile is one drag, not two systems handing off.
-
-#### Split Presentation into Presentation + UIEngine projects
-
-Part of `EPIC-sprites-ui-engine-and-dev-tools.md` (child 4).
-
-Mirrors the Engine->Game split one layer up. Dependency rule: `UIEngine` references only `Engine`;
-`Presentation` references `UIEngine`/`Engine`/`Game`; never the reverse. Clearly-`UIEngine` and
-clearly-stays-`Presentation` sets are both fairly obvious (generic Element/window framework vs.
-game-specific concrete windows). The hard part: `UiInputController` is mostly generic but has
-game-specific branches (`HotbarController`/`ActionTargetingController`/drag-payload type-matching) woven
-directly into its methods -- needs those pulled behind a `UIEngine`-defined hook `Presentation`
-implements, not a straight file move. `ColorPalettes`/`Chrome` need the same judgment call. No
-migration plan designed -- purely a scoping note, low priority until UIEngine-shaped reuse becomes real.
 
 #### Abstract element pool factory registration
 

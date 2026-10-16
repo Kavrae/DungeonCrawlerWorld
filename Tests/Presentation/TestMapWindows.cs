@@ -6,8 +6,8 @@ using Game.Blueprints;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
-using Game.Modules.Core.Components;
 using Game.Modules.Auras;
+using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
@@ -18,6 +18,9 @@ using Presentation.MapRendering;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.FloatingText;
+using Tests.UIEngine;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Tests.Presentation;
 
@@ -96,9 +99,9 @@ internal static class TestMapWindows
         var auraPower = new AuraPowerView(new AuraField(world, terrain, auras, eventBus), auras);
 
         var floatingTextController = new FloatingTextController(eventBus, new SimulationClock());
-        var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, fontService, new Game.Modules.StatusEffects.StatusEffectDisplayRegistry(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new LabelRenderer());
+        var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, fontService, new Game.Modules.StatusEffects.StatusEffectDisplayRegistry(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new LabelRenderer());
 
-        var mapRenderer = new MapRenderer(mapView, auraPower, camera, windowService, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new LabelRenderer());
+        var mapRenderer = new MapRenderer(mapView, auraPower, camera, windowService, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new LabelRenderer());
         var mapGameOverlay = new MapGameOverlay(mapView, mapViewState, camera, actionTargeting, fontService, new LabelRenderer());
 
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(

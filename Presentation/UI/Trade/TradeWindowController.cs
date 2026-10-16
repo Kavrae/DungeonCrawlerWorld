@@ -1,7 +1,9 @@
 using Microsoft.Xna.Framework;
-using Presentation.UI.ColorPalettes;
 using Presentation.UI.Inventory;
 using Presentation.UI.Shops;
+using UIEngine.Geometry;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Trade;
 
@@ -128,15 +130,15 @@ public sealed class TradeWindowController(
         _layers.Add(UiLayer.DynamicHud, window);
 
         var screenSize = mapWindow.CurrentSize;
-        var centeredPosition = ScreenBoundsClamp.Clamp((screenSize - window.CurrentSize) / 2f, window.CurrentSize, screenSize);
+        var centeredPosition = RectangleClamp.ClampInside((screenSize - window.CurrentSize) / 2f, window.CurrentSize, screenSize);
         window.SetRelativePosition(centeredPosition);
 
         var leftPosition = new Vector2(centeredPosition.X - WindowCascadePlacement.Gap - inventoryWindow.CurrentSize.X, centeredPosition.Y);
-        inventoryWindow.SetRelativePosition(ScreenBoundsClamp.Clamp(leftPosition, inventoryWindow.CurrentSize, screenSize));
+        inventoryWindow.SetRelativePosition(RectangleClamp.ClampInside(leftPosition, inventoryWindow.CurrentSize, screenSize));
 
         var shopSize = new Vector2(shopWindowController.Rectangle.Width, shopWindowController.Rectangle.Height);
         var rightPosition = new Vector2(centeredPosition.X + window.CurrentSize.X + WindowCascadePlacement.Gap, centeredPosition.Y);
-        shopWindowController.SetPosition(ScreenBoundsClamp.Clamp(rightPosition, shopSize, screenSize));
+        shopWindowController.SetPosition(RectangleClamp.ClampInside(rightPosition, shopSize, screenSize));
 
         _window = window;
         _pendingCloseReason = CloseReason.Direct;

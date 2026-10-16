@@ -8,9 +8,12 @@ using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Presentation.Fonts;
-using Presentation.Rendering;
+
 using Presentation.UI.Chrome;
+using UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Presentation.UI.Content;
 
@@ -47,6 +50,22 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
     private bool _hasPotionCooldown;
     private int _potionCooldownFramesRemaining;
 
+    /// <summary>A number drawn below an icon, built and measured only when it changes.</summary>
+    private sealed class BelowIconNumber
+    {
+        private readonly KeyedCache<int, string> _text = new();
+        private readonly TextSizeCache _size = new();
+
+        public (string Text, Vector2 Size) Get(SpriteFontBase font, int number)
+        {
+            var text = _text.Get(number, static value => value.ToString());
+            return (text, _size.SizeOf(font, text));
+        }
+    }
+
+    private readonly Dictionary<StatusEffectType, BelowIconNumber> _stackCountNumbers = [];
+    private readonly BelowIconNumber _potionCooldownNumber = new();
+
     private Window _hostWindow = null!;
     private SpriteFontBase _font = null!;
     private SpriteFontBase _countdownFont = null!;
@@ -57,8 +76,8 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
 
         // Glyph drawn smaller than its background square -- a glyph sized to exactly fill the
         // square read as cramped/touching the border.
-        _font = fontService.GetFont((int)(Size.Y * FontChrome.PlayerStatusGlyphFontFraction));
-        _countdownFont = fontService.GetFont((int)(Size.Y * FontChrome.PlayerStatusCountdownFontFraction));
+        _font = fontService.GetFont((int)(Size.Y * GameFontChrome.PlayerStatusGlyphFontFraction));
+        _countdownFont = fontService.GetFont((int)(Size.Y * GameFontChrome.PlayerStatusCountdownFontFraction));
     }
 
     /// <summary>Which status effect types are active, their stack counts, and the potion cooldown are all decided here -- Draw only reads the cached results and lays out icons/text.</summary>
@@ -123,7 +142,7 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
 
         if (_stackCountsByType.TryGetValue(effectType, out var stackCount))
         {
-            DrawStackCount(spriteBatch, origin, size, stackCount);
+            DrawStackCount(spriteBatch, origin, size, effectType, stackCount);
         }
     }
 
@@ -136,26 +155,30 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
             _labelRenderer.DrawCentered(spriteBatch, _font, healthPotion.Glyph, origin, size, healthPotion.GlyphColor);
         }
 
-        DrawTextBelowIcon(spriteBatch, origin, size, PotionCooldownEffects.RemainingSeconds(framesRemaining).ToString());
+        DrawTextBelowIcon(spriteBatch, origin, size, _potionCooldownNumber.Get(_countdownFont, PotionCooldownEffects.RemainingSeconds(framesRemaining)));
     }
 
     /// <summary>No-ops at count &lt;= 1 -- a lone stack doesn't need a number, the same convention ItemIconRenderer.DrawQuantityBadge already uses for item stacks.</summary>
-    private void DrawStackCount(SpriteBatch spriteBatch, Vector2 origin, Vector2 size, int stackCount)
+    private void DrawStackCount(SpriteBatch spriteBatch, Vector2 origin, Vector2 size, StatusEffectType effectType, int stackCount)
     {
         if (stackCount <= 1)
         {
             return;
         }
 
-        DrawTextBelowIcon(spriteBatch, origin, size, stackCount.ToString());
+        if (!_stackCountNumbers.TryGetValue(effectType, out var stackCountNumber))
+        {
+            stackCountNumber = new BelowIconNumber();
+            _stackCountNumbers[effectType] = stackCountNumber;
+        }
+
+        DrawTextBelowIcon(spriteBatch, origin, size, stackCountNumber.Get(_countdownFont, stackCount));
     }
 
-    private void DrawTextBelowIcon(SpriteBatch spriteBatch, Vector2 origin, Vector2 size, string text)
+    private void DrawTextBelowIcon(SpriteBatch spriteBatch, Vector2 origin, Vector2 size, (string Text, Vector2 Size) number)
     {
-        var textSize = _countdownFont.MeasureString(text);
-        var textPosition = new Vector2(origin.X + (size.X - textSize.X) / 2f, origin.Y + size.Y + CountdownTextGap);
-
-        ContrastTextRenderer.Draw(spriteBatch, _countdownFont, text, textPosition);
+        var textPosition = new Vector2(origin.X + (size.X - number.Size.X) / 2f, origin.Y + size.Y + CountdownTextGap);
+        ContrastTextRenderer.Draw(spriteBatch, _countdownFont, number.Text, textPosition);
     }
 
     /// <summary>The square white tile with a 1px black border shared by every status/cooldown icon here -- DrawIcon and DrawPotionCooldownIcon otherwise only differ in what's drawn on top of it.</summary>

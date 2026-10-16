@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Presentation.MapRendering;
 using Presentation.Rendering;
 using SpriteFormat;
+using UIEngine.Rendering;
 
 namespace Tests.Presentation.MapRendering;
 

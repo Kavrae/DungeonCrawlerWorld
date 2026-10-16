@@ -10,6 +10,6 @@ namespace Engine.Utilities;
 /// </summary>
 public static class GlobalState
 {
-    /// <summary>F12-toggled, debug-build-only -- see UiInputController.HandleAdminModeToggle.</summary>
+    /// <summary>F12-toggled, debug-build-only -- see Presentation's AdminModeInputHandler.</summary>
     public static bool IsAdminModeOn { get; set; }
 }

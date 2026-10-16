@@ -12,6 +12,10 @@ using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Chrome;
 using Presentation.UI.Diagnostics;
+using Tests.UIEngine;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Tests.Presentation;
 

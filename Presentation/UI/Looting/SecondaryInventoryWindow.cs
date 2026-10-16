@@ -3,11 +3,12 @@ using Game.Spawning;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
-using Presentation.Rendering;
-using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Looting;
 

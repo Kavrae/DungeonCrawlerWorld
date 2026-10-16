@@ -8,10 +8,13 @@ using Microsoft.Xna.Framework;
 using Presentation.MapRendering;
 using Presentation.Rendering;
 using SpriteFormat;
+using Tests.UIEngine;
+using UIEngine.Rendering;
 
 namespace Tests.Presentation.MapRendering;
 
 [TestClass]
+[DoNotParallelize]
 public sealed class MapRendererTests
 {
     private static readonly Point Scroll = new(100, 200);
@@ -113,7 +116,7 @@ public sealed class MapRendererTests
         var auras = TestAuras.GlowOnlyCatalog();
         var auraPower = new AuraPowerView(new AuraField(TestWorlds.Create(new Map(new Vector3Int(64, 64, 1))), new TerrainRegistry(), auras, new EventBus()), auras);
 
-        var renderer = new MapRenderer(mapView, auraPower, camera, TestElementPoolServiceFactory.Create(TestFonts.Shared, labelRenderer), TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), labelRenderer);
+        var renderer = new MapRenderer(mapView, auraPower, camera, TestElementPoolServiceFactory.Create(TestFonts.Shared, labelRenderer), TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), labelRenderer);
 
         renderer.Update(0);
         renderer.InvalidateTerrain();

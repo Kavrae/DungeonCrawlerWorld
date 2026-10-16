@@ -1,8 +1,6 @@
-﻿using Engine.ECS.Systems;
-using Game.Views;
-using Effect = Game.Effects.Effect;
-using Engine.ECS.Components;
+﻿using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game.Floors;
@@ -10,20 +8,26 @@ using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Currency;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Currency;
 using Game.Modules.Shops;
+using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using Presentation.Fonts;
 using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
+using Tests.UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using Effect = Game.Effects.Effect;
 
 namespace Tests.Presentation;
 
@@ -130,7 +134,7 @@ public sealed class UiInputControllerTests
         return window;
     }
 
-    /// <summary>No CanUserClose (so no title buttons to intercept the click) -- lets a press over TitleRectangle resolve to a Move interaction instead.</summary>
+    /// <summary>No CanUserClose (so no title buttons to intercept the click) -- lets a press over HeaderRectangle resolve to a Move interaction instead.</summary>
     private static Window CreateMovableWindow(ElementPoolService windowService, Vector2 relativePosition)
     {
         var window = windowService.CreateElement<Window>(null, new ElementOptions
@@ -432,7 +436,7 @@ public sealed class UiInputControllerTests
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
-        var pressPoint = window.TitleRectangle.Center;
+        var pressPoint = window.HeaderRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
@@ -450,7 +454,7 @@ public sealed class UiInputControllerTests
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
-        var pressPoint = window.TitleRectangle.Center;
+        var pressPoint = window.HeaderRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
@@ -467,7 +471,7 @@ public sealed class UiInputControllerTests
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
-        var pressPoint = window.TitleRectangle.Center;
+        var pressPoint = window.HeaderRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
@@ -501,7 +505,7 @@ public sealed class UiInputControllerTests
         parent.AddChild(child);
         var controller = CreateController([parent], [], [], [], LargeScreenSize);
 
-        var pressPoint = child.TitleRectangle.Center;
+        var pressPoint = child.HeaderRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
@@ -516,7 +520,7 @@ public sealed class UiInputControllerTests
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
-        var pressPoint = window.TitleRectangle.Center;
+        var pressPoint = window.HeaderRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
         Assert.AreEqual(ElementDragInteractionKind.Move, controller.ActiveInteraction.Kind);
@@ -684,7 +688,7 @@ public sealed class UiInputControllerTests
         var smallScreen = new Vector2(300, 200);
         var controller = CreateController([window], [], [], [], smallScreen);
 
-        var pressPoint = window.TitleRectangle.Center;
+        var pressPoint = window.HeaderRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
@@ -702,7 +706,7 @@ public sealed class UiInputControllerTests
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
-        var pressPoint = window.TitleRectangle.Center;
+        var pressPoint = window.HeaderRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
@@ -733,7 +737,7 @@ public sealed class UiInputControllerTests
         parent.AddChild(child);
         var controller = CreateController([parent], [], [], [], LargeScreenSize);
 
-        var pressPoint = child.TitleRectangle.Center;
+        var pressPoint = child.HeaderRectangle.Center;
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
 
@@ -866,7 +870,7 @@ public sealed class UiInputControllerTests
         var window = CreateMovableWindow(windowService, new Vector2(50, 60));
         var controller = CreateController([window], [], [], [], LargeScreenSize);
 
-        var hoverPoint = window.TitleRectangle.Center;
+        var hoverPoint = window.HeaderRectangle.Center;
         controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Released));
 
         Assert.AreEqual(MouseCursor.SizeAll, controller.CurrentCursor);
@@ -1647,7 +1651,7 @@ public sealed class UiInputControllerTests
         container.AddChild(textBox);
         var controller = CreateController([container], [], [], [], LargeScreenSize);
 
-        var titlePoint = container.TitleRectangle.Center;
+        var titlePoint = container.HeaderRectangle.Center;
         controller.Update(NoKeys, MouseAt(titlePoint.X, titlePoint.Y, ButtonState.Released));
         controller.Update(NoKeys, MouseAt(titlePoint.X, titlePoint.Y, ButtonState.Pressed));
 
@@ -2204,7 +2208,7 @@ public sealed class UiInputControllerTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
-            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer()));
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
 
         var cell = windowService.CreateElement<InventoryItemStackCell>(null, new ElementOptions
         {
@@ -2217,7 +2221,7 @@ public sealed class UiInputControllerTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, itemCatalog: itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), new ActionCatalog(), itemCatalog,
-            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
@@ -2246,7 +2250,7 @@ public sealed class UiInputControllerTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
-            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer()));
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
 
         var cell = windowService.CreateElement<InventoryItemStackCell>(null, new ElementOptions
         {
@@ -2259,7 +2263,7 @@ public sealed class UiInputControllerTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, itemCatalog: itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), new ActionCatalog(), itemCatalog,
-            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
@@ -2475,8 +2479,7 @@ public sealed class UiInputControllerTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        var spriteRenderer = new SpriteRenderer();
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
@@ -2523,8 +2526,7 @@ public sealed class UiInputControllerTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        var spriteRenderer = new SpriteRenderer();
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
@@ -2677,7 +2679,7 @@ public sealed class UiInputControllerTests
     /// <summary>
     /// Same shape as BuildInventoryToInventoryDragHarness, but sourceEntityId is world.PlayerEntityId
     /// and destinationEntityId carries a ShopComponent -- for exercising the shop-aware branches of
-    /// TryStartContentDrag (refuses to even pick up an Ineligible cell) and ResolveContentDrag
+    /// InventoryTransferDropHandler.AllowsDragStart (refuses to even pick up an Ineligible cell) and ResolveContentDrag
     /// (routes through ShopActions.TrySellToShop/TryBuyFromShop instead of a plain transfer).
     /// mapViewState.OpenShopEntityId is set to shopEntityId, mirroring what ShopWindowController.
     /// OpenShop does for real. potionItemId carries GameTags.ItemConsumablePotion (tradeable with an allowedTags:
@@ -2711,9 +2713,8 @@ public sealed class UiInputControllerTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        var spriteRenderer = new SpriteRenderer();
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
-        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
+        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
@@ -2823,7 +2824,7 @@ public sealed class UiInputControllerTests
     /// sell/direct-buy price assertions (an extra unit already sitting on the shop shifts which
     /// band a sale/purchase prices against). Both the player and the shop start with 1000 Gold --
     /// comfortably affording a sale in either direction, so UpdateShopEligibilityState never marks
-    /// a cell Ineligible for being unaffordable and TryStartContentDrag's own "can't drag what you
+    /// a cell Ineligible for being unaffordable and InventoryTransferDropHandler.AllowsDragStart's own "can't drag what you
     /// can't trade" gate never spuriously blocks a drag this harness needs to actually start.
     /// world (an IPlayerQuery, PlayerEntityId == playerEntityId) is returned as playerQuery -- the
     /// composed direct-sell/direct-buy branches need a real IPlayerQuery to resolve the trade-
@@ -2857,10 +2858,9 @@ public sealed class UiInputControllerTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        var spriteRenderer = new SpriteRenderer();
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
-        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
-        windowService.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
+        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
+        windowService.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
         windowService.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(fontService, windowService, labelRenderer));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
         var tooltipController = new TooltipController();
@@ -3179,8 +3179,7 @@ public sealed class UiInputControllerTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        var spriteRenderer = new SpriteRenderer();
-        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: playerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
@@ -3331,7 +3330,7 @@ public sealed class UiInputControllerTests
     }
 
     /// <summary>
-    /// A shop's own Gold must still never be directly Takeable by the player -- TryStartContentDrag
+    /// A shop's own Gold must still never be directly Takeable by the player -- InventoryTransferDropHandler.AllowsDragStart
     /// now lets a shop-origin currency drag start at all (see its own doc comment), purely so it can
     /// reach the trade-shop column, but dropping it anywhere else (here, straight onto the player's
     /// own currency row, bypassing the trade window entirely) must still fail with no state changed.
@@ -3345,7 +3344,7 @@ public sealed class UiInputControllerTests
 
         DragGoldElement(controller, shopWindow, playerWindow);
 
-        Assert.AreEqual(1000, ReadGold(componentManager, shopEntityId), "A direct Take must never succeed, regardless of TryStartContentDrag now letting the drag itself start.");
+        Assert.AreEqual(1000, ReadGold(componentManager, shopEntityId), "A direct Take must never succeed, regardless of InventoryTransferDropHandler.AllowsDragStart now letting the drag itself start.");
         Assert.AreEqual(0, ReadGold(componentManager, playerEntityId));
     }
 
@@ -3373,12 +3372,11 @@ public sealed class UiInputControllerTests
         var labelRenderer = new LabelRenderer();
         var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        var spriteRenderer = new SpriteRenderer();
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
         windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, labelRenderer));
         windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, labelRenderer));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
-        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService, spriteRenderer));
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
@@ -3484,7 +3482,7 @@ public sealed class UiInputControllerTests
 
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, new ItemCatalog()), TestActionStateViews.Over(componentManager, actionCatalog), new HotkeyBindingCommands(componentManager, new ItemCatalog(), new EventBus()), actionCatalog, new ItemCatalog(),
-            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new SpriteRenderer(), new Vector2(1920, 1080), simulationClock: new SimulationClock());
+            fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },

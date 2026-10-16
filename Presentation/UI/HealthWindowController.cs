@@ -1,6 +1,8 @@
 using Game.World;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI;
 
@@ -21,7 +23,7 @@ public sealed class HealthWindowController(
     private Button _button = null!;
     private WindowLifecycle<HealthWindow> _slot = null!;
 
-    /// <summary>Lets a global keyboard hotkey (U -- see UiInputController.HandleWindowToggleHotkeys) reuse the same open/close behavior the button's own Clicked handler already has, without exposing _windowLifecycle itself.</summary>
+    /// <summary>Lets a global keyboard hotkey (U -- a KeyPressInputHandler registered in ShellBootstrapper) reuse the same open/close behavior the button's own Clicked handler already has, without exposing _windowLifecycle itself.</summary>
     public void ToggleHealthWindow() => _slot.Toggle();
 
     public void Initialize(UiLayerStack layers)
@@ -32,7 +34,7 @@ public sealed class HealthWindowController(
         {
             Layout = new ElementLayoutOptions { RelativePosition = HealthWindowChrome.ButtonPosition, Size = HealthWindowChrome.ButtonSize, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
-            Text = new TextOptions { Text = HeartGlyph, TextColor = WindowPalette.HeartGlyphColor },
+            Text = new TextOptions { Text = HeartGlyph, TextColor = GameWindowPalette.HeartGlyphColor },
             Button = new ButtonOptions { HotkeyLabel = "U" },
         });
         _button.Initialize();

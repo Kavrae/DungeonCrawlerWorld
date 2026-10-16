@@ -6,7 +6,7 @@ namespace Presentation.Input.DragDrop;
 
 /// <summary>
 /// The input layer's own default drag-drop resolution -- always registered last in
-/// UiInputController's resolver list and always claims, so it only ever runs once every
+/// InventoryTransferDropHandler's resolver list and always claims, so it only ever runs once every
 /// feature-specific resolver (Trade, Shop) has already declined the drag. Not itself a "feature"
 /// opting in, unlike ShopDragDropResolver/TradeDragDropResolver.
 /// </summary>

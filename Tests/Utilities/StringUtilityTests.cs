@@ -8,7 +8,47 @@ public sealed class StringUtilityTests
     /// <summary>Fixed pixel width per character, so wrap/truncate math is hand-verifiable in tests.</summary>
     private sealed class FixedWidthTextMeasurer(float widthPerCharacter) : ITextMeasurer
     {
-        public float MeasureWidth(string text) => text.Length * widthPerCharacter;
+        public float MeasureWidth(ReadOnlySpan<char> text) => text.Length * widthPerCharacter;
+    }
+
+    [TestMethod]
+    public void TruncateWithEllipsis_TextThatFits_IsReturnedUnchanged()
+    {
+        const string text = "abcde";
+
+        Assert.AreSame(text, StringUtility.TruncateWithEllipsis(new FixedWidthTextMeasurer(10), text, maximumWidth: 50));
+    }
+
+    [TestMethod]
+    public void TruncateWithEllipsis_TextTooWide_KeepsTheLongestPrefixThatFitsWithTheEllipsis()
+    {
+        var truncated = StringUtility.TruncateWithEllipsis(new FixedWidthTextMeasurer(10), "abcdefghij", maximumWidth: 65);
+
+        Assert.AreEqual("abc...", truncated);
+    }
+
+    [TestMethod]
+    public void TruncateWithEllipsis_NoRoomForAnyCharacter_IsTheEllipsisAlone()
+    {
+        var truncated = StringUtility.TruncateWithEllipsis(new FixedWidthTextMeasurer(10), "abcdefghij", maximumWidth: 35);
+
+        Assert.AreEqual("...", truncated);
+    }
+
+    [TestMethod]
+    public void WidestLineWidth_MeasuresEachLineWithoutItsCarriageReturn()
+    {
+        var widest = StringUtility.WidestLineWidth(new FixedWidthTextMeasurer(10), "ab\r\nabcd\r\nabc");
+
+        Assert.AreEqual(40f, widest);
+    }
+
+    [TestMethod]
+    public void WidestLineWidth_ATrailingNewline_EndsWithAnEmptyLine()
+    {
+        var widest = StringUtility.WidestLineWidth(new FixedWidthTextMeasurer(10), "abc\n");
+
+        Assert.AreEqual(30f, widest);
     }
 
     [TestMethod]
@@ -203,7 +243,7 @@ public sealed class StringUtilityTests
     /// whose real width is far larger than the space-based CharacterWidth estimate suggests.</summary>
     private sealed class VariableWidthTextMeasurer : ITextMeasurer
     {
-        public float MeasureWidth(string text)
+        public float MeasureWidth(ReadOnlySpan<char> text)
         {
             var width = 0f;
             foreach (var character in text)

@@ -4,12 +4,13 @@ using FontStashSharp;
 using Game.Views;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Presentation.Fonts;
 using Presentation.Rendering;
-using Presentation.UI;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 using SpriteFormat;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Presentation.MapRendering;
 
@@ -74,7 +75,6 @@ public sealed class MapRenderer
     private readonly MapCamera _camera;
     private readonly ElementPoolService _elementPoolService;
     private readonly SpriteSheetService _spriteSheetService;
-    private readonly SpriteRenderer _spriteRenderer;
     private readonly LabelRenderer _labelRenderer;
     private readonly AuraGlowBlend _auraGlowBlend;
 
@@ -124,7 +124,6 @@ public sealed class MapRenderer
         ElementPoolService elementPoolService,
         FontService fontService,
         SpriteSheetService spriteSheetService,
-        SpriteRenderer spriteRenderer,
         LabelRenderer labelRenderer)
     {
         _mapView = mapView;
@@ -132,16 +131,15 @@ public sealed class MapRenderer
         _camera = camera;
         _elementPoolService = elementPoolService;
         _spriteSheetService = spriteSheetService;
-        _spriteRenderer = spriteRenderer;
         _labelRenderer = labelRenderer;
         _auraGlowBlend = new AuraGlowBlend(auraPower);
         _terrainCells = new MapTerrainCells(mapView, spriteSheetService.Sprites);
 
-        _mediumFont = fontService.GetFont(FontChrome.MapMediumFontSize);
-        _largeFont = fontService.GetFont(FontChrome.MapLargeFontSize);
-        _hugeFont = fontService.GetFont(FontChrome.MapHugeFontSize);
-        _tinyFont = fontService.GetFont(FontChrome.MapTinyFontSize); // ~1/3 of _mediumFont, for the tiny-entity grid.
-        _badgeFont = fontService.GetFont(FontChrome.MapBadgeFontSize); // Double _tinyFont, for the up/down layer-occupancy badges -- legible at a glance without competing with the main glyph.
+        _mediumFont = fontService.GetFont(GameFontChrome.MapMediumFontSize);
+        _largeFont = fontService.GetFont(GameFontChrome.MapLargeFontSize);
+        _hugeFont = fontService.GetFont(GameFontChrome.MapHugeFontSize);
+        _tinyFont = fontService.GetFont(GameFontChrome.MapTinyFontSize); // ~1/3 of _mediumFont, for the tiny-entity grid.
+        _badgeFont = fontService.GetFont(GameFontChrome.MapBadgeFontSize); // Double _tinyFont, for the up/down layer-occupancy badges -- legible at a glance without competing with the main glyph.
 
         _lootBagSprite = spriteSheetService.Sprites.TryGetFirst(LootBagSpriteName, out var lootBagSprite) ? lootBagSprite : null;
 
@@ -441,14 +439,14 @@ public sealed class MapRenderer
         drawnTop = footprintTopLeft.Y;
         if (visual.Sprite is not { } sprite)
         {
-            return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, (SpriteView?)null, font, visual.Glyph, visual.IsDead ? Color.Gray : visual.GlyphColor, footprintTopLeft, footprintSize, Color.White, alphaMultiplier, outline: true);
+            return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _labelRenderer, (SpriteView?)null, font, visual.Glyph, visual.IsDead ? Color.Gray : visual.GlyphColor, footprintTopLeft, footprintSize, Color.White, alphaMultiplier, outline: true);
         }
 
         var (drawnTopLeft, drawnSize) = footprintTiles is { } tiles
             ? SpritePlacementMath.DrawnRectangle(footprintTopLeft, footprintSize, tiles, new Point(sprite.SourceRectangle.Width, sprite.SourceRectangle.Height), sprite.Placement)
             : (footprintTopLeft, footprintSize);
         drawnTop = drawnTopLeft.Y;
-        return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, sprite, font, string.Empty, Color.White, drawnTopLeft, drawnSize, visual.IsDead ? Color.Gray : Color.White, alphaMultiplier, outline: true);
+        return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _labelRenderer, sprite, font, string.Empty, Color.White, drawnTopLeft, drawnSize, visual.IsDead ? Color.Gray : Color.White, alphaMultiplier, outline: true);
     }
 
     /// <summary>One Tiny occupant in the tile's 3x3 sub-grid, at the cell for how many of the tile's Tiny occupants were drawn before it. Returns whether anything was drawn, so an occupant with no visual doesn't take a cell.</summary>
@@ -510,7 +508,7 @@ public sealed class MapRenderer
         var badgeSize = new Vector2(tileSize.X, tileSize.Y) * LootBagBadgeSizeFraction;
         var badgePosition = new Vector2(footprintTopLeft.X + footprintSize.X - badgeSize.X, footprintTopLeft.Y);
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, lootBagSprite, _badgeFont, string.Empty, tint, badgePosition, badgeSize, tint, outline: true);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _labelRenderer, lootBagSprite, _badgeFont, string.Empty, tint, badgePosition, badgeSize, tint, outline: true);
     }
 
     /// <summary>
@@ -532,7 +530,7 @@ public sealed class MapRenderer
         var badgePosition = new Vector2(footprintTopLeft.X + (footprintSize.X - badgeSize.X) / 2f, cueTop - badgeSize.Y);
 
         SpriteView? actionSprite = action.SpriteName is { } spriteName && _spriteSheetService.Sprites.TryGetFirst(spriteName, out var icon) ? icon : null;
-        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _spriteRenderer, _labelRenderer, actionSprite, _badgeFont, action.Glyph, action.GlyphColor, badgePosition, badgeSize, Color.White, outline: true);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _labelRenderer, actionSprite, _badgeFont, action.Glyph, action.GlyphColor, badgePosition, badgeSize, Color.White, outline: true);
     }
 
     private void DrawEntityIcons(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, EntityStatusView status, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize, float cueTop)

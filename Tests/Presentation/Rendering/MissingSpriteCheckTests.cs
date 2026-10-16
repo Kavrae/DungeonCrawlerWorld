@@ -8,6 +8,7 @@ using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.Rendering;
+using Tests.UIEngine;
 
 namespace Tests.Presentation.Rendering;
 

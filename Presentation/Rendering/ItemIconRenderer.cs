@@ -12,16 +12,10 @@ public static class ItemIconRenderer
     private static readonly Vector2 QuantityShadowOffset = new(-1, -1);
     private static readonly Vector2 QuantityTextPadding = new(0, 0);
 
-    /// <summary>No-ops at quantity &lt;= 1 -- a lone stack doesn't need a number. A wand's own remaining/max charges used to replace this outright ("5/6" instead of the plain count) but that's shown in the hover tooltip now instead -- every item's badge is just its plain Quantity, charges or not.</summary>
-    public static void DrawQuantityBadge(SpriteBatch spriteBatch, SpriteFontBase quantityFont, int quantity, Vector2 contentPosition, Vector2 contentSize)
-    {
-        if (quantity <= 1)
-        {
-            return;
-        }
-
-        DrawBottomAligned(spriteBatch, quantityFont, quantity.ToString(), contentPosition, contentSize, alignRight: false, QuantityTextColor);
-    }
+    /// <summary>Draws a stack's quantity text bottom-left; the caller draws none for a lone stack, which doesn't need a number. A wand's own remaining/max charges used to replace this outright ("5/6" instead of the plain count) but that's shown in the hover tooltip now instead -- every item's badge is just its plain Quantity, charges or not.</summary>
+    /// <param name="quantityTextSize">quantityText's measured size, from the caller's TextSizeCache.</param>
+    public static void DrawQuantityBadge(SpriteBatch spriteBatch, SpriteFontBase quantityFont, string quantityText, Vector2 quantityTextSize, Vector2 contentPosition, Vector2 contentSize) =>
+        DrawBottomAligned(spriteBatch, quantityFont, quantityText, quantityTextSize, contentPosition, contentSize, alignRight: false, QuantityTextColor);
 
     /// <summary>
     /// Same shadowed-for-legibility-over-any-background styling DrawQuantityBadge already uses,
@@ -29,9 +23,9 @@ public static class ItemIconRenderer
     /// own bottom-left quantity / bottom-right total-price pair (the price colored favorable/
     /// unfavorable, the same way ShopItemStackCell's own price line already is).
     /// </summary>
-    public static void DrawBottomAligned(SpriteBatch spriteBatch, SpriteFontBase font, string text, Vector2 contentPosition, Vector2 contentSize, bool alignRight, Color textColor)
+    /// <param name="textSize">text's measured size, from the caller's TextSizeCache.</param>
+    public static void DrawBottomAligned(SpriteBatch spriteBatch, SpriteFontBase font, string text, Vector2 textSize, Vector2 contentPosition, Vector2 contentSize, bool alignRight, Color textColor)
     {
-        var textSize = font.MeasureString(text);
         var x = alignRight ? contentPosition.X + contentSize.X - textSize.X - QuantityTextPadding.X : contentPosition.X + QuantityTextPadding.X;
         var textPosition = new Vector2(x, contentPosition.Y + contentSize.Y - textSize.Y - QuantityTextPadding.Y);
         spriteBatch.DrawString(font, text, textPosition, QuantityShadowColor);

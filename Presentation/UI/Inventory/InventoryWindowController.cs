@@ -1,11 +1,9 @@
-using Engine.ECS.Components.Stores;
-using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.UI.Chrome;
-using Presentation.UI.ColorPalettes;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Inventory;
 
@@ -61,7 +59,7 @@ public sealed class InventoryWindowController(
     /// <summary>Opens the player's own Inventory window if it isn't already -- idempotent, same as WindowLifecycle.Open itself. Lets a non-button trigger (e.g. clicking a corpse to loot it) reuse this window instead of the button being the only way to open it.</summary>
     public void OpenInventoryWindow() => _windowLifecycle.Open();
 
-    /// <summary>Lets a global keyboard hotkey (I -- see UiInputController.HandleWindowToggleHotkeys) reuse the same open/close behavior the button's own Clicked handler already has, without exposing _windowLifecycle itself.</summary>
+    /// <summary>Lets a global keyboard hotkey (I -- a KeyPressInputHandler registered in ShellBootstrapper) reuse the same open/close behavior the button's own Clicked handler already has, without exposing _windowLifecycle itself.</summary>
     public void ToggleInventoryWindow() => _windowLifecycle.Toggle();
 
     public void Initialize(UiLayerStack layers)

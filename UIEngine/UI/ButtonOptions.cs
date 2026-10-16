@@ -1,0 +1,11 @@
+namespace UIEngine.UI;
+
+/// <summary>Button-specific configuration -- same "independent option group" pattern as TextOptions/FolderOptions. Optional: a plain text-only Button (a title-bar "X", a context-menu row) never sets this.</summary>
+public sealed class ButtonOptions
+{
+    /// <summary>Looked up in the sprite manifest (SpriteSheetService.Sprites), drawn centered in the content area in place of Text.Text -- falls back to drawing Text.Text as a glyph (the same sprite-or-glyph degrade Folder's own icon uses) if the name isn't found there.</summary>
+    public string? SpriteName { get; set; }
+
+    /// <summary>A short (1-2 char) key label drawn in the button's top-left corner, over whatever else it draws -- the same treatment HotbarContent gives each slot's own bound key. Null (the default) draws nothing extra; set by a HUD-trigger button whose window can also be opened via a global keyboard hotkey (see UiInputController.HandleWindowToggleHotkeys).</summary>
+    public string? HotkeyLabel { get; set; }
+}

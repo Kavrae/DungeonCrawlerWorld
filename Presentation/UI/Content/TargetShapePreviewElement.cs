@@ -1,10 +1,13 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
 
@@ -54,7 +57,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
         _minY = minY;
         _cellSize = cellSize;
         _highlightedOffsets = highlightedOffsets;
-        _numberFont = FontService.GetFont(System.Math.Max(FontChrome.TargetShapePreviewMinNumberFontSize, (int)(cellSize * FontChrome.TargetShapePreviewNumberFontFraction)));
+        _numberFont = FontService.GetFont(System.Math.Max(GameFontChrome.TargetShapePreviewMinNumberFontSize, (int)(cellSize * GameFontChrome.TargetShapePreviewNumberFontFraction)));
     }
 
     public override void DrawContent(GameTime gameTime)

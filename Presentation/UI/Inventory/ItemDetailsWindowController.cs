@@ -3,6 +3,8 @@ using Game.Modules.Inventory;
 using Game.Views;
 using Microsoft.Xna.Framework;
 using Presentation.UI.ColorPalettes;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Inventory;
 

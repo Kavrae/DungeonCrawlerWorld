@@ -1,19 +1,18 @@
-using Game.Views;
 using FontStashSharp;
-using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using UIEngine.Rendering;
 
 namespace Presentation.Rendering;
 
 /// <summary>
-/// spriteSheetService/spriteRenderer are optional -- every existing caller (ActionLockContent,
-/// and HotbarContent's ability slots) draws glyphs only and never sets Sprite, so they're left
+/// spriteSheetService is optional -- every existing caller (ActionLockContent,
+/// and HotbarContent's ability slots) draws glyphs only and never sets Sprite, so it's left
 /// null and Draw falls back to the original glyph-only path unchanged. HotbarContent's item
-/// slots are the one caller that supplies both (items can have real sprites, unlike abilities
+/// slots are the one caller that supplies it (items can have real sprites, unlike abilities
 /// today) and sets Sprite/SpriteTint per draw.
 /// </summary>
-public sealed class RadialFillRenderer(LabelRenderer labelRenderer, SpriteSheetService? spriteSheetService = null, SpriteRenderer? spriteRenderer = null)
+public sealed class RadialFillRenderer(LabelRenderer labelRenderer, SpriteSheetService? spriteSheetService = null)
 {
     private const int SliverCount = 72;
     private static readonly Color MaskColor = new Color(64, 64, 64) * 0.5f;
@@ -37,9 +36,9 @@ public sealed class RadialFillRenderer(LabelRenderer labelRenderer, SpriteSheetS
         var position = new Vector2(bounds.X, bounds.Y);
         var size = new Vector2(bounds.Width, bounds.Height);
 
-        if (Sprite is { } sprite && spriteSheetService is not null && spriteRenderer is not null)
+        if (Sprite is { } sprite && spriteSheetService is not null)
         {
-            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, labelRenderer, sprite, font, Glyph, GlyphColor, position, size, SpriteTint, alphaMultiplier);
+            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, labelRenderer, sprite, font, Glyph, GlyphColor, position, size, SpriteTint, alphaMultiplier);
         }
         else
         {

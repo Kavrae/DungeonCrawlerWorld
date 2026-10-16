@@ -1,6 +1,7 @@
 using Game.Modules.Actions;
 using Microsoft.Xna.Framework;
-using Presentation.UI.ColorPalettes;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI;
 

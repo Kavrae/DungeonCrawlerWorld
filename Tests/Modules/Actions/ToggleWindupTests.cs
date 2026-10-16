@@ -19,6 +19,7 @@ using Game.Modules.Inventory.Definitions;
 using Game.Modules.Mana.Components;
 using Game.Spawning;
 using Game.World;
+using UIEngine.UI;
 
 namespace Tests.Modules.Actions;
 

@@ -15,9 +15,11 @@ using Game.Spawning;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Looting;
+using UIEngine.UI;
+using UIEngine.UI.Chrome;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
 

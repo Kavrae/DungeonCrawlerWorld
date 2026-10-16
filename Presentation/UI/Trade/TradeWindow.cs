@@ -8,12 +8,14 @@ using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Presentation.Fonts;
-using Presentation.Rendering;
-using Presentation.UI.Chrome;
-using Presentation.UI.ColorPalettes;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
+using UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.Chrome;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Trade;
 
@@ -110,6 +112,10 @@ public sealed class TradeWindow(
     private string _playerValueText = "0G";
 
     private string _shopValueText = "0G";
+
+    /// <summary>The two value lines, rebuilt only when a value changes rather than every frame the window is open.</summary>
+    private readonly KeyedCache<int, string> _playerValueTextCache = new();
+    private readonly KeyedCache<int, string> _shopValueTextCache = new();
     private Button _balanceOfferButton = null!;
     private Button _cancelButton = null!;
     private Button _completeButton = null!;
@@ -205,8 +211,8 @@ public sealed class TradeWindow(
 
         var playerValue = ComputeColumnValue(_playerSideEntityId, isShopSide: false);
         var shopValue = ComputeColumnValue(_shopSideEntityId, isShopSide: true);
-        _playerValueText = $"{playerValue}G";
-        _shopValueText = $"{shopValue}G";
+        _playerValueText = _playerValueTextCache.Get(playerValue, static value => $"{value}G");
+        _shopValueText = _shopValueTextCache.Get(shopValue, static value => $"{value}G");
 
         var isEmpty = IsColumnEmpty(_playerSideEntityId) && IsColumnEmpty(_shopSideEntityId);
         _balanceOfferButton.Enabled = !isEmpty;

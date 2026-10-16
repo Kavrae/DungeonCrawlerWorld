@@ -10,6 +10,7 @@ namespace Tests.Presentation;
 
 /// <summary>The windup telegraph is drawn from TargetResolution each frame, so a Target-mode windup's tiles follow its target.</summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class WindupTelegraphTests
 {
     private const int CasterEntityId = 5;

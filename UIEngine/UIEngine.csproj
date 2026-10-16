@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The window framework: elements and windows, layers, input routing, tooltips, context menus, fonts, and sprites
+    drawn by name from the manifest. References only Engine and SpriteFormat (never Game, Presentation or Content),
+    so the game and the engine IDE both build on it. Presentation holds the game's own windows on top of it.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FNA.NET" Version="2.1.2.2506" />
+    <PackageReference Include="FNA.NET.FontStashSharp" Version="2.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Engine\Engine.csproj" />
+    <ProjectReference Include="..\SpriteFormat\SpriteFormat.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Lets Tests exercise internal-scoped seams (e.g. UiInputController's testable
+         state-driven Update overload) without widening them to full public API. -->
+    <InternalsVisibleTo Include="Tests" />
+  </ItemGroup>
+
+</Project>

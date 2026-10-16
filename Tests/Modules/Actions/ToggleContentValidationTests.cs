@@ -10,6 +10,7 @@ using Game.Modules.Inventory;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffects;
 using Microsoft.Xna.Framework;
+using UIEngine.UI;
 
 namespace Tests.Modules.Actions;
 

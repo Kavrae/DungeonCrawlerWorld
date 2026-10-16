@@ -1,9 +1,8 @@
 using Engine.ECS.Components;
-using Game.Effects;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
-using Game.Modules;
+using Game.Effects;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
@@ -19,6 +18,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
 using Tests.Presentation;
+using UIEngine.UI;
 
 namespace Tests.Modules.Actions;
 

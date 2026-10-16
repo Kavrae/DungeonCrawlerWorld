@@ -3,6 +3,10 @@ using Microsoft.Xna.Framework.Input;
 using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI;
+using Tests.UIEngine;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Tests.Presentation;
 

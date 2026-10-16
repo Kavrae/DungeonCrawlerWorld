@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
-using Presentation.UI.ColorPalettes;
 using Presentation.UI.Inventory;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Shops;
 

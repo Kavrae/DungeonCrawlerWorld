@@ -1,11 +1,15 @@
 using FontStashSharp;
 using Game.Modules.Currency;
-using Game.Views;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
-using Presentation.Rendering;
+using Presentation.Input.DragDrop;
 using Presentation.UI.Chrome;
-using Presentation.UI.ColorPalettes;
+using UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.Chrome;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
 
@@ -17,14 +21,17 @@ namespace Presentation.UI.Content;
 /// every frame by the owning content class, OnRightClicked inherited free from Element). No
 /// IsSelected/click-to-inspect concept -- hover + drag + right-click only, matching what was asked.
 /// </summary>
-public sealed class CurrencyElement(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
-    : Element(fontService, elementPoolService, labelRenderer)
+public sealed class CurrencyElement(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService)
+    : Element(fontService, elementPoolService, labelRenderer), IContentDragSource
 {
     private const float IconGap = 4f;
 
     private SpriteFontBase _textFont = null!;
     private SpriteFontBase _glyphFont = null!;
     private int _amount;
+
+    /// <summary>The amount as drawn and its measured size, rebuilt only when the amount, label or font changes.</summary>
+    private readonly KeyedCache<(string Label, int Amount, bool ShowLabel, SpriteFontBase Font), (string Text, Vector2 Size)> _drawnText = new();
 
     /// <summary>The entity whose Currency this element represents -- what UiInputController's content-drag path reads as a transfer's origin entity, and what the owning CurrencyRowContent's context menu reads to decide Give vs. Take (mirrors InventoryItemStackCell.EntityId exactly).</summary>
     public int EntityId { get; private set; }
@@ -41,7 +48,7 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
     /// <summary>Null (the default) draws WindowPalette.BodyTextColor, same as every other consumer -- Configure's own textColor param overrides this for the trade window's own two currency footers, whose trade grid sits on a transparent background too dark for the shared BodyTextColor to read against. Set in Configure, not a bare settable property, for the same pool-reuse-staleness reason _showLabel is.</summary>
     private Color? _textColorOverride;
 
-    /// <summary>The square icon's own on-screen size -- what UiInputController.TryStartContentDrag reads as the drag ghost's size, not CurrentSize (this element's full "Gold : 10 [sprite]" bounds, much wider than tall): drawing the ghost at the whole element's size stretched the sprite horizontally.</summary>
+    /// <summary>The square icon's own on-screen size -- what TryBeginContentDrag uses as the drag ghost's size, not CurrentSize (this element's full "Gold : 10 [sprite]" bounds, much wider than tall): drawing the ghost at the whole element's size stretched the sprite horizontally.</summary>
     public Vector2 IconSize => new(ContentSize.Y, ContentSize.Y);
 
     /// <summary>Label/sprite key/glyph-fallback char/glyph-fallback color for each CurrencyType -- the one place this element switches on it, so adding a new currency here (and to CurrencyType/CurrencyComponent) is enough for this element to draw it.</summary>
@@ -60,7 +67,7 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
         _showLabel = showLabel;
         _textColorOverride = textColor;
         _textFont = FontService.GetFont(FontChrome.DefaultFontSize);
-        _glyphFont = FontService.GetFont((int)(elementSize.Y * FontChrome.IconGlyphFontFraction));
+        _glyphFont = FontService.GetFont((int)(elementSize.Y * GameFontChrome.IconGlyphFontFraction));
     }
 
     /// <summary>Called every frame by the owning CurrencyRowContent -- Currency has no version watcher, so an unconditional re-read is the simplest correct option (same cost the old CurrencyRow.Format paid every Update).</summary>
@@ -77,8 +84,11 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
 
         var (label, spriteName, glyph, glyphColor) = TypeDisplay;
 
-        var text = _showLabel ? $"{label} : {_amount}" : $"{_amount}";
-        var textSize = _textFont.MeasureString(text);
+        var (text, textSize) = _drawnText.Get((label, _amount, _showLabel, _textFont), static key =>
+        {
+            var builtText = key.ShowLabel ? $"{key.Label} : {key.Amount}" : $"{key.Amount}";
+            return (builtText, key.Font.MeasureString(builtText));
+        });
         var textPosition = ContentAbsolutePosition + new Vector2(0, (ContentSize.Y - textSize.Y) / 2f);
         LabelRenderer.Draw(spriteBatch, _textFont, text, textPosition, _textColorOverride ?? WindowPalette.BodyTextColor);
 
@@ -86,6 +96,13 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
         // "Gold : 10" then the sprite immediately after, not stranded at the far side of the row.
         var iconPosition = new Vector2(textPosition.X + textSize.X + IconGap, ContentAbsolutePosition.Y);
         SpriteView? sprite = spriteSheetService.Sprites.TryGetFirst(spriteName, out var spriteView) ? spriteView : null;
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, spriteRenderer, LabelRenderer, sprite, _glyphFont, glyph, glyphColor, iconPosition, IconSize, Color.White);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, LabelRenderer, sprite, _glyphFont, glyph, glyphColor, iconPosition, IconSize, Color.White);
+    }
+
+    /// <summary>Picks up this row's currency. The ghost is IconSize -- the square icon alone; the whole "Gold : 10 [sprite]" bounds stretched it horizontally.</summary>
+    public bool TryBeginContentDrag(Point pressPosition, out ContentDragStart start)
+    {
+        start = new ContentDragStart(new DragPayload(DragPayloadOrigin.Currency, CurrencyType: Type, OriginEntityId: EntityId), IconSize);
+        return true;
     }
 }

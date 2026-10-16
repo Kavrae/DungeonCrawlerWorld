@@ -2,6 +2,7 @@ using Engine.Math;
 using Microsoft.Xna.Framework;
 using Presentation.Rendering;
 using Presentation.UI;
+using UIEngine.Rendering;
 
 namespace Presentation.MapRendering;
 

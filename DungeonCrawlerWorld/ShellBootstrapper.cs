@@ -7,9 +7,9 @@ using Game.Notifications;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using Presentation.Bootstrap;
+using Microsoft.Xna.Framework.Input;
 using Presentation.Input;
+using Presentation.Input.DragDrop;
 using Presentation.MapRendering;
 using Presentation.UI;
 using Presentation.UI.AbilityScores;
@@ -18,20 +18,24 @@ using Presentation.UI.Content;
 using Presentation.UI.Diagnostics;
 using Presentation.UI.Inventory;
 using Presentation.UI.Notifications;
+using UIEngine.Bootstrap;
+using UIEngine.Input;
+using UIEngine.UI;
+using UIEngine.UI.Content;
 
 namespace DungeonCrawlerWorld;
 
-/// <summary>Builds the app's specific screen on top of the services PresentationBootstrapper already constructed.</summary>
+/// <summary>Builds the app's specific screen on top of the services UiEngineBootstrapper already constructed.</summary>
 /// <cleanupVersion>1</cleanupVersion>>
 public static class ShellBootstrapper
 {
     /// <summary>Builds the game shell context.</summary>
-    /// <param name="presentation"></param>
+    /// <param name="uiEngine"></param>
     /// <param name="worldSession">The game session the shell shows, and the app-owned pieces around it.</param>
     /// <param name="screenSize"></param>
     /// <param name="diagnostics">What the Diagnostics window (F3) reads its rates, gauges and leak findings from; null shows only what the window reads from the session itself.</param>
     /// <returns></returns>
-    public static ShellContext Build(PresentationContext presentation, WorldSessionContext worldSession, Vector2 screenSize, DiagnosticsEngine? diagnostics = null)
+    public static ShellContext Build(UiEngineContext uiEngine, WorldSessionContext worldSession, Vector2 screenSize, DiagnosticsEngine? diagnostics = null)
     {
         HudChrome.ResolveLayout(screenSize);
 
@@ -47,10 +51,10 @@ public static class ShellBootstrapper
             new UiLayerStack(),
             new MapViewState { ReservedEntityIds = worldSession.ReservedEntityIds },
             new MapCamera(views.MapView),
-            new ContextMenuController(presentation.ElementPoolService),
+            new ContextMenuController(uiEngine.ElementPoolService),
             new TooltipController(),
             pointerState,
-            new CursorTextContent(pointerState, presentation.FontService, presentation.LabelRenderer));
+            new CursorTextContent(pointerState, uiEngine.FontService, uiEngine.LabelRenderer));
         var uiLayers = shellServices.Layers;
         var mapViewState = shellServices.MapViewState;
         var contextMenuController = shellServices.ContextMenuController;
@@ -71,23 +75,23 @@ public static class ShellBootstrapper
             commands.PlayerCommands,
             gameSession.SimulationClock);
         var playerMovementController = new PlayerMovementController(commands.PlayerCommands);
-        var dragGhostContent = new DragGhostContent(pointerState, world, catalogs.ActionCatalog, catalogs.ItemCatalog, views.InventoryView, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, presentation.LabelRenderer);
+        var dragGhostContent = new DragGhostContent(pointerState, world, catalogs.ActionCatalog, catalogs.ItemCatalog, views.InventoryView, uiEngine.FontService, uiEngine.SpriteSheetService, uiEngine.LabelRenderer);
 
-        ElementFactoryRegistry.RegisterAll(presentation, gameSession, worldSession.AdminTools, shellServices, actionTargetingController, playerMovementController);
+        ElementFactoryRegistry.RegisterAll(uiEngine, gameSession, worldSession.AdminTools, shellServices, actionTargetingController, playerMovementController);
 
         contextMenuController.Initialize(uiLayers);
-        tooltipController.Initialize(presentation.ElementPoolService, uiLayers);
+        tooltipController.Initialize(uiEngine.ElementPoolService, uiLayers);
 
-        var mapWindow = BuildBaseWindows(presentation, uiLayers);
-        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(presentation, gameSession, screenSize, mapViewState, uiLayers);
+        var mapWindow = BuildBaseWindows(uiEngine, uiLayers);
+        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(uiEngine, gameSession, screenSize, mapViewState, uiLayers);
         mapWindow.OnInspectionOpened = () => inspectionWindow.SetDisplayMode(ElementDisplayMode.Fixed);
-        var (notificationCenter, healthController) = BuildDynamicHudWindows(presentation, world, ecsContext.EventBus, contextMenuController, uiLayers);
-        var itemWindows = new ItemWindowCoordinator(presentation.ElementPoolService, shellServices, world, mapWindow, actionTargetingController, views.InventoryView, catalogs.ItemCatalog, catalogs.LootboxCatalog, commands.LootCommands, commands.LootboxCommands, worldSession.ReservedEntityIds);
+        var (notificationCenter, healthController) = BuildDynamicHudWindows(uiEngine, world, ecsContext.EventBus, contextMenuController, uiLayers);
+        var itemWindows = new ItemWindowCoordinator(uiEngine.ElementPoolService, shellServices, world, mapWindow, actionTargetingController, views.InventoryView, catalogs.ItemCatalog, catalogs.LootboxCatalog, commands.LootCommands, commands.LootboxCommands, worldSession.ReservedEntityIds);
         var hotbarController = BuildHotbarController(mapViewState, hotbarContent, actionTargetingController, tooltipController);
-        BuildUserWindows(presentation, shellServices.CursorTextContent, dragGhostContent, uiLayers);
+        BuildUserWindows(uiEngine, shellServices.CursorTextContent, dragGhostContent, uiLayers);
 
-        var abilityScoreController = BuildAbilityScoreWindowController(presentation, world, views.InventoryView, itemWindows.Inventory, mapWindow, contextMenuController, uiLayers, tooltipController);
-        var diagnosticsController = BuildDiagnosticsWindowController(presentation, ecsContext, diagnostics, uiLayers);
+        var abilityScoreController = BuildAbilityScoreWindowController(uiEngine, world, views.InventoryView, itemWindows.Inventory, mapWindow, contextMenuController, uiLayers, tooltipController);
+        var diagnosticsController = BuildDiagnosticsWindowController(uiEngine, ecsContext, diagnostics, uiLayers);
 
         // A destroyed entity's id is reused straight away, so nothing on screen may keep pointing at
         // it: whatever it was selected in, or open for, lets go before the id means someone else.
@@ -101,8 +105,26 @@ public static class ShellBootstrapper
             itemWindows.ReleaseEntity(entityId);
         };
 
-        var inputController = new UiInputController(uiLayers, screenSize, pointerState, views.ShopView, world, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, hotbarController, contextMenuController, itemWindows.ItemDetails, itemWindows.ItemComparison, mapViewState, healthController, itemWindows.Inventory, abilityScoreController, diagnosticsController,
-            new TargetingModeSwitch(mapViewState, views.ActionStateView, world, shellServices.CursorTextContent));
+        var targetingModeSwitch = new TargetingModeSwitch(mapViewState, views.ActionStateView, world, shellServices.CursorTextContent);
+        IUiInputHandler[] inputHandlers =
+        [
+            new AdminModeInputHandler(),
+            new KeyPressInputHandler(Keys.U, healthController.ToggleHealthWindow),
+            new KeyPressInputHandler(Keys.I, itemWindows.Inventory.ToggleInventoryWindow),
+            new KeyPressInputHandler(Keys.O, abilityScoreController.ToggleAbilityScoreWindow),
+            new KeyPressInputHandler(Keys.F3, diagnosticsController.ToggleDiagnosticsWindow),
+            new KeyPressInputHandler(Keys.LeftAlt, targetingModeSwitch.Switch),
+            new ItemDetailsOutsideClickInputHandler(itemWindows.ItemDetails),
+            new ItemComparisonDisarmInputHandler(itemWindows.ItemComparison),
+            new HotbarInputHandler(hotbarController),
+            new ActivationRefusalInputHandler(),
+        ];
+        IContentDropHandler[] contentDropHandlers =
+        [
+            new InventoryTransferDropHandler(mapViewState, views.ShopView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, world),
+            new HotbarBindingDropHandler(hotbarContent, world),
+        ];
+        var inputController = new UiInputController(uiLayers, screenSize, pointerState, inputHandlers, contentDropHandlers, contextMenuController);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 
@@ -122,16 +144,16 @@ public static class ShellBootstrapper
         // always-visible StaticHUD panels) isn't guaranteed to stay above a map click while it's
         // open -- DynamicHUD tier, the same tier NotificationCenter's own popups already use,
         // not Base/StaticHUD.
-        questTriggerWindow.Clicked += _ => inputController.FocusElement(OpenQuestComposer(presentation.ElementPoolService, notificationCenter, uiLayers));
+        questTriggerWindow.Clicked += _ => inputController.FocusElement(OpenQuestComposer(uiEngine.ElementPoolService, notificationCenter, uiLayers));
 
-        return new ShellContext(mapWindow, notificationCenter, itemWindows.Inventory, abilityScoreController, uiLayers, inputController);
+        return new ShellContext(mapWindow, notificationCenter, itemWindows.Inventory, abilityScoreController, uiLayers, inputController, new UiLayerHost(uiLayers, uiEngine.ElementPoolService));
     }
 
     /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see UiInputController's own doc comment for what each of the four tiers means. MapWindow's own factory (and every other pooled type's) is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
     private static MapWindow BuildBaseWindows(
-        PresentationContext presentation, UiLayerStack layers)
+        UiEngineContext uiEngine, UiLayerStack layers)
     {
-        var mapWindow = presentation.ElementPoolService.CreateElement<MapWindow>(null, new ElementOptions
+        var mapWindow = uiEngine.ElementPoolService.CreateElement<MapWindow>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
             {
@@ -156,7 +178,7 @@ public static class ShellBootstrapper
 
     /// <summary>StaticHUD tier: the player health bar, action lock, status effects, InspectionWindow, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent and inspectionWindow are returned too, for BuildHotbarController and Build's own OnInspectionOpened wiring respectively.</summary>
     private static (TextWindow QuestTriggerWindow, HotbarContent HotbarContent, InspectionWindow InspectionWindow) BuildStaticHudWindows(
-        PresentationContext presentation, GameSession gameSession, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers)
+        UiEngineContext uiEngine, GameSession gameSession, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers)
     {
         var world = gameSession.World;
         var ecsContext = gameSession.EcsContext;
@@ -164,7 +186,7 @@ public static class ShellBootstrapper
         var mapView = gameSession.Views.MapView;
         var simulationClock = gameSession.SimulationClock;
 
-        var playerHealthBarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
+        var playerHealthBarWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
             {
@@ -176,11 +198,11 @@ public static class ShellBootstrapper
             // BorderSize left at the default (1,1) -- a thinner outset reads as a subtle bevel rather than a heavy frame.
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        playerHealthBarWindow.SetContent(new PlayerHealthBarContent(world, gameSession.Views.HealthView, gameSession.Views.EntityBodyParts, gameSession.Views.StatModifierView, presentation.FontService, layers));
+        playerHealthBarWindow.SetContent(new PlayerHealthBarContent(world, gameSession.Views.HealthView, gameSession.Views.EntityBodyParts, gameSession.Views.StatModifierView, uiEngine.FontService, layers));
         playerHealthBarWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerHealthBarWindow);
 
-        var playerManaBarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
+        var playerManaBarWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
             {
@@ -191,11 +213,11 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        playerManaBarWindow.SetContent(new PlayerManaBarContent(world, gameSession.Views.ActionStateView, gameSession.Views.StatModifierView, presentation.FontService));
+        playerManaBarWindow.SetContent(new PlayerManaBarContent(world, gameSession.Views.ActionStateView, gameSession.Views.StatModifierView, uiEngine.FontService));
         playerManaBarWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerManaBarWindow);
 
-        var actionLockWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
+        var actionLockWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
             {
@@ -206,11 +228,11 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        actionLockWindow.SetContent(new ActionLockContent(world, gameSession.Views.ActionStateView, mapView, presentation.FontService, simulationClock));
+        actionLockWindow.SetContent(new ActionLockContent(world, gameSession.Views.ActionStateView, mapView, uiEngine.FontService, simulationClock));
         actionLockWindow.Initialize();
         layers.Add(UiLayer.StaticHud, actionLockWindow);
 
-        var playerStatusEffectsWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
+        var playerStatusEffectsWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
             {
@@ -221,7 +243,7 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = false, CanUserFocus = false },
         });
-        playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, gameSession.Views.ActionStateView, catalogs.ItemCatalog, presentation.FontService, catalogs.StatusEffectDisplays, simulationClock));
+        playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, gameSession.Views.ActionStateView, catalogs.ItemCatalog, uiEngine.FontService, catalogs.StatusEffectDisplays, simulationClock));
         playerStatusEffectsWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerStatusEffectsWindow);
 
@@ -229,7 +251,7 @@ public static class ShellBootstrapper
         // ResolveLayout's own MinimapReserve constant for why headroom is left above the
         // hotbar's worst-case (fully expanded) top edge. Same width as the health bar
         // (PlayerHealthBarContent.Size.X), per the Inspection V2 request.
-        var inspectionWindow = presentation.ElementPoolService.CreateElement<InspectionWindow>(null, new ElementOptions
+        var inspectionWindow = uiEngine.ElementPoolService.CreateElement<InspectionWindow>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
             Layout = new ElementLayoutOptions
@@ -247,7 +269,7 @@ public static class ShellBootstrapper
                 CanUserScrollVertical = true,
             },
         });
-        inspectionWindow.SetContent(new InspectionWindowContent(world, mapView, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, presentation.ElementPoolService, catalogs.Definitions, gameSession.Internals.SpawnRecordRebuilder, gameSession.Internals.Skeletons));
+        inspectionWindow.SetContent(new InspectionWindowContent(world, mapView, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, uiEngine.ElementPoolService, catalogs.Definitions, gameSession.Internals.SpawnRecordRebuilder, gameSession.Internals.Skeletons));
         inspectionWindow.Initialize();
         layers.Add(UiLayer.StaticHud, inspectionWindow);
 
@@ -256,9 +278,9 @@ public static class ShellBootstrapper
         // player's currently-unlocked Expansion slot count, so it's constructed first and its own
         // Size read to size/position this window -- see HotbarContent.RefreshLayoutIfChanged for
         // how it keeps itself bottom-anchored/horizontally-centered as that Size changes later.
-        var hotbarContent = new HotbarContent(world, mapViewState, gameSession.Views.HotkeyBindingView, gameSession.Views.InventoryView, gameSession.Views.ActionStateView, gameSession.Commands.HotkeyBindingCommands, catalogs.ActionCatalog, catalogs.ItemCatalog, presentation.FontService, presentation.SpriteSheetService, presentation.SpriteRenderer, screenSize, simulationClock, gameSession.Views.EntityActions, catalogs.GameplayTags);
+        var hotbarContent = new HotbarContent(world, mapViewState, gameSession.Views.HotkeyBindingView, gameSession.Views.InventoryView, gameSession.Views.ActionStateView, gameSession.Commands.HotkeyBindingCommands, catalogs.ActionCatalog, catalogs.ItemCatalog, uiEngine.FontService, uiEngine.SpriteSheetService, screenSize, simulationClock, gameSession.Views.EntityActions, catalogs.GameplayTags);
         var hotbarSize = hotbarContent.Size;
-        var hotbarWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
+        var hotbarWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
             {
@@ -280,7 +302,7 @@ public static class ShellBootstrapper
         // clickable TextWindow the same way NotificationCenter's own summary-bar entries are
         // (see NotificationCenter.Initialize's countWindow.Clicked wiring). StaticHUD tier --
         // overlays the fullscreen map, same reasoning as selectionWindow above.
-        var questTriggerWindow = presentation.ElementPoolService.CreateElement<TextWindow>(null, new ElementOptions
+        var questTriggerWindow = uiEngine.ElementPoolService.CreateElement<TextWindow>(null, new ElementOptions
         {
             // Left margin matches the notification count window's (HudChrome.Margin.X).
             Layout = new ElementLayoutOptions { RelativePosition = HudChrome.QuestTriggerWindowPosition, Size = HudChrome.QuestTriggerWindowSize, DisplayMode = ElementDisplayMode.Fixed },
@@ -295,12 +317,12 @@ public static class ShellBootstrapper
     }
 
     /// <summary>DynamicHUD tier: NotificationCenter owns/populates its own folder+popups, and HealthWindowController its own button+window (both add to UiLayer.DynamicHud specifically) -- see UiLayer's own doc comment for what each tier means. The inventory button follows from ItemWindowCoordinator, built right after, so it keeps its place beneath the health button. Build also passes the same layer stack into OpenQuestComposer later, since that popup belongs in DynamicHud too.</summary>
-    private static (NotificationCenter NotificationCenter, HealthWindowController Health) BuildDynamicHudWindows(PresentationContext presentation, World world, EventBus eventBus, ContextMenuController contextMenuController, UiLayerStack layers)
+    private static (NotificationCenter NotificationCenter, HealthWindowController Health) BuildDynamicHudWindows(UiEngineContext uiEngine, World world, EventBus eventBus, ContextMenuController contextMenuController, UiLayerStack layers)
     {
-        var notificationCenter = new NotificationCenter(presentation.ElementPoolService, eventBus, layers, contextMenuController);
+        var notificationCenter = new NotificationCenter(uiEngine.ElementPoolService, eventBus, layers, contextMenuController);
         notificationCenter.Initialize();
 
-        var health = new HealthWindowController(presentation.ElementPoolService, world);
+        var health = new HealthWindowController(uiEngine.ElementPoolService, world);
         health.Initialize(layers);
 
         return (notificationCenter, health);
@@ -308,20 +330,20 @@ public static class ShellBootstrapper
 
     /// <summary>Built after InventoryWindowController (whose PlayerInventoryWindow accessor this abilityScoreController reads to cascade its own window beside a live Inventory window -- see AbilityScoreWindowController.CreateAbilityScoreWindow) and MapWindow.</summary>
     private static AbilityScoreWindowController BuildAbilityScoreWindowController(
-        PresentationContext presentation, World world, InventoryView inventoryView, InventoryWindowController inventory, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers, TooltipController tooltipController)
+        UiEngineContext uiEngine, World world, InventoryView inventoryView, InventoryWindowController inventory, MapWindow mapWindow, ContextMenuController contextMenuController, UiLayerStack layers, TooltipController tooltipController)
     {
-        var abilityScoreController = new AbilityScoreWindowController(presentation.ElementPoolService, world, inventoryView, inventory, mapWindow, contextMenuController, tooltipController);
+        var abilityScoreController = new AbilityScoreWindowController(uiEngine.ElementPoolService, world, inventoryView, inventory, mapWindow, contextMenuController, tooltipController);
         abilityScoreController.Initialize(layers);
         return abilityScoreController;
     }
 
     /// <summary>Registers the Diagnostics window's factory here rather than in ElementFactoryRegistry, since only this method has the DiagnosticsEngine it reads.</summary>
     private static DiagnosticsWindowController BuildDiagnosticsWindowController(
-        PresentationContext presentation, EcsContext ecsContext, DiagnosticsEngine? diagnostics, UiLayerStack layers)
+        UiEngineContext uiEngine, EcsContext ecsContext, DiagnosticsEngine? diagnostics, UiLayerStack layers)
     {
-        var elementPool = presentation.ElementPoolService;
+        var elementPool = uiEngine.ElementPoolService;
         elementPool.RegisterFactory<DiagnosticsWindow>(() => new DiagnosticsWindow(
-            presentation.FontService, elementPool, presentation.LabelRenderer, ecsContext.EntityManager, ecsContext.ComponentManager.GetPackedPool<MovementComponent>(), ecsContext.SystemManager.Clock, diagnostics));
+            uiEngine.FontService, elementPool, uiEngine.LabelRenderer, ecsContext.EntityManager, ecsContext.ComponentManager.GetPackedPool<MovementComponent>(), ecsContext.SystemManager.Clock, diagnostics));
         return new DiagnosticsWindowController(elementPool, layers);
     }
 
@@ -331,12 +353,12 @@ public static class ShellBootstrapper
         new(mapViewState, hotbarContent, actionTargeting, tooltipController);
 
     /// <summary>User tier: hosts cursorTextContent/dragGhostContent, both drawn at the pointer through PointerState -- see UiLayer's own doc comment for what this tier is for.</summary>
-    private static void BuildUserWindows(PresentationContext presentation, CursorTextContent cursorTextContent, DragGhostContent dragGhostContent, UiLayerStack layers)
+    private static void BuildUserWindows(UiEngineContext uiEngine, CursorTextContent cursorTextContent, DragGhostContent dragGhostContent, UiLayerStack layers)
     {
         // Zero-size and fully transparent -- DragGhostContent draws directly at the live mouse
         // position (see its own doc comment), not relative to this window's own bounds, so the
         // window itself exists only to host the content and get its DrawContent called.
-        var dragGhostWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
+        var dragGhostWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = Vector2.Zero, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
@@ -347,7 +369,7 @@ public static class ShellBootstrapper
 
         // Same hosting shape as dragGhostWindow above -- see CursorTextContent's own doc comment
         // for why it's built the same way DragGhostContent is.
-        var cursorTextWindow = presentation.ElementPoolService.CreateElement<Window>(null, new ElementOptions
+        var cursorTextWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = Vector2.Zero, DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
@@ -428,57 +450,11 @@ public sealed record ShellContext(
     InventoryWindowController Inventory,
     AbilityScoreWindowController AbilityScore,
     UiLayerStack Layers,
-    UiInputController InputController)
+    UiInputController InputController,
+    UiLayerHost LayerHost)
 {
-    /// <summary>
-    /// Per-Draw-call scratch state for the dim-overlay pass -- recomputed/reset at the top of
-    /// every Draw, read (and, for _dimDrawn, mutated) by DrawWindowLayer/DrawWindow across that
-    /// same call's layer loop. Fields rather than values threaded through DrawWindowLayer's own
-    /// parameters/return value: _dimDrawn in particular used to be passed in and returned back
-    /// out on every call, purely so the next layer's call could see whether a previous one had
-    /// already drawn the quad -- an accumulator, just expressed awkwardly as a threaded return
-    /// value instead of the single flag it actually is.
-    /// </summary>
-    private Element? _bottommostMenuWindow;
-
-    private List<Element> _menuModeExemptElements = [];
-
-    private bool _dimDrawn;
-
-    /// <summary>
-    /// The render services every Update/Draw call needs -- captured once by
-    /// LoadContent (see its own doc comment for why that's the right hook) rather than threaded
-    /// through every Update/Draw call, since all three are session-lifetime-stable in real usage:
-    /// GraphicsDevice never changes reference for this app; SpriteBatchRenderer hands back the
-    /// same single SpriteBatch instance on every call (see its own doc comment); and the unit-pixel
-    /// Texture2D is created once in GameLoop.LoadContent. None of the three are ever expected to vary
-    /// call-to-call the way e.g. GameTime or which layer is being drawn do.
-    /// </summary>
-    private GraphicsDevice _graphicsDevice = null!;
-
-    private SpriteBatch _spriteBatch = null!;
-
-    private Texture2D _unitRectangle = null!;
-
-    /// <summary>
-    /// Captures the session-stable render services (see their own field doc comment)
-    /// and lets every window LoadContent, in that order -- called once, from GameLoop.LoadContent,
-    /// after GraphicsDevice/unitRectangle/the shared SpriteBatch all already exist.
-    /// </summary>
-    public void LoadContent(GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, Texture2D unitRectangle)
-    {
-        _graphicsDevice = graphicsDevice;
-        _spriteBatch = spriteBatch;
-        _unitRectangle = unitRectangle;
-
-        foreach (var layer in UiLayerStack.LayersAscending())
-        {
-            foreach (var window in Layers[layer])
-            {
-                window.LoadContent();
-            }
-        }
-    }
+    /// <summary>Lets every window load its content -- called once, from GameLoop.LoadContent, after ElementPoolService has its render services.</summary>
+    public void LoadContent() => LayerHost.LoadContent();
 
     /// <summary>
     /// Must run before GameLoop's pause check reads MapWindow.IsPaused/Layers.IsMenuModeActive,
@@ -509,84 +485,9 @@ public sealed record ShellContext(
         Inventory.Update();
         AbilityScore.Update();
 
-        foreach (var layer in UiLayerStack.LayersAscending())
-        {
-            UpdateWindowLayer(Layers[layer], layer.ToString(), gameTime);
-        }
+        LayerHost.Update(gameTime);
     }
 
-    /// <summary>Drawn bottom-to-top, UiLayer's own declaration order -- see its doc comment for what each tier holds. User (topmost) draws last and unconditionally, so drag feedback is never occluded by whatever it's passing over on its way to a drop target. A dim overlay is drawn immediately beneath Layers.BottommostMenuWindow, if menu mode is currently active -- see UiLayerStack's own doc comment on OpenMenuWindow/CloseMenuWindow. Every element UiLayerStack.IsMenuModeExempt opted in (the hotbar, the Notification folder, the Health/Inventory/Ability Score buttons) is pulled out of its ordinary draw slot and redrawn immediately above that same dim quad instead (see FindMenuModeExemptElements) -- they stay reachable for input while menu mode is active (UiInputController.TryHitTestInteraction), so they need to read as visually usable too, not look identical to the rest of the dimmed HUD.</summary>
-    public void Draw(GameTime gameTime)
-    {
-        _bottommostMenuWindow = Layers.BottommostMenuWindow;
-        _menuModeExemptElements = _bottommostMenuWindow is null ? [] : FindMenuModeExemptElements();
-        _dimDrawn = _bottommostMenuWindow is null;
-
-        foreach (var layer in UiLayerStack.LayersAscending())
-        {
-            DrawWindowLayer(Layers[layer], layer.ToString(), gameTime);
-        }
-    }
-
-    /// <summary>Every element UiLayerStack.IsMenuModeExempt currently considers exempt, across every layer, preserving normal ascending draw order among themselves (so e.g. the hotbar and a folder tile keep whatever relative stacking they'd otherwise have). Expected to stay a short list -- see UiLayerStack's own field doc comment on why the exempt set is meant to stay small and deliberately curated.</summary>
-    private List<Element> FindMenuModeExemptElements()
-    {
-        List<Element> exempt = [];
-        foreach (var layer in UiLayerStack.LayersAscending())
-        {
-            foreach (var element in Layers[layer])
-            {
-                if (Layers.IsMenuModeExempt(element))
-                {
-                    exempt.Add(element);
-                }
-            }
-        }
-
-        return exempt;
-    }
-
-    private void UpdateWindowLayer(IReadOnlyList<Element> windows, string tierName, GameTime gameTime)
-    {
-        foreach (var window in windows.ToArray())
-        {
-            using (EngineHooks.FrameCost(FrameCostCategory.Update, tierName, window.GetType().Name))
-            {
-                window.Update(gameTime);
-            }
-        }
-    }
-
-    /// <summary>Draws one layer's windows, consulting/mutating the per-Draw-call _dimDrawn/_bottommostMenuWindow/_menuModeExemptElements fields (reset at the top of Draw) instead of threading them through parameters and a return value. _menuModeExemptElements (empty unless menu mode is active) are skipped here in their ordinary draw slot -- drawing one there, before the dim quad, would just get it covered by that same quad -- and instead drawn once each, immediately after the dim, the moment this loop reaches _bottommostMenuWindow's own layer.</summary>
-    private void DrawWindowLayer(IReadOnlyList<Element> windows, string tierName, GameTime gameTime)
-    {
-        foreach (var window in windows)
-        {
-            if (_menuModeExemptElements.Contains(window))
-            {
-                continue;
-            }
-
-            if (!_dimDrawn && window == _bottommostMenuWindow)
-            {
-                MenuModeDimRenderer.Draw(_spriteBatch, _unitRectangle, _graphicsDevice);
-                _dimDrawn = true;
-
-                foreach (var exemptElement in _menuModeExemptElements)
-                {
-                    DrawWindow(exemptElement, gameTime, "MenuModeExempt");
-                }
-            }
-
-            DrawWindow(window, gameTime, tierName);
-        }
-    }
-
-    private void DrawWindow(Element window, GameTime gameTime, string tierName)
-    {
-        using (EngineHooks.FrameCost(FrameCostCategory.Draw, tierName, window.GetType().Name))
-        {
-            window.Draw(gameTime);
-        }
-    }
+    /// <summary>Every layer bottom to top, with the menu-mode dim -- see UiLayerHost.</summary>
+    public void Draw(GameTime gameTime) => LayerHost.Draw(gameTime);
 }

@@ -1,11 +1,12 @@
 using Engine.Utilities;
-using Game.Modules.Core.Components;
+using FontStashSharp;
 using Game.Modules.Shops;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using Presentation.Fonts;
-using Presentation.Rendering;
 using Presentation.UI.Chrome;
+using UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Presentation.UI.Content;
 
@@ -14,7 +15,7 @@ namespace Presentation.UI.Content;
 /// + a stack-count/total-cost row (bottom-right, quantity flush left, "{total}G" flush right)
 /// instead of InventoryItemStackCell's own icon+quantity-badge layout. The per-unit price and any
 /// band breakdown live in the hover tooltip's own band table/receipt now (see InventoryGridContent.
-/// ComputeHoverRows) -- this row only needs to answer "how many, for how much total," so it no
+/// ComputeShopRows) -- this row only needs to answer "how many, for how much total," so it no
 /// longer repeats the per-unit figure the tooltip already shows. Same grid controls/hover/selection/
 /// eligibility-glow as the normal grid -- DrawStateOverlay/GlowRenderer are reused unchanged, only
 /// the icon-and-quantity portion of DrawContent is replaced. Named for what it's for (shop buy/sell
@@ -26,8 +27,8 @@ namespace Presentation.UI.Content;
 /// name+price row), reusing Configure/SetPrice/SetStockStatus/the favorable-price coloring via its
 /// own DrawContent override. See that class's own doc comment.
 /// </summary>
-public class ShopItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService, SpriteRenderer spriteRenderer)
-    : InventoryItemStackCell(fontService, elementPoolService, labelRenderer, spriteSheetService, spriteRenderer)
+public class ShopItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService)
+    : InventoryItemStackCell(fontService, elementPoolService, labelRenderer, spriteSheetService)
 {
     private const float TextPadding = 4f;
 
@@ -35,7 +36,7 @@ public class ShopItemStackCell(FontService fontService, ElementPoolService eleme
     private const float NameTopPadding = 6f;
 
     /// <summary>
-    /// Halfway between _quantityFont's own 0.5 fraction (see FontChrome.InventoryStackQuantityFontFraction,
+    /// Halfway between _quantityFont's own 0.5 fraction (see GameFontChrome.InventoryStackQuantityFontFraction,
     /// the original, too-large price size) and this cell's first attempt at shrinking it (0.25,
     /// confirmed too small live) -- 0.375. Named for what it's for generically, not "price"
     /// specifically -- protected, not private, so TradeItemStackCell's own DrawContent can reuse
@@ -43,7 +44,7 @@ public class ShopItemStackCell(FontService fontService, ElementPoolService eleme
     /// sized for the plain inventory cell's lone quantity badge, is too large once that cell's own
     /// small square needs to fit a 3-digit-or-more number legibly).
     /// </summary>
-    protected static readonly float CompactStatFontSizeFraction = FontChrome.InventoryStackQuantityFontFraction * 0.75f;
+    protected static readonly float CompactStatFontSizeFraction = GameFontChrome.InventoryStackQuantityFontFraction * 0.75f;
 
     /// <summary>Same Better/Worse pair ItemDetailsWindow already uses -- reused here so a favorable price and an unfavorable one read with the same color language elsewhere in the UI. See PriceIsFavorable/PriceIsUnfavorable's own doc comment for which StockStatus counts as which, per grid. protected, not private -- TradeItemStackCell's own small-square layout reuses this same color pair for its price text.</summary>
     protected static readonly Color FavorableColor = Color.LightGreen;
@@ -57,14 +58,20 @@ public class ShopItemStackCell(FontService fontService, ElementPoolService eleme
     protected int _totalPrice;
 
     protected int _quantity;
-    private FontStashTextMeasurer? _nameFontMeasurer;
+
+    /// <summary>The name as drawn, shortened to the cell -- see DrawContent.</summary>
+    private readonly KeyedCache<(string Name, float Width, SpriteFontBase Font), string> _truncatedName = new();
+
+    /// <summary>The total price as drawn, rebuilt only when it changes.</summary>
+    private readonly KeyedCache<int, string> _totalPriceText = new();
+
+    private readonly TextSizeCache _totalPriceTextSize = new();
+
+    /// <summary>The quantity as drawn, rebuilt only when it changes; protected so TradeItemStackCell draws the same text.</summary>
+    protected readonly KeyedCache<int, string> _quantityText = new();
 
     /// <summary>Set right after Configure -- Configure has no notion of an item's display Name (it only ever carried SpriteName/Glyph), so this is the one extra piece of data this subclass needs beyond what the base setter already captures.</summary>
-    public void SetItemName(string name)
-    {
-        _itemName = name;
-        _nameFontMeasurer = new FontStashTextMeasurer(_badgeFont);
-    }
+    public void SetItemName(string name) => _itemName = name;
 
     public void SetPrice(int totalPrice, int quantity)
     {
@@ -114,7 +121,7 @@ public class ShopItemStackCell(FontService fontService, ElementPoolService eleme
         var textWidth = System.Math.Max(0f, ContentSize.X - spriteSize.X - TextPadding);
         var halfHeight = ContentSize.Y / 2f;
 
-        var truncatedName = _nameFontMeasurer is { } measurer ? StringUtility.TruncateWithEllipsis(measurer, _itemName, textWidth) : _itemName;
+        var truncatedName = _truncatedName.Get((_itemName, textWidth, _badgeFont), FontService, static (key, fontService) => StringUtility.TruncateWithEllipsis(fontService.GetTextMeasurer(key.Font), key.Name, key.Width));
         LabelRenderer.DrawLeftAligned(spriteBatch, _badgeFont, truncatedName, new Vector2(textLeft, ContentAbsolutePosition.Y + NameTopPadding), new Vector2(textWidth, halfHeight - NameTopPadding), textColor);
 
         var priceColor = isGreyedOut ? Color.Gray : PriceIsFavorable ? FavorableColor : PriceIsUnfavorable ? UnfavorableColor : textColor;
@@ -125,7 +132,7 @@ public class ShopItemStackCell(FontService fontService, ElementPoolService eleme
 
         if (_quantity > 1)
         {
-            LabelRenderer.DrawLeftAligned(spriteBatch, priceFont, _quantity.ToString(), priceRowPosition, priceRowSize, textColor);
+            LabelRenderer.DrawLeftAligned(spriteBatch, priceFont, _quantityText.Get(_quantity, static quantity => quantity.ToString()), priceRowPosition, priceRowSize, textColor);
         }
 
         // Inset from the cell's own right edge by the eligibility glow's own width -- flush against
@@ -134,6 +141,7 @@ public class ShopItemStackCell(FontService fontService, ElementPoolService eleme
         // FadeRingCount's own doc comment; Tooltip.DrawContent's band-table price column needed the
         // same fix for the same reason).
         var totalPriceRowSize = new Vector2(System.Math.Max(0f, priceRowSize.X - GlowRenderer.FadeRingCount), priceRowSize.Y);
-        LabelRenderer.DrawRightAligned(spriteBatch, priceFont, $"{_totalPrice}G", priceRowPosition, totalPriceRowSize, priceColor);
+        var totalPriceText = _totalPriceText.Get(_totalPrice, static totalPrice => $"{totalPrice}G");
+        LabelRenderer.DrawRightAligned(spriteBatch, priceFont, totalPriceText, _totalPriceTextSize.SizeOf(priceFont, totalPriceText).X, priceRowPosition, totalPriceRowSize, priceColor);
     }
 }

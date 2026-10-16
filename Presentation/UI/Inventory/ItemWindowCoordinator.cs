@@ -9,6 +9,7 @@ using Presentation.UI.Lootboxes;
 using Presentation.UI.Looting;
 using Presentation.UI.Shops;
 using Presentation.UI.Trade;
+using UIEngine.UI;
 
 namespace Presentation.UI.Inventory;
 

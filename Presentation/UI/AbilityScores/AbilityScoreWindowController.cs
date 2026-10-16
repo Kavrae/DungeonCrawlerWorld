@@ -1,12 +1,11 @@
-using Engine.ECS.Components.Stores;
-using Game.Modules.Inventory;
-using Game.Modules.Inventory.Components;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.UI.Chrome;
-using Presentation.UI.ColorPalettes;
 using Presentation.UI.Inventory;
+using UIEngine.Geometry;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.AbilityScores;
 
@@ -34,7 +33,7 @@ public sealed class AbilityScoreWindowController(
     private WindowLifecycle<AbilityScoreWindow> _slot = null!;
     private UiLayerStack _layers = null!;
 
-    /// <summary>Lets a global keyboard hotkey (O -- see UiInputController.HandleWindowToggleHotkeys) reuse the same open/close behavior the button's own Clicked handler already has, without exposing _windowLifecycle itself.</summary>
+    /// <summary>Lets a global keyboard hotkey (O -- a KeyPressInputHandler registered in ShellBootstrapper) reuse the same open/close behavior the button's own Clicked handler already has, without exposing _windowLifecycle itself.</summary>
     public void ToggleAbilityScoreWindow() => _slot.Toggle();
 
     public void Initialize(UiLayerStack layers)
@@ -78,7 +77,7 @@ public sealed class AbilityScoreWindowController(
 
         var relativePosition = inventory.PlayerInventoryWindow is { } playerWindow
             ? WindowCascadePlacement.ComputePosition(playerWindow.Rectangle, childSize, 0, mapWindow.CurrentSize)
-            : ScreenBoundsClamp.Clamp(new Vector2(InventoryChrome.WindowPosition.X + windowWidth + WindowCascadePlacement.Gap, InventoryChrome.WindowPosition.Y), childSize, mapWindow.CurrentSize);
+            : RectangleClamp.ClampInside(new Vector2(InventoryChrome.WindowPosition.X + windowWidth + WindowCascadePlacement.Gap, InventoryChrome.WindowPosition.Y), childSize, mapWindow.CurrentSize);
 
         var window = elementPoolService.CreateElement<AbilityScoreWindow>(null, new ElementOptions
         {

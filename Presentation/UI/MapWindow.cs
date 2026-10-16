@@ -5,10 +5,11 @@ using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
-using Presentation.Fonts;
 using Presentation.MapRendering;
-using Presentation.Rendering;
 using Presentation.UI.FloatingText;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Presentation.UI;
 
@@ -193,7 +194,7 @@ public sealed class MapWindow : Window
     /// (internal, not private) since MapWindowTests exercises it directly the same way it does
     /// Window.HandleHotkeys, simulating a mouse position without a real OS cursor.
     /// </summary>
-    internal void UpdateHoveredTile(Point mousePosition) => _actionTargeting.UpdateHoveredTile(mousePosition, _contentState.AbsolutePosition);
+    internal void UpdateHoveredTile(Point mousePosition) => _actionTargeting.UpdateHoveredTile(mousePosition, ContentAbsolutePosition);
 
     /// <summary>Read-only view of the armed ability's current hit-footprint -- see ActionTargetingController.HoveredFootprint.</summary>
     internal IReadOnlyList<Vector3Int> HoveredFootprint => _actionTargeting.HoveredFootprint;
@@ -266,10 +267,10 @@ public sealed class MapWindow : Window
 
     /// <summary>Sets MapViewState.SelectedMapNodePosition to whatever map tile mousePosition resolves to, if any.</summary>
     /// <remarks>A miss (cursor off the map) is a no-op -- the previous selection, if any, stays selected rather than being cleared by clicking empty space. This is the ordinary inspector click-select path; see OnContentClickAction for why an armed ability/item's click-to-confirm takes over first when something is armed.</remarks>
-    /// <param name="mousePosition">The raw mouse position (e.g. from Mouse.GetState()), not pre-translated to this window's content area -- resolved against _contentState.AbsolutePosition internally, the same as UpdateHoveredTile/TryConfirmActivation.</param>
+    /// <param name="mousePosition">The raw mouse position (e.g. from Mouse.GetState()), not pre-translated to this window's content area -- resolved against ContentAbsolutePosition internally, the same as UpdateHoveredTile/TryConfirmActivation.</param>
     public void SelectMapNodes(Point mousePosition)
     {
-        if (_camera.TryGetHoveredMapPosition(mousePosition, _contentState.AbsolutePosition, out var mapPosition))
+        if (_camera.TryGetHoveredMapPosition(mousePosition, ContentAbsolutePosition, out var mapPosition))
         {
             _mapViewState.SelectedMapNodePosition = mapPosition;
             _mapViewState.InspectionMode = InspectionMode.Basic;
@@ -288,7 +289,7 @@ public sealed class MapWindow : Window
     {
         if (_mapViewState.ArmedActionId is not null || _mapViewState.ArmedItemStackInstanceId is not null)
         {
-            _actionTargeting.TryConfirmActivation(mousePosition, _contentState.AbsolutePosition);
+            _actionTargeting.TryConfirmActivation(mousePosition, ContentAbsolutePosition);
             return;
         }
 
@@ -337,7 +338,7 @@ public sealed class MapWindow : Window
     /// </summary>
     internal void TryOpenEntityContextMenuAt(Point mousePosition)
     {
-        if (!_camera.TryGetHoveredMapPosition(mousePosition, _contentState.AbsolutePosition, out var mapPosition))
+        if (!_camera.TryGetHoveredMapPosition(mousePosition, ContentAbsolutePosition, out var mapPosition))
         {
             return;
         }

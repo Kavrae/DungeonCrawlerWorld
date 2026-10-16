@@ -1,0 +1,45 @@
+using FontStashSharp;
+
+namespace UIEngine.Fonts;
+
+/// <summary>Loads and hands out fonts by size, wrapping FontStashSharp's dynamic glyph rasterization.</summary>
+public sealed class FontService : IDisposable
+{
+    private readonly FontSystem _fontSystem;
+    private readonly Dictionary<SpriteFontBase, FontStashTextMeasurer> _textMeasurersByFont = new(ReferenceEqualityComparer.Instance);
+
+    /// <param name="fontsDirectory">
+    /// Directory containing font files, relative to the exe's output directory (where the
+    /// Content project's font files land as "Fonts"). Resolved against
+    /// <see cref="AppContext.BaseDirectory"/> rather than the process's current working
+    /// directory, since "dotnet run" sets the working directory to the project's source
+    /// folder, not its build output.
+    /// Fonts should be adding in fallback order.
+    /// </param>
+    public FontService(string fontsDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fontsDirectory);
+
+        _fontSystem = new FontSystem();
+        var resolvedFontsDirectory = Path.Combine(AppContext.BaseDirectory, fontsDirectory);
+        _fontSystem.AddFont(File.ReadAllBytes(Path.Combine(resolvedFontsDirectory, "DroidSans.ttf")));
+        _fontSystem.AddFont(File.ReadAllBytes(Path.Combine(resolvedFontsDirectory, "DroidSansJapanese.ttf")));
+        _fontSystem.AddFont(File.ReadAllBytes(Path.Combine(resolvedFontsDirectory, "Symbola-Emoji.ttf")));
+    }
+
+    public SpriteFontBase GetFont(int fontSize) => _fontSystem.GetFont(fontSize);
+
+    /// <summary>The one text measurer for font, made on first request and kept, so measuring never allocates one per call.</summary>
+    public FontStashTextMeasurer GetTextMeasurer(SpriteFontBase font)
+    {
+        if (!_textMeasurersByFont.TryGetValue(font, out var textMeasurer))
+        {
+            textMeasurer = new FontStashTextMeasurer(font);
+            _textMeasurersByFont[font] = textMeasurer;
+        }
+
+        return textMeasurer;
+    }
+
+    public void Dispose() => _fontSystem.Dispose();
+}

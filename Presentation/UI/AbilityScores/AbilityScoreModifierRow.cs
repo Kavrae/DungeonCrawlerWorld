@@ -1,12 +1,12 @@
 using FontStashSharp;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using Presentation.Fonts;
-using Presentation.Rendering;
 using Presentation.UI.Chrome;
-using Presentation.UI.ColorPalettes;
-using Presentation.UI;
+using UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.AbilityScores;
 
@@ -29,6 +29,7 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
 
     private string _text = string.Empty;
     private SpriteFontBase _font = null!;
+    private readonly TextSizeCache _textSize = new();
 
     public ActionSource? Source { get; private set; }
 
@@ -44,7 +45,7 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
         Source = line.Source;
         ModifierText = line.ModifierText;
         RemainingDurationFrames = line.RemainingDurationFrames;
-        _font = FontService.GetFont((int)(rowHeight * FontChrome.AbilityScoreModifierRowFontFraction));
+        _font = FontService.GetFont((int)(rowHeight * GameFontChrome.AbilityScoreModifierRowFontFraction));
     }
 
     public override void DrawContent(GameTime gameTime)
@@ -58,6 +59,6 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
         }
 
         var footprintSize = new Vector2(ContentSize.X - Padding, ContentSize.Y);
-        LabelRenderer.DrawRightAligned(spriteBatch, _font, _text, ContentAbsolutePosition, footprintSize, TextColor);
+        LabelRenderer.DrawRightAligned(spriteBatch, _font, _text, _textSize.SizeOf(_font, _text).X, ContentAbsolutePosition, footprintSize, TextColor);
     }
 }

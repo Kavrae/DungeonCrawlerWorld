@@ -10,11 +10,17 @@ using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Presentation.Fonts;
 using Presentation.Input;
+using Presentation.Input.DragDrop;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using UIEngine;
+using UIEngine.Fonts;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Content;
 
@@ -50,11 +56,10 @@ public sealed class HotbarContent(
     ItemCatalog itemCatalog,
     FontService fontService,
     SpriteSheetService spriteSheetService,
-    SpriteRenderer spriteRenderer,
     Vector2 screenSize,
     SimulationClock simulationClock,
     EntityActions? actions = null,
-    GameplayTagRegistry? gameplayTags = null) : IElementContent
+    GameplayTagRegistry? gameplayTags = null) : IElementContent, IContentDragSource
 {
 
     /// <summary>Optional for the same reason as the clock: a test that never shows an action cooldown needs no action lookups at all.</summary>
@@ -77,9 +82,8 @@ public sealed class HotbarContent(
     internal static readonly float SummaryWidth = SummarySlotSpan * SlotSize.X + (SummarySlotSpan - 1) * HotbarChrome.SlotGap;
 
     /// <summary>
-    /// Set by UiInputController while a content-drag (an inventory item cell, or an already-
-    /// bound hotbar slot, picked up toward a new binding -- see its own doc comment) is in
-    /// progress, so every slot glows to invite the drop -- any slot can accept any item, so
+    /// Set by HotbarBindingDropHandler while a content drag that could bind here (an inventory item
+    /// cell, or an already-bound hotbar slot) is in progress, so every slot glows to invite the drop -- any slot can accept any item, so
     /// there's no single "hovered" target the way a more typical drop zone would highlight.
     /// Cleared the moment the drag ends, drop accepted or not. Reuses GlowRenderer.Draw verbatim,
     /// the same primitive NotificationCenter's folder already uses for its own unread-glow --
@@ -87,15 +91,30 @@ public sealed class HotbarContent(
     /// </summary>
     public bool IsAcceptingDrag { get; set; }
 
-    private readonly RadialFillRenderer _radialFill = new(new LabelRenderer(), spriteSheetService, spriteRenderer);
+    private readonly RadialFillRenderer _radialFill = new(new LabelRenderer(), spriteSheetService);
 
     private Window _hostWindow = null!;
     private SpriteFontBase _font = null!;
     private SpriteFontBase _overlayFont = null!;
     private SpriteFontBase _countdownFont = null!;
 
-    /// <summary>Whether each slot is currently active (usable) -- refreshed once per Update (see RefreshSlotActiveStates), not recomputed during Draw. Deciding *whether* a slot is disabled (locked, or blocked -- see ComputeIsSlotActive) is state/game logic; Draw only ever asks "is this slot active" and independently decides how that reads visually (see AlphaFor) -- the two are deliberately kept separate rather than DrawActionSlot/DrawItemSlot each computing and returning their own alpha for the rest of DrawSlot to reuse.</summary>
+    /// <summary>Whether each slot is currently active (usable) -- refreshed once per Update (see RefreshSlotActiveStates), not recomputed during Draw. Deciding *whether* a slot is disabled (locked, or blocked -- see RefreshSlotActiveStates) is state/game logic; Draw only ever asks "is this slot active" and independently decides how that reads visually (see AlphaFor) -- the two are deliberately kept separate rather than DrawActionSlot/DrawItemSlot each computing and returning their own alpha for the rest of DrawSlot to reuse.</summary>
     private readonly Dictionary<HotkeySlot, bool> _slotActiveStates = [];
+
+    /// <summary>Whether each slot holds something that resolves -- refreshed alongside _slotActiveStates, from the same binding lookup.</summary>
+    private readonly Dictionary<HotkeySlot, bool> _slotBoundStates = [];
+
+    /// <summary>Every laid-out slot's bounds -- see SlotBounds, which rebuilds it when _slotBoundsOrigin or _slotBoundsUnlockedExpansionSlots no longer match, and counts each rebuild in _slotBoundsVersion (0 = never built).</summary>
+    private readonly List<(HotkeySlot Slot, Rectangle Bounds)> _slotBounds = [];
+    private Vector2 _slotBoundsOrigin;
+    private short _slotBoundsUnlockedExpansionSlots;
+    private int _slotBoundsVersion;
+
+    /// <summary>TryGetSlotAt's last answer, valid while the position and _slotBoundsVersion still match.</summary>
+    private Point _lastSlotQueryPosition;
+    private int _lastSlotQueryBoundsVersion;
+    private bool _lastSlotQueryFound;
+    private HotkeySlot _lastSlotQuerySlot;
 
     /// <summary>Read at construction (not deferred to Initialize/Update) specifically so ShellBootstrapper can read a correct Size immediately after `new HotbarContent(...)`, before the host Window -- which needs that Size to construct itself -- exists at all. Field initializers can't reference another instance field (only the primary constructor's own parameters), hence re-resolving the pool from componentManager here rather than reusing _hotkeyExpansionUnlocks.</summary>
     private short _unlockedExpansionSlots = GetUnlockedExpansionSlots(hotkeyBindingView, world.PlayerEntityId);
@@ -113,7 +132,7 @@ public sealed class HotbarContent(
     /// later SetBounds calls, as more slots unlock, aren't clamped straight back down to whatever
     /// page/row count happened to be visible at construction time. Confirmed bug: a player starting
     /// with exactly the DefaultUnlockedExpansionSlots fallback (page 1 only) baked that width in as
-    /// a hard cap, so page 2's slots -- drawn fine by DrawContent/EnumerateSlotBounds, which don't
+    /// a hard cap, so page 2's slots -- drawn fine by DrawContent/SlotBounds, which don't
     /// go through the clamped Rectangle -- were never actually clickable/droppable once revealed.
     /// </summary>
     public static readonly Vector2 MaximumSize = ComputeSize(HotbarChrome.MaxExpansionRows, HotbarChrome.MaxExpansionPages);
@@ -145,9 +164,9 @@ public sealed class HotbarContent(
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
-        _font = fontService.GetFont((int)(SlotSize.Y * FontChrome.HotbarSlotGlyphFontFraction));
-        _overlayFont = fontService.GetFont((int)(SlotSize.Y * FontChrome.HotbarOverlayFontFraction));
-        _countdownFont = fontService.GetFont((int)(SlotSize.Y * FontChrome.HotbarCountdownFontFraction));
+        _font = fontService.GetFont((int)(SlotSize.Y * GameFontChrome.HotbarSlotGlyphFontFraction));
+        _overlayFont = fontService.GetFont((int)(SlotSize.Y * GameFontChrome.HotbarOverlayFontFraction));
+        _countdownFont = fontService.GetFont((int)(SlotSize.Y * GameFontChrome.HotbarCountdownFontFraction));
     }
 
     public void Update(GameTime gameTime)
@@ -176,29 +195,37 @@ public sealed class HotbarContent(
 
         foreach (var entry in HotkeySlotLayout.Entries)
         {
-            _slotActiveStates[entry.Slot] = ComputeIsSlotActive(playerEntityId, entry.Slot);
+            var isBound = TryGetSlotBlocker(playerEntityId, entry.Slot, out var blocker);
+            _slotBoundStates[entry.Slot] = isBound;
+
+            // Unbound but unlocked is empty, not disabled (nothing to fade).
+            _slotActiveStates[entry.Slot] = !IsSlotLocked(entry.Slot) && (!isBound || blocker == ActivationBlocker.None);
         }
     }
 
-    private bool ComputeIsSlotActive(int playerEntityId, HotkeySlot slot)
-    {
-        if (IsSlotLocked(slot))
-        {
-            return false;
-        }
+    /// <summary>Whether slot holds an action or item stack that resolves, as of the last Update -- exactly when TryGetSlotSummary has something to describe, without building its text.</summary>
+    /// <remarks>Read every frame the cursor rests on the hotbar, so it's the answer RefreshSlotActiveStates already resolved rather than a fresh binding lookup.</remarks>
+    internal bool IsSlotBound(HotkeySlot slot) => _slotBoundStates.GetValueOrDefault(slot);
 
+    /// <summary>Why the player can't use what slot holds right now (None if they can) -- false if the slot holds nothing. The blocker TryGetSlotSummary reports, without building its text.</summary>
+    internal bool TryGetSlotBlocker(HotkeySlot slot, out ActivationBlocker blocker) => TryGetSlotBlocker(world.PlayerEntityId, slot, out blocker);
+
+    private bool TryGetSlotBlocker(int playerEntityId, HotkeySlot slot, out ActivationBlocker blocker)
+    {
         if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out _))
         {
-            return actionStateView.GetActionBlocker(playerEntityId, actionId) == ActivationBlocker.None;
+            blocker = actionStateView.GetActionBlocker(playerEntityId, actionId);
+            return true;
         }
 
         if (hotkeyBindingView.TryGetBoundItem(playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out _, out _))
         {
-            return actionStateView.GetItemBlocker(playerEntityId, stackInstanceId) == ActivationBlocker.None;
+            blocker = actionStateView.GetItemBlocker(playerEntityId, stackInstanceId);
+            return true;
         }
 
-        // Unbound but unlocked -- empty, not disabled (nothing to fade).
-        return true;
+        blocker = ActivationBlocker.None;
+        return false;
     }
 
     /// <summary>Unlocking more Expansion slots is rare and permanent (see HotkeyExpansion.Apply), so this only actually resizes/repositions the host window on the frame the row/page count changes, not every frame -- centered horizontally and anchored to the same bottom margin as before, recomputed against the new Size so the bar grows upward as rows are added and rightward as page 2 appears (see ShellBootstrapper, which sizes/positions the window identically at construction).</summary>
@@ -228,7 +255,7 @@ public sealed class HotbarContent(
         var unitRectangle = _hostWindow.ElementPoolService.UnitRectangle;
         var playerEntityId = world.PlayerEntityId;
 
-        foreach (var (slot, bounds) in EnumerateSlotBounds())
+        foreach (var (slot, bounds) in SlotBounds())
         {
             DrawSlot(spriteBatch, unitRectangle, playerEntityId, slot, bounds);
 
@@ -251,12 +278,27 @@ public sealed class HotbarContent(
     /// height; Expansion itself sits flush at the content origin's Y, which is what makes the bar
     /// grow upward as rows are added (see RefreshLayoutIfChanged's own doc comment).
     /// </summary>
-    private IEnumerable<(HotkeySlot Slot, Rectangle Bounds)> EnumerateSlotBounds()
+    /// <remarks>
+    /// Kept, and rebuilt only when what it depends on changes -- the content origin and how many Expansion slots are
+    /// unlocked -- since it's read several times a frame (drawing, the cursor's slot, the summary's anchor). A List, not an
+    /// interface, so a foreach over it allocates nothing.
+    /// </remarks>
+    private List<(HotkeySlot Slot, Rectangle Bounds)> SlotBounds()
     {
+        var origin = _hostWindow.ContentAbsolutePosition;
+        if (_slotBoundsVersion > 0 && origin == _slotBoundsOrigin && _unlockedExpansionSlots == _slotBoundsUnlockedExpansionSlots)
+        {
+            return _slotBounds;
+        }
+
+        _slotBoundsOrigin = origin;
+        _slotBoundsUnlockedExpansionSlots = _unlockedExpansionSlots;
+        _slotBoundsVersion++;
+        _slotBounds.Clear();
+
         var rowsVisible = GetExpansionRowsVisible(_unlockedExpansionSlots);
         var pagesVisible = GetExpansionPagesVisible(_unlockedExpansionSlots);
         var expansionHeight = ComputeSize(rowsVisible, pagesVisible).Y;
-        var origin = _hostWindow.ContentAbsolutePosition;
         var baseWidth = HotbarChrome.BaseSlotCount * SlotSize.X + (HotbarChrome.BaseSlotCount - 1) * HotbarChrome.SlotGap;
         var centeredRowY = origin.Y + (expansionHeight - SlotSize.Y) / 2f;
 
@@ -264,12 +306,12 @@ public sealed class HotbarContent(
         for (var i = 0; i < HotbarChrome.BaseSlotCount; i++)
         {
             var slot = (HotkeySlot)((int)HotkeySlot.Base1 + i);
-            yield return (slot, new Rectangle((int)x, (int)centeredRowY, (int)SlotSize.X, (int)SlotSize.Y));
+            _slotBounds.Add((slot, new Rectangle((int)x, (int)centeredRowY, (int)SlotSize.X, (int)SlotSize.Y)));
             x += SlotSize.X + HotbarChrome.SlotGap;
         }
 
         x = origin.X + baseWidth + HotbarChrome.GroupGap;
-        yield return (HotkeySlot.DefaultAttack, new Rectangle((int)x, (int)centeredRowY, (int)SlotSize.X, (int)SlotSize.Y));
+        _slotBounds.Add((HotkeySlot.DefaultAttack, new Rectangle((int)x, (int)centeredRowY, (int)SlotSize.X, (int)SlotSize.Y)));
 
         var expansionOriginX = x + SlotSize.X + HotbarChrome.GroupGap;
         var pageWidth = HotbarChrome.ExpansionColumnsPerRow * SlotSize.X + (HotbarChrome.ExpansionColumnsPerRow - 1) * HotbarChrome.SlotGap;
@@ -284,27 +326,43 @@ public sealed class HotbarContent(
             var pageOriginX = expansionOriginX + entry.Page * (pageWidth + HotbarChrome.ExpansionPageGap);
             var slotX = pageOriginX + entry.Column * (SlotSize.X + HotbarChrome.SlotGap);
             var slotY = origin.Y + entry.Row * (SlotSize.Y + HotbarChrome.SlotGap);
-            yield return (entry.Slot, new Rectangle((int)slotX, (int)slotY, (int)SlotSize.X, (int)SlotSize.Y));
+            _slotBounds.Add((entry.Slot, new Rectangle((int)slotX, (int)slotY, (int)SlotSize.X, (int)SlotSize.Y)));
         }
+
+        return _slotBounds;
     }
 
     /// <summary>Whether slot is usable as of the last Update (see RefreshSlotActiveStates) -- true until the first one has run.</summary>
     internal bool IsSlotActive(HotkeySlot slot) => _slotActiveStates.GetValueOrDefault(slot, true);
 
     /// <summary>Screen-position hit test for exactly which hotbar slot (if any) screenPosition falls within -- UiInputController's content-drag path uses this both as a bind-drop target and, combined with TryGetBoundItemId, to detect a drag starting on an already-bound slot.</summary>
+    /// <remarks>Remembers its last answer: the cursor's slot is asked several times a frame (the refusal cursor, the hover, a drag's refusal), and the same position against the same layout gives the same slot.</remarks>
     internal bool TryGetSlotAt(Point screenPosition, out HotkeySlot slot)
     {
-        foreach (var (candidateSlot, bounds) in EnumerateSlotBounds())
+        var slotBounds = SlotBounds();
+        if (screenPosition == _lastSlotQueryPosition && _slotBoundsVersion == _lastSlotQueryBoundsVersion)
+        {
+            slot = _lastSlotQuerySlot;
+            return _lastSlotQueryFound;
+        }
+
+        _lastSlotQueryPosition = screenPosition;
+        _lastSlotQueryBoundsVersion = _slotBoundsVersion;
+        _lastSlotQueryFound = false;
+        _lastSlotQuerySlot = default;
+
+        foreach (var (candidateSlot, bounds) in slotBounds)
         {
             if (bounds.Contains(screenPosition))
             {
-                slot = candidateSlot;
-                return true;
+                _lastSlotQueryFound = true;
+                _lastSlotQuerySlot = candidateSlot;
+                break;
             }
         }
 
-        slot = default;
-        return false;
+        slot = _lastSlotQuerySlot;
+        return _lastSlotQueryFound;
     }
 
     /// <summary>The item stack (if any) currently bound to slot -- UiInputController's content-drag path reads this at press time to capture the payload of a drag starting on an already-bound hotbar slot.</summary>
@@ -363,11 +421,10 @@ public sealed class HotbarContent(
         return lines.Count == 1 ? summary : string.Join('\n', lines);
     }
 
-    /// <summary>slot's on-screen bounds -- reuses the same EnumerateSlotBounds walk DrawContent/
-    /// TryGetSlotAt already share as their single source of truth.</summary>
+    /// <summary>slot's on-screen bounds -- the same SlotBounds DrawContent/TryGetSlotAt share as their single source of truth.</summary>
     internal Rectangle GetSlotBounds(HotkeySlot slot)
     {
-        foreach (var (candidateSlot, bounds) in EnumerateSlotBounds())
+        foreach (var (candidateSlot, bounds) in SlotBounds())
         {
             if (candidateSlot == slot)
             {
@@ -419,7 +476,7 @@ public sealed class HotbarContent(
     ///
     /// This is the one place the unbind-then-bind sequencing rule lives, next to the rest of
     /// this class's own binding rules (locked slots, mutual exclusivity -- see BindItem/BindAction),
-    /// rather than in UiInputController's drag-resolution code. UiInputController still owns
+    /// rather than in HotbarBindingDropHandler. UiInputController owns
     /// gesture recognition (tap-vs-drag threshold, hit-testing the release position) -- only it
     /// has visibility across the whole press-to-release gesture, which can start on a different
     /// source Element entirely (e.g. InventoryItemStackCell); this method only knows the
@@ -473,6 +530,32 @@ public sealed class HotbarContent(
         string? QuantityText,
         int? CountdownSecondsAboveSlot);
 
+    /// <summary>A slot's drawn numbers -- its cost badges, its quantity or charges and its countdown -- each rebuilt and measured only when its number changes, not every frame the bar is drawn.</summary>
+    private sealed class SlotTextCaches
+    {
+        public KeyedCache<float, string> ManaCost { get; } = new();
+        public TextSizeCache ManaCostSize { get; } = new();
+        public KeyedCache<float, string> HealthCost { get; } = new();
+        public TextSizeCache HealthCostSize { get; } = new();
+        public KeyedCache<(bool IsWand, int Count, int MaximumCharges), string> Quantity { get; } = new();
+        public TextSizeCache QuantitySize { get; } = new();
+        public KeyedCache<int, string> Countdown { get; } = new();
+        public TextSizeCache CountdownSize { get; } = new();
+    }
+
+    private readonly Dictionary<HotkeySlot, SlotTextCaches> _slotTextCaches = [];
+
+    private SlotTextCaches SlotTextCachesFor(HotkeySlot slot)
+    {
+        if (!_slotTextCaches.TryGetValue(slot, out var textCaches))
+        {
+            textCaches = new SlotTextCaches();
+            _slotTextCaches[slot] = textCaches;
+        }
+
+        return textCaches;
+    }
+
     private void DrawSlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, HotkeySlot slot, Rectangle bounds)
     {
         var contentBounds = BorderThickness.Inset(bounds, SlotBorderThickness);
@@ -481,7 +564,7 @@ public sealed class HotbarContent(
 
         if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out var action))
         {
-            DrawSlotVisual(spriteBatch, unitRectangle, bounds, contentBounds, BuildActionVisual(playerEntityId, action, isActive), alpha);
+            DrawSlotVisual(spriteBatch, unitRectangle, slot, bounds, contentBounds, BuildActionVisual(playerEntityId, action, isActive), alpha);
 
             if (actionStateView.IsActionToggledOn(playerEntityId, actionId))
             {
@@ -490,7 +573,7 @@ public sealed class HotbarContent(
         }
         else if (hotkeyBindingView.TryGetBoundItem(playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out var stack))
         {
-            DrawSlotVisual(spriteBatch, unitRectangle, bounds, contentBounds, BuildItemVisual(playerEntityId, item, stack, isActive), alpha);
+            DrawSlotVisual(spriteBatch, unitRectangle, slot, bounds, contentBounds, BuildItemVisual(playerEntityId, slot, item, stack, isActive), alpha);
 
             if (ToggleText.IsLit(item))
             {
@@ -577,7 +660,7 @@ public sealed class HotbarContent(
     /// wand) always shows *that* stack's own Quantity/charges, not whichever stack of the same
     /// item id a fresh lookup happened to find first.
     /// </summary>
-    private SlotVisual BuildItemVisual(int playerEntityId, ItemDefinition item, InventoryItemStackComponent stack, bool isActive)
+    private SlotVisual BuildItemVisual(int playerEntityId, HotkeySlot slot, ItemDefinition item, InventoryItemStackComponent stack, bool isActive)
     {
         var quantity = stack.Quantity;
 
@@ -591,19 +674,19 @@ public sealed class HotbarContent(
         return new SlotVisual(
             SpriteName: item.SpriteName,
             Glyph: item.Glyph,
-            GlyphColor: WindowPalette.SlotGlyphColor,
+            GlyphColor: GameWindowPalette.SlotGlyphColor,
             FillPercentage: isActive ? ComputeItemFillPercentage(playerEntityId) : 0f,
             Costs: actionStateView.ItemCostsOf(playerEntityId, stack.StackInstanceId),
             QuantityText: item.Activator is WandActivator wandActivator
-                ? $"{wandActivator.Charges}/{wandActivator.MaxCharges}"
+                ? SlotTextCachesFor(slot).Quantity.Get((true, wandActivator.Charges, wandActivator.MaxCharges), static key => $"{key.Count}/{key.MaximumCharges}")
                 : quantity > 1
-                    ? $"x{quantity}"
+                    ? SlotTextCachesFor(slot).Quantity.Get((false, quantity, 0), static key => $"x{key.Count}")
                     : null,
             CountdownSecondsAboveSlot: countdownSeconds);
     }
 
     /// <summary>The one place a SlotVisual actually gets drawn -- radial fill/icon, then its costs (bottom-left), its quantity (bottom-center) and countdown, if any. Shared by both BuildActionVisual and BuildItemVisual outputs, regardless of which kind produced them.</summary>
-    private void DrawSlotVisual(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Rectangle contentBounds, SlotVisual visual, float alpha)
+    private void DrawSlotVisual(SpriteBatch spriteBatch, Texture2D unitRectangle, HotkeySlot slot, Rectangle bounds, Rectangle contentBounds, SlotVisual visual, float alpha)
     {
         _radialFill.Sprite = visual.SpriteName is not null && spriteSheetService.Sprites.TryGetFirst(visual.SpriteName, out var sprite) ? sprite : null;
         _radialFill.SpriteTint = Color.White;
@@ -615,25 +698,25 @@ public sealed class HotbarContent(
 
         if (!visual.Costs.IsFree)
         {
-            DrawCosts(spriteBatch, bounds, visual.Costs, alpha);
+            DrawCosts(spriteBatch, SlotTextCachesFor(slot), bounds, visual.Costs, alpha);
         }
 
         if (visual.QuantityText is not null)
         {
-            DrawBottomCenterText(spriteBatch, bounds, visual.QuantityText, alpha);
+            DrawBottomCenterText(spriteBatch, SlotTextCachesFor(slot).QuantitySize, bounds, visual.QuantityText, alpha);
         }
 
         if (visual.CountdownSecondsAboveSlot is { } seconds)
         {
-            DrawCountdownAboveSlot(spriteBatch, bounds, seconds);
+            DrawCountdownAboveSlot(spriteBatch, SlotTextCachesFor(slot), bounds, seconds);
         }
     }
 
     /// <summary>No symbol here (contrast PlayerStatusEffectsContent's status-bar icon) -- just the number, centered above the slot it belongs to.</summary>
-    private void DrawCountdownAboveSlot(SpriteBatch spriteBatch, Rectangle slotBounds, int remainingSeconds)
+    private void DrawCountdownAboveSlot(SpriteBatch spriteBatch, SlotTextCaches textCaches, Rectangle slotBounds, int remainingSeconds)
     {
-        var text = remainingSeconds.ToString();
-        var textSize = _countdownFont.MeasureString(text);
+        var text = textCaches.Countdown.Get(remainingSeconds, static seconds => seconds.ToString());
+        var textSize = textCaches.CountdownSize.SizeOf(_countdownFont, text);
         var textPosition = new Vector2(slotBounds.Center.X - textSize.X / 2f, slotBounds.Y - textSize.Y - CountdownTextGap);
 
         ContrastTextRenderer.Draw(spriteBatch, _countdownFont, text, textPosition);
@@ -648,32 +731,32 @@ public sealed class HotbarContent(
     }
 
     /// <summary>Bottom-left -- what using the slot takes, only ever called when it takes anything: each resource's amount in its own colour (CostBadgePalette), mana then health, to one decimal place since a modifier can leave a fraction.</summary>
-    private void DrawCosts(SpriteBatch spriteBatch, Rectangle bounds, ActivationCostTotals costs, float alpha)
+    private void DrawCosts(SpriteBatch spriteBatch, SlotTextCaches textCaches, Rectangle bounds, ActivationCostTotals costs, float alpha)
     {
         var x = bounds.X + OverlayPadding.X;
-        x = DrawCost(spriteBatch, bounds, x, costs.Mana, CostBadgePalette.Mana, alpha);
-        DrawCost(spriteBatch, bounds, x, costs.Health, CostBadgePalette.Health, alpha);
+        x = DrawCost(spriteBatch, textCaches.ManaCost, textCaches.ManaCostSize, bounds, x, costs.Mana, CostBadgePalette.Mana, alpha);
+        DrawCost(spriteBatch, textCaches.HealthCost, textCaches.HealthCostSize, bounds, x, costs.Health, CostBadgePalette.Health, alpha);
     }
 
     /// <summary>One resource's amount at x along the bottom edge, or nothing when it is 0. Returns where the next one starts.</summary>
-    private float DrawCost(SpriteBatch spriteBatch, Rectangle bounds, float x, float amount, Color color, float alpha)
+    private float DrawCost(SpriteBatch spriteBatch, KeyedCache<float, string> costText, TextSizeCache costTextSize, Rectangle bounds, float x, float amount, Color color, float alpha)
     {
         if (amount <= 0)
         {
             return x;
         }
 
-        var text = amount.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
-        var textSize = _overlayFont.MeasureString(text);
+        var text = costText.Get(amount, static cost => cost.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture));
+        var textSize = costTextSize.SizeOf(_overlayFont, text);
         ContrastTextRenderer.Draw(spriteBatch, _overlayFont, text, new Vector2(x, bounds.Bottom - textSize.Y - OverlayPadding.Y), alpha, color);
         return x + textSize.X + OverlayPadding.X;
     }
 
     /// <summary>Bottom-center -- an item stack's quantity as "x{n}", only ever called when quantity > 1. Replaces the old ItemIconRenderer.DrawQuantityBadge call this element used to make (that method has since moved to the bottom-left corner instead, for consistency with Shop/TradeItemStackCell's own quantity placement -- InventoryItemStackCell is its one remaining consumer, unaffected by this element's own bottom-center choice).</summary>
-    private void DrawBottomCenterText(SpriteBatch spriteBatch, Rectangle bounds, string text, float alpha)
+    private void DrawBottomCenterText(SpriteBatch spriteBatch, TextSizeCache textSize, Rectangle bounds, string text, float alpha)
     {
-        var textSize = _overlayFont.MeasureString(text);
-        var position = new Vector2(bounds.Center.X - textSize.X / 2f, bounds.Bottom - textSize.Y - OverlayPadding.Y);
+        var measuredSize = textSize.SizeOf(_overlayFont, text);
+        var position = new Vector2(bounds.Center.X - measuredSize.X / 2f, bounds.Bottom - measuredSize.Y - OverlayPadding.Y);
         ContrastTextRenderer.Draw(spriteBatch, _overlayFont, text, position, alpha);
     }
 
@@ -732,5 +815,27 @@ public sealed class HotbarContent(
         }
 
         return 0f;
+    }
+
+    /// <summary>Picks up the item or action bound to the slot under pressPosition, at SlotSize; dragging it anywhere unbinds that slot (see HotbarBindingDropHandler).</summary>
+    public bool TryBeginContentDrag(Point pressPosition, out ContentDragStart start)
+    {
+        if (TryGetSlotAt(pressPosition, out var pressedSlot))
+        {
+            if (TryGetBoundItemStackInstanceId(pressedSlot, out var boundStackInstanceId))
+            {
+                start = new ContentDragStart(new DragPayload(DragPayloadOrigin.HotbarSlot, ItemStackInstanceId: boundStackInstanceId, OriginSlot: pressedSlot), SlotSize);
+                return true;
+            }
+
+            if (TryGetBoundActionId(pressedSlot, out var boundActionId))
+            {
+                start = new ContentDragStart(new DragPayload(DragPayloadOrigin.HotbarSlot, ActionId: boundActionId, OriginSlot: pressedSlot), SlotSize);
+                return true;
+            }
+        }
+
+        start = default;
+        return false;
     }
 }

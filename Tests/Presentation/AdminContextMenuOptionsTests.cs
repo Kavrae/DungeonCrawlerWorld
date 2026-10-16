@@ -3,6 +3,7 @@ using Game.Bootstrap;
 using Game.Modules.Inventory.Components;
 using Game.World;
 using Presentation.UI;
+using UIEngine.UI;
 
 namespace Tests.Presentation;
 

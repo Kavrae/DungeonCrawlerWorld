@@ -1,9 +1,9 @@
 using Engine.ECS.Systems;
-using Game.Effects;
-using Game.Effects.Entries;
 using Engine.Events;
 using Engine.Math;
 using Game.Blueprints;
+using Game.Effects;
+using Game.Effects.Entries;
 using Game.Floors;
 using Game.Modules;
 using Game.Modules.Actions;
@@ -25,6 +25,11 @@ using Presentation.UI.Inventory;
 using Presentation.UI.Looting;
 using Presentation.UI.Shops;
 using Presentation.UI.Trade;
+using Tests.UIEngine;
+using UIEngine.Input;
+using UIEngine.Rendering;
+using UIEngine.UI;
+using UIEngine.UI.Content;
 
 namespace Tests.Presentation;
 
@@ -66,7 +71,6 @@ public sealed class ItemWindowCoordinatorTests
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        var spriteRenderer = new SpriteRenderer();
         var elementPool = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
         var layers = new UiLayerStack();
         var pointerState = new PointerState();
@@ -92,14 +96,14 @@ public sealed class ItemWindowCoordinatorTests
         elementPool.RegisterFactory<GridControl>(() => new GridControl(fontService, elementPool, labelRenderer));
         elementPool.RegisterFactory<Toggle>(() => new Toggle(fontService, elementPool, labelRenderer));
         elementPool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, elementPool, labelRenderer));
-        elementPool.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, elementPool, labelRenderer, spriteSheetService, spriteRenderer));
-        elementPool.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, elementPool, labelRenderer, spriteSheetService, spriteRenderer));
-        elementPool.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(fontService, elementPool, labelRenderer, spriteSheetService, spriteRenderer));
+        elementPool.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, elementPool, labelRenderer, spriteSheetService));
+        elementPool.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, elementPool, labelRenderer, spriteSheetService));
+        elementPool.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(fontService, elementPool, labelRenderer, spriteSheetService));
         elementPool.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(fontService, elementPool, labelRenderer));
-        elementPool.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, elementPool, labelRenderer, spriteSheetService, spriteRenderer));
-        elementPool.RegisterFactory<ItemIconElement>(() => new ItemIconElement(fontService, elementPool, labelRenderer, spriteSheetService, spriteRenderer));
+        elementPool.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, elementPool, labelRenderer, spriteSheetService));
+        elementPool.RegisterFactory<ItemIconElement>(() => new ItemIconElement(fontService, elementPool, labelRenderer, spriteSheetService));
         elementPool.RegisterFactory<TargetShapePreviewElement>(() => new TargetShapePreviewElement(fontService, elementPool, labelRenderer));
-        elementPool.RegisterFactory<EntityIconElement>(() => new EntityIconElement(fontService, elementPool, labelRenderer, spriteSheetService, spriteRenderer, mapView));
+        elementPool.RegisterFactory<EntityIconElement>(() => new EntityIconElement(fontService, elementPool, labelRenderer, spriteSheetService, mapView));
         elementPool.RegisterFactory<ItemDetailsWindow>(() => new ItemDetailsWindow(fontService, elementPool, labelRenderer, new ActionCatalog(), TestGameplayTags.BuiltIn, inventoryServices.ActionStateView, world));
         elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(fontService, elementPool, labelRenderer, inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
         elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(fontService, elementPool, labelRenderer, inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming, healthView: healthView));

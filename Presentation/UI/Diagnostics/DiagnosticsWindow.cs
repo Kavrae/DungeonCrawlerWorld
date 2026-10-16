@@ -5,10 +5,12 @@ using Engine.ECS.Systems;
 using FontStashSharp;
 using Game.Modules.Movement.Components;
 using Microsoft.Xna.Framework;
-using Presentation.Fonts;
 using Presentation.Rendering;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI;
 
 namespace Presentation.UI.Diagnostics;
 
@@ -64,7 +66,7 @@ public sealed class DiagnosticsWindow(
     {
         base.Build(parent, options);
 
-        _font = FontService.GetFont(FontChrome.DiagnosticsWindowFontSize);
+        _font = FontService.GetFont(GameFontChrome.DiagnosticsWindowFontSize);
         _updateCounter = new PerformanceCounter();
         _drawCounter = new PerformanceCounter();
         _headerLines.Clear();
@@ -110,7 +112,7 @@ public sealed class DiagnosticsWindow(
         UpdateScrollBounds();
     }
 
-    private void UpdateScrollBounds() => SetMaxScrollOffset(new Vector2(0, System.Math.Max(0, _contentHeight - _contentState.Size.Y)));
+    private void UpdateScrollBounds() => SetMaxScrollOffset(new Vector2(0, System.Math.Max(0, _contentHeight - ContentSize.Y)));
 
     public override void DrawContent(GameTime gameTime)
     {
@@ -178,23 +180,23 @@ public sealed class DiagnosticsWindow(
     private float LayOut(bool isDrawing)
     {
         var inset = DiagnosticsWindowChrome.RowInset;
-        var width = _contentState.Size.X - inset * 2;
+        var width = ContentSize.X - inset * 2;
         var rowHeight = RowHeight;
         _layoutIsDrawing = isDrawing;
         _layoutVisibleTop = ScrollOffset.Y - rowHeight;
-        _layoutVisibleBottom = ScrollOffset.Y + _contentState.Size.Y;
+        _layoutVisibleBottom = ScrollOffset.Y + ContentSize.Y;
         _layoutCursorY = inset;
 
         for (var lineIndex = 0; lineIndex < _headerLines.Count; lineIndex++)
         {
-            LayOutTextLine(_headerLines[lineIndex], lineIndex == 0 && _isRunningSlowly ? WindowPalette.DiagnosticsWarningText : WindowPalette.DiagnosticsText);
+            LayOutTextLine(_headerLines[lineIndex], lineIndex == 0 && _isRunningSlowly ? GameWindowPalette.DiagnosticsWarningText : GameWindowPalette.DiagnosticsText);
         }
 
         if (diagnostics?.LiveGauges is not { } liveGauges || _rowValueTexts.Length != liveGauges.Rows.Count)
         {
             if (diagnostics?.Features.HasFlag(DiagnosticsFeatures.Gauges) != true)
             {
-                LayOutTextLine(GaugesOffHint, WindowPalette.DiagnosticsWarningText);
+                LayOutTextLine(GaugesOffHint, GameWindowPalette.DiagnosticsWarningText);
             }
 
             LayOutLeakLines();
@@ -202,12 +204,12 @@ public sealed class DiagnosticsWindow(
         }
 
         _layoutCursorY += DiagnosticsWindowChrome.GroupGap;
-        LayOutTextLine(_frameGraphLabel, WindowPalette.DiagnosticsGroupHeading);
+        LayOutTextLine(_frameGraphLabel, GameWindowPalette.DiagnosticsGroupHeading);
         var frameGraphHeight = DiagnosticsWindowChrome.FrameGraphHeight;
         if (IsInVisibleBand(_layoutCursorY, frameGraphHeight))
         {
             var frameHistory = _historyScratch.AsSpan(0, liveGauges.CopyHistory(0, _historyScratch));
-            SparklineRenderer.Draw(ElementPoolService.SpriteBatch, ElementPoolService.UnitRectangle, new Rectangle((int)inset, (int)_layoutCursorY, (int)width, (int)frameGraphHeight), frameHistory, 0, _frameGraphMaximum, SparklineStyle.Bars, WindowPalette.DiagnosticsLevelSeries, WindowPalette.DiagnosticsGraphBackground, DiagnosticsWindowChrome.FrameBudgetMilliseconds, WindowPalette.DiagnosticsFrameBudgetLine);
+            SparklineRenderer.Draw(ElementPoolService.SpriteBatch, ElementPoolService.UnitRectangle, new Rectangle((int)inset, (int)_layoutCursorY, (int)width, (int)frameGraphHeight), frameHistory, 0, _frameGraphMaximum, SparklineStyle.Bars, GameWindowPalette.DiagnosticsLevelSeries, GameWindowPalette.DiagnosticsGraphBackground, DiagnosticsWindowChrome.FrameBudgetMilliseconds, GameWindowPalette.DiagnosticsFrameBudgetLine);
         }
 
         _layoutCursorY += frameGraphHeight;
@@ -220,7 +222,7 @@ public sealed class DiagnosticsWindow(
             {
                 currentGroupName = row.GroupName;
                 _layoutCursorY += DiagnosticsWindowChrome.GroupGap;
-                LayOutTextLine(currentGroupName, WindowPalette.DiagnosticsGroupHeading);
+                LayOutTextLine(currentGroupName, GameWindowPalette.DiagnosticsGroupHeading);
             }
 
             if (IsInVisibleBand(_layoutCursorY, rowHeight))
@@ -256,19 +258,19 @@ public sealed class DiagnosticsWindow(
         }
 
         _layoutCursorY += DiagnosticsWindowChrome.GroupGap;
-        LayOutTextLine(LeakDetectionHeading, WindowPalette.DiagnosticsGroupHeading);
+        LayOutTextLine(LeakDetectionHeading, GameWindowPalette.DiagnosticsGroupHeading);
         foreach (var leakLine in _leakLines)
         {
-            LayOutTextLine(leakLine, WindowPalette.DiagnosticsWarningText);
+            LayOutTextLine(leakLine, GameWindowPalette.DiagnosticsWarningText);
         }
     }
 
     private void DrawGaugeRow(GaugeHistory liveGauges, int rowIndex, Gauge row, float y, float inset, float width, float rowHeight)
     {
         var spriteBatch = ElementPoolService.SpriteBatch;
-        LabelRenderer.Draw(spriteBatch, _font, row.GaugeName, new Vector2(inset * 3, y), WindowPalette.DiagnosticsText);
-        LabelRenderer.Draw(spriteBatch, _font, _rowValueTexts[rowIndex], new Vector2(inset + DiagnosticsWindowChrome.ValueColumnX, y), WindowPalette.DiagnosticsText);
-        LabelRenderer.Draw(spriteBatch, _font, _rowRangeTexts[rowIndex], new Vector2(inset + DiagnosticsWindowChrome.RangeColumnX, y), WindowPalette.DiagnosticsText);
+        LabelRenderer.Draw(spriteBatch, _font, row.GaugeName, new Vector2(inset * 3, y), GameWindowPalette.DiagnosticsText);
+        LabelRenderer.Draw(spriteBatch, _font, _rowValueTexts[rowIndex], new Vector2(inset + DiagnosticsWindowChrome.ValueColumnX, y), GameWindowPalette.DiagnosticsText);
+        LabelRenderer.Draw(spriteBatch, _font, _rowRangeTexts[rowIndex], new Vector2(inset + DiagnosticsWindowChrome.RangeColumnX, y), GameWindowPalette.DiagnosticsText);
 
         var sparklineWidth = DiagnosticsWindowChrome.SparklineWidth;
         var verticalGap = DiagnosticsWindowChrome.SparklineVerticalGap;
@@ -277,12 +279,12 @@ public sealed class DiagnosticsWindow(
         var (minimum, maximum, _) = Summarize(history);
         if (row.Kind is GaugeKind.Cumulative)
         {
-            SparklineRenderer.Draw(spriteBatch, ElementPoolService.UnitRectangle, sparklineArea, history, 0, System.Math.Max(maximum, 1), SparklineStyle.Bars, WindowPalette.DiagnosticsEventSeries, WindowPalette.DiagnosticsGraphBackground);
+            SparklineRenderer.Draw(spriteBatch, ElementPoolService.UnitRectangle, sparklineArea, history, 0, System.Math.Max(maximum, 1), SparklineStyle.Bars, GameWindowPalette.DiagnosticsEventSeries, GameWindowPalette.DiagnosticsGraphBackground);
         }
         else
         {
             var padding = maximum == minimum ? System.Math.Max(1, System.Math.Abs(maximum) * 0.01) : 0;
-            SparklineRenderer.Draw(spriteBatch, ElementPoolService.UnitRectangle, sparklineArea, history, minimum - padding, maximum + padding, SparklineStyle.Line, WindowPalette.DiagnosticsLevelSeries, WindowPalette.DiagnosticsGraphBackground);
+            SparklineRenderer.Draw(spriteBatch, ElementPoolService.UnitRectangle, sparklineArea, history, minimum - padding, maximum + padding, SparklineStyle.Line, GameWindowPalette.DiagnosticsLevelSeries, GameWindowPalette.DiagnosticsGraphBackground);
         }
     }
 

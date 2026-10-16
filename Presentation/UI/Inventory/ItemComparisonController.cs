@@ -1,9 +1,9 @@
-using Engine.ECS.Components.Stores;
 using Game.Modules.Inventory;
 using Game.Views;
 using Microsoft.Xna.Framework;
-using Presentation.UI.ColorPalettes;
-using Presentation.UI.Content;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
+using UIEngine.UI.Content;
 
 namespace Presentation.UI.Inventory;
 
