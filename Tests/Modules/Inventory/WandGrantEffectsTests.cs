@@ -1,5 +1,5 @@
 using Engine.ECS.Components;
-using Engine.Math;
+using Engine.Tiles;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.AbilityScores;
@@ -7,8 +7,6 @@ using Game.Modules.AbilityScores.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Microsoft.Xna.Framework;
-using Game.Modules.StatModifiers.Components;
-using Game.Modules.Death.Components;
 
 namespace Tests.Modules.Inventory;
 

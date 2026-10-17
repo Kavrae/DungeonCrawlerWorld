@@ -1,7 +1,7 @@
-using Engine.ECS.Components;
 using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Tiles;
 using Game.Bootstrap;
 using Game.Floors;
 using Game.Modules.Actions.Components;
@@ -27,7 +27,7 @@ public sealed class EntityTeleporterTests
     private static Session BuildSession()
     {
         var map = new Map(new MapBounds(-Neighborhoods.SizeTiles, 0, 2 * Neighborhoods.SizeTiles, Rows, 3));
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
         var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24));
         var world = result.World;
         var ecs = result.EcsContext;

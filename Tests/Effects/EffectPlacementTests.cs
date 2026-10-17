@@ -24,7 +24,7 @@ public sealed class EffectPlacementTests
     }
 
     private static EffectContext Context() =>
-        new(TestActionEffects.Services(BuiltInTestComponents.RegisterAll(new ComponentManager(16, 16)), new EntityKeys(), new EventBus(), new MathUtility(new Random(1))),
+        new(TestActionEffects.Services(BuiltInTestComponents.RegisterAll(new ComponentManager(16, 16)), new EntityKeys(), new EventBus(), new MathUtility(new SeededRandom((ulong)1))),
             Game.World.ActionSource.Admin, SourceEntityId: 1, TargetEntityId: 1, "Test", default, Now: 0);
 
     [TestMethod]

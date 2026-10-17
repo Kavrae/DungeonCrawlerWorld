@@ -3,6 +3,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Tiles;
 using Game.Blueprints.Races;
 using Game.Bootstrap;
 using Game.Spawning;
@@ -27,7 +28,7 @@ public sealed class CreatureSkeletonsTests
     private static Session BuildSession(UniqueNumberAllocator? crawlerNumbers = null)
     {
         var map = new Map(new MapBounds(-Neighborhoods.SizeTiles, 0, 2 * Neighborhoods.SizeTiles, Rows, 3));
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
         var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers ?? new UniqueNumberAllocator(1, 1, 24));
         var world = result.World;
         var ecs = result.EcsContext;

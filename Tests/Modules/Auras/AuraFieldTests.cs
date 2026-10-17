@@ -1,5 +1,6 @@
 using Engine.Events;
 using Engine.Math;
+using Engine.Tiles;
 using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
 using Game.Modules.Core.Components;

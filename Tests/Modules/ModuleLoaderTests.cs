@@ -49,4 +49,25 @@ public sealed class ModuleLoaderTests
             directory.Delete(recursive: true);
         }
     }
+
+    [TestMethod]
+    public void LoadFromDirectory_LoadsDllsInOrdinalFileNameOrder()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var fixturePath = Tests.Bootstrap.GameBootstrapperTests.FindAssemblyPath("Mods.TestFixtures");
+            File.Copy(fixturePath, Path.Combine(directory.FullName, "b-fixtures.dll"));
+            File.Copy(fixturePath, Path.Combine(directory.FullName, "a-fixtures.dll"));
+
+            var result = ModuleLoader.LoadFromDirectory<Game.Modules.GameModuleContext>(directory.FullName);
+            var loadedFileNames = result.ModuleFactories.Select(factory => Path.GetFileName(factory.ModuleType.Assembly.Location)).Distinct().ToList();
+
+            CollectionAssert.AreEqual(new[] { "a-fixtures.dll", "b-fixtures.dll" }, loadedFileNames);
+        }
+        finally
+        {
+            Tests.Bootstrap.GameBootstrapperTests.TryDeleteDirectory(directory.FullName);
+        }
+    }
 }

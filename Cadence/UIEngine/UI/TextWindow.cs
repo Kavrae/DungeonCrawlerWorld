@@ -1,0 +1,221 @@
+using Engine.Utilities;
+using FontStashSharp;
+using Microsoft.Xna.Framework;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI.Chrome;
+using UIEngine.UI.ColorPalettes;
+
+namespace UIEngine.UI;
+
+public class TextWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer) : Window(fontService, elementPoolService, labelRenderer)
+{
+    public string OriginalText { get; set; } = string.Empty;
+    public DisplayText DisplayText { get; set; }
+    public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(FontChrome.DefaultFontSize);
+    public Color TextColor { get; set; }
+
+    /// <summary>No bold font asset exists in this codebase (see FontService -- DroidSans regular only), so Bold renders as a cheap 1px-offset double-draw instead of a real bold weight -- close enough for a UI label (e.g. ContextMenu's own header rows) without needing a second font file.</summary>
+    public bool Bold { get; set; }
+
+    protected const int LinePadding = 3;
+
+    public override void Build(Element? parent, ElementOptions options)
+    {
+        base.Build(parent, options);
+
+        OriginalText = options.Text?.Text ?? string.Empty;
+        TextColor = options.Text?.TextColor ?? WindowPalette.BodyTextColor;
+        Bold = options.Text?.Bold ?? false;
+        // ElementOptions/TextOptions carries no font-size field -- every consumer that wants a
+        // non-default size sets ContentFont imperatively after CreateElement returns. Reset to the default here, on
+        // every Build (pooled reuse included, not just first construction), so a size set by a
+        // previous consumer doesn't leak into a differently-sized pooled reuse.
+        ContentFont = FontService.GetFont(FontChrome.DefaultFontSize);
+        _canContainChildren = false;
+    }
+
+    /// <summary>See LabelRenderer.Draw's own doc comment for why this routes through it (which rounds to a whole pixel before drawing) instead of calling SpriteBatch.DrawString directly, as it used to -- the fix for the same "bottom of the text is cut off" bug every other UI text draw already gets from that method.</summary>
+    public override void DrawContent(GameTime gameTime)
+    {
+        if (string.IsNullOrWhiteSpace(DisplayText.FormattedText))
+        {
+            return;
+        }
+
+        var origin = (RequiresContentViewport ? Vector2.Zero : ContentAbsolutePosition) + new Vector2(LinePadding, LinePadding);
+
+        if (Bold)
+        {
+            LabelRenderer.Draw(ElementPoolService.SpriteBatch, ContentFont, DisplayText.FormattedText, origin + new Vector2(1, 0), TextColor);
+        }
+
+        LabelRenderer.Draw(ElementPoolService.SpriteBatch, ContentFont, DisplayText.FormattedText, origin, TextColor);
+    }
+
+    protected override void RecalculateFixedSize()
+    {
+        base.RecalculateFixedSize();
+
+        ReformatDisplayText();
+        UpdateScrollBounds();
+    }
+
+    protected override void RecalculateFillSize()
+    {
+        base.RecalculateFillSize();
+
+        ReformatDisplayText();
+        UpdateScrollBounds();
+    }
+
+    protected override void RecalculateWrapContentSize()
+    {
+        // Only a child window's MaximumSize is actually a parent-relative boundary (inherited
+        // as _parentElement.ContentSize, see BuildWindow) -- subtracting RelativePosition there
+        // gives the space still available after this child's own offset within the parent. A
+        // root window's MaximumSize (like a notification popup's explicit cap) is just a
+        // literal bound with no parent edge to offset against; subtracting RelativePosition.X
+        // from it would pin a draggable window's right edge to a fixed screen x.
+        // Y has the same shape as X here, so it gets the same ParentElement-is-null check.
+        // Clamped to 0, not left possibly negative: a tiled sibling positioned far enough down
+        // a tall column (e.g. by earlier siblings' own long text) can have RelativePosition.Y
+        // exceed MaximumSize.Y outright. An unclamped negative maximumContentHeight fed into
+        // the Math.Min below would make this window's own Size.Y negative -- which then makes
+        // RetileChildrenFrom's next-sibling chain (previousChildWindow.RelativePosition.Y +
+        // previousChildWindow.CurrentSize.Y) step backward instead of forward, landing the next
+        // sibling on top of this one instead of below it.
+        var scrollbarGutterSize = ScrollbarGutterSize;
+        var maximumContentWidth = System.Math.Max(0, (ParentElement is not null
+            ? _geometry.MaximumSize.X - _geometry.RelativePosition.X - BorderInsetDoubled.X
+            : _geometry.MaximumSize.X - BorderInsetDoubled.X) - scrollbarGutterSize.X);
+        var maximumContentHeight = System.Math.Max(0, (ParentElement is not null
+            ? _geometry.MaximumSize.Y - _geometry.RelativePosition.Y
+            : _geometry.MaximumSize.Y) - BorderInsetDoubled.Y - HeaderInsetHeight - scrollbarGutterSize.Y);
+
+        // Wrap against the maximum first (this is the width word-wrap decisions need), then
+        // shrink the window itself to the widest line that wrapping actually produced --
+        // StringUtility.FormatText already returns text unwrapped (i.e. at its own natural
+        // width) whenever it fits within maximumContentWidth, so most short notifications
+        // need far less than the full maximum and shouldn't claim it.
+        _contentState.Size.X = maximumContentWidth;
+        ReformatDisplayText();
+        _contentState.Size.X = System.Math.Min(WidestLineWidth() + ContentPadding.X * 2, maximumContentWidth);
+
+        if (_headerState.ShowHeader)
+        {
+            _contentState.Size.X = System.Math.Min(System.Math.Max(_contentState.Size.X, MinimumHeaderWidth()), maximumContentWidth);
+        }
+
+        var wrappedTextHeight = TextContentHeight();
+
+        // Clamped to maximumContentHeight, unlike width, which always has room to shrink into
+        // (the window just gets narrower). Text with more lines than fit has no analogous
+        // shrink-to-fit fallback, so without this clamp the window would grow past its own
+        // MaximumSize instead of respecting it -- CanUserScrollVertical is what makes the clamped-off remainder still reachable, via
+        // UpdateScrollBounds below.
+        _contentState.Size.Y = System.Math.Min(wrappedTextHeight, maximumContentHeight);
+
+        // TextWindow always forces _canContainChildren false (see Build), so there's no separate
+        // padded-vs-full distinction here -- BackgroundSize must still be set explicitly, though,
+        // since this fully replaces the base RecalculateWrapContentSize (never calls it) and
+        // nothing else sets it for this element. Without this, every WrapContent TextWindow/
+        // TextBox/Tooltip (every hover popup and notification in the game) draws its own
+        // background at a stale, zero-initialized size -- fully invisible.
+        _contentState.BackgroundSize = _contentState.Size + scrollbarGutterSize;
+
+        _geometry.CurrentSize = _contentState.BackgroundSize;
+        if (_headerState.ShowHeader)
+        {
+            // Resize horizontally to fit the new content size, but keep the vertical size --
+            // OriginalSize.Y as-is, not shrunk by BorderInset.Y (a stray subtraction that used to
+            // sit here undersized every WrapContent TextWindow/Tooltip's own title bar relative to
+            // what Window.Build actually measured it at, most visible once WindowTitleFontSize grew).
+            _headerState.Size = new Vector2(_contentState.BackgroundSize.X, _headerState.OriginalSize.Y);
+            _geometry.CurrentSize.Y += _headerState.Size.Y;
+        }
+        _geometry.CurrentSize += BorderInsetDoubled;
+
+        UpdateScrollBounds();
+    }
+
+    private float WidestLineWidth() => StringUtility.WidestLineWidth(FontService.GetTextMeasurer(ContentFont), DisplayText.FormattedText);
+
+    private void UpdateScrollBounds()
+    {
+        var maxScrollY = System.Math.Max(0, TextContentHeight() - _contentState.Size.Y);
+
+        // Word-wrap already keeps lines within the content width, but a single word too long
+        // to break still overflows one line horizontally -- so this isn't always zero.
+        var maxScrollX = System.Math.Max(0, WidestLineWidth() + ContentPadding.X * 2 - _contentState.Size.X);
+
+        SetMaxScrollOffset(new Vector2(maxScrollX, maxScrollY));
+    }
+
+    /// <summary>Protected, not private -- TextBox uses this same formula (with an enforced minimum line count) to auto-size its own height to content. See TextBox.AutoSizeToContent.</summary>
+    protected float TextContentHeight() => ContentFont.LineHeight * DisplayText.LineCount + LinePadding * 2;
+
+    /// <summary>
+    /// Virtual so TextBox can override it: StringUtility.WordWrapWithHyphenation treats a
+    /// pre-existing '\n' (a multi-line dump, say) as a forced break, but
+    /// StringUtility.SimpleWordWrap -- used only below the hyphenation width threshold -- still
+    /// doesn't (confirmed by StringUtilityTests.SimpleWordWrap_EmbeddedNewlineNotAtChunkBoundary,
+    /// a deliberate, documented limitation, not a bug). TextBox needs its own override
+    /// regardless of either: it must reconstruct OriginalText-index-aligned line spans for caret
+    /// positioning, which an already-wrapped/hyphenated string can't give it back reliably.
+    /// </summary>
+    public virtual void ReformatDisplayText()
+    {
+        // Clamped to 0, not left possibly negative -- a collapsed or negative-width window (a
+        // real transient state during resize, not just theoretical) would otherwise feed a
+        // negative MaximumPixelWidth into word-wrap, same class of degenerate input
+        // RecalculateWrapContentSize's own maximumContentWidth/maximumContentHeight already
+        // guard against.
+        var maximumPixelWidth = System.Math.Max(0f, _contentState.Size.X - ContentPadding.X * 2);
+        DisplayText = StringUtility.FormatText(new FormatTextCriteria(
+            FontService.GetTextMeasurer(ContentFont),
+            maximumPixelWidth,
+            OriginalText,
+            FormatTextMode.Wordwrap));
+    }
+
+    /// <summary>Shows newText, re-wrapping and re-laying-out the window -- a no-op when it's the text already shown, so a caller can push the same text every refresh without paying for the layout.</summary>
+    public void UpdateText(string newText)
+    {
+        if (newText == OriginalText)
+        {
+            return;
+        }
+
+        OriginalText = newText;
+        RelayoutText();
+    }
+
+    /// <summary>Re-wraps OriginalText and re-lays-out the window at its current size and display mode -- for a subclass whose other content changed the size its text needs (Tooltip's rows).</summary>
+    protected void RelayoutText()
+    {
+        switch (_geometry.DisplayMode)
+        {
+            case ElementDisplayMode.Fixed:
+                RecalculateFixedSize();
+                break;
+            case ElementDisplayMode.Fill:
+                RecalculateFillSize();
+                break;
+            case ElementDisplayMode.WrapContent:
+                RecalculateWrapContentSize();
+                break;
+        }
+
+        // Without this, a text-driven resize left the window's rectangles/absolute
+        // positions/title button positions stale (still reflecting the size before the
+        // text change) even though CurrentSize/ContentSize above were already correct.
+        Arrange();
+
+        SettleScrollbarsOutsideMeasure();
+    }
+
+    protected override void OnContentClickAction(Point mousePosition)
+    {
+    }
+}

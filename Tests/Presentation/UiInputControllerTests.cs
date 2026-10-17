@@ -3,11 +3,11 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tiles;
 using Game.Floors;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Core.Components;
 using Game.Modules.Currency;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -15,10 +15,7 @@ using Game.Modules.Shops;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using Presentation.Input;
-using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
@@ -1082,12 +1079,12 @@ public sealed class UiInputControllerTests
     {
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        ContextMenuController contextMenuController = null!;
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer, createTextBox: pool => new TextBox(fontService, pool, labelRenderer, null, contextMenuController));
         var layers = new UiLayerStack();
 
-        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, layers);
+        contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, layers);
 
-        windowService.RegisterFactory<TextBox>(() => new TextBox(fontService, windowService, labelRenderer, null, contextMenuController));
         var textBox = windowService.CreateElement<TextBox>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(50, 50), Size = new Vector2(200, 30), DisplayMode = ElementDisplayMode.Fixed },
@@ -1173,10 +1170,11 @@ public sealed class UiInputControllerTests
     {
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        ContextMenuController contextMenuController = null!;
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer, createTextBox: pool => new TextBox(fontService, pool, labelRenderer, null, contextMenuController));
         var layers = new UiLayerStack();
 
-        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, layers);
+        contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, layers);
 
         var parentWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -1187,7 +1185,6 @@ public sealed class UiInputControllerTests
         layers.Add(UiLayer.DynamicHud, parentWindow);
         layers.OpenMenuWindow(parentWindow); // Simulates Inventory's own "same Menu Mode" wiring.
 
-        windowService.RegisterFactory<TextBox>(() => new TextBox(fontService, windowService, labelRenderer, null, contextMenuController));
         var textBox = windowService.CreateElement<TextBox>(parentWindow, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(50, 50), Size = new Vector2(200, 30), DisplayMode = ElementDisplayMode.Fixed },

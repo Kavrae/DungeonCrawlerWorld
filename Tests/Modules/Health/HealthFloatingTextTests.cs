@@ -87,7 +87,7 @@ public sealed class HealthFloatingTextTests
         var bodyParts = BodyPartTestWorld.WithParts(EntityId, ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
         var health = new PackedComponentPool<SimpleHealthComponent>(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
-        TestHealth.Damage(health, new EventBus(), EntityId, 9, ActionSource.Admin, null, "Test", now: 0, bodyParts: bodyParts, mathUtility: new MathUtility(new Random(1)), floatingTextFeed: floatingText.Feed);
+        TestHealth.Damage(health, new EventBus(), EntityId, 9, ActionSource.Admin, null, "Test", now: 0, bodyParts: bodyParts, mathUtility: new MathUtility(new SeededRandom((ulong)1)), floatingTextFeed: floatingText.Feed);
 
         Assert.AreEqual(9, floatingText.Published.Single().Amount);
     }
@@ -99,7 +99,7 @@ public sealed class HealthFloatingTextTests
         var bodyParts = BodyPartTestWorld.WithParts(EntityId, ("Head", BodyPartType.Head, 30, 30, true), ("Torso", BodyPartType.Torso, 60, 60, true)).BodyParts;
         var health = new PackedComponentPool<SimpleHealthComponent>(entityCapacity: 10, initialCapacity: 4, static (ref existing, incoming) => existing = incoming);
 
-        TestHealth.Damage(health, new EventBus(), EntityId, 10, ActionSource.Admin, null, "Test", now: 0, bodyParts: bodyParts, mathUtility: new MathUtility(new Random(1)), targetMode: BodyPartTargetMode.All, floatingTextFeed: floatingText.Feed);
+        TestHealth.Damage(health, new EventBus(), EntityId, 10, ActionSource.Admin, null, "Test", now: 0, bodyParts: bodyParts, mathUtility: new MathUtility(new SeededRandom((ulong)1)), targetMode: BodyPartTargetMode.All, floatingTextFeed: floatingText.Feed);
 
         Assert.AreEqual(10, floatingText.Published.Single().Amount);
     }

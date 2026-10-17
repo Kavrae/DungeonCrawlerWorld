@@ -5,9 +5,7 @@ using Game.Blueprints.Composites;
 using Game.Bootstrap;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
-using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
 using Game.Spawning;
@@ -69,7 +67,7 @@ public sealed class DodgeDuringActionLockTests
     private static Harness Build()
     {
         var map = new Map(new Vector3Int(40, 40, 3));
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
         var world = result.World;
         var ecs = result.EcsContext;
         var components = ecs.ComponentManager;

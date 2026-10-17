@@ -2,14 +2,11 @@ using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
-using Game.Modules;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Lootboxes;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
-using Presentation.Input;
-using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
 using Tests.UIEngine;
@@ -57,7 +54,6 @@ public sealed class LootboxInventoryInputTests
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
-        windowService.RegisterFactory<ContextMenu>(() => new ContextMenu(fontService, windowService, labelRenderer));
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 

@@ -3,15 +3,14 @@ using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tiles;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Death.Systems;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Auras.Components;
-using Game.Modules.StatusEffects;
 using Game.World;
-using Microsoft.Xna.Framework;
 
 namespace Tests.Modules.Death;
 

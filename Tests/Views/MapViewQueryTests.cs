@@ -4,6 +4,7 @@ using Game.Effects;
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Tiles;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;

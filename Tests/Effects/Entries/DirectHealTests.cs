@@ -7,16 +7,13 @@ using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
 using Engine.Tags;
-using Game.Modules;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
-using Game.Modules.Actions;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Tags;
-using Game.World;
 
 namespace Tests.Effects.Entries;
 
@@ -39,7 +36,7 @@ public sealed class DirectHealTests
             TargetEntityId: TargetEntityId,
             Health: health,
             EventBus: new EventBus(),
-            MathUtility: new MathUtility(new Random()),
+            MathUtility: new MathUtility(),
             ComponentManager: componentManager,
             EntityKeys: new EntityKeys(),
             ActivatorName: "Test",
@@ -61,7 +58,7 @@ public sealed class DirectHealTests
             TargetEntityId: TargetEntityId,
             Health: componentManager.GetPackedPool<SimpleHealthComponent>(),
             EventBus: new EventBus(),
-            MathUtility: new MathUtility(new Random()),
+            MathUtility: new MathUtility(),
             ComponentManager: componentManager,
             EntityKeys: new EntityKeys(),
             ActivatorName: "Test",

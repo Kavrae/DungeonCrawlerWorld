@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.Math;
+using Engine.Tiles;
 using Game.Blueprints.Composites;
 using Game.Blueprints.Races;
 using Game.Bootstrap;
@@ -59,7 +60,7 @@ public sealed class TargetResolutionTests
 
     private static Session BuildSession()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(CasterPosition);
         var session = new Session(build, CasterId: -1);
         return session with { CasterId = session.Spawn(Goblin.Id, CasterPosition) };

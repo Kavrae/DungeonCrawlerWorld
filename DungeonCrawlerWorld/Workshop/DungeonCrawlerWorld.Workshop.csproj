@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The game's IDE: Cadence Workshop's shell with DungeonCrawlerWorld's build and its Builders tabs. For developing the
+    game; GameShell is for playing it, and Play here starts GameShell as its own process.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>DungeonCrawlerWorld.Workshop</AssemblyName>
+    <RootNamespace>DungeonCrawlerWorld.Workshop</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FNA.NET" Version="2.1.2.2506" />
+    <PackageReference Include="FNA.NET.FontStashSharp" Version="2.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Cadence\Engine\Engine.csproj" />
+    <ProjectReference Include="..\..\Cadence\UIEngine\UIEngine.csproj" />
+    <ProjectReference Include="..\..\Cadence\Workshop\Workshop.csproj" />
+    <ProjectReference Include="..\Game\Game.csproj" />
+    <ProjectReference Include="..\Presentation\Presentation.csproj" />
+    <ProjectReference Include="..\Content\Content.csproj" />
+    <ProjectReference Include="..\Builders\Builders.csproj" />
+    <!-- Build-order only: Play starts GameShell's own executable, so it must be built whenever the IDE is. -->
+    <ProjectReference Include="..\GameShell\GameShell.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Workshop.Tests" />
+  </ItemGroup>
+
+</Project>

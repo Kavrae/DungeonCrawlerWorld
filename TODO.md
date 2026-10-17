@@ -324,6 +324,29 @@ add their own merge layer for data files.
 Slot/equip-unequip mechanics -- move an `InventoryItemStackComponent` stack into a slot, no new storage
 primitive. Companion to the Game/Presentation equipment items below.
 
+#### IDE bottom panel: an Output tab
+
+The IDE's bottom panel (`PLAN-ide-shell-and-actions-items-tab.md`) has an Error List and a Dependents tab. Visual Studio
+puts the console output of a build and of a running program in an Output tab beside them. Here that would be the trial
+build's output (module load failures, settings failures, `Console.Error` lines that name no record), and the console
+of a game started with Play, which runs as its own process, captured through its standard output and error.
+- One more tab on the panel's list view (or a plain scrolling text view), with one source selector per producer (Trial
+  build, Play) and a Clear button.
+- Lines that name a record (a table and Guid) are clickable, as they are in the Error List.
+- Pairs with "Debug/event logging with levels" (Global, Low): once logging has levels and sinks, an IDE sink feeds this
+  tab and filters it by level.
+
+#### IDE Error List: error codes
+
+The IDE's Error List shows severity, description, table, record, field and layer. Visual Studio adds a **Code** column
+(`CS0103`, `IDE0042`), which lets you search, filter and sort by kind of problem, and look one up by code.
+- A stable code per kind of diagnostic: undeclared tag, toggle rule broken, targeting mode not allowed, record doesn't
+  decode, reference to a draft, reference to a disabled record with no replacement, trial-build failure. Each check
+  declares its own code beside its message, the way a refusal declares its `ActivationBlocker`, and a check added by a
+  mod declares its own with a prefix of its own.
+- The column, a filter by code, and a short description per code (shown in the row's tooltip).
+- Codes are never reused or renumbered once assigned, so a search or a note that names one stays true.
+
 ## Game
 
 ### High Priority
@@ -3736,6 +3759,20 @@ of and rickrolls the visitor. The Crawler TV show (Game, above) would air an in-
 navigating to the advertised URL (typed or via an in-show QR code) is the payoff. Two separate
 deliverables (the site itself, and the in-show ad segment) -- the site has no dependency on the game
 engine at all.
+
+#### Engine tests in a project of their own
+
+`PLAN-ide-shell-and-actions-items-tab.md` puts the engine (Engine, UIEngine, SpriteFormat, the IDE shell library) under
+its own root folder, reusable by another game, and the game under another. It splits the tests only into the game's
+(`Tests`) and the IDE's (`Workshop.Tests`). Engine and UIEngine tests still live in `Tests`, beside the game's, so the
+engine can't be taken to another game together with its tests.
+- Move the engine's tests (`Tests/Engine`, `Tests/UIEngine`, the SpriteFormat tests, and the IDE shell library's tests
+  out of `Workshop.Tests`) into a test project under the engine root that references nothing from the game.
+- The hard part is tests that build a real game to exercise engine code (module ordering through the built-ins, pools
+  registered by `BuiltInTestComponents`). Each one either moves to fixtures of the engine's own or stays with the game's
+  tests as an integration test.
+- An architecture test then holds the engine's test project to the same rule as the engine: no reference under the game
+  root.
 
 ## Accessibility
 

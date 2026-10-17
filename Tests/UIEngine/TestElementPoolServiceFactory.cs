@@ -11,14 +11,16 @@ internal static class TestElementPoolServiceFactory
     /// <summary>Stand-in screen size for anything that would otherwise need a real GraphicsDevice.Viewport.Bounds -- unavailable headlessly. Matches PlayerHealthBarContentTests' own ScreenBounds constant.</summary>
     private static readonly Rectangle ScreenBounds = new(0, 0, 1920, 1080);
 
-    public static ElementPoolService Create(FontService fontService, LabelRenderer labelRenderer)
+    /// <param name="createTextWindow">A TextWindow factory in place of the plain one, for a test that captures what it creates.</param>
+    /// <param name="createTextBox">A TextBox factory in place of the plain one, for a test whose text boxes open a context menu.</param>
+    public static ElementPoolService Create(FontService fontService, LabelRenderer labelRenderer, Func<ElementPoolService, TextWindow>? createTextWindow = null, Func<ElementPoolService, TextBox>? createTextBox = null)
     {
         var pool = new ElementPoolService();
         pool.RegisterFactory<Window>(() => new Window(fontService, pool, labelRenderer));
         pool.RegisterFactory<Button>(() => new Button(fontService, pool, labelRenderer));
         pool.RegisterFactory<ContextMenu>(() => new ContextMenu(fontService, pool, labelRenderer));
-        pool.RegisterFactory<TextWindow>(() => new TextWindow(fontService, pool, labelRenderer));
-        pool.RegisterFactory<TextBox>(() => new TextBox(fontService, pool, labelRenderer));
+        pool.RegisterFactory<TextWindow>(() => createTextWindow?.Invoke(pool) ?? new TextWindow(fontService, pool, labelRenderer));
+        pool.RegisterFactory<TextBox>(() => createTextBox?.Invoke(pool) ?? new TextBox(fontService, pool, labelRenderer));
         return pool;
     }
 

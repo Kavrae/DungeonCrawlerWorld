@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Tiles;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.BodyPartEffects.Components;
@@ -8,7 +9,6 @@ using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Tags;
 using Microsoft.Xna.Framework;
-using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
 using Tests.UIEngine;
@@ -38,7 +38,6 @@ public sealed class InventoryGridContentActivateTests
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
-        windowService.RegisterFactory<ContextMenu>(() => new ContextMenu(fontService, windowService, labelRenderer));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());

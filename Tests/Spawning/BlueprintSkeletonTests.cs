@@ -23,7 +23,7 @@ public sealed class BlueprintSkeletonTests
     }
 
     private static GameSession Bootstrap() =>
-        GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 1_000, initialComponentCapacity: 100);
+        GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 1_000, initialComponentCapacity: 100);
 
     /// <summary>Builds blueprintId's skeleton, gives it a footprint no blueprint declares (so even a same-sized transform merge would show), then builds the rest and reports whether any skeleton component changed.</summary>
     private static bool WritesASkeletonComponent(GameSession result, ushort blueprintId)

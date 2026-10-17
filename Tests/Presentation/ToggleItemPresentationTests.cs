@@ -16,7 +16,6 @@ using Game.Spawning;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
 using Tests.UIEngine;
@@ -79,7 +78,7 @@ public sealed class ToggleItemPresentationTests
     private static InputHarness BuildInput()
     {
         var map = new Map(new Vector3Int(40, 40, 3));
-        var session = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var session = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
         var world = session.World;
         var ecs = session.EcsContext;
         var components = ecs.ComponentManager;
@@ -202,7 +201,6 @@ public sealed class ToggleItemPresentationTests
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
-        windowService.RegisterFactory<ContextMenu>(() => new ContextMenu(fontService, windowService, labelRenderer));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: GridPlayerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());

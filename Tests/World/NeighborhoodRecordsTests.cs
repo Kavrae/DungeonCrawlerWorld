@@ -9,7 +9,7 @@ public sealed class NeighborhoodRecordsTests
     [TestMethod]
     public void GetOrCreate_SameCoordinate_ReturnsTheSameRecord()
     {
-        var records = new NeighborhoodRecords(new MathUtility(new Random(1)));
+        var records = new NeighborhoodRecords(new MathUtility(new SeededRandom((ulong)1)));
 
         var first = records.GetOrCreate(-1, 2);
 
@@ -20,8 +20,8 @@ public sealed class NeighborhoodRecordsTests
     [TestMethod]
     public void GetOrCreate_SameSessionSeedAndOrder_AssignsTheSameSeeds()
     {
-        var a = new NeighborhoodRecords(new MathUtility(new Random(5)));
-        var b = new NeighborhoodRecords(new MathUtility(new Random(5)));
+        var a = new NeighborhoodRecords(new MathUtility(new SeededRandom((ulong)5)));
+        var b = new NeighborhoodRecords(new MathUtility(new SeededRandom((ulong)5)));
 
         Assert.AreEqual(a.GetOrCreate(0, 0).Seed, b.GetOrCreate(0, 0).Seed);
         Assert.AreEqual(a.GetOrCreate(1, 0).Seed, b.GetOrCreate(1, 0).Seed);

@@ -1,11 +1,10 @@
-using Engine.Utilities;
+using Game;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Mana.Components;
-using Game.Modules.Mana.Systems;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers;
@@ -174,7 +173,7 @@ public sealed class ManaRegenSystemTests
         // Update_ThrottledEntity_OnEligibleCycle_Regenerates for the reasoning.
         const float regenPerSecond = 0.3f; // MaxManaRegenPerSecond -- see CreateAbilityScoresPoolWithMaxIntelligence.
         var framesPerVisit = system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Neighborhood];
-        var expected = 50f + (regenPerSecond * framesPerVisit / GameTiming.FramesPerSecond);
+        var expected = 50f + (regenPerSecond * framesPerVisit / GameFrameRate.FramesPerSecond);
 
         Assert.AreEqual(expected, pool.GetReadonly(0).CurrentMana, 0.0001f);
     }

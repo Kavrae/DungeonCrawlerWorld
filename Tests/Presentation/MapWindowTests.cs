@@ -1,14 +1,12 @@
 using Engine.ECS.Components;
-using Engine.Events;
 using Engine.Math;
-using Engine.Utilities;
+using Presentation.Input;
+using Engine.Tiles;
 using Game.Effects;
 using Game.Effects.Entries;
-using Game.Modules;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Auras.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
@@ -17,11 +15,9 @@ using Game.Modules.Inventory.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Shops.Components;
 using Game.Tags;
-using Game.Views;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.MapRendering;
-using Presentation.Rendering;
 using Presentation.UI;
 using UIEngine.UI;
 
@@ -1080,7 +1076,7 @@ public sealed class MapWindowTests
         mapWindow.OnCorpseClicked = _ => { };
         var corpsePosition = PlaceCorpseReservedForAnotherEntity(world, componentManager);
 
-        GlobalState.IsAdminModeOn = true;
+        AdminMode.IsOn = true;
         try
         {
             mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
@@ -1091,7 +1087,7 @@ public sealed class MapWindowTests
         }
         finally
         {
-            GlobalState.IsAdminModeOn = false;
+            AdminMode.IsOn = false;
         }
     }
 
@@ -1260,10 +1256,10 @@ public sealed class MapWindowTests
     [TestMethod]
     public void ContextMenuInspectOption_Selected_WhileAdminModeOn_SetsAdminInspection()
     {
-        // GlobalState.IsAdminModeOn is true cross-layer static state -- reset in finally so this
+        // AdminMode.IsOn is true cross-layer static state -- reset in finally so this
         // doesn't leak into any other test regardless of pass/fail (this class is already
         // [DoNotParallelize], so no other test can observe it mid-run either way).
-        GlobalState.IsAdminModeOn = true;
+        AdminMode.IsOn = true;
         try
         {
             var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
@@ -1283,7 +1279,7 @@ public sealed class MapWindowTests
         }
         finally
         {
-            GlobalState.IsAdminModeOn = false;
+            AdminMode.IsOn = false;
         }
     }
 

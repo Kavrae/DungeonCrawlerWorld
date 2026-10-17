@@ -42,7 +42,7 @@ public sealed class BossLootboxAwarderTests
     private static Setup Build()
     {
         var map = new Map(new Vector3Int(20, 20, 3));
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24), runtimeSpawnSeed: 7);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24), runtimeSpawnSeed: 7);
         var playerEntityId = result.Internals.Factory.Spawn(TestDummyBlueprint.Id, 1, 1);
         result.World.PlayerEntityId = playerEntityId;
         return new Setup(result, playerEntityId);
@@ -110,7 +110,7 @@ public sealed class BossLootboxAwarderTests
             Game.Modules.Health.HealthDamage.Apply(
                 componentManager.GetPackedPool<Game.Modules.Health.Components.SimpleHealthComponent>(), result.EcsContext.EventBus, goblin, 1000, source, result.World, "Test", now: 0,
                 componentManager.GetMultiPool<Game.Modules.StatModifiers.Components.StatModifierComponent>(), Game.Modules.Health.EntityBodyParts.For(componentManager, result.Catalogs.Definitions),
-                new MathUtility(new Random(1)), deadEntities, Game.Modules.Health.DamageLedger.For(componentManager, result.EcsContext.EntityManager.Keys), new Game.World.FloatingTextFeed(result.EcsContext.EventBus, componentManager.GetDirectPool<Game.Modules.ProcessingTier.Components.ProcessingTierComponent>(), componentManager.GetDirectPool<Game.Modules.Core.Components.TransformComponent>()),
+                new MathUtility(new SeededRandom((ulong)1)), deadEntities, Game.Modules.Health.DamageLedger.For(componentManager, result.EcsContext.EntityManager.Keys), new Game.World.FloatingTextFeed(result.EcsContext.EventBus, componentManager.GetDirectPool<Game.Modules.ProcessingTier.Components.ProcessingTierComponent>(), componentManager.GetDirectPool<Game.Modules.Core.Components.TransformComponent>()),
                 ResourceLossCategory.Direct, targetMode: Game.Modules.Health.BodyPartTargetMode.All);
             result.EcsContext.EventBus.DispatchBuffered<EntityDiedEvent>();
         }

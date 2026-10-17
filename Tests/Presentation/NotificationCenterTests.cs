@@ -1,8 +1,6 @@
 ﻿using Engine.Events;
 using Game.Notifications;
 using Microsoft.Xna.Framework;
-using Presentation.Rendering;
-using Presentation.UI;
 using Presentation.UI.Notifications;
 using Tests.UIEngine;
 using UIEngine.Rendering;
@@ -324,22 +322,21 @@ public sealed class NotificationCenterTests
     {
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
         var capturedPopups = new List<TextWindow>();
 
-        // Overrides WindowService's default TextWindow factory just to capture each created
+        // Replaces the default TextWindow factory just to capture each created
         // instance -- NotificationCenter doesn't expose its windows, and this is the only
         // way to get real Button/ButtonRectangle references (needed to click precisely,
         // since a WrapContent popup's exact size depends on font metrics) without duplicating
         // Window's internal layout math in the test.
-        windowService.RegisterFactory<TextWindow>(() =>
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer, createTextWindow: pool =>
         {
-            var window = new TextWindow(fontService, windowService, new LabelRenderer());
+            var window = new TextWindow(fontService, pool, new LabelRenderer());
             capturedPopups.Add(window);
             return window;
         });
+        windowService.RegisterFactory<Folder>(() => new Folder(
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
 
         var layers = new UiLayerStack();
         var notificationCenter = CreateNotificationCenter(windowService, layers);
@@ -371,16 +368,15 @@ public sealed class NotificationCenterTests
     {
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
         var capturedPopups = new List<TextWindow>();
-        windowService.RegisterFactory<TextWindow>(() =>
+        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer, createTextWindow: pool =>
         {
-            var window = new TextWindow(fontService, windowService, new LabelRenderer());
+            var window = new TextWindow(fontService, pool, new LabelRenderer());
             capturedPopups.Add(window);
             return window;
         });
+        windowService.RegisterFactory<Folder>(() => new Folder(
+            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
         return (windowService, capturedPopups);
     }
 

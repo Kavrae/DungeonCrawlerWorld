@@ -20,11 +20,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Engine\Engine.csproj" />
-    <ProjectReference Include="..\UIEngine\UIEngine.csproj" />
-    <ProjectReference Include="..\Game\Game.csproj" />
-    <ProjectReference Include="..\Presentation\Presentation.csproj" />
-    <ProjectReference Include="..\SpriteFormat\SpriteFormat.csproj" />
+    <ProjectReference Include="..\Cadence\Engine\Engine.csproj" />
+    <ProjectReference Include="..\Cadence\UIEngine\UIEngine.csproj" />
+    <ProjectReference Include="..\DungeonCrawlerWorld\Game\Game.csproj" />
+    <ProjectReference Include="..\DungeonCrawlerWorld\Presentation\Presentation.csproj" />
+    <ProjectReference Include="..\Cadence\SpriteFormat\SpriteFormat.csproj" />
     <!--
       Build-order only: GameBootstrapperTests/ModuleLoaderTests load Mods.ExampleMod.dll at
       runtime via reflection (the real modding pipeline), not by compile-time reference.
@@ -32,8 +32,8 @@
       pipeline is what's actually being exercised, while still guaranteeing it's built
       before Tests runs.
     -->
-    <ProjectReference Include="..\Mods\Mods.ExampleMod\Mods.ExampleMod.csproj" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="..\Mods\Mods.TestFixtures\Mods.TestFixtures.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\DungeonCrawlerWorld\Mods\Mods.ExampleMod\Mods.ExampleMod.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\DungeonCrawlerWorld\Mods\Mods.TestFixtures\Mods.TestFixtures.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

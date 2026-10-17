@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The IDE's tests: Cadence Workshop's shell library, the game's Workshop executable and its Builders tabs. The game's
+    own tests are Tests.csproj; neither project references the other.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="4.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cadence\Engine\Engine.csproj" />
+    <ProjectReference Include="..\Cadence\UIEngine\UIEngine.csproj" />
+    <ProjectReference Include="..\Cadence\Workshop\Workshop.csproj" />
+    <ProjectReference Include="..\DungeonCrawlerWorld\Game\Game.csproj" />
+    <ProjectReference Include="..\DungeonCrawlerWorld\Presentation\Presentation.csproj" />
+    <ProjectReference Include="..\DungeonCrawlerWorld\Builders\Builders.csproj" />
+    <ProjectReference Include="..\DungeonCrawlerWorld\Workshop\DungeonCrawlerWorld.Workshop.csproj" />
+    <!-- Build-order only: the content session tests copy these mods' DLLs into a mods folder and load them the way the game does. -->
+    <ProjectReference Include="..\DungeonCrawlerWorld\Mods\Mods.ExampleMod\Mods.ExampleMod.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\DungeonCrawlerWorld\Mods\Mods.TestFixtures\Mods.TestFixtures.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+</Project>

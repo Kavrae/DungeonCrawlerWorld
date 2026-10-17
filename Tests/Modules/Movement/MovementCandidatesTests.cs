@@ -1,4 +1,5 @@
 using Engine.Math;
+using Engine.Tiles;
 using Game.Modules.Movement;
 using Game.World;
 
@@ -165,7 +166,7 @@ public sealed class MovementCandidatesTests
         // directions (South/West) are occupied by other Blocking entities.
         mapQuery.SetOccupant(new Vector3Int(0, 1, 0), entityId: 1); // South of (0,0)
         mapQuery.SetOccupant(new Vector3Int(1, 0, 0), entityId: 2); // West of (0,0)
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         var found = MovementCandidates.TryPickRandomAdjacentPosition(mapQuery, mathUtility, entityId: 0, new Vector3Int(0, 0, 0), SingleTile, isBlocking: true, out _);
 
@@ -182,7 +183,7 @@ public sealed class MovementCandidatesTests
         mapQuery.SetOccupant(new Vector3Int(2, 1, 0), entityId: 1); // North
         mapQuery.SetOccupant(new Vector3Int(2, 3, 0), entityId: 2); // South
         mapQuery.SetOccupant(new Vector3Int(1, 2, 0), entityId: 3); // East
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         var found = MovementCandidates.TryPickRandomAdjacentPosition(mapQuery, mathUtility, entityId: 0, origin, SingleTile, isBlocking: true, out var candidate);
 
@@ -198,7 +199,7 @@ public sealed class MovementCandidatesTests
         var origin = new Vector3Int(0, 0, 0);
         mapQuery.SetOccupant(new Vector3Int(0, 1, 0), entityId: 1); // South
         mapQuery.SetOccupant(new Vector3Int(1, 0, 0), entityId: 2); // West
-        var mathUtility = new MathUtility(new Random(2));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)2));
 
         var found = MovementCandidates.TryPickRandomAdjacentPosition(mapQuery, mathUtility, entityId: 0, origin, SingleTile, isBlocking: false, out var candidate);
 

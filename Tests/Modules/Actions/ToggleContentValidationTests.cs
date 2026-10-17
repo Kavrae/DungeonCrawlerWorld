@@ -10,7 +10,6 @@ using Game.Modules.Inventory;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffects;
 using Microsoft.Xna.Framework;
-using UIEngine.UI;
 
 namespace Tests.Modules.Actions;
 
@@ -97,7 +96,7 @@ public sealed class ToggleContentValidationTests
     [TestMethod]
     public void ToggleSpecWithoutAToggleItemActivator_Throws()
     {
-        var potionActivator = new PotionActivator(new Engine.Math.TargetingSpec(Engine.Math.TargetShape.Self, Range: 0, AreaSize: 0), new ActionTiming(ActionTimingCategory.Immediate));
+        var potionActivator = new PotionActivator(new Game.Modules.Actions.TargetingSpec(Engine.Tiles.TargetShape.Self, Range: 0, AreaSize: 0), new ActionTiming(ActionTimingCategory.Immediate));
 
         var exception = BuildWith(new ItemDefinition(Guid.NewGuid(), "Other Half", null, "?", Color.White, GameplayTagSet.Empty, [], Activator: potionActivator, Toggle: ToggleSpec.HoldsEffectsOnly));
 

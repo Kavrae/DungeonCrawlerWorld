@@ -6,33 +6,9 @@ namespace Tests.Math;
 public sealed class MathUtilityTests
 {
     [TestMethod]
-    public void ClampInt_ValueWithinRange_ReturnsValue()
-    {
-        Assert.AreEqual(5, MathUtility.ClampInt(5, 0, 10));
-    }
-
-    [TestMethod]
-    public void ClampInt_ValueAboveMax_ReturnsMax()
-    {
-        Assert.AreEqual(10, MathUtility.ClampInt(15, 0, 10));
-    }
-
-    [TestMethod]
-    public void ClampInt_ValueBelowMin_ReturnsMin()
-    {
-        Assert.AreEqual(0, MathUtility.ClampInt(-5, 0, 10));
-    }
-
-    [TestMethod]
     public void ClampShort_ValueAboveMax_ReturnsMax()
     {
         Assert.AreEqual((ushort)100, MathUtility.ClampUShort(200, 0, 100));
-    }
-
-    [TestMethod]
-    public void ClampInt_MinGreaterThanMax_Throws()
-    {
-        Assert.ThrowsExactly<ArgumentException>(() => MathUtility.ClampInt(5, 10, 0));
     }
 
     [TestMethod]
@@ -62,7 +38,7 @@ public sealed class MathUtilityTests
     [TestMethod]
     public void RandomExceptFor_NeverReturnsASkippedValue()
     {
-        var mathUtility = new MathUtility(new Random(12345));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)12345));
         ReadOnlySpan<int> skip = [1, 3];
 
         for (var i = 0; i < 1000; i++)
@@ -76,7 +52,7 @@ public sealed class MathUtilityTests
     [TestMethod]
     public void RandomExceptFor_NoValuesToSkip_StaysInRange()
     {
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         for (var i = 0; i < 100; i++)
         {
@@ -90,7 +66,7 @@ public sealed class MathUtilityTests
     {
         // The old rank-based algorithm required ascending order; deliberately pass
         // values out of order to confirm that's no longer a requirement.
-        var mathUtility = new MathUtility(new Random(99));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)99));
         ReadOnlySpan<int> skip = [3, 0, 1];
 
         for (var i = 0; i < 1000; i++)
@@ -103,7 +79,7 @@ public sealed class MathUtilityTests
     [TestMethod]
     public void RandomExceptFor_DuplicateValuesToSkip_StillWorks()
     {
-        var mathUtility = new MathUtility(new Random(7));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)7));
         ReadOnlySpan<int> skip = [1, 1, 1];
 
         for (var i = 0; i < 200; i++)
@@ -120,7 +96,7 @@ public sealed class MathUtilityTests
         // Regression test for the bias the old rank-based algorithm had toward values
         // immediately after a skipped one. With maximumValue=10 and one skipped value,
         // each of the 9 remaining values should be selected roughly equally often.
-        var mathUtility = new MathUtility(new Random(2024));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)2024));
         var counts = new int[10];
         const int trials = 90_000;
 

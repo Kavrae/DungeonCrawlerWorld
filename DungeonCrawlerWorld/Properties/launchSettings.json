@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "DungeonCrawlerWorld": {
-      "commandName": "Project",
-      "commandLineArgs": "--diagnostics=none"
-    }
-  }
-}

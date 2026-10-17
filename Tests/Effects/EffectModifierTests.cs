@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Tiles;
 using Engine.Tags;
 using Game.Blueprints.Races;
 using Game.Bootstrap;
@@ -15,7 +16,6 @@ using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.Poison.Components;
 using Game.Modules.StatModifiers;
-using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
 using Game.Spawning;
 using Game.Tags;
@@ -60,7 +60,7 @@ public sealed class EffectModifierTests
 
     private static Session BuildSession()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(20, 20, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(20, 20, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(new Vector3Int(5, 5, Ground));
         int Spawn(Vector3Int position)
         {

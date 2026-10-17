@@ -7,7 +7,7 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
 
-    # Default: DungeonCrawlerWorld/bin/<Configuration>/net10.0/DungeonCrawlerWorld.exe
+    # Default: DungeonCrawlerWorld/GameShell/bin/<Configuration>/net10.0/DungeonCrawlerWorld.exe
     [string]$ExePath = "",
     # Default: Log/phase-benchmarks/baseline-build-<configuration>, or
     # baseline-build-<configuration>-<BaselineName> when a name is given.
@@ -29,7 +29,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if ([string]::IsNullOrEmpty($ExePath)) {
-    $ExePath = "DungeonCrawlerWorld/bin/$Configuration/net10.0/DungeonCrawlerWorld.exe"
+    $ExePath = "DungeonCrawlerWorld/GameShell/bin/$Configuration/net10.0/DungeonCrawlerWorld.exe"
 }
 if ([string]::IsNullOrEmpty($BaselineDirectory)) {
     $BaselineDirectory = "Log/phase-benchmarks/baseline-build-$($Configuration.ToLowerInvariant())"

@@ -1,46 +1,27 @@
-using Engine.ECS.Entities;
-using Game.Effects.Entries;
 using Engine.ECS.Components;
 using Engine.ECS.Context;
-using Engine.Events;
 using Engine.Math;
-using Engine.Modules;
+using Engine.Tiles;
 using Game.Blueprints;
 using Game.Blueprints.Classes;
-using Game.Spawning;
-using Game.Blueprints.NPCs.Generic;
 using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
-using Game.Modules;
-using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions;
 using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Actions.Definitions.Spells;
-using Game.Modules.Class;
 using Game.Modules.Class.Components;
-using Game.Modules.Containers;
 using Game.Modules.Containers.Components;
-using Game.Modules.Core;
 using Game.Modules.Core.Components;
-using Game.Modules.Crawler;
-using Game.Modules.Crawler.Components;
-using Game.Modules.Currency;
 using Game.Modules.Currency.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Inventory.Definitions;
-using Game.Modules.Mana;
-using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
-using Game.Modules.ProcessingTier;
-using Game.Modules.Race;
 using Game.Modules.Race.Components;
-using Game.Modules.Shops;
 using Game.Modules.Shops.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -516,7 +497,7 @@ public sealed class BlueprintTests
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         ecsContext.BuildDefinition(entityId, Engineer.Id);
         ecsContext.BuildDefinition(entityId, Goblin.Id);
@@ -618,7 +599,7 @@ public sealed class BlueprintTests
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         ecsContext.BuildBlueprint(entityId, BlueprintTestContext.GoblinEngineerBlueprint);
     }

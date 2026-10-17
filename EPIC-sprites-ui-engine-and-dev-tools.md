@@ -100,7 +100,9 @@ Each is its own plan; numbering is the order. Arrows are hard dependencies.
    Presentation"): a `UIEngine` project on Engine + SpriteFormat; `UiInputController`'s game branches behind
    `IUiInputHandler`, `IContentDragSource` and `IContentDropHandler`; `UiLayerHost` out of the exe; palettes and
    font sizes split by reader.
-5. **The IDE shell and its Actions & Items tab** (→4). The IDE executable: a tab host on UIEngine +
+5. **The IDE shell and its Actions & Items tab** (→4). Planned 2026-10-16 in `PLAN-ide-shell-and-actions-items-tab.md`, with
+   every decision confirmed: Cadence Workshop, separate Items, Actions and Auras tabs, and a Phase 0 split of the
+   repository into engine and game roots. Not started. The IDE executable: a tab host on UIEngine +
    Presentation + a Game build, the place every later tool goes. Its first tab edits actions and items and
    reuses Item Details and `TargetShapePreviewElement`/`TargetShapePreviewGeometry` as they are. Pairs with
    the data-driven actions and items plan (`PLAN-data-driven-actions-and-items.md`), which supplies the
@@ -128,4 +130,6 @@ for `MapWindow`'s sake alone. 4 landed ahead of 5. 6, 7 and 8 are independent of
 
 - Authoring objects vs runtime objects: answered by child 1 -- one model per content format, no translation file; editor state never goes in a content file (IMPLEMENTATION-NOTES, "Where the manifest lives").
 - The IDE hosting a game session vs attaching to a game process (child 8's research).
-- The IDE's name and where its project lives (`DevTools/` alongside the sprite builder, or its own root).
+- The IDE's name and where its project lives: answered by child 5 (renamed 2026-10-17 from Murmuration). The engine is Cadence and the IDE
+  Cadence Workshop. Its shell library sits under the engine root (`Cadence/Workshop`) and the game's IDE exe under
+  the game root (`DungeonCrawlerWorld/Workshop`); see `PLAN-ide-shell-and-actions-items-tab.md`, "File structure".

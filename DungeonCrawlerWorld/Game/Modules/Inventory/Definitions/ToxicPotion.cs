@@ -1,0 +1,28 @@
+using Engine.Tiles;
+using Game.Effects;
+using Game.Effects.Entries;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
+using Game.Modules.StatusEffects;
+using Microsoft.Xna.Framework;
+
+namespace Game.Modules.Inventory.Definitions;
+
+public static class ToxicPotion
+{
+    public static readonly Guid Id = new("e72db9f1-9947-4b85-9cb4-0dcf38a8a53b");
+
+    public static ItemDefinition Build() => new(
+        Id, "Toxic Flask", "HealthPotion", "x", Color.Purple,
+        Tags: [],
+        Effects: [new Effect([
+            new StatusEffectGrant(StatusEffectType.Poison, StackCount: 5),
+            new StatusEffectGrant(StatusEffectType.Burning, StackCount: 3),
+        ])],
+        Description: "A sloshing flask of concentrated venom and embers. It doesn't hit hard on its own -- it hits long after you've stopped paying attention.",
+        Summary: "Inflicts 5 stacks of Poison and 3 stacks of Burning.",
+        GoldValue: 6,
+        Activator: new PotionActivator(
+            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1, TargetModeAffects: TargetModeAffects.MarkedOnly),
+            new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));
+}

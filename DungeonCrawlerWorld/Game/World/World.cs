@@ -1,0 +1,496 @@
+using Engine.ECS.Components.Stores;
+using Engine.ECS.Entities;
+using Engine.Events;
+using Engine.Math;
+using Engine.Tiles;
+using Game.Modules.Core.Components;
+using Game.Terrain;
+
+namespace Game.World;
+
+/// <summary>The in-memory game world</summary>
+/// <remarks>The map and bookkeeping for entities placed on it.</remarks>
+/// <cleanupVersion>1</cleanupVersion>
+public sealed class World(
+    Map map,
+    MultiComponentPool<NonBlockingComponent> nonBlockingComponents,
+    MultiComponentPool<ForceBlockingComponent> forceBlockingComponents,
+    EventBus eventBus,
+    EntityKeys entityKeys,
+    TerrainRegistry terrain) : IMapQuery, IPlayerQuery
+{
+    public Map Map { get; set; } = map;
+
+    /// <summary>Tracks the components that temporarily change a blocking entity to non-blocking</summary>
+    public MultiComponentPool<NonBlockingComponent> NonBlockingComponents { get; } = nonBlockingComponents;
+
+    /// <summary>Tracks the components that temporarily change a non-blocking entity to blocking</summary>
+    public MultiComponentPool<ForceBlockingComponent> ForceBlockingComponents { get; } = forceBlockingComponents;
+
+    /// <summary>Used by SetTerrain and SetStructure to publish their change events.</summary>
+    public EventBus EventBus { get; } = eventBus;
+
+    /// <summary>The session's stable entity keys.</summary>
+    public EntityKeys EntityKeys { get; } = entityKeys;
+
+    /// <summary>The session's terrain and structure definitions, which decide whether a cell blocks movement.</summary>
+    /// <remarks>Filled by the modules during the build's configure step, after World exists.</remarks>
+    public TerrainRegistry Terrain { get; } = terrain;
+
+    /// <summary>The player character's entity id</summary>
+    /// <remarks>Defaults to -1 as the standard sentinel</remarks>
+    public int PlayerEntityId { get; set; } = -1;
+
+    /// <summary>The player's stable key; None while there is no player.</summary>
+    public EntityKey PlayerEntityKey => EntityKeys.GetKey(PlayerEntityId);
+
+    /// <summary>
+    /// Raised after an entity is successfully placed on the map by PlaceEntityOnMap, with the
+    /// position it landed at. Generic by design: World knows nothing
+    /// about processing tiers. GameBuildPass subscribes ProcessingTierResolver.EnsureTiered, so
+    /// every placement path gets a correct tier without its caller having to ask for one. Carries the
+    /// position rather than letting a subscriber re-read the TransformComponent, because callers pass
+    /// the transform by ref and not every caller's ref points into the pool.
+    /// </summary>
+    public event Action<int, Vector3Int>? EntityPlaced;
+
+    private static readonly Vector2Byte TransformSize1 = new(1, 1);
+
+    /// <summary> Moves entityId's map-index presence from transformComponent.Position to newPosition.</summary>
+    /// <remarks>
+    /// No-ops (leaves the map's index untouched) if either footprint is off the map, or if
+    /// the destination footprint is already occupied by a different Blocking entity 
+    /// A nonblocking entity is exempt from map occupancy.
+    /// </remarks>
+    public void MoveEntity(int entityId, Vector3Int newPosition, TransformComponent transformComponent)
+    {
+        var size = transformComponent.Size;
+        var newCube = new CubeInt(newPosition, new Vector3Int(size.X, size.Y, 1)); // A footprint never spans more than one MapLayer.
+        var isBlocking = IsBlocking(entityId);
+
+        if (!IsValidDestination(entityId, newCube, isBlocking))
+        {
+            return;
+        }
+
+        MoveEntityUnchecked(entityId, newPosition, transformComponent, isBlocking);
+    }
+
+    /// <summary>
+    /// Same map-index update as MoveEntity, minus the free-space/bounds re-validation --
+    /// internal, and safe ONLY when the caller has already validated the destination footprint
+    /// moments earlier in the same single-threaded call with nothing else able to mutate the
+    /// map in between (today: MoveEntity itself, immediately above, plus WorldEventSync.SyncMove,
+    /// invoked directly by MovementSystem immediately after MovementSystem.CanMove already
+    /// checked this exact footprint). Any other caller -- a mod, a future spawner -- should use
+    /// the public, defensive MoveEntity instead.
+    /// </summary>
+    /// <remarks>
+    /// isBlocking is a caller-supplied parameter, not re-derived internally via IsBlocking(entityId)
+    /// -- both callers already computed it moments earlier for their own IsValidDestination check,
+    /// so re-querying here would just repeat the same MultiComponentPool lookups for the identical
+    /// answer. It also decides only which NEW footprint kind to register at newPosition; departure
+    /// from oldPosition goes through RemoveFootprint, which no longer needs to know or guess which
+    /// kind was actually registered there (see RemoveFootprint's own doc comment).
+    /// </remarks>
+    internal void MoveEntityUnchecked(int entityId, Vector3Int newPosition, TransformComponent transformComponent, bool isBlocking)
+    {
+        var size = transformComponent.Size;
+        var oldPosition = transformComponent.Position;
+
+        RemoveFootprint(entityId, oldPosition, size);
+
+        if (isBlocking)
+        {
+            AddBlockingFootprint(entityId, newPosition, size);
+        }
+        else
+        {
+            AddNonBlockingFootprint(entityId, newPosition, size);
+        }
+    }
+
+    /// <summary>Whether newCube is a legal destination for entityId -- on the map, clear of blocking terrain and structures unless entityId is Phasing, and (only when isBlocking) not occupied by a different Blocking entity.</summary>
+    private bool IsValidDestination(int entityId, CubeInt newCube, bool isBlocking)
+    {
+        if (!IsOnMap(newCube))
+        {
+            return false;
+        }
+
+        var checksCells = isBlocking || !IsPhasing(entityId);
+        return !checksCells || IsFootprintFreeFor(entityId, newCube, isBlocking);
+    }
+
+    /// <summary>True if no cell in cube blocks movement and, when checkOccupants, every cell is either empty or already occupied by entityId.</summary>
+    private bool IsFootprintFreeFor(int entityId, CubeInt cube, bool checkOccupants)
+    {
+        var z = cube.Position.Z;
+        var maxX = cube.Position.X + cube.Size.X;
+        var maxY = cube.Position.Y + cube.Size.Y;
+        for (var x = cube.Position.X; x < maxX; x++)
+        {
+            for (var y = cube.Position.Y; y < maxY; y++)
+            {
+                var cell = new Vector3Int(x, y, z);
+                if (IsCellBlockedOnMap(cell))
+                {
+                    return false;
+                }
+
+                if (!checkOccupants)
+                {
+                    continue;
+                }
+
+                var occupyingEntityId = Map.GetBlockingEntityId(cell);
+                if (occupyingEntityId != -1 && occupyingEntityId != entityId)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Fulfills IMapQuery.IsBlocking. ForceBlockingComponent wins if present (an effect
+    /// forcing an otherwise-exempt entity solid); otherwise NonBlockingComponent exempts it;
+    /// otherwise the default is Blocking. Both are Multi pools -- Has() means "at least one
+    /// source is still active" -- so overlapping sources (two independent effects granting
+    /// the same exemption) are handled correctly: one expiring doesn't affect the other.
+    /// </summary>
+    public bool IsBlocking(int entityId)
+    {
+        if (ForceBlockingComponents.Has(entityId))
+        {
+            return true;
+        }
+
+        return !NonBlockingComponents.Has(entityId);
+    }
+
+    /// <inheritdoc cref="IMapQuery"/>
+    /// <remarks>ForceBlockingComponent wins here too: a force-solid entity is not Phasing, whatever NonBlockingComponent kinds it also carries.</remarks>
+    public bool IsPhasing(int entityId)
+    {
+        if (ForceBlockingComponents.Has(entityId))
+        {
+            return false;
+        }
+
+        var nonBlocking = NonBlockingComponents;
+        for (var denseIndex = nonBlocking.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = nonBlocking.GetNextDenseIndex(denseIndex))
+        {
+            if ((nonBlocking.GetReadonlyByDenseIndex(denseIndex).Kind & NonBlockingKind.Phasing) != 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc cref="IMapQuery"/>
+    public bool IsCellBlocked(Vector3Int position) => IsOnMap(position) && IsCellBlockedOnMap(position);
+
+    /// <summary>IsCellBlocked for a position already known to be on the map.</summary>
+    private bool IsCellBlockedOnMap(Vector3Int position)
+    {
+        if (Terrain.BlocksMovement(Map.GetStructureTypeId(position)))
+        {
+            return true;
+        }
+
+        return Map.TerrainLayerFor(position.Z) is { } terrainLayer && Terrain.BlocksMovement(Map.GetTerrain(position.X, position.Y, terrainLayer).TypeId);
+    }
+
+    /// <summary>Removes entityId's footprint from the map and leaves it unplaced on the same MapLayer.</summary>
+    public void RemoveEntityFromMap(int entityId, ref TransformComponent transformComponent)
+    {
+        if (IsOnMap(transformComponent.Position))
+        {
+            RemoveFootprint(entityId, transformComponent.Position, transformComponent.Size);
+        }
+
+        transformComponent.Position = TransformComponent.UnplacedOn((MapLayer)transformComponent.Position.Z);
+    }
+
+    /// <summary> Transitions a currently-Blocking entity to non-Blocking at its own current position </summary>
+    public void ConvertToNonBlocking(int entityId, ref TransformComponent transformComponent)
+    {
+        if (!IsOnMap(transformComponent.Position))
+        {
+            return;
+        }
+
+        RemoveFootprint(entityId, transformComponent.Position, transformComponent.Size);
+        AddNonBlockingFootprint(entityId, transformComponent.Position, transformComponent.Size);
+    }
+
+    /// <summary>Places an entity on the map at the specified position.</summary>
+    /// <param name="entityId">The ID of the entity to place.</param>
+    /// <param name="newPosition">The position at which to place the entity.</param>
+    /// <param name="transformComponent">The transform component of the entity.</param>
+    /// <remarks>No-ops if the footprint is off the map, or if a Blocking entity's destination footprint is already occupied by a different Blocking entity -- mirrors MoveEntity's guard. A nonblocking entity is exempt from map occupancy.</remarks>
+    public void PlaceEntityOnMap(int entityId, Vector3Int newPosition, ref TransformComponent transformComponent)
+    {
+        var size = transformComponent.Size;
+        var newCube = new CubeInt(newPosition, new Vector3Int(size.X, size.Y, 1)); // A footprint never spans more than one MapLayer.
+        var isBlocking = IsBlocking(entityId);
+        if (!IsValidDestination(entityId, newCube, isBlocking))
+        {
+            return;
+        }
+
+        if (isBlocking)
+        {
+            AddBlockingFootprint(entityId, newPosition, size);
+        }
+        else
+        {
+            AddNonBlockingFootprint(entityId, newPosition, size);
+        }
+
+        transformComponent.Position = newPosition;
+
+        EntityPlaced?.Invoke(entityId, newPosition);
+    }
+
+    /// <summary>Shared footprint iteration for a Blocking entity's placement/arrival -- every cell of its X/Y extent at the given Z, with a single-cell fast path for a 1x1 footprint instead of entering the loop.</summary>
+    /// <remarks>Writes both the O(1) Blocking fast-path index and the occupant index -- a Blocking entity is discoverable both ways (see Map's class doc comment).</remarks>
+    private void AddBlockingFootprint(int entityId, Vector3Int position, Vector2Byte size)
+    {
+        if (size == TransformSize1)
+        {
+            Map.SetBlockingEntityId(position, entityId);
+            Map.AddOccupantEntityId(position, entityId);
+            return;
+        }
+
+        var z = position.Z;
+        for (var x = position.X; x < position.X + size.X; x++)
+        {
+            for (var y = position.Y; y < position.Y + size.Y; y++)
+            {
+                var cell = new Vector3Int(x, y, z);
+                Map.SetBlockingEntityId(cell, entityId);
+                Map.AddOccupantEntityId(cell, entityId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Shared footprint iteration for ANY entity's departure -- Blocking or not -- clearing
+    /// every index it might actually be registered in at position, rather than trusting the
+    /// entity's current IsBlocking() to say which single index applies.
+    /// </summary>
+    /// <remarks>
+    /// Unconditionally attempts both: Map.ClearBlockingIfOccupiedBy (a no-op if entityId isn't
+    /// the cell's recorded Blocking occupant -- e.g. it never held that slot to begin with) and
+    /// Map.RemoveOccupantEntityId (a no-op if it isn't recorded there either). This makes
+    /// removal correct based on what Map actually has stored, not on a live re-query of the
+    /// entity's current blocking status -- those two can only diverge if something changes an
+    /// entity's NonBlockingComponent/ForceBlockingComponent state without going through
+    /// ConvertToNonBlocking first, but there's no need to depend on that never happening: this
+    /// removal is safe either way. Previously named RemoveBlockingFootprint and called only when
+    /// IsBlocking(entityId) was still true; every caller (MoveEntityUnchecked, RemoveEntityFromMap,
+    /// ConvertToNonBlocking) now calls this same method regardless of current blocking status.
+    /// </remarks>
+    private void RemoveFootprint(int entityId, Vector3Int position, Vector2Byte size)
+    {
+        if (size == TransformSize1)
+        {
+            Map.ClearBlockingIfOccupiedBy(position, entityId);
+            Map.RemoveOccupantEntityId(position, entityId);
+            return;
+        }
+
+        var z = position.Z;
+        for (var x = position.X; x < position.X + size.X; x++)
+        {
+            for (var y = position.Y; y < position.Y + size.Y; y++)
+            {
+                var cell = new Vector3Int(x, y, z);
+                Map.ClearBlockingIfOccupiedBy(cell, entityId);
+                Map.RemoveOccupantEntityId(cell, entityId);
+            }
+        }
+    }
+
+    /// <summary>Shared footprint iteration for a non-Blocking entity's placement/arrival -- every cell of its X/Y extent at the given Z, matching how AddBlockingFootprint above loops over Size.X/Size.Y.</summary>
+    /// <remarks>Only writes the occupant index -- a non-Blocking entity never touches the Blocking fast-path array.</remarks>
+    /// <summary>Registers the cells of an already-placed entity's footprint that lie inside area.</summary>
+    /// <remarks>For a multi-tile entity straddling a neighborhood border: the cells on the far side were dropped when that neighborhood unloaded, and come back here once it loads again.</remarks>
+    public void RestoreFootprintWithin(int entityId, Vector3Int position, Vector2Byte size, MapBounds area)
+    {
+        var isBlocking = IsBlocking(entityId);
+        for (var x = System.Math.Max(position.X, area.MinX); x < System.Math.Min(position.X + size.X, area.MaxX); x++)
+        {
+            for (var y = System.Math.Max(position.Y, area.MinY); y < System.Math.Min(position.Y + size.Y, area.MaxY); y++)
+            {
+                var cell = new Vector3Int(x, y, position.Z);
+                if (!IsOnMap(cell))
+                {
+                    continue;
+                }
+
+                if (isBlocking)
+                {
+                    Map.SetBlockingEntityId(cell, entityId);
+                }
+
+                Map.AddOccupantEntityId(cell, entityId);
+            }
+        }
+    }
+
+    private void AddNonBlockingFootprint(int entityId, Vector3Int position, Vector2Byte size)
+    {
+        var z = position.Z;
+        for (var x = position.X; x < position.X + size.X; x++)
+        {
+            for (var y = position.Y; y < position.Y + size.Y; y++)
+            {
+                Map.AddOccupantEntityId(new Vector3Int(x, y, z), entityId);
+            }
+        }
+    }
+
+    /// <summary>Changes the terrain at (x, y) on terrainLayer and publishes TerrainChangedEvent. No-op off the map or when the cell already holds exactly this.</summary>
+    /// <remarks>
+    /// The one runtime path for changing terrain, so everything derived from it -- aura grids, the
+    /// map's cached terrain image -- hears about every change. Published after the store is
+    /// updated, so a subscriber that re-reads the cell sees the new terrain.
+    /// </remarks>
+    public void SetTerrain(int x, int y, TerrainLayer terrainLayer, TerrainCell cell)
+    {
+        if (!IsOnMap(new Vector3Int(x, y, 0)))
+        {
+            return;
+        }
+
+        var previous = Map.GetTerrain(x, y, terrainLayer);
+        if (previous == cell)
+        {
+            return;
+        }
+
+        Map.SetTerrain(x, y, terrainLayer, cell);
+        EventBus.Publish(new TerrainChangedEvent(x, y, terrainLayer, previous.TypeId, cell.TypeId));
+    }
+
+    /// <summary>Writes terrain during population, before anything derived from terrain exists, without publishing.</summary>
+    /// <remarks>
+    /// Population writes millions of cells, and nothing that listens for TerrainChangedEvent has
+    /// built its state yet -- the aura grid and the map's caches scan the finished terrain once
+    /// when they first need it. Publishing here would cost an event per cell for nothing, and
+    /// would double-count any listener that also scans. Anything after population uses SetTerrain.
+    /// </remarks>
+    public void PopulateTerrain(int x, int y, TerrainLayer terrainLayer, TerrainCell cell)
+    {
+        if (IsOnMap(new Vector3Int(x, y, 0)))
+        {
+            Map.SetTerrain(x, y, terrainLayer, cell);
+        }
+    }
+
+    /// <summary>Changes the structure at position and publishes StructureChangedEvent. No-op off the map or when the cell already holds exactly this.</summary>
+    /// <remarks>The one runtime path for changing a structure. Doesn't move anyone already standing in the cell.</remarks>
+    public void SetStructure(Vector3Int position, TerrainCell cell)
+    {
+        if (!IsOnMap(position))
+        {
+            return;
+        }
+
+        var previous = Map.GetStructure(position);
+        if (previous == cell)
+        {
+            return;
+        }
+
+        Map.SetStructure(position, cell);
+        EventBus.Publish(new StructureChangedEvent(position, previous.TypeId, cell.TypeId));
+    }
+
+    /// <summary>Writes a structure during population without publishing -- see PopulateTerrain for why.</summary>
+    public void PopulateStructure(Vector3Int position, TerrainCell cell)
+    {
+        if (IsOnMap(position))
+        {
+            Map.SetStructure(position, cell);
+        }
+    }
+
+    /// <inheritdoc cref="IMapQuery"/>
+    public TerrainCell GetStructureAt(Vector3Int position) => IsOnMap(position) ? Map.GetStructure(position) : default;
+
+    public bool IsOnMap(Vector3Int coordinates) => Map.Contains(coordinates);
+
+    /// <inheritdoc cref="IMapQuery"/>
+    public bool IsNeighborhoodLoaded(int cellX, int cellY) => Map.IsNeighborhoodLoaded(cellX, cellY);
+
+    /// <summary>
+    /// True only if the whole cube is on the map, so multi-tile entities never move
+    /// partially off it. Size is an extent, not an inclusive far corner -- a cube occupies
+    /// cells [Position, Position + Size), so the last actually-occupied cell is
+    /// Position + Size - 1, not Position + Size. Checking Position + Size directly would
+    /// reject a footprint sitting flush against the map's far edge (e.g. a 1x1x1 cube at the
+    /// map's last valid row/column) even though every cell it occupies is on the map.
+    /// </summary>
+    public bool IsOnMap(CubeInt cube) => IsOnMap(cube.Position) && IsOnMap(cube.Position + cube.Size - new Vector3Int(1, 1, 1));
+
+    /// <inheritdoc cref="IMapQuery"/>
+    public MapBounds Bounds => Map.Bounds;
+
+    /// <inheritdoc cref="IMapQuery"/>
+    public bool IsBounded => Map.IsBounded;
+
+    /// <inheritdoc cref="IMapQuery"/>
+    public int GetEntityIdAt(Vector3Int position) => Map.GetBlockingEntityId(position);
+
+    /// <inheritdoc cref="IMapQuery"/>
+    public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) => Map.GetOccupantEntityIdsAt(position);
+
+    /// <inheritdoc cref="IMapQuery"/>
+    public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) => Map.GetOccupantEntityIdSpanAt(position);
+
+    /// <inheritdoc cref="IMapQuery"/>
+    /// <remarks>Explicitly implemented rather than left as IMapQuery's own default -- a default interface method is only callable through an IMapQuery-typed reference, not a concrete World one, and MapWindow (this method's first caller) holds World directly.</remarks>
+    public bool IsPositionOccupied(Vector3Int position) => Map.HasOccupantAt(position);
+
+    /// <inheritdoc cref="IMapQuery"/>
+    public TerrainCell GetTerrainAt(Vector3Int position) =>
+        Map.TerrainLayerFor(position.Z) is { } terrainLayer && IsOnMap(position) ? Map.GetTerrain(position.X, position.Y, terrainLayer) : default;
+
+    /// <summary>The seed the look of the terrain under MapLayer position.Z at position is picked from (CellSeeds); 0 off the map or on a layer with no floor.</summary>
+    public uint GetTerrainSeedAt(Vector3Int position) =>
+        Map.TerrainLayerFor(position.Z) is { } terrainLayer && IsOnMap(position) ? Map.GetTerrainSeed(position.X, position.Y, terrainLayer) : 0;
+
+    /// <summary>The seed the look of the structure at position is picked from (CellSeeds); 0 off the map.</summary>
+    public uint GetStructureSeedAt(Vector3Int position) => IsOnMap(position) ? Map.GetStructureSeed(position) : 0;
+
+    /// <summary>
+    /// Row-major (X fastest-varying) batched occupant scan -- box.Size.Z is ignored, every
+    /// cell is read at box.Position.Z. One batched call instead of one interface call per
+    /// cell, for anything scanning a falloff radius (aura range) instead of a fixed 3x3
+    /// neighborhood.
+    /// </summary>
+    /// <inheritdoc cref="IMapQuery"/>
+    public void GetEntityIdsInBox(CubeInt box, Span<int> entityIds)
+    {
+        var z = box.Position.Z;
+        var index = 0;
+        for (var y = box.Position.Y; y < box.Position.Y + box.Size.Y; y++)
+        {
+            for (var x = box.Position.X; x < box.Position.X + box.Size.X; x++)
+            {
+                var position = new Vector3Int(x, y, z);
+                entityIds[index] = IsOnMap(position) ? Map.GetBlockingEntityId(position) : -1;
+                index++;
+            }
+        }
+    }
+}

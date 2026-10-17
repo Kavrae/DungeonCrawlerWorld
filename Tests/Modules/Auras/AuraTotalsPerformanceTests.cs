@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Engine.Math;
+using Engine.Tiles;
 using Game.Modules.Auras;
 using Game.World;
 

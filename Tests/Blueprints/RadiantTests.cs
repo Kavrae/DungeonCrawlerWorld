@@ -32,7 +32,7 @@ public sealed class RadiantTests
     [TestMethod]
     public void OfferedByAdminApply()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(20, 20, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 50, initialComponentCapacity: 50);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(20, 20, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 50, initialComponentCapacity: 50);
         var commands = new BlueprintAdminCommands(build.Factory, build.Context.Definitions);
 
         Assert.IsTrue(commands.Applicable().Any(choice => choice.Name == Radiant.Name));
@@ -42,7 +42,7 @@ public sealed class RadiantTests
     [TestMethod]
     public void AppliedToAGoblin_RadiatesBothAurasToSizeThirty()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(128, 128, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(128, 128, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(GoblinPosition);
         var goblinId = build.Factory.Spawn(SpawnRequest.At(build.Context.Definitions.GetId(Goblin.Id), GoblinPosition) with { Seed = 1 });
         build.EcsContext.ComponentManager.GetPackedPool<MovementComponent>().Remove(goblinId);

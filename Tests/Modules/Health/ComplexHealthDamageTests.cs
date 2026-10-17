@@ -2,14 +2,13 @@ using Engine.ECS.Systems;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
-using Engine.Utilities;
+using Game;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
-using Game.Modules.AbilityScores.Components;
 
 namespace Tests.Modules.Health;
 
@@ -57,7 +56,7 @@ public sealed class ComplexHealthDamageTests
         bodyParts.TryGet(0, 0, out var part);
         Assert.AreEqual(0, part.CurrentHealth);
         Assert.IsTrue(part.IsDisabled);
-        Assert.AreEqual((uint)(10 * GameTiming.FramesPerSecond), part.RegenLockedUntilFrame);
+        Assert.AreEqual((uint)(10 * GameFrameRate.FramesPerSecond), part.RegenLockedUntilFrame);
     }
 
     [TestMethod]

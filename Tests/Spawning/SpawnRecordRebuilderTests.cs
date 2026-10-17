@@ -1,7 +1,5 @@
 using Engine.Diagnostics;
 using Engine.ECS.Components;
-using Engine.ECS.Context;
-using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints.Classes;
 using Game.Blueprints.Races;
@@ -31,7 +29,7 @@ public sealed class SpawnRecordRebuilderTests
     private sealed record Creature(List<string> Components, List<string> Stacks, List<string> Modifiers);
 
     private static GameSession Bootstrap(Map map, UniqueNumberAllocator? crawlerNumbers = null) =>
-        GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
+        GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
 
     private static Creature Read(ComponentManager componentManager, int entityId, params Type[] excluded)
     {
@@ -190,7 +188,7 @@ public sealed class SpawnRecordRebuilderTests
     [TestMethod]
     public void PopulatedCreatures_RebuildFromTheirSpawnRecords()
     {
-        var mathUtility = new MathUtility(new Random(3));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)3));
         var result = Bootstrap(new Map(new Vector3Int(60, 60, 3)), new UniqueNumberAllocator(1, 1, 24));
         var world = result.World;
         var ecs = result.EcsContext;

@@ -7,6 +7,7 @@ using Game.World;
 using Game.Modules.StatModifiers.Components;
 using Game.Effects;
 using Engine.Math;
+using Engine.Tiles;
 using Engine.ECS.Systems;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
@@ -71,7 +72,7 @@ public sealed class ActivationQueriesTests
         ActivationQueries.GetBlocker(EntityId, action, activator, isToggledOn: false, componentManager.GetPackedPool<MeleeDisabledComponent>(), ServicesOver(componentManager), Now);
 
     private static EffectServices ServicesOver(ComponentManager componentManager) =>
-        TestActionEffects.Services(componentManager, new EntityKeys(), new EventBus(), new MathUtility(new Random(1)), statModifiers: componentManager.GetMultiPool<StatModifierComponent>(), mana: componentManager.GetPackedPool<ManaComponent>());
+        TestActionEffects.Services(componentManager, new EntityKeys(), new EventBus(), new MathUtility(new SeededRandom((ulong)1)), statModifiers: componentManager.GetMultiPool<StatModifierComponent>(), mana: componentManager.GetPackedPool<ManaComponent>());
 
     private static ActivationBlocker BlockerOf(ComponentManager componentManager, ActionDefinition action) => BlockerOf(componentManager, action, action.Activator);
 

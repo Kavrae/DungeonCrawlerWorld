@@ -1,8 +1,8 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Tiles;
 using Game.Floors;
-using Game.Modules;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Currency.Components;
@@ -11,9 +11,7 @@ using Game.Modules.Inventory.Components;
 using Game.Modules.Shops;
 using Game.Modules.Shops.Components;
 using Game.Tags;
-using Game.World;
 using Microsoft.Xna.Framework;
-using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
 using Tests.UIEngine;
@@ -479,7 +477,6 @@ public sealed class InventoryGridContentShopModeTests
         windowService.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
         windowService.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(fontService, windowService, labelRenderer));
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
-        windowService.RegisterFactory<ContextMenu>(() => new ContextMenu(fontService, windowService, labelRenderer));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         var layers = new UiLayerStack();

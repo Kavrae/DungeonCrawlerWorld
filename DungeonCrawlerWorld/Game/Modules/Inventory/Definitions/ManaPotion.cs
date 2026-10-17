@@ -1,0 +1,25 @@
+using Engine.Tiles;
+using Game.Effects;
+using Game.Effects.Entries;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
+using Game.Tags;
+using Microsoft.Xna.Framework;
+
+namespace Game.Modules.Inventory.Definitions;
+
+public static class ManaPotion
+{
+    public static readonly Guid Id = new("a4f2e8c1-6b3d-4e97-9a1f-2d8c5b7e4a63");
+
+    public static ItemDefinition Build() => new(
+        Id, "Regular Mana Potion", "HealthPotion", "m", Color.Blue,
+        Tags: [GameTags.TargetingSelf],
+        Effects: [new Effect([new DirectManaRestore(1f)])],
+        Description: "Fully restores the target(s) mana. Oddly tastes like TV static.",
+        Summary: "Restore target's mana.",
+        GoldValue: 7,
+        Activator: new PotionActivator(
+            new TargetingSpec(Shape: TargetShape.Burst, Range: 3, AreaSize: 1, TargetModeAffects: TargetModeAffects.MarkedOnly),
+            new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: null)));
+}

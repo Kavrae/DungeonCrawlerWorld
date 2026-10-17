@@ -16,7 +16,7 @@ public sealed class TemporaryNpcLootGrantTests
         const int npcCount = 400;
         var manager = new ComponentManager(initialEntityCapacity: npcCount, initialComponentCapacity: 16);
         new InventoryModule().RegisterComponents(manager);
-        var mathUtility = new MathUtility(new Random(7));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)7));
 
         for (var entityId = 0; entityId < npcCount; entityId++)
         {

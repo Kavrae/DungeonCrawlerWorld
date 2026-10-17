@@ -56,6 +56,6 @@ public sealed class AuraContentReachTests
     {
         AuraDefinition[] auras = [BuiltInTerrain.LavaAura, BuiltInTerrain.HolyGroundAura, HealingShrine.Aura, ToxicIdol.Aura, ToxicAuraAction.Aura, ScrollOfTorch.Aura];
 
-        Assert.IsTrue(auras.All(aura => aura.Falloff == Engine.Math.AuraFalloff.Linear));
+        Assert.IsTrue(auras.All(aura => aura.Falloff == Engine.Tiles.AuraFalloff.Linear));
     }
 }

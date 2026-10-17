@@ -23,7 +23,7 @@ namespace Tests.Bootstrap;
 [TestClass]
 public sealed class GameBootstrapperTests
 {
-    private static string FindRepositoryRoot()
+    internal static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "DungeonCrawlerWorld.sln")))
@@ -39,17 +39,17 @@ public sealed class GameBootstrapperTests
         return directory.FullName;
     }
 
-    private static string FindAssemblyPath(string projectName)
+    internal static string FindAssemblyPath(string projectName)
     {
         var assemblyFileName = $"{projectName}.dll";
         return Directory.EnumerateFiles(
-                Path.Combine(FindRepositoryRoot(), "Mods", projectName, "bin"),
+                Path.Combine(FindRepositoryRoot(), "DungeonCrawlerWorld", "Mods", projectName, "bin"),
                 assemblyFileName,
                 SearchOption.AllDirectories)
             .First();
     }
 
-    private static void CopyModTo(string modsDirectory, string projectName)
+    internal static void CopyModTo(string modsDirectory, string projectName)
     {
         Directory.CreateDirectory(modsDirectory);
         var sourcePath = FindAssemblyPath(projectName);
@@ -66,7 +66,7 @@ public sealed class GameBootstrapperTests
     /// memory-mapped, and therefore locked on disk, for the rest of this test process's
     /// lifetime. Best-effort cleanup only; leaving a temp directory behind is harmless.
     /// </summary>
-    private static void TryDeleteDirectory(string path)
+    internal static void TryDeleteDirectory(string path)
     {
         try
         {

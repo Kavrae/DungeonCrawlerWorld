@@ -1,12 +1,12 @@
 using Engine.Events;
 using Engine.Math;
+using Engine.Tiles;
 using Game.Modules.Auras;
 using Game.Terrain;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.MapRendering;
-using Presentation.Rendering;
 using SpriteFormat;
 using Tests.UIEngine;
 using UIEngine.Rendering;

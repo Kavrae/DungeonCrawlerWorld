@@ -1,7 +1,7 @@
+using Game;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
-using Engine.Utilities;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatModifiers.Systems;
@@ -144,8 +144,8 @@ public sealed class StatModifierExpirySystemTests
     [TestMethod]
     public void TwoBuffsOnTheSameStat_TheShorterExpiresWithoutTakingTheLongerWithIt()
     {
-        const uint FiveSeconds = 5 * GameTiming.FramesPerSecond;
-        const uint SixSeconds = 6 * GameTiming.FramesPerSecond;
+        const uint FiveSeconds = 5 * GameFrameRate.FramesPerSecond;
+        const uint SixSeconds = 6 * GameFrameRate.FramesPerSecond;
 
         var pool = CreatePool();
         var expiries = CreateExpiriesPool();

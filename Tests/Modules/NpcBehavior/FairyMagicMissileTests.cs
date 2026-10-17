@@ -54,7 +54,7 @@ public sealed class FairyMagicMissileTests
     /// <param name="playerOffset">Where the player stands from the Fairy, on the ground below it.</param>
     private static Session BuildSession(Vector3Int playerOffset, float? fairyMana = null)
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(FairyPosition);
         var definitions = build.Context.Definitions;
 

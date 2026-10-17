@@ -1,6 +1,7 @@
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tiles;
 using Game;
 using Game.Blueprints.Objects;
 using Game.Bootstrap;
@@ -8,7 +9,6 @@ using Game.Floors;
 using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
 using Game.Modules.Core.Components;
-using Game.Spawning;
 using Game.World;
 
 namespace Tests.Floors;
@@ -35,7 +35,7 @@ public sealed class AuraEvictionWalkTests
             map.UnloadNeighborhood(cellX, 0);
         }
 
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
         var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24));
         var world = result.World;
         var ecs = result.EcsContext;

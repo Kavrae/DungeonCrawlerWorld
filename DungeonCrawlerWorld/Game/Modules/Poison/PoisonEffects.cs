@@ -1,0 +1,92 @@
+using Engine.ECS.Entities;
+using Engine.ECS.Components;
+using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
+using Engine.Events;
+using Engine.Math;
+using Game.Modules.Poison.Components;
+using Game.Modules.StatModifiers;
+using Game.Modules.StatModifiers.Components;
+using Game.Modules.StatusEffects;
+using Game.World;
+
+namespace Game.Modules.Poison;
+
+/// <summary>Poison's own rules: how many stacks it can hold, how often it ticks, and how a stack (with its own duration) gets applied.</summary>
+public static class PoisonEffects
+{
+    // No explicit cap was specified for Poison -- mirrors Burning's cap as a reasonable default
+    // (every stacking effect needs *some* limit; see the original stacking-status-effects spec).
+    public const byte MaxStacks = byte.MaxValue;
+
+    /// <summary>Once per second -- literally GameFrameRate.FramesPerSecond, not a converted duration.</summary>
+    public const ushort TickIntervalFrames = GameFrameRate.FramesPerSecond;
+
+    /// <summary>☠ (U+2620, "skull and crossbones"). Requires Symbola-Emoji.ttf loaded as a fallback font (see FontService).</summary>
+    public const string Glyph = "☠";
+
+    /// <summary>
+    /// No-ops entirely if entityId is currently immune to Poison (StatusEffectImmunity), or once
+    /// MaxStacks is reached. durationInTicks is how many future damage applications this specific
+    /// stack should keep Poison alive for -- scaled by the source's own OutgoingDebuffDuration
+    /// (the source entity, while it is still loaded) then the target's own IncomingDebuffDuration
+    /// before being stored, unconditionally (no ConditionTag/activator-tags support here -- an
+    /// aura-refreshed grant has no real activator to carry tags from; see this feature's own plan
+    /// for why that's out of scope). The entity's overall RemainingDurationTicks becomes the
+    /// greater of whatever it already was and this (already-scaled) value (never additive), so
+    /// reapplying a long duration repeatedly keeps refreshing it, while a short reapplication after
+    /// a longer one already landed does nothing to the timer.
+    /// </summary>
+    /// <param name="now">The simulation frame the stack lands on. A new poisoning's first tick is TickIntervalFrames after it; a re-application leaves the running tick alone.</param>
+    public static void ApplyStack(ComponentManager componentManager, EntityKeys entityKeys, int entityId, ActionSource source, ushort durationInTicks, long now, EventBus eventBus, IPlayerQuery playerQuery) =>
+        ApplyStacks(componentManager, entityKeys, entityId, count: 1, source, durationInTicks, now, eventBus, playerQuery);
+
+    /// <summary>ApplyStack for up to count stacks at once, stopping at MaxStacks; returns how many landed.</summary>
+    /// <param name="announcesRefusal">False to leave an immunity's blocked event unpublished.</param>
+    public static int ApplyStacks(ComponentManager componentManager, EntityKeys entityKeys, int entityId, int count, ActionSource source, ushort durationInTicks, long now, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true)
+    {
+        if (count <= 0 || StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Poison, source, eventBus, playerQuery, announcesRefusal))
+        {
+            return 0;
+        }
+
+        var timers = componentManager.GetPackedPool<PoisonTimerComponent>();
+        var hasTimer = timers.TryGetReadonly(entityId, out var existingTimer);
+        var stacksLanded = Math.Min(count, MaxStacks - (hasTimer ? existingTimer.StackCount : 0));
+        if (stacksLanded <= 0)
+        {
+            return 0;
+        }
+
+        var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
+        var scaledDuration = ScaleDebuffDuration(entityKeys, statModifiers, source, entityId, durationInTicks);
+
+        if (hasTimer)
+        {
+            timers.TryUpdate(entityId, ((byte)stacksLanded, scaledDuration), static (ref PoisonTimerComponent t, (byte Added, ushort NewDuration) state) =>
+            {
+                t.StackCount += state.Added;
+                t.RemainingDurationTicks = Math.Max(t.RemainingDurationTicks, state.NewDuration);
+            });
+        }
+        else
+        {
+            timers.Add(entityId, new PoisonTimerComponent(FrameDeadline.AfterStaggered(now, TickIntervalFrames, entityId), stackCount: (byte)stacksLanded, remainingDurationTicks: scaledDuration, source));
+        }
+
+        return stacksLanded;
+    }
+
+    private static ushort ScaleDebuffDuration(EntityKeys entityKeys, MultiComponentPool<StatModifierComponent> statModifiers, ActionSource source, int targetEntityId, ushort durationInTicks)
+    {
+        var scaled = (float)durationInTicks;
+
+        if (source.Kind == ActionSourceKind.Entity && entityKeys.TryGetEntityId(source.Key, out var sourceEntityId))
+        {
+            scaled = StatModifierMath.GetEffectiveValue(statModifiers, sourceEntityId, StatModifierTarget.OutgoingDebuffDuration, scaled);
+        }
+
+        scaled = StatModifierMath.GetEffectiveValue(statModifiers, targetEntityId, StatModifierTarget.IncomingDebuffDuration, scaled);
+        return MathUtility.ClampUShort(scaled, 0, ushort.MaxValue);
+    }
+}

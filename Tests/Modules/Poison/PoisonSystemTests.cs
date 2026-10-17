@@ -2,7 +2,6 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
-using Game.Modules;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Poison;
@@ -241,7 +240,7 @@ public sealed class PoisonSystemTests
             var health = CreateHealthPool();
             var bodyParts = BodyPartTestWorld.WithParts(0, ("Head", BodyPartType.Head, 40, 40, true), ("Torso", BodyPartType.Torso, 65, 65, true), ("Internal", BodyPartType.Internal, 15, 15, true)).BodyParts;
             timers.Add(0, new PoisonTimerComponent(1, stackCount: 3, remainingDurationTicks: 5, ActionSource.Admin));
-            var system = TestSystems.PoisonSystem(timers, health, new EventBus(), new TestPlayerQuery(0), new MathUtility(new Random(seed)), statModifiers: null, bodyParts: bodyParts);
+            var system = TestSystems.PoisonSystem(timers, health, new EventBus(), new TestPlayerQuery(0), new MathUtility(new SeededRandom((ulong)seed)), statModifiers: null, bodyParts: bodyParts);
 
             system.Update(Frame(1), 0);
 

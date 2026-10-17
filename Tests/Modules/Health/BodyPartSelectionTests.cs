@@ -37,7 +37,7 @@ public sealed class BodyPartSelectionTests
             Part("Head", BodyPartType.Head, maximumHealth: 10, isVital: true),
             Part("Torso", BodyPartType.Torso, maximumHealth: 20, isVital: true),
             Part("Arm", BodyPartType.Arm, maximumHealth: 15));
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         for (var i = 0; i < 50; i++)
         {
@@ -52,7 +52,7 @@ public sealed class BodyPartSelectionTests
     public void PickRandom_EntityWithNoBodyParts_ReturnsNegativeOne()
     {
         var world = new BodyPartTestWorld();
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         Assert.AreEqual(-1, BodyPartSelection.PickRandom(world.BodyParts, EntityId, mathUtility));
     }
@@ -204,7 +204,7 @@ public sealed class BodyPartSelectionTests
         var world = CreateWorld(
             Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true),
             Part("Left Foot", BodyPartType.Foot));
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         var partId = BodyPartSelection.PickByTypeWithFallback(world.BodyParts, EntityId, new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Topmost), mathUtility);
 
@@ -217,7 +217,7 @@ public sealed class BodyPartSelectionTests
         var world = CreateWorld(
             Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true),
             Part("Torso", BodyPartType.Torso, verticalPosition: 4, maximumHealth: 60, isVital: true));
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         var partId = BodyPartSelection.PickByTypeWithFallback(world.BodyParts, EntityId, new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Topmost), mathUtility);
 
@@ -230,7 +230,7 @@ public sealed class BodyPartSelectionTests
         var world = CreateWorld(
             Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true),
             Part("Torso", BodyPartType.Torso, verticalPosition: 4, maximumHealth: 60, isVital: true));
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         var partId = BodyPartSelection.PickByTypeWithFallback(world.BodyParts, EntityId, new BodyPartTargetRule(BodyPartType.Foot, BodyPartFallback.Bottommost), mathUtility);
 
@@ -243,7 +243,7 @@ public sealed class BodyPartSelectionTests
         var world = CreateWorld(
             Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true),
             Part("Torso", BodyPartType.Torso, verticalPosition: 4, maximumHealth: 60, isVital: true));
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         for (var i = 0; i < 50; i++)
         {
@@ -273,7 +273,7 @@ public sealed class BodyPartSelectionTests
             Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true),
             Part("Torso", BodyPartType.Torso, verticalPosition: 4, maximumHealth: 60, isVital: true));
         world.SetHealth(EntityId, 1, 0);
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         for (var i = 0; i < 50; i++)
         {
@@ -286,7 +286,7 @@ public sealed class BodyPartSelectionTests
     {
         var world = CreateWorld(Part("Head", BodyPartType.Head, verticalPosition: 5, maximumHealth: 30, isVital: true));
         world.SetHealth(EntityId, 0, 0);
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         Assert.AreEqual("Head", NameOf(world, BodyPartSelection.PickRandom(world.BodyParts, EntityId, mathUtility)));
     }

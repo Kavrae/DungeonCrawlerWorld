@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Tiles;
 using Engine.Modules;
 using Game.Blueprints.Composites;
 using Game.Bootstrap;
@@ -133,7 +134,7 @@ public sealed class ToggleActionTests
     private static Harness Build()
     {
         var map = new Map(new Vector3Int(40, 40, 3));
-        var session = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var session = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
         session.Internals.ProcessingTierResolver.SetReferencePosition(PlayerPosition);
 
         var playerEntityId = session.EcsContext.EntityManager.CreateEntity();

@@ -63,7 +63,7 @@ public sealed class LavaBurningTests
     /// <summary>A goblin that can't walk away, standing tilesEastOfLava from the one lava cell.</summary>
     private static Session SpawnGoblin(int tilesEastOfLava)
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(LavaPosition);
         build.World.PopulateTerrain(LavaPosition.X, LavaPosition.Y, TerrainLayer.Ground, new TerrainCell(build.Context.Terrain.GetId(BuiltInTerrain.LavaKey)));
 

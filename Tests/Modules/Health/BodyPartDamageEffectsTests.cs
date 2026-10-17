@@ -1,9 +1,7 @@
-using Engine.Utilities;
+using Game;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers.Components;
-using Game.Modules.Death.Components;
-using Game.Modules.AbilityScores.Components;
 
 namespace Tests.Modules.Health;
 
@@ -35,7 +33,7 @@ public sealed class BodyPartDamageEffectsTests
         var part = PartOf(world);
         Assert.AreEqual(0f, part.CurrentHealth);
         Assert.IsTrue(part.IsDisabled);
-        Assert.AreEqual((uint)(10 * GameTiming.FramesPerSecond), part.RegenLockedUntilFrame);
+        Assert.AreEqual((uint)(10 * GameFrameRate.FramesPerSecond), part.RegenLockedUntilFrame);
     }
 
     /// <summary>The lockout re-arms on every hit that leaves a part at 0, not only the first transition into 0 -- a second hit against an already-disabled part (e.g. a burning part's own repeat DoT tick) must not let the lockout quietly keep counting down from the first hit.</summary>
@@ -52,7 +50,7 @@ public sealed class BodyPartDamageEffectsTests
         var part = PartOf(world);
         Assert.AreEqual(0f, part.CurrentHealth);
         Assert.IsTrue(part.IsDisabled);
-        Assert.AreEqual((uint)(100 + (10 * GameTiming.FramesPerSecond)), part.RegenLockedUntilFrame, "The second 0-landing hit must reset the lockout to a fresh 10 seconds from when it landed.");
+        Assert.AreEqual((uint)(100 + (10 * GameFrameRate.FramesPerSecond)), part.RegenLockedUntilFrame, "The second 0-landing hit must reset the lockout to a fresh 10 seconds from when it landed.");
     }
 
     [TestMethod]

@@ -5,7 +5,6 @@ using Game.Blueprints.Composites;
 using Game.Bootstrap;
 using Game.Spawning;
 using Game.Modules.Actions;
-using Game.World;
 
 namespace Tests.Blueprints;
 
@@ -21,7 +20,7 @@ internal static class BlueprintTestContext
     public static ActionCatalog Actions { get; } = BuiltIns.Context.Actions;
 
     public static BlueprintContext ContextFor(this EcsContext ecsContext, int entityId, int seed = 1, BlueprintRegistry? creatures = null) =>
-        new(ecsContext.ComponentManager, entityId, new MathUtility(new Random(seed)), ecsContext.EntityManager.Keys, (uint)seed, creatures ?? Definitions, Actions);
+        new(ecsContext.ComponentManager, entityId, new MathUtility(new SeededRandom((ulong)seed)), ecsContext.EntityManager.Keys, (uint)seed, creatures ?? Definitions, Actions);
 
     /// <summary>The player's blueprint (see FloorBuilder.CreatePlayer).</summary>
     public static ushort PlayerBlueprint { get; } = Definitions.GetId(Player.Id);

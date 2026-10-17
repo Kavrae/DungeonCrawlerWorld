@@ -3,11 +3,8 @@ using Engine.Math;
 using Game.Bootstrap;
 using Game.Modules.Core.Components;
 using Game.Modules.ProcessingTier;
-using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
-using Game.Modules.StatusEffects;
 using Game.World;
-using Microsoft.Xna.Framework;
 
 namespace Tests.Bootstrap;
 
@@ -18,7 +15,7 @@ public sealed class EntityDestructionTests
     private static (Game.World.World World, EcsContext Ecs, ProcessingTierResolver Resolver) Build()
     {
         var map = new Map(new Vector3Int(40, 40, 3));
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
         var world = result.World;
         result.Internals.ProcessingTierResolver.SetReferencePosition(new Vector3Int(1, 1, (int)MapLayer.Ground));
         return (world, result.EcsContext, result.Internals.ProcessingTierResolver);

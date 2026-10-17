@@ -22,7 +22,7 @@ A fixed seed makes the simulation repeat frame for frame; a fixed frame range ma
 
 ## Headless vs windowed
 
-`--headless` (see `DungeonCrawlerWorld/HeadlessBenchmark.cs`) builds the same world with the same seed and runs the simulation back to back with no window, no Presentation and no 60fps pacing, then exits.
+`--headless` (see `DungeonCrawlerWorld/GameShell/HeadlessBenchmark.cs`) builds the same world with the same seed and runs the simulation back to back with no window, no Presentation and no 60fps pacing, then exits.
 
 | | Windowed | Headless |
 |---|---|---|

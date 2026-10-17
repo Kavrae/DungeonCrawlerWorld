@@ -1,0 +1,227 @@
+using Engine.Utilities;
+using FontStashSharp;
+using Microsoft.Xna.Framework;
+using UIEngine.Fonts;
+using UIEngine.Rendering;
+using UIEngine.UI.Chrome;
+using UIEngine.UI.ColorPalettes;
+
+namespace UIEngine.UI;
+
+/// <summary>
+/// A reusable row of grid-scoped controls -- an item count display, a click-to-cycle sort
+/// button, zero or more Toggle checkboxes, and a debounced search box -- entirely generic: no
+/// reference to items, tags, or any specific grid content anywhere in this class. A caller
+/// supplies the sort option labels and toggle definitions (each with its own onToggled delegate)
+/// at Configure time and reacts to SortOptionCycled/SearchFilterChanged; GridControl itself never
+/// knows what a toggle *does*. Each Toggle owns its own on/off state and visual, and says what it
+/// means through its own onToggled delegate, so no caller has to know what an index means. A Window
+/// subclass, since it composes several children and owns its own event/update logic. The sort
+/// control is click-to-cycle.
+/// </summary>
+public sealed class GridControl(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
+    : Window(fontService, elementPoolService, labelRenderer)
+{
+    public const float RowHeight = 24f;
+
+    private const float ControlGap = 4f;
+    private const float TileTextPadding = 6f;
+    private const float LeftMargin = 6f;
+    private const float SearchBoxWidth = 112f;
+
+    /// <summary>Widest count text this control ever needs room for without visibly resizing as digits come and go -- four digits.</summary>
+    private const string WidestCountText = "9999 items";
+
+    /// <summary>How long the search box's text must sit unchanged before it's applied -- see DebouncedTextFilter.</summary>
+    private static readonly int SearchDebounceFrames = GameTiming.FramesForSeconds(0.3f);
+
+    private static readonly Color ControlColor = WindowPalette.ControlBackground;
+    private static readonly Color ToggleOnColor = new(80, 68, 30);
+
+    /// <summary>Fires with the newly-selected option's index into the labels Configure was given -- GridControl never knows what any index means.</summary>
+    public event Action<int>? SortOptionCycled;
+
+    /// <summary>Fires with the debounced, applied search text -- see DebouncedTextFilter.</summary>
+    public event Action<string>? SearchFilterChanged;
+
+    private readonly DebouncedTextFilter _searchFilter = new(SearchDebounceFrames);
+
+    private IReadOnlyList<string> _sortOptionLabels = [];
+    private IReadOnlyList<(string Label, bool DefaultOn, Action<bool> OnToggled)> _toggleDefinitions = [];
+    private string _searchGhostText = string.Empty;
+    private int _sortOptionIndex;
+
+    private SpriteFontBase _font = null!;
+    private TextWindow _countLabel = null!;
+    private Button _sortButton = null!;
+    private TextBox _searchBox = null!;
+
+    /// <summary>
+    /// This control is a flush row of controls pinned to exactly RowHeight tall, like a real
+    /// toolbar -- not a padded content panel -- so it opts out of the generic ContentPadding a
+    /// container Window would otherwise get for having children (see Element.ContentPadding's own
+    /// doc comment). Set here rather than in OnChildrenInitialized: this Window's own initial
+    /// Measure/Arrange pass (which computes ContentSize) runs between Build and
+    /// OnChildrenInitialized, and every child built in OnChildrenInitialized without an explicit
+    /// MaximumSize falls back to reading THIS ContentSize as its own MaximumSize at that same
+    /// moment (see Element.Build) -- so the zero padding must be set here, before that pass, or a
+    /// new instance's search box is clamped shorter than its declared Size.Y on its first open
+    /// (ContentPadding is a plain field that Build never resets).
+    /// </summary>
+    public override void Build(Element? parent, ElementOptions options)
+    {
+        base.Build(parent, options);
+
+        ContentPadding = Vector2.Zero;
+    }
+
+    /// <summary>Must be called after CreateElement but before Initialize (the usual Configure contract) -- sortOptionLabels must be non-empty, since the sort button always shows whichever one is currently selected. toggles may be empty (no toggles at all).</summary>
+    public void Configure(IReadOnlyList<string> sortOptionLabels, IReadOnlyList<(string Label, bool DefaultOn, Action<bool> OnToggled)> toggles, string searchGhostText)
+    {
+        if (sortOptionLabels.Count == 0)
+        {
+            throw new ArgumentException("GridControl needs at least one sort option label.", nameof(sortOptionLabels));
+        }
+
+        _sortOptionLabels = sortOptionLabels;
+        _sortOptionIndex = 0;
+        _toggleDefinitions = toggles;
+        _searchGhostText = searchGhostText;
+    }
+
+    /// <summary>
+    /// Builds this control's own count/sort/toggle/search children here, not in an Initialize
+    /// override that calls base first -- OnChildrenInitialized is the one point in Element's
+    /// Initialize sequence that is both after MeasureAndArrange (ContentSize is real) and before
+    /// Opened fires, so Opened still means "fully set up" for anyone who subscribes to it later.
+    /// The same hook Window itself uses to mount IElementContent (see Window.OnChildrenInitialized).
+    /// </summary>
+    protected override void OnChildrenInitialized()
+    {
+        base.OnChildrenInitialized();
+
+        _font = FontService.GetFont((int)(RowHeight * FontChrome.GridControlLabelFontFraction));
+
+        // ContentPadding is already zeroed by Build (see its own doc comment) -- LeftMargin below
+        // restores this control's own original left inset now that it's no longer automatic.
+        var x = LeftMargin;
+
+        _countLabel = CreateTile(WidestCountText, MeasureTileWidth(WidestCountText), x, showBorder: false);
+        AddChild(_countLabel);
+        x += _countLabel.CurrentSize.X + ControlGap;
+
+        var sortButtonSize = new Vector2(MeasureWidest(_sortOptionLabels), RowHeight);
+        _sortButton = ElementPoolService.CreateElement<Button>(this, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            // Same MinimumSize == MaximumSize pinning CreateTile's own doc comment explains --
+            // cycling through shorter/longer labels must never resize the button.
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, 0), Size = sortButtonSize, MinimumSize = sortButtonSize, MaximumSize = sortButtonSize, DisplayMode = ElementDisplayMode.Fixed },
+            // BorderStyle left unset -- Button's own default (raised Outset, sinking to Inset
+            // while actually pressed) is the right convention for a clickable control. The
+            // count label beside this one is a static, non-interactive TextWindow tile and
+            // keeps its own separate Inset (sunken) look via CreateTile -- that choice doesn't
+            // carry over to an actual button, which needs a rest/pressed distinction to show.
+            Chrome = new ElementChromeOptions { ShowBorder = true },
+            Content = new ElementContentOptions { ContentColor = ControlColor },
+            Text = new TextOptions { Text = _sortOptionLabels[_sortOptionIndex], TextColor = WindowPalette.ControlLabelTextColor },
+        });
+        _sortButton.ContentFont = _font; // Must match the font width was measured with, or the label can wrap/clip against the tile's own fixed width.
+        _sortButton.Clicked += _ => CycleSortOption();
+        AddChild(_sortButton);
+        x += _sortButton.CurrentSize.X + ControlGap;
+
+        foreach (var (label, defaultOn, onToggled) in _toggleDefinitions)
+        {
+            var toggleWidth = Toggle.CheckboxSize + Toggle.LabelGap + _font.MeasureString(label).X;
+            var toggle = ElementPoolService.CreateElement<Toggle>(this, new ElementOptions
+            {
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, 0), Size = new Vector2(toggleWidth, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
+                Chrome = new ElementChromeOptions { ShowBorder = false, CanUserFocus = false },
+                Content = new ElementContentOptions { ContentColor = Color.Transparent },
+            });
+            toggle.Configure(label, LabelPosition.East, defaultOn, ToggleOnColor, ControlColor, WindowPalette.ControlLabelTextColor, _font, onToggled);
+            AddChild(toggle);
+            x += toggleWidth + ControlGap;
+        }
+
+        _searchBox = ElementPoolService.CreateElement<TextBox>(this, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            Layout = new ElementLayoutOptions { RelativePosition = SearchBoxPosition(), Size = new Vector2(SearchBoxWidth, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = false },
+            Content = new ElementContentOptions { ContentColor = ControlColor },
+            Text = new TextOptions { TextColor = WindowPalette.ControlLabelTextColor },
+        });
+        _searchBox.ContentFont = _font;
+        _searchBox.GhostText = _searchGhostText;
+        AddChild(_searchBox); // Already initializes _searchBox -- see Element.AddChild's own doc comment.
+
+        Resized += OnSelfResized;
+
+        UpdateCountLabelText(0);
+    }
+
+    /// <summary>Keeps the search box right-aligned to this control's own right edge as it resizes -- mirrors TabbedContent's own OnHostWindowResized repositioning its search box the same way. The left-aligned count/sort/toggle tiles need no equivalent -- their own widths/positions are fixed regardless of this control's overall width.</summary>
+    private void OnSelfResized(Element _) => _searchBox.SetRelativePosition(SearchBoxPosition());
+
+    private Vector2 SearchBoxPosition() => new(ContentSize.X - SearchBoxWidth, 0);
+
+    public override void Update(GameTime gameTime)
+    {
+        base.Update(gameTime);
+
+        if (_searchFilter.Update(_searchBox.OriginalText))
+        {
+            SearchFilterChanged?.Invoke(_searchFilter.AppliedText);
+        }
+    }
+
+    /// <summary>Updates the count display in place -- fixed-width (see WidestCountText), so this never shifts the sort/toggle/search controls to its right.</summary>
+    public void SetItemCount(int count) => UpdateCountLabelText(count);
+
+    private void UpdateCountLabelText(int count) => _countLabel.UpdateText($"{count} items");
+
+    private void CycleSortOption()
+    {
+        _sortOptionIndex = (_sortOptionIndex + 1) % _sortOptionLabels.Count;
+        _sortButton.LeftText = _sortOptionLabels[_sortOptionIndex];
+        SortOptionCycled?.Invoke(_sortOptionIndex);
+    }
+
+    /// <summary>Widest of a set of labels, in the same units MeasureTileWidth returns -- used to size the sort button once for its widest possible label, so cycling through shorter/longer labels never resizes it (see CreateTile's own MinimumSize == MaximumSize pinning).</summary>
+    private float MeasureWidest(IReadOnlyList<string> labels)
+    {
+        var widest = 0f;
+        foreach (var label in labels)
+        {
+            widest = System.Math.Max(widest, MeasureTileWidth(label));
+        }
+
+        return widest;
+    }
+
+    private float MeasureTileWidth(string text) => _font.MeasureString(text).X + TileTextPadding * 2;
+
+    /// <summary>
+    /// A plain TextWindow tile, the same shape TabbedContent's own tab tiles use -- MinimumSize
+    /// == MaximumSize == its own Size pins it immune to any ambient resize/rearrange cascade
+    /// (see TabbedContent's own doc comment on why that matters). relativePositionX is baked
+    /// into the creation options directly, not set by a follow-up SetRelativePosition call.
+    /// </summary>
+    private TextWindow CreateTile(string text, float width, float relativePositionX, bool showBorder)
+    {
+        var tileSize = new Vector2(width, RowHeight);
+        var tile = ElementPoolService.CreateElement<TextWindow>(this, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(relativePositionX, 0), Size = tileSize, MinimumSize = tileSize, MaximumSize = tileSize, DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = showBorder, BorderStyle = BorderStyle.Inset, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = ControlColor },
+            Text = new TextOptions { Text = text, TextColor = WindowPalette.ControlLabelTextColor },
+        });
+        tile.ContentFont = _font; // Must match the font width was measured with, or the label can wrap/clip against the tile's own fixed width.
+        return tile;
+    }
+}

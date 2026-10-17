@@ -11,7 +11,7 @@ namespace Tests.Presentation;
 public sealed class AdminContextMenuOptionsTests
 {
     private static GameSession BuildSession() =>
-        GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
 
     [TestMethod]
     public void AddTileOptions_OffersTheNeighborhoodGroupSpawnHereBuildStoneWallAndTeleportHere()

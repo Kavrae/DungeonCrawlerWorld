@@ -1,6 +1,7 @@
 using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Engine.Tiles;
 using Game;
 using Game.Spawning;
 using Game.Bootstrap;
@@ -28,7 +29,7 @@ public sealed class NeighborhoodStreamerTests
     private static Session Build(int budgetPerFrame = NeighborhoodStreamer.DefaultBudgetPerFrame)
     {
         var map = new Map(new MapBounds(0, 0, 2 * Neighborhoods.SizeTiles, Rows, 3));
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
         var crawlerNumbers = new UniqueNumberAllocator(1, 1, 24);
         var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
         var world = result.World;
@@ -279,7 +280,7 @@ public sealed class NeighborhoodStreamerTests
             map.UnloadNeighborhood(cellX, 0);
         }
 
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
         var crawlerNumbers = new UniqueNumberAllocator(1, 1, 24);
         var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
         var world = result.World;

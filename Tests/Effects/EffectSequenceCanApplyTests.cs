@@ -21,7 +21,7 @@ public sealed class EffectSequenceCanApplyTests
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(16, 16));
         var mana = componentManager.GetPackedPool<ManaComponent>();
         mana.Add(CasterEntityId, new ManaComponent(currentMana, 100));
-        var context = TestActionEffects.Context(CasterEntityId, CasterEntityId, EmptyPools.Packed<SimpleHealthComponent>(), new EventBus(), new MathUtility(new Random(1)), componentManager, new EntityKeys(), "Test", default, Now: 0, Mana: mana);
+        var context = TestActionEffects.Context(CasterEntityId, CasterEntityId, EmptyPools.Packed<SimpleHealthComponent>(), new EventBus(), new MathUtility(new SeededRandom((ulong)1)), componentManager, new EntityKeys(), "Test", default, Now: 0, Mana: mana);
         return (context, () => mana.GetReadonly(CasterEntityId).CurrentMana);
     }
 

@@ -1,4 +1,5 @@
 using Engine.Math;
+using Engine.Tiles;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.MapRendering;

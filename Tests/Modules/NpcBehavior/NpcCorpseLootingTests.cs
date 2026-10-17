@@ -80,7 +80,7 @@ public sealed class NpcCorpseLootingTests
 
     private static Session BuildSession()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(LooterPosition);
         return new Session(build);
     }
@@ -247,7 +247,7 @@ public sealed class NpcCorpseLootingTests
     [TestMethod]
     public void TheBehaviorSystem_NeverReadsAnUnbuiltSkeletonBesideTheLooter()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(2048, 1024, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(2048, 1024, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(new Vector3Int(0, 0, (int)MapLayer.Ground));
         var session = new Session(build);
         var looter = session.SpawnEmptyGoblin(new Vector3Int(1023, 10, (int)MapLayer.Ground));

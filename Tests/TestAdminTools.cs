@@ -13,7 +13,7 @@ internal static class TestAdminTools
 {
     public static AdminTools Create(GameSession? gameSession = null)
     {
-        var mathUtility = new MathUtility(new Random(1));
+        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
         gameSession ??= GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), mathUtility, initialEntityCapacity: 100, initialComponentCapacity: 50);
 
         var ecsContext = gameSession.EcsContext;

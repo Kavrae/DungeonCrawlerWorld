@@ -45,6 +45,19 @@ public sealed class PackedTimerWheelTests
         return fires;
     }
 
+    /// <summary>A destroyed entity's id is reused at once, often by an unbuilt skeleton: the wheel dropping its stale entry is bookkeeping, not a read of the new entity, so it must not reach the access guard.</summary>
+    [TestMethod]
+    public void StaleEntry_ForAnIdNowGuarded_IsDroppedWithoutAskingTheGuard()
+    {
+        var pool = CreatePool();
+        var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
+        pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 1 });
+        pool.Remove(3);
+        pool.AccessGuard = new ThrowingAccessGuard();
+
+        CollectionAssert.AreEqual(Array.Empty<(long, int)>(), Run(wheel, pool, 0, 10));
+    }
+
     [TestMethod]
     public void AddedTimer_IsScheduledWithoutAnyoneTellingTheWheel()
     {

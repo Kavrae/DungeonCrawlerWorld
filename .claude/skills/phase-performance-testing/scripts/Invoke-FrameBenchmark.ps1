@@ -1,6 +1,6 @@
 [CmdletBinding(DefaultParameterSetName = "Run")]
 param(
-    # Run the simulation with no window (see DungeonCrawlerWorld/HeadlessBenchmark.cs): seconds
+    # Run the simulation with no window (see DungeonCrawlerWorld/GameShell/HeadlessBenchmark.cs): seconds
     # instead of ~75s per run, no Draw or frame pacing in the numbers, and a determinism check.
     [Parameter(ParameterSetName = "Run")]
     [switch]$Headless,
@@ -35,7 +35,7 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug",
 
-    # Default: DungeonCrawlerWorld/bin/<Configuration>/net10.0/DungeonCrawlerWorld.exe
+    # Default: DungeonCrawlerWorld/GameShell/bin/<Configuration>/net10.0/DungeonCrawlerWorld.exe
     [string]$ExePath = "",
     # Default: Log/phase-benchmarks/baseline-build-<configuration>, or
     # baseline-build-<configuration>-<BaselineName> when a name is given.
@@ -72,7 +72,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if ([string]::IsNullOrEmpty($ExePath)) {
-    $ExePath = "DungeonCrawlerWorld/bin/$Configuration/net10.0/DungeonCrawlerWorld.exe"
+    $ExePath = "DungeonCrawlerWorld/GameShell/bin/$Configuration/net10.0/DungeonCrawlerWorld.exe"
 }
 if ([string]::IsNullOrEmpty($BaselineDirectory)) {
     $BaselineDirectory = "Log/phase-benchmarks/baseline-build-$($Configuration.ToLowerInvariant())"

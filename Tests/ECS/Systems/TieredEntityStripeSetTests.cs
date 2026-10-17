@@ -8,16 +8,16 @@ public sealed class TieredEntityStripeSetTests
     private static int[] Collect(TieredEntityStripeSet set, long frameCount)
     {
         var result = new List<int>();
-        foreach (var entityId in set.GetDueEntities(frameCount))
+        for (var tierIndex = 0; tierIndex < set.TierCount; tierIndex++)
         {
-            result.Add(entityId);
+            result.AddRange(set.GetTierBucket(tierIndex, frameCount));
         }
 
         return result.ToArray();
     }
 
     [TestMethod]
-    public void Constructor_SeedsMembersViaLookupDelegate_GetDueEntitiesReflectsPerTierCadence()
+    public void Constructor_SeedsMembersViaLookupDelegate_TierBucketsReflectPerTierCadence()
     {
         // baseStripeCount 1, divisors [1, 2] -- tier 0 (entities 0,1) is due every frameCount;
         // tier 1 (entities 10,11) has its own internal stripeCount of 2, so only half its
@@ -92,22 +92,5 @@ public sealed class TieredEntityStripeSetTests
 
         CollectionAssert.AreEquivalent(Array.Empty<int>(), Collect(tieredSet, 0));
         CollectionAssert.AreEquivalent(Array.Empty<int>(), Collect(tieredSet, 1));
-    }
-
-    /// <summary>Exercises the chained enumerator advancing past an empty tier bucket in the middle of the sequence, not just at the ends.</summary>
-    [TestMethod]
-    public void GetDueEntities_ChainsAcrossMultipleTiers_SkippingEmptyOnesInTheMiddle()
-    {
-        var tieredSet = new TieredEntityStripeSet(1, [1, 1, 1], [0, 20], entityId => entityId == 0 ? (byte)0 : (byte)2);
-
-        CollectionAssert.AreEquivalent(new[] { 0, 20 }, Collect(tieredSet, 0));
-    }
-
-    [TestMethod]
-    public void GetDueEntities_AllTiersEmpty_YieldsNothing()
-    {
-        var tieredSet = new TieredEntityStripeSet(1, [1, 2, 4], [], entityId => 0);
-
-        CollectionAssert.AreEquivalent(Array.Empty<int>(), Collect(tieredSet, 0));
     }
 }

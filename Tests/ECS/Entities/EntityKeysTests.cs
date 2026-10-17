@@ -35,6 +35,48 @@ public sealed class EntityKeysTests
     }
 
     [TestMethod]
+    public void Release_EveryKeyIssuedTogether_OthersStillResolve_AndReleasedOnesDoNot()
+    {
+        const int EntityCount = 2_000;
+        var keys = new EntityKeys();
+        var issuedKeys = new EntityKey[EntityCount];
+        for (var entityId = 0; entityId < EntityCount; entityId++)
+        {
+            issuedKeys[entityId] = keys.Issue(entityId);
+        }
+
+        for (var entityId = 0; entityId < EntityCount; entityId++)
+        {
+            if (entityId != 1_500)
+            {
+                keys.Release(entityId);
+            }
+        }
+
+        Assert.AreEqual(1, keys.Count);
+        Assert.IsTrue(keys.TryGetEntityId(issuedKeys[1_500], out var survivingEntityId));
+        Assert.AreEqual(1_500, survivingEntityId);
+        Assert.IsFalse(keys.TryGetEntityId(issuedKeys[0], out _));
+        Assert.IsFalse(keys.TryGetEntityId(issuedKeys[1_499], out _));
+
+        var reissuedKey = keys.Issue(0);
+        Assert.IsTrue(keys.TryGetEntityId(reissuedKey, out var reissuedEntityId));
+        Assert.AreEqual(0, reissuedEntityId);
+        Assert.IsFalse(keys.TryGetEntityId(issuedKeys[0], out _));
+    }
+
+    [TestMethod]
+    public void TryGetEntityId_NoneOrNeverIssued_ResolvesToNothing()
+    {
+        var keys = new EntityKeys();
+        keys.Issue(0);
+
+        Assert.IsFalse(keys.TryGetEntityId(EntityKey.None, out _));
+        Assert.IsFalse(keys.TryGetEntityId(new EntityKey(2), out _));
+        Assert.IsFalse(keys.TryGetEntityId(new EntityKey(1UL << 40), out _));
+    }
+
+    [TestMethod]
     public void GetKey_IdNeverIssued_IsNone() =>
         Assert.IsTrue(new EntityKeys().GetKey(1_000).IsNone);
 

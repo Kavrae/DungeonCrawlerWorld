@@ -3,8 +3,8 @@ using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tiles;
 using Game.Blueprints.Races;
-using Game.Bootstrap;
 using Game.Effects;
 using Game.Effects.Entries;
 using Game.Modules.Actions;
@@ -34,7 +34,7 @@ public sealed class HealthDrainTests
         var health = componentManager.GetPackedPool<SimpleHealthComponent>();
         health.Add(PayerEntityId, new SimpleHealthComponent(currentHealth, 100));
         componentManager.GetPackedPool<ManaComponent>().Add(PayerEntityId, new ManaComponent(100, 100));
-        var context = TestActionEffects.Context(PayerEntityId, PayerEntityId, health, new EventBus(), new MathUtility(new Random(1)), componentManager, new EntityKeys(), "Test", default, Now: 0,
+        var context = TestActionEffects.Context(PayerEntityId, PayerEntityId, health, new EventBus(), new MathUtility(new SeededRandom((ulong)1)), componentManager, new EntityKeys(), "Test", default, Now: 0,
             StatModifiers: componentManager.GetMultiPool<StatModifierComponent>(), Mana: componentManager.GetPackedPool<ManaComponent>());
         return (context, componentManager);
     }
@@ -91,7 +91,7 @@ public sealed class HealthDrainTests
     [TestMethod]
     public void ABodyPlan_PaysAnEvenShareFromEveryPart_AndIsRefusedWhenAVitalPartsShareWouldKill()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(20, 20, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(20, 20, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(new Vector3Int(5, 5, Ground));
         var goblinId = build.Factory.Spawn(SpawnRequest.At(build.Context.Definitions.GetId(Goblin.Id), new Vector3Int(5, 5, Ground)) with { Seed = 1 });
         var bodyParts = build.Context.EffectServices.BodyParts;

@@ -6,7 +6,6 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
-using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Effects;
@@ -42,7 +41,7 @@ public sealed class DodgeActivationTests
             TargetEntityId: TargetEntityId,
             Health: componentManager.GetPackedPool<SimpleHealthComponent>(),
             EventBus: new EventBus(),
-            MathUtility: new MathUtility(new Random()),
+            MathUtility: new MathUtility(),
             ComponentManager: componentManager,
             EntityKeys: new EntityKeys(),
             ActivatorName: "Dodge",
@@ -79,7 +78,7 @@ public sealed class DodgeActivationTests
             TargetEntityId: TargetEntityId,
             Health: componentManager.GetPackedPool<SimpleHealthComponent>(),
             EventBus: new EventBus(),
-            MathUtility: new MathUtility(new Random()),
+            MathUtility: new MathUtility(),
             ComponentManager: componentManager,
             EntityKeys: new EntityKeys(),
             ActivatorName: "Dodge",

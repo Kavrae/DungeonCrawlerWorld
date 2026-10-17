@@ -7,10 +7,8 @@ using Game.Bootstrap;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
 using Game.Modules.Core.Components;
-using Game.Modules.Death;
 using Game.Modules.Death.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -99,7 +97,7 @@ public sealed class ToggleItemTests
     private static Harness Build()
     {
         var map = new Map(new Vector3Int(40, 40, 3));
-        var session = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new Random(1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var session = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
         session.Internals.ProcessingTierResolver.SetReferencePosition(PlayerPosition);
 
         var playerEntityId = session.EcsContext.EntityManager.CreateEntity();

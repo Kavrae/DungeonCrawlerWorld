@@ -5,8 +5,7 @@ using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
-using Engine.Utilities;
-using Game.Modules.Actions;
+using Game;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory.Definitions;
 using Game.Modules.Poison;
@@ -114,7 +113,7 @@ public sealed class StatusEffectRemovalTests
 
         var immunity = setup.ComponentManager.GetMultiPool<StatusEffectImmunityComponent>();
         Assert.IsTrue(immunity.TryGetFirst(TargetEntityId, static (ref readonly StatusEffectImmunityComponent candidate) => candidate.EffectType == StatusEffectType.Poison, out var poisonImmunity));
-        Assert.AreEqual(FrameDeadline.After(100, 5 * 60 * GameTiming.FramesPerSecond), poisonImmunity.ExpiresAtFrame);
+        Assert.AreEqual(FrameDeadline.After(100, 5 * 60 * GameFrameRate.FramesPerSecond), poisonImmunity.ExpiresAtFrame);
     }
 
     [TestMethod]

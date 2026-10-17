@@ -1,4 +1,4 @@
-using Engine.Utilities;
+using Game;
 using Microsoft.Xna.Framework;
 using Presentation.UI.Chrome;
 using Presentation.UI.FloatingText;
@@ -28,7 +28,7 @@ public sealed class FloatingTextMotionTests
         var offset = FloatingTextMotion.GetOffsetTiles(FloatingTextChrome.RiseFrames, horizontalDirection: -1, verticalDirection: -1);
 
         Assert.AreEqual(-FloatingTextChrome.RiseDistanceTiles, offset.Y, Tolerance);
-        Assert.AreEqual(-FloatingTextChrome.HorizontalDriftTilesPerSecond * FloatingTextChrome.RiseFrames / GameTiming.FramesPerSecond, offset.X, Tolerance);
+        Assert.AreEqual(-FloatingTextChrome.HorizontalDriftTilesPerSecond * FloatingTextChrome.RiseFrames / GameFrameRate.FramesPerSecond, offset.X, Tolerance);
     }
 
     [TestMethod]
@@ -38,7 +38,7 @@ public sealed class FloatingTextMotionTests
         var endOfLife = FloatingTextMotion.GetOffsetTiles(FloatingTextChrome.LifetimeFrames, horizontalDirection: 1, verticalDirection: -1);
 
         var driftFrames = FloatingTextChrome.LifetimeFrames - FloatingTextChrome.RiseFrames;
-        Assert.AreEqual(-FloatingTextChrome.DriftTilesPerSecond * driftFrames / GameTiming.FramesPerSecond, endOfLife.Y - endOfRise.Y, Tolerance);
+        Assert.AreEqual(-FloatingTextChrome.DriftTilesPerSecond * driftFrames / GameFrameRate.FramesPerSecond, endOfLife.Y - endOfRise.Y, Tolerance);
     }
 
     [TestMethod]

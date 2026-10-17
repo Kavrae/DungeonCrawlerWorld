@@ -32,6 +32,19 @@ public sealed class MultiTimerWheelTests
         return fires;
     }
 
+    /// <summary>A destroyed entity's id is reused at once, often by an unbuilt skeleton: the wheel dropping its stale entry is bookkeeping, not a read of the new entity, so it must not reach the access guard.</summary>
+    [TestMethod]
+    public void StaleEntry_ForAnIdNowGuarded_IsDroppedWithoutAskingTheGuard()
+    {
+        var pool = CreatePool();
+        var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
+        pool.Add(3, new Exposure(effect: 1, nextTickFrame: 5));
+        pool.Remove(3);
+        pool.AccessGuard = new ThrowingAccessGuard();
+
+        CollectionAssert.AreEqual(Array.Empty<(long, int, int)>(), Run(wheel, 0, 10));
+    }
+
     /// <summary>The case membership events can't see: a second instance on an entity that already has one raises no EntityAdded -- and must still be scheduled.</summary>
     [TestMethod]
     public void SecondInstanceOnTheSameEntity_IsScheduled()
