@@ -5,6 +5,13 @@ namespace Tests.SpriteManifestFormat;
 [TestClass]
 public sealed class SpriteManifestFileTests
 {
+    /// <summary>The one problem parsing reported, for an entry it left out.</summary>
+    private static string SingleProblem(SpriteManifest manifest)
+    {
+        Assert.HasCount(1, manifest.Problems);
+        return manifest.Problems[0];
+    }
+
     private static string CheckedInManifestPath => Path.Combine(AppContext.BaseDirectory, "SpriteManifest.json");
 
     private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n");
@@ -31,16 +38,59 @@ public sealed class SpriteManifestFileTests
     }
 
     [TestMethod]
-    public void Parse_ANameTwice_ThrowsNamingIt()
+    public void Load_TheCheckedInManifest_ReportsNoProblems()
+    {
+        Assert.IsEmpty(SpriteManifest.Load(CheckedInManifestPath).Problems);
+    }
+
+    [TestMethod]
+    public void Parse_ABrokenEntryBetweenTwoGoodOnes_LoadsTheGoodOnes()
+    {
+        const string json = """
+            [{"Name":"First","Cells":[{"SheetPath":"sheet.png","Column":0,"Row":0,"CellWidth":16,"CellHeight":16}]},
+             {"Name":"Broken","Cells":[{"SheetPath":"sheet.png","Column":1,"Row":0,"CellWidth":16,"CellHeight":16,"Rotation":45}]},
+             {"Name":"Last","Cells":[{"SheetPath":"sheet.png","Column":2,"Row":0,"CellWidth":16,"CellHeight":16}]}]
+            """;
+
+        var manifest = SpriteManifest.Parse(json);
+
+        CollectionAssert.AreEqual(new[] { "First", "Last" }, manifest.Entries.Select(entry => entry.Name).ToArray());
+        StringAssert.Contains(SingleProblem(manifest), "'Broken'");
+    }
+
+    [TestMethod]
+    public void Write_ReplacesTheFile_AndLeavesNoTemporaryFileBehind()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var path = Path.Combine(directory.FullName, "SpriteManifest.json");
+            File.WriteAllText(path, "old");
+
+            SpriteManifest.Write(path, [new SpriteManifestEntry("Written", [new SpriteManifestCell("sheet.png", 0, 0, 16, 16)])]);
+
+            Assert.AreEqual("Written", SpriteManifest.Load(path).Entries.Single().Name);
+            CollectionAssert.AreEqual(new[] { "SpriteManifest.json" }, Directory.GetFiles(directory.FullName).Select(Path.GetFileName).ToArray());
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Parse_ANameTwice_KeepsTheFirst_AndReportsTheSecondNamingIt()
     {
         const string json = """
             [{"Name":"Twin","Cells":[{"SheetPath":"sheet.png","Column":0,"Row":0,"CellWidth":16,"CellHeight":16}]},
              {"Name":"Twin","Cells":[{"SheetPath":"sheet.png","Column":1,"Row":0,"CellWidth":16,"CellHeight":16}]}]
             """;
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(json));
+        var manifest = SpriteManifest.Parse(json);
+        var problem = SingleProblem(manifest);
 
-        StringAssert.Contains(exception.Message, "'Twin'");
+        StringAssert.Contains(problem, "'Twin'");
+        Assert.AreEqual(0, manifest.Entries.Single().Cells[0]!.Column);
     }
 
     [TestMethod]

@@ -22,7 +22,8 @@ public sealed class Folder : Element
     private readonly SpriteSheetService _spriteSheetService;
 
     private Vector2 _iconSize;
-    private string? _spriteName;
+    /// <summary>The icon FolderOptions.SpriteName names, resolved when the folder is built; null draws the fallback glyph.</summary>
+    private SpriteView? _sprite;
     private string _fallbackGlyph = string.Empty;
     private SpriteFontBase _fallbackGlyphFont = null!;
     private Color _backgroundColor;
@@ -39,7 +40,7 @@ public sealed class Folder : Element
 
         var folderOptions = options.Folder;
         _iconSize = folderOptions?.IconSize ?? DefaultIconSize;
-        _spriteName = folderOptions?.SpriteName;
+        _sprite = _spriteSheetService.Sprites.FirstOrNull(folderOptions?.SpriteName);
         _fallbackGlyph = folderOptions?.FallbackGlyph ?? string.Empty;
         _fallbackGlyphFont = FontService.GetFont((int)(_iconSize.Y * FontChrome.FolderFallbackGlyphFontFraction));
         _backgroundColor = folderOptions?.BackgroundColor ?? WindowPalette.HeaderBackground;
@@ -118,8 +119,7 @@ public sealed class Folder : Element
         // rect rather than stretched to fill it.
         var iconTopLeft = HeaderAbsolutePosition + (HeaderSize - _iconSize) / 2f;
 
-        SpriteView? sprite = _spriteName is not null && _spriteSheetService.Sprites.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, LabelRenderer, sprite, _fallbackGlyphFont, _fallbackGlyph, Color.Black, iconTopLeft, _iconSize, Color.White);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, LabelRenderer, _sprite, _fallbackGlyphFont, _fallbackGlyph, Color.Black, iconTopLeft, _iconSize, Color.White);
     }
 }

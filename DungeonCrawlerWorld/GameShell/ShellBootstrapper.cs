@@ -51,7 +51,7 @@ public static class ShellBootstrapper
             new UiLayerStack(),
             new MapViewState { ReservedEntityIds = worldSession.ReservedEntityIds },
             new MapCamera(views.MapView),
-            new ContextMenuController(uiEngine.ElementPoolService),
+            new ContextMenuController(new DropdownController(uiEngine.ElementPoolService)),
             new TooltipController(),
             pointerState,
             new CursorTextContent(pointerState, uiEngine.FontService, uiEngine.LabelRenderer));
@@ -79,7 +79,7 @@ public static class ShellBootstrapper
 
         ElementFactoryRegistry.RegisterAll(uiEngine, gameSession, worldSession.AdminTools, shellServices, actionTargetingController, playerMovementController);
 
-        contextMenuController.Initialize(uiLayers);
+        contextMenuController.Dropdowns.Initialize(uiLayers);
         tooltipController.Initialize(uiEngine.ElementPoolService, uiLayers);
 
         var mapWindow = BuildBaseWindows(uiEngine, uiLayers);
@@ -124,7 +124,7 @@ public static class ShellBootstrapper
             new InventoryTransferDropHandler(mapViewState, views.ShopView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, world),
             new HotbarBindingDropHandler(hotbarContent, world),
         ];
-        var inputController = new UiInputController(uiLayers, screenSize, pointerState, inputHandlers, contentDropHandlers, contextMenuController);
+        var inputController = new UiInputController(uiLayers, screenSize, pointerState, inputHandlers, contentDropHandlers, contextMenuController.Dropdowns);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 

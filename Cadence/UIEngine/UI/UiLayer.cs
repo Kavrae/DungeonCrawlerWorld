@@ -31,6 +31,6 @@ public enum UiLayer
     /// <summary>Cursor-following drag feedback and other transient user-driven visual effects.</summary>
     User = 4000,
 
-    /// <summary>A single open right-click ContextMenu (see ContextMenuController) -- always the true topmost tier, above even User: an open context menu is the player's active focus and must never be obscured, including by drag feedback. Also reachable during menu mode (see UiInputController.LayersAboveMenuMode) -- a search box inside an open menu window still needs its context menu.</summary>
+    /// <summary>A single open right-click Dropdown (see ContextMenuController) -- always the true topmost tier, above even User: an open context menu is the player's active focus and must never be obscured, including by drag feedback. Also reachable during menu mode (see UiInputController.LayersAboveMenuMode) -- a search box inside an open menu window still needs its context menu.</summary>
     ContextMenu = 5000,
 }

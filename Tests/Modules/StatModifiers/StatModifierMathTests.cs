@@ -1,7 +1,7 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Tags;
-using Game.Modules.Actions.Definitions.Spells;
+using Game.Modules.Actions;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Tags;
@@ -152,7 +152,7 @@ public sealed class StatModifierMathTests
         pool.Add(0, HalvedIncomingDamage(GameTags.Magic));
 
         Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(pool, 0, StatModifierTarget.IncomingDamage, 100f, [GameTags.DamageFire, GameTags.Magic]), "A fireball.");
-        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(pool, 0, StatModifierTarget.IncomingDamage, 100f, MagicMissileAction.Build().Tags), "Magic Missile: Damage.Energy + Magic.");
+        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(pool, 0, StatModifierTarget.IncomingDamage, 100f, TestContent.Action(BuiltInActionIds.MagicMissile).Tags), "Magic Missile: Damage.Energy + Magic.");
         Assert.AreEqual(100f, StatModifierMath.GetEffectiveValue(pool, 0, StatModifierTarget.IncomingDamage, 100f, [GameTags.DamageFire]), "A torch.");
     }
 

@@ -1,5 +1,5 @@
-using Engine.ECS.Entities;
 using Engine.ECS.Context;
+using Engine.ECS.Entities;
 using Engine.Events;
 using Engine.Math;
 using Engine.Modules;
@@ -10,9 +10,7 @@ using Game.Modules.Achievements.Definitions;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Definitions;
-using Game.Modules.Actions.Definitions.DirectActions;
-using Game.Modules.Actions.Definitions.Spells;
-using Game.Modules.Inventory.Definitions;
+using Game.Modules.Inventory;
 using Game.World;
 
 namespace Tests.Modules.Achievements;
@@ -37,7 +35,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new ActionActivatedEvent(playerEntityId, HealAction.Id));
+        eventBus.Publish(new ActionActivatedEvent(playerEntityId, BuiltInActionIds.Heal));
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -52,7 +50,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new ActionActivatedEvent(playerEntityId, MagicMissileAction.Id));
+        eventBus.Publish(new ActionActivatedEvent(playerEntityId, BuiltInActionIds.MagicMissile));
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -67,7 +65,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new ActionActivatedEvent(playerEntityId, QuickAttackAction.Id));
+        eventBus.Publish(new ActionActivatedEvent(playerEntityId, BuiltInActionIds.QuickAttack));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -83,7 +81,7 @@ public sealed class SpellCasterAchievementTests
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new ActionActivatedEvent(npcEntityId, HealAction.Id));
+        eventBus.Publish(new ActionActivatedEvent(npcEntityId, BuiltInActionIds.Heal));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -99,7 +97,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = build.EcsContext.EntityManager.CreateEntity();
         build.World.PlayerEntityId = playerEntityId;
         var spellId = Guid.NewGuid();
-        var healingScroll = ScrollOfHealing.Build();
+        var healingScroll = TestContent.Item(BuiltInItemIds.ScrollOfHealing);
         var scroll = healingScroll with { Activator = ((ScrollActivator)healingScroll.Activator!) with { SpellId = spellId } };
 
         for (var i = 0; i < ScrollMasteryEffects.MasteryThreshold; i++)

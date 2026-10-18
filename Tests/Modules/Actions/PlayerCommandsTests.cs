@@ -7,7 +7,6 @@ using Game.Effects;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -86,9 +85,9 @@ public sealed class PlayerCommandsTests
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: locked ? LockEndsAtFrame : 0u));
         componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 5));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(SelfActionId, overrideDefinition: null));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(BuiltInActionIds.Dodge, overrideDefinition: null));
         componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, SelfActionId));
-        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.DefaultAttack, DodgeAction.Id));
+        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.DefaultAttack, BuiltInActionIds.Dodge));
 
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(
@@ -97,7 +96,7 @@ public sealed class PlayerCommandsTests
             Activator: new SpellActivator(
                 new TargetingSpec(TargetShape.Self, Range: 0),
                 new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
-        actionCatalog.Register(DodgeAction.Build());
+        actionCatalog.Register(TestContent.Action(BuiltInActionIds.Dodge));
 
         var clock = new SimulationClock();
         var eventBus = new EventBus();
@@ -316,7 +315,7 @@ public sealed class PlayerCommandsTests
         harness.Frame(50, Keys.W);
         harness.Frame(51);
         harness.ConfirmDodgeInPlace(52);
-        Assert.AreEqual(DodgeAction.Id, harness.PendingActionId);
+        Assert.AreEqual(BuiltInActionIds.Dodge, harness.PendingActionId);
 
         harness.Frame(LockEndsAtFrame);
 
@@ -397,7 +396,7 @@ public sealed class PlayerCommandsTests
 
         harness.EventBus.Publish(new EntityStaggeredEvent(PlayerEntityId, ActionSource.AI));
         harness.ComponentManager.GetPackedPool<PendingActionActivationComponent>().Remove(PlayerEntityId);
-        harness.EventBus.Publish(new ActionActivatedEvent(PlayerEntityId, DodgeAction.Id));
+        harness.EventBus.Publish(new ActionActivatedEvent(PlayerEntityId, BuiltInActionIds.Dodge));
 
         Assert.AreEqual(new Vector3Int(6, 5, 0), harness.NextMapPosition);
     }

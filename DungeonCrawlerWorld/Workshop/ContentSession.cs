@@ -1,6 +1,10 @@
+using Engine.Content;
 using Engine.Math;
+using Engine.Modules;
 using Engine.Settings;
 using Game.Bootstrap;
+using Game.Content;
+using Workshop;
 
 namespace DungeonCrawlerWorld.Workshop;
 
@@ -28,4 +32,31 @@ public static class ContentSession
 
         return gameSession;
     }
+
+    /// <summary>The Error List's lines for a session: each mod dropped, each setting override refused, and each record of the master manifest under masterDirectory that doesn't load.</summary>
+    /// <remarks>The manifest is read again from masterDirectory -- the source tree's copy, the one the IDE edits -- through the built-in modules' codecs, collecting every failure rather than stopping at the first.</remarks>
+    public static IReadOnlyList<WorkshopProblem> LoadProblems(GameSession gameSession, string masterDirectory)
+    {
+        var problems = new List<WorkshopProblem>();
+
+        foreach (var failure in gameSession.ModuleFailures)
+        {
+            problems.Add(new WorkshopProblem(WorkshopProblemSeverity.Error, $"Mod dropped: {FirstLineOf(failure.Exception.Message)}", Path.GetFileName(failure.Source)));
+        }
+
+        foreach (var failure in gameSession.SettingsFailures)
+        {
+            problems.Add(new WorkshopProblem(WorkshopProblemSeverity.Warning, $"{failure.Setting}: {failure.Message}", failure.Source));
+        }
+
+        var content = MasterContent.Load(masterDirectory, ContentTypeRegistry.Declare(GameBootstrapper.BuiltInModules().CreateAll()));
+        foreach (var failure in content.Failures)
+        {
+            problems.Add(new WorkshopProblem(WorkshopProblemSeverity.Error, failure.Reason, failure.Line > 0 ? $"{failure.File}:{failure.Line}" : failure.File));
+        }
+
+        return problems;
+    }
+
+    private static string FirstLineOf(string text) => text.Split('\n', 2)[0].TrimEnd('\r');
 }

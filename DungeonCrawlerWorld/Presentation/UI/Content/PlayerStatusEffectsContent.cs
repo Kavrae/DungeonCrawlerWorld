@@ -2,7 +2,6 @@ using Engine.ECS.Systems;
 using FontStashSharp;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.StatusEffects;
 using Game.Views;
 using Game.World;
@@ -150,7 +149,7 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
     {
         DrawIconBackground(spriteBatch, unitRectangle, origin, size);
 
-        if (itemCatalog.TryGet(HealthPotion.Id, out var healthPotion))
+        if (itemCatalog.TryGet(BuiltInItemIds.HealthPotion, out var healthPotion))
         {
             _labelRenderer.DrawCentered(spriteBatch, _font, healthPotion.Glyph, origin, size, healthPotion.GlyphColor);
         }

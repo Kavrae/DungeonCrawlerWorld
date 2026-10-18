@@ -39,8 +39,8 @@ public sealed class NotificationCenterTests
 
     private static NotificationCenter CreateNotificationCenter(ElementPoolService windowService, UiLayerStack layers, EventBus? eventBus = null)
     {
-        var contextMenuController = new ContextMenuController(windowService);
-        contextMenuController.Initialize(layers);
+        var contextMenuController = new ContextMenuController(new DropdownController(windowService));
+        contextMenuController.Dropdowns.Initialize(layers);
 
         var notificationCenter = new NotificationCenter(windowService, eventBus ?? new EventBus(), layers, contextMenuController);
         notificationCenter.Initialize();
@@ -424,8 +424,8 @@ public sealed class NotificationCenterTests
         var eventBus = new EventBus();
         var layers = new UiLayerStack();
         var windowService = CreateWindowService();
-        var contextMenuController = new ContextMenuController(windowService);
-        contextMenuController.Initialize(layers);
+        var contextMenuController = new ContextMenuController(new DropdownController(windowService));
+        contextMenuController.Dropdowns.Initialize(layers);
         var notificationCenter = new NotificationCenter(windowService, eventBus, layers, contextMenuController);
         notificationCenter.Initialize();
 

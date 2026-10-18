@@ -8,7 +8,6 @@ using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.Paralysis;
 using Game.Modules.Paralysis.Components;
 using Game.Modules.Poison;
@@ -238,7 +237,7 @@ public sealed class HealthWindowTests
     private static ItemCatalog CreateItemCatalogWithHealthPotion()
     {
         var itemCatalog = new ItemCatalog();
-        itemCatalog.Register(HealthPotion.Build());
+        itemCatalog.Register(TestContent.Item(BuiltInItemIds.HealthPotion));
         return itemCatalog;
     }
 

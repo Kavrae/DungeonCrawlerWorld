@@ -1017,7 +1017,7 @@ public sealed class MapWindowTests
         Assert.IsTrue(mapWindow.ContextMenuController.IsOpen);
         var rows = mapWindow.ContextMenuController.Menu.ChildElements;
         // 3, not 1 -- a read-only name header always leads each entity's own group (see
-        // TryOpenEntityContextMenuAt/ContextMenuOption.Header), and PlaceCorpse merges
+        // TryOpenEntityContextMenuAt/DropdownOption.Header), and PlaceCorpse merges
         // DeadComponent directly rather than going through DeathSystem.ConvertToNonBlocking, so
         // the corpse stays Blocking here, and "Inspect" now always accompanies "Loot" for a
         // Blocking corpse.

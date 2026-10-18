@@ -304,7 +304,8 @@
         "Column": 1,
         "Row": 5,
         "CellWidth": 16,
-        "CellHeight": 16
+        "CellHeight": 16,
+        "Tint": "#FF0000"
       }
     ]
   },

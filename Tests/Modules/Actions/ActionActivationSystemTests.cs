@@ -1,4 +1,3 @@
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Effects;
 using Game.Effects.Entries;
 using Engine.Tags;
@@ -606,7 +605,7 @@ public sealed class ActionActivationSystemTests
 
     [TestMethod]
     public void Immediate_UnarmedTaggedAction_MeleeDisabled_IsRefusedToo() =>
-        AssertMeleeDisabledRefuses(QuickAttackAction.Build().Tags);
+        AssertMeleeDisabledRefuses(TestContent.Action(BuiltInActionIds.QuickAttack).Tags);
 
     private static void AssertMeleeDisabledRefuses(GameplayTagSet actionTags)
     {

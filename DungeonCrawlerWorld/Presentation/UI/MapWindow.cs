@@ -323,7 +323,7 @@ public sealed class MapWindow : Window
     /// <summary>
     /// Opens a stacked context menu for everything on the tile under mousePosition -- every
     /// occupant (Blocking or not), each its own group, with the structure's then the terrain's name
-    /// as last headers when there is at least one occupant group: a read-only name header (see ContextMenuOption.Header -- also the visual separator
+    /// as last headers when there is at least one occupant group: a read-only name header (see DropdownOption.Header -- also the visual separator
     /// from the next group, no blank divider needed), "Loot" first if that entity is a corpse or
     /// a container (a container is lootable even while alive -- see ContainerComponent's own doc
     /// comment; replaces the old click-to-loot, see OnCorpseClicked's own doc comment), then always
@@ -346,7 +346,7 @@ public sealed class MapWindow : Window
 
         var tilePosition = new Vector3Int(mapPosition.X, mapPosition.Y, _mapViewState.CurrentMapLayer);
 
-        List<ContextMenuOption> options = [];
+        List<DropdownOption> options = [];
 
         foreach (var entityId in _mapView.GetOccupants(tilePosition))
         {
@@ -359,12 +359,12 @@ public sealed class MapWindow : Window
         // nothing in it to choose.
         if (options.Count > 0 && _mapView.TryGetStructure(mapPosition.X, mapPosition.Y, _mapViewState.CurrentMapLayer, out var structure))
         {
-            options.Add(ContextMenuOption.Header(structure.Name));
+            options.Add(DropdownOption.Header(structure.Name));
         }
 
         if (options.Count > 0 && _mapView.TryGetTerrain(mapPosition.X, mapPosition.Y, _mapViewState.CurrentMapLayer, out var terrain))
         {
-            options.Add(ContextMenuOption.Header(terrain.Name));
+            options.Add(DropdownOption.Header(terrain.Name));
         }
 
         if (AdminMode.IsOn)
@@ -379,10 +379,10 @@ public sealed class MapWindow : Window
     }
 
     /// <summary>Appends one occupant's own group to the tile's stacked menu -- a read-only name header, then whatever options it offers.</summary>
-    private void AddEntityGroup(List<ContextMenuOption> options, int entityId)
+    private void AddEntityGroup(List<DropdownOption> options, int entityId)
     {
         var interaction = _mapView.GetInteraction(entityId);
-        options.Add(ContextMenuOption.Header(interaction.Name));
+        options.Add(DropdownOption.Header(interaction.Name));
 
         var isShop = interaction.IsShop;
 
@@ -402,15 +402,15 @@ public sealed class MapWindow : Window
         if ((isDestroyed || (interaction.IsContainer && !isShop)) && OnCorpseClicked is { } onCorpseClicked)
         {
             var isLootReserved = interaction.IsLootReservedFromPlayer && !AdminMode.IsOn;
-            options.Add(new ContextMenuOption(isLootReserved ? "Loot (reserved)" : "Loot", null, IsAdjacentToPlayer(entityId) && !isLootReserved, () => onCorpseClicked.Invoke(entityId)));
+            options.Add(new DropdownOption(isLootReserved ? "Loot (reserved)" : "Loot", null, IsAdjacentToPlayer(entityId) && !isLootReserved, () => onCorpseClicked.Invoke(entityId)));
         }
 
         if (isShop && !isDestroyed && OnShopClicked is { } onShopClicked)
         {
-            options.Add(new ContextMenuOption("Shop", null, IsAdjacentToPlayer(entityId), () => onShopClicked.Invoke(entityId)));
+            options.Add(new DropdownOption("Shop", null, IsAdjacentToPlayer(entityId), () => onShopClicked.Invoke(entityId)));
         }
 
-        options.Add(new ContextMenuOption("Inspect", null, !_playerActionGate.IsLocked, () => InspectEntity(entityId)));
+        options.Add(new DropdownOption("Inspect", null, !_playerActionGate.IsLocked, () => InspectEntity(entityId)));
 
         if (AdminMode.IsOn)
         {
@@ -418,7 +418,7 @@ public sealed class MapWindow : Window
         }
     }
 
-    /// <summary>Details/Admin inspection's actual activation -- sets Detail or Admin mode (AdminMode.IsOn) on the shared entityId (see MapViewState.InspectedEntityId), starts the global cooldown (the same shared ActionLockComponent lock movement/melee/consumables already use), and un-minimizes InspectionWindow. Only ever reached via the "Inspect" ContextMenuOption above, which already gates on the cooldown being clear -- no redundant re-check here, matching how "Loot" above trusts its own Enabled gate instead of re-checking adjacency.</summary>
+    /// <summary>Details/Admin inspection's actual activation -- sets Detail or Admin mode (AdminMode.IsOn) on the shared entityId (see MapViewState.InspectedEntityId), starts the global cooldown (the same shared ActionLockComponent lock movement/melee/consumables already use), and un-minimizes InspectionWindow. Only ever reached via the "Inspect" DropdownOption above, which already gates on the cooldown being clear -- no redundant re-check here, matching how "Loot" above trusts its own Enabled gate instead of re-checking adjacency.</summary>
     private void InspectEntity(int entityId)
     {
         _mapViewState.InspectionMode = AdminMode.IsOn ? InspectionMode.Admin : InspectionMode.Detail;

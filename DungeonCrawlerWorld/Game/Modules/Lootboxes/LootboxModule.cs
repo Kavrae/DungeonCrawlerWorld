@@ -1,3 +1,4 @@
+using Engine.Content;
 using Engine.Modules;
 using Game.Blueprints;
 using Game.Spawning;
@@ -22,6 +23,12 @@ public sealed class LootboxModule : IGameModule
         {
             context.Lootboxes.Register(type);
         }
+    }
+
+    /// <summary>Registers the content codecs for the serialized types this module owns.</summary>
+    public void DeclareContentTypes(ContentTypeRegistration registration)
+    {
+        LootboxContentCodecs.Register(registration);
     }
 
     public void RegisterComponents(ComponentRegistration registration)

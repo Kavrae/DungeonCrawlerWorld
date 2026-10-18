@@ -17,12 +17,13 @@ public sealed class TerrainSpriteSet
     private readonly SpriteManifestPart? _top;
     private readonly SpriteView?[] _topSprites;
 
-    public TerrainSpriteSet(SpriteManifestEntry entry)
+    /// <param name="sheetFor">The shared SpriteSheet for a sheet path, so terrain shares its sheets with every other sprite.</param>
+    public TerrainSpriteSet(SpriteManifestEntry entry, Func<string, SpriteSheet> sheetFor)
     {
         _face = entry.Face;
-        _faceSprites = ResolvePart(_face);
+        _faceSprites = ResolvePart(_face, sheetFor);
         _top = entry.Top;
-        _topSprites = _top is null ? [] : ResolvePart(_top);
+        _topSprites = _top is null ? [] : ResolvePart(_top, sheetFor);
 
         var faceSets = _face.Cells.Count / SpriteLinks.CellsPerSet(_face.Linking);
         var topSets = _top is null ? 0 : _top.Cells.Count / SpriteLinks.CellsPerSet(_top.Linking);
@@ -64,14 +65,14 @@ public sealed class TerrainSpriteSet
     /// <summary>The variant seed picks, the same for face and top.</summary>
     private int VariantFor(uint seed) => VariantCount == 0 ? 0 : (int)(seed % (uint)VariantCount);
 
-    private static SpriteView?[] ResolvePart(SpriteManifestPart part)
+    private static SpriteView?[] ResolvePart(SpriteManifestPart part, Func<string, SpriteSheet> sheetFor)
     {
         var sprites = new SpriteView?[part.Cells.Count];
         for (var index = 0; index < sprites.Length; index++)
         {
             if (part.Cells[index] is { } cell)
             {
-                sprites[index] = SpriteManifestResolver.ToSpriteView(cell, part.PlacementFor(cell));
+                sprites[index] = SpriteManifestResolver.ToSpriteView(cell, part.PlacementFor(cell), sheetFor(cell.SheetPath));
             }
         }
 

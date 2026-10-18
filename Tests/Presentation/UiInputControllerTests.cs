@@ -1136,8 +1136,8 @@ public sealed class UiInputControllerTests
         var controller = TestUiInputController.Create(layers, LargeScreenSize, NewComponentManager(), TestPlayerQuery.NoPlayer, new EventBus(), new ItemCatalog(), contextMenuController: contextMenuController);
 
         var picked = 0;
-        List<ContextMenuOption> submenu = [ContextMenuOption.Header("Kinds"), new ContextMenuOption("Pick", null, true, () => picked++)];
-        contextMenuController.Open(new Vector2(100, 100), [new ContextMenuOption("Other", null, true, () => { }), ContextMenuOption.Opening("More", submenu)]);
+        List<DropdownOption> submenu = [DropdownOption.Header("Kinds"), new DropdownOption("Pick", null, true, () => picked++)];
+        contextMenuController.Open(new Vector2(100, 100), [new DropdownOption("Other", null, true, () => { }), DropdownOption.Opening("More", submenu)]);
 
         void Click(Element element)
         {
@@ -1162,7 +1162,7 @@ public sealed class UiInputControllerTests
 
     [TestMethod]
     public void SubmenuOption_WithNothingInIt_IsDisabled() =>
-        Assert.IsFalse(ContextMenuOption.Opening("Empty", []).Enabled);
+        Assert.IsFalse(DropdownOption.Opening("Empty", []).Enabled);
 
     /// <summary>Same as above, but the TextBox lives inside an open menu window (e.g. the Inventory folder's own search box) -- the exact scenario TODO.md's Context menu entry calls out as the second consumer.</summary>
     [TestMethod]

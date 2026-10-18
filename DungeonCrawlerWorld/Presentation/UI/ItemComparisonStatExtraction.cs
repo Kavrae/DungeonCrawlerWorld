@@ -35,11 +35,15 @@ public static class ItemComparisonStatExtraction
     }
 
     /// <summary>Just the Effects-section half -- ItemDetailsWindow.BuildEffectsSection's own line source, since Effects and Activation render as separate sections with their own headers.</summary>
-    public static IReadOnlyList<ItemComparisonStat> ExtractEffectStats(ItemDefinition definition, GameplayTagRegistry gameplayTags)
+    public static IReadOnlyList<ItemComparisonStat> ExtractEffectStats(ActivatableDefinition definition, GameplayTagRegistry gameplayTags) =>
+        ExtractEffectStats(definition.Effects, gameplayTags);
+
+    /// <summary>One or more lines per entry of effects -- what an action or item holds, or an aura applies.</summary>
+    public static IReadOnlyList<ItemComparisonStat> ExtractEffectStats(IReadOnlyList<Effect> effects, GameplayTagRegistry gameplayTags)
     {
         var stats = new List<ItemComparisonStat>();
 
-        foreach (var effect in definition.Effects)
+        foreach (var effect in effects)
         {
             foreach (var entry in effect.Entries)
             {

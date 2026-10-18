@@ -1,7 +1,6 @@
 using Game.Blueprints.NPCs;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Movement.Components;
 using Microsoft.Xna.Framework;
@@ -37,18 +36,13 @@ public static class Ghost
 
     public static readonly AppearanceFacet Appearance = new() { DisplayNames = DisplayNames, Description = Description, Glyph = Glyph, GlyphColor = Color.Blue, SpriteName = AppearanceFacet.NoSprite };
 
-    /// <summary>One override shared by every creature of this race: an ActionDefinition is never changed in place, only replaced, and building it per creature was most of what a creature allocated.</summary>
-    private static readonly ActionDefinition QuickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
-
-    /// <inheritdoc cref="QuickAttackOverride"/>
-    private static readonly ActionDefinition PowerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
-
     /// <summary>What every creature of this race can do -- held on its race definition, not on each creature (see ActionGrant). Dodge has no override: it rolls its catalog definition unchanged.</summary>
+    /// <remarks>Each override is made from the session's own definition and shared by every creature of this race (ActionGrant.Derived): an ActionDefinition is never changed in place, only replaced, and building it per creature was most of what a creature allocated.</remarks>
     public static readonly ActionGrant[] ActionGrants =
     [
-        new(QuickAttackAction.Id, QuickAttackOverride),
-        new(PowerAttackAction.Id, PowerAttackOverride),
-        new(DodgeAction.Id),
+        ActionGrant.Derived(BuiltInActionIds.QuickAttack, "Ghost.QuickAttack", static action => ActionOverrideEffects.OverrideFlatDamage(action, QuickAttackDamage)),
+        ActionGrant.Derived(BuiltInActionIds.PowerAttack, "Ghost.PowerAttack", static action => ActionOverrideEffects.OverrideFlatDamage(action, PowerAttackDamage)),
+        new(BuiltInActionIds.Dodge),
     ];
 
     public static readonly BlueprintDefinition Definition = new(Id, Name)
@@ -69,7 +63,7 @@ public static class Ghost
         componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
         componentManager.Merge(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
-        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, context.Rolls);
+        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, context.Rolls, context.Items);
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
     }

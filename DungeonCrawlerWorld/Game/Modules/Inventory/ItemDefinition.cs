@@ -39,4 +39,7 @@ public sealed record ItemDefinition(
     IItemContents? Contents = null,
     bool CanTrade = true,
     ToggleSpec? Toggle = null)
-    : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Activator is null ? Tags : Tags.Union(Activator.ImpliedTags), Effects, Description, Summary, Toggle);
+    : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Activator is null ? Tags : Tags.Union(Activator.ImpliedTags), Effects, Description, Summary, Toggle)
+{
+    public override GameplayTagSet DeclaredTags { get; } = Tags;
+}

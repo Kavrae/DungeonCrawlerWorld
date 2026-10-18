@@ -19,8 +19,11 @@ internal static class BlueprintTestContext
     /// <summary>The built-in actions, registered the way CoreActionsModule does it.</summary>
     public static ActionCatalog Actions { get; } = BuiltIns.Context.Actions;
 
+    /// <summary>The built-in items, registered the way CoreItemsModule does it.</summary>
+    public static Game.Modules.Inventory.ItemCatalog Items { get; } = BuiltIns.Context.Items;
+
     public static BlueprintContext ContextFor(this EcsContext ecsContext, int entityId, int seed = 1, BlueprintRegistry? creatures = null) =>
-        new(ecsContext.ComponentManager, entityId, new MathUtility(new SeededRandom((ulong)seed)), ecsContext.EntityManager.Keys, (uint)seed, creatures ?? Definitions, Actions);
+        new(ecsContext.ComponentManager, entityId, new MathUtility(new SeededRandom((ulong)seed)), ecsContext.EntityManager.Keys, (uint)seed, creatures ?? Definitions, Actions, Items);
 
     /// <summary>The player's blueprint (see FloorBuilder.CreatePlayer).</summary>
     public static ushort PlayerBlueprint { get; } = Definitions.GetId(Player.Id);
@@ -30,7 +33,7 @@ internal static class BlueprintTestContext
 
     /// <summary>Builds a whole blueprint, includes and all, the way EntityFactory does in the real world.</summary>
     public static void BuildBlueprint(this EcsContext ecsContext, int entityId, ushort blueprintId, int seed = 1) =>
-        new EntityBuilder(Definitions, new Game.Modules.Auras.AuraCatalog(), Actions, ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId, blueprintId, (uint)seed, now: 0);
+        new EntityBuilder(Definitions, new Game.Modules.Auras.AuraCatalog(), Actions, Items, ecsContext.EntityManager.Keys).Build(ecsContext.ComponentManager, entityId, blueprintId, (uint)seed, now: 0);
 
     /// <summary>Builds the built-in definition registered as definitionId -- its race or class and its includes as well as its own blueprint.</summary>
     public static void BuildDefinition(this EcsContext ecsContext, int entityId, Guid definitionId, int seed = 1) =>

@@ -11,7 +11,6 @@ using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Actions.Definitions;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Class;
 using Game.Modules.Core;
 using Game.Modules.Core.Components;
@@ -68,7 +67,7 @@ public sealed class HumanTests
             Assert.IsTrue(AbilityScoreQueries.TryGetComponent(ecsContext.ComponentManager.GetPackedPool<AbilityScoresComponent>(), entityId, abilityScoreType, out _), $"Missing ability score: {abilityScoreType}");
         }
 
-        Assert.IsTrue(ecsContext.ActionsOf().Has(entityId, QuickAttackAction.Id));
+        Assert.IsTrue(ecsContext.ActionsOf().Has(entityId, BuiltInActionIds.QuickAttack));
 
         var expectedPartsByName = new Dictionary<string, (BodyPartType Type, ushort MinimumHealth, ushort MaximumHealth, bool IsVital)>
         {

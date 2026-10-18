@@ -56,8 +56,8 @@ public sealed class InventoryManagementWindowTests
         windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)));
-        var contextMenuController = new ContextMenuController(windowService);
-        contextMenuController.Initialize(new UiLayerStack());
+        var contextMenuController = new ContextMenuController(new DropdownController(windowService));
+        contextMenuController.Dropdowns.Initialize(new UiLayerStack());
         var mapViewState = new MapViewState();
 
         windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(

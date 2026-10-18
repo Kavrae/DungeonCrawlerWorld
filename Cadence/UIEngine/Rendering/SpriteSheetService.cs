@@ -16,7 +16,7 @@ public sealed class SpriteSheetService
 {
     private readonly GraphicsDevice? _graphicsDevice;
     private readonly string _spritesheetsDirectory;
-    private readonly Dictionary<string, Texture2D> _textures = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<string, Texture2D> _texturesByPath = new(StringComparer.Ordinal);
 
     /// <param name="graphicsDevice">
     /// Nullable so this type can be constructed in headless tests that never call GetTexture --
@@ -41,11 +41,15 @@ public sealed class SpriteSheetService
     /// <summary>The loaded sprite manifest: a sprite name to the cell it draws as.</summary>
     public SpriteManifestResolver Sprites { get; }
 
-    public Texture2D GetTexture(string relativePath)
+    /// <summary>sheet's texture, loaded the first time any sprite on it is drawn and kept on the sheet.</summary>
+    /// <remarks>A sheet object made outside the resolver finds a texture already loaded for its path, so no sheet is ever loaded twice.</remarks>
+    public Texture2D GetTexture(SpriteSheet sheet) => sheet.Texture ??= LoadTexture(sheet.RelativePath);
+
+    private Texture2D LoadTexture(string relativePath)
     {
-        if (_textures.TryGetValue(relativePath, out var cached))
+        if (_texturesByPath.TryGetValue(relativePath, out var loaded))
         {
-            return cached;
+            return loaded;
         }
 
         ArgumentNullException.ThrowIfNull(_graphicsDevice);
@@ -53,7 +57,7 @@ public sealed class SpriteSheetService
         var resolvedPath = Path.Combine(AppContext.BaseDirectory, _spritesheetsDirectory, relativePath);
         using var stream = File.OpenRead(resolvedPath);
         var texture = Texture2D.FromStream(_graphicsDevice, stream);
-        _textures[relativePath] = texture;
+        _texturesByPath.Add(relativePath, texture);
         return texture;
     }
 }

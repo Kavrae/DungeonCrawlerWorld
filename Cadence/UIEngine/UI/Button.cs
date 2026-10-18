@@ -28,6 +28,9 @@ namespace UIEngine.UI;
 public sealed class Button(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService? spriteSheetService = null)
     : Element(fontService, elementPoolService, labelRenderer)
 {
+    /// <summary>What ContentFont is reset to on every Build, so a pooled button never keeps a font a previous user set.</summary>
+    private readonly SpriteFontBase _defaultContentFont = fontService.GetFont(FontChrome.DefaultFontSize);
+
     public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(FontChrome.DefaultFontSize);
 
     public string LeftText { get; set; } = string.Empty;
@@ -40,7 +43,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
     public Color TextColor { get; set; }
 
     /// <summary>
-    /// Forces left alignment even when RightText is empty -- ContextMenu's own option rows set
+    /// Forces left alignment even when RightText is empty -- Dropdown's own option rows set
     /// this so they always read as a native left-aligned menu command, regardless of whether a
     /// hotkey column happens to be present, rather than falling into the single-glyph
     /// ink-centered look DrawContent otherwise uses for a title button ("X", "_", "O") when
@@ -51,6 +54,12 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
 
     public bool IsHovered { get; set; }
 
+    /// <summary>Draws the hover highlight without the pointer over it -- a Dropdown row Up/Down moved to.</summary>
+    public bool IsHighlighted { get; set; }
+
+    /// <summary>Draws an accent at the left edge -- a Dropdown row holding a DropdownField's current value.</summary>
+    public bool IsMarked { get; set; }
+
     /// <summary>True while the mouse is held down over this button -- DrawContent swaps Outset/Inset while true, giving the pressed-in look. Set by UiInputController on press/release (see PressedButton).</summary>
     public bool IsPressed { get; private set; }
 
@@ -60,9 +69,13 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
     private BorderStyle _restingBorderStyle;
 
     /// <summary>Set via ElementOptions.Button.SpriteName -- null (the default) means this button draws its ordinary Left/RightText, never the sprite-or-glyph icon branch below. Reset on every Build, same as every other field here, so a pooled-and-reused Button can't carry a stale icon from its previous consumer.</summary>
-    private string? _spriteName;
+    /// <summary>The icon ElementOptions.Button.SpriteName names, resolved when the button is built; null for none.</summary>
+    private SpriteView? _sprite;
 
-    /// <summary>Set via ElementOptions.Button.HotkeyLabel -- see its own doc comment. Reset every Build, same as _spriteName.</summary>
+    /// <summary>Whether this button draws an icon (a sprite, or LeftText as its glyph when the manifest has none) rather than plain text.</summary>
+    private bool _hasSpriteIcon;
+
+    /// <summary>Set via ElementOptions.Button.HotkeyLabel -- see its own doc comment. Reset every Build, same as _sprite.</summary>
     private string? _hotkeyLabel;
 
     /// <summary>Only fetched when _hotkeyLabel is actually set (the overwhelming majority of Buttons never set HotkeyLabel) -- sized off this button's own OriginalSize.Y.</summary>
@@ -80,14 +93,18 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
 
         _contentState.BackgroundColor = options.Content?.ContentColor ?? WindowPalette.PanelContentColor;
 
+        ContentFont = _defaultContentFont;
         LeftText = options.Text?.Text ?? string.Empty;
         RightText = null;
         TextColor = options.Text?.TextColor ?? WindowPalette.BodyTextColor;
         Enabled = true;
         IsHovered = false;
+        IsHighlighted = false;
+        IsMarked = false;
         IsPressed = false;
         LeftAlign = false;
-        _spriteName = options.Button?.SpriteName;
+        _sprite = spriteSheetService?.Sprites.FirstOrNull(options.Button?.SpriteName);
+        _hasSpriteIcon = options.Button?.SpriteName is not null;
 
         _hotkeyLabel = options.Button?.HotkeyLabel;
         _hotkeyLabelFont = _hotkeyLabel is not null ? FontService.GetFont((int)(OriginalSize.Y * FontChrome.ButtonHotkeyLabelFontFraction)) : null;
@@ -149,20 +166,28 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
     /// Horizontal breathing room around LeftText/RightText when both are present -- DrawLeftAligned/
     /// DrawRightAligned otherwise sit flush against the row's own edges, fine for a single
     /// ink-centered glyph (see the RightText-empty branch below) but visibly cramped for a
-    /// two-column context-menu row. Internal, not private: ContextMenu.MeasureWidth sizes its
+    /// two-column context-menu row. Internal, not private: Dropdown.MeasureWidth sizes its
     /// rows off this same constant, rather than guessing its own separate padding value that
     /// could silently drift out of sync with what actually gets drawn.
     /// </summary>
     internal const float HorizontalTextInset = 4f;
+
+    /// <summary>How wide IsMarked's accent is -- inside HorizontalTextInset, so it never reaches the text.</summary>
+    private const int MarkerWidth = 3;
 
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = ElementPoolService.SpriteBatch;
         var unitRectangle = ElementPoolService.UnitRectangle;
 
-        if (IsHovered)
+        if (IsHovered || IsHighlighted)
         {
             spriteBatch.Draw(unitRectangle, ContentRectangle, HoverOverlayColor);
+        }
+
+        if (IsMarked)
+        {
+            spriteBatch.Draw(unitRectangle, new Rectangle(ContentRectangle.X, ContentRectangle.Y, MarkerWidth, ContentRectangle.Height), WindowPalette.FocusAccentColor);
         }
 
         var textColor = Enabled ? TextColor : Color.Gray;
@@ -173,11 +198,10 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         // centered across the whole content area, with LeftText read as the fallback glyph if
         // the sprite name isn't found in the manifest (or spriteSheetService was
         // never wired -- see this class's own doc comment on why it's optional).
-        if (_spriteName is not null && spriteSheetService is not null)
+        if (_hasSpriteIcon && spriteSheetService is not null)
         {
-            SpriteView? sprite = spriteSheetService.Sprites.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
             var spriteTint = Enabled ? Color.White : Color.Gray;
-            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, LabelRenderer, sprite, ContentFont, LeftText, textColor, ContentAbsolutePosition, ContentSize, spriteTint);
+            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, LabelRenderer, _sprite, ContentFont, LeftText, textColor, ContentAbsolutePosition, ContentSize, spriteTint);
         }
         else if (string.IsNullOrEmpty(RightText) && !LeftAlign)
         {

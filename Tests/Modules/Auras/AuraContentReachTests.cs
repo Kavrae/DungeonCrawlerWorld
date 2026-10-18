@@ -1,8 +1,8 @@
 using Game.Blueprints.Objects;
 using Game.Effects;
-using Game.Modules.Actions.Definitions.DirectActions;
+using Game.Modules.Actions;
 using Game.Modules.Auras;
-using Game.Modules.Inventory.Definitions;
+using Game.Modules.Inventory;
 using Game.Terrain;
 
 namespace Tests.Modules.Auras;
@@ -36,8 +36,8 @@ public sealed class AuraContentReachTests
     [TestMethod]
     public void ToxicIdolAndToxicAura_PowerSixteenSizeFour()
     {
-        var idol = OnlyAuraGrant(ToxicIdol.Build().Effects);
-        var action = OnlyAuraGrant(ToxicAuraAction.Build().Effects);
+        var idol = OnlyAuraGrant(TestContent.Item(BuiltInItemIds.ToxicIdol).Effects);
+        var action = OnlyAuraGrant(TestContent.Action(BuiltInActionIds.ToxicAura).Effects);
 
         Assert.AreEqual((16, 4), (idol.Power, idol.Size));
         Assert.AreEqual((16, 4), (action.Power, action.Size));
@@ -46,7 +46,7 @@ public sealed class AuraContentReachTests
     [TestMethod]
     public void ScrollOfTorch_PowerEightSizeThree()
     {
-        var grant = OnlyAuraGrant(ScrollOfTorch.Build().Effects);
+        var grant = OnlyAuraGrant(TestContent.Item(BuiltInItemIds.ScrollOfTorch).Effects);
 
         Assert.AreEqual((8, 3), (grant.Power, grant.Size));
     }
@@ -54,7 +54,7 @@ public sealed class AuraContentReachTests
     [TestMethod]
     public void EveryBuiltInAura_FallsOffLinearly()
     {
-        AuraDefinition[] auras = [BuiltInTerrain.LavaAura, BuiltInTerrain.HolyGroundAura, HealingShrine.Aura, ToxicIdol.Aura, ToxicAuraAction.Aura, ScrollOfTorch.Aura];
+        AuraDefinition[] auras = [BuiltInTerrain.LavaAura, BuiltInTerrain.HolyGroundAura, HealingShrine.Aura, TestContent.Aura(BuiltInAuraIds.ToxicIdolPoison), TestContent.Aura(BuiltInAuraIds.ToxicAura), TestContent.Aura(BuiltInAuraIds.TorchLight)];
 
         Assert.IsTrue(auras.All(aura => aura.Falloff == Engine.Tiles.AuraFalloff.Linear));
     }

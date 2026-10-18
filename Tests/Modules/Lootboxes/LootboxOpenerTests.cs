@@ -5,7 +5,6 @@ using Game.Modules.AbilityScores;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.Lootboxes;
 using Game.Tags;
 using Microsoft.Xna.Framework;
@@ -163,7 +162,7 @@ public sealed class LootboxOpenerTests
     [TestMethod]
     public void OpenAll_WandReward_IsGrantedWithItsChargesBaked()
     {
-        var wand = WandOfFireball.Build();
+        var wand = TestContent.Item(BuiltInItemIds.WandOfFireball);
         var setup = CreateSetup(wand);
         setup.Grant(Box(LootboxTypes.Weapon, LootboxRarity.Bronze, Contents(new ItemContentsEntry(wand.Id, 1))));
 

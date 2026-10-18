@@ -9,8 +9,6 @@ using Game.Blueprints.Races;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
-using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.Class.Components;
 using Game.Modules.Containers.Components;
 using Game.Modules.Core.Components;
@@ -19,7 +17,6 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.Movement.Components;
 using Game.Modules.Race.Components;
 using Game.Modules.Shops.Components;
@@ -163,8 +160,8 @@ public sealed class BlueprintTests
 
         var potionItemIds = new HashSet<Guid>
         {
-            HealthPotion.Build().Id, ManaPotion.Build().Id, HotkeyExpansionPotion.Build().Id, DamagePotion.Build().Id,
-            ToxicPotion.Build().Id, ImmunityTestPotion.Build().Id, ResistanceTestPotion.Build().Id,
+            TestContent.Item(BuiltInItemIds.HealthPotion).Id, TestContent.Item(BuiltInItemIds.ManaPotion).Id, TestContent.Item(BuiltInItemIds.HotkeyExpansionPotion).Id, TestContent.Item(BuiltInItemIds.DamagePotion).Id,
+            TestContent.Item(BuiltInItemIds.ToxicPotion).Id, TestContent.Item(BuiltInItemIds.ImmunityTestPotion).Id, TestContent.Item(BuiltInItemIds.ResistanceTestPotion).Id,
         };
         foreach (var stack in stacks)
         {
@@ -245,7 +242,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        Assert.IsTrue(ecsContext.ActionsOf().TryGetEffectiveAction(entityId, QuickAttackAction.Id, out var punch));
+        Assert.IsTrue(ecsContext.ActionsOf().TryGetEffectiveAction(entityId, BuiltInActionIds.QuickAttack, out var punch));
         Assert.AreEqual((short)10, FlatDamageOf(punch));
 
         AssertHasRandomStartingGoldAndCredits(ecsContext.ComponentManager, entityId);
@@ -321,13 +318,13 @@ public sealed class BlueprintTests
         // No per-instance Override -- unlike every other race's QuickAttack grant -- so the
         // player's QuickAttack rolls its catalog DirectDamage's own MinFlatDamage..MaxFlatDamage
         // range instead of a fixed number (see ActionInstanceComponent.Override's own doc comment).
-        Assert.IsTrue(ecsContext.ActionsOf().TryGetEffectiveAction(entityId, QuickAttackAction.Id, out var punch));
-        BlueprintTestContext.Actions.TryGet(QuickAttackAction.Id, out var catalogQuickAttack);
+        Assert.IsTrue(ecsContext.ActionsOf().TryGetEffectiveAction(entityId, BuiltInActionIds.QuickAttack, out var punch));
+        BlueprintTestContext.Actions.TryGet(BuiltInActionIds.QuickAttack, out var catalogQuickAttack);
         Assert.AreEqual(FlatDamageOf(catalogQuickAttack!), FlatDamageOf(punch), "No override: the player's QuickAttack is the catalog definition, rolling its own damage range.");
-        Assert.IsTrue(ecsContext.ActionsOf().TryGetEffectiveAction(entityId, MagicMissileAction.Id, out var magicMissile));
+        Assert.IsTrue(ecsContext.ActionsOf().TryGetEffectiveAction(entityId, BuiltInActionIds.MagicMissile, out var magicMissile));
         Assert.AreEqual((short)5, FlatDamageOf(magicMissile));
-        Assert.IsTrue(ecsContext.ActionsOf().Has(entityId, HealAction.Id));
-        Assert.IsTrue(ecsContext.ActionsOf().Has(entityId, ToxicStrikeAction.Id));
+        Assert.IsTrue(ecsContext.ActionsOf().Has(entityId, BuiltInActionIds.Heal));
+        Assert.IsTrue(ecsContext.ActionsOf().Has(entityId, BuiltInActionIds.ToxicStrike));
 
         // Starting items: 5 Health Potions, 5 Mana Potions, 3 Hotkey Expansion Potions, 5 Volatile
         // Concoctions (damage), 5 Toxic Flasks (Poison+Burning), 1 Toxic Idol (Poison aura toggle),
@@ -335,53 +332,53 @@ public sealed class BlueprintTests
         // 5 Draughts of Insulation (Burning+Poison resistance) -- see the Effect/
         // ActionActivator plan's concrete test content. Plus a batch of 10 Wands of Fireball and
         // one TEMPORARY divergent Adjacent-targeting test wand -- two separate stacks sharing
-        // WandOfFireball.Id, since the divergent one carries its own Override -- see the per-slot
+        // BuiltInItemIds.WandOfFireball, since the divergent one carries its own Override -- see the per-slot
         // item divergence work.
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
         Assert.HasCount(16, stacks);
 
-        var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == HealthPotion.Id);
+        var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.HealthPotion);
         Assert.AreEqual(5, healthPotionStack.Quantity);
         Assert.IsFalse(healthPotionStack.IsDisabled);
 
-        var manaPotionStack = stacks.Single(stack => stack.ItemDefinitionId == ManaPotion.Id);
+        var manaPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ManaPotion);
         Assert.AreEqual(5, manaPotionStack.Quantity);
         Assert.IsFalse(manaPotionStack.IsDisabled);
 
-        var hotkeyExpansionPotionStack = stacks.Single(stack => stack.ItemDefinitionId == HotkeyExpansionPotion.Id);
+        var hotkeyExpansionPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.HotkeyExpansionPotion);
         Assert.AreEqual(4, hotkeyExpansionPotionStack.Quantity);
         Assert.IsFalse(hotkeyExpansionPotionStack.IsDisabled);
 
-        var damagePotionStack = stacks.Single(stack => stack.ItemDefinitionId == DamagePotion.Id);
+        var damagePotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.DamagePotion);
         Assert.AreEqual(5, damagePotionStack.Quantity);
         Assert.IsFalse(damagePotionStack.IsDisabled);
 
-        var toxicPotionStack = stacks.Single(stack => stack.ItemDefinitionId == ToxicPotion.Id);
+        var toxicPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ToxicPotion);
         Assert.AreEqual(5, toxicPotionStack.Quantity);
         Assert.IsFalse(toxicPotionStack.IsDisabled);
 
-        var toxicIdolStack = stacks.Single(stack => stack.ItemDefinitionId == ToxicIdol.Id);
+        var toxicIdolStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ToxicIdol);
         Assert.AreEqual(1, toxicIdolStack.Quantity);
         Assert.IsFalse(toxicIdolStack.IsDisabled);
 
-        var scrollOfHealingStack = stacks.Single(stack => stack.ItemDefinitionId == ScrollOfHealing.Id);
+        var scrollOfHealingStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ScrollOfHealing);
         Assert.AreEqual(5, scrollOfHealingStack.Quantity);
         Assert.IsFalse(scrollOfHealingStack.IsDisabled);
 
-        var scrollOfTorchStack = stacks.Single(stack => stack.ItemDefinitionId == ScrollOfTorch.Id);
+        var scrollOfTorchStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ScrollOfTorch);
         Assert.AreEqual(5, scrollOfTorchStack.Quantity);
         Assert.IsFalse(scrollOfTorchStack.IsDisabled);
 
-        var immunityTestPotionStack = stacks.Single(stack => stack.ItemDefinitionId == ImmunityTestPotion.Id);
+        var immunityTestPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ImmunityTestPotion);
         Assert.AreEqual(5, immunityTestPotionStack.Quantity);
         Assert.IsFalse(immunityTestPotionStack.IsDisabled);
 
-        var resistanceTestPotionStack = stacks.Single(stack => stack.ItemDefinitionId == ResistanceTestPotion.Id);
+        var resistanceTestPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ResistanceTestPotion);
         Assert.AreEqual(5, resistanceTestPotionStack.Quantity);
         Assert.IsFalse(resistanceTestPotionStack.IsDisabled);
 
-        var wandOfFireballStacks = stacks.Where(stack => stack.ItemDefinitionId == WandOfFireball.Id).ToList();
+        var wandOfFireballStacks = stacks.Where(stack => stack.ItemDefinitionId == BuiltInItemIds.WandOfFireball).ToList();
         Assert.HasCount(2, wandOfFireballStacks);
 
         var plainWandStack = wandOfFireballStacks.Single(stack => !stack.IsDivergent);
@@ -416,7 +413,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
 
-        Assert.IsTrue(ecsContext.ActionsOf().TryGetEffectiveAction(entityId, QuickAttackAction.Id, out var punch));
+        Assert.IsTrue(ecsContext.ActionsOf().TryGetEffectiveAction(entityId, BuiltInActionIds.QuickAttack, out var punch));
         Assert.AreEqual((short)3, FlatDamageOf(punch));
 
         AssertHasRandomStartingGoldAndCredits(ecsContext.ComponentManager, entityId);

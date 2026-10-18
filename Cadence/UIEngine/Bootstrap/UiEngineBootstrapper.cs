@@ -8,8 +8,8 @@ namespace UIEngine.Bootstrap;
 /// <summary>
 /// Constructs the window framework's services: fonts, the sprite batch, label drawing, the sprite manifest and its sheets, and
 /// the element pool. Deliberately not a copy of Engine's module/dependency-validating Bootstrapper -- the service set is
-/// small and fixed, so it doesn't need that machinery. New window/control types register with
-/// ElementPoolService.RegisterFactory, not a second module system.
+/// small and fixed, so it doesn't need that machinery. UiEngineContext.RegisterFrameworkElementFactories registers
+/// UIEngine's own controls; a host's own types register with ElementPoolService.RegisterFactory, not a second module system.
 /// </summary>
 public static class UiEngineBootstrapper
 {

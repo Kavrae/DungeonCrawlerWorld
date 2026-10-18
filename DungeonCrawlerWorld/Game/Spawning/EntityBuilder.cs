@@ -10,6 +10,7 @@ using Game.Modules.Auras.Components;
 using Game.Modules.Class;
 using Game.Modules.Class.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Inventory;
 using Game.Modules.Mana;
 using Game.Modules.Race.Components;
 
@@ -36,15 +37,17 @@ public sealed class EntityBuilder
     private readonly BlueprintRegistry _definitions;
     private readonly AuraCatalog _auras;
     private readonly ActionCatalog _actions;
+    private readonly ItemCatalog _items;
     private readonly EntityKeys _entityKeys;
     private readonly SeededRandom _random = new();
     private readonly MathUtility _rolls;
 
-    public EntityBuilder(BlueprintRegistry definitions, AuraCatalog auras, ActionCatalog actions, EntityKeys entityKeys)
+    public EntityBuilder(BlueprintRegistry definitions, AuraCatalog auras, ActionCatalog actions, ItemCatalog items, EntityKeys entityKeys)
     {
         _definitions = definitions;
         _auras = auras;
         _actions = actions;
+        _items = items;
         _entityKeys = entityKeys;
         _rolls = new MathUtility(_random);
     }
@@ -80,7 +83,7 @@ public sealed class EntityBuilder
     {
         var resolved = _definitions.Resolve(blueprintId);
         _random.Reseed(seed);
-        var context = new BlueprintContext(componentManager, entityId, _rolls, _entityKeys, seed, _definitions, _actions);
+        var context = new BlueprintContext(componentManager, entityId, _rolls, _entityKeys, seed, _definitions, _actions, _items);
 
         foreach (var partId in resolved.BuildOrder)
         {
@@ -113,7 +116,7 @@ public sealed class EntityBuilder
         }
 
         _random.Reseed(seed ^ ((ulong)(uint)blueprint.Definition.Id.GetHashCode() << 32));
-        var context = new BlueprintContext(componentManager, entityId, _rolls, _entityKeys, seed, _definitions, _actions);
+        var context = new BlueprintContext(componentManager, entityId, _rolls, _entityKeys, seed, _definitions, _actions, _items);
 
         foreach (var partId in blueprint.BuildOrder)
         {
@@ -210,7 +213,7 @@ public sealed class EntityBuilder
         for (var index = 0; index < actions.Count; index++)
         {
             var grant = actions[index];
-            if ((grant.Override ?? (_actions.TryGet(grant.ActionId, out var definition) ? definition : null)) is { } action && ManaUse.DrainsUsersMana(action))
+            if ((grant.ResolveOverride(_actions) ?? (_actions.TryGet(grant.ActionId, out var definition) ? definition : null)) is { } action && ManaUse.DrainsUsersMana(action))
             {
                 ManaGrant.EnsureManaComponentExists(componentManager, entityId);
                 return;

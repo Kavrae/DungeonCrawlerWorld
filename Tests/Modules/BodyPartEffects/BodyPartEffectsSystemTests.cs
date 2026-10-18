@@ -1,6 +1,6 @@
 using Engine.ECS.Components.Stores;
 using Game.Modules;
-using Game.Modules.Actions.Definitions.DirectActions;
+using Game.Modules.Actions;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.BodyPartEffects.Systems;
 using Game.Modules.Health;
@@ -167,7 +167,7 @@ public sealed class BodyPartEffectsSystemTests
 
         system.Update(default, 0);
 
-        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.OutgoingDamage, 100f, QuickAttackAction.Build().Tags), 0.01f, "Delivery.Melee.Unarmed is Delivery.Melee.");
+        Assert.AreEqual(50f, StatModifierMath.GetEffectiveValue(statModifiers, 0, StatModifierTarget.OutgoingDamage, 100f, TestContent.Action(BuiltInActionIds.QuickAttack).Tags), 0.01f, "Delivery.Melee.Unarmed is Delivery.Melee.");
     }
 
     [TestMethod]

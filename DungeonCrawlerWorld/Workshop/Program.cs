@@ -8,9 +8,10 @@ Game.GameFrameRate.Apply();
 
 IReadOnlyList<ISettingsSource> settingsSources = [new CommandLineSettingsSource(args)];
 var tabName = TabArgument.Parse(args);
-if (tabName is not null && !BuilderTabs.Titles.Contains(tabName, StringComparer.OrdinalIgnoreCase))
+IReadOnlyList<string> tabTitles = [.. BuilderTabs.Titles, ControlGalleryTab.TabTitle];
+if (tabName is not null && !tabTitles.Contains(tabName, StringComparer.OrdinalIgnoreCase))
 {
-    Console.Error.WriteLine($"--tab={tabName} names no tab. Tabs: {string.Join(", ", BuilderTabs.Titles)}.");
+    Console.Error.WriteLine($"--tab={tabName} names no tab. Tabs: {string.Join(", ", tabTitles)}.");
     return 2;
 }
 
@@ -20,13 +21,17 @@ var options = new WorkshopHostOptions(
     FontsDirectory: "Fonts",
     SpritesheetsDirectory: "Spritesheets",
     SpriteManifestFileName: "SpriteManifest.json",
-    GameLaunchTarget: new GameLaunchTarget(RepositoryPaths.GameExecutablePath(), string.Empty, gameShellOutputDirectory),
+    GameLaunchTarget: new GameLaunchTarget(RepositoryPaths.GameExecutablePath(), string.Empty, gameShellOutputDirectory, RepositoryPaths.GameShellBuildCommand()),
     CreateTabs: uiEngine =>
     {
         var gameSession = ContentSession.Build(Path.Combine(gameShellOutputDirectory, "Mods"), settingsSources, Console.Error);
+        uiEngine.SpriteSheetService.Sprites.ReportManifestProblems(Console.Error);
         MissingSpriteCheck.Report(gameSession.Views.ContentSpriteNames, uiEngine.SpriteSheetService.Sprites, Console.Error);
-        return TabArgument.Select(BuilderTabs.Create(uiEngine, gameSession), tabName);
-    });
+        return new WorkshopTabSet(TabArgument.Select([.. BuilderTabs.Create(uiEngine, gameSession), new ControlGalleryTab()], tabName), ContentSession.LoadProblems(gameSession, RepositoryPaths.MasterContentDirectory()));
+    })
+{
+    GameOutputLogPath = Path.Combine(RepositoryPaths.LogDirectory(), "workshop-game-output.log"),
+};
 
 using var workshop = new WorkshopHost(options);
 workshop.Run();

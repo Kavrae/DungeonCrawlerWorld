@@ -1,5 +1,4 @@
-﻿using Game.Modules.Inventory;
-using Game.Modules.Inventory.Definitions;
+using Game.Modules.Inventory;
 using Game.Modules.Lootboxes;
 using Game.Tags;
 using Game.World;
@@ -11,7 +10,7 @@ namespace Game.Modules.Achievements.Definitions;
 public sealed class SpellCasterAchievement : IAchievementDefinition
 {
     private static readonly LootboxReward Reward = new(LootboxTypes.Adventurer.Id, LootboxRarity.Bronze,
-        new SetItemContents([new ItemContentsEntry(ManaPotion.Id, 5)]));
+        new SetItemContents([new ItemContentsEntry(BuiltInItemIds.ManaPotion, 5)]));
 
     public Guid Id { get; } = new("3a1f8c2e-9d4b-47a6-8e2f-000000000009");
 

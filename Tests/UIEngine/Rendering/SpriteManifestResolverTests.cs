@@ -59,9 +59,31 @@ public sealed class SpriteManifestResolverTests
         Assert.AreEqual(expectedIndex * 16, sprite.SourceRectangle.X);
     }
 
-    /// <summary>SpriteSheetService caches textures by reference: two entries naming one sheet must share one path instance, or each loads its own copy.</summary>
+    /// <summary>A sheet holds its texture once loaded: two entries naming one sheet must share one SpriteSheet, so the texture is loaded once and read from it.</summary>
     [TestMethod]
-    public void TwoEntriesNamingOneSheet_ShareOneSheetPathInstance()
+    public void TerrainAndEntitySprites_OfOneSheet_ShareOneSpriteSheet()
+    {
+        var resolver = ResolverOf(new SpriteManifestEntry("Floor", [new SpriteManifestCell("shared-sheet.png", 0, 0, 16, 16)]));
+
+        Assert.IsTrue(resolver.TryGetFirst("Floor", out var icon));
+        Assert.IsTrue(resolver.TryGetTerrainSprites("Floor", out var terrain));
+        Assert.IsTrue(terrain.TryGetFace(seed: 0, mask: null, out var face));
+        Assert.IsTrue(ReferenceEquals(icon.Sheet, face.Sheet));
+    }
+
+    [TestMethod]
+    public void TryGetFirst_ANameBuiltAtRuntime_FindsTheEntryByValue()
+    {
+        var resolver = ResolverOf(new SpriteManifestEntry("Built-Name", [new SpriteManifestCell("sheet.png", 0, 0, 16, 16)]));
+        var builtName = string.Concat("Built", "-", "Name");
+
+        Assert.IsTrue(resolver.TryGetFirst(builtName, out _));
+        Assert.IsTrue(resolver.TryGetFirst("Built-Name", out _));
+        Assert.IsFalse(resolver.TryGetFirst(string.Concat("Missing", "-", "Name"), out _));
+    }
+
+    [TestMethod]
+    public void TwoEntriesNamingOneSheet_ShareOneSpriteSheet()
     {
         var resolver = ResolverOf(
             new SpriteManifestEntry("First", [new SpriteManifestCell("shared-sheet.png", 0, 0, 16, 16)]),
@@ -69,7 +91,7 @@ public sealed class SpriteManifestResolverTests
 
         Assert.IsTrue(resolver.TryGetFirst("First", out var first));
         Assert.IsTrue(resolver.TryGetFirst("Second", out var second));
-        Assert.IsTrue(ReferenceEquals(first.SheetPath, second.SheetPath));
+        Assert.IsTrue(ReferenceEquals(first.Sheet, second.Sheet));
     }
 
     [TestMethod]

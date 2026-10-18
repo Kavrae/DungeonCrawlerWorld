@@ -317,7 +317,8 @@ internal static class TestSystems
             meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>(),
             playerQuery ?? TestPlayerQuery.NoPlayer,
             new TargetResolution(mapQuery, transformPool, entityKeys ?? new EntityKeys(), deadEntities ?? EmptyPools.Packed<DeadComponent>(), EmptyPools.Multi<NonBlockingComponent>(), EmptyPools.Packed<AbilityScoresComponent>()),
-            corpseLooting ?? new NpcCorpseLooting(BuiltInTestComponents.RegisterAll(new ComponentManager(16, 16)), new ItemCatalog(), playerQuery ?? TestPlayerQuery.NoPlayer, entityKeys ?? new EntityKeys(), mapQuery, new ProcessingTierQuery(processingTiers)));
+            corpseLooting ?? new NpcCorpseLooting(BuiltInTestComponents.RegisterAll(new ComponentManager(16, 16)), new ItemCatalog(), playerQuery ?? TestPlayerQuery.NoPlayer, entityKeys ?? new EntityKeys(), mapQuery, new ProcessingTierQuery(processingTiers)),
+            TestContent.Item(Game.Modules.Inventory.BuiltInItemIds.HealthPotion).Activator!);
 
     public static DeathSystem DeathSystem(
         PackedComponentPool<DeadComponent> deadEntities,

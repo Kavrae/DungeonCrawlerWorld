@@ -25,7 +25,7 @@ namespace UIEngine.UI;
 /// instead (replacing any active selection first), but only when Multiline -- a
 /// single-line box treats Shift+Enter the same as a plain Enter.
 /// </summary>
-public sealed class TextBox(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null) : TextWindow(fontService, elementPoolService, labelRenderer)
+public class TextBox(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null) : TextWindow(fontService, elementPoolService, labelRenderer)
 {
     private static readonly Color FocusIndicatorColor = WindowPalette.FocusAccentColor;
     private static readonly BorderThickness FocusIndicatorThickness = BorderThickness.Uniform(new Vector2(2, 2));
@@ -170,7 +170,7 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
 
     protected override void OnTextInputAction(char character)
     {
-        if (char.IsControl(character))
+        if (char.IsControl(character) || !AcceptsCharacter(character))
         {
             return;
         }
@@ -394,7 +394,7 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
                 }
                 continue;
             }
-            if (!char.IsControl(character))
+            if (!char.IsControl(character) && AcceptsCharacter(character))
             {
                 filtered.Append(character);
             }
@@ -429,22 +429,22 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
     /// already gate on), Paste only when the clipboard actually has text, and Select All whenever
     /// there's anything to select.
     /// </summary>
-    internal IReadOnlyList<ContextMenuOption> BuildContextMenuOptions()
+    internal IReadOnlyList<DropdownOption> BuildContextMenuOptions()
     {
         var hasSelection = _selectionAnchor is { } anchor && anchor != _caretIndex;
 
         return
         [
-            new ContextMenuOption("Cut", "Ctrl+X", hasSelection, () =>
+            new DropdownOption("Cut", "Ctrl+X", hasSelection, () =>
             {
                 if (CopySelectionToClipboard())
                 {
                     TryDeleteSelection();
                 }
             }),
-            new ContextMenuOption("Copy", "Ctrl+C", hasSelection, () => CopySelectionToClipboard()),
-            new ContextMenuOption("Paste", "Ctrl+V", SDL.SDL_HasClipboardText(), PasteFromClipboard),
-            new ContextMenuOption("Select All", "Ctrl+A", OriginalText.Length > 0, () =>
+            new DropdownOption("Copy", "Ctrl+C", hasSelection, () => CopySelectionToClipboard()),
+            new DropdownOption("Paste", "Ctrl+V", SDL.SDL_HasClipboardText(), PasteFromClipboard),
+            new DropdownOption("Select All", "Ctrl+A", OriginalText.Length > 0, () =>
             {
                 MoveCaretTo(OriginalText.Length);
                 _selectionAnchor = 0;
@@ -870,6 +870,16 @@ public sealed class TextBox(FontService fontService, ElementPoolService elementP
         }
 
         return index;
+    }
+
+    /// <summary>Whether a typed or pasted character goes into the text -- every printable one by default; a number field takes only what a number is written with.</summary>
+    protected virtual bool AcceptsCharacter(char character) => true;
+
+    /// <summary>Replaces the whole text, clearing any selection and putting the caret at the end -- for a value set from outside the box.</summary>
+    public void SetText(string text)
+    {
+        SetTextAndAutoSize(text);
+        MoveCaretTo(text.Length);
     }
 
     private void SetTextAndAutoSize(string newText)

@@ -1,5 +1,6 @@
 using DungeonCrawlerWorld.Workshop;
 using Game.Bootstrap;
+using Game.Content;
 
 namespace Workshop.Tests;
 
@@ -95,6 +96,53 @@ public sealed class ContentSessionTests
         StringAssert.Contains(failureLog, "[ModuleLoad]");
         Assert.IsGreaterThan(0, session.Catalogs.ItemCatalog.Count);
     }
+
+    [TestMethod]
+    public void LoadProblems_ForACleanSessionAndTheShippedManifest_IsEmpty()
+    {
+        var (session, _) = BuildWithMods();
+
+        Assert.IsEmpty(ContentSession.LoadProblems(session, MasterManifestDirectory()));
+    }
+
+    [TestMethod]
+    public void LoadProblems_ListEachModThatWasDropped_AsAnError_NamingItsFileOrModule()
+    {
+        var (session, _) = BuildWithMods("Mods.TestFixtures");
+
+        var problems = ContentSession.LoadProblems(session, MasterManifestDirectory());
+
+        Assert.IsNotEmpty(problems);
+        CollectionAssert.AreEqual(session.ModuleFailures.Select(failure => Path.GetFileName(failure.Source)).ToArray(), problems.Select(problem => problem.Source).ToArray());
+        Assert.IsTrue(problems.All(problem => problem.Severity == WorkshopProblemSeverity.Error && problem.Description.StartsWith("Mod dropped: ", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void LoadProblems_ListEachManifestRecordThatDoesNotLoad_ByFileAndLine()
+    {
+        var (session, _) = BuildWithMods();
+        var masterDirectory = Directory.CreateTempSubdirectory();
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(MasterManifestDirectory()))
+            {
+                File.Copy(file, Path.Combine(masterDirectory.FullName, Path.GetFileName(file)));
+            }
+
+            File.AppendAllText(Path.Combine(masterDirectory.FullName, MasterContent.ItemsFileName), "{ not json\n");
+
+            var problem = ContentSession.LoadProblems(session, masterDirectory.FullName).Single();
+
+            Assert.AreEqual(WorkshopProblemSeverity.Error, problem.Severity);
+            StringAssert.StartsWith(problem.Source, MasterContent.ItemsFileName + ":");
+        }
+        finally
+        {
+            TryDeleteDirectory(masterDirectory.FullName);
+        }
+    }
+
+    private static string MasterManifestDirectory() => Path.Combine(FindRepositoryRoot(), "DungeonCrawlerWorld", "Content", "Definitions", "Master");
 
     [TestMethod]
     public void Build_HasNoPlayer()

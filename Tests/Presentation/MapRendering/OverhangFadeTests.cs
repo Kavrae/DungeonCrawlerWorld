@@ -31,7 +31,7 @@ public sealed class OverhangFadeTests
     [TestMethod]
     public void WatchedRectangle_ATallPlacedSprite_CoversTheRowAboveItsTile()
     {
-        var sprite = new SpriteView("sheet.png", new Rectangle(0, 0, 16, 32), new SpritePlacement(16, 8, 32));
+        var sprite = new SpriteView(new SpriteSheet("sheet.png"), new Rectangle(0, 0, 16, 32), new SpritePlacement(16, 8, 32));
 
         var watched = OverhangFade.WatchedRectangle(new Vector2(5 * Tile, 5 * Tile), new Vector2(Tile, Tile), new Vector2Byte(1, 1), sprite);
 

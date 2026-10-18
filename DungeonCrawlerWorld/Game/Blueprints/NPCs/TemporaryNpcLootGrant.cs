@@ -2,7 +2,6 @@ using Engine.ECS.Components;
 using Engine.Math;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Definitions;
 
 namespace Game.Blueprints.NPCs;
 
@@ -20,33 +19,22 @@ public static class TemporaryNpcLootGrant
     private const int MinWandMaxCharges = 1;
     private const int MaxWandMaxCharges = 20;
 
-    /// <summary>
-    /// Built once via each item's own pure, side-effect-free Build() factory -- the same one
-    /// CoreItemsModule.Configure calls to populate ItemCatalog -- so this needs no ItemCatalog
-    /// injection just to read each item's Id/Activator.
-    /// </summary>
-    private static readonly ItemDefinition[] AllCoreItems =
-    [
-        HealthPotion.Build(),
-        ManaPotion.Build(),
-        HotkeyExpansionPotion.Build(),
-        DamagePotion.Build(),
-        ToxicPotion.Build(),
-        ToxicIdol.Build(),
-        ScrollOfHealing.Build(),
-        ScrollOfTorch.Build(),
-        WandOfFireball.Build(),
-    ];
+    /// <summary>The kind ItemCatalog.GetOrCreateDerived keeps each fully charged wand under; its variant is ChargedWandVariant(the wand's index in AllCoreItemIds, its charges).</summary>
+    private const string ChargedWandKind = "TemporaryNpcLootGrant.ChargedWand";
 
-    /// <summary>Each wand in AllCoreItems fully charged to every MaxCharges the grant can roll, indexed [item][maxCharges]; null for an item that isn't a wand.</summary>
-    /// <remarks>Definitions are immutable, so every NPC granted the same roll shares one instance instead of building its own.</remarks>
-    private static readonly ItemDefinition?[][] ChargedWands = AllCoreItems
-        .Select(static item => item.Activator is WandActivator wandActivator
-            ? Enumerable.Range(0, MaxWandMaxCharges + 1)
-                .Select(maxCharges => (ItemDefinition?)(item with { Activator = wandActivator with { Charges = (ushort)maxCharges, MaxCharges = (ushort)maxCharges } }))
-                .ToArray()
-            : null)
-        .ToArray()!;
+    /// <summary>The items an NPC can be granted, by their BuiltInItemIds Guid.</summary>
+    private static readonly Guid[] AllCoreItemIds =
+    [
+        BuiltInItemIds.HealthPotion,
+        BuiltInItemIds.ManaPotion,
+        BuiltInItemIds.HotkeyExpansionPotion,
+        BuiltInItemIds.DamagePotion,
+        BuiltInItemIds.ToxicPotion,
+        BuiltInItemIds.ToxicIdol,
+        BuiltInItemIds.ScrollOfHealing,
+        BuiltInItemIds.ScrollOfTorch,
+        BuiltInItemIds.WandOfFireball,
+    ];
 
     /// <summary>
     /// Rolls 0-20 stacks of a randomly selected item each, quantity 1-entityId's own effective max
@@ -56,26 +44,38 @@ public static class TemporaryNpcLootGrant
     /// acceptable for throwaway test content. A rolled wand instead gets a random MaxCharges (1-20)
     /// with Charges set to match (full charge), via AddItemWithOverride -- the same "freshly
     /// granted identical batch, not yet divergent" primitive WandGrantEffects.Grant itself uses,
-    /// just with a flat random MaxCharges instead of one scaled off Intelligence.
+    /// just with a flat random MaxCharges instead of one scaled off Intelligence. Every NPC granted
+    /// the same roll shares one charged definition (ItemCatalog.GetOrCreateDerived) instead of
+    /// building its own.
     /// </summary>
-    public static void GrantRandomStartingLoot(ComponentManager componentManager, int entityId, MathUtility mathUtility)
+    public static void GrantRandomStartingLoot(ComponentManager componentManager, int entityId, MathUtility mathUtility, ItemCatalog itemCatalog)
     {
         var stackCount = mathUtility.Next(0, MaxStackCount + 1);
         for (var i = 0; i < stackCount; i++)
         {
-            var itemIndex = mathUtility.Next(0, AllCoreItems.Length);
-            var item = AllCoreItems[itemIndex];
+            var itemIndex = mathUtility.Next(0, AllCoreItemIds.Length);
+            var itemId = AllCoreItemIds[itemIndex];
             var quantity = (ushort)mathUtility.Next(1, InventoryActions.GetEffectiveMaxStackSize(componentManager, entityId) + 1);
 
-            if (ChargedWands[itemIndex] is { } chargedWands)
+            if (itemCatalog.Get(itemId).Activator is WandActivator)
             {
                 var maxCharges = mathUtility.Next(MinWandMaxCharges, MaxWandMaxCharges + 1);
-                InventoryActions.AddItemWithOverride(componentManager, entityId, chargedWands[maxCharges]!, quantity);
+                var chargedWand = itemCatalog.GetOrCreateDerived(ChargedWandKind, ChargedWandVariant(itemIndex, maxCharges), static (catalog, variant) => ChargedWand(catalog, variant));
+                InventoryActions.AddItemWithOverride(componentManager, entityId, chargedWand, quantity);
             }
             else
             {
-                InventoryActions.AddItem(componentManager, entityId, item.Id, quantity);
+                InventoryActions.AddItem(componentManager, entityId, itemId, quantity);
             }
         }
+    }
+
+    private static int ChargedWandVariant(int itemIndex, int charges) => itemIndex * (MaxWandMaxCharges + 1) + charges;
+
+    private static ItemDefinition ChargedWand(ItemCatalog itemCatalog, int variant)
+    {
+        var wand = itemCatalog.Get(AllCoreItemIds[variant / (MaxWandMaxCharges + 1)]);
+        var charges = (ushort)(variant % (MaxWandMaxCharges + 1));
+        return wand with { Activator = ((WandActivator)wand.Activator!) with { Charges = charges, MaxCharges = charges } };
     }
 }

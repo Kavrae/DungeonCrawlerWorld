@@ -851,13 +851,13 @@ public sealed class InventoryGridContent(
     /// immediately instead. A loot window's cells (see IsLootCell) also end with "Take All", on
     /// every cell, a Merged Stack or untradeable one included.
     /// </summary>
-    private List<ContextMenuOption> BuildItemContextMenu(InventoryItemStackCell cell)
+    private List<DropdownOption> BuildItemContextMenu(InventoryItemStackCell cell)
     {
         var options = BuildStackContextMenu(cell);
 
         if (IsLootCell(cell))
         {
-            options.Add(new ContextMenuOption("Take All", null, Enabled: true, () => TakeAll(cell.EntityId)));
+            options.Add(new DropdownOption("Take All", null, Enabled: true, () => TakeAll(cell.EntityId)));
         }
 
         return options;
@@ -877,13 +877,13 @@ public sealed class InventoryGridContent(
         _currencyCommands.TryTransferAll(lootedEntityId, world.PlayerEntityId);
     }
 
-    private List<ContextMenuOption> BuildStackContextMenu(InventoryItemStackCell cell)
+    private List<DropdownOption> BuildStackContextMenu(InventoryItemStackCell cell)
     {
-        List<ContextMenuOption> options = [];
+        List<DropdownOption> options = [];
 
         if (IsPlayerLootbox(cell))
         {
-            options.Add(new ContextMenuOption("Open All", null, Enabled: true, () => onOpenLootboxesRequested(world.PlayerEntityId)));
+            options.Add(new DropdownOption("Open All", null, Enabled: true, () => onOpenLootboxesRequested(world.PlayerEntityId)));
             return options;
         }
 
@@ -894,10 +894,10 @@ public sealed class InventoryGridContent(
 
         if (CanActivate(cell.EntityId, stackInstanceId))
         {
-            options.Add(new ContextMenuOption(ActivateLabel(stackInstanceId), null, Enabled: !IsHeldByActionLock(stackInstanceId) && !IsBlocked(stackInstanceId), () => onActivateRequested(cell.EntityId, stackInstanceId)));
+            options.Add(new DropdownOption(ActivateLabel(stackInstanceId), null, Enabled: !IsHeldByActionLock(stackInstanceId) && !IsBlocked(stackInstanceId), () => onActivateRequested(cell.EntityId, stackInstanceId)));
         }
 
-        options.Add(new ContextMenuOption("Compare", null, Enabled: true, () => onCompareRequested(cell.EntityId, stackInstanceId)));
+        options.Add(new DropdownOption("Compare", null, Enabled: true, () => onCompareRequested(cell.EntityId, stackInstanceId)));
 
         // While a shop is open, every cell's ShopTradeEligible reflects shop trade eligibility
         // (see UpdateShopEligibilityState) -- false (wrong tag, or the paying side can't afford
@@ -929,7 +929,7 @@ public sealed class InventoryGridContent(
 
             if (tradeTargetEntityId is { } tradeTarget)
             {
-                options.Add(new ContextMenuOption("Add to trade", null, Enabled: true, () =>
+                options.Add(new DropdownOption("Add to trade", null, Enabled: true, () =>
                     _inventoryCommands.TryTransferStack(cell.EntityId, tradeTarget, stackInstanceId)));
             }
         }
@@ -946,7 +946,7 @@ public sealed class InventoryGridContent(
 
             if (cell.EntityId == world.PlayerEntityId && secondaryTargetEntityId != world.PlayerEntityId)
             {
-                options.Add(new ContextMenuOption(isShopSecondary ? "Sell All" : "Give", null, Enabled: true, () =>
+                options.Add(new DropdownOption(isShopSecondary ? "Sell All" : "Give", null, Enabled: true, () =>
                 {
                     if (isShopSecondary)
                     {
@@ -960,7 +960,7 @@ public sealed class InventoryGridContent(
             }
             else if (cell.EntityId == secondaryTargetEntityId && secondaryTargetEntityId != world.PlayerEntityId)
             {
-                options.Add(new ContextMenuOption(isShopSecondary ? "Buy All" : "Take", null, Enabled: true, () =>
+                options.Add(new DropdownOption(isShopSecondary ? "Buy All" : "Take", null, Enabled: true, () =>
                 {
                     if (isShopSecondary)
                     {

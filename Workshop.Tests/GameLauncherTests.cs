@@ -56,4 +56,88 @@ public sealed class GameLauncherTests
         StringAssert.Contains(status, missingPath);
         Assert.IsFalse(launcher.IsGameRunning);
     }
+
+    private static List<GameOutputLine> OutputOf(GameLauncher launcher)
+    {
+        var lines = new List<GameOutputLine>();
+        launcher.DrainOutput(lines);
+        return lines;
+    }
+
+    [TestMethod]
+    public void TheGamesOutput_IsCaptured_WithErrorsMarked()
+    {
+        var launcher = LauncherFor("/c echo to-standard-output& echo to-standard-error 1>&2");
+
+        Assert.IsTrue(launcher.TryLaunch(out _));
+        WaitUntilNotRunning(launcher);
+        var output = OutputOf(launcher);
+
+        CollectionAssert.Contains(output, new GameOutputLine("to-standard-output", IsError: false));
+        CollectionAssert.Contains(output, new GameOutputLine("to-standard-error ", IsError: true));
+    }
+
+    [TestMethod]
+    public void ExtraArguments_ComeAfterTheTargetsOwn_ForThatLaunchOnly()
+    {
+        var launcher = LauncherFor("/c echo");
+
+        Assert.IsTrue(launcher.TryLaunch(out _, extraArguments: "--seed=7"));
+        WaitUntilNotRunning(launcher);
+
+        CollectionAssert.Contains(OutputOf(launcher), new GameOutputLine("--seed=7", IsError: false));
+    }
+
+    [TestMethod]
+    public void AGameThatExitsWithAnErrorCode_SaysSoInTheStatus()
+    {
+        var launcher = LauncherFor("/c exit 3");
+
+        Assert.IsTrue(launcher.TryLaunch(out _));
+        WaitUntilNotRunning(launcher);
+
+        StringAssert.Contains(launcher.Status, "exit code 3");
+    }
+
+    [TestMethod]
+    public void AGameThatExitsCleanly_SaysGameClosed_AndMovesTheStatusVersionOn()
+    {
+        var launcher = LauncherFor("/c exit");
+        Assert.IsTrue(launcher.TryLaunch(out _));
+        var startedVersion = launcher.StatusVersion;
+
+        WaitUntilNotRunning(launcher);
+
+        Assert.AreEqual(GameLauncher.GameClosedStatus, launcher.Status);
+        Assert.AreNotEqual(startedVersion, launcher.StatusVersion);
+    }
+
+    [TestMethod]
+    public void BuildFirst_AFailingBuild_StartsNoGame_AndSaysSo()
+    {
+        var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        var launcher = new GameLauncher(new GameLaunchTarget(cmd, "/c echo game-ran", Environment.SystemDirectory, new ProcessCommand(cmd, "/c exit 2", Environment.SystemDirectory)));
+
+        Assert.IsTrue(launcher.TryLaunch(out var status, buildFirst: true));
+        Assert.AreEqual("Building...", status);
+        WaitUntilNotRunning(launcher);
+
+        StringAssert.Contains(launcher.Status, "Build failed (exit code 2)");
+        Assert.IsFalse(OutputOf(launcher).Any(line => line.Text == "game-ran"));
+    }
+
+    [TestMethod]
+    public void BuildFirst_ASucceedingBuild_ThenStartsTheGame()
+    {
+        var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        var launcher = new GameLauncher(new GameLaunchTarget(cmd, "/c echo game-ran", Environment.SystemDirectory, new ProcessCommand(cmd, "/c echo built", Environment.SystemDirectory)));
+
+        Assert.IsTrue(launcher.TryLaunch(out _, buildFirst: true));
+        WaitUntilNotRunning(launcher);
+        var output = OutputOf(launcher);
+
+        CollectionAssert.Contains(output, new GameOutputLine("built", IsError: false));
+        CollectionAssert.Contains(output, new GameOutputLine("game-ran", IsError: false));
+        Assert.AreEqual(GameLauncher.GameClosedStatus, launcher.Status);
+    }
 }

@@ -3,8 +3,6 @@ using Game.Blueprints.NPCs;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Definitions.DirectActions;
-using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Mana.Components;
@@ -38,37 +36,33 @@ public static class Fairy
     /// <summary>Flat default for every NPC race, adjustable in a later balance pass -- see TODO.md's Stats entry.</summary>
     private const ushort DefaultAbilityScoreBaseValue = 5;
 
-    /// <summary>One override shared by every creature of this race: an ActionDefinition is never changed in place, only replaced, and building it per creature was most of what a creature allocated.</summary>
-    private static readonly ActionDefinition QuickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
-
-    /// <inheritdoc cref="QuickAttackOverride"/>
-    private static readonly ActionDefinition PowerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
-
     private const int MagicMissileRange = 8;
 
     private const ushort MagicMissileDamage = 8;
 
     private static readonly ushort MagicMissileWindupFrames = GameTiming.FramesForSeconds(1f);
 
-    /// <summary>TEMPORARY: the first NPC ranged attack, to see targeting modes in play -- Magic Missile wound up for a second, over a shorter range, for less damage. The catalog spell, and the player's, stay Immediate with range 20.</summary>
-    /// <remarks>After MagicMissileWindupFrames, which it reads.</remarks>
-    private static readonly ActionDefinition MagicMissileOverride = BuildMagicMissileOverride();
-
     /// <summary>Enough mana for three Magic Missiles, regenerating, so a Fairy runs dry and waits like a caster.</summary>
     private const float MaximumMana = 15;
 
     /// <summary>What every creature of this race can do -- held on its race definition, not on each creature (see ActionGrant). Dodge has no override: it rolls its catalog definition unchanged.</summary>
+    /// <remarks>
+    /// Each override is made from the session's own definition and shared by every creature of this race (ActionGrant.Derived):
+    /// an ActionDefinition is never changed in place, only replaced, and building it per creature was most of what a creature
+    /// allocated. Magic Missile is TEMPORARY: the first NPC ranged attack, to see targeting modes in play -- wound up for a
+    /// second, over a shorter range, for less damage. The catalog spell, and the player's, stay Immediate with range 20.
+    /// </remarks>
     public static readonly ActionGrant[] ActionGrants =
     [
-        new(QuickAttackAction.Id, QuickAttackOverride),
-        new(PowerAttackAction.Id, PowerAttackOverride),
-        new(DodgeAction.Id),
-        new(MagicMissileAction.Id, MagicMissileOverride),
+        ActionGrant.Derived(BuiltInActionIds.QuickAttack, "Fairy.QuickAttack", static action => ActionOverrideEffects.OverrideFlatDamage(action, QuickAttackDamage)),
+        ActionGrant.Derived(BuiltInActionIds.PowerAttack, "Fairy.PowerAttack", static action => ActionOverrideEffects.OverrideFlatDamage(action, PowerAttackDamage)),
+        new(BuiltInActionIds.Dodge),
+        ActionGrant.Derived(BuiltInActionIds.MagicMissile, "Fairy.MagicMissile", BuildMagicMissileOverride),
     ];
 
-    private static ActionDefinition BuildMagicMissileOverride()
+    private static ActionDefinition BuildMagicMissileOverride(ActionDefinition magicMissile)
     {
-        var catalogSpell = ActionOverrideEffects.OverrideFlatDamage(MagicMissileAction.Build(), MagicMissileDamage);
+        var catalogSpell = ActionOverrideEffects.OverrideFlatDamage(magicMissile, MagicMissileDamage);
         var spell = (SpellActivator)catalogSpell.Activator;
         return catalogSpell with
         {
@@ -100,7 +94,7 @@ public static class Fairy
         componentManager.Merge(entityId, new ManaComponent(MaximumMana, MaximumMana));
 
 
-        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, context.Rolls);
+        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, context.Rolls, context.Items);
         StartingCurrencyGrant.GrantRandomStartingGoldAndCredits(componentManager, entityId, context.Rolls);
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);

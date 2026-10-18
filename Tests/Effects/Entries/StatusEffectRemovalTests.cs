@@ -1,13 +1,13 @@
 using Engine.ECS.Components;
-using Game.Effects;
-using Game.Effects.Entries;
 using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
 using Game;
+using Game.Effects;
+using Game.Effects.Entries;
 using Game.Modules.Health.Components;
-using Game.Modules.Inventory.Definitions;
+using Game.Modules.Inventory;
 using Game.Modules.Poison;
 using Game.Modules.Poison.Components;
 using Game.Modules.StatModifiers.Components;
@@ -99,7 +99,7 @@ public sealed class StatusEffectRemovalTests
         setup.Poison(stacks: 3);
         var context = setup.Context(now: 100);
 
-        foreach (var effect in CurePoisonPotion.Build().Effects)
+        foreach (var effect in TestContent.Item(BuiltInItemIds.CurePoisonPotion).Effects)
         {
             foreach (var entry in effect.Entries)
             {
@@ -119,6 +119,6 @@ public sealed class StatusEffectRemovalTests
     [TestMethod]
     public void CurePoisonPotion_IsWorthFiftyGold()
     {
-        Assert.AreEqual(50, CurePoisonPotion.Build().GoldValue);
+        Assert.AreEqual(50, TestContent.Item(BuiltInItemIds.CurePoisonPotion).GoldValue);
     }
 }

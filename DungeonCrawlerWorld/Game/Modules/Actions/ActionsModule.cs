@@ -1,3 +1,4 @@
+using Engine.Content;
 using Engine.ECS.Components;
 using Engine.Modules;
 using Game.Blueprints;
@@ -47,6 +48,12 @@ public sealed class ActionsModule : IGameModule
     public Guid Id => ModuleId;
 
     public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, AurasModule.ModuleId, BodyPartEffectsModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId];
+
+    /// <summary>Registers the content codecs for the serialized types this module owns.</summary>
+    public void DeclareContentTypes(ContentTypeRegistration registration)
+    {
+        ActionContentCodecs.Register(registration);
+    }
 
     public void RegisterComponents(ComponentRegistration registration)
     {

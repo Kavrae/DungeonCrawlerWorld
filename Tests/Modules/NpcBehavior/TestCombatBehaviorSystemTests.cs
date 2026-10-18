@@ -3,7 +3,6 @@ using Engine.Math;
 using Engine.Tiles;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -11,7 +10,6 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.Movement.Components;
 using Game.Modules.NpcBehavior.Systems;
 using Game.Modules.ProcessingTier;
@@ -143,8 +141,8 @@ public sealed class TestCombatBehaviorSystemTests
     /// <summary>Grants both QuickAttack and PowerAttack, matching every real race blueprint's paired grant -- TryDecideMeleeAttack gates on QuickAttack's presence but randomly picks either for the actual attack.</summary>
     private static void GrantMeleeActions(Fixture fixture, int entityId)
     {
-        fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(QuickAttackAction.Id, ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), 10)));
-        fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(PowerAttackAction.Id, ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), 20)));
+        fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(BuiltInActionIds.QuickAttack, ActionOverrideEffects.OverrideFlatDamage(TestContent.Action(BuiltInActionIds.QuickAttack), 10)));
+        fixture.ActionInstances.Add(entityId, new ActionInstanceComponent(BuiltInActionIds.PowerAttack, ActionOverrideEffects.OverrideFlatDamage(TestContent.Action(BuiltInActionIds.PowerAttack), 20)));
     }
 
     private static void PlaceGoblin(Fixture fixture, int entityId, short currentHealth = 200, short maximumHealth = 200, bool grantMeleeActions = true)
@@ -185,7 +183,7 @@ public sealed class TestCombatBehaviorSystemTests
     {
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId, currentHealth: 50, maximumHealth: 200);
-        fixture.InventoryStacks.Add(GoblinEntityId, new InventoryItemStackComponent(HealthPotion.Id, quantity: 1));
+        fixture.InventoryStacks.Add(GoblinEntityId, new InventoryItemStackComponent(BuiltInItemIds.HealthPotion, quantity: 1));
         fixture.MapQuery.SetBlockingOccupant(AdjacentTile, PlayerEntityId);
 
         fixture.System.Update(default, 0);
@@ -194,7 +192,7 @@ public sealed class TestCombatBehaviorSystemTests
         var pending = fixture.PendingItemActivations.GetReadonly(GoblinEntityId);
         var pool = fixture.InventoryStacks;
         Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, GoblinEntityId, pending.StackInstanceId, out var boundStack));
-        Assert.AreEqual(HealthPotion.Id, boundStack.ItemDefinitionId);
+        Assert.AreEqual(BuiltInItemIds.HealthPotion, boundStack.ItemDefinitionId);
         Assert.AreEqual(TargetingMode.Target, pending.Selection.Mode, "Drunk, not thrown: Target mode on itself.");
         Assert.AreEqual(GoblinPosition, pending.Selection.AimedTile);
         Assert.IsFalse(fixture.PendingActivations.Has(GoblinEntityId), "Healing takes priority over attacking -- both should never fire the same tick.");
@@ -220,7 +218,7 @@ public sealed class TestCombatBehaviorSystemTests
     {
         var fixture = Build();
         PlaceComplexEntity(fixture, GoblinEntityId, headCurrent: 50);
-        fixture.InventoryStacks.Add(GoblinEntityId, new InventoryItemStackComponent(HealthPotion.Id, quantity: 1));
+        fixture.InventoryStacks.Add(GoblinEntityId, new InventoryItemStackComponent(BuiltInItemIds.HealthPotion, quantity: 1));
         fixture.MapQuery.SetBlockingOccupant(AdjacentTile, PlayerEntityId);
 
         fixture.System.Update(default, 0);
@@ -241,7 +239,7 @@ public sealed class TestCombatBehaviorSystemTests
 
         Assert.IsTrue(fixture.PendingActivations.Has(GoblinEntityId));
         var pending = fixture.PendingActivations.GetReadonly(GoblinEntityId);
-        Assert.IsTrue(pending.ActionId == QuickAttackAction.Id || pending.ActionId == PowerAttackAction.Id, "Randomly one or the other -- see TryDecideMeleeAttack's own doc comment.");
+        Assert.IsTrue(pending.ActionId == BuiltInActionIds.QuickAttack || pending.ActionId == BuiltInActionIds.PowerAttack, "Randomly one or the other -- see TryDecideMeleeAttack's own doc comment.");
         Assert.AreEqual(TargetingMode.Ground, pending.Selection.Mode, "Melee is Ground only: the Adjacent ring around the attacker, whoever is in it when it resolves.");
         Assert.AreEqual(GoblinPosition, pending.Selection.AimedTile);
     }
@@ -401,7 +399,7 @@ public sealed class TestCombatBehaviorSystemTests
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId, currentHealth: 50, maximumHealth: 200);
         fixture.MovementPool.TryUpdate(GoblinEntityId, static (ref MovementComponent m) => m.NextMapPosition = GoblinPosition);
-        fixture.InventoryStacks.Add(GoblinEntityId, new InventoryItemStackComponent(HealthPotion.Id, quantity: 1));
+        fixture.InventoryStacks.Add(GoblinEntityId, new InventoryItemStackComponent(BuiltInItemIds.HealthPotion, quantity: 1));
 
         fixture.System.Update(default, 0);
 

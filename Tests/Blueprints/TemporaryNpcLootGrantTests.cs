@@ -20,7 +20,7 @@ public sealed class TemporaryNpcLootGrantTests
 
         for (var entityId = 0; entityId < npcCount; entityId++)
         {
-            TemporaryNpcLootGrant.GrantRandomStartingLoot(manager, entityId, mathUtility);
+            TemporaryNpcLootGrant.GrantRandomStartingLoot(manager, entityId, mathUtility, BlueprintTestContext.Items);
         }
 
         var stacks = manager.GetMultiPool<InventoryItemStackComponent>();

@@ -1,7 +1,6 @@
 using Engine.ECS.Components;
 using Engine.Tags;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Definitions;
 using Game.Tags;
 using Microsoft.Xna.Framework;
 
@@ -34,7 +33,7 @@ public sealed class InventoryTagQueriesTests
     [TestMethod]
     public void AnItem_CountsUnderItsCategoryAndEveryParentBelowItem()
     {
-        var counts = Counts(HealthPotion.Build());
+        var counts = Counts(TestContent.Item(BuiltInItemIds.HealthPotion));
 
         CollectionAssert.AreEquivalent(
             new[] { (GameTags.ItemConsumable, 1), (GameTags.ItemConsumablePotion, 1) },
@@ -44,7 +43,7 @@ public sealed class InventoryTagQueriesTests
     [TestMethod]
     public void TagsOutsideItem_AreNotCategories()
     {
-        var counts = Counts(HealthPotion.Build(), WandOfFireball.Build());
+        var counts = Counts(TestContent.Item(BuiltInItemIds.HealthPotion), TestContent.Item(BuiltInItemIds.WandOfFireball));
 
         Assert.IsFalse(counts.Any(entry => !entry.Tag.IsSelfOrDescendantOf(GameTags.Item)), $"Only Item.* categories expected, got {string.Join(", ", counts)}.");
         Assert.IsFalse(counts.Any(entry => entry.Tag == GameTags.Item), "Item itself is never a tab.");
@@ -53,7 +52,7 @@ public sealed class InventoryTagQueriesTests
     [TestMethod]
     public void AStack_CountsOnceUnderACategory_EvenWhenSeveralOfItsTagsLeadThere()
     {
-        var counts = Counts(WandOfFireball.Build());
+        var counts = Counts(TestContent.Item(BuiltInItemIds.WandOfFireball));
 
         Assert.AreEqual(1, counts.Single(entry => entry.Tag == GameTags.ItemConsumable).Count, "The wand declares Consumable and is not a Potion or Scroll, so Consumable counts it once.");
         Assert.AreEqual(1, counts.Single(entry => entry.Tag == GameTags.ItemWand).Count);
@@ -62,7 +61,7 @@ public sealed class InventoryTagQueriesTests
     [TestMethod]
     public void MostPopulatedCategory_ComesFirst_ThenByDisplayName()
     {
-        var counts = Counts(HealthPotion.Build(), ManaPotion.Build(), ScrollOfHealing.Build());
+        var counts = Counts(TestContent.Item(BuiltInItemIds.HealthPotion), TestContent.Item(BuiltInItemIds.ManaPotion), TestContent.Item(BuiltInItemIds.ScrollOfHealing));
 
         CollectionAssert.AreEqual(
             new[] { GameTags.ItemConsumable, GameTags.ItemConsumablePotion, GameTags.ItemConsumableScroll },

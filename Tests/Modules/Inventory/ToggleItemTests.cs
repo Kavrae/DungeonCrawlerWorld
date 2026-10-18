@@ -7,12 +7,12 @@ using Game.Bootstrap;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
+using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Inventory.Definitions;
 using Game.Spawning;
 using Game.World;
 
@@ -43,7 +43,7 @@ public sealed class ToggleItemTests
         {
             var stacks = new List<InventoryItemStackComponent>();
             InventoryQueries.CopyStacksForEntity(Components.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-            return stacks.Where(stack => stack.ItemDefinitionId == ToxicIdol.Id).ToList();
+            return stacks.Where(stack => stack.ItemDefinitionId == BuiltInItemIds.ToxicIdol).ToList();
         }
 
         public uint PlainIdolStackId(int entityId) => StacksOf(entityId).Single(stack => !IsLit(stack)).StackInstanceId;
@@ -61,7 +61,7 @@ public sealed class ToggleItemTests
 
         public int PoisonStrengthAt(Vector3Int position)
         {
-            Assert.IsTrue(Session.Catalogs.Auras.TryGetId(ToxicIdol.Aura.Id, out var auraId));
+            Assert.IsTrue(Session.Catalogs.Auras.TryGetId(TestContent.Aura(BuiltInAuraIds.ToxicIdolPoison).Id, out var auraId));
             return Session.Internals.AuraField.GetTotalPowerAt(position, auraId);
         }
 
@@ -111,7 +111,7 @@ public sealed class ToggleItemTests
     private static Harness BuildWithIdols(ushort idolCount)
     {
         var harness = Build();
-        InventoryActions.AddItem(harness.Components, harness.PlayerEntityId, ToxicIdol.Id, (ushort)(idolCount - 1));
+        InventoryActions.AddItem(harness.Components, harness.PlayerEntityId, BuiltInItemIds.ToxicIdol, (ushort)(idolCount - 1));
         return harness;
     }
 
@@ -235,7 +235,7 @@ public sealed class ToggleItemTests
         var harness = Build();
         var player = harness.PlayerEntityId;
         var stacks = harness.Components.GetMultiPool<InventoryItemStackComponent>();
-        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, player, HealthPotion.Id, out var potionStack));
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, player, BuiltInItemIds.HealthPotion, out var potionStack));
         var versionBefore = stacks.GetEntityVersion(player);
 
         Assert.IsFalse(ToggleItemActions.TryToggle(harness.Components, harness.Items, player, potionStack.StackInstanceId, out _));
@@ -314,7 +314,7 @@ public sealed class ToggleItemTests
         var harness = Build();
         var player = harness.PlayerEntityId;
         var giver = harness.CreatePlacedEntity(OtherPosition);
-        InventoryActions.AddItem(harness.Components, giver, ToxicIdol.Id, quantity: 1);
+        InventoryActions.AddItem(harness.Components, giver, BuiltInItemIds.ToxicIdol, quantity: 1);
         var givenLitStackId = harness.Light(giver);
         harness.Light(player);
         Assert.IsTrue(harness.Session.Commands.InventoryCommands.TryTransferStack(giver, player, givenLitStackId));
@@ -368,7 +368,7 @@ public sealed class ToggleItemTests
     {
         var harness = Build();
         var holder = harness.CreatePlacedEntity(OtherPosition);
-        InventoryActions.AddItem(harness.Components, holder, ToxicIdol.Id, quantity: 1);
+        InventoryActions.AddItem(harness.Components, holder, BuiltInItemIds.ToxicIdol, quantity: 1);
         harness.Light(holder);
         harness.Components.GetMultiPool<AuraSourceComponent>().Add(holder, new AuraSourceComponent(harness.Session.Catalogs.Auras.Register(TestAuras.Light), power: 4, size: 2));
 
@@ -387,7 +387,7 @@ public sealed class ToggleItemTests
     {
         var harness = Build();
         var holder = harness.CreatePlacedEntity(OtherPosition);
-        InventoryActions.AddItem(harness.Components, holder, ToxicIdol.Id, quantity: 2);
+        InventoryActions.AddItem(harness.Components, holder, BuiltInItemIds.ToxicIdol, quantity: 2);
         harness.Light(holder);
         harness.Light(holder);
         var sources = harness.Components.GetMultiPool<AuraSourceComponent>();
@@ -427,14 +427,14 @@ public sealed class ToggleItemTests
 
     /// <summary>A unit of a Toxic Idol that is switched FreeCast rather than Delayed, added unlit.</summary>
     private static uint AddFreeCastIdol(Harness harness, int entityId) =>
-        InventoryActions.AddDivergentItem(harness.Components, entityId, ToxicIdol.Build() with { Activator = new ToggleItemActivator(new ActionTiming(ActionTimingCategory.FreeCast)) });
+        InventoryActions.AddDivergentItem(harness.Components, entityId, TestContent.Item(BuiltInItemIds.ToxicIdol) with { Activator = new ToggleItemActivator(new ActionTiming(ActionTimingCategory.FreeCast)) });
 
     [TestMethod]
     public void ImmediateToggleItem_IsRefusedWhileActionLocked_AndSetsTheLockWhenItFlips()
     {
         var harness = Build();
         var player = harness.PlayerEntityId;
-        var immediateIdol = ToxicIdol.Build() with { Activator = new ToggleItemActivator(new ActionTiming(ActionTimingCategory.Immediate)) };
+        var immediateIdol = TestContent.Item(BuiltInItemIds.ToxicIdol) with { Activator = new ToggleItemActivator(new ActionTiming(ActionTimingCategory.Immediate)) };
         var immediateStackId = InventoryActions.AddDivergentItem(harness.Components, player, immediateIdol);
         harness.LockPlayerUntil(1000);
 
@@ -459,7 +459,7 @@ public sealed class ToggleItemTests
         var player = harness.PlayerEntityId;
         harness.LockPlayerUntil(1000);
         var stacks = harness.Components.GetMultiPool<InventoryItemStackComponent>();
-        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, player, HealthPotion.Id, out var potionStack));
+        Assert.IsTrue(InventoryQueries.TryGetStack(stacks, player, BuiltInItemIds.HealthPotion, out var potionStack));
         var playerCommands = harness.Session.Commands.PlayerCommands;
         var plainIdolStackId = harness.PlainIdolStackId(player);
         var freeCastStackId = AddFreeCastIdol(harness, player);

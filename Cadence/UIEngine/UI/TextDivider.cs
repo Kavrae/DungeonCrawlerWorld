@@ -27,6 +27,9 @@ public sealed class TextDivider(FontService fontService, ElementPoolService elem
     private float _textPosition;
     private SpriteFontBase _font = null!;
 
+    /// <summary>The label's width in _font, measured when Configure sets them rather than every draw.</summary>
+    private float _textWidth;
+
     // fontSize's default can't reference FontChrome.DefaultFontSize directly -- a default
     // parameter value must be a compile-time constant, and FontChrome's fields are plain mutable
     // statics (see its own doc comment) -- so it resolves inside the method body instead.
@@ -37,14 +40,14 @@ public sealed class TextDivider(FontService fontService, ElementPoolService elem
         _widthFraction = widthFraction;
         _textPosition = textPosition;
         _font = FontService.GetFont(fontSize ?? FontChrome.DefaultFontSize);
+        _textWidth = _font.MeasureString(_text).X;
     }
 
     public override void DrawContent(GameTime gameTime)
     {
         var margin = (1f - _widthFraction) / 2f * ContentSize.X;
         var textStart = margin + _textPosition * ContentSize.X;
-        var textSize = _font.MeasureString(_text);
-        var textEnd = textStart + textSize.X;
+        var textEnd = textStart + _textWidth;
         var rightEdge = ContentSize.X - margin;
         var lineY = ContentAbsolutePosition.Y + (ContentSize.Y - LineHeight) / 2f;
 
@@ -62,7 +65,7 @@ public sealed class TextDivider(FontService fontService, ElementPoolService elem
             DrawLine(rightLineStart, rightEdge - rightLineStart, lineY);
         }
 
-        // LineHeight, not textSize.Y -- MeasureString's bounding box tightens to whichever
+        // LineHeight, not the measured height -- MeasureString's bounding box tightens to whichever
         // glyphs this label has, so labels with and without descenders would sit at different heights.
         // The font's line height keeps every label's baseline in one place and leaves room for a
         // descender inside this row, short of a scrollable parent's clip boundary.

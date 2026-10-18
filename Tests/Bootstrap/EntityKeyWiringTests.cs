@@ -1,8 +1,8 @@
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Bootstrap;
+using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.World;
@@ -28,8 +28,8 @@ public sealed class EntityKeyWiringTests
         var targetId = PlaceAt(world, ecs, result, targetPosition);
         ecs.ComponentManager.Merge(targetId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
         ecs.ComponentManager.Merge(casterId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
-        ecs.ComponentManager.Merge(casterId, new ActionInstanceComponent(QuickAttackAction.Id, overrideDefinition: null));
-        ecs.ComponentManager.Merge(casterId, new PendingActionActivationComponent(QuickAttackAction.Id, TestSelections.At(targetPosition)));
+        ecs.ComponentManager.Merge(casterId, new ActionInstanceComponent(BuiltInActionIds.QuickAttack, overrideDefinition: null));
+        ecs.ComponentManager.Merge(casterId, new PendingActionActivationComponent(BuiltInActionIds.QuickAttack, TestSelections.At(targetPosition)));
         ActionSource? damageSource = null;
         ecs.EventBus.Subscribe<EntityDamagedEvent>(damaged => damageSource = damaged.EntityId == targetId ? damaged.Source : damageSource);
 

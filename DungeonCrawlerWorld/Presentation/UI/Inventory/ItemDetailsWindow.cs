@@ -1,18 +1,15 @@
 using Engine.Tags;
-using FontStashSharp;
 using Game.Modules.Actions;
 using Game.Modules.Inventory;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 
-using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
-using Presentation.UI.Content;
+using Presentation.UI.Details;
 using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI;
-using UIEngine.UI.Chrome;
 
 namespace Presentation.UI.Inventory;
 
@@ -20,7 +17,9 @@ namespace Presentation.UI.Inventory;
 /// Persistent single-item details pane -- shows whatever item ItemDetailsWindowController last
 /// selected, updating in place rather than opening a second window when a different item is
 /// clicked (see that controller's own doc comment). Close-only (no minimize), the same shape as
-/// InventoryManagementWindow/SecondaryInventoryWindow, not InspectionWindow (minimize-only).
+/// InventoryManagementWindow/SecondaryInventoryWindow, not InspectionWindow (minimize-only). The
+/// sections it shares with Action Details are ActivatableDetailsSections'; the stack's blocker, the
+/// gold value and Item Details Comparison's colouring are its own.
 ///
 /// Sections, top to bottom, a divider (BuildDivider, a single TextDivider row -- plain when its
 /// label is omitted, mirroring InspectionWindowContent.BuildSpacer; labeled for the two sections
@@ -65,20 +64,7 @@ public sealed class ItemDetailsWindow(
     /// <summary>The stack id Configure is given for an item shown from its definition alone (a loot box reward whose stack is gone) -- there's no stack to compare, so Compare does nothing.</summary>
     public const uint NoStackInstanceId = 0;
 
-    private const float IconSize = 32f;
-    private const float RowHeight = 18f;
-    private const float RowTextGap = 6f;
-
-    /// <summary>Soft per-widget height cap for the target shape preview grid -- independent of this window's own overall MaximumSize/scroll safety net, specifically so one large-AreaSize Burst can't single-handedly blow out the window's height; TargetShapePreviewGeometry.ComputeCellSize shrinks cells to fit within this instead.</summary>
-    private const float TargetShapePreviewMaxHeight = 160f;
-
-    /// <summary>BuildTargetingRow divides its own width into this many equal zones -- text (left), the target shape grid (centered in the middle one), and an empty zone (right, reserved for now).</summary>
-    private const float TargetingRowZoneCount = 3f;
-
-    /// <summary>A generous, effectively-unlimited per-row height cap -- see InspectionWindowContent.UnboundedChildHeight's own doc comment for why this is needed: without it, a row tiled past the host window's own one-screen-tall content size gets silently clamped to nothing.</summary>
-    private const float UnboundedChildHeight = 10000f;
-
-    private static readonly Color BodyTextColor = Color.White;
+    private static readonly Color BodyTextColor = ActivatableDetailsSections.BodyTextColor;
 
     /// <summary>Item Details Comparison's own per-line coloring -- Better doubles as the "this item has a stat at least one other compared item doesn't" exclusive marker too (see ResolveLineColor's own doc comment), so the same color means "advantage" either way.</summary>
     private static readonly Color BetterColor = Color.LightGreen;
@@ -86,11 +72,7 @@ public sealed class ItemDetailsWindow(
     /// <summary>LightCoral, not IndianRed -- confirmed live that IndianRed's (205,92,92) read too dark/muted against the near-black panel background, hard to distinguish from BodyTextColor at a glance. LightCoral pairs naturally with BetterColor's own "Light" prefix and is meaningfully brighter (perceived luminance ~162 vs. ~126).</summary>
     private static readonly Color WorseColor = Color.LightCoral;
 
-    /// <summary>TextWindow.ContentFont defaults to DefaultFontSize only the first time a pooled instance is ever truly constructed -- a settable property, not reset by Build/Configure, so a recycled instance keeps whatever size its *previous* consumer last set. Cached once and assigned explicitly wherever a TextWindow row is built (BuildNameRow's own _nameFont included) so no row's size ever depends on what the pool handed back -- see HealthWindow._bodyFont's own doc comment for the same reasoning. Without this, a TextWindow instance the pool last handed to BuildNameRow (set to _nameFont) could come back for an ordinary Effects/Activation/Description/Tags row still carrying the doubled name size.</summary>
-    private readonly SpriteFontBase _bodyFont = fontService.GetFont(FontChrome.DefaultFontSize);
-
-    /// <summary>See _bodyFont's own doc comment -- BuildNameRow's own doubled-size counterpart.</summary>
-    private readonly SpriteFontBase _nameFont = fontService.GetFont(GameFontChrome.ItemDetailsNameFontSize);
+    private readonly ActivatableDetailsSections _sections = new(elementPoolService, fontService, actionCatalog, gameplayTags);
 
     private ItemDefinition? _definition;
     private float _contentWidth;
@@ -188,6 +170,7 @@ public sealed class ItemDetailsWindow(
         Rebuild();
     }
 
+
     private void Rebuild()
     {
         ElementPoolService.CloseAllChildren(this);
@@ -210,230 +193,33 @@ public sealed class ItemDetailsWindow(
         // the caller actually asked for.
         var width = _contentWidth - ContentPadding.X * 2;
 
-        BuildNameRow(_definition, width);
+        _sections.BuildNameRow(this, _definition, width);
 
         if (ToggleText.IsLit(_definition))
         {
-            BuildFixedTextLine(width, ToggleText.Active, GameWindowPalette.ToggleActiveText);
+            _sections.BuildFixedTextLine(this, width, ToggleText.Active, GameWindowPalette.ToggleActiveText);
         }
 
         _displayedBlocker = ComputeBlocker();
         if (_displayedBlocker != ActivationBlocker.None)
         {
-            BuildFixedTextLine(width, ActivationBlockerText.Describe(_displayedBlocker), ActivationBlockerText.ReasonColor);
+            _sections.BuildFixedTextLine(this, width, ActivationBlockerText.Describe(_displayedBlocker), ActivationBlockerText.ReasonColor);
         }
 
-        // A toggle's own Effects are what it holds while it is on.
-        BuildDivider(width, _definition.Toggle is null ? "Effects" : "While on", 0.125f);
-        BuildEffectsSection(_definition, width);
-
-        if (CostText.Lines(_definition, gameplayTags).ToList() is { Count: > 0 } costLines)
-        {
-            BuildDivider(width, "Cost", 0.125f);
-            foreach (var line in costLines)
-            {
-                BuildFixedTextLine(width, line, BodyTextColor);
-            }
-        }
+        _sections.BuildEffectsSection(this, _definition, width, ResolveLineColor);
+        _sections.BuildCostSection(this, _definition, width);
 
         if (_definition.Activator is { } activator)
         {
-            BuildDivider(width, "Activation", 0.125f);
-            BuildActivationSection(activator, width);
+            _sections.BuildActivationSection(this, activator, width, ResolveLineColor, ComputeShapeHighlight);
         }
 
-        if (!string.IsNullOrWhiteSpace(_definition.Description))
-        {
-            BuildDivider(width);
-            BuildWrappingTextLine(width, _definition.Description);
-        }
+        _sections.BuildDescriptionSection(this, _definition, width);
 
-        BuildDivider(width);
-        BuildValueRow(_definition.GoldValue, width);
+        _sections.BuildDivider(this, width);
+        _sections.BuildIconTextRow(this, "Currency-Gold", "G", Color.Gold, $"{_definition.GoldValue}G", width);
 
-        BuildDivider(width);
-        BuildWrappingTextLine(width, FormatTagDisplayNames(_definition.Tags));
-    }
-
-    private string FormatTagDisplayNames(GameplayTagSet tags)
-    {
-        var displayNames = new List<string>(tags.Count);
-        foreach (var tag in tags)
-        {
-            displayNames.Add(gameplayTags.GetDisplayName(tag));
-        }
-
-        return string.Join(", ", displayNames);
-    }
-
-    /// <summary>Item's base Gold worth (see ItemDefinition.GoldValue's own doc comment) -- same icon+text row shape BuildNameRow uses, but with a fixed RowHeight text line (no doubled name font) and the Currency-Gold sprite/glyph instead of the item's own.</summary>
-    private void BuildValueRow(int value, float width)
-    {
-        var rowContentHeight = System.Math.Max(IconSize, RowHeight);
-        var rowHeight = rowContentHeight + ContentPadding.Y * 2;
-        var row = ElementPoolService.CreateElement<Window>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, rowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        AddChild(row);
-
-        var icon = ElementPoolService.CreateElement<ItemIconElement>(row, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, (rowContentHeight - IconSize) / 2f), Size = new Vector2(IconSize, IconSize), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        icon.Configure("Currency-Gold", "G", Color.Gold, new Vector2(IconSize, IconSize));
-        row.AddChild(icon);
-
-        var textX = IconSize + RowTextGap;
-        var availableWidth = width - ContentPadding.X * 2;
-        var valueLine = ElementPoolService.CreateElement<TextWindow>(row, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(textX, (rowContentHeight - RowHeight) / 2f), Size = new Vector2(System.Math.Max(0f, availableWidth - textX), RowHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-            Text = new TextOptions { Text = $"{value}G", TextColor = BodyTextColor },
-        });
-        valueLine.ContentFont = _bodyFont; // See _bodyFont's own doc comment.
-        row.AddChild(valueLine);
-    }
-
-    private void BuildNameRow(ItemDefinition definition, float width)
-    {
-        // Row content height is the taller of the icon and the (now doubled) name text -- no
-        // longer just IconSize, since _nameFont's own line height can exceed it. row's outer
-        // width is a hard constraint (must equal width exactly, matching every other top-level
-        // row so this window's own WrapContent measurement stays consistent); its outer height is
-        // not similarly constrained, so it grows by ContentPadding on top and bottom instead --
-        // see HealthWindow.AddBarRow's own doc comment for the same reasoning.
-        var nameLineHeight = _nameFont.LineHeight;
-        var rowContentHeight = System.Math.Max(IconSize, nameLineHeight);
-        var rowHeight = rowContentHeight + ContentPadding.Y * 2;
-        var row = ElementPoolService.CreateElement<Window>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, rowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        AddChild(row);
-
-        var icon = ElementPoolService.CreateElement<ItemIconElement>(row, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, (rowContentHeight - IconSize) / 2f), Size = new Vector2(IconSize, IconSize), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        icon.Configure(definition.SpriteName, definition.Glyph, definition.GlyphColor, new Vector2(IconSize, IconSize));
-        row.AddChild(icon);
-
-        // row's own content width is width - ContentPadding*2 (see the width comment above), not
-        // the outer width -- width is a hard constraint, so the text shrinks to fit instead.
-        var availableWidth = width - ContentPadding.X * 2;
-        var textX = IconSize + RowTextGap;
-        var nameLine = ElementPoolService.CreateElement<TextWindow>(row, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(textX, (rowContentHeight - nameLineHeight) / 2f), Size = new Vector2(System.Math.Max(0f, availableWidth - textX), nameLineHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-            Text = new TextOptions { Text = definition.Name, TextColor = BodyTextColor },
-        });
-        nameLine.ContentFont = _nameFont; // Must match the font Size/nameLineHeight above were computed for -- see _nameFont's own doc comment for why this can't be left to TextWindow's own default.
-        row.AddChild(nameLine);
-    }
-
-    private void BuildEffectsSection(ItemDefinition definition, float width)
-    {
-        var stats = ItemComparisonStatExtraction.ExtractEffectStats(definition, gameplayTags);
-        foreach (var stat in stats)
-        {
-            BuildFixedTextLine(width, stat.DisplayText, ResolveLineColor(stat));
-        }
-
-        if (stats.Count == 0)
-        {
-            BuildFixedTextLine(width, "None", BodyTextColor);
-        }
-    }
-
-    private void BuildActivationSection(IActionActivator activator, float width)
-    {
-        BuildTargetingRow(activator, width);
-    }
-
-    /// <summary>
-    /// Three equal-width zones: targeting shape/range caption plus every Timing/per-activator-type
-    /// line, stacked in the left zone; the target shape preview grid (see
-    /// TargetShapePreviewGeometry/TargetShapePreviewElement for the shape math/rendering) centered
-    /// within the middle zone; the right zone deliberately left empty for now. Vertically centered
-    /// against the taller of the text column/grid. Both are sized entirely up front (line count *
-    /// RowHeight for the text column; columns/rows/cellSize from the same TargetingSpec for the
-    /// grid, capped to the middle zone's own width) before this row -- and everything inside it --
-    /// is created, so none of it risks the Fixed-vs-WrapContent shrink-feedback pitfall the window
-    /// itself hit earlier.
-    /// </summary>
-    private void BuildTargetingRow(IActionActivator activator, float width)
-    {
-        var stats = ItemComparisonStatExtraction.ExtractActivatorStats(activator, actionCatalog);
-
-        // row's own content width is width - ContentPadding*2 (width is a hard constraint,
-        // matching every other top-level row), so the three zones divide that, not the outer width.
-        var availableWidth = width - ContentPadding.X * 2;
-        var zoneWidth = availableWidth / TargetingRowZoneCount;
-
-        var offsets = TargetShapePreviewGeometry.ComputeOffsets(activator.Targeting);
-        var (minX, minY, columns, rows) = TargetShapePreviewGeometry.ComputeBounds(offsets);
-        var cellSize = TargetShapePreviewGeometry.ComputeCellSize(columns, rows, zoneWidth, TargetShapePreviewMaxHeight);
-        var gridWidth = columns * cellSize;
-        var gridHeight = rows * cellSize;
-
-        var textColumnHeight = stats.Count * RowHeight;
-        var rowHeight = System.Math.Max(textColumnHeight, gridHeight);
-
-        // row's outer height is not externally constrained (unlike its width), so it grows by
-        // ContentPadding on top and bottom instead -- rowHeight itself still means row's own
-        // content height throughout the rest of this method (text/grid vertical centering).
-        var row = ElementPoolService.CreateElement<Window>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, rowHeight + ContentPadding.Y * 2), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        AddChild(row);
-
-        for (var i = 0; i < stats.Count; i++)
-        {
-            var line = ElementPoolService.CreateElement<TextWindow>(row, new ElementOptions
-            {
-                Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, i * RowHeight), Size = new Vector2(zoneWidth, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
-                Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-                Content = new ElementContentOptions { ContentColor = Color.Transparent },
-                Text = new TextOptions { Text = stats[i].DisplayText, TextColor = ResolveLineColor(stats[i]) },
-            });
-            line.ContentFont = _bodyFont; // See _bodyFont's own doc comment.
-            row.AddChild(line);
-        }
-
-        var gridX = zoneWidth + (zoneWidth - gridWidth) / 2f;
-        var preview = ElementPoolService.CreateElement<TargetShapePreviewElement>(row, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(gridX, (rowHeight - gridHeight) / 2f), Size = new Vector2(gridWidth, gridHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        preview.Configure(offsets, minX, minY, cellSize, ComputeShapeHighlight(activator.Targeting, offsets));
-        row.AddChild(preview);
+        _sections.BuildTagsSection(this, _definition, width);
     }
 
     /// <summary>
@@ -537,48 +323,5 @@ public sealed class ItemDetailsWindow(
             ComparisonHighlight.Worse => WorseColor,
             _ => BodyTextColor,
         };
-    }
-
-    private void BuildFixedTextLine(float width, string text, Color color)
-    {
-        var line = ElementPoolService.CreateElement<TextWindow>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, RowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-            Text = new TextOptions { Text = text, TextColor = color },
-        });
-        line.ContentFont = _bodyFont; // See _bodyFont's own doc comment.
-        AddChild(line);
-    }
-
-    /// <summary>Description/Tags -- length varies per item, so these wrap and auto-size rather than clipping at a fixed RowHeight (mirrors InspectionWindowContent.BuildDescriptionRow).</summary>
-    private void BuildWrappingTextLine(float width, string text)
-    {
-        var line = ElementPoolService.CreateElement<TextWindow>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.WrapContent },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-            Text = new TextOptions { Text = text, TextColor = BodyTextColor },
-        });
-        line.ContentFont = _bodyFont; // See _bodyFont's own doc comment.
-        AddChild(line);
-    }
-
-    /// <summary>Section-opening divider -- a single TextDivider row, always 95% width, in GameWindowPalette.HeaderTextColor. Plain (mirroring InspectionWindowContent.BuildSpacer) when label/textPosition are left at their defaults; labeled, with the line broken at textPosition, when a section has its own label (Effects/Activation).</summary>
-    private void BuildDivider(float width, string label = "", float textPosition = 0f)
-    {
-        var divider = ElementPoolService.CreateElement<TextDivider>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, RowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        AddChild(divider);
-        divider.Configure(label, GameWindowPalette.HeaderTextColor, 0.95f, textPosition);
     }
 }

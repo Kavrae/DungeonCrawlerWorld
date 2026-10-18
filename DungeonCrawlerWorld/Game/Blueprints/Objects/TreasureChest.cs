@@ -2,7 +2,6 @@ using Game.Modules.Containers.Components;
 using Game.Modules.Currency.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
 using Microsoft.Xna.Framework;
@@ -42,18 +41,18 @@ public static class TreasureChest
     private const int MinimumStartingCredits = 0;
     private const int MaximumStartingCredits = 1;
 
-    /// <summary>Built once via each item's own pure, side-effect-free Build() factory, the same set TemporaryNpcLootGrant draws from -- no ItemCatalog injection needed just to read each item's Id.</summary>
-    private static readonly ItemDefinition[] LootTable =
+    /// <summary>The items a chest can hold, by their BuiltInItemIds Guid -- the same set TemporaryNpcLootGrant draws from.</summary>
+    private static readonly Guid[] LootTable =
     [
-        HealthPotion.Build(),
-        ManaPotion.Build(),
-        HotkeyExpansionPotion.Build(),
-        DamagePotion.Build(),
-        ToxicPotion.Build(),
-        ToxicIdol.Build(),
-        ScrollOfHealing.Build(),
-        ScrollOfTorch.Build(),
-        WandOfFireball.Build(),
+        BuiltInItemIds.HealthPotion,
+        BuiltInItemIds.ManaPotion,
+        BuiltInItemIds.HotkeyExpansionPotion,
+        BuiltInItemIds.DamagePotion,
+        BuiltInItemIds.ToxicPotion,
+        BuiltInItemIds.ToxicIdol,
+        BuiltInItemIds.ScrollOfHealing,
+        BuiltInItemIds.ScrollOfTorch,
+        BuiltInItemIds.WandOfFireball,
     ];
 
     public static readonly BlueprintDefinition Definition = new(Id, Name)
@@ -80,10 +79,10 @@ public static class TreasureChest
         var itemCount = context.Rolls.Next(MinimumItemCount, MaximumItemCount + 1);
         for (var i = 0; i < itemCount; i++)
         {
-            var item = LootTable[context.Rolls.Next(0, LootTable.Length)];
+            var itemId = LootTable[context.Rolls.Next(0, LootTable.Length)];
             var maximumQuantity = Math.Min(MaximumStackQuantity, (int)InventoryActions.GetEffectiveMaxStackSize(componentManager, entityId));
             var quantity = (ushort)context.Rolls.Next(MinimumStackQuantity, maximumQuantity + 1);
-            InventoryActions.AddItem(componentManager, entityId, item.Id, quantity);
+            InventoryActions.AddItem(componentManager, entityId, itemId, quantity);
         }
     }
 }

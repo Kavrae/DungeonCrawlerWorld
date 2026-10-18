@@ -1,0 +1,5 @@
+{"fmt":1,"table":"Auras"}
+{"id":"xKH22S6LOk-cHQAAAAADBg","n":"Toxic Aura","gc":4278215680,"fx":[{"e":[{"$":"StatusEffectGrant","ty":"Poison","md":"TopUpTo"}]}]}
+{"id":"xKH22S6LOk-cHQAAAAADCQ","n":"Lantern","gc":4292016890}
+{"id":"xKH22S6LOk-cHQAAAAADAg","n":"Poison","gc":4278215680,"fx":[{"e":[{"$":"StatusEffectGrant","ty":"Poison","md":"TopUpTo"}]}]}
+{"id":"xKH22S6LOk-cHQAAAAADAw","n":"Light"}

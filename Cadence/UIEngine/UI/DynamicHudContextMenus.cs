@@ -10,10 +10,10 @@ namespace UIEngine.UI;
 /// </summary>
 public static class DynamicHudContextMenus
 {
-    public static IReadOnlyList<ContextMenuOption> BuildCloseMenu(Window window, UiLayerStack layers) =>
+    public static IReadOnlyList<DropdownOption> BuildCloseMenu(Window window, UiLayerStack layers) =>
     [
-        new ContextMenuOption("Close", null, Enabled: true, window.Close),
-        new ContextMenuOption("Close All", null, Enabled: true, () => CloseAll(layers)),
+        new DropdownOption("Close", null, Enabled: true, window.Close),
+        new DropdownOption("Close All", null, Enabled: true, () => CloseAll(layers)),
     ];
 
     /// <summary>Makes right-clicking window open its own Close/Close All menu.</summary>

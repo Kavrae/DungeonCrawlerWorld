@@ -6,7 +6,6 @@ using Game.Blueprints.Composites;
 using Game.Bootstrap;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.Core.Components;
 using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
@@ -38,7 +37,7 @@ public sealed class FairyMagicMissileTests
             for (var frame = start; frame < start + frameCount; frame++)
             {
                 Build.EcsContext.SystemManager.Update(new EngineTime(frameDuration * frame, frameDuration, false, frame));
-                var isWindingUp = windups.TryGetReadonly(FairyId, out var windup) && windup.Activatable == ActivatableReference.Action(MagicMissileAction.Id);
+                var isWindingUp = windups.TryGetReadonly(FairyId, out var windup) && windup.Activatable == ActivatableReference.Action(BuiltInActionIds.MagicMissile);
                 if (isWindingUp && !wasWindingUp)
                 {
                     casts.Add(windup.Selection.Mode);
@@ -80,7 +79,7 @@ public sealed class FairyMagicMissileTests
         var session = BuildSession(new Vector3Int(4, 0, 0));
 
         Assert.AreEqual(15f, session.Components.GetPackedPool<ManaComponent>().GetReadonly(session.FairyId).MaximumMana);
-        Assert.IsTrue(EntityActions.For(session.Components, session.Build.Context.Actions, session.Build.Context.Definitions).TryGetEffectiveAction(session.FairyId, MagicMissileAction.Id, out var magicMissile));
+        Assert.IsTrue(EntityActions.For(session.Components, session.Build.Context.Actions, session.Build.Context.Definitions).TryGetEffectiveAction(session.FairyId, BuiltInActionIds.MagicMissile, out var magicMissile));
         Assert.AreEqual(ActionTimingCategory.Delayed, magicMissile.Activator.Timing.Category);
         Assert.AreEqual(8, magicMissile.Activator.Targeting.Range);
     }

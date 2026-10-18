@@ -9,6 +9,7 @@ using Game.Modules.Auras;
 using Game.Modules.Class.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Crawler.Components;
+using Game.Modules.Inventory;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.World;
@@ -66,6 +67,7 @@ public sealed class EntityFactory
         BlueprintRegistry definitions,
         AuraCatalog auras,
         ActionCatalog actions,
+        ItemCatalog items,
         World.World world,
         EntityManager entityManager,
         ComponentManager componentManager,
@@ -77,7 +79,7 @@ public sealed class EntityFactory
         ulong runtimeSeed = 0)
     {
         _definitions = definitions;
-        _builder = new EntityBuilder(definitions, auras, actions, entityManager.Keys);
+        _builder = new EntityBuilder(definitions, auras, actions, items, entityManager.Keys);
         _world = world;
         _entityManager = entityManager;
         _componentManager = componentManager;

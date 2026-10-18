@@ -8,16 +8,16 @@ namespace UIEngine.UI.Chrome;
 public static class PopupChrome
 {
     /// <summary>
-    /// Generous ceiling for ContextMenu's own Fixed-mode MaximumSize -- comfortably larger than any
+    /// Generous ceiling for Dropdown's own Fixed-mode MaximumSize -- comfortably larger than any
     /// realistic option list could ever need (the same "generous ceiling" reasoning
     /// NotificationChrome.FolderMaximumSize already uses for its own WrapContent Folder). Fixed
     /// mode's own size clamp (RecalculateFixedSize) reads MaximumSize as whatever Build last set
-    /// it to and never re-derives it later -- a parent-null Element (see ContextMenu's own doc
+    /// it to and never re-derives it later -- a parent-null Element (see Dropdown's own doc
     /// comment on why it must stay top-level) has no parent ContentSize to fall back on either,
     /// so without an explicit MaximumSize here it defaults to (0,0) and every later Show/SetBounds
     /// call gets silently clamped down to nothing, however large a size it actually asks for.
     /// </summary>
-    public static Vector2 ContextMenuMaximumSize = new(600, 2000);
+    public static Vector2 DropdownMaximumSize = new(600, 2000);
 
     /// <summary>Fixed width cap for the shared TooltipController's own Tooltip (every grid/ability hover popup); height auto-grows with content. The one value every consumer passes to TooltipController.Show.</summary>
     public static Vector2 HoverPopupMaximumSize = new(225, 10000f);

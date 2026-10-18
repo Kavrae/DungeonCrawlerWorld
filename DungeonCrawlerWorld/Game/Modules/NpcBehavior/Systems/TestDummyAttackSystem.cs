@@ -2,7 +2,6 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.NpcBehavior.Components;
 
@@ -30,14 +29,16 @@ public sealed class TestDummyAttackSystem : ISystem
     private readonly EntityStripeSet _stripeSet;
 
     /// <summary>Power Attack's Adjacent ring, which needs no aimed tile.</summary>
-    private static readonly TargetingSpec PowerAttackTargeting = PowerAttackAction.Build().Activator.Targeting;
+    private readonly TargetingSpec _powerAttackTargeting;
 
     public TestDummyAttackSystem(
         PackedComponentPool<TestDummyComponent> testDummies,
         DirectComponentPool<TransformComponent> transformPool,
         PackedComponentPool<ActionLockComponent> actionLocks,
-        PackedComponentPool<PendingActionActivationComponent> pendingActivations)
+        PackedComponentPool<PendingActionActivationComponent> pendingActivations,
+        TargetingSpec powerAttackTargeting)
     {
+        _powerAttackTargeting = powerAttackTargeting;
         _testDummies = testDummies;
         _transformPool = transformPool;
         _actionLocks = actionLocks;
@@ -55,7 +56,7 @@ public sealed class TestDummyAttackSystem : ISystem
                 continue;
             }
 
-            _pendingActivations.Merge(entityId, new PendingActionActivationComponent(PowerAttackAction.Id, TargetSelection.Ground(transform.Position, PowerAttackTargeting)));
+            _pendingActivations.Merge(entityId, new PendingActionActivationComponent(BuiltInActionIds.PowerAttack, TargetSelection.Ground(transform.Position, _powerAttackTargeting)));
         }
     }
 }

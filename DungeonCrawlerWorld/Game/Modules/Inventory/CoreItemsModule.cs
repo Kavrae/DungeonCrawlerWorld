@@ -1,14 +1,14 @@
 using Engine.Modules;
+using Game.Modules.Actions;
 using Game.Modules.Auras;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.Poison;
 
 namespace Game.Modules.Inventory;
 
 /// <summary>
-/// Registers the first real, permanent item catalog -- race/class-agnostic items any entity can
-/// carry. See PlayerKit for where these are granted. Mirrors CoreActionsModule/
-/// AchievementModule's static Definitions list, one file per item under Definitions/.
+/// Registers the built-in items -- race/class-agnostic items any entity can carry -- from the master manifest's Items
+/// table, in file order. See PlayerKit for where these are granted, by their BuiltInItemIds. A disabled item's
+/// replacement is registered as its redirect.
 /// </summary>
 public sealed class CoreItemsModule : IGameModule
 {
@@ -16,32 +16,20 @@ public sealed class CoreItemsModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [AurasModule.ModuleId, PoisonModule.ModuleId];
-
-    private static readonly IReadOnlyList<Func<ItemDefinition>> Definitions = [
-        HealthPotion.Build,
-        CurePoisonPotion.Build,
-        ManaPotion.Build,
-        HotkeyExpansionPotion.Build,
-        DamagePotion.Build,
-        ToxicPotion.Build,
-        ToxicIdol.Build,
-        ScrollOfHealing.Build,
-        ScrollOfTorch.Build,
-        WandOfFireball.Build,
-        ImmunityTestPotion.Build,
-        ResistanceTestPotion.Build,
-        ModifierTestPotions.BuildPlenty,
-        ModifierTestPotions.BuildThrift,
-        ModifierTestPotions.BuildVenom,
-        ModifierTestPotions.BuildRadiance,
-    ];
+    /// <summary>Inventory owns the item codec, Actions the activators', Auras the aura sources items grant, Poison the status effect they apply.</summary>
+    public IReadOnlyList<Guid> Requires { get; } = [InventoryModule.ModuleId, ActionsModule.ModuleId, AurasModule.ModuleId, PoisonModule.ModuleId];
 
     public void Configure(GameModuleContext context)
     {
-        foreach (var build in Definitions)
+        var content = context.Content;
+        foreach (var item in content.Items)
         {
-            context.Items.Register(build());
+            context.Items.Register(item);
+        }
+
+        foreach (var (from, to) in content.ItemRedirects)
+        {
+            context.Items.AddRedirect(from, to);
         }
     }
 

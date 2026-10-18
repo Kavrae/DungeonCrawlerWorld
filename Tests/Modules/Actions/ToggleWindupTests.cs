@@ -11,12 +11,10 @@ using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.Mana.Components;
 using Game.Spawning;
 using Game.World;
@@ -68,7 +66,7 @@ public sealed class ToggleWindupTests
         {
             var stacks = new List<InventoryItemStackComponent>();
             InventoryQueries.CopyStacksForEntity(Components.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-            return stacks.Where(stack => stack.ItemDefinitionId == ToxicIdol.Id).ToList();
+            return stacks.Where(stack => stack.ItemDefinitionId == BuiltInItemIds.ToxicIdol).ToList();
         }
 
         public int LitCount(int entityId) =>
@@ -150,7 +148,7 @@ public sealed class ToggleWindupTests
         harness.Frame(5);
 
         Assert.IsTrue(mapView.TryGetChargingAction(harness.PlayerEntityId, out var charging));
-        Assert.AreEqual(ToxicIdol.Build().Glyph, charging.Glyph);
+        Assert.AreEqual(TestContent.Item(BuiltInItemIds.ToxicIdol).Glyph, charging.Glyph);
         Assert.IsGreaterThan(0f, mapView.GetChargeFraction(harness.PlayerEntityId));
     }
 
@@ -206,7 +204,7 @@ public sealed class ToggleWindupTests
         harness.QueueItem(harness.IdolStackId);
         harness.Frame(3);
 
-        harness.QueueAction(DodgeAction.Id);
+        harness.QueueAction(BuiltInActionIds.Dodge);
         harness.Frame();
 
         Assert.IsFalse(harness.Windups.Has(harness.PlayerEntityId));
@@ -221,34 +219,34 @@ public sealed class ToggleWindupTests
     {
         var harness = Build();
         var player = harness.PlayerEntityId;
-        var delayedAura = ToxicAuraAction.Build() with
+        var delayedAura = TestContent.Action(BuiltInActionIds.ToxicAura) with
         {
             Activator = new DirectAction(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Delayed)),
             Toggle = ToggleSpec.HoldsEffectsOnly,
             ActivationEffects = [new Effect([new ManaDrain(2)])],
         };
-        ActionGrantEffects.Grant(harness.Components, harness.Session.Catalogs.ActionCatalog, player, ToxicAuraAction.Id, overrideDefinition: delayedAura);
+        ActionGrantEffects.Grant(harness.Components, harness.Session.Catalogs.ActionCatalog, player, BuiltInActionIds.ToxicAura, overrideDefinition: delayedAura);
         harness.Components.GetPackedPool<ManaComponent>().TryUpdate(player, static (ref ManaComponent mana) =>
         {
             mana.MaximumMana = 100;
             mana.CurrentMana = 50;
         });
 
-        harness.QueueAction(ToxicAuraAction.Id);
+        harness.QueueAction(BuiltInActionIds.ToxicAura);
         harness.Frame();
         var manaAtWindupStart = harness.Mana;
 
-        Assert.IsFalse(harness.IsToggleActionOn(ToxicAuraAction.Id));
-        Assert.AreEqual(ActivatableReference.Action(ToxicAuraAction.Id), harness.Windups.GetReadonly(player).Activatable);
+        Assert.IsFalse(harness.IsToggleActionOn(BuiltInActionIds.ToxicAura));
+        Assert.AreEqual(ActivatableReference.Action(BuiltInActionIds.ToxicAura), harness.Windups.GetReadonly(player).Activatable);
         Assert.IsLessThan(49f, manaAtWindupStart, "Paid when the windup starts.");
 
-        harness.FrameUntil(() => harness.IsToggleActionOn(ToxicAuraAction.Id));
+        harness.FrameUntil(() => harness.IsToggleActionOn(BuiltInActionIds.ToxicAura));
         Assert.IsGreaterThanOrEqualTo(manaAtWindupStart, harness.Mana, "Nothing more is taken when it goes on.");
 
         harness.Frame(60);
-        harness.QueueAction(ToxicAuraAction.Id);
+        harness.QueueAction(BuiltInActionIds.ToxicAura);
         harness.Frame();
-        Assert.IsFalse(harness.IsToggleActionOn(ToxicAuraAction.Id), "Turning off is at once.");
+        Assert.IsFalse(harness.IsToggleActionOn(BuiltInActionIds.ToxicAura), "Turning off is at once.");
         Assert.IsFalse(harness.Windups.Has(player));
     }
 
@@ -257,27 +255,27 @@ public sealed class ToggleWindupTests
     {
         var harness = Build();
         var player = harness.PlayerEntityId;
-        var delayedAura = ToxicAuraAction.Build() with
+        var delayedAura = TestContent.Action(BuiltInActionIds.ToxicAura) with
         {
             Activator = new DirectAction(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Delayed)),
             Toggle = ToggleSpec.HoldsEffectsOnly,
             ActivationEffects = [new Effect([new ManaDrain(10)])],
         };
-        ActionGrantEffects.Grant(harness.Components, harness.Session.Catalogs.ActionCatalog, player, ToxicAuraAction.Id, overrideDefinition: delayedAura);
+        ActionGrantEffects.Grant(harness.Components, harness.Session.Catalogs.ActionCatalog, player, BuiltInActionIds.ToxicAura, overrideDefinition: delayedAura);
         harness.Components.GetPackedPool<ManaComponent>().TryUpdate(player, static (ref ManaComponent mana) =>
         {
             mana.MaximumMana = 100;
             mana.CurrentMana = 50;
         });
 
-        harness.QueueAction(ToxicAuraAction.Id);
+        harness.QueueAction(BuiltInActionIds.ToxicAura);
         harness.Frame();
         Assert.IsTrue(harness.Session.Commands.PlayerCommands.TryCancelWindup(harness.CurrentFrame));
         var manaAfterCancel = harness.Mana;
 
         harness.RunPastAWindup();
 
-        Assert.IsFalse(harness.IsToggleActionOn(ToxicAuraAction.Id));
+        Assert.IsFalse(harness.IsToggleActionOn(BuiltInActionIds.ToxicAura));
         Assert.IsLessThan(41f, manaAfterCancel, "The activation effects are not given back.");
     }
 }

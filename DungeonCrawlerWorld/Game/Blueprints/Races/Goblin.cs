@@ -2,7 +2,6 @@ using Engine.ECS.Systems;
 using Game.Blueprints.NPCs;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
@@ -55,18 +54,13 @@ public static class Goblin
     /// <summary>Permanent racial toughness -- reduces all damage this goblin takes by 1, regardless of source (melee, ranged, status effects, contact hazards -- see HealthDamage.Apply, the single chokepoint IncomingDamage is consumed at).</summary>
     private const float DamageReductionAmount = -1f;
 
-    /// <summary>One override shared by every creature of this race: an ActionDefinition is never changed in place, only replaced, and building it per creature was most of what a creature allocated.</summary>
-    private static readonly ActionDefinition QuickAttackOverride = ActionOverrideEffects.OverrideFlatDamage(QuickAttackAction.Build(), QuickAttackDamage);
-
-    /// <inheritdoc cref="QuickAttackOverride"/>
-    private static readonly ActionDefinition PowerAttackOverride = ActionOverrideEffects.OverrideFlatDamage(PowerAttackAction.Build(), PowerAttackDamage);
-
     /// <summary>What every creature of this race can do -- held on its race definition, not on each creature (see ActionGrant). Dodge has no override: it rolls its catalog definition unchanged.</summary>
+    /// <remarks>Each override is made from the session's own definition and shared by every creature of this race (ActionGrant.Derived): an ActionDefinition is never changed in place, only replaced, and building it per creature was most of what a creature allocated.</remarks>
     public static readonly ActionGrant[] ActionGrants =
     [
-        new(QuickAttackAction.Id, QuickAttackOverride),
-        new(PowerAttackAction.Id, PowerAttackOverride),
-        new(DodgeAction.Id),
+        ActionGrant.Derived(BuiltInActionIds.QuickAttack, "Goblin.QuickAttack", static action => ActionOverrideEffects.OverrideFlatDamage(action, QuickAttackDamage)),
+        ActionGrant.Derived(BuiltInActionIds.PowerAttack, "Goblin.PowerAttack", static action => ActionOverrideEffects.OverrideFlatDamage(action, PowerAttackDamage)),
+        new(BuiltInActionIds.Dodge),
     ];
 
     public static readonly BlueprintDefinition Definition = new(Id, Name)
@@ -86,7 +80,7 @@ public static class Goblin
         componentManager.Merge(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
 
-        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, context.Rolls);
+        TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, context.Rolls, context.Items);
         StartingCurrencyGrant.GrantRandomStartingGoldAndCredits(componentManager, entityId, context.Rolls);
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);

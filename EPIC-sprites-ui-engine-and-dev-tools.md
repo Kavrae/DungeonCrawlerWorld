@@ -1,6 +1,6 @@
 # Epic: Sprites out of Game, a UIEngine, and the Engine IDE
 
-(Epic -- a plan of plans. Child 1 landed 2026-10-11, child 2 2026-10-13, child 3 2026-10-14, child 4 2026-10-14 (ahead of child 5 by choice); the rest are not started. Each child below gets its own
+(Epic -- a plan of plans. Child 1 landed 2026-10-11, child 2 2026-10-13, child 3 2026-10-14, child 4 2026-10-14 (ahead of child 5 by choice), child 5 2026-10-18 (view-only tabs; editing moved to TODO.md); the rest are not started. Each child below gets its own
 `PLAN-*.md` when it starts, and is phased and tested in-game like any other plan. Decided 2026-10-11.)
 
 ## Why
@@ -102,12 +102,16 @@ Each is its own plan; numbering is the order. Arrows are hard dependencies.
    font sizes split by reader.
 5. **The IDE shell and its Actions & Items tab** (→4). Planned 2026-10-16 in `PLAN-ide-shell-and-actions-items-tab.md`, with
    every decision confirmed: Cadence Workshop, separate Items, Actions and Auras tabs, and a Phase 0 split of the
-   repository into engine and game roots. Not started. The IDE executable: a tab host on UIEngine +
+   repository into engine and game roots. Landed 2026-10-18 with view-only Items, Actions and Auras tabs, the editor controls and the bottom panel; editing (the plan's Phases 5-7) moved to TODO.md as "Workshop: edit Items", "Workshop: edit Actions" and "Workshop: edit Auras" (Engine, High). The IDE executable: a tab host on UIEngine +
    Presentation + a Game build, the place every later tool goes. Its first tab edits actions and items and
    reuses Item Details and `TargetShapePreviewElement`/`TargetShapePreviewGeometry` as they are. Pairs with
    the data-driven actions and items plan (`PLAN-data-driven-actions-and-items.md`), which supplies the
    content format it edits. The smaller tool, so it proves the split first.
-6. **Map tab** (→3, →5). Draws with child 3's renderer over an authored layout's `IMapViewQuery`. Needs
+6. **Map tab** (→3, →5). Planned 2026-10-18 in `PLAN-map-areas-and-map-tab.md`, **read-only**: named map areas
+   (rows of symbols plus a legend, explicit entity placements, markers), palettes, random pools and fixed placements as
+   content, stamped into `TestMapBuilder.Plan`; the starting area becomes the first area; the tab previews areas, pools
+   and a generated neighborhood through real builds. Editing is TODO.md's "Workshop: edit map areas" (Engine, High).
+   Draws with child 3's renderer over an authored layout's `IMapViewQuery`. Needs
    the hand-placed layout format in Game and its merge into `NeighborhoodPlan`, which belongs with "Real map
    generation -- neighborhood templates" (TODO.md, Game, High): the tab authors layout templates and fixed
    pieces; "Composite buildings" (TODO.md, Game) are its first multi-entity placements.

@@ -44,17 +44,13 @@ public static class ElementFactoryRegistry
         var commands = gameSession.Commands;
         var inventoryServices = new InventoryServices(itemCatalog, views.InventoryView, views.ShopView, views.CurrencyView, views.ActionStateView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, catalogs.GameplayTags);
 
+        uiEngineContext.RegisterFrameworkElementFactories(contextMenuController, cursorTextContent);
+
         // Supplies the fontService/elementPool/labelRenderer trio every plain registration repeats, so
         // each call site below only has to spell out its own type-specific extras.
         void Register<TElement>(Func<FontService, ElementPoolService, LabelRenderer, TElement> factory)
             where TElement : Element
             => elementPool.RegisterFactory(() => factory(uiEngineContext.FontService, elementPool, uiEngineContext.LabelRenderer));
-
-        Register<Window>((font, elements, glyph) => new Window(font, elements, glyph));
-        Register<Button>((font, elements, glyph) => new Button(font, elements, glyph, uiEngineContext.SpriteSheetService));
-        Register<ContextMenu>((font, elements, glyph) => new ContextMenu(font, elements, glyph));
-        Register<TextWindow>((font, elements, glyph) => new TextWindow(font, elements, glyph));
-        Register<TextBox>((font, elements, glyph) => new TextBox(font, elements, glyph, cursorTextContent, contextMenuController));
 
         // MapWindow's dependencies (the map view query, renderers) come from Game and Presentation
         // both, plus the map-specific services built alongside it -- too many type-specific extras
@@ -81,7 +77,6 @@ public static class ElementFactoryRegistry
             floatingTextRenderer,
             new AdminContextMenuOptions(adminTools)));
 
-        Register<Folder>((font, elements, glyph) => new Folder(font, elements, glyph, uiEngineContext.SpriteSheetService));
 
         elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
             uiEngineContext.FontService, elementPool, uiEngineContext.LabelRenderer,
@@ -90,8 +85,6 @@ public static class ElementFactoryRegistry
         Register<ShopItemStackCell>((font, elements, glyph) => new ShopItemStackCell(font, elements, glyph, uiEngineContext.SpriteSheetService));
         Register<TradeItemStackCell>((font, elements, glyph) => new TradeItemStackCell(font, elements, glyph, uiEngineContext.SpriteSheetService));
         Register<EmptyTradeSlotCell>((font, elements, glyph) => new EmptyTradeSlotCell(font, elements, glyph));
-        Register<GridControl>((font, elements, glyph) => new GridControl(font, elements, glyph));
-        Register<Toggle>((font, elements, glyph) => new Toggle(font, elements, glyph));
 
         elementPool.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
             uiEngineContext.FontService, elementPool, uiEngineContext.LabelRenderer, views.AbilityScoreView, views.StatModifierView, views.ActionSourceNaming, gameSession.SimulationClock, shellServices.PointerState));
@@ -100,9 +93,6 @@ public static class ElementFactoryRegistry
             views.ActionSourceNaming, shellServices.TooltipController, shellServices.PointerState));
         Register<AbilityScoreColumnHeader>((font, elements, glyph) => new AbilityScoreColumnHeader(font, elements, glyph));
         Register<AbilityScoreModifierRow>((font, elements, glyph) => new AbilityScoreModifierRow(font, elements, glyph));
-        Register<SeparatorBar>((font, elements, glyph) => new SeparatorBar(font, elements, glyph));
-        Register<TextDivider>((font, elements, glyph) => new TextDivider(font, elements, glyph));
-        Register<Tooltip>((font, elements, glyph) => new Tooltip(font, elements, glyph));
 
         elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(
             uiEngineContext.FontService, elementPool, uiEngineContext.LabelRenderer, inventoryServices, world, contextMenuController, mapViewState,
@@ -121,6 +111,5 @@ public static class ElementFactoryRegistry
         Register<ItemIconElement>((font, elements, glyph) => new ItemIconElement(font, elements, glyph, uiEngineContext.SpriteSheetService));
         Register<CurrencyElement>((font, elements, glyph) => new CurrencyElement(font, elements, glyph, uiEngineContext.SpriteSheetService));
         Register<TargetShapePreviewElement>((font, elements, glyph) => new TargetShapePreviewElement(font, elements, glyph));
-        Register<FractionBarElement>((font, elements, glyph) => new FractionBarElement(font, elements, glyph));
     }
 }

@@ -10,13 +10,13 @@ public sealed class ItemBrowserSectionsTests
 {
     private static readonly Lazy<GameSession> Session = new(() => ContentSession.Build(Path.Combine(AppContext.BaseDirectory, "NoMods"), [], TextWriter.Null));
 
-    private static IReadOnlyList<ItemBrowserSection> Build(string search) =>
+    private static IReadOnlyList<Builders.Browsing.RecordBrowserSection<Game.Modules.Inventory.ItemDefinition>> Build(string search) =>
         ItemBrowserSections.Build(Session.Value.Catalogs.ItemCatalog.Definitions, search, Session.Value.Catalogs.GameplayTags);
 
     [TestMethod]
     public void EmptySearch_ListsEveryItemOnce()
     {
-        var listed = Build(string.Empty).SelectMany(section => section.Items).ToList();
+        var listed = Build(string.Empty).SelectMany(section => section.Records).ToList();
 
         Assert.HasCount(Session.Value.Catalogs.ItemCatalog.Count, listed);
         CollectionAssert.AllItemsAreUnique(listed);
@@ -34,7 +34,7 @@ public sealed class ItemBrowserSectionsTests
 
         foreach (var section in sections)
         {
-            var names = section.Items.Select(item => item.Name).ToList();
+            var names = section.Records.Select(item => item.Name).ToList();
             CollectionAssert.AreEqual(names.Order(StringComparer.OrdinalIgnoreCase).ToList(), names, $"{section.Heading} is not sorted by name.");
         }
     }
@@ -44,7 +44,7 @@ public sealed class ItemBrowserSectionsTests
     {
         var potions = Build(string.Empty).Single(section => section.Heading == "Potions");
 
-        Assert.IsTrue(potions.Items.All(item => item.Activator is PotionActivator));
+        Assert.IsTrue(potions.Records.All(item => item.Activator is PotionActivator));
     }
 
     [TestMethod]
@@ -53,7 +53,7 @@ public sealed class ItemBrowserSectionsTests
         var anyItem = Session.Value.Catalogs.ItemCatalog.Definitions.First();
         var search = anyItem.Name[..Math.Min(4, anyItem.Name.Length)].ToUpperInvariant();
 
-        var listed = Build(search).SelectMany(section => section.Items).ToList();
+        var listed = Build(search).SelectMany(section => section.Records).ToList();
 
         CollectionAssert.Contains(listed, anyItem);
     }
@@ -70,7 +70,7 @@ public sealed class ItemBrowserSectionsTests
             break;
         }
 
-        var listed = Build(tagDisplayName).SelectMany(section => section.Items).ToList();
+        var listed = Build(tagDisplayName).SelectMany(section => section.Records).ToList();
 
         CollectionAssert.Contains(listed, taggedItem);
     }

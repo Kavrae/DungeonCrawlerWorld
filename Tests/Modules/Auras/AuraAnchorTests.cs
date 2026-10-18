@@ -6,12 +6,11 @@ using Game.Blueprints.Races;
 using Game.Bootstrap;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
+using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.Movement.Components;
 using Game.Spawning;
 using Game.World;
@@ -48,20 +47,20 @@ public sealed class AuraAnchorTests
 
         public void ReadTorch(TargetingMode mode, Vector3Int tile)
         {
-            var stackInstanceId = InventoryActions.AddItem(Components, CasterId, ScrollOfTorch.Id, quantity: 1);
-            var selection = Build.Context.TargetResolution.Select(CasterId, ScrollOfTorch.Build().Activator!, mode, tile, Build.Context.SimulationClock.CurrentFrame);
+            var stackInstanceId = InventoryActions.AddItem(Components, CasterId, BuiltInItemIds.ScrollOfTorch, quantity: 1);
+            var selection = Build.Context.TargetResolution.Select(CasterId, TestContent.Item(BuiltInItemIds.ScrollOfTorch).Activator!, mode, tile, Build.Context.SimulationClock.CurrentFrame);
             Components.Merge(CasterId, new PendingItemActivationComponent(stackInstanceId, selection));
             RunFrames(1);
         }
 
         public void PressLantern(TargetingMode mode)
         {
-            var selection = Build.Context.TargetResolution.Select(CasterId, LanternAction.Build().Activator, mode, CasterPosition, Build.Context.SimulationClock.CurrentFrame);
-            Components.Merge(CasterId, new PendingActionActivationComponent(LanternAction.Id, selection));
+            var selection = Build.Context.TargetResolution.Select(CasterId, TestContent.Action(BuiltInActionIds.Lantern).Activator, mode, CasterPosition, Build.Context.SimulationClock.CurrentFrame);
+            Components.Merge(CasterId, new PendingActionActivationComponent(BuiltInActionIds.Lantern, selection));
             RunFrames(1);
         }
 
-        public bool LanternIsOn => Build.Context.Toggles.IsOn(CasterId, ActivatableReference.Action(LanternAction.Id));
+        public bool LanternIsOn => Build.Context.Toggles.IsOn(CasterId, ActivatableReference.Action(BuiltInActionIds.Lantern));
 
         public void RunFrames(int count)
         {
@@ -80,7 +79,7 @@ public sealed class AuraAnchorTests
         build.Context.ProcessingTierResolver.SetReferencePosition(CasterPosition);
         var session = new Session(build, CasterId: -1);
         var casterId = session.Spawn(Goblin.Id, CasterPosition);
-        ActionGrantEffects.Grant(session.Components, session.Build.Context.Actions, casterId, LanternAction.Id, overrideDefinition: null);
+        ActionGrantEffects.Grant(session.Components, session.Build.Context.Actions, casterId, BuiltInActionIds.Lantern, overrideDefinition: null);
         session.RunFrames(FramesPerSecond);
         return session with { CasterId = casterId };
     }
@@ -96,7 +95,7 @@ public sealed class AuraAnchorTests
         var transform = session.Components.GetDirectPool<TransformComponent>().GetReadonly(anchorId);
         Assert.AreEqual(AimedTile, transform.Position);
         Assert.AreEqual("Light Aura", session.Components.GetPackedPool<DisplayTextComponent>().GetReadonly(anchorId).Name);
-        Assert.AreEqual(8, session.PowerAt(AimedTile, ScrollOfTorch.Aura));
+        Assert.AreEqual(8, session.PowerAt(AimedTile, TestContent.Aura(BuiltInAuraIds.TorchLight)));
         Assert.IsFalse(session.Build.World.IsBlocking(anchorId), "An anchor never blocks the tile.");
     }
 
@@ -108,7 +107,7 @@ public sealed class AuraAnchorTests
         session.ReadTorch(TargetingMode.Target, AimedTile);
 
         Assert.HasCount(1, session.AnchorIds);
-        Assert.AreEqual(8, session.PowerAt(AimedTile, ScrollOfTorch.Aura));
+        Assert.AreEqual(8, session.PowerAt(AimedTile, TestContent.Aura(BuiltInAuraIds.TorchLight)));
     }
 
     [TestMethod]
@@ -135,7 +134,7 @@ public sealed class AuraAnchorTests
 
         Assert.IsEmpty(session.AnchorIds);
         Assert.IsFalse(session.Build.EcsContext.EntityManager.Keys.TryGetEntityId(anchorKey, out _), "The anchor entity is gone.");
-        Assert.AreEqual(0, session.PowerAt(AimedTile, ScrollOfTorch.Aura));
+        Assert.AreEqual(0, session.PowerAt(AimedTile, TestContent.Aura(BuiltInAuraIds.TorchLight)));
     }
 
     [TestMethod]
@@ -160,7 +159,7 @@ public sealed class AuraAnchorTests
         session.Build.EcsContext.EntityManager.DestroyEntity(session.CasterId);
 
         Assert.IsEmpty(session.AnchorIds);
-        Assert.AreEqual(0, session.PowerAt(AimedTile, ScrollOfTorch.Aura));
+        Assert.AreEqual(0, session.PowerAt(AimedTile, TestContent.Aura(BuiltInAuraIds.TorchLight)));
     }
 
     [TestMethod]
@@ -172,7 +171,7 @@ public sealed class AuraAnchorTests
 
         Assert.IsTrue(session.LanternIsOn);
         Assert.IsEmpty(session.AnchorIds);
-        Assert.AreEqual(8, session.PowerAt(CasterPosition, LanternAction.Aura));
+        Assert.AreEqual(8, session.PowerAt(CasterPosition, TestContent.Aura(BuiltInAuraIds.Lantern)));
     }
 
     [TestMethod]
@@ -192,7 +191,7 @@ public sealed class AuraAnchorTests
 
         Assert.IsFalse(session.LanternIsOn);
         Assert.IsEmpty(session.AnchorIds);
-        Assert.AreEqual(0, session.PowerAt(CasterPosition, LanternAction.Aura));
+        Assert.AreEqual(0, session.PowerAt(CasterPosition, TestContent.Aura(BuiltInAuraIds.Lantern)));
     }
 
     /// <summary>What its neighborhood unloading does: the streamer destroys the anchor, and the toggle holding it is switched off with it.</summary>
@@ -206,7 +205,7 @@ public sealed class AuraAnchorTests
         session.RunFrames(1);
 
         Assert.IsFalse(session.LanternIsOn, "A toggle is never on with nothing behind it.");
-        Assert.AreEqual(0, session.PowerAt(CasterPosition, LanternAction.Aura));
+        Assert.AreEqual(0, session.PowerAt(CasterPosition, TestContent.Aura(BuiltInAuraIds.Lantern)));
     }
 
     [TestMethod]
@@ -218,7 +217,7 @@ public sealed class AuraAnchorTests
         session.Build.EcsContext.EntityManager.DestroyEntity(session.CasterId);
 
         Assert.IsEmpty(session.AnchorIds);
-        Assert.AreEqual(0, session.PowerAt(CasterPosition, LanternAction.Aura));
+        Assert.AreEqual(0, session.PowerAt(CasterPosition, TestContent.Aura(BuiltInAuraIds.Lantern)));
     }
 
     [TestMethod]

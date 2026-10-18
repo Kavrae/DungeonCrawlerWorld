@@ -21,6 +21,27 @@ public sealed class UiLayerStackTests
         windowService.CreateElement<Window>(null, new ElementOptions());
 
     [TestMethod]
+    public void LayerOf_FollowsAddRaiseAndRemove()
+    {
+        var layers = new UiLayerStack();
+        var windowService = CreateWindowService();
+        var first = CreateWindow(windowService);
+        var second = CreateWindow(windowService);
+
+        layers.Add(UiLayer.DynamicHud, first);
+        layers.Add(UiLayer.DynamicHud, second);
+        layers.RaiseToFront(first);
+
+        Assert.AreEqual(UiLayer.DynamicHud, layers.LayerOf(first));
+        CollectionAssert.AreEqual(new[] { second, first }, layers[UiLayer.DynamicHud].ToArray());
+
+        layers.Remove(UiLayer.DynamicHud, first);
+
+        Assert.IsNull(layers.LayerOf(first));
+        Assert.AreEqual(UiLayer.DynamicHud, layers.LayerOf(second));
+    }
+
+    [TestMethod]
     public void OpenMenuWindow_MarksAsMenuWindow_AndActivatesMenuMode()
     {
         var layers = new UiLayerStack();

@@ -1,17 +1,18 @@
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints;
+using Game.Blueprints.Classes;
 using Game.Blueprints.Composites;
 using Game.Blueprints.NPCs.Generic;
 using Game.Blueprints.Objects;
 using Game.Blueprints.Parts;
-using Game.Blueprints.Classes;
 using Game.Blueprints.Races;
-using Engine.ECS.Systems;
 using Game.Bootstrap;
-using Game.Spawning;
+using Game.Modules.Actions;
 using Game.Modules.Class.Components;
-using Game.Modules.Crawler.Components;
 using Game.Modules.Core.Components;
+using Game.Modules.Crawler.Components;
+using Game.Spawning;
 using Game.World;
 using Tests.Blueprints;
 
@@ -333,7 +334,7 @@ public sealed class EntityFactoryTests
     public void Apply_ATraitsActions_AreGrantedToThatEntityAlone()
     {
         var (result, _) = Bootstrap();
-        var trait = new BlueprintDefinition(Guid.NewGuid(), "Toxic Trait") { Actions = [new Game.Modules.Actions.ActionGrant(Game.Modules.Actions.Definitions.Spells.ToxicStrikeAction.Id)] };
+        var trait = new BlueprintDefinition(Guid.NewGuid(), "Toxic Trait") { Actions = [new Game.Modules.Actions.ActionGrant(BuiltInActionIds.ToxicStrike)] };
         var traitId = result.Catalogs.Definitions.Register(trait);
         var goblin = SpawnGoblin(result);
         var other = SpawnGoblin(result, x: 8);
@@ -341,8 +342,8 @@ public sealed class EntityFactoryTests
 
         result.Internals.Factory.Apply(goblin, traitId);
 
-        Assert.IsTrue(actions.Has(goblin, Game.Modules.Actions.Definitions.Spells.ToxicStrikeAction.Id));
-        Assert.IsFalse(actions.Has(other, Game.Modules.Actions.Definitions.Spells.ToxicStrikeAction.Id));
+        Assert.IsTrue(actions.Has(goblin, BuiltInActionIds.ToxicStrike));
+        Assert.IsFalse(actions.Has(other, BuiltInActionIds.ToxicStrike));
     }
 
     [TestMethod]

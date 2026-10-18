@@ -5,8 +5,8 @@ using Game.Modules.Shops.Components;
 
 namespace Game.Blueprints.Objects;
 
-/// <summary>One item a shop's stock table can grant, paired with the PreferredStockLevel ShopStockPricing measures that shop's actual stock against -- hand-authored per item, the same "hand-tuned per item" convention ItemDefinition.GoldValue already established.</summary>
-public readonly record struct ShopStockEntry(ItemDefinition Item, byte PreferredStockLevel);
+/// <summary>One item a shop's stock table can grant, paired with the PreferredStockLevel ShopStockPricing measures that shop's actual stock against -- hand-authored per item, the same "hand-tuned per item" convention ItemDefinition.GoldValue already established. Named by Guid (BuiltInItemIds), since the definitions are content.</summary>
+public readonly record struct ShopStockEntry(Guid ItemId, byte PreferredStockLevel);
 
 /// <summary>Shared random-stock fill shared by PotionShopStock/GeneralShopStock -- same shape as TreasureChest's own random-loot loop, factored out since two stock parts need it against two different item pools.</summary>
 public static class ShopStock
@@ -24,8 +24,8 @@ public static class ShopStock
             var entry = stockPool[mathUtility.Next(0, stockPool.Count)];
             var maximumQuantity = System.Math.Min(MaximumStackQuantity, (int)InventoryActions.GetEffectiveMaxStackSize(componentManager, entityId));
             var quantity = (ushort)mathUtility.Next(MinimumStackQuantity, maximumQuantity + 1);
-            InventoryActions.AddItem(componentManager, entityId, entry.Item.Id, quantity);
-            EnsurePreferredStockLevel(componentManager, entityId, entry.Item.Id, entry.PreferredStockLevel);
+            InventoryActions.AddItem(componentManager, entityId, entry.ItemId, quantity);
+            EnsurePreferredStockLevel(componentManager, entityId, entry.ItemId, entry.PreferredStockLevel);
         }
     }
 

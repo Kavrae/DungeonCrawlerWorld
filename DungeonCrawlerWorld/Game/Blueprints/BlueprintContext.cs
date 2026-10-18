@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Entities;
 using Engine.Math;
 using Game.Modules.Actions;
+using Game.Modules.Inventory;
 
 namespace Game.Blueprints;
 
@@ -11,5 +12,6 @@ namespace Game.Blueprints;
 /// <param name="Seed">The entity's own seed (Rolls starts from it for a creature). For choices that must be known without building, like appearance -- see EntityAppearance.</param>
 /// <param name="Definitions">The session's blueprint definitions -- what a blueprint looks a race or class up in (see EntityBodyParts, ActionSource).</param>
 /// <param name="Actions">The session's action definitions -- what an action granted by id is read from (see ActionGrantEffects).</param>
+/// <param name="Items">The session's item definitions -- what an item granted, stocked or dropped by id is read from.</param>
 /// <cleanupVersion>1</cleanupVersion>
-public readonly record struct BlueprintContext(ComponentManager ComponentManager, int EntityId, MathUtility Rolls, EntityKeys EntityKeys, uint Seed, BlueprintRegistry Definitions, ActionCatalog Actions);
+public readonly record struct BlueprintContext(ComponentManager ComponentManager, int EntityId, MathUtility Rolls, EntityKeys EntityKeys, uint Seed, BlueprintRegistry Definitions, ActionCatalog Actions, ItemCatalog Items);

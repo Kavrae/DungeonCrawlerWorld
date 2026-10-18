@@ -931,6 +931,28 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
     protected virtual void OnEscapeAction() { }
 
+    /// <summary>Offers the mouse wheel to this element before any scrollable ancestor scrolls -- notches is positive away from the user. Returns whether it was used.</summary>
+    internal bool HandleMouseWheel(int notches) => OnMouseWheelAction(notches);
+
+    /// <summary>Uses nothing by default, so the wheel scrolls; a number field steps its value.</summary>
+    protected virtual bool OnMouseWheelAction(int notches) => false;
+
+    /// <summary>Whether a press at position drags something of this element's own -- a split pane's splitter -- ahead of its children.</summary>
+    protected virtual bool IsPointerDragHandleAt(Point position) => false;
+
+    /// <summary>The cursor over and while dragging what IsPointerDragHandleAt reports.</summary>
+    protected internal virtual MouseCursor PointerDragCursor => MouseCursor.Arrow;
+
+    /// <summary>Called every frame of a pointer drag with the mouse's total movement since the press.</summary>
+    internal void DragPointer(Vector2 totalMouseDelta) => OnPointerDragAction(totalMouseDelta);
+
+    protected virtual void OnPointerDragAction(Vector2 totalMouseDelta) { }
+
+    /// <summary>Called once when the press that started a pointer drag is released.</summary>
+    internal void EndPointerDrag() => OnPointerDragEndedAction();
+
+    protected virtual void OnPointerDragEndedAction() { }
+
     /// <summary>
     /// Routes an actual typed character (shifted case, punctuation, OS keyboard layout) to
     /// this window while it holds focus -- see UiInputController.RouteTextInputToFocusedWindow.
@@ -1158,6 +1180,11 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         if (ownScrollbarPart != ScrollbarPart.None)
         {
             return ElementInteraction.Scrollbar(this, ownScrollbarPart);
+        }
+
+        if (IsPointerDragHandleAt(position))
+        {
+            return ElementInteraction.PointerDrag(this);
         }
 
         for (var index = _children.Count - 1; index >= 0; index--)

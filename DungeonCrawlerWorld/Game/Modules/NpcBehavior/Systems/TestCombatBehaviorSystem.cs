@@ -5,8 +5,6 @@ using Engine.Tiles;
 using Game.Effects;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
-using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -14,7 +12,6 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.Mana.Components;
 using Game.Modules.Movement;
 using Game.Modules.Movement.Components;
@@ -94,7 +91,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     private readonly NpcCorpseLooting _corpseLooting;
 
     /// <summary>A Health Potion's targeting, for marking the drinker itself.</summary>
-    private static readonly IActionActivator HealthPotionActivator = HealthPotion.Build().Activator!;
+    private readonly IActionActivator _healthPotionActivator;
 
     private readonly List<Vector3Int> _adjacentTilesBuffer = [];
 
@@ -118,8 +115,10 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         PackedComponentPool<MeleeDisabledComponent> meleeDisabled,
         IPlayerQuery playerQuery,
         TargetResolution targetResolution,
-        NpcCorpseLooting corpseLooting)
+        NpcCorpseLooting corpseLooting,
+        IActionActivator healthPotionActivator)
     {
+        _healthPotionActivator = healthPotionActivator;
         _movementPool = movementPool;
         _transformPool = transformPool;
         _actionLocks = actionLocks;
@@ -229,12 +228,12 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
             return false;
         }
 
-        if (!InventoryQueries.TryGetStack(_inventoryStacks, entityId, HealthPotion.Id, out var potionStack) || potionStack.Quantity <= 0)
+        if (!InventoryQueries.TryGetStack(_inventoryStacks, entityId, BuiltInItemIds.HealthPotion, out var potionStack) || potionStack.Quantity <= 0)
         {
             return false;
         }
 
-        _pendingItemActivations.Merge(entityId, new PendingItemActivationComponent(potionStack.StackInstanceId, _targetResolution.SelectEntity(entityId, HealthPotionActivator, entityId)));
+        _pendingItemActivations.Merge(entityId, new PendingItemActivationComponent(potionStack.StackInstanceId, _targetResolution.SelectEntity(entityId, _healthPotionActivator, entityId)));
         ClearStep(entityId);
         return true;
     }
@@ -252,7 +251,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     /// </summary>
     private bool TryDecideMeleeAttack(int entityId, TransformComponent transform, long now)
     {
-        if (!_actions.Has(entityId, QuickAttackAction.Id))
+        if (!_actions.Has(entityId, BuiltInActionIds.QuickAttack))
         {
             return false;
         }
@@ -272,7 +271,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
             return false;
         }
 
-        var actionId = _mathUtility.Next(0, 2) == 0 ? QuickAttackAction.Id : PowerAttackAction.Id;
+        var actionId = _mathUtility.Next(0, 2) == 0 ? BuiltInActionIds.QuickAttack : BuiltInActionIds.PowerAttack;
         if (!_actions.TryGetEffectiveAction(entityId, actionId, out var action) ||
             ActivationQueries.GetBlocker(entityId, action, action.Activator, isToggledOn: false, _meleeDisabled, _effectServices, now) != ActivationBlocker.None)
         {
@@ -296,7 +295,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     {
         var playerEntityId = _playerQuery.PlayerEntityId;
         if (playerEntityId == entityId ||
-            !_actions.TryGetEffectiveAction(entityId, MagicMissileAction.Id, out var action) ||
+            !_actions.TryGetEffectiveAction(entityId, BuiltInActionIds.MagicMissile, out var action) ||
             !TryGetRaceId(entityId, out var casterRaceId) ||
             !IsAttackable(playerEntityId, casterRaceId) ||
             !_transformPool.TryGetReadonly(playerEntityId, out var playerTransform))
@@ -316,7 +315,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
             ? _targetResolution.SelectEntity(entityId, action.Activator, playerEntityId)
             : _targetResolution.Select(entityId, action.Activator, TargetingMode.Ground, playerTransform.Position, now);
 
-        _pendingActivations.Merge(entityId, new PendingActionActivationComponent(MagicMissileAction.Id, selection));
+        _pendingActivations.Merge(entityId, new PendingActionActivationComponent(BuiltInActionIds.MagicMissile, selection));
         ClearStep(entityId);
         return true;
     }

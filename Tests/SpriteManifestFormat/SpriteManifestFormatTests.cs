@@ -6,6 +6,13 @@ namespace Tests.SpriteManifestFormat;
 [TestClass]
 public sealed class SpriteManifestFormatTests
 {
+    /// <summary>The one problem parsing reported, for an entry it left out.</summary>
+    private static string SingleProblem(SpriteManifest manifest)
+    {
+        Assert.HasCount(1, manifest.Problems);
+        return manifest.Problems[0];
+    }
+
     private const string Sheet = "sheet.png";
 
     private static string ManifestJson(params SpriteManifestEntry[] entries) => JsonSerializer.Serialize(entries);
@@ -98,13 +105,13 @@ public sealed class SpriteManifestFormatTests
     [DataRow(15)]
     [DataRow(17)]
     [DataRow(0)]
-    public void Parse_LinkedEntryNotAMultipleOfSixteen_ThrowsNamingTheEntry(int cellCount)
+    public void Parse_LinkedEntryNotAMultipleOfSixteen_LeavesItOutNamingTheEntry(int cellCount)
     {
         var json = ManifestJson(new SpriteManifestEntry("Broken-Top", Cells(cellCount), Linking: SpriteLinking.Cardinal));
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(json));
+        var problem = SingleProblem(SpriteManifest.Parse(json));
 
-        StringAssert.Contains(exception.Message, "'Broken-Top'");
+        StringAssert.Contains(problem, "'Broken-Top'");
     }
 
     [TestMethod]
@@ -135,25 +142,25 @@ public sealed class SpriteManifestFormatTests
     [DataRow(45)]
     [DataRow(360)]
     [DataRow(-90)]
-    public void Parse_RotationNotAQuarterTurn_ThrowsNamingTheEntry(int rotation)
+    public void Parse_RotationNotAQuarterTurn_LeavesItOutNamingTheEntry(int rotation)
     {
         var json = ManifestJson(new SpriteManifestEntry("Askew", [new SpriteManifestCell(Sheet, 0, 0, 16, 16, Rotation: rotation)]));
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(json));
+        var problem = SingleProblem(SpriteManifest.Parse(json));
 
-        StringAssert.Contains(exception.Message, "'Askew'");
+        StringAssert.Contains(problem, "'Askew'");
     }
 
     [TestMethod]
     [DataRow(90)]
     [DataRow(270)]
-    public void Parse_QuarterTurnOfANonSquareCell_ThrowsNamingTheEntry(int rotation)
+    public void Parse_QuarterTurnOfANonSquareCell_LeavesItOutNamingTheEntry(int rotation)
     {
         var json = ManifestJson(new SpriteManifestEntry("Lanky", [new SpriteManifestCell(Sheet, 0, 0, 16, 16, RowSpan: 2, Rotation: rotation)]));
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(json));
+        var problem = SingleProblem(SpriteManifest.Parse(json));
 
-        StringAssert.Contains(exception.Message, "'Lanky'");
+        StringAssert.Contains(problem, "'Lanky'");
     }
 
     [TestMethod]
@@ -212,17 +219,17 @@ public sealed class SpriteManifestFormatTests
     [TestMethod]
     [DataRow(48, 16)]
     [DataRow(32, 32)]
-    public void Parse_WallWhoseFaceAndTopPassThreeRows_ThrowsNamingTheTop(int faceHeightPixels, int topHeightPixels)
+    public void Parse_WallWhoseFaceAndTopPassThreeRows_LeavesItOutNamingTheTop(int faceHeightPixels, int topHeightPixels)
     {
         var json = ManifestJson(Wall("Tower", faceHeightPixels, topHeightPixels));
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(json));
+        var problem = SingleProblem(SpriteManifest.Parse(json));
 
-        StringAssert.Contains(exception.Message, "'Tower' (top");
+        StringAssert.Contains(problem, "'Tower' (top");
     }
 
     [TestMethod]
-    public void Parse_StretchedTopOnAThreeRowFace_Throws()
+    public void Parse_StretchedTopOnAThreeRowFace_LeavesItOut()
     {
         var wall = new SpriteManifestEntry(
             "Tall",
@@ -230,9 +237,9 @@ public sealed class SpriteManifestFormatTests
             PixelsPerTile: 16,
             Top: new SpriteManifestPart([new SpriteManifestCell(Sheet, 1, 0, 16, 16)]));
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(ManifestJson(wall)));
+        var problem = SingleProblem(SpriteManifest.Parse(ManifestJson(wall)));
 
-        StringAssert.Contains(exception.Message, "on a 3-row face");
+        StringAssert.Contains(problem, "on a 3-row face");
     }
 
     [TestMethod]
@@ -263,23 +270,23 @@ public sealed class SpriteManifestFormatTests
     }
 
     [TestMethod]
-    public void Parse_HorizontalFaceMissingAStandalonePiece_ThrowsNamingTheSet()
+    public void Parse_HorizontalFaceMissingAStandalonePiece_LeavesItOutNamingTheSet()
     {
         var faceCells = Cells(8);
         faceCells[4 + SpriteLinks.Standalone] = null;
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(ManifestJson(WallWithFace(faceCells))));
+        var problem = SingleProblem(SpriteManifest.Parse(ManifestJson(WallWithFace(faceCells))));
 
-        StringAssert.Contains(exception.Message, "'Stone'");
-        StringAssert.Contains(exception.Message, "variant set 2");
+        StringAssert.Contains(problem, "'Stone'");
+        StringAssert.Contains(problem, "variant set 2");
     }
 
     [TestMethod]
     [DataRow(3)]
     [DataRow(5)]
-    public void Parse_HorizontalFaceNotInWholeSetsOfFour_Throws(int cellCount)
+    public void Parse_HorizontalFaceNotInWholeSetsOfFour_LeavesItOut(int cellCount)
     {
-        Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(ManifestJson(WallWithFace(Cells(cellCount)))));
+        SingleProblem(SpriteManifest.Parse(ManifestJson(WallWithFace(Cells(cellCount)))));
     }
 
     [TestMethod]
@@ -379,13 +386,13 @@ public sealed class SpriteManifestFormatTests
     [TestMethod]
     [DataRow("blue")]
     [DataRow("#12345")]
-    public void Parse_AMalformedTint_ThrowsNamingTheEntry(string tint)
+    public void Parse_AMalformedTint_LeavesItOutNamingTheEntry(string tint)
     {
         var json = ManifestJson(new SpriteManifestEntry("Smudged", [new SpriteManifestCell(Sheet, 0, 0, 16, 16, Tint: tint)]));
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(json));
+        var problem = SingleProblem(SpriteManifest.Parse(json));
 
-        StringAssert.Contains(exception.Message, "'Smudged'");
+        StringAssert.Contains(problem, "'Smudged'");
     }
 
     [TestMethod]
@@ -432,21 +439,21 @@ public sealed class SpriteManifestFormatTests
     [DataRow(new[] { 60, 30 })]
     [DataRow(new[] { 100 })]
     [DataRow(new[] { 110, -10 })]
-    public void Parse_VariantChancesNotOnePerSetAddingTo100_ThrowsNamingTheEntry(int[] chances)
+    public void Parse_VariantChancesNotOnePerSetAddingTo100_LeavesItOutNamingTheEntry(int[] chances)
     {
         var json = ManifestJson(new SpriteManifestEntry("Lopsided", Cells(8), Linking: SpriteLinking.Horizontal, VariantWeights: [.. chances]));
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(json));
+        var problem = SingleProblem(SpriteManifest.Parse(json));
 
-        StringAssert.Contains(exception.Message, "'Lopsided'");
+        StringAssert.Contains(problem, "'Lopsided'");
     }
 
     [TestMethod]
-    public void Parse_VariantChancesOnAPlainOptionsEntry_Throws()
+    public void Parse_VariantChancesOnAPlainOptionsEntry_LeavesItOut()
     {
         var json = ManifestJson(new SpriteManifestEntry("Options", Cells(2), VariantWeights: [50, 50]));
 
-        Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(json));
+        SingleProblem(SpriteManifest.Parse(json));
     }
 
     [TestMethod]
@@ -464,15 +471,15 @@ public sealed class SpriteManifestFormatTests
     }
 
     [TestMethod]
-    public void Parse_OptionsEntryWithAnEmptyCell_ThrowsNamingTheEntry()
+    public void Parse_OptionsEntryWithAnEmptyCell_LeavesItOutNamingTheEntry()
     {
         var cells = Cells(2);
         cells[1] = null;
         var json = ManifestJson(new SpriteManifestEntry("Gappy", cells));
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(json));
+        var problem = SingleProblem(SpriteManifest.Parse(json));
 
-        StringAssert.Contains(exception.Message, "'Gappy'");
+        StringAssert.Contains(problem, "'Gappy'");
     }
 
     [TestMethod]
@@ -486,36 +493,36 @@ public sealed class SpriteManifestFormatTests
     }
 
     [TestMethod]
-    public void Parse_ThreeRowsAbove_ThrowsNamingTheEntryAndItsReach()
+    public void Parse_ThreeRowsAbove_LeavesItOutNamingTheEntryAndItsReach()
     {
         var json = ManifestJson(PlacedEntry("Tower", 16, 64, 16));
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(json));
+        var problem = SingleProblem(SpriteManifest.Parse(json));
 
-        StringAssert.Contains(exception.Message, "'Tower'");
-        StringAssert.Contains(exception.Message, "reaches 3 rows above");
+        StringAssert.Contains(problem, "'Tower'");
+        StringAssert.Contains(problem, "reaches 3 rows above");
     }
 
     [TestMethod]
-    public void Parse_ThreeColumnsToOneSide_ThrowsNamingTheEntryAndItsReach()
+    public void Parse_ThreeColumnsToOneSide_LeavesItOutNamingTheEntryAndItsReach()
     {
         var json = ManifestJson(PlacedEntry("Banner", 16, 16, 16, pivotX: 56));
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(json));
+        var problem = SingleProblem(SpriteManifest.Parse(json));
 
-        StringAssert.Contains(exception.Message, "'Banner'");
-        StringAssert.Contains(exception.Message, "3 columns left");
+        StringAssert.Contains(problem, "'Banner'");
+        StringAssert.Contains(problem, "3 columns left");
     }
 
     [TestMethod]
-    public void Parse_BelowTheFootprint_ThrowsNamingTheEntryAndItsReach()
+    public void Parse_BelowTheFootprint_LeavesItOutNamingTheEntryAndItsReach()
     {
         var json = ManifestJson(PlacedEntry("Sunken", 16, 16, 16, pivotY: 8));
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(json));
+        var problem = SingleProblem(SpriteManifest.Parse(json));
 
-        StringAssert.Contains(exception.Message, "'Sunken'");
-        StringAssert.Contains(exception.Message, "0.5 rows below");
+        StringAssert.Contains(problem, "'Sunken'");
+        StringAssert.Contains(problem, "0.5 rows below");
     }
 
     [TestMethod]
@@ -530,13 +537,13 @@ public sealed class SpriteManifestFormatTests
     }
 
     [TestMethod]
-    public void Parse_ZeroPixelsPerTile_ThrowsNamingTheEntry()
+    public void Parse_ZeroPixelsPerTile_LeavesItOutNamingTheEntry()
     {
         var json = ManifestJson(PlacedEntry("Flat", 16, 16, 0));
 
-        var exception = Assert.ThrowsExactly<InvalidDataException>(() => SpriteManifest.Parse(json));
+        var problem = SingleProblem(SpriteManifest.Parse(json));
 
-        StringAssert.Contains(exception.Message, "'Flat'");
+        StringAssert.Contains(problem, "'Flat'");
     }
 
     /// <summary>Catches a builder that wrote a shape the game can't read, or an entry outside the reach box.</summary>

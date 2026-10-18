@@ -1,6 +1,6 @@
 # The engine IDE shell and its Items, Actions and Auras tabs
 
-(Child 5 of `EPIC-sprites-ui-engine-and-dev-tools.md`. Started 2026-10-16. All decisions confirmed 2026-10-16. Phase 0 landed 2026-10-17 (tested in-game). Phase 1 landed 2026-10-17 (tested in-game). Settled in review: Items,
+(Child 5 of `EPIC-sprites-ui-engine-and-dev-tools.md`. Started 2026-10-16. All decisions confirmed 2026-10-16. Phase 0 landed 2026-10-17 (tested in-game). Phase 1 landed 2026-10-17 (tested in-game). Phase 2 landed 2026-10-17 (tested in-game). Phase 3 landed 2026-10-17 (tested in-game). Phase 4 landed 2026-10-18 (tested in-game). **Complete at Phase 4, 2026-10-18:** view-only tabs are enough for this child; Phases 5-7 (editing) moved to TODO.md as "Workshop: edit Items", "Workshop: edit Actions" and "Workshop: edit Auras" (Engine, High), and this plan's Design and Decisions sections stay their design. Settled in review: Items,
 Actions and Auras are separate tabs; phase order read-only Items → Actions → Auras, then edit Items → Actions → Auras;
 `ContextMenu` generalised into a `Dropdown` element; the codec plan as described (codecs declare their fields); a drafts
 manifest the IDE layers over master and the game never loads; any master record can be disabled, with an optional load
@@ -461,22 +461,110 @@ Where the implementation differs from the design above:
 - Verify: launch the IDE and `--tab=Items`, resize, search, select every item and compare with the game's Item Details,
   Play starts the game.
 
-### Phase 2 -- The Actions tab, read-only
+### Phase 2 -- The Actions tab, read-only (landed 2026-10-17, tested in-game)
+
+What was built, and where it differs:
+- **`ActivatableDetailsSections`** (`Presentation/UI/Details`) holds every section Item Details and Action Details share:
+  name row, effects ("While on" for a toggle), cost, activation with the shape preview, description, tags, and an
+  icon-and-text row. `ItemDetailsWindow` builds the same rows in the same order through it and keeps only its own
+  parts: the stack's blocker, the gold row, comparison colouring and Compare. `ItemComparisonStatExtraction.ExtractEffectStats`
+  takes any `ActivatableDefinition`.
+- **`ActionDetailsWindow`** shows an action from its definition alone: Item Details' order without gold, blocker or
+  comparison. Only the IDE uses it.
+- **`RecordBrowserTab<TRecord, TPreview>`** (Builders/Browsing) is the browser-and-preview tab the Items tab had, made
+  generic, so Items, Actions and (next) Auras each say only how records are grouped, drawn and previewed.
+  `RecordBrowserSections` does the grouping, sorting and search for all of them. Selection is by reference.
+- **Action groups:** Abilities (direct actions), Spells, Toggles (any action with a toggle, first), Other.
+- **Tests:** `DetailsWindowsTests` (Tests) builds Item Details for every built-in item and Action Details for every
+  built-in action and checks the shared sections appear in order (plus gold for items, none for actions);
+  `ActionBrowserSectionsTests` (Workshop.Tests).
+- **Not done: a scroll's spell opening in the Actions tab.** Item Details shows the spell as a plain line, and making
+  it a link means changing the game's window or adding a link to the IDE's preview, plus a shell call to switch tab and
+  select a record. Phase 3 needs the same mechanism for aura grants opening the Auras tab, so it moved
+  there for both (decided 2026-10-17).
 
 - The shared section builder over `ActivatableDefinition`; `ItemDetailsWindow` on it; `ActionDetailsWindow`; the Actions
-  tab. A scroll's spell opens in the Actions tab.
+  tab. (A scroll's spell opening in the Actions tab moved to Phase 3.)
 - Verify in the game: Item Details for every item unchanged (Comparison included). In the IDE: every action.
 
-### Phase 3 -- The Auras tab, read-only
+### Phase 3 -- The Auras tab, read-only (landed 2026-10-17, tested in-game)
+
+What was built, and where it differs:
+- **`AuraDetailsWindow`** (Presentation, IDE only): the name row (a swatch of the glow colour, since auras have no
+  sprite), "Strength" (whether effects scale with strength, and how strength falls off), "Each tick" (its effects, or
+  "None" for glow only), then tags. Built on `ActivatableDetailsSections`, which gained overloads taking an effect
+  list, a tag set and a bare name.
+- **`EffectEntries`** (Game.Effects, public): the walk over every effect entry an action or item holds, nested ones
+  included. `EffectContent` now uses it, so there's still one list of effect holders.
+- **`ContentReferenceIndex`** (Builders/References): every reference between actions, items, auras, terrain and
+  blueprints. A scroll casts its spell, an entry naming an aura grants it, terrain or a blueprint radiates its aura.
+  It answers uses and used-by. A scroll whose spell id names no action (Scroll of Torch's, a synthesised spell) casts
+  nothing. This is the live-definition precursor of Phase 4's schema-driven index.
+- **The Related window** (`RecordBrowserTab`): a third window beside the preview with "Uses" and "Used by". A line
+  naming an action, item or aura is a link; terrain and blueprints are plain lines. The plan's "the preview offers
+  each reference as a link" became this window, so the game's own Item Details stays unchanged.
+- **`TabNavigator`** (Workshop): a link queues a request, and the shell opens the tab and selects the record at the
+  start of its next update, never inside the click (opening a tab closes the windows the click came from). The newest
+  request wins. A tab not in the session (`--tab=`) or an unknown record is reported on the status line. Tabs select
+  by id through `IIdeTab.TrySelectRecord`; `WorkshopTabContext.Navigator` carries it.
+- **The Auras tab** groups by what puts each aura in the world: Terrain, Fixtures (blueprints), Items and actions,
+  Unused. An aura with several sources goes under the most permanent one.
+- **Tests:** `ContentReferenceIndexTests`, `AuraBrowserSectionsTests`, `TabNavigatorTests` and `ContentLinksTests`
+  (Workshop.Tests); Aura Details for every aura (`DetailsWindowsTests`, Tests).
 
 - `AuraDetailsWindow`; the Auras tab over the session's `AuraCatalog` (every aura the content names, with who grants it);
-  aura grants in Items and Actions open it.
+  aura grants in Items and Actions open it. A scroll's spell opens in the Actions tab (moved from Phase 2): the
+  shell gains a call to open a tab with a record selected, and the preview offers each cross-table reference as a link.
 - Verify: every aura (lava, Holy Ground, the shrine's, the Toxic auras, Scroll of Torch's glow) matches what it does in
   the game.
 
-**Gate: data-driven Phases 1-2 land here** (with the drafts exclusion in `Content.csproj`).
+**Gate: data-driven Phases 1-2 land here** (with the drafts exclusion in `Content.csproj`). Landed 2026-10-18 (tested in-game): codecs with enforced schemas, the master manifest, disabled/replacement records and the Drafts exclusion are in place (see the data-driven plan's "Phases 1 and 2 as built").
 
-### Phase 4 -- Dropdown and the editor controls (UIEngine)
+### Phase 4 -- Dropdown and the editor controls (UIEngine) (landed 2026-10-18, tested in-game)
+
+Landed 2026-10-18 (tested in-game). What was built, and where it differs:
+- **`Dropdown`/`DropdownOption`/`DropdownController`** are the renamed `ContextMenu`/`ContextMenuOption`/the popup half of
+  `ContextMenuController`. The controller opens at a point (`OpenAt`) or under an element (`OpenBelow`: at least its
+  width, flipped above when there's no room below, scrolling past a maximum height, the current option marked and
+  highlighted). `UiInputController` takes the `DropdownController` and owns its rules: Escape and an outside press close
+  it (a press on the element that opened it doesn't count as outside, so the element closes its own list), and Up/Down/
+  Enter go to it before the focused element. `ContextMenuController` is now only the at-cursor gesture over the same
+  dropdown (`ContextMenuController.Dropdowns`), so a context menu and a field's list are never open together. The layer
+  keeps its name, `UiLayer.ContextMenu`. The existing context-menu tests pass with only the type renames.
+- **`DropdownField`**: draws its value and an arrow; a press opens the list, a second press closes it; Space, Enter or
+  Down when focused opens it.
+- **`NumericField` and `ColorField`** derive from `TextBox`, which is no longer sealed and gained `AcceptsCharacter` (a
+  filter for typed and pasted characters) and `SetText`. Both read their text on Enter or when focus leaves, and put the
+  last value back when it doesn't parse. The number field clamps to its limits and rounds to its places; the wheel
+  steps it, through a new `Element.OnMouseWheelAction` offered before any scrollable ancestor scrolls. The colour field
+  reads `RRGGBB` or `RRGGBBAA` and draws a swatch.
+- **`SplitPane`**: two pane windows and a splitter, dragged through a new pointer-drag interaction
+  (`Element.IsPointerDragHandleAt`, `OnPointerDragAction`, `PointerDragCursor`), hit-tested ahead of an element's children.
+  One pane keeps its size when the split pane is resized.
+- **`ListView`**: draws its own rows (no child per row), so a long list costs only what's on screen. Sortable headers
+  (numbers compare as numbers), an icon column, selection that survives a sort or new rows that still hold it,
+  double-click and Enter activate, Up/Down/Home/End move. Cells are cut to their column once, when rows or widths change.
+- **`ListEditor`**: rows of the owner's content, each with move up, move down and remove, and an add button. A button
+  raises its request on the next update, never inside the click, since the owner answering it rebuilds every row.
+- **`ModalDialog`**: a `Window` opened as a menu window (everything behind it dimmed and unreachable), with a message or
+  a body the caller fills and a row of buttons. Exactly one button runs; Escape or the close button counts as the cancel
+  button.
+- **The bottom panel** is its own window along the IDE's bottom edge, not a `SplitPane` around the tabs: the tabs add
+  their own top-level windows, and a split pane raised by a click would sit over them. Its top edge drags through the
+  same pointer-drag hook, and the open tab is resized to what it leaves. Error List: mods dropped, settings refused, and
+  every record of the source tree's master manifest that doesn't load (`ContentSession.LoadProblems`; the host returns
+  them with its tabs as a `WorkshopTabSet`). Dependents: what names the record selected in the open tab
+  (`ContentLinks.DependentsOf`, through `WorkshopTabContext.ShowDependents`); activating a line opens its record. No
+  scroll casts Fireball in the shipped content (the Wand of Fireball holds its own effects), so the check below becomes
+  Heal listing the Scroll of Healing.
+- **A "Controls" tab** (`ControlGalleryTab`, Workshop) holds one of each control, wired to the status line -- the scratch
+  panel for verifying them. Remove it or keep it once the edit phases use the controls.
+- **Tests:** `DropdownTests`, `NumericAndColorFieldTests`, `SplitPaneAndListEditorTests`, `ListViewAndModalDialogTests`
+  (Tests/UIEngine, through `UiInputController` with `ControlTestHarness`); `ContentLinksTests` and `ContentSessionTests`
+  gained dependents and load-problem cases (Workshop.Tests). The reference index's own tests (a scroll names its spell, an
+  item its aura) were already there from Phase 3.
+
+The plan as written:
 
 - `Dropdown`/`DropdownOption`/`DropdownController` from `ContextMenu`/`ContextMenuOption`/`ContextMenuController`; the
   context menu on top of it; `DropdownField`.
@@ -495,53 +583,11 @@ Where the implementation differs from the design above:
 - Verify in the game: every context menu (corpse, TextBox, Admin "Spawn here >"/"Apply >" with submenus, inventory). In
   the IDE: a scratch panel of each control, and the bottom panel's Dependents for Fireball listing the Scroll.
 
-### Phase 5 -- Edit Items
+### Phases 5-7 -- Editing (moved to TODO.md 2026-10-18)
 
-- The generic machinery, first used here: `ContentDocument`, the field editors, the polymorphic type picker, the
-  targeting and appearance editors, per-edit decode + preview + validation, undo/redo; saving with master and drafts,
-  Publish/Hold, New/Duplicate/Delete, the trial build, unsaved markers, the quit prompt, the session rebuild; the Error
-  List fed by per-edit validation and the trial build; Disable/Enable, the replacement field, the confirmation dialog
-  (Replacement with its picker, Cascade, Cancel), and redirect resolution.
-- Tests (`Workshop.Tests`):
-  - every built-in item opens and round-trips through the document unchanged (bytes equal);
-  - every entry, activator and contents type has a schema the inspector can draw;
-  - a record that doesn't decode survives a save and reopen as a draft;
-  - published content referencing a draft is refused;
-  - disabling with no dependents doesn't ask, and disabling with dependents does;
-  - Cascade disables the whole chain, and one undo restores it;
-  - a replacement resolves through a chain, and a cycle is refused;
-  - a disabled record with no replacement isn't loaded by a game build over the saved master. That last one is in
-    `Tests`, since it is the game's loader.
-- Verify:
-  - change the Wand of Fireball's damage and save; `git diff` shows one line; Play and see it;
-  - break a record and save; find it in Drafts with its error in the Error List, and the game unaffected; fix it and
-    publish;
-  - add a new item and grant it in Admin Mode;
-  - disable the Health Potion with no replacement and Play: it is gone from the shop stock and the player's kit;
-  - disable it with the Mana Potion as replacement and see Mana Potions in its place;
-  - Enable it again.
-
-### Phase 6 -- Edit Actions
-
-- The Actions tab's inspector and saving on Phase 5's machinery; editing a spell's mana (a `ManaDrain` among its
-  activation effects), timing, toggle spec.
-- Verify:
-  - change Fireball's range and see it in the Scroll's Item Details too;
-  - a toggle action that breaks the toggle rules lands in Drafts, with its error in the Error List;
-  - disabling Fireball asks first, because the Scroll and the Wand name it, and Cascade disables both.
-
-### Phase 7 -- Edit Auras
-
-- The Auras tab's inspector and saving; editing an aura used by a published item keeps the reference rule (an aura held
-  as a draft can't be granted by a published item).
-- Docs: CLAUDE.md (Layers: Cadence and the game root, the Workshop; Commands), IMPLEMENTATION-NOTES (the IDE, the
-  document/schema editor, drafts and why), the epic (child 5 landed, its open question on name/location answered), TODO.md
-  entries for the follow-ups; the data-driven plan's "indented copy for reading" can go.
-- Verify:
-  - change the Toxic Idol's aura power and see it in the game;
-  - hold it as a draft and see the game keep the old one;
-  - disabling the Toxic Idol's aura asks first, with the Idol as its dependent;
-  - Confirm With Replacement redirects it to another aura, and the Idol radiates that one in the game.
+Edit Items, Edit Actions and Edit Auras are TODO.md items now (Engine, High): "Workshop: edit Items", "Workshop: edit
+Actions", "Workshop: edit Auras". Their design is this plan's "The editor", "Saving: master and drafts" and "Disabling a
+master record" sections and Decisions 8-20.
 
 ## Open questions
 

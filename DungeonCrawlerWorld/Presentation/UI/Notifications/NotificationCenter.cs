@@ -108,8 +108,8 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
                     var hasUnread = UnreadListFor(category).Count > 0;
                     contextMenuController.Open(new Vector2(position.X, position.Y),
                     [
-                        new ContextMenuOption("Open", null, hasUnread, () => OpenNextNotification(category)),
-                        new ContextMenuOption("Open All", null, hasUnread, () => OpenAllNotifications(category)),
+                        new DropdownOption("Open", null, hasUnread, () => OpenNextNotification(category)),
+                        new DropdownOption("Open All", null, hasUnread, () => OpenAllNotifications(category)),
                     ]);
                 };
             }
@@ -255,18 +255,18 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     }
 
     /// <summary>Close/Close All always (mirrors what every popup's own Close button already permits -- CanUserClose is unconditionally true for every category, see ShowActive); Minimize/Minimize All only for a non-System notification, the same canMinimize gate ShowActive already computes for the dedicated minimize button.</summary>
-    private List<ContextMenuOption> BuildRightClickMenu(Notification notification, bool canMinimize)
+    private List<DropdownOption> BuildRightClickMenu(Notification notification, bool canMinimize)
     {
-        List<ContextMenuOption> options =
+        List<DropdownOption> options =
         [
-            new ContextMenuOption("Close", null, Enabled: true, () => CloseNotification(notification.Id)),
-            new ContextMenuOption("Close All", null, Enabled: true, CloseAllNotifications),
+            new DropdownOption("Close", null, Enabled: true, () => CloseNotification(notification.Id)),
+            new DropdownOption("Close All", null, Enabled: true, CloseAllNotifications),
         ];
 
         if (canMinimize)
         {
-            options.Add(new ContextMenuOption("Minimize", null, Enabled: true, () => MinimizeNotification(notification)));
-            options.Add(new ContextMenuOption("Minimize All", null, Enabled: true, MinimizeAllNotifications));
+            options.Add(new DropdownOption("Minimize", null, Enabled: true, () => MinimizeNotification(notification)));
+            options.Add(new DropdownOption("Minimize All", null, Enabled: true, MinimizeAllNotifications));
         }
 
         return options;

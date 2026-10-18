@@ -6,7 +6,6 @@ using Game.Blueprints.Races;
 using Game.Bootstrap;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
@@ -29,7 +28,7 @@ public sealed class TargetingModeActivationTests
     private static readonly Vector3Int CasterPosition = new(5, 5, Ground);
     private static readonly Vector3Int AimedTile = new(11, 5, Ground);
 
-    private static readonly IActionActivator FireballActivator = FireballAction.Build().Activator;
+    private static readonly IActionActivator FireballActivator = TestContent.Action(BuiltInActionIds.Fireball).Activator;
 
     private sealed record Session(GameBuildPassResult Build, int CasterId)
     {
@@ -61,7 +60,7 @@ public sealed class TargetingModeActivationTests
         {
             var activator = FireballActivator;
             var selection = Build.Context.TargetResolution.Select(CasterId, activator, mode, aimedTile, Build.Context.SimulationClock.CurrentFrame);
-            Components.Merge(CasterId, new PendingActionActivationComponent(FireballAction.Id, selection));
+            Components.Merge(CasterId, new PendingActionActivationComponent(BuiltInActionIds.Fireball, selection));
         }
 
         public void RunFrames(int count)
@@ -81,7 +80,7 @@ public sealed class TargetingModeActivationTests
         build.Context.ProcessingTierResolver.SetReferencePosition(CasterPosition);
         var session = new Session(build, CasterId: -1);
         var casterId = session.Spawn(Goblin.Id, CasterPosition);
-        ActionGrantEffects.Grant(session.Components, session.Build.Context.Actions, casterId, FireballAction.Id, overrideDefinition: null);
+        ActionGrantEffects.Grant(session.Components, session.Build.Context.Actions, casterId, BuiltInActionIds.Fireball, overrideDefinition: null);
         session.Components.Merge(casterId, new ManaComponent(CasterMana, CasterMana));
         session.RunFrames(FramesPerSecond);
         return session with { CasterId = casterId };
@@ -101,7 +100,7 @@ public sealed class TargetingModeActivationTests
 
         Assert.AreEqual(180, WindupFrames(session));
         Assert.IsTrue(session.Components.GetPackedPool<PendingWindupComponent>().Has(session.CasterId), "Winding up.");
-        Assert.AreEqual(manaBefore - FireballAction.ManaCost, session.ManaOf(session.CasterId), 0.5f);
+        Assert.AreEqual(manaBefore - TestContent.ManaCostOf(BuiltInActionIds.Fireball), session.ManaOf(session.CasterId), 0.5f);
     }
 
     [TestMethod]
@@ -167,13 +166,13 @@ public sealed class TargetingModeActivationTests
         var playerId = build.Factory.Spawn(SpawnRequest.At(build.Context.Definitions.GetId(Player.Id), new Vector3Int(5, 5, Ground)) with { Seed = 1 });
         var components = build.EcsContext.ComponentManager;
 
-        Assert.IsTrue(EntityActions.For(components, build.Context.Actions, build.Context.Definitions).Has(playerId, FireballAction.Id));
+        Assert.IsTrue(EntityActions.For(components, build.Context.Actions, build.Context.Definitions).Has(playerId, BuiltInActionIds.Fireball));
         var bindings = components.GetMultiPool<ActionHotkeyBindingComponent>();
         var boundToSlotEight = false;
         for (var denseIndex = bindings.GetFirstDenseIndex(playerId); denseIndex != -1; denseIndex = bindings.GetNextDenseIndex(denseIndex))
         {
             var binding = bindings.GetReadonlyByDenseIndex(denseIndex);
-            boundToSlotEight |= binding.Slot == HotkeySlot.Slot8 && binding.ActionId == FireballAction.Id;
+            boundToSlotEight |= binding.Slot == HotkeySlot.Slot8 && binding.ActionId == BuiltInActionIds.Fireball;
         }
 
         Assert.IsTrue(boundToSlotEight);

@@ -108,7 +108,7 @@ public sealed class EntityActions(
             && creatures.TryResolve(record.BlueprintId, out var blueprint)
             && blueprint.TryGetAction(actionId, out var grant))
         {
-            overrideDefinition = grant.Override;
+            overrideDefinition = grant.ResolveOverride(actionCatalog);
             return true;
         }
 
@@ -138,7 +138,7 @@ public sealed class EntityActions(
             {
                 if (grant.ActionId == actionId)
                 {
-                    overrideDefinition = grant.Override;
+                    overrideDefinition = grant.ResolveOverride(actionCatalog);
                     latestOrder = applied.Order;
                     break;
                 }

@@ -76,7 +76,7 @@ internal static class TestUiInputController
             contentDropHandlers.Add(new HotbarBindingDropHandler(hotbarContent, playerQuery));
         }
 
-        return new(layers, screenSize, pointerState ?? new PointerState(), inputHandlers, contentDropHandlers, contextMenuController);
+        return new(layers, screenSize, pointerState ?? new PointerState(), inputHandlers, contentDropHandlers, contextMenuController?.Dropdowns);
     }
 
     private static void AddKeyPress(List<IUiInputHandler> inputHandlers, Keys key, Action? onPressed)

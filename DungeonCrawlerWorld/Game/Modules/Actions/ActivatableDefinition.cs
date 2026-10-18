@@ -43,4 +43,7 @@ public abstract record ActivatableDefinition(
     /// cancelled. Turning a toggle off is not a use: it takes nothing.
     /// </remarks>
     public IReadOnlyList<Effect> ActivationEffects { get; init; } = [];
+
+    /// <summary>The tags the definition itself declares, without its activator's implied ones -- what a content file holds, so implied tags never outlive a change of activator.</summary>
+    public abstract GameplayTagSet DeclaredTags { get; }
 }

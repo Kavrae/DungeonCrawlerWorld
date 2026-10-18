@@ -16,6 +16,25 @@ public interface IItemDefinitionSource
 public sealed class ItemCatalog() : Catalog<ItemDefinition>(static definition => definition.Id)
 {
     private readonly List<IItemDefinitionSource> _itemDefinitionSources = [];
+    private readonly Dictionary<(string Kind, int Variant), ItemDefinition> _derivedDefinitions = [];
+
+    /// <summary>The definition (kind, variant) names, made from this catalog by create the first time it's asked for and the same instance every time after.</summary>
+    /// <remarks>
+    /// For a definition derived from a registered one that many stacks share (a wand charged to a given number): one
+    /// instance per session, as a static field once gave, but made from this session's definitions. kind is a constant
+    /// unique to what create makes and variant tells its versions apart, so asking allocates nothing; create should be a
+    /// static lambda for the same reason.
+    /// </remarks>
+    public ItemDefinition GetOrCreateDerived(string kind, int variant, Func<ItemCatalog, int, ItemDefinition> create)
+    {
+        if (!_derivedDefinitions.TryGetValue((kind, variant), out var definition))
+        {
+            definition = create(this, variant);
+            _derivedDefinitions[(kind, variant)] = definition;
+        }
+
+        return definition;
+    }
 
     /// <summary>Adds a source asked for any id this catalog doesn't hold.</summary>
     public void AddDefinitionSource(IItemDefinitionSource itemDefinitionSource) => _itemDefinitionSources.Add(itemDefinitionSource);

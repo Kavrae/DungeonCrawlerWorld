@@ -10,6 +10,7 @@ internal enum ElementDragInteractionKind : byte
     Resize,
     ScrollThumb,
     ScrollTrack,
+    PointerDrag,
 }
 
 /// <summary>
@@ -31,6 +32,8 @@ internal readonly record struct ElementInteraction(ElementDragInteractionKind Ki
     public static ElementInteraction Move(Element element) => new(ElementDragInteractionKind.Move, element, ResizeEdges.None, null, ScrollbarPart.None);
 
     public static ElementInteraction Resize(Element element, ResizeEdges edges) => new(ElementDragInteractionKind.Resize, element, edges, null, ScrollbarPart.None);
+
+    public static ElementInteraction PointerDrag(Element element) => new(ElementDragInteractionKind.PointerDrag, element, ResizeEdges.None, null, ScrollbarPart.None);
 
     public static ElementInteraction Scrollbar(Element element, ScrollbarPart part) =>
         new(part.IsThumb() ? ElementDragInteractionKind.ScrollThumb : ElementDragInteractionKind.ScrollTrack, element, ResizeEdges.None, null, part);

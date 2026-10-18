@@ -4,7 +4,6 @@ using Engine.Events;
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
@@ -39,12 +38,12 @@ public sealed class ActionTargetingControllerDodgeTests
         TestTransforms.Set(componentManager, PlayerEntityId, new TransformComponent(PlayerPosition, new Vector2Byte(1, 1)));
         componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(DodgeAction.Id, overrideDefinition: null));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(BuiltInActionIds.Dodge, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 5));
-        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.DefaultAttack, DodgeAction.Id));
+        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.DefaultAttack, BuiltInActionIds.Dodge));
 
         var actionCatalog = new ActionCatalog();
-        actionCatalog.Register(DodgeAction.Build());
+        actionCatalog.Register(TestContent.Action(BuiltInActionIds.Dodge));
         var itemCatalog = new ItemCatalog();
 
         var camera = TestMapCameras.Over(world);
@@ -84,7 +83,7 @@ public sealed class ActionTargetingControllerDodgeTests
     private static void ActivateDodge(ComponentManager componentManager, EventBus eventBus)
     {
         componentManager.GetPackedPool<PendingActionActivationComponent>().Remove(PlayerEntityId);
-        eventBus.Publish(new Game.World.ActionActivatedEvent(PlayerEntityId, DodgeAction.Id));
+        eventBus.Publish(new Game.World.ActionActivatedEvent(PlayerEntityId, BuiltInActionIds.Dodge));
     }
 
     [TestMethod]
@@ -92,7 +91,7 @@ public sealed class ActionTargetingControllerDodgeTests
     {
         var (actionTargeting, mapViewState, componentManager, _, _, eventBus) = Build();
         actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
-        Assert.AreEqual(DodgeAction.Id, mapViewState.ArmedActionId, "Sanity check: Dodge must actually be armed before exercising the directional confirm.");
+        Assert.AreEqual(BuiltInActionIds.Dodge, mapViewState.ArmedActionId, "Sanity check: Dodge must actually be armed before exercising the directional confirm.");
         var claimedKeys = new HashSet<Keys>();
 
         actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.D), new KeyboardState(), claimedKeys);
@@ -134,7 +133,7 @@ public sealed class ActionTargetingControllerDodgeTests
         componentManager.GetPackedPool<PendingActionActivationComponent>().Remove(PlayerEntityId);
         clock.Advance(1);
         playerMovement.HandleInput(new KeyboardState(), new KeyboardState(), new HashSet<Keys>());
-        eventBus.Publish(new Game.World.ActionActivatedEvent(PlayerEntityId, DodgeAction.Id));
+        eventBus.Publish(new Game.World.ActionActivatedEvent(PlayerEntityId, BuiltInActionIds.Dodge));
 
         Assert.IsNull(componentManager.GetPackedPool<MovementComponent>().GetReadonly(PlayerEntityId).NextMapPosition);
     }
@@ -169,7 +168,7 @@ public sealed class ActionTargetingControllerDodgeTests
         actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.D), new KeyboardState(), []);
 
         var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
-        Assert.AreEqual(DodgeAction.Id, pending.ActionId);
+        Assert.AreEqual(BuiltInActionIds.Dodge, pending.ActionId);
         Assert.AreEqual(PlayerPosition, pending.Selection.AimedTile,
             "Must name the caster's own current tile (still occupied by the caster, since the move is only queued) -- not (6,5,0), the destination MovementSystem hasn't placed anyone at yet.");
     }
@@ -193,7 +192,7 @@ public sealed class ActionTargetingControllerDodgeTests
         actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
 
         var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
-        Assert.AreEqual(DodgeAction.Id, pending.ActionId);
+        Assert.AreEqual(BuiltInActionIds.Dodge, pending.ActionId);
         Assert.AreEqual(PlayerPosition, pending.Selection.AimedTile,
             "A double-tapped Dodge must activate on the caster's own tile, not silently fail to queue anything at all.");
         Assert.IsNull(mapViewState.ArmedActionId,

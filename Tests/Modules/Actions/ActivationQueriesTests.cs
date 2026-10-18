@@ -12,7 +12,6 @@ using Engine.ECS.Systems;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
@@ -110,8 +109,8 @@ public sealed class ActivationQueriesTests
     [TestMethod]
     public void UnarmedMeleeAction_IsBlockedByMeleeDisabled()
     {
-        Assert.AreEqual(ActivationBlocker.MeleeDisabled, BlockerOf(Components(meleeDisabled: true), QuickAttackAction.Build()));
-        Assert.AreEqual(ActivationBlocker.None, BlockerOf(Components(), QuickAttackAction.Build()));
+        Assert.AreEqual(ActivationBlocker.MeleeDisabled, BlockerOf(Components(meleeDisabled: true), TestContent.Action(BuiltInActionIds.QuickAttack)));
+        Assert.AreEqual(ActivationBlocker.None, BlockerOf(Components(), TestContent.Action(BuiltInActionIds.QuickAttack)));
     }
 
     [TestMethod]

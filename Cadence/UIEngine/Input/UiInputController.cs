@@ -129,13 +129,14 @@ public sealed class UiInputController
     private static readonly int ContentDragGhostDelayFrames = GameTiming.FramesForSeconds(0.15f);
 
     /// <summary>The application's own raw-input rules, called in this order at fixed points of every Update -- see IUiInputHandler. An array, so the per-frame loops over it allocate no enumerator.</summary>
-    private readonly IUiInputHandler[] _inputHandlers;
+    /// <remarks>Replaced whole by AddInputHandler and RemoveInputHandler, never written in place, so a handler that adds or removes one mid-loop doesn't disturb the loop it runs in.</remarks>
+    private IUiInputHandler[] _inputHandlers;
 
     /// <summary>What a content drop means, tried in this order on release until one claims it -- see IContentDropHandler.</summary>
     private readonly IContentDropHandler[] _contentDropHandlers;
 
-    /// <summary>Owns the single shared ContextMenu popup -- null in test setups that don't build one, in which case right-click context menus simply never open and an already-open one (there can't be, without this) never needs dismissing.</summary>
-    private readonly ContextMenuController? _contextMenuController;
+    /// <summary>Owns the single shared Dropdown popup -- null in test setups that don't build one, in which case no context menu or dropdown ever opens and an already-open one (there can't be, without this) never needs dismissing.</summary>
+    private readonly DropdownController? _dropdownController;
 
     /// <summary>Rewritten at the end of every Update -- see PointerState.</summary>
     private readonly PointerState _pointerState;
@@ -193,14 +194,14 @@ public sealed class UiInputController
 
     /// <param name="inputHandlers">The application's raw-input rules, called in this order -- see IUiInputHandler.</param>
     /// <param name="contentDropHandlers">What a content drop means, tried in this order until one claims it -- see IContentDropHandler.</param>
-    public UiInputController(UiLayerStack layers, Vector2 screenSize, PointerState pointerState, IReadOnlyList<IUiInputHandler> inputHandlers, IReadOnlyList<IContentDropHandler> contentDropHandlers, ContextMenuController? contextMenuController = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, PointerState pointerState, IReadOnlyList<IUiInputHandler> inputHandlers, IReadOnlyList<IContentDropHandler> contentDropHandlers, DropdownController? dropdownController = null)
     {
         _layers = layers;
         _screenSize = screenSize;
         _pointerState = pointerState;
         _inputHandlers = [.. inputHandlers];
         _contentDropHandlers = [.. contentDropHandlers];
-        _contextMenuController = contextMenuController;
+        _dropdownController = dropdownController;
         _isMenuWindow = layers.IsMenuWindow;
         _isMenuModeExempt = layers.IsMenuModeExempt;
 
@@ -208,6 +209,26 @@ public sealed class UiInputController
         // SDL_TEXTINPUT while text input is stopped (see SetFocus's Start/StopTextInput calls
         // below), so this just never fires until a TextBox is actually focused.
         TextInputEXT.TextInput += OnTextInput;
+    }
+
+    /// <summary>Adds handler after every handler already registered, from its next call on -- for one that comes and goes, such as a tab's hotkeys while the tab is open.</summary>
+    public void AddInputHandler(IUiInputHandler handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+
+        _inputHandlers = [.. _inputHandlers, handler];
+    }
+
+    /// <summary>Removes handler; nothing happens when it isn't registered.</summary>
+    public bool RemoveInputHandler(IUiInputHandler handler)
+    {
+        if (Array.IndexOf(_inputHandlers, handler) is not (var index and >= 0))
+        {
+            return false;
+        }
+
+        _inputHandlers = [.. _inputHandlers[..index], .. _inputHandlers[(index + 1)..]];
+        return true;
     }
 
     /// <summary>Internal, not private, so tests can simulate a typed character without a real OS text-input event -- the subscribed TextInputEXT.TextInput handler in real use otherwise.</summary>
@@ -327,11 +348,19 @@ public sealed class UiInputController
         _frameCounter++;
         FlushExpiredPendingClicks();
 
-        RouteHotkeysToFocusedElement(keyboardState);
+        var dropdownTookKey = RouteNavigationKeysToOpenDropdown(keyboardState);
+        if (!dropdownTookKey)
+        {
+            RouteHotkeysToFocusedElement(keyboardState);
+        }
+
         HandleFocusCycling(keyboardState);
         HandleEscape(keyboardState);
         RouteKeysToInputHandlers(keyboardState);
-        RouteKeyPressesToFocusedElement(keyboardState);
+        if (!dropdownTookKey)
+        {
+            RouteKeyPressesToFocusedElement(keyboardState);
+        }
         RouteTextInputToFocusedElement();
 
         if (keyboardState != _previousKeyboardState)
@@ -394,6 +423,28 @@ public sealed class UiInputController
         _pointerState.CursorPosition = CurrentMousePosition;
         _pointerState.ContentDrag = new ContentDragState(ContentDragGhostVisible, _contentDrag?.Payload, _contentDragSourceSize, CurrentMousePosition);
     }
+
+    /// <summary>Up, Down and Enter pressed this frame go to an open dropdown before the focused element sees them -- a TextBox under a DropdownField's list must not also move its caret. Returns whether one did.</summary>
+    private bool RouteNavigationKeysToOpenDropdown(KeyboardState keyboardState)
+    {
+        if (_dropdownController is not { IsOpen: true } dropdownController)
+        {
+            return false;
+        }
+
+        var tookKey = false;
+        foreach (var key in DropdownNavigationKeys)
+        {
+            if (IsKeyPressed(keyboardState, key) && dropdownController.HandleNavigationKey(key))
+            {
+                tookKey = true;
+            }
+        }
+
+        return tookKey;
+    }
+
+    private static readonly Keys[] DropdownNavigationKeys = [Keys.Up, Keys.Down, Keys.Enter];
 
     /// <summary>
     /// Routes the whole keyboard state to whichever element is focused, once per frame (see
@@ -521,9 +572,9 @@ public sealed class UiInputController
             // short-circuit (CloseTopmostClosableWindow), which would otherwise close the
             // whole menu window instead of just dismissing a context menu opened from
             // something inside it.
-            if (_contextMenuController is { IsOpen: true } contextMenuController)
+            if (_dropdownController is { IsOpen: true } dropdownController)
             {
-                contextMenuController.Close();
+                dropdownController.Close();
                 return;
             }
 
@@ -610,9 +661,9 @@ public sealed class UiInputController
         // rather than also raising/focusing/pressing whatever happens to be underneath. A click
         // that lands ON the menu (e.g. a row Button) falls through to the ordinary hit-test below
         // exactly as normal, since Contains is false only for a genuinely outside click.
-        if (_contextMenuController is { IsOpen: true } contextMenuController && !contextMenuController.Menu.Rectangle.Contains(clickPosition))
+        if (_dropdownController is { IsOpen: true } dropdownController && !dropdownController.Menu.Rectangle.Contains(clickPosition) && dropdownController.Owner?.Rectangle.Contains(clickPosition) != true)
         {
-            contextMenuController.Close();
+            dropdownController.Close();
             _activeInteraction = ElementInteraction.NotHit;
             return;
         }
@@ -749,7 +800,13 @@ public sealed class UiInputController
         // click fires at all, rather than after the fact.
         // A scrollbar press is chrome, not content -- releasing it never clicks the scrolled element.
         var isScrollbarInteraction = _activeInteraction.ScrollbarPart != ScrollbarPart.None;
-        if (!isScrollbarInteraction && !_textSelectionDragExceededTapThreshold && !ExceededContentDragTapThreshold(new Point(mouseState.X, mouseState.Y)))
+        var isPointerDrag = _activeInteraction.Kind == ElementDragInteractionKind.PointerDrag;
+        if (isPointerDrag)
+        {
+            _activeInteraction.Element?.EndPointerDrag();
+        }
+
+        if (!isScrollbarInteraction && !isPointerDrag && !_textSelectionDragExceededTapThreshold && !ExceededContentDragTapThreshold(new Point(mouseState.X, mouseState.Y)))
         {
             DispatchClick(_activeInteraction.Element, new Point(mouseState.X, mouseState.Y));
         }
@@ -951,6 +1008,10 @@ public sealed class UiInputController
             (relativePosition, size) = ClampResizeToBounds(relativePosition, size, GetPositionBounds(element), element.MinimumSize);
             element.SetBounds(relativePosition, size);
         }
+        else if (_activeInteraction.Kind == ElementDragInteractionKind.PointerDrag && _activeInteraction.Element is not null)
+        {
+            _activeInteraction.Element.DragPointer(DragDelta);
+        }
         else if (_activeInteraction.Kind == ElementDragInteractionKind.ScrollThumb && _activeInteraction.Element is not null)
         {
             _activeInteraction.Element.DragScrollbarThumb(_activeInteraction.ScrollbarPart, _dragStartScrollOffset, DragDelta);
@@ -1017,7 +1078,7 @@ public sealed class UiInputController
         // Every right-press dismisses an already-open context menu unconditionally, whether or
         // not this gesture goes on to open a fresh one -- an element's right-click tap (on
         // release, if this turns out to be a tap rather than a drag) opens a fresh one if it has a menu.
-        _contextMenuController?.Close();
+        _dropdownController?.Close();
 
         // Every input handler hears every right press too, with the same unconditional precedence.
         foreach (var handler in _inputHandlers)
@@ -1090,7 +1151,18 @@ public sealed class UiInputController
 
         var position = new Point(mouseState.X, mouseState.Y);
         var hoveredInteraction = HoveredInteractionAt(position);
-        if (hoveredInteraction.Element is not { } element || FindScrollableAncestor(element) is not { } scrollableElement)
+        if (hoveredInteraction.Element is not { } element)
+        {
+            return;
+        }
+
+        if (OfferMouseWheel(element, WholeNotches(wheelDelta)))
+        {
+            InvalidateHoveredInteraction();
+            return;
+        }
+
+        if (FindScrollableAncestor(element) is not { } scrollableElement)
         {
             return;
         }
@@ -1107,6 +1179,33 @@ public sealed class UiInputController
         scrollableElement.ScrollBy(scrollsHorizontally ? new Vector2(scrollDelta, 0) : new Vector2(0, scrollDelta));
     }
 
+    /// <summary>A wheel movement as whole notches -- at least one for any movement, so a fine-grained wheel that reports a fraction of a notch still steps a value.</summary>
+    private static int WholeNotches(int wheelDelta) => (int)(wheelDelta / WheelNotchValue) is var notches and not 0 ? notches : System.Math.Sign(wheelDelta);
+
+    /// <summary>Offers the wheel to element and each ancestor in turn up to the first scrollable one, which scrolls if none of them uses it -- so a number field inside a scrolling list steps its value, and the list scrolls everywhere else.</summary>
+    private static bool OfferMouseWheel(Element element, int notches)
+    {
+        if (notches == 0)
+        {
+            return false;
+        }
+
+        for (var candidate = (Element?)element; candidate is not null; candidate = candidate.ParentElement)
+        {
+            if (candidate.HandleMouseWheel(notches))
+            {
+                return true;
+            }
+
+            if (candidate.CanUserScrollVertical || candidate.CanUserScrollHorizontal)
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Starts at element itself (so an already-scrollable hit is unchanged) and walks ParentElement upward, returning the first element that opts into CanUserScrollVertical/Horizontal, or null if nothing in the chain does.</summary>
     private static Element? FindScrollableAncestor(Element element)
     {
@@ -1121,7 +1220,7 @@ public sealed class UiInputController
         return null;
     }
 
-    /// <summary>Tooltip/User both sit structurally above DynamicHud, where every menu window lives today -- see the menu-mode branch of TryHitTestInteraction for why hit-testing still reaches them while menu mode is active. ContextMenu is deliberately not in this array -- see TryHitTestInteraction's own doc comment for why it needs checking even earlier than this.</summary>
+    /// <summary>Tooltip/User both sit structurally above DynamicHud, where every menu window lives today -- see the menu-mode branch of TryHitTestInteraction for why hit-testing still reaches them while menu mode is active. Dropdown is deliberately not in this array -- see TryHitTestInteraction's own doc comment for why it needs checking even earlier than this.</summary>
     private static readonly UiLayer[] LayersAboveMenuMode = [UiLayer.User, UiLayer.Tooltip];
 
     /// <summary>User tier first, then DynamicHUD, then StaticHUD, then Base -- a higher tier can never lose to a lower one. Each tier topmost (last-raised) first. User is checked first purely for consistency (see the class's own doc comment) -- nothing placed there today is ever actually hit, since DragGhostContent's host window has no clickable content.</summary>
@@ -1129,7 +1228,7 @@ public sealed class UiInputController
     {
         if (_layers.IsMenuModeActive)
         {
-            // ContextMenu is checked before even IsMenuWindow -- it's always the true topmost
+            // Dropdown is checked before even IsMenuWindow -- it's always the true topmost
             // tier (see UiLayer.ContextMenu's own doc comment), but a menu opened from something
             // inside a menu window (a search box) commonly renders
             // overlapping that same menu window's own bounds. TryHitTestWhere(IsMenuWindow) below
@@ -1637,6 +1736,12 @@ public sealed class UiInputController
             SetHoveredButton(null);
             SetHoveredScrollbar(null, ScrollbarPart.None);
         }
+        else if (_activeInteraction is { Kind: ElementDragInteractionKind.PointerDrag, Element: { } pointerDragElement })
+        {
+            cursor = pointerDragElement.PointerDragCursor;
+            SetHoveredButton(null);
+            SetHoveredScrollbar(null, ScrollbarPart.None);
+        }
         else if (_activeInteraction.Kind is ElementDragInteractionKind.ScrollThumb or ElementDragInteractionKind.ScrollTrack)
         {
             cursor = MouseCursor.Arrow;
@@ -1741,6 +1846,7 @@ public sealed class UiInputController
     {
         ElementDragInteractionKind.Resize => GetResizeCursor(interaction.Edges),
         ElementDragInteractionKind.Move => MouseCursor.SizeAll,
+        ElementDragInteractionKind.PointerDrag when interaction.Element is { } element => element.PointerDragCursor,
         ElementDragInteractionKind.None when interaction.Element is TextBox => MouseCursor.IBeam,
         _ => MouseCursor.Arrow,
     };

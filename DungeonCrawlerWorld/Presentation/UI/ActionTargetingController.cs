@@ -3,7 +3,6 @@ using Engine.Math;
 using Engine.Tiles;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Inventory;
 using Game.Tags;
 using Game.Views;
@@ -338,7 +337,7 @@ public sealed class ActionTargetingController(
     /// </summary>
     public void TryClaimDodgeDirectionalKey(KeyboardState keyboardState, KeyboardState previousKeyboardState, HashSet<Keys> claimedKeys)
     {
-        if (mapViewState.ArmedActionId != DodgeAction.Id || !transformView.TryGetTransform(world.PlayerEntityId, out var transform))
+        if (mapViewState.ArmedActionId != BuiltInActionIds.Dodge || !transformView.TryGetTransform(world.PlayerEntityId, out var transform))
         {
             return;
         }
@@ -835,7 +834,7 @@ public sealed class ActionTargetingController(
     {
         Vector3Int? stepOnActivation = null;
 
-        if (actionId == DodgeAction.Id && transformView.TryGetTransform(entityId, out var casterTransform))
+        if (actionId == BuiltInActionIds.Dodge && transformView.TryGetTransform(entityId, out var casterTransform))
         {
             // DodgeActivation's own effect (DodgingComponent) always applies to the caster, not to
             // "whoever occupies the resolved target tile" -- for a directional dodge that tile is the

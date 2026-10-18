@@ -58,7 +58,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     protected static readonly Color CompareEligibleGlowColor = Color.LightGreen;
 
     /// <summary>protected, not private -- ShopItemStackCell's own DrawContent override reads these directly (its sprite/name/price layout replaces the icon+quantity-badge one below entirely, so it can't reuse this class's own DrawContent body, only its Configure-computed data).</summary>
-    protected string? _spriteName;
+    private SpriteView? _sprite;
     protected string _glyph = string.Empty;
     protected Color _glyphColor;
     private int _quantity;
@@ -177,7 +177,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         StackInstanceId = stackInstanceId;
         IsDivergent = isDivergent;
         MergedStackBadgeVisible = mergedStackBadgeVisible;
-        _spriteName = spriteName;
+        _sprite = spriteSheetService.Sprites.FirstOrNull(spriteName);
         _glyph = glyph;
         _glyphColor = glyphColor;
         IsDragSource = true;
@@ -255,11 +255,10 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         }
 
         var isGreyedOut = _isDisabled || CompareState == CellCompareState.Ineligible || !ShopTradeEligible;
-        SpriteView? sprite = _spriteName is not null && spriteSheetService.Sprites.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
         var spriteTint = isGreyedOut ? Color.Gray : Color.White;
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, LabelRenderer, sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, iconSize, spriteTint);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, LabelRenderer, _sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, iconSize, spriteTint);
 
         if (IsToggledOn)
         {

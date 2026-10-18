@@ -128,9 +128,9 @@ public sealed class CurrencyRowContent(
     }
 
     /// <summary>Mirrors InventoryGridContent.BuildItemContextMenu's exact Give/Take decision logic. "Give"/"Take" move only the clicked element's own currency; "Give All"/"Take All" move both regardless of which element was right-clicked. A shop never offers "Take"/"Take All" -- a player can Give Gold to a shop but never take it back out (see this class's own doc comment). A shop also never offers plain "Give": giving one currency type at a time isn't a meaningful shop gesture, so only "Give All" is shown once the secondary target carries a ShopComponent -- a corpse/container still gets both.</summary>
-    private List<ContextMenuOption> BuildCurrencyContextMenu(CurrencyElement element)
+    private List<DropdownOption> BuildCurrencyContextMenu(CurrencyElement element)
     {
-        List<ContextMenuOption> options = [];
+        List<DropdownOption> options = [];
 
         if (getSecondaryTargetEntityId() is not { } secondaryTargetEntityId)
         {
@@ -143,15 +143,15 @@ public sealed class CurrencyRowContent(
         {
             if (!secondaryIsShop)
             {
-                options.Add(new ContextMenuOption("Give", null, Enabled: true, () => TransferOne(element, world.PlayerEntityId, secondaryTargetEntityId)));
+                options.Add(new DropdownOption("Give", null, Enabled: true, () => TransferOne(element, world.PlayerEntityId, secondaryTargetEntityId)));
             }
 
-            options.Add(new ContextMenuOption("Give All", null, Enabled: true, () => TransferAll(world.PlayerEntityId, secondaryTargetEntityId)));
+            options.Add(new DropdownOption("Give All", null, Enabled: true, () => TransferAll(world.PlayerEntityId, secondaryTargetEntityId)));
         }
         else if (element.EntityId == secondaryTargetEntityId && secondaryTargetEntityId != world.PlayerEntityId && !secondaryIsShop)
         {
-            options.Add(new ContextMenuOption("Take", null, Enabled: true, () => TransferOne(element, secondaryTargetEntityId, world.PlayerEntityId)));
-            options.Add(new ContextMenuOption("Take All", null, Enabled: true, () => _currencyCommands.TryTransferAll(secondaryTargetEntityId, world.PlayerEntityId)));
+            options.Add(new DropdownOption("Take", null, Enabled: true, () => TransferOne(element, secondaryTargetEntityId, world.PlayerEntityId)));
+            options.Add(new DropdownOption("Take All", null, Enabled: true, () => _currencyCommands.TryTransferAll(secondaryTargetEntityId, world.PlayerEntityId)));
         }
 
         return options;

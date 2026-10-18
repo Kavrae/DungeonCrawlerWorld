@@ -1,3 +1,4 @@
+using Engine.Content;
 using Engine.Modules;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
@@ -27,6 +28,12 @@ public sealed class InventoryModule : IGameModule
     public Guid Id => ModuleId;
 
     public IReadOnlyList<Guid> Requires { get; } = [ActionsModule.ModuleId, CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, BodyPartEffectsModule.ModuleId, AurasModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId];
+
+    /// <summary>Registers the content codecs for the serialized types this module owns.</summary>
+    public void DeclareContentTypes(ContentTypeRegistration registration)
+    {
+        InventoryContentCodecs.Register(registration);
+    }
 
     public void RegisterComponents(ComponentRegistration registration)
     {

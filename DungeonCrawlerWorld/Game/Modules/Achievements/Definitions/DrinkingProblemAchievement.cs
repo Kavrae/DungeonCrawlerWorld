@@ -1,5 +1,4 @@
-﻿using Game.Modules.Inventory;
-using Game.Modules.Inventory.Definitions;
+using Game.Modules.Inventory;
 using Game.Modules.Lootboxes;
 using Game.World;
 
@@ -10,7 +9,7 @@ namespace Game.Modules.Achievements.Definitions;
 public sealed class DrinkingProblemAchievement : IAchievementDefinition
 {
     private static readonly LootboxReward Reward = new(LootboxTypes.Alchemist.Id, LootboxRarity.Bronze,
-        new SetItemContents([new ItemContentsEntry(HealthPotion.Id, 2), new ItemContentsEntry(CurePoisonPotion.Id, 2)]));
+        new SetItemContents([new ItemContentsEntry(BuiltInItemIds.HealthPotion, 2), new ItemContentsEntry(BuiltInItemIds.CurePoisonPotion, 2)]));
 
     public Guid Id { get; } = new("3a1f8c2e-9d4b-47a6-8e2f-000000000008");
 

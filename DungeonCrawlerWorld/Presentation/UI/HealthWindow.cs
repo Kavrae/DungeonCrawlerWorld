@@ -8,7 +8,6 @@ using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
 using Game.Modules.Health;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
@@ -103,7 +102,7 @@ public sealed class HealthWindow(
     /// <summary>Gap between the left (Status Effects/Body Parts) and right (Buffs/Debuffs) columns -- same role as AbilityScoreWindow.ColumnGap, just between 2 columns instead of 5.</summary>
     private const float ColumnGap = 6f;
 
-    /// <summary>TextWindow.ContentFont defaults to 12 only the first time a pooled instance is ever truly constructed -- a settable property, not reset by Build/Configure, so a recycled instance keeps whatever size its *previous* consumer last set (see ContextMenu/GridControl/TabbedContent's own ".ContentFont = _font" call sites, each with the same "must match" comment). Cached once and assigned explicitly in AddTextRow so a row's size never depends on what the pool handed back.</summary>
+    /// <summary>TextWindow.ContentFont defaults to 12 only the first time a pooled instance is ever truly constructed -- a settable property, not reset by Build/Configure, so a recycled instance keeps whatever size its *previous* consumer last set (see Dropdown/GridControl/TabbedContent's own ".ContentFont = _font" call sites, each with the same "must match" comment). Cached once and assigned explicitly in AddTextRow so a row's size never depends on what the pool handed back.</summary>
     private readonly SpriteFontBase _bodyFont = fontService.GetFont(FontChrome.DefaultFontSize);
 
     private readonly EntityBodyParts _bodyParts = bodyParts;
@@ -1074,7 +1073,7 @@ public sealed class HealthWindow(
             return false;
         }
 
-        var hasHealthPotion = itemCatalog.TryGet(HealthPotion.Id, out var healthPotion);
+        var hasHealthPotion = itemCatalog.TryGet(BuiltInItemIds.HealthPotion, out var healthPotion);
         var glyph = hasHealthPotion ? healthPotion.Glyph : "?";
         color = hasHealthPotion ? healthPotion.GlyphColor : BodyTextColor;
         text = $"{glyph} Potion Cooldown: {PotionCooldownEffects.RemainingSeconds(framesRemaining)}s";

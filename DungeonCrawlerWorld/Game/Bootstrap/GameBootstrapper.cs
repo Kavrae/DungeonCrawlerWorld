@@ -102,7 +102,7 @@ public static class GameBootstrapper
         }
 
         var session = GameBuildPass.Run(builtInModules, validatedMods.Mods, map, mathUtility, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, runtimeSpawnSeed);
-        var spawnRecordRebuilder = new SpawnRecordRebuilder(staging.EcsContext, new EntityBuilder(session.Context.Definitions, session.Context.Auras, session.Context.Actions, staging.EcsContext.EntityManager.Keys));
+        var spawnRecordRebuilder = new SpawnRecordRebuilder(staging.EcsContext, new EntityBuilder(session.Context.Definitions, session.Context.Auras, session.Context.Actions, session.Context.Items, staging.EcsContext.EntityManager.Keys));
         return new GameSession(session, validatedMods.Failures, spawnRecordRebuilder, CreateTeleporter(session.World, session.EcsContext, session.Factory, session.Factory.Skeletons));
     }
 

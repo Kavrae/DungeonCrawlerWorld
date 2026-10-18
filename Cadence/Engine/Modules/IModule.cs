@@ -1,3 +1,4 @@
+using Engine.Content;
 using Engine.Settings;
 using Engine.Tags;
 
@@ -9,7 +10,7 @@ namespace Engine.Modules;
 /// it. Requires is about presence and RunsAfter/RunsBefore about system order, and neither implies the
 /// other: every component is registered before any module is configured or any behavior registered, so a
 /// pool another module owns is available whatever the order. The phases run in this order, each for
-/// every module before the next starts: DeclareSettings and DeclareTags, RegisterComponents, then
+/// every module before the next starts: DeclareSettings, DeclareTags and DeclareContentTypes, RegisterComponents, then
 /// <see cref="IModule{TContext}"/>'s Configure and RegisterBehavior.
 ///
 /// Implement <see cref="IModule{TContext}"/>, never this alone: the builder, the loader and
@@ -50,6 +51,12 @@ public interface IModule
     /// <summary>Declares every gameplay tag this module's content uses, with any display names.</summary>
     /// <remarks>Runs with DeclareSettings, before any other phase, with no pools yet.</remarks>
     void DeclareTags(GameplayTagDeclarations tags)
+    {
+    }
+
+    /// <summary>Registers the content codecs for the serialized types this module owns -- its definitions, and the effect entries, activators or contents it adds to a family.</summary>
+    /// <remarks>Runs with DeclareSettings and DeclareTags, before any other phase, so every codec exists before a Configure reads a manifest.</remarks>
+    void DeclareContentTypes(ContentTypeRegistration registration)
     {
     }
 

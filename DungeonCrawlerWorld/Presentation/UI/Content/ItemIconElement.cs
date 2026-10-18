@@ -20,14 +20,14 @@ namespace Presentation.UI.Content;
 public sealed class ItemIconElement(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService)
     : Element(fontService, elementPoolService, labelRenderer)
 {
-    private string? _spriteName;
+    private SpriteView? _sprite;
     private string _glyph = string.Empty;
     private Color _glyphColor;
     private SpriteFontBase _glyphFont = null!;
 
     public void Configure(string? spriteName, string glyph, Color glyphColor, Vector2 iconSize)
     {
-        _spriteName = spriteName;
+        _sprite = spriteSheetService.Sprites.FirstOrNull(spriteName);
         _glyph = glyph;
         _glyphColor = glyphColor;
         _glyphFont = FontService.GetFont((int)(iconSize.Y * GameFontChrome.IconGlyphFontFraction));
@@ -35,8 +35,6 @@ public sealed class ItemIconElement(FontService fontService, ElementPoolService 
 
     public override void DrawContent(GameTime gameTime)
     {
-        SpriteView? sprite = _spriteName is not null && spriteSheetService.Sprites.TryGetFirst(_spriteName, out var spriteView) ? spriteView : null;
-
-        SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, LabelRenderer, sprite, _glyphFont, _glyph, _glyphColor, ContentAbsolutePosition, ContentSize, Color.White);
+        SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, LabelRenderer, _sprite, _glyphFont, _glyph, _glyphColor, ContentAbsolutePosition, ContentSize, Color.White);
     }
 }

@@ -1,4 +1,4 @@
-using Game.Modules.Inventory.Definitions;
+using Game.Modules.Inventory;
 using Game.Modules.Shops.Components;
 
 namespace Game.Blueprints.Objects;
@@ -14,25 +14,25 @@ public static class GeneralShopStock
     private const float SellMultiplier = 0.80f;
 
     /// <summary>
-    /// Every current CoreItemsModule item, built once via each item's own pure Build() factory --
-    /// mirrors TreasureChest.LootTable's own "no ItemCatalog injection needed" shape.
+    /// Every current CoreItemsModule item, named by its BuiltInItemIds Guid --
+    /// a stock entry needs only the id.
     /// PreferredStockLevel per item is hand-tuned the same way ItemDefinition.GoldValue is
     /// -- lower across the board than PotionShopStock's own par levels, since a
     /// generalist spreads its Gold across every tag instead of leaning on one.
     /// </summary>
     private static readonly ShopStockEntry[] Stock =
     [
-        new(HealthPotion.Build(), PreferredStockLevel: 40),
-        new(ManaPotion.Build(), PreferredStockLevel: 40),
-        new(HotkeyExpansionPotion.Build(), PreferredStockLevel: 15),
-        new(DamagePotion.Build(), PreferredStockLevel: 20),
-        new(ToxicPotion.Build(), PreferredStockLevel: 20),
-        new(ToxicIdol.Build(), PreferredStockLevel: 10),
-        new(ScrollOfHealing.Build(), PreferredStockLevel: 25),
-        new(ScrollOfTorch.Build(), PreferredStockLevel: 25),
-        new(WandOfFireball.Build(), PreferredStockLevel: 5),
-        new(ImmunityTestPotion.Build(), PreferredStockLevel: 10),
-        new(ResistanceTestPotion.Build(), PreferredStockLevel: 10),
+        new(BuiltInItemIds.HealthPotion, PreferredStockLevel: 40),
+        new(BuiltInItemIds.ManaPotion, PreferredStockLevel: 40),
+        new(BuiltInItemIds.HotkeyExpansionPotion, PreferredStockLevel: 15),
+        new(BuiltInItemIds.DamagePotion, PreferredStockLevel: 20),
+        new(BuiltInItemIds.ToxicPotion, PreferredStockLevel: 20),
+        new(BuiltInItemIds.ToxicIdol, PreferredStockLevel: 10),
+        new(BuiltInItemIds.ScrollOfHealing, PreferredStockLevel: 25),
+        new(BuiltInItemIds.ScrollOfTorch, PreferredStockLevel: 25),
+        new(BuiltInItemIds.WandOfFireball, PreferredStockLevel: 5),
+        new(BuiltInItemIds.ImmunityTestPotion, PreferredStockLevel: 10),
+        new(BuiltInItemIds.ResistanceTestPotion, PreferredStockLevel: 10),
     ];
 
     public static readonly BlueprintDefinition Definition = new(Id, Name)

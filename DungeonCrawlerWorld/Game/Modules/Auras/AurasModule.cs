@@ -1,3 +1,4 @@
+using Engine.Content;
 using Engine.ECS.Components;
 using Engine.ECS.Relationships;
 using Engine.ECS.Systems;
@@ -31,6 +32,12 @@ public sealed class AurasModule : IGameModule
     public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, ProcessingTierModule.ModuleId, .. EffectServices.RequiredModuleIds.Where(static moduleId => moduleId != ModuleId)];
 
     public IReadOnlyList<Guid> RunsAfter { get; } = [MovementModule.ModuleId];
+
+    /// <summary>Registers the content codecs for the serialized types this module owns.</summary>
+    public void DeclareContentTypes(ContentTypeRegistration registration)
+    {
+        AuraContentCodecs.Register(registration);
+    }
 
     public void RegisterComponents(ComponentRegistration registration)
     {

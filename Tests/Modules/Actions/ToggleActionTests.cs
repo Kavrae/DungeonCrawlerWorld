@@ -12,13 +12,11 @@ using Game.Modules;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Auras;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.Mana.Components;
 using Game.Spawning;
 using Game.World;
@@ -68,12 +66,12 @@ public sealed class ToggleActionTests
         }
 
         public void QueueToxicAura() =>
-            Components.Merge(PlayerEntityId, new PendingActionActivationComponent(ToxicAuraAction.Id, TestSelections.At(PlayerPosition)));
+            Components.Merge(PlayerEntityId, new PendingActionActivationComponent(BuiltInActionIds.ToxicAura, TestSelections.At(PlayerPosition)));
 
         public void QueueItem(uint stackInstanceId) =>
             Components.Merge(PlayerEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(PlayerPosition)));
 
-        public bool IsToxicAuraOn => Session.Views.ActionStateView.IsActionToggledOn(PlayerEntityId, ToxicAuraAction.Id);
+        public bool IsToxicAuraOn => Session.Views.ActionStateView.IsActionToggledOn(PlayerEntityId, BuiltInActionIds.ToxicAura);
 
         public int ActiveToggleCount(int entityId) => Components.GetMultiPool<ActiveToggleComponent>().CountForEntity(entityId);
 
@@ -106,7 +104,7 @@ public sealed class ToggleActionTests
         {
             var stacks = new List<InventoryItemStackComponent>();
             InventoryQueries.CopyStacksForEntity(Components.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-            return stacks.Where(stack => stack.ItemDefinitionId == ToxicIdol.Id).ToList();
+            return stacks.Where(stack => stack.ItemDefinitionId == BuiltInItemIds.ToxicIdol).ToList();
         }
 
         public int LitCount(int entityId) =>
@@ -150,7 +148,7 @@ public sealed class ToggleActionTests
     /// <summary>A unit of a Toxic Idol variant with periodic effects, added to entityId unlit. FreeCast, so a test about its upkeep isn't also waiting out a windup.</summary>
     private static uint AddIdolWithUpkeep(Harness harness, int entityId, ushort manaPerInterval, ushort intervalFrames, IReadOnlyList<Effect>? activationEffects = null)
     {
-        var variant = ToxicIdol.Build() with
+        var variant = TestContent.Item(BuiltInItemIds.ToxicIdol) with
         {
             Activator = new ToggleItemActivator(new ActionTiming(ActionTimingCategory.FreeCast)),
             Toggle = new ToggleSpec(new TogglePeriodicEffects([new Effect([new ManaDrain(manaPerInterval)])], intervalFrames)),
@@ -169,7 +167,7 @@ public sealed class ToggleActionTests
         harness.Frame();
 
         Assert.IsTrue(harness.IsToxicAuraOn);
-        Assert.AreEqual(AuraStrength, harness.StrengthAt(PlayerPosition, ToxicAuraAction.Aura));
+        Assert.AreEqual(AuraStrength, harness.StrengthAt(PlayerPosition, TestContent.Aura(BuiltInAuraIds.ToxicAura)));
         Assert.AreEqual(LockedUntilFrame, harness.LockDeadline);
     }
 
@@ -189,7 +187,7 @@ public sealed class ToggleActionTests
         harness.QueueToxicAura();
         harness.Frame();
         Assert.IsFalse(harness.IsToxicAuraOn);
-        Assert.AreEqual(0, harness.StrengthAt(PlayerPosition, ToxicAuraAction.Aura));
+        Assert.AreEqual(0, harness.StrengthAt(PlayerPosition, TestContent.Aura(BuiltInAuraIds.ToxicAura)));
 
         harness.QueueToxicAura();
         harness.Frame();
@@ -224,16 +222,16 @@ public sealed class ToggleActionTests
         harness.FrameUntil(() => harness.LitCount(player) == 1);
 
         Assert.AreEqual(2, harness.ActiveToggleCount(player));
-        Assert.AreEqual(AuraStrength, harness.StrengthAt(PlayerPosition, ToxicAuraAction.Aura));
-        Assert.AreEqual(AuraStrength, harness.StrengthAt(PlayerPosition, ToxicIdol.Aura));
+        Assert.AreEqual(AuraStrength, harness.StrengthAt(PlayerPosition, TestContent.Aura(BuiltInAuraIds.ToxicAura)));
+        Assert.AreEqual(AuraStrength, harness.StrengthAt(PlayerPosition, TestContent.Aura(BuiltInAuraIds.ToxicIdolPoison)));
 
         harness.FrameUntil(() => !harness.IsPlayerLocked);
         harness.QueueItem(harness.LitStackId(player));
         harness.Frame();
 
         Assert.IsTrue(harness.IsToxicAuraOn);
-        Assert.AreEqual(AuraStrength, harness.StrengthAt(PlayerPosition, ToxicAuraAction.Aura));
-        Assert.AreEqual(0, harness.StrengthAt(PlayerPosition, ToxicIdol.Aura));
+        Assert.AreEqual(AuraStrength, harness.StrengthAt(PlayerPosition, TestContent.Aura(BuiltInAuraIds.ToxicAura)));
+        Assert.AreEqual(0, harness.StrengthAt(PlayerPosition, TestContent.Aura(BuiltInAuraIds.ToxicIdolPoison)));
     }
 
     [TestMethod]
@@ -250,9 +248,9 @@ public sealed class ToggleActionTests
         harness.Kill(player);
 
         Assert.IsFalse(harness.IsToxicAuraOn);
-        Assert.AreEqual(0, harness.StrengthAt(PlayerPosition, ToxicAuraAction.Aura));
+        Assert.AreEqual(0, harness.StrengthAt(PlayerPosition, TestContent.Aura(BuiltInAuraIds.ToxicAura)));
         Assert.AreEqual(1, harness.ActiveToggleCount(player));
-        Assert.AreEqual(AuraStrength, harness.StrengthAt(PlayerPosition, ToxicIdol.Aura));
+        Assert.AreEqual(AuraStrength, harness.StrengthAt(PlayerPosition, TestContent.Aura(BuiltInAuraIds.ToxicIdolPoison)));
         Assert.AreEqual(1, harness.LitCount(player));
     }
 
@@ -273,7 +271,7 @@ public sealed class ToggleActionTests
         harness.Frame(3);
         Assert.AreEqual(0, harness.LitCount(player));
         Assert.AreEqual(0, harness.ActiveToggleCount(player));
-        Assert.AreEqual(0, harness.StrengthAt(PlayerPosition, ToxicIdol.Aura));
+        Assert.AreEqual(0, harness.StrengthAt(PlayerPosition, TestContent.Aura(BuiltInAuraIds.ToxicIdolPoison)));
         Assert.AreEqual(2, harness.IdolStacks(player).Sum(stack => stack.Quantity), "No unit is lost.");
     }
 
@@ -310,7 +308,7 @@ public sealed class ToggleActionTests
         Assert.AreEqual(0, harness.LitCount(corpse));
         Assert.AreEqual(0, harness.ActiveToggleCount(corpse));
         Assert.AreEqual(1, harness.IdolStacks(corpse).Sum(stack => stack.Quantity));
-        Assert.AreEqual(0, harness.StrengthAt(OtherPosition, ToxicIdol.Aura));
+        Assert.AreEqual(0, harness.StrengthAt(OtherPosition, TestContent.Aura(BuiltInAuraIds.ToxicIdolPoison)));
     }
 
     [TestMethod]

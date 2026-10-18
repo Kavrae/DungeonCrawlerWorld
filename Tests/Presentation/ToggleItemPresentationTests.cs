@@ -7,11 +7,9 @@ using Game.Bootstrap;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
-using Game.Modules.Inventory.Definitions;
 using Game.Spawning;
 using Game.Views;
 using Game.World;
@@ -54,7 +52,7 @@ public sealed class ToggleItemPresentationTests
         {
             var stacks = new List<InventoryItemStackComponent>();
             InventoryQueries.CopyStacksForEntity(Ecs.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), PlayerEntityId, stacks);
-            return stacks.Where(stack => stack.ItemDefinitionId == ToxicIdol.Id).ToList();
+            return stacks.Where(stack => stack.ItemDefinitionId == BuiltInItemIds.ToxicIdol).ToList();
         }
 
         public bool IsIdolLit => IdolStacks().Any(stack => stack.Override?.Activator is ToggleItemActivator { IsToggledOn: true });
@@ -141,12 +139,12 @@ public sealed class ToggleItemPresentationTests
         var harness = BuildInput();
         harness.FrameUntil(() => !harness.IsPlayerLocked);
         harness.ActionTargeting.HandleHotkeySlotPress(HotkeySlot.Base1);
-        Assert.AreEqual(PowerAttackAction.Id, harness.MapViewState.ArmedActionId);
+        Assert.AreEqual(BuiltInActionIds.PowerAttack, harness.MapViewState.ArmedActionId);
 
         harness.ActionTargeting.HandleHotkeySlotPress(HotkeySlot.Slot6);
         harness.FrameUntil(() => harness.IsIdolLit);
 
-        Assert.AreEqual(PowerAttackAction.Id, harness.MapViewState.ArmedActionId);
+        Assert.AreEqual(BuiltInActionIds.PowerAttack, harness.MapViewState.ArmedActionId);
     }
 
     [TestMethod]
@@ -154,7 +152,7 @@ public sealed class ToggleItemPresentationTests
     {
         var harness = BuildInput();
         var components = harness.Ecs.ComponentManager;
-        components.GetMultiPool<ActionHotkeyBindingComponent>().Add(harness.PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot8, ToxicAuraAction.Id));
+        components.GetMultiPool<ActionHotkeyBindingComponent>().Add(harness.PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot8, BuiltInActionIds.ToxicAura));
         components.GetPackedPool<Game.Modules.Mana.Components.ManaComponent>().TryUpdate(harness.PlayerEntityId, static (ref Game.Modules.Mana.Components.ManaComponent mana) =>
         {
             mana.MaximumMana = 50;
@@ -207,7 +205,7 @@ public sealed class ToggleItemPresentationTests
 
         var itemCatalog = new ItemCatalog();
         // FreeCast, so the grid's lock rules for a FreeCast item can be tested; nothing else here depends on timing.
-        itemCatalog.Register(ToxicIdol.Build() with { Activator = new ToggleItemActivator(new ActionTiming(ActionTimingCategory.FreeCast)) });
+        itemCatalog.Register(TestContent.Item(BuiltInItemIds.ToxicIdol) with { Activator = new ToggleItemActivator(new ActionTiming(ActionTimingCategory.FreeCast)) });
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
@@ -237,7 +235,7 @@ public sealed class ToggleItemPresentationTests
     public void LitStack_KeepsACellOfItsOwn_WhileStacksAreGrouped()
     {
         var fixture = BuildGrid();
-        var plainStackId = InventoryActions.AddItem(fixture.ComponentManager, GridPlayerEntityId, ToxicIdol.Id, quantity: 3);
+        var plainStackId = InventoryActions.AddItem(fixture.ComponentManager, GridPlayerEntityId, BuiltInItemIds.ToxicIdol, quantity: 3);
         Assert.IsTrue(ToggleItemActions.TryToggle(fixture.ComponentManager, fixture.ItemCatalog, GridPlayerEntityId, plainStackId, out var litStackId));
         Assert.IsTrue(fixture.Grid.GroupDivergedStacks);
 
@@ -253,7 +251,7 @@ public sealed class ToggleItemPresentationTests
     public void LitCell_CarriesTheToggleMarker_AndTheUnlitCellDoesNot()
     {
         var fixture = BuildGrid();
-        var plainStackId = InventoryActions.AddItem(fixture.ComponentManager, GridPlayerEntityId, ToxicIdol.Id, quantity: 2);
+        var plainStackId = InventoryActions.AddItem(fixture.ComponentManager, GridPlayerEntityId, BuiltInItemIds.ToxicIdol, quantity: 2);
         Assert.IsTrue(ToggleItemActions.TryToggle(fixture.ComponentManager, fixture.ItemCatalog, GridPlayerEntityId, plainStackId, out var litStackId));
 
         fixture.Refresh();
@@ -271,7 +269,7 @@ public sealed class ToggleItemPresentationTests
     public void MenuOption_ReadsTurnOnForAnUnlitUnit_AndTurnOffForALitOne()
     {
         var fixture = BuildGrid();
-        var plainStackId = InventoryActions.AddItem(fixture.ComponentManager, GridPlayerEntityId, ToxicIdol.Id, quantity: 2);
+        var plainStackId = InventoryActions.AddItem(fixture.ComponentManager, GridPlayerEntityId, BuiltInItemIds.ToxicIdol, quantity: 2);
         Assert.IsTrue(ToggleItemActions.TryToggle(fixture.ComponentManager, fixture.ItemCatalog, GridPlayerEntityId, plainStackId, out var litStackId));
         fixture.Refresh();
 
@@ -283,7 +281,7 @@ public sealed class ToggleItemPresentationTests
     public void FreeCastToggleItem_CanBeActivatedFromTheGridWhileActionLocked()
     {
         var fixture = BuildGrid(unlockedAtFrame: LockedUntilFrame);
-        var stackId = InventoryActions.AddItem(fixture.ComponentManager, GridPlayerEntityId, ToxicIdol.Id, quantity: 1);
+        var stackId = InventoryActions.AddItem(fixture.ComponentManager, GridPlayerEntityId, BuiltInItemIds.ToxicIdol, quantity: 1);
         fixture.Refresh();
         var cell = fixture.Cells.Single();
 

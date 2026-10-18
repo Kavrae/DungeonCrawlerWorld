@@ -95,6 +95,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         using (EngineHooks.DiagnosticScope("Presentation Bootstrap"))
         {
             _uiEngine = UiEngineBootstrapper.Build(GraphicsDevice, "Fonts", "Spritesheets", "SpriteManifest.json");
+            _uiEngine.SpriteSheetService.Sprites.ReportManifestProblems(Console.Error);
             MissingSpriteCheck.Report(_worldSession.GameSession.Views.ContentSpriteNames, _uiEngine.SpriteSheetService.Sprites, Console.Error);
         }
 

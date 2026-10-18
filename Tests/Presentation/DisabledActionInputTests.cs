@@ -8,7 +8,6 @@ using Game.Effects.Entries;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
@@ -93,14 +92,14 @@ public sealed class DisabledActionInputTests
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(PlayerEntityId, new ManaComponent(50f, 100f));
         componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 5));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(QuickAttackAction.Id, overrideDefinition: null));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(BuiltInActionIds.QuickAttack, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(SpellId, overrideDefinition: null));
         var bindings = componentManager.GetMultiPool<ActionHotkeyBindingComponent>();
-        bindings.Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, QuickAttackAction.Id));
+        bindings.Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, BuiltInActionIds.QuickAttack));
         bindings.Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot2, SpellId));
 
         var actionCatalog = new ActionCatalog();
-        actionCatalog.Register(QuickAttackAction.Build());
+        actionCatalog.Register(TestContent.Action(BuiltInActionIds.QuickAttack));
         actionCatalog.Register(new ActionDefinition(
             SpellId, "Test Self Spell", null, "*", Color.White, [GameTags.TargetingSelf],
             Effects: [Effect.None],

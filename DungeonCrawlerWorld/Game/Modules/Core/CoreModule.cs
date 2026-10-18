@@ -1,6 +1,9 @@
+using Engine.Content;
 using Engine.Math;
 using Engine.Modules;
 using Engine.Tags;
+using Game.Effects;
+using Game.Effects.Entries;
 using Game.Modules.Core.Components;
 using Game.Tags;
 using Microsoft.Xna.Framework;
@@ -28,6 +31,13 @@ public sealed class CoreModule : IGameModule
     /// <summary>Nothing to configure -- kept because IGameModule requires it, and because Core is still a game module by every other measure.</summary>
     public void Configure(GameModuleContext context)
     {
+    }
+
+    /// <summary>Registers the content codecs for the serialized types this module owns.</summary>
+    public void DeclareContentTypes(ContentTypeRegistration registration)
+    {
+        EffectContentCodecs.Register(registration);
+        EffectEntryCodecs.Register(registration);
     }
 
     /// <summary>Registers core components with their appropriate component pools.</summary>

@@ -1,7 +1,6 @@
 using Engine.Math;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
@@ -30,9 +29,9 @@ public static class Human
     /// <summary>What every Human can do -- held on its race definition, not on each creature (see ActionGrant). No overrides: QuickAttack and PowerAttack roll their catalog DirectDamage range rather than a fixed number.</summary>
     public static readonly ActionGrant[] ActionGrants =
     [
-        new(QuickAttackAction.Id),
-        new(PowerAttackAction.Id),
-        new(DodgeAction.Id),
+        new(BuiltInActionIds.QuickAttack),
+        new(BuiltInActionIds.PowerAttack),
+        new(BuiltInActionIds.Dodge),
     ];
 
     /// <summary>Head/Torso/Internal are Vital; sums to 250, matching the flat SimpleHealthComponent total this replaced so the split doesn't itself rebalance Human's overall toughness. 11 parts (Arm/Leg each split off a Hand/Foot, plus Internal for Poison's own always-hit target) -- not a final balance pass. VerticalPosition: Head 5, Torso/Internal 4, Arm 3, Hand 2, Leg 1, Foot 0.</summary>

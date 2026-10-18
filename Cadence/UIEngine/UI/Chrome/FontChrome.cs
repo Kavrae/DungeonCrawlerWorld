@@ -6,7 +6,7 @@ namespace UIEngine.UI.Chrome;
 /// to overwrite them at startup.</summary>
 public static class FontChrome
 {
-    /// <summary>The base/default font size for ordinary body-style text with no dynamic per-widget scaling of its own -- TextWindow/Button's own pooled-default ContentFont, ContextMenu's option text and TextDivider's default label size.</summary>
+    /// <summary>The base/default font size for ordinary body-style text with no dynamic per-widget scaling of its own -- TextWindow/Button's own pooled-default ContentFont, Dropdown's option text and TextDivider's default label size.</summary>
     public static int DefaultFontSize = 12;
 
     /// <summary>Window's own title-bar text -- larger than DefaultFontSize since small title text read as illegible/oddly-hinted at 12px. Window's header height is measured directly off this font's own line height (see Window's OriginalSize/RecalculateMinimizedSize), so raising this alone grows the header to fit -- no separate header-height constant to keep in sync.</summary>

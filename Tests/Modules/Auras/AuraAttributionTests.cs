@@ -7,7 +7,6 @@ using Game.Effects;
 using Game.Effects.Entries;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
 using Game.Modules.Core.Components;
@@ -87,13 +86,13 @@ public sealed class AuraAttributionTests
         var session = BuildSession();
         var casterId = session.Spawn(Goblin.Id, SourcePosition);
         var victimId = session.Spawn(Goblin.Id, VictimPosition);
-        ActionGrantEffects.Grant(session.Components, session.Build.Context.Actions, casterId, ToxicAuraAction.Id, overrideDefinition: null);
+        ActionGrantEffects.Grant(session.Components, session.Build.Context.Actions, casterId, BuiltInActionIds.ToxicAura, overrideDefinition: null);
         session.Components.GetPackedPool<ManaComponent>().Remove(casterId);
         session.Components.GetPackedPool<ManaComponent>().Add(casterId, new ManaComponent(50, 50));
         session.RunFrames(FramesPerSecond);
 
-        var selection = session.Build.Context.TargetResolution.Select(casterId, ToxicAuraAction.Build().Activator, TargetingMode.Ground, SourcePosition, session.Build.Context.SimulationClock.CurrentFrame);
-        session.Components.Merge(casterId, new PendingActionActivationComponent(ToxicAuraAction.Id, selection));
+        var selection = session.Build.Context.TargetResolution.Select(casterId, TestContent.Action(BuiltInActionIds.ToxicAura).Activator, TargetingMode.Ground, SourcePosition, session.Build.Context.SimulationClock.CurrentFrame);
+        session.Components.Merge(casterId, new PendingActionActivationComponent(BuiltInActionIds.ToxicAura, selection));
         var poisons = session.Components.GetPackedPool<PoisonTimerComponent>();
         for (var frame = 0; frame < 3 * FramesPerSecond && !poisons.Has(victimId); frame++)
         {

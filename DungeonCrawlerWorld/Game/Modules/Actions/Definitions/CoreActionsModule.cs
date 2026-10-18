@@ -1,18 +1,14 @@
 using Engine.Modules;
 using Game.Modules.Auras;
 using Game.Modules.Poison;
-using Game.Modules.Actions.Definitions.DirectActions;
-using Game.Modules.Actions.Definitions.Spells;
 
 namespace Game.Modules.Actions.Definitions;
 
 /// <summary>
-/// Registers the first real, permanent action catalog -- race/class-agnostic actions any entity
-/// can be granted. A flat catalog rather than one module per tag, since tags are multi-valued
-/// (e.g. Punch is Melee+Unarmed+Attack, with no single tag-module it would belong to) -- see
-/// PlayerKit and the race blueprints for where these are granted. Mirrors AchievementModule's
-/// static Definitions list, one file per action under Spells/DirectActions (organized by
-/// ActionActivator kind).
+/// Registers the built-in actions -- race/class-agnostic actions any entity can be granted -- from the master manifest's
+/// Actions table, in file order. A flat catalog rather than one module per tag, since tags are multi-valued (e.g. Punch
+/// is Melee+Unarmed+Attack, with no single tag-module it would belong to) -- see PlayerKit and the race blueprints for
+/// where these are granted, by their BuiltInActionIds. A disabled action's replacement is registered as its redirect.
 /// </summary>
 public sealed class CoreActionsModule : IGameModule
 {
@@ -20,25 +16,20 @@ public sealed class CoreActionsModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    public IReadOnlyList<Guid> Requires { get; } = [AurasModule.ModuleId, PoisonModule.ModuleId];
-
-    private static readonly IReadOnlyList<Func<ActionDefinition>> Definitions = [
-        HealAction.Build,
-        QuickAttackAction.Build,
-        PowerAttackAction.Build,
-        DodgeAction.Build,
-        ToxicAuraAction.Build,
-        LanternAction.Build,
-        MagicMissileAction.Build,
-        ToxicStrikeAction.Build,
-        FireballAction.Build,
-    ];
+    /// <summary>Actions owns the codecs the table is read through, Auras the aura sources it grants, Poison the status effect it applies.</summary>
+    public IReadOnlyList<Guid> Requires { get; } = [ActionsModule.ModuleId, AurasModule.ModuleId, PoisonModule.ModuleId];
 
     public void Configure(GameModuleContext context)
     {
-        foreach (var build in Definitions)
+        var content = context.Content;
+        foreach (var action in content.Actions)
         {
-            context.Actions.Register(build());
+            context.Actions.Register(action);
+        }
+
+        foreach (var (from, to) in content.ActionRedirects)
+        {
+            context.Actions.AddRedirect(from, to);
         }
     }
 

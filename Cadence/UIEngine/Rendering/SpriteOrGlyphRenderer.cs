@@ -33,7 +33,7 @@ public static class SpriteOrGlyphRenderer
     {
         if (sprite is { } spriteView)
         {
-            var texture = spriteSheetService.GetTexture(spriteView.SheetPath);
+            var texture = spriteSheetService.GetTexture(spriteView.Sheet);
             var tint = spriteView.Tint is { } cellTint ? Multiply(spriteTint, cellTint) : spriteTint;
             SpriteRenderer.Draw(spriteBatch, texture, spriteView.SourceRectangle, topLeft, size, tint * alphaMultiplier, spriteView.Transform);
             return true;

@@ -1,5 +1,5 @@
 using Engine.Tags;
-using Game.Modules.Inventory.Definitions;
+using Game.Modules.Inventory;
 using Game.Modules.Shops.Components;
 using Game.Tags;
 
@@ -18,21 +18,20 @@ public static class PotionShopStock
     private static readonly GameplayTagQuery AcceptedItems = GameplayTagQuery.Any([GameTags.ItemConsumablePotion]);
 
     /// <summary>
-    /// Every current CoreItemsModule item carrying GameTags.ItemConsumablePotion, built once via each item's own pure
-    /// Build() factory -- mirrors TreasureChest.LootTable's own "no ItemCatalog injection needed"
-    /// shape. PreferredStockLevel per item is hand-tuned the same way ItemDefinition.GoldValue is
+    /// Every current CoreItemsModule item carrying GameTags.ItemConsumablePotion, named by its BuiltInItemIds Guid -- a
+    /// stock entry needs only the id. PreferredStockLevel per item is hand-tuned the same way ItemDefinition.GoldValue is
     /// -- higher for the staple potions a specialist shop leans on, lower for the
     /// niche/test items.
     /// </summary>
     private static readonly ShopStockEntry[] Stock =
     [
-        new(HealthPotion.Build(), PreferredStockLevel: 50),
-        new(ManaPotion.Build(), PreferredStockLevel: 50),
-        new(HotkeyExpansionPotion.Build(), PreferredStockLevel: 20),
-        new(DamagePotion.Build(), PreferredStockLevel: 30),
-        new(ToxicPotion.Build(), PreferredStockLevel: 30),
-        new(ImmunityTestPotion.Build(), PreferredStockLevel: 10),
-        new(ResistanceTestPotion.Build(), PreferredStockLevel: 10),
+        new(BuiltInItemIds.HealthPotion, PreferredStockLevel: 50),
+        new(BuiltInItemIds.ManaPotion, PreferredStockLevel: 50),
+        new(BuiltInItemIds.HotkeyExpansionPotion, PreferredStockLevel: 20),
+        new(BuiltInItemIds.DamagePotion, PreferredStockLevel: 30),
+        new(BuiltInItemIds.ToxicPotion, PreferredStockLevel: 30),
+        new(BuiltInItemIds.ImmunityTestPotion, PreferredStockLevel: 10),
+        new(BuiltInItemIds.ResistanceTestPotion, PreferredStockLevel: 10),
     ];
 
     public static readonly BlueprintDefinition Definition = new(Id, Name)

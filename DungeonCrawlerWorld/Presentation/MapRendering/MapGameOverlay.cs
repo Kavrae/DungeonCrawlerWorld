@@ -1,6 +1,6 @@
 using Engine.Math;
 using FontStashSharp;
-using Game.Modules.Actions.Definitions.DirectActions;
+using Game.Modules.Actions;
 using Game.Views;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -165,7 +165,7 @@ public sealed class MapGameOverlay
     /// </summary>
     private void DrawDodgeDirectionalHints(SpriteBatch spriteBatch)
     {
-        if (_mapViewState.ArmedActionId != DodgeAction.Id || !TryGetPlayerPosition(out var playerPosition))
+        if (_mapViewState.ArmedActionId != BuiltInActionIds.Dodge || !TryGetPlayerPosition(out var playerPosition))
         {
             return;
         }

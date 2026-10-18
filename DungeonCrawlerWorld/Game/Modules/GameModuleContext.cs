@@ -1,3 +1,4 @@
+using Engine.Content;
 using Engine.ECS.Components;
 using Engine.ECS.Entities;
 using Engine.ECS.Systems;
@@ -7,6 +8,7 @@ using Engine.Settings;
 using Engine.Tags;
 using Game.Blueprints;
 using Game.Blueprints.Objects;
+using Game.Content;
 using Game.Effects;
 using Game.Modules.Achievements;
 using Game.Modules.Actions;
@@ -48,6 +50,7 @@ public sealed class GameModuleContext
         EventBus eventBus,
         SettingValues settings,
         GameplayTagRegistry gameplayTags,
+        ContentTypeRegistry contentTypes,
         MathUtility mathUtility,
         UniqueNumberAllocator? crawlerNumbers = null,
         ulong runtimeSpawnSeed = 0)
@@ -60,6 +63,7 @@ public sealed class GameModuleContext
         EventBus = eventBus;
         Settings = settings;
         GameplayTags = gameplayTags;
+        ContentTypes = contentTypes;
         MathUtility = mathUtility;
         EntityKeys = entityManager.Keys;
         Terrain = world.Terrain;
@@ -80,7 +84,7 @@ public sealed class GameModuleContext
 
         SimulationScope = new SimulationScope(new ProcessingTierQuery(tiers).IsSimulated);
         FloatingTextFeed = new FloatingTextFeed(eventBus, tiers, transforms);
-        EntityFactory = new EntityFactory(Definitions, Auras, Actions, world, entityManager, componentManager, MovedEntities, SimulationClock, ProcessingTierEvents, ProcessingTierResolver, crawlerNumbers, runtimeSpawnSeed);
+        EntityFactory = new EntityFactory(Definitions, Auras, Actions, Items, world, entityManager, componentManager, MovedEntities, SimulationClock, ProcessingTierEvents, ProcessingTierResolver, crawlerNumbers, runtimeSpawnSeed);
         _effectServices = new Lazy<EffectServices>(() => EffectServices.For(componentManager, EntityKeys, eventBus, mathUtility, PlayerQuery, Definitions, StatusEffectAppliers, Auras, FloatingTextFeed,
             entityManager, position => EntityFactory.Spawn(SpawnRequest.At(Definitions.GetId(AuraAnchor.Id), position))));
         _toggles = new Lazy<Toggles>(() => new Toggles(componentManager.GetMultiPool<ActiveToggleComponent>(), EffectServices));
@@ -112,6 +116,15 @@ public sealed class GameModuleContext
 
     /// <summary>Every gameplay tag this build's modules declared, and each one's display name.</summary>
     public GameplayTagRegistry GameplayTags { get; }
+
+    /// <summary>Every content codec this build's modules registered -- what a manifest is read and written through.</summary>
+    public ContentTypeRegistry ContentTypes { get; }
+
+    /// <summary>The master manifest's actions, items and auras, read through ContentTypes the first time a module asks (CoreActionsModule and CoreItemsModule, in Configure).</summary>
+    /// <remarks>Each table is read when first asked for, so a build that never asks for one never reads it. A record that fails to load stops the build: the shipped content must load whole.</remarks>
+    public MasterContent Content => _content ??= MasterContent.Open(MasterContent.DefaultDirectory, ContentTypes);
+
+    private MasterContent? _content;
 
     public MathUtility MathUtility { get; }
 

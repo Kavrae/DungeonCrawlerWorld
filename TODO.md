@@ -46,6 +46,100 @@ membership. Dependencies, out of scope here: a floor-end event (see EndOfLevelSt
 class-selection UI, the advancement rules themselves, the residue roll. Ends with an in-game test and
 a `phase-performance-testing` A/B.
 
+#### Workshop: edit Items
+
+Cadence Workshop's tabs are view-only (`PLAN-ide-shell-and-actions-items-tab.md`, landed through Phase 4). This is that
+plan's Phase 5: the generic editing machinery, first used by the Items tab. Its design is the plan's "The editor",
+"Saving: master and drafts" and "Disabling a master record" sections and Decisions 8-20, all confirmed 2026-10-16.
+- **Edit:** a `ContentDocument` (the record as the codec reads and writes it), the generated inspector with a field editor
+  per `ContentFieldKind`, the polymorphic type picker, custom targeting and appearance editors, per-edit decode into the
+  preview with failures shown at the field, per-record validation into the Error List, undo/redo.
+- **Save:** master and drafts (`Content/Definitions/Drafts`, never copied to the game), Ctrl+S, Publish/Hold,
+  New/Duplicate/Delete, the trial build of master alone, unsaved markers, the quit prompt, the session rebuild.
+- **Disable:** Disable/Enable, the replacement field, the confirmation dialog (Replacement with its picker, Cascade,
+  Cancel) when master dependents name the record, and redirect resolution.
+- **Already in place:** the controls (`DropdownField`, `NumericField`, `ColorField`, `ListView`, `ListEditor`,
+  `SplitPane`, `ModalDialog`), the bottom panel (Error List, Dependents) and the reference index; codecs with enforced
+  schemas; `off`/`rep` envelope keys and catalog redirects.
+- **Found while planning:** `ContentField` has no default value -- each codec passes its defaults to the writer and
+  reader (`BodyPartTargetMode` defaults differ by entry, `CanTrade` defaults to true), so the inspector can't show what
+  an omitted field means. Give `ContentField` a default and have the writer check the one a codec passes against it, so
+  writing every record (which `ContentCodecTests` does) proves they agree.
+- **Worth splitting:** in-memory editing, saving, and disabling are each a phase's worth, tested in-game in turn. Where
+  the inspector sits in the three-column layout is still to decide.
+- Tests and in-game checks: the plan's Phase 5 list (round-trip every built-in item unchanged, a schema for every entry,
+  activator and contents type, an undecodable record surviving as a draft, the draft rule, disabling with and without
+  dependents, Cascade undone in one step, replacement chains and cycles; change the Wand of Fireball's damage and see a
+  one-line `git diff`; disable the Health Potion with and without the Mana Potion as replacement).
+
+#### Workshop: edit Actions
+
+The plan's Phase 6, on "Workshop: edit Items"'s machinery: the Actions tab's inspector and saving -- a spell's mana (a
+`ManaDrain` among its activation effects), timing and toggle spec. Checks: change an action's range and see it in a
+scroll that casts it; a toggle action that breaks the toggle rules lands in Drafts with its error in the Error List;
+disabling an action that content names asks first, and Cascade disables its dependents. The plan's example, Fireball
+named by "the Scroll and the Wand", doesn't hold for the shipped content: no scroll casts Fireball and the Wand of
+Fireball carries its own effects, so pick an action a scroll casts (Heal, by the Scroll of Healing).
+
+#### Workshop: edit Auras
+
+The plan's Phase 7: the Auras tab's inspector and saving, keeping the reference rule (a published item can't grant an
+aura held as a draft). Checks: change the Toxic Idol's aura power and see it in the game; hold it as a draft and see the
+game keep the old one; disabling the aura asks first with the Idol as its dependent; Confirm With Replacement redirects
+it to another aura, and the Idol radiates that one in the game. Afterwards the data-driven plan's "indented copy for
+reading" can go.
+
+#### Workshop: edit map areas
+
+The Map tab is read-only (`PLAN-map-areas-and-map-tab.md`, child 6 of the epic): areas, palettes, pools and fixed
+placements are authored as text files until this lands. This is the edit half, on "Workshop: edit Items"'s machinery
+(document, inspector, drafts and master, Publish, disabling, undo/redo), writing the same files -- one area per file,
+rows one per line -- so a hand-written area and a saved one look the same.
+- **Painting** (Tiled, LDtk): a symbol palette panel built from the area's resolved legend (palettes, then its own),
+  with each symbol drawn as the cell it makes; brush, rectangle, line and flood fill; an eyedropper; erase to
+  transparent (space). Paint one layer at a time, with the others shown faded or hidden.
+- **Legend editing:** add or change a symbol's terrain, structure and spawns (`DropdownField` over terrain keys and
+  blueprints, chance, weighted `OneOf`); promote a symbol to a shared palette; a symbol still in use can't be removed.
+- **Entity placements and markers:** place, select, drag and delete; an inspector for the placement's fields
+  (placement id, blueprint, size, layer, chance, unique and fallback); footprints drawn and refused when they leave the
+  area or overlap a blocking one; markers likewise.
+- **Area properties:** name, tags, rules, transforms, uniqueness; resize with an anchor (which edge grows or shrinks).
+- **Selection tools:** select a rectangle, copy, cut, paste (as a floating stamp), turn and mirror the selection.
+- **Pools and fixed placements:** edit members, weights, chance, placement rule and eligibility; place a fixed area on
+  the neighborhood preview by dragging it.
+- **Feedback while editing:** validation on every edit into the Error List (an undefined symbol, a footprint over a
+  wall), Reroll for `Chance`/`OneOf`, and the neighborhood preview rebuilt on save.
+- Checks: draw a new boss room from nothing, add it to the pool, and find it in the game; a hand-written area opened
+  and saved unchanged is byte-identical; an area left with an undefined symbol saves to Drafts with its row and column
+  in the Error List; undo a flood fill in one step.
+
+#### UiInputController.Update: one key and hotkey routing path
+
+`UiInputController.Update` hands the keyboard out through seven separate steps in a fixed order, each with its own
+rules for who sees a key, whether menu mode gates it and whether anyone else still sees it afterwards:
+- `RouteNavigationKeysToOpenDropdown` (Up/Down/Enter to an open dropdown) -- the only step whose consumption suppresses
+  others, and only two of them: its bool is checked by hand before `RouteHotkeysToFocusedElement` and
+  `RouteKeyPressesToFocusedElement`, but an input handler still sees the same Enter.
+- `RouteHotkeysToFocusedElement` (`Element.OnHotkeysAction`, held and modifier-aware) is gated by
+  `IsReachableDuringMenuMode`; `RouteKeyPressesToFocusedElement` (`Element.OnKeyPressAction`, discrete presses to the
+  same focused element) is not, so a view focused from before a menu window opened still gets its key presses.
+- `HandleFocusCycling` (Tab) and `HandleEscape` (per-layer broadcast/close, the dropdown's dismissal special-cased at
+  its top) are hard-coded steps rather than handlers.
+- `RouteKeysToInputHandlers` runs every `IUiInputHandler.HandleKeys` unconditionally whatever the focused element did
+  with the key; each handler avoids double-firing on its own through `isTextBoxFocused` (`KeyPressInputHandler`'s
+  `firesWhileTyping`), which knows a TextBox and nothing else that takes keys (a `ListView`, a `DropdownField`).
+- Two element hooks for keys (`OnHotkeysAction`, `OnKeyPressAction`) overlap: which one an element uses decides whether
+  menu mode reaches it, not just held-versus-pressed.
+
+Clean-up: one ordered route per key press -- open dropdown/popup, focused element (menu-mode scoped once, for both
+hooks), focus cycling, Escape, then hotkeys/input handlers -- where a step that takes a key marks it taken and later
+steps don't see it, replacing the hand-checked bool and the `isTextBoxFocused` workaround with "the focused element
+took it". Decide whether held-key repeat (`OnHotkeysAction`) and discrete presses stay two hooks or become one with a
+repeat flag. Keep `KeyPressInputHandler`'s exact-modifier rule (F5 vs Ctrl+F5) and the hover invalidation on a keyboard
+change. Tests drive the real `Update` with synthetic `KeyboardState`s (dropdown open over a TextBox, menu mode with a
+stale focused view, a hotkey letter while a ListView has focus, Escape with a context menu open over a menu window),
+then an in-game and in-Workshop check of every hotkey and the TextBox/DropdownField/ListView keys.
+
 ### Medium Priority
 
 #### FrameEventBuffer double-buffering + event system cleanup
@@ -215,6 +309,51 @@ sync points that the scheduler inserts automatically between a system that queue
 system ordered after it. `commands.spawn(...)` reserves the `Entity` immediately (`reserve_entity`).
 Exclusive systems (`&mut World`) are the escape hatch that applies changes directly.
 `DeferredWorld` (what hooks get) can queue commands but not change structure.
+
+#### Workshop Debug Options tab
+
+Every debug setting the game has is a command-line flag today, typed by hand into a launch profile or a terminal:
+`--seed=N`, `--map-size=N`, `--diagnostics=frame,memory,startup,leak,gauges` (or `all`), `--benchmark-frames=START-END`,
+`--headless`, and `--setting=Module.Setting=Value` for module settings. Cadence Workshop's Play and Build and Play start
+the game with none of them.
+- A **Debug Options** tab with a control for each: a number field for the seed (plus "random") and the map size, a
+  checkbox per diagnostics feature (and All), a start and end frame for the benchmark range, a headless checkbox
+  (disabled unless a range is set, the way `Program.cs` refuses it), and a row per declared module setting, typed by
+  its `SettingKey<T>` (bool as a checkbox, numbers as number fields, enums as dropdowns) from `SettingsCatalog`.
+- **Where it sits:** beside the Play and Build and Play command tiles at the strip's right edge, not among the builder
+  tabs on the left -- it configures how the game is launched, so it belongs with the commands that launch it.
+- **What it does:** Play and Build and Play pass its arguments (`GameLaunchTarget.Arguments`). The status line or the
+  tile's tooltip shows the command line they start the game with, so nothing is hidden. The options persist per user
+  between IDE runs, never in a content file (IMPLEMENTATION-NOTES, "Where the manifest lives": editor state never goes in
+  content).
+- Generic in Cadence's Workshop: the engine-level flags (seed, diagnostics, benchmark range, headless, settings) are
+  Engine's, so the tab is shell-owned. A game adds rows for its own flags (`--map-size`) through a hook, as it adds
+  tabs.
+- Uses Phase 4's controls (`PLAN-ide-shell-and-actions-items-tab.md`): number field, dropdown, checkbox (`Toggle`).
+
+#### Common game elements in Engine: actions, auras, items and the activator base
+
+Actions, auras, items and `IActionActivator` live in Game, but nearly every game this engine would host has them, they
+are among the hottest paths at the entity counts it runs (activation, aura fields and ticks, inventory and stack
+transfers, effect application), and the IDE's builders already treat them as content types any game would edit.
+Investigate moving the shared core into Engine as optimized common elements, while each game keeps its specifics.
+- **Research industry practice first, before any plan:** Unreal's Gameplay Ability System (`UGameplayAbility`,
+  `UGameplayEffect`, attribute sets and gameplay cues are an engine plugin; each game subclasses abilities and authors
+  effects as data), Unity's lack of any built-in equivalent and what popular packages provide, Godot's resource-based
+  items and abilities, Bevy's ecosystem crates, and data-driven roguelike engines (Cataclysm DDA, Caves of Qud) --
+  where each draws the line between engine and game, and what they optimize (pooled effect instances, tag queries,
+  attribute aggregation, network prediction).
+- **Candidates for Engine:** `ActivatableDefinition` and its catalogs, `ActionDefinition`/`ItemDefinition`/
+  `AuraDefinition` cores, the `IActionActivator` base, the targeting spec and shape resolver (already partly Engine:
+  `TargetShape`, `TargetShapeResolver`), the effect vocabulary's base (`Effect`, `IEffectEntry`, `EffectContext`),
+  and their **content codecs** (Workshop's builders would then be engine tools any game gets).
+- **Stays in Game:** each specific activator (Direct, Spell, Potion, Scroll, Wand, ToggleItem), each specific effect
+  entry, stat modifiers, body parts, and every rule that names a game concept.
+- **What to weigh:** Engine knowing no game (the layering rule CLAUDE.md enforces with architecture tests); how much of
+  today's types names Game concepts (body parts, stat modifier targets, status effect types) and would need an
+  extension point instead; the cost of indirection on hot paths versus the optimization a shared home allows; and
+  whether mods and the IDE gain from a stable engine-level contract.
+- The outcome may be "move these few, leave the rest"; the point is a decision backed by how shipped engines do it.
 
 ### Low Priority
 
@@ -480,6 +619,8 @@ Cover it with a test: damage a Goblin, apply Human, then check every part's heal
 the topmost/bottommost picks, and that a burning part keeps its id.
 
 #### Real map generation -- neighborhood templates, replacing TestMapBuilder
+
+Authored pieces come from `PLAN-map-areas-and-map-tab.md`: map areas, palettes and pools as content, stamped into the plan. The generator asks pools for areas by tag instead of their `Eligibility`.
 
 The sliding window of 1024x1024 neighborhoods is in place: `NeighborhoodStreamer` generates each neighborhood on demand from its own
 `NeighborhoodRecord` seed through `TestMapBuilder.GenerateNeighborhood`, which is still a stand-in --
@@ -2089,6 +2230,13 @@ To settle when designing it:
 ## Presentation
 
 ### High Priority
+
+#### Health window: right-click Close / Close All menu
+
+Right-clicking the Health window opens nothing, unlike every other DynamicHud window. Inventory, Ability Scores,
+Item Details, loot box results and the targeted windows each call `DynamicHudContextMenus.WireCloseContextMenu`
+from their controller; `HealthWindowController` doesn't. Wire it the same way, and check that Close All from the
+Health window also closes the others, and that Close leaves the rest open.
 
 #### Replace the text outline with SDF glyphs and an outline shader
 

@@ -1,6 +1,6 @@
 # Data-driven actions and items -- definition manifests, save folders, load by id
 
-(Pre-implementation. Prerequisite for the Action and Item Builder dev tool, which is itself the
+(Phases 1 and 2 landed together 2026-10-18, tested in-game; see "Phases 1 and 2 as built". Phases 3-5 not started. Prerequisite for the Action and Item Builder dev tool, which is itself the
 prerequisite for the NPC Builder. Establishes the save-folder pattern that TODO.md's "Data storage,
 starting with window locations and sizes" and "Save and load Beyond neighborhoods" (Global) build on;
 takes the "Data tables for content" (Game, Medium) approach for the first two tables, without taking
@@ -273,6 +273,55 @@ Auras table:
 ## Phases
 
 Each phase ends with the game running and a stop for in-game testing before the next.
+
+## Phases 1 and 2 as built (2026-10-18)
+
+Implemented together, at the IDE plan's request (its Phase 4 needs both). Where the result differs from the text below:
+- **Reading is over `JsonDocument`, not `Utf8JsonReader`.** Codecs read a `ContentObject` (keyed access over a
+  `JsonElement`) and write through `ContentWriter` (over `Utf8JsonWriter`). Decision 3's point holds: no reflection, no
+  `JsonSerializer`, one hand-written codec per type owning its format. Random access by key is what makes "a field
+  omitted means its default" simple to read, and at today's 29 records the cost is nothing. Phase 4 measures it.
+- **The schema is enforced both ways.** `ContentWriter` refuses a key its codec's `ContentSchema` doesn't declare, and
+  `ContentObject` fails a record holding one, so the schema is always the whole of what a codec reads and writes. That
+  makes it safe for the IDE's generated inspector.
+- **Key names differ from the sketch** (it was illustrative). An `Effect` is `{"e":[entries]}`. The header is
+  `{"fmt":1,"table":"..."}`: the `"ver"` map waits until modules declare content versions (Phase 3's save header needs
+  them).
+- **Disabled records are table-level** (`"off":true` and `"rep":<Guid>`, read by `ContentTable` before any codec). They
+  were added for the IDE plan: a disabled record isn't loaded, and its replacement becomes a catalog redirect
+  (`Catalog<T>.AddRedirect`, which `TryGet`/`Get` follow, cycles refused). Redirects are kept per table.
+- **Where things live.** The generic layer is in `Engine.Content`: `ContentSchema`/`ContentField`, `ContentCodec<T>`,
+  `ContentTypeRegistry` (`IModule.DeclareContentTypes`, declared in `GameBuildPass.BuildModules` beside the tags),
+  `ContentWriter`, `ContentObject`, `ContentTable`, `ContentFailure`, `ContentGuid` and `IContentReferences`. The
+  codecs sit beside their types, one file per owner: `EffectContentCodecs` and `EffectEntryCodecs` (Core),
+  `ActionContentCodecs` (Actions), `AuraContentCodecs` (Auras), `InventoryContentCodecs` (Inventory) and
+  `LootboxContentCodecs` (Lootboxes). The manifest itself is `Game.Content.MasterContent`, reached as
+  `GameModuleContext.Content`.
+- **Each table loads when first asked for** (auras first), not all at once. A build of a few modules never needs
+  another module's codecs: `BuiltInModulesTests` caught CoreActions needing the item codec otherwise. A failing record
+  stops the build on its table. `MasterContent.Load` reads everything and collects failures, for tools and tests.
+- **What could be derived without a catalog had to change** once the definitions became per-session content:
+  - Race overrides are `ActionGrant.Derived(actionId, key, derive)`, resolved through
+    `ActionCatalog.GetOrCreateDerived`. That gives one instance per session, shared by every creature, and a lookup
+    allocates nothing.
+  - The NPC loot grant's charged wands use `ItemCatalog.GetOrCreateDerived(kind, variant, ...)` the same way.
+  - `BlueprintContext` gained `Items`, so `EntityBuilder` and `EntityFactory` take the item catalog.
+  - Shop stock holds Guids (`ShopStockEntry(Guid ItemId, ...)`).
+  - `TestCombatBehaviorSystem` and `TestDummyAttackSystem` take their definitions at construction. NpcBehavior now
+    `Requires` CoreActions and CoreItems.
+- **The exporter** is `DungeonCrawlerWorld/Tools/ContentManifestExporter`. It writes the auras that actions and items
+  name to the Auras table, in first-named order, and keeps disabled lines already in a table. Run again, it reproduces
+  the files byte for byte. No indented copy was added.
+- **Tests:** `ContentCodecTests` covers round trips of every built-in action, item and aura to identical bytes, a codec
+  for every concrete entry, activator and contents type, defaults omitted, unknown discriminator or key, truncated
+  lines, out-of-range numbers, header mismatch, disabled records and dangling aura references. Tests that built
+  definitions from C# read the shipped manifest instead (`TestContent`).
+- **Verified:**
+  - All tests pass.
+  - The exporter round-trips the manifest byte for byte.
+  - A headless seeded A/B against a build from before the change simulated the same world (fingerprint
+    `CFE09753FCC9528B`).
+  - In-game check passed 2026-10-18 (tooltips, toggles, the Toxic Idol, Scroll of Torch, wands, NPCs, shops, chests, the IDE tabs).
 
 ### Phase 1 -- Content type registry and codecs
 

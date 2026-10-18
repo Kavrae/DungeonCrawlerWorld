@@ -1,6 +1,6 @@
 namespace SpriteFormat;
 
-/// <summary>The rules a manifest entry must keep to be loaded, each as the message that refuses it: the game refuses the file at load, a tool refuses the entry at save.</summary>
+/// <summary>The rules a manifest entry must keep to be loaded, each as the message that refuses it: the game leaves the entry out at load and reports it, a tool refuses the entry at save.</summary>
 /// <remarks>
 /// A linked part holds whole sets of cells (a slot may be empty while the set is unfinished, nothing else may); a Horizontal set holds its
 /// standalone piece; chances are one per variant set, none negative, adding up to 100; PixelsPerTile is positive; a tint is well formed;

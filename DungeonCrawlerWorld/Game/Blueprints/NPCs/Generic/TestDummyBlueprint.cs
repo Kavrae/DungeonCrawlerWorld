@@ -2,7 +2,6 @@ using Engine.Utilities;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.NpcBehavior.Components;
@@ -61,7 +60,7 @@ public static class TestDummyBlueprint
                 abilityScoreType == AbilityScoreType.Constitution ? HighRegenConstitutionBaseValue : DefaultAbilityScoreBaseValue);
         }
 
-        ActionGrantEffects.Grant(componentManager, context.Actions, entityId, PowerAttackAction.Id, overrideDefinition: BuildPowerAttackWithIdleCooldown());
+        ActionGrantEffects.Grant(componentManager, context.Actions, entityId, BuiltInActionIds.PowerAttack, overrideDefinition: context.Actions.GetOrCreateDerived("TestDummy.PowerAttack", BuiltInActionIds.PowerAttack, PowerAttackWithIdleCooldown));
     }
 
     /// <summary>
@@ -74,9 +73,8 @@ public static class TestDummyBlueprint
     /// IdleSecondsAfterAttack, and keeps tracking correctly if PowerAttackAction's own windup ever
     /// changes.
     /// </summary>
-    private static ActionDefinition BuildPowerAttackWithIdleCooldown()
+    private static ActionDefinition PowerAttackWithIdleCooldown(ActionDefinition baseAction)
     {
-        var baseAction = PowerAttackAction.Build();
         if (baseAction.Activator is not DirectAction directAction)
         {
             return baseAction;

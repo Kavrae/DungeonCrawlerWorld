@@ -7,10 +7,7 @@ using Engine.Tags;
 using Game.Modules;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
-using Game.Modules.Actions.Definitions.DirectActions;
-using Game.Modules.Actions.Definitions.Spells;
 using Game.Modules.Inventory;
-using Game.Modules.Inventory.Definitions;
 using Game.Modules.StatModifiers;
 using Game.Tags;
 using Game.World;
@@ -61,21 +58,21 @@ public sealed class ContentTagsTests
     [TestMethod]
     public void Spells_ScrollsAndWands_AreMagic_WithoutDeclaringIt()
     {
-        Assert.IsTrue(HealAction.Build().Tags.HasExact(GameTags.Magic));
-        Assert.IsTrue(MagicMissileAction.Build().Tags.HasExact(GameTags.Magic));
-        Assert.IsTrue(ToxicStrikeAction.Build().Tags.HasExact(GameTags.Magic));
-        Assert.IsTrue(ScrollOfHealing.Build().Tags.HasExact(GameTags.Magic));
-        Assert.IsTrue(ScrollOfTorch.Build().Tags.HasExact(GameTags.Magic));
-        Assert.IsTrue(WandOfFireball.Build().Tags.HasExact(GameTags.Magic));
+        Assert.IsTrue(TestContent.Action(BuiltInActionIds.Heal).Tags.HasExact(GameTags.Magic));
+        Assert.IsTrue(TestContent.Action(BuiltInActionIds.MagicMissile).Tags.HasExact(GameTags.Magic));
+        Assert.IsTrue(TestContent.Action(BuiltInActionIds.ToxicStrike).Tags.HasExact(GameTags.Magic));
+        Assert.IsTrue(TestContent.Item(BuiltInItemIds.ScrollOfHealing).Tags.HasExact(GameTags.Magic));
+        Assert.IsTrue(TestContent.Item(BuiltInItemIds.ScrollOfTorch).Tags.HasExact(GameTags.Magic));
+        Assert.IsTrue(TestContent.Item(BuiltInItemIds.WandOfFireball).Tags.HasExact(GameTags.Magic));
     }
 
     [TestMethod]
     public void PotionsAndPhysicalAttacks_AreNotMagic()
     {
-        Assert.IsFalse(HealthPotion.Build().Tags.Has(GameTags.Magic));
-        Assert.IsFalse(ToxicIdol.Build().Tags.Has(GameTags.Magic));
-        Assert.IsFalse(PowerAttackAction.Build().Tags.Has(GameTags.Magic));
-        Assert.IsFalse(QuickAttackAction.Build().Tags.Has(GameTags.Magic));
+        Assert.IsFalse(TestContent.Item(BuiltInItemIds.HealthPotion).Tags.Has(GameTags.Magic));
+        Assert.IsFalse(TestContent.Item(BuiltInItemIds.ToxicIdol).Tags.Has(GameTags.Magic));
+        Assert.IsFalse(TestContent.Action(BuiltInActionIds.PowerAttack).Tags.Has(GameTags.Magic));
+        Assert.IsFalse(TestContent.Action(BuiltInActionIds.QuickAttack).Tags.Has(GameTags.Magic));
     }
 
     [TestMethod]
@@ -83,10 +80,10 @@ public sealed class ContentTagsTests
     {
         Assert.IsTrue(ActionTagged([], new SpellActivator(SelfTargeting, ImmediateTiming)).Tags.HasExact(GameTags.ActionSpell));
         Assert.IsTrue(ItemTagged([]).Tags.IsEmpty, "No activator implies nothing.");
-        Assert.IsTrue(HealthPotion.Build().Tags.HasExact(GameTags.ItemConsumablePotion));
-        Assert.IsTrue(HealthPotion.Build().Tags.Has(GameTags.ItemConsumable));
-        Assert.IsTrue(ScrollOfHealing.Build().Tags.HasExact(GameTags.ItemConsumableScroll));
-        Assert.IsTrue(WandOfFireball.Build().Tags.HasExact(GameTags.ItemWand));
+        Assert.IsTrue(TestContent.Item(BuiltInItemIds.HealthPotion).Tags.HasExact(GameTags.ItemConsumablePotion));
+        Assert.IsTrue(TestContent.Item(BuiltInItemIds.HealthPotion).Tags.Has(GameTags.ItemConsumable));
+        Assert.IsTrue(TestContent.Item(BuiltInItemIds.ScrollOfHealing).Tags.HasExact(GameTags.ItemConsumableScroll));
+        Assert.IsTrue(TestContent.Item(BuiltInItemIds.WandOfFireball).Tags.HasExact(GameTags.ItemWand));
         Assert.IsFalse(ActionTagged([], new DirectAction(SelfTargeting, ImmediateTiming)).Tags.Has(GameTags.ActionSpell));
     }
 
@@ -102,7 +99,7 @@ public sealed class ContentTagsTests
     [TestMethod]
     public void TheFireballWand_DealsMagicalFire()
     {
-        var tags = WandOfFireball.Build().Tags;
+        var tags = TestContent.Item(BuiltInItemIds.WandOfFireball).Tags;
 
         Assert.IsTrue(GameplayTagQuery.All([GameTags.DamageFire, GameTags.Magic]).Matches(tags));
     }
@@ -110,7 +107,7 @@ public sealed class ContentTagsTests
     [TestMethod]
     public void MagicMissile_DealsMagicalEnergy()
     {
-        var tags = MagicMissileAction.Build().Tags;
+        var tags = TestContent.Action(BuiltInActionIds.MagicMissile).Tags;
 
         Assert.IsTrue(GameplayTagQuery.All([GameTags.DamageEnergy, GameTags.Magic]).Matches(tags));
         Assert.IsFalse(tags.Has(GameTags.DamageFire));
@@ -119,7 +116,7 @@ public sealed class ContentTagsTests
     [TestMethod]
     public void QuickAttack_IsMeleeThroughUnarmed()
     {
-        var tags = QuickAttackAction.Build().Tags;
+        var tags = TestContent.Action(BuiltInActionIds.QuickAttack).Tags;
 
         Assert.IsTrue(tags.Has(GameTags.DeliveryMelee));
         Assert.IsFalse(tags.HasExact(GameTags.DeliveryMelee));

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Writes the built-in actions, items and auras, as a build of the built-in modules registers them, to the master
+    manifest in the source tree (DungeonCrawlerWorld/Content/Definitions/Master), through the content codecs. It made the
+    first manifest from the C# definitions; run again, it re-writes the manifest canonically from what was loaded.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FNA.NET" Version="2.1.2.2506" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Cadence\Engine\Engine.csproj" />
+    <ProjectReference Include="..\..\Game\Game.csproj" />
+    <ProjectReference Include="..\..\Content\Content.csproj" />
+  </ItemGroup>
+
+</Project>

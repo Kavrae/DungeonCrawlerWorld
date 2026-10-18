@@ -7,7 +7,6 @@ using Game.Effects;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
-using Game.Modules.Actions.Definitions.DirectActions;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
@@ -59,12 +58,12 @@ public sealed class ActivationRefusalCursorTests
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 5));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(QuickAttackAction.Id, overrideDefinition: null));
-        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, QuickAttackAction.Id));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(BuiltInActionIds.QuickAttack, overrideDefinition: null));
+        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, BuiltInActionIds.QuickAttack));
         componentManager.Merge(PlayerEntityId, new MeleeDisabledComponent());
 
         var actionCatalog = new ActionCatalog();
-        actionCatalog.Register(QuickAttackAction.Build());
+        actionCatalog.Register(TestContent.Action(BuiltInActionIds.QuickAttack));
         var itemCatalog = new ItemCatalog();
         var fontService = TestFonts.Shared;
         var labelRenderer = new LabelRenderer();
@@ -130,10 +129,10 @@ public sealed class ActivationRefusalCursorTests
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 5));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(QuickAttackAction.Id, overrideDefinition: null));
-        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, QuickAttackAction.Id));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(BuiltInActionIds.QuickAttack, overrideDefinition: null));
+        componentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, BuiltInActionIds.QuickAttack));
         var actionCatalog = new ActionCatalog();
-        actionCatalog.Register(QuickAttackAction.Build());
+        actionCatalog.Register(TestContent.Action(BuiltInActionIds.QuickAttack));
         var itemCatalog = new ItemCatalog();
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog,

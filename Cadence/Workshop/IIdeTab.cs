@@ -20,4 +20,10 @@ public interface IIdeTab
 
     /// <summary>Per-frame work of the open tab's own, beyond its windows' (which the shell's layer host updates).</summary>
     void Update(GameTime gameTime) { }
+
+    /// <summary>Whether the bottom panel offers Dependents while this tab is open -- false for a tab with no records.</summary>
+    bool ShowsDependents => true;
+
+    /// <summary>Selects the record with this id in the open tab; false when the tab holds no such record, or isn't open.</summary>
+    bool TrySelectRecord(Guid recordId) => false;
 }

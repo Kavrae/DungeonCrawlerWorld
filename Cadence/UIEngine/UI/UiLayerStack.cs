@@ -7,11 +7,15 @@ namespace UIEngine.UI;
 /// </summary>
 public sealed class UiLayerStack
 {
-    private readonly Dictionary<UiLayer, List<Element>> _byLayer;
+    /// <summary>Each layer's root elements in draw order, indexed by the layer's position in AscendingLayers.</summary>
+    private readonly List<Element>[] _byLayer;
+
+    /// <summary>The layer each root element is in, kept by Add and Remove, so LayerOf never scans the lists.</summary>
+    private readonly Dictionary<Element, UiLayer> _layerByElement = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>
     /// Currently-open menu windows -- membership only, not z-order (see TopmostMenuWindow/
-    /// BottommostMenuWindow, which read actual draw/raise order out of _byLayer instead). Menu
+    /// BottommostMenuWindow, which read actual draw/raise order out of the layer lists instead). Menu
     /// mode -- named for the WoW/Diablo/PoE bag-open convention this mimics, not a "modal dialog"
     /// in the strict web/desktop sense (see UiInputController.TryHitTestInteraction's own doc
     /// comment) -- is an "interaction mode switch," not a single locked-to-one-window state: while
@@ -41,10 +45,10 @@ public sealed class UiLayerStack
     /// <summary>Every UiLayer starts as its own new, empty list.</summary>
     public UiLayerStack()
     {
-        _byLayer = new Dictionary<UiLayer, List<Element>>();
-        foreach (var layer in Enum.GetValues<UiLayer>())
+        _byLayer = new List<Element>[AscendingLayers.Length];
+        for (var layerIndex = 0; layerIndex < _byLayer.Length; layerIndex++)
         {
-            _byLayer[layer] = [];
+            _byLayer[layerIndex] = [];
         }
     }
 
@@ -113,7 +117,7 @@ public sealed class UiLayerStack
     {
         foreach (var layer in layers)
         {
-            var elements = _byLayer[layer];
+            var elements = ElementsIn(layer);
             if (reverse)
             {
                 for (var index = elements.Count - 1; index >= 0; index--)
@@ -142,7 +146,7 @@ public sealed class UiLayerStack
     /// <summary>True while any menu window is open -- a host may pause its simulation on it.</summary>
     public bool IsMenuModeActive => _menuWindows.Count > 0;
 
-    public IReadOnlyList<Element> this[UiLayer layer] => _byLayer[layer];
+    public IReadOnlyList<Element> this[UiLayer layer] => ElementsIn(layer);
 
     /// <summary>
     /// Adds element to layer -- and, if menu mode is already active, promotes it straight into
@@ -159,7 +163,8 @@ public sealed class UiLayerStack
     /// </summary>
     public void Add(UiLayer layer, Element element)
     {
-        _byLayer[layer].Add(element);
+        ElementsIn(layer).Add(element);
+        _layerByElement[element] = layer;
         Version++;
 
         if (IsMenuModeActive && !IsMenuModeExempt(element))
@@ -170,29 +175,38 @@ public sealed class UiLayerStack
 
     public bool Remove(UiLayer layer, Element element)
     {
-        if (!_byLayer[layer].Remove(element))
+        if (!ElementsIn(layer).Remove(element))
         {
             return false;
+        }
+
+        if (_layerByElement.TryGetValue(element, out var recordedLayer) && recordedLayer == layer && !ElementsIn(layer).Contains(element))
+        {
+            _layerByElement.Remove(element);
         }
 
         Version++;
         return true;
     }
 
-    public bool Contains(UiLayer layer, Element element) => _byLayer[layer].Contains(element);
+    public bool Contains(UiLayer layer, Element element) => ElementsIn(layer).Contains(element);
 
     /// <summary>Which layer element currently lives in, if any -- for code that needs to ask an element's own tier rather than being told it explicitly (e.g. focus redirect deciding whether a closing root element's siblings are the DynamicHud group).</summary>
-    public UiLayer? LayerOf(Element element)
+    public UiLayer? LayerOf(Element element) => _layerByElement.TryGetValue(element, out var layer) ? layer : null;
+
+    private List<Element> ElementsIn(UiLayer layer) => _byLayer[IndexOf(layer)];
+
+    private static int IndexOf(UiLayer layer)
     {
-        foreach (var (layer, elements) in _byLayer)
+        for (var layerIndex = 0; layerIndex < AscendingLayers.Length; layerIndex++)
         {
-            if (elements.Contains(element))
+            if (AscendingLayers[layerIndex] == layer)
             {
-                return layer;
+                return layerIndex;
             }
         }
 
-        return null;
+        throw new ArgumentOutOfRangeException(nameof(layer), layer, "Not a declared UiLayer.");
     }
 
     /// <summary>Moves element to the end of its own layer's list -- draws last (on top), wins future hit-tests against same-layer siblings. Root-element counterpart to Element.RaiseToFront, which only handles the parented case (a root has no ParentElement of its own to raise within). No-op if element isn't in any layer.</summary>
@@ -203,7 +217,7 @@ public sealed class UiLayerStack
             return;
         }
 
-        var elements = _byLayer[layer];
+        var elements = ElementsIn(layer);
         elements.Remove(element);
         elements.Add(element);
         Version++;
@@ -224,7 +238,7 @@ public sealed class UiLayerStack
     {
         foreach (var layer in LayersDescending())
         {
-            var snapshot = _byLayer[layer].ToArray();
+            var snapshot = ElementsIn(layer).ToArray();
             for (var index = snapshot.Length - 1; index >= 0; index--)
             {
                 if (snapshot[index] is Window { CanUserClose: true } window)

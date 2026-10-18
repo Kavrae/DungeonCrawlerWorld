@@ -1,4 +1,5 @@
 using Engine.Bootstrap;
+using Engine.Content;
 using Engine.Diagnostics;
 using Engine.ECS.Context;
 using Engine.Events;
@@ -110,6 +111,7 @@ public static class GameBuildPass
         ulong runtimeSpawnSeed = 0)
     {
         var gameplayTags = GameplayTagRegistry.Declare(modules);
+        var contentTypes = ContentTypeRegistry.Declare(modules);
         var sortedModules = EcsBuilder.Begin(modules, settings, initialEntityCapacity, initialComponentCapacity, new EventBus());
         var registeredComponents = sortedModules.RegisterComponents();
 
@@ -123,7 +125,7 @@ public static class GameBuildPass
             registeredComponents.EventBus,
             registeredComponents.EntityManager.Keys,
             new TerrainRegistry());
-        var gameModuleContext = new GameModuleContext(world, componentManager, registeredComponents.EntityManager, registeredComponents.EventBus, settings, gameplayTags, mathUtility, crawlerNumbers, runtimeSpawnSeed);
+        var gameModuleContext = new GameModuleContext(world, componentManager, registeredComponents.EntityManager, registeredComponents.EventBus, settings, gameplayTags, contentTypes, mathUtility, crawlerNumbers, runtimeSpawnSeed);
 
         var configuredModules = registeredComponents.Configure(gameModuleContext);
 
