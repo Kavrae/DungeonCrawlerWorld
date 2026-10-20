@@ -106,12 +106,12 @@ public sealed class FrameDeadlineTests
         Assert.AreEqual(42, manager.Clock.CurrentFrame, "And it still reads that frame after the update, for Presentation.");
     }
 
-    /// <summary>The game swaps in the clock its modules captured; SystemManager must advance that instance, not a private one.</summary>
+    /// <summary>EcsBuilder hands SystemManager the clock it gave the context; SystemManager must advance that instance, not a private one.</summary>
     [TestMethod]
     public void SystemManager_AdvancesAnInjectedClock()
     {
         var clock = new SimulationClock();
-        var manager = new SystemManager { Clock = clock };
+        var manager = new SystemManager(clock);
 
         manager.Update(new EngineTime(default, default, false, 7));
 

@@ -74,6 +74,31 @@ public sealed class SpawnRecordRebuilderTests
             : result.Catalogs.Definitions.Register(new BlueprintDefinition(Guid.NewGuid(), "Test composite") { Includes = parts });
 
     [TestMethod]
+    public void ASession_BuildsItsStagingWorldUpFront_ByDefault()
+    {
+        var result = Bootstrap(new Map(new Vector3Int(5, 5, 1)));
+
+        Assert.IsTrue(result.Internals.SpawnRecordRebuilder.IsStagingWorldBuilt);
+    }
+
+    [TestMethod]
+    public void ASessionThatDefersItsStagingWorld_BuildsItOnTheFirstRebuild_AndRebuildsTheSame()
+    {
+        var deferred = GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 1_000, initialComponentCapacity: 100, buildsStagingWorldOnFirstRebuild: true);
+        Assert.IsFalse(deferred.Internals.SpawnRecordRebuilder.IsStagingWorldBuilt);
+        var ecs = deferred.EcsContext;
+        var blueprintId = Blueprint(deferred, Goblin.Id);
+        var entityId = ecs.EntityManager.CreateEntity();
+        new EntityBuilder(deferred.Catalogs.Definitions, deferred.Catalogs.Auras, deferred.Catalogs.ActionCatalog, deferred.Catalogs.ItemCatalog, ecs.EntityManager.Keys)
+            .Build(ecs.ComponentManager, entityId, blueprintId, 3, now: 0);
+
+        var rebuilt = RebuildDefaults(deferred, new SpawnRecordComponent(blueprintId, 3));
+
+        Assert.IsTrue(deferred.Internals.SpawnRecordRebuilder.IsStagingWorldBuilt);
+        AssertSame(Read(ecs.ComponentManager, entityId), rebuilt);
+    }
+
+    [TestMethod]
     public void Rebuild_ReproducesEveryBlueprintBuiltComponent_ForEachRace()
     {
         var result = Bootstrap(new Map(new Vector3Int(20, 20, 3)));

@@ -1,3 +1,4 @@
+using Engine.Bootstrap;
 using Engine.Diagnostics;
 using Engine.ECS.Components;
 using Engine.ECS.Entities;
@@ -13,15 +14,21 @@ namespace Engine.ECS.Context;
 /// those two emit EngineHooks.Sessions.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class EcsContext(EntityManager entityManager, ComponentManager componentManager, SystemManager systemManager, EventBus eventBus) : IDisposable
+public sealed class EcsContext(EntityManager entityManager, ComponentManager componentManager, SystemManager systemManager, EventBus eventBus, EcsBuildPurpose purpose = EcsBuildPurpose.Session) : IDisposable
 {
-    private bool _isSessionStarted;
-    private bool _isDisposed;
-
     public EntityManager EntityManager { get; } = entityManager;
     public ComponentManager ComponentManager { get; } = componentManager;
     public SystemManager SystemManager { get; } = systemManager;
     public EventBus EventBus { get; } = eventBus;
+
+    /// <summary>What this context was built for; only a Session build can begin a session.</summary>
+    public EcsBuildPurpose Purpose { get; } = purpose;
+
+    private bool _isSessionStarted;
+    private bool _isDisposed;
+
+    /// <summary>The simulation's "now", advanced by SystemManager each update.</summary>
+    public SimulationClock Clock => SystemManager.Clock;
 
     /// <summary>The named values diagnostics samples from this context once its session begins; register them while building it.</summary>
     public GaugeRegistry Gauges { get; } = CreateEngineGauges(entityManager, componentManager);
@@ -76,17 +83,24 @@ public sealed class EcsContext(EntityManager entityManager, ComponentManager com
     /// <param name="time">The current engine time.</param>
     public void Update(EngineTime time) => SystemManager.Update(time);
 
-    /// <summary>Marks this context as the simulated session, once the host has finished building it, and freezes its gauges.</summary>
-    /// <exception cref="InvalidOperationException">The session already began, or this context was disposed.</exception>
+    /// <summary>Marks this context as the simulated session, once the host has finished building it, and freezes its systems and gauges: nothing registers either after this.</summary>
+    /// <exception cref="InvalidOperationException">This context wasn't built as a Session, or its session already began.</exception>
+    /// <exception cref="ObjectDisposedException">This context was disposed.</exception>
     public void BeginSession()
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
+
+        if (Purpose != EcsBuildPurpose.Session)
+        {
+            throw new InvalidOperationException($"A {Purpose} build is never simulated; only a Session build can begin a session.");
+        }
 
         if (_isSessionStarted)
         {
             throw new InvalidOperationException("This EcsContext's session already began.");
         }
 
+        SystemManager.CloseRegistration();
         Gauges.Freeze();
         EngineHooks.Sessions.Listener?.SessionStarted(this);
         _isSessionStarted = true;

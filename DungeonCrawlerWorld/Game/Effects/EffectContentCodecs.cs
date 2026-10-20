@@ -7,10 +7,10 @@ namespace Game.Effects;
 /// <summary>Codecs for Effect and BodyPartTargeting, the values every effect holder shares; registered by Core.</summary>
 internal static class EffectContentCodecs
 {
-    public static void Register(ContentTypeRegistration registration)
+    public static void Register(ContentTypeDeclarations contentTypes)
     {
-        registration.RegisterValue(new EffectCodec());
-        registration.RegisterValue(new BodyPartTargetingCodec());
+        contentTypes.RegisterValue(new EffectCodec());
+        contentTypes.RegisterValue(new BodyPartTargetingCodec());
     }
 
     /// <summary>An Effect as {"e":[entries]}, each entry with its discriminator first.</summary>

@@ -1,3 +1,4 @@
+using Engine.Bootstrap;
 using Engine.Diagnostics;
 using Engine.ECS.Components;
 using Engine.ECS.Context;
@@ -23,10 +24,25 @@ public sealed class EcsContextSessionTests
         public void SessionEnding(EcsContext session) => Calls.Add(("ending", session));
     }
 
-    private static EcsContext CreateContext()
+    private static EcsContext CreateContext(EcsBuildPurpose purpose = EcsBuildPurpose.Session)
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
-        return new EcsContext(new EntityManager(componentManager, initialCapacity: 10), componentManager, new SystemManager(), new EventBus());
+        return new EcsContext(new EntityManager(componentManager, initialCapacity: 10), componentManager, new SystemManager(), new EventBus(), purpose);
+    }
+
+    [TestMethod]
+    [DataRow(EcsBuildPurpose.Trial)]
+    [DataRow(EcsBuildPurpose.Staging)]
+    public void BeginSession_OnABuildThatIsNotASession_ThrowsAndEmitsNothing(EcsBuildPurpose purpose)
+    {
+        var recorder = new SessionRecorder();
+        using var sessionSubscription = EngineHooks.Sessions.Subscribe(recorder);
+        using var context = CreateContext(purpose);
+
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(context.BeginSession);
+
+        Assert.Contains(purpose.ToString(), exception.Message);
+        Assert.IsEmpty(recorder.Calls);
     }
 
     [TestMethod]

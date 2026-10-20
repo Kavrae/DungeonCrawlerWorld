@@ -9,9 +9,9 @@ namespace Engine.Modules;
 /// Other modules are named by Id, so a mod that replaces one by Id still satisfies everything that names
 /// it. Requires is about presence and RunsAfter/RunsBefore about system order, and neither implies the
 /// other: every component is registered before any module is configured or any behavior registered, so a
-/// pool another module owns is available whatever the order. The phases run in this order, each for
-/// every module before the next starts: DeclareSettings, DeclareTags and DeclareContentTypes, RegisterComponents, then
-/// <see cref="IModule{TContext}"/>'s Configure and RegisterBehavior.
+/// pool another module owns is available whatever the order. EcsBuilder.Build validates and sorts the set first, then
+/// runs the phases in this order, each for every module before the next starts: DeclareSettings, DeclareTags and
+/// DeclareContentTypes, RegisterComponents, then <see cref="IModule{TContext}"/>'s Configure and RegisterBehavior.
 ///
 /// Implement <see cref="IModule{TContext}"/>, never this alone: the builder, the loader and
 /// replacement all work on the generic form. This non-generic base is what identity, ordering and
@@ -56,7 +56,7 @@ public interface IModule
 
     /// <summary>Registers the content codecs for the serialized types this module owns -- its definitions, and the effect entries, activators or contents it adds to a family.</summary>
     /// <remarks>Runs with DeclareSettings and DeclareTags, before any other phase, so every codec exists before a Configure reads a manifest.</remarks>
-    void DeclareContentTypes(ContentTypeRegistration registration)
+    void DeclareContentTypes(ContentTypeDeclarations contentTypes)
     {
     }
 

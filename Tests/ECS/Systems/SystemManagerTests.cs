@@ -117,17 +117,73 @@ public sealed class SystemManagerTests
     }
 
     [TestMethod]
-    public void RegisterFirst_RunsBeforeSystemsRegisteredEarlier()
+    public void RegisterAtFrameStart_RunsBeforeEveryOtherSystem_WhenEverItWasRegistered()
     {
         var order = new List<string>();
         var systemManager = new SystemManager();
         systemManager.Register(new OrderRecordingSystem("a", order));
         systemManager.Register(new OrderRecordingSystem("b", order));
-        systemManager.RegisterFirst(new OrderRecordingSystem("first", order));
+        systemManager.RegisterAtFrameStart(new OrderRecordingSystem("first", order), order: 0);
 
         systemManager.Update(default);
 
         CollectionAssert.AreEqual(new[] { "first", "a", "b" }, order);
+    }
+
+    [TestMethod]
+    public void RegisterAtFrameStart_RunsByOrder_NotByWhichRegisteredFirst()
+    {
+        var order = new List<string>();
+        var systemManager = new SystemManager();
+        systemManager.RegisterAtFrameStart(new OrderRecordingSystem("late", order), order: 100);
+        systemManager.RegisterAtFrameStart(new OrderRecordingSystem("early", order), order: 0);
+
+        systemManager.Update(default);
+
+        CollectionAssert.AreEqual(new[] { "early", "late" }, order);
+    }
+
+    [TestMethod]
+    public void RegisterAtFrameStart_AnOrderAlreadyTaken_ThrowsNamingBothSystems()
+    {
+        var order = new List<string>();
+        var systemManager = new SystemManager();
+        systemManager.RegisterAtFrameStart(new OrderRecordingSystem("first", order), order: 5);
+
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() => systemManager.RegisterAtFrameStart(new RecordingSystem(1), order: 5));
+
+        Assert.Contains(nameof(RecordingSystem), exception.Message);
+        Assert.Contains(nameof(OrderRecordingSystem), exception.Message);
+    }
+
+    [TestMethod]
+    public void Register_BetweenUpdates_RunsFromTheNextUpdate_KeepingEveryStripe()
+    {
+        var order = new List<string>();
+        var systemManager = new SystemManager();
+        var striped = new RecordingSystem(3);
+        systemManager.Register(striped);
+        systemManager.Update(default);
+
+        systemManager.Register(new OrderRecordingSystem("added", order));
+        systemManager.Update(default);
+
+        CollectionAssert.AreEqual(new[] { "added" }, order);
+        CollectionAssert.AreEqual(new byte[] { 0, 1 }, striped.StripeIndexesSeen);
+    }
+
+    [TestMethod]
+    [DoNotParallelize]
+    public void Registering_AfterTheSessionBegan_Throws()
+    {
+        var componentManager = new Engine.ECS.Components.ComponentManager(10, 10);
+        var systemManager = new SystemManager();
+        using var ecsContext = new Engine.ECS.Context.EcsContext(new Engine.ECS.Entities.EntityManager(componentManager, initialCapacity: 10), componentManager, systemManager, new Engine.Events.EventBus());
+        ecsContext.BeginSession();
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => systemManager.Register(new RecordingSystem(1)));
+        Assert.ThrowsExactly<InvalidOperationException>(() => systemManager.RegisterAtFrameStart(new RecordingSystem(1), order: 0));
+        Assert.ThrowsExactly<InvalidOperationException>(() => systemManager.RegisterFrameScoped(new FrameEventBuffer<int>()));
     }
 
     private sealed class SimulationFrameRecorder(List<string> order, SimulationClock clock) : ISimulationFrameListener

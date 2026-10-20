@@ -122,7 +122,7 @@ public sealed class StartupProfilerTests
         }
 
         var stages = profiler.Phases.Where(phase => phase.Depth == 0).Select(phase => phase.Name).ToArray();
-        CollectionAssert.AreEqual(new[] { "RegisterComponents", "Configure", "ResolveBlueprints", "RegisterBehavior" }, stages);
+        CollectionAssert.AreEqual(new[] { "DeclareModules", "RegisterComponents", "Configure", "ResolveBlueprints", "RegisterBehavior" }, stages);
 
         var registerComponentsIndex = profiler.Phases.ToList().FindIndex(phase => phase.Name == "RegisterComponents");
         var modulePhases = profiler.Phases.Skip(registerComponentsIndex + 1).TakeWhile(phase => phase.Depth == 1).ToList();

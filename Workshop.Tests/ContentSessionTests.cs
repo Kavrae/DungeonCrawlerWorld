@@ -77,6 +77,14 @@ public sealed class ContentSessionTests
     }
 
     [TestMethod]
+    public void Build_LeavesTheStagingWorldUnbuilt()
+    {
+        var (session, _) = BuildWithMods();
+
+        Assert.IsFalse(session.Internals.SpawnRecordRebuilder.IsStagingWorldBuilt);
+    }
+
+    [TestMethod]
     public void Build_WithTheExampleMod_BuildsWithNoFailures()
     {
         var (withoutMod, _) = BuildWithMods();

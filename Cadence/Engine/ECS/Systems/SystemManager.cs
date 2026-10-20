@@ -4,66 +4,127 @@ using System.Diagnostics;
 namespace Engine.ECS.Systems;
 
 /// <summary> Runs every registered system once per frame, passing each its rotating stripe index. </summary>
-/// <cleanupVersion>1</cleanupVersion>
-public sealed class SystemManager
+/// <remarks>
+/// Systems run in two lanes, in this order: the frame start -- systems that feed the frame rather than react to it,
+/// each placed by an explicit order (RegisterAtFrameStart) -- then every other system, in the order registered
+/// (Register: modules' systems, in module sort order). Where a system lands never depends on when it was registered.
+/// The lanes are flattened into one run order when registration changes, never per frame, and registration closes
+/// when the session begins (EcsContext.BeginSession).
+/// </remarks>
+/// <cleanupVersion>2</cleanupVersion>
+/// <param name="clock">The clock Update advances; a clock of its own when null. EcsBuilder passes the one it gave the build's context.</param>
+/// <param name="simulatedTierCount">See SimulatedTierCount.</param>
+public sealed class SystemManager(SimulationClock? clock = null, int simulatedTierCount = int.MaxValue)
 {
-    private readonly List<(ISystem System, ITieredSystem? TieredSystem, byte CurrentStripe)> _systems = [];
-    private readonly List<IFrameScoped> _frameScopedBuffers = [];
-
     /// <summary>
     /// How many processing tiers, from the lowest index up, are simulated for every
     /// <see cref="ITieredSystem"/>. Tiers at or past this are skipped entirely: their entities are
     /// not visited and their countdowns do not advance. Defaults to every tier. The game supplies
-    /// the value; this layer never learns what any tier means. See ITieredSystem's own remarks.
+    /// the value (EcsBuildRequest.SimulatedTierCount); this layer never learns what any tier means.
+    /// See ITieredSystem's own remarks.
     /// </summary>
-    public int SimulatedTierCount { get; set; } = int.MaxValue;
+    public int SimulatedTierCount { get; } = simulatedTierCount;
 
     /// <summary>
     /// Advanced to each update's EngineTime.FrameCount before any system runs, so everything that
-    /// reads it during or after that frame sees the frame being simulated. The game replaces this
-    /// default with the instance its modules were configured against (GameBuildPass) -- the same
-    /// injected-policy shape as SimulatedTierCount. See SimulationClock's own remarks.
+    /// reads it during or after that frame sees the frame being simulated. See SimulationClock's own remarks.
     /// </summary>
-    public SimulationClock Clock { get; set; } = new();
+    public SimulationClock Clock { get; } = clock ?? new SimulationClock();
 
-    /// <summary>Register a system to be updated each frame.</summary>
-    /// <param name="system">The system to register.</param>
-    /// <exception cref="ArgumentException">Thrown when the system's StripeCount is zero.</exception>
+    private readonly SortedList<int, SystemEntry> _frameStartSystems = [];
+    private readonly List<SystemEntry> _moduleSystems = [];
+    private readonly List<IFrameScoped> _frameScopedBuffers = [];
+
+    private SystemEntry[] _runOrder = [];
+    private bool _isRunOrderStale;
+    private bool _isRegistrationClosed;
+
+    /// <summary>One registered system and its rotating stripe index.</summary>
+    private sealed class SystemEntry(ISystem system)
+    {
+        public ISystem System { get; } = system;
+
+        public ITieredSystem? TieredSystem { get; } = system as ITieredSystem;
+
+        public byte CurrentStripe;
+    }
+
+    /// <summary>Registers a system to run each frame after the frame start's systems and every system registered before it.</summary>
+    /// <exception cref="ArgumentException">The system's StripeCount is zero.</exception>
+    /// <exception cref="InvalidOperationException">The session already began.</exception>
     public void Register(ISystem system)
     {
         ArgumentNullException.ThrowIfNull(system);
+        ThrowIfCannotRegister(system);
 
-        if (system.StripeCount == 0)
-        {
-            throw new ArgumentException("StripeCount must be greater than zero.", nameof(system));
-        }
-
-        _systems.Add((system, system as ITieredSystem, 0));
+        _moduleSystems.Add(new SystemEntry(system));
+        _isRunOrderStale = true;
     }
 
-    /// <summary>Registers a system to be updated each frame before every system registered so far.</summary>
-    /// <remarks>For a system that feeds the frame rather than reacting to it -- one that records into a FrameEventBuffer every other system reads this frame.</remarks>
-    public void RegisterFirst(ISystem system)
+    /// <summary>Registers a system to run each frame before every system registered with Register, at order among the frame start's systems (lower runs first).</summary>
+    /// <remarks>For a system that feeds the frame rather than reacting to it -- one that records into a FrameEventBuffer every other system reads this frame. The game names its orders in one place, so two systems' places never depend on which registered first.</remarks>
+    /// <exception cref="ArgumentException">The system's StripeCount is zero.</exception>
+    /// <exception cref="InvalidOperationException">Another system already holds order at the frame start, or the session already began.</exception>
+    public void RegisterAtFrameStart(ISystem system, int order)
     {
         ArgumentNullException.ThrowIfNull(system);
+        ThrowIfCannotRegister(system);
 
-        if (system.StripeCount == 0)
+        if (!_frameStartSystems.TryAdd(order, new SystemEntry(system)))
         {
-            throw new ArgumentException("StripeCount must be greater than zero.", nameof(system));
+            throw new InvalidOperationException($"{system.GetType().Name} can't run at frame-start order {order}: {_frameStartSystems[order].System.GetType().Name} already does.");
         }
 
-        _systems.Insert(0, (system, system as ITieredSystem, 0));
+        _isRunOrderStale = true;
     }
 
     /// <summary>See FrameEventBuffer/IFrameScoped's own doc comment for why this is cleared here, once per cycle, rather than by its own producer.</summary>
+    /// <exception cref="InvalidOperationException">The session already began.</exception>
     public void RegisterFrameScoped(IFrameScoped buffer)
     {
         ArgumentNullException.ThrowIfNull(buffer);
+        ThrowIfRegistrationClosed(buffer.GetType().Name);
 
         _frameScopedBuffers.Add(buffer);
     }
 
-    /// <summary>Runs every registered system once, in registration order.</summary>
+    /// <summary>Fixes the run order and refuses any later registration: what the session simulates is decided before it begins.</summary>
+    internal void CloseRegistration()
+    {
+        RefreshRunOrder();
+        _isRegistrationClosed = true;
+    }
+
+    private void ThrowIfCannotRegister(ISystem system)
+    {
+        if (system.StripeCount == 0)
+        {
+            throw new ArgumentException("StripeCount must be greater than zero.", nameof(system));
+        }
+
+        ThrowIfRegistrationClosed(system.GetType().Name);
+    }
+
+    private void ThrowIfRegistrationClosed(string registeredName)
+    {
+        if (_isRegistrationClosed)
+        {
+            throw new InvalidOperationException($"{registeredName} was registered after the session began; register systems while building the session.");
+        }
+    }
+
+    private void RefreshRunOrder()
+    {
+        if (!_isRunOrderStale)
+        {
+            return;
+        }
+
+        _runOrder = [.. _frameStartSystems.Values, .. _moduleSystems];
+        _isRunOrderStale = false;
+    }
+
+    /// <summary>Runs every registered system once: the frame start's systems by order, then every other system in registration order.</summary>
     /// <remarks>
     /// The frame boundary for every host: EngineHooks.SimulationFrames hears the frame start before the
     /// clock advances and its end after the frame-scoped buffers clear. While EngineHooks.FrameCosts has a
@@ -82,28 +143,31 @@ public sealed class SystemManager
             frameStartTimestamp = Stopwatch.GetTimestamp();
         }
 
+        RefreshRunOrder();
         Clock.Advance(time.FrameCount);
         IsUpdating = true;
         var frameCostRecorder = EngineHooks.FrameCosts.Listener;
+        var runOrder = _runOrder;
 
         try
         {
-            for (var i = 0; i < _systems.Count; i++)
+            for (var i = 0; i < runOrder.Length; i++)
             {
-                var (system, tieredSystem, stripeIndex) = _systems[i];
+                var entry = runOrder[i];
+                var stripeIndex = entry.CurrentStripe;
 
                 if (frameCostRecorder is not null)
                 {
                     var start = Stopwatch.GetTimestamp();
-                    Run(system, tieredSystem, time, stripeIndex);
-                    frameCostRecorder.Record(FrameCostCategory.Update, "SystemManager", system.GetType().Name, Stopwatch.GetElapsedTime(start));
+                    Run(entry, time, stripeIndex);
+                    frameCostRecorder.Record(FrameCostCategory.Update, "SystemManager", entry.System.GetType().Name, Stopwatch.GetElapsedTime(start));
                 }
                 else
                 {
-                    Run(system, tieredSystem, time, stripeIndex);
+                    Run(entry, time, stripeIndex);
                 }
 
-                _systems[i] = (system, tieredSystem, (byte)((stripeIndex + 1) % system.StripeCount));
+                entry.CurrentStripe = (byte)((stripeIndex + 1) % entry.System.StripeCount);
             }
         }
         finally
@@ -123,15 +187,15 @@ public sealed class SystemManager
     public bool IsUpdating { get; private set; }
 
     /// <summary>A tiered system runs through TieredSystemRunner with this manager's tier policy -- deliberately not through its own Update, which runs every tier. A plain system gets its rotating stripe index, which a tiered system has no use for since it keys off EngineTime.FrameCount.</summary>
-    private void Run(ISystem system, ITieredSystem? tieredSystem, EngineTime time, byte stripeIndex)
+    private void Run(SystemEntry entry, EngineTime time, byte stripeIndex)
     {
-        if (tieredSystem is not null)
+        if (entry.TieredSystem is { } tieredSystem)
         {
             TieredSystemRunner.Run(tieredSystem, time, SimulatedTierCount);
         }
         else
         {
-            system.Update(time, stripeIndex);
+            entry.System.Update(time, stripeIndex);
         }
     }
 }

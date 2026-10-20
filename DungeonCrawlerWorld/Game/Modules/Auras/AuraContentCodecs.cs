@@ -10,10 +10,10 @@ internal static class AuraContentCodecs
 {
     public const string AurasTable = "Auras";
 
-    public static void Register(ContentTypeRegistration registration)
+    public static void Register(ContentTypeDeclarations contentTypes)
     {
-        registration.RegisterValue(new AuraDefinitionCodec());
-        registration.RegisterPolymorphic<IEffectEntry, AuraSourceGrant>(nameof(AuraSourceGrant), new AuraSourceGrantCodec());
+        contentTypes.RegisterValue(new AuraDefinitionCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, AuraSourceGrant>(nameof(AuraSourceGrant), new AuraSourceGrantCodec());
     }
 
     private sealed class AuraDefinitionCodec : ContentCodec<AuraDefinition>

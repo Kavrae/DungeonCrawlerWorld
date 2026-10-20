@@ -38,7 +38,7 @@ namespace Game.Floors;
 /// created, LayoutRowCost per row of terrain written or announced. Work runs one job at a time, in order,
 /// except that an eviction destroys its built creatures first and ahead of every other job (see
 /// IsEvictingBuiltCreatures), and a shift queues its evictions before its loads, so no more than 9 + CacheSize neighborhoods are
-/// ever loaded at once -- the headroom the session reserves at startup. Register it with SystemManager.RegisterFirst: population
+/// ever loaded at once -- the headroom the session reserves at startup. Register it at GameFrameStartOrder.NeighborhoodStreaming: population
 /// records each new creature's spawn into the moved-entities buffer, which the systems that read it
 /// must not have read yet this frame.
 /// </para>

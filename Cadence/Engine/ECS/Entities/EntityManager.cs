@@ -45,10 +45,19 @@ public sealed class EntityManager
     /// <summary>Number of entities in the game.</summary>
     public int LivingEntityCount => _entityIdPool.Count;
 
+    /// <summary>True while EcsBuilder is still building: entities wait until every module's systems and handlers exist.</summary>
+    internal bool IsEntityCreationHeld { get; set; }
+
     /// <summary>Creates a new entity id via pool rental.</summary>
     /// <returns>The id of the created entity.</returns>
+    /// <exception cref="InvalidOperationException">The build this manager belongs to hasn't completed.</exception>
     public int CreateEntity()
     {
+        if (IsEntityCreationHeld)
+        {
+            ThrowEntityCreationHeld();
+        }
+
         var entityId = _entityIdPool.Rent();
         Keys.Issue(entityId);
 
@@ -60,6 +69,9 @@ public sealed class EntityManager
 
         return entityId;
     }
+
+    private static void ThrowEntityCreationHeld() =>
+        throw new InvalidOperationException("An entity was created before the build completed; create entities once EcsBuilder.Build returns, when every blueprint is resolved and every system and handler exists.");
 
     /// <summary>Grows entity capacity, where smaller, so ids below capacity never trigger a reallocation of every entity-indexed pool.</summary>
     public void ReserveCapacity(int capacity)

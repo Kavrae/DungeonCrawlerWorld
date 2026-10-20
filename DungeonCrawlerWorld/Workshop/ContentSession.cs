@@ -1,6 +1,4 @@
-using Engine.Content;
 using Engine.Math;
-using Engine.Modules;
 using Engine.Settings;
 using Game.Bootstrap;
 using Game.Content;
@@ -9,6 +7,7 @@ using Workshop;
 namespace DungeonCrawlerWorld.Workshop;
 
 /// <summary>The game build the IDE reads its catalogs and views from: every built-in module and every valid mod, over a placeholder map, with no population and no player, never simulated.</summary>
+/// <remarks>The IDE never rebuilds a spawn record, so the session's staging world is left until one is rebuilt -- never, today.</remarks>
 public static class ContentSession
 {
     private const int InitialEntityCapacity = 16;
@@ -18,7 +17,7 @@ public static class ContentSession
     public static GameSession Build(string modsDirectory, IReadOnlyList<ISettingsSource> settingsSources, TextWriter failureLog)
     {
         var validatedMods = ModValidation.Validate(modsDirectory, settingsSources);
-        var gameSession = GameBootstrapper.Build(validatedMods, GameBuildPass.CreatePlaceholderMap(), new MathUtility(new SeededRandom()), InitialEntityCapacity, InitialComponentCapacity, settingsSources: settingsSources);
+        var gameSession = GameBootstrapper.Build(validatedMods, GameBuildPass.CreatePlaceholderMap(), new MathUtility(new SeededRandom()), InitialEntityCapacity, InitialComponentCapacity, settingsSources: settingsSources, buildsStagingWorldOnFirstRebuild: true);
 
         foreach (var failure in gameSession.ModuleFailures)
         {
@@ -34,7 +33,7 @@ public static class ContentSession
     }
 
     /// <summary>The Error List's lines for a session: each mod dropped, each setting override refused, and each record of the master manifest under masterDirectory that doesn't load.</summary>
-    /// <remarks>The manifest is read again from masterDirectory -- the source tree's copy, the one the IDE edits -- through the built-in modules' codecs, collecting every failure rather than stopping at the first.</remarks>
+    /// <remarks>The manifest is read again from masterDirectory -- the source tree's copy, the one the IDE edits -- through the session's own codecs, collecting every failure rather than stopping at the first.</remarks>
     public static IReadOnlyList<WorkshopProblem> LoadProblems(GameSession gameSession, string masterDirectory)
     {
         var problems = new List<WorkshopProblem>();
@@ -49,7 +48,7 @@ public static class ContentSession
             problems.Add(new WorkshopProblem(WorkshopProblemSeverity.Warning, $"{failure.Setting}: {failure.Message}", failure.Source));
         }
 
-        var content = MasterContent.Load(masterDirectory, ContentTypeRegistry.Declare(GameBootstrapper.BuiltInModules().CreateAll()));
+        var content = MasterContent.Load(masterDirectory, gameSession.Catalogs.ContentTypes);
         foreach (var failure in content.Failures)
         {
             problems.Add(new WorkshopProblem(WorkshopProblemSeverity.Error, failure.Reason, failure.Line > 0 ? $"{failure.File}:{failure.Line}" : failure.File));

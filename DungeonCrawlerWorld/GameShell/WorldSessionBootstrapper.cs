@@ -86,7 +86,7 @@ public static class WorldSessionBootstrapper
         // (see FloorBuilder.CreatePlayer's own comment on why both exist). Population itself
         // (PopulateFloor, just below) never publishes EntityMovedEvent this way -- only the
         // buffered path -- so subscribing this early doesn't log anything spurious.
-        var playerActivityLog = new PlayerActivityLog(world, ecsContext.ComponentManager, ecsContext.EventBus, ecsContext.SystemManager.Clock, playerActivityLogFilePath, gameSession.Catalogs.Definitions, gameSession.Views.ActionSourceNaming);
+        var playerActivityLog = new PlayerActivityLog(world, ecsContext.ComponentManager, ecsContext.EventBus, ecsContext.Clock, playerActivityLogFilePath, gameSession.Catalogs.Definitions, gameSession.Views.ActionSourceNaming);
         Console.WriteLine($"[PlayerActivityLog] Writing to {playerActivityLogFilePath}");
 
         // The tier reference is set to where the player is aimed at spawning BEFORE population, so
@@ -145,7 +145,7 @@ public static class WorldSessionBootstrapper
         // systems read later the same frame.
         var neighborhoodStreamer = new NeighborhoodStreamer(world, ecsContext.EntityManager, ecsContext.ComponentManager.GetDirectPool<Game.Modules.Core.Components.TransformComponent>(), ecsContext.EventBus, tierResolver, neighborhoodRecords,
             new Game.TestMapBuilder(ecsContext.EntityManager, gameSession.Internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Auras, gameSession.Catalogs.Definitions), gameSession.Internals.Skeletons);
-        ecsContext.SystemManager.RegisterFirst(neighborhoodStreamer);
+        ecsContext.SystemManager.RegisterAtFrameStart(neighborhoodStreamer, GameFrameStartOrder.NeighborhoodStreaming);
         RegisterStreamerGauges(ecsContext.Gauges, neighborhoodStreamer);
 
         // A window shift promotes the new centre's creature skeletons only once the neighborhoods it

@@ -34,9 +34,9 @@ public sealed class AurasModule : IGameModule
     public IReadOnlyList<Guid> RunsAfter { get; } = [MovementModule.ModuleId];
 
     /// <summary>Registers the content codecs for the serialized types this module owns.</summary>
-    public void DeclareContentTypes(ContentTypeRegistration registration)
+    public void DeclareContentTypes(ContentTypeDeclarations contentTypes)
     {
-        AuraContentCodecs.Register(registration);
+        AuraContentCodecs.Register(contentTypes);
     }
 
     public void RegisterComponents(ComponentRegistration registration)
@@ -77,6 +77,23 @@ public sealed class AurasModule : IGameModule
             context.SimulationScope));
 
         WireAnchors(context, systemManager, componentManager);
+        WireEntityDestruction(context, componentManager);
+    }
+
+    /// <summary>A destroyed entity's aura sources leave the field while it is still placed: their removal reads where each source last was.</summary>
+    /// <remarks>Subscribed here, during RegisterBehavior, so it runs after the factory forgets a skeleton and before the build's own handler takes the entity off the map.</remarks>
+    private static void WireEntityDestruction(GameModuleContext context, ComponentManager componentManager)
+    {
+        var auraSources = componentManager.GetMultiPool<AuraSourceComponent>();
+        var eventBus = context.EventBus;
+
+        context.EntityManager.EntityDestroying += entityId =>
+        {
+            if (auraSources.Has(entityId))
+            {
+                AuraSourceEffects.RemoveAll(auraSources, eventBus, entityId);
+            }
+        };
     }
 
     /// <summary>Ends an anchor once its last source goes, and switches off the toggle holding an anchor that is destroyed (its neighborhood unloading).</summary>

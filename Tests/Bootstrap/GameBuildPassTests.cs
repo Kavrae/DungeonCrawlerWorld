@@ -78,10 +78,10 @@ public sealed class GameBuildPassTests
     [TestMethod]
     public void AModuleBuildWithoutAFoundationModule_ThrowsNamingIt()
     {
-        IReadOnlyList<IModule<GameModuleContext>> modules = [new Game.Modules.Core.CoreModule(), new Game.Blueprints.BlueprintsModule()];
+        IReadOnlyList<ModuleFactory<GameModuleContext>> modules = [ModuleFactory<GameModuleContext>.For<Game.Modules.Core.CoreModule>(), ModuleFactory<GameModuleContext>.For<Game.Blueprints.BlueprintsModule>()];
 
         var exception = Assert.ThrowsExactly<InvalidOperationException>(() =>
-            GameBuildPass.BuildModules(modules, TestModuleRegistration.DefaultSettings(modules), new Map(new Vector3Int(5, 5, 1)), new MathUtility(), initialEntityCapacity: 10, initialComponentCapacity: 10));
+            GameBuildPass.BuildModules(modules, [], new Map(new Vector3Int(5, 5, 1)), new MathUtility(), [], initialEntityCapacity: 10, initialComponentCapacity: 10));
 
         Assert.Contains(Game.Modules.ProcessingTier.ProcessingTierModule.ModuleId.ToString(), exception.Message);
     }

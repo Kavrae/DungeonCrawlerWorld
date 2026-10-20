@@ -1,3 +1,4 @@
+using Engine.Content;
 using Engine.Tags;
 using Game.Blueprints;
 using Game.Modules;
@@ -32,6 +33,9 @@ public sealed class GameCatalogs(GameModuleContext context)
 
     /// <summary>Every gameplay tag this session's modules declared, and each one's display name.</summary>
     public GameplayTagRegistry GameplayTags { get; } = context.GameplayTags;
+
+    /// <summary>Every content codec this session's modules registered -- what a manifest is read and written through.</summary>
+    public ContentTypeRegistry ContentTypes { get; } = context.ContentTypes;
 
     /// <summary>Every blueprint definition, by session-local id and by Guid.</summary>
     public BlueprintRegistry Definitions { get; } = context.Definitions;

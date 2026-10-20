@@ -1,8 +1,8 @@
 using Engine.Bootstrap;
-using Engine.ECS.Context;
-using Engine.Events;
+using Engine.ECS.Systems;
 using Engine.Modules;
 using Engine.Settings;
+using Game;
 
 namespace Tests.Bootstrap;
 
@@ -16,7 +16,7 @@ public sealed class BootstrapperTests
 
     private static readonly SettingKey<int> CoreCapacity = new(CoreId, "Capacity");
 
-    private sealed record TestBuildContext(string Name);
+    private sealed record TestBuildContext(string Name, SimulationClock Clock, Engine.ECS.Entities.EntityManager EntityManager);
 
     private abstract class LoggingModule(string name, Guid id, List<string> log) : IModule<TestBuildContext>
     {
@@ -25,6 +25,7 @@ public sealed class BootstrapperTests
         public IReadOnlyList<Guid> Requires { get; init; } = [];
         public IReadOnlyList<Guid> RunsAfter { get; init; } = [];
         public IReadOnlyList<Guid> RunsBefore { get; init; } = [];
+        public void DeclareTags(Engine.Tags.GameplayTagDeclarations tags) => log.Add($"{name}:declare");
         public void RegisterComponents(ComponentRegistration registration) => log.Add($"{name}:components");
         public void Configure(TestBuildContext context) => log.Add($"{name}:configure:{context.Name}");
         public void RegisterBehavior(BehaviorRegistration<TestBuildContext> registration) => log.Add($"{name}:systems:{registration.Context.Name}");
@@ -53,12 +54,49 @@ public sealed class BootstrapperTests
         public void RegisterBehavior(BehaviorRegistration<TestBuildContext> registration) => log.Add($"systems:{registration.Settings.Get(CoreCapacity)}");
     }
 
-    private static EcsContext Build(IReadOnlyList<IModule<TestBuildContext>> modules, SettingValues? settings = null) =>
-        EcsBuilder.Begin(modules, settings ?? SettingValues.None, 10, 10, new EventBus())
-            .RegisterComponents()
-            .Configure(new TestBuildContext("shared"))
-            .RegisterBehavior()
-            .Complete();
+    private struct ContractTestComponent;
+
+    private sealed class PoolRegisteringModule(string name, Action<ComponentRegistration> registerComponents) : IModule<TestBuildContext>
+    {
+        public string Name => name;
+
+        public Guid Id => CoreId;
+
+        public void RegisterComponents(ComponentRegistration registration) => registerComponents(registration);
+
+        public void RegisterBehavior(BehaviorRegistration<TestBuildContext> registration)
+        {
+        }
+    }
+
+    private static PoolRegisteringModule PackedPoolModule(string name) =>
+        new(name, registration => registration.ComponentManager.RegisterPackedPool<ContractTestComponent>(static (ref existing, incoming) => existing = incoming));
+
+    private static EcsBuild<TestBuildContext> Build(
+        IReadOnlyList<IModule<TestBuildContext>> modules,
+        IReadOnlyList<ISettingsSource>? settingsSources = null,
+        IReadOnlyList<Guid>? requiredModuleIds = null,
+        int simulatedTierCount = int.MaxValue,
+        List<string>? log = null,
+        IReadOnlyList<IModule<TestBuildContext>>? mods = null) =>
+        EcsBuilder.Build(new EcsBuildRequest<TestBuildContext>
+        {
+            Modules = BuiltInTestModules.Factories(modules),
+            Mods = BuiltInTestModules.Factories(mods ?? []),
+            SettingsSources = settingsSources ?? [],
+            FramesPerSecond = GameFrameRate.FramesPerSecond,
+            InitialEntityCapacity = 10,
+            InitialComponentCapacity = 10,
+            RequiredModuleIds = requiredModuleIds ?? [],
+            SimulatedTierCount = simulatedTierCount,
+            CreateContext = services =>
+            {
+                log?.Add("CreateContext");
+                return new TestBuildContext("shared", services.Clock, services.EntityManager);
+            },
+            AfterConfigure = _ => log?.Add("AfterConfigure"),
+            AfterBehavior = (_, _) => log?.Add("AfterBehavior"),
+        });
 
     private static List<string> SystemsOrder(List<string> log) =>
         log.Where(entry => entry.Contains(":systems")).Select(entry => entry[..entry.IndexOf(':')]).ToList();
@@ -76,14 +114,30 @@ public sealed class BootstrapperTests
     }
 
     [TestMethod]
-    public void Build_ConfiguresEveryModule_AfterEveryComponentAndBeforeAnySystem()
+    public void Build_RunsEveryPhaseForEveryModule_BeforeTheNextPhase()
     {
         var log = new List<string>();
 
         Build([new MovementTestModule(log), new CoreTestModule(log)]);
 
         CollectionAssert.AreEqual(
-            new[] { "Movement:components", "Core:components", "Movement:configure:shared", "Core:configure:shared", "Movement:systems:shared", "Core:systems:shared" },
+            new[] { "Movement:declare", "Core:declare", "Movement:components", "Core:components", "Movement:configure:shared", "Core:configure:shared", "Movement:systems:shared", "Core:systems:shared" },
+            log);
+    }
+
+    [TestMethod]
+    public void Build_CallsTheGamesCallbacksBetweenThePhases()
+    {
+        var log = new List<string>();
+
+        Build([new MovementTestModule(log), new CoreTestModule(log)], log: log);
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "Movement:declare", "Core:declare", "Movement:components", "Core:components", "CreateContext",
+                "Movement:configure:shared", "Core:configure:shared", "AfterConfigure", "Movement:systems:shared", "Core:systems:shared", "AfterBehavior",
+            },
             log);
     }
 
@@ -104,6 +158,7 @@ public sealed class BootstrapperTests
 
         Build([new MovementTestModule(log) { RunsAfter = [CoreId] }, new CoreTestModule(log)]);
 
+        Assert.IsLessThan(log.IndexOf("Movement:declare"), log.IndexOf("Core:declare"));
         Assert.IsLessThan(log.IndexOf("Movement:components"), log.IndexOf("Core:components"));
         Assert.IsLessThan(log.IndexOf("Movement:configure:shared"), log.IndexOf("Core:configure:shared"));
         Assert.IsLessThan(log.IndexOf("Movement:systems:shared"), log.IndexOf("Core:systems:shared"));
@@ -150,7 +205,7 @@ public sealed class BootstrapperTests
     }
 
     [TestMethod]
-    public void Begin_MissingRequirement_ThrowsNamingTheModuleAndTheMissingId()
+    public void Build_MissingRequirement_ThrowsNamingTheModuleAndTheMissingId_BeforeAnyModuleRuns()
     {
         var log = new List<string>();
 
@@ -162,7 +217,18 @@ public sealed class BootstrapperTests
     }
 
     [TestMethod]
-    public void Begin_CircularOrdering_ThrowsWithThePath()
+    public void Build_MissingBuildRequirement_ThrowsNamingTheMissingId_BeforeAnyModuleRuns()
+    {
+        var log = new List<string>();
+
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() => Build([new MovementTestModule(log)], requiredModuleIds: [CoreId]));
+
+        Assert.Contains(CoreId.ToString(), exception.Message);
+        Assert.IsEmpty(log);
+    }
+
+    [TestMethod]
+    public void Build_CircularOrdering_ThrowsWithThePath()
     {
         var log = new List<string>();
         IReadOnlyList<IModule<TestBuildContext>> modules =
@@ -178,7 +244,7 @@ public sealed class BootstrapperTests
     }
 
     [TestMethod]
-    public void Begin_CircularOrderingThroughRunsBefore_NamesTheDeclaringModuleAndList()
+    public void Build_CircularOrderingThroughRunsBefore_NamesTheDeclaringModuleAndList()
     {
         var log = new List<string>();
         IReadOnlyList<IModule<TestBuildContext>> modules =
@@ -203,7 +269,7 @@ public sealed class BootstrapperTests
     }
 
     [TestMethod]
-    public void Begin_TwoModulesSharingANonEmptyId_Throws()
+    public void Build_TwoModulesSharingANonEmptyId_Throws()
     {
         var log = new List<string>();
 
@@ -221,7 +287,7 @@ public sealed class BootstrapperTests
     }
 
     [TestMethod]
-    public void Begin_DuplicateModuleType_Throws()
+    public void Build_DuplicateModuleType_Throws()
     {
         var log = new List<string>();
 
@@ -233,43 +299,126 @@ public sealed class BootstrapperTests
     {
         var log = new List<string>();
 
-        var ecsContext = Build([new CoreTestModule(log)]);
+        var ecsContext = Build([new CoreTestModule(log)]).EcsContext;
 
         var entityId = ecsContext.EntityManager.CreateEntity();
         Assert.AreEqual(0, entityId);
     }
 
     [TestMethod]
-    public void EveryStage_CanBeAdvancedOnlyOnce()
+    public void Build_TheContextIsGivenTheClockTheSystemManagerAdvances()
     {
         var log = new List<string>();
-        var sortedModules = EcsBuilder.Begin<TestBuildContext>([new CoreTestModule(log)], SettingValues.None, 10, 10, new EventBus());
 
-        var registeredComponents = sortedModules.RegisterComponents();
-        Assert.ThrowsExactly<InvalidOperationException>(() => sortedModules.RegisterComponents());
+        var build = Build([new CoreTestModule(log)]);
+        build.EcsContext.Update(new EngineTime(TimeSpan.Zero, TimeSpan.Zero, IsRunningSlowly: false, FrameCount: 9));
 
-        var configuredModules = registeredComponents.Configure(new TestBuildContext("first"));
-        Assert.ThrowsExactly<InvalidOperationException>(() => registeredComponents.Configure(new TestBuildContext("second")));
+        Assert.AreSame(build.EcsContext.Clock, build.Context.Clock);
+        Assert.AreEqual(9, build.Context.Clock.CurrentFrame);
+    }
 
-        var registeredBehavior = configuredModules.RegisterBehavior();
-        Assert.ThrowsExactly<InvalidOperationException>(() => configuredModules.RegisterBehavior());
+    [TestMethod]
+    public void Build_AppliesTheRequestedSimulatedTierCount()
+    {
+        var log = new List<string>();
 
-        registeredBehavior.Complete();
-        Assert.ThrowsExactly<InvalidOperationException>(() => registeredBehavior.Complete());
+        var build = Build([new CoreTestModule(log)], simulatedTierCount: 2);
 
-        CollectionAssert.AreEqual(new[] { "Core:components", "Core:configure:first", "Core:systems:first" }, log);
+        Assert.AreEqual(2, build.EcsContext.SystemManager.SimulatedTierCount);
     }
 
     [TestMethod]
     public void ResolvedSettings_ReachRegisterComponentsAndRegisterBehavior()
     {
         var log = new List<string>();
-        IReadOnlyList<IModule<TestBuildContext>> modules = [new SettingReadingModule(log)];
-        var resolution = SettingsCatalog.Declare(modules).Resolve([new CommandLineSettingsSource(["--setting=SettingReadingModule.Capacity=64"])]);
 
-        Build(modules, resolution.Values);
+        var build = Build([new SettingReadingModule(log)], settingsSources: [new CommandLineSettingsSource(["--setting=SettingReadingModule.Capacity=64"])]);
 
-        Assert.IsEmpty(resolution.Failures);
+        Assert.IsEmpty(build.Declarations.SettingsFailures);
         CollectionAssert.AreEqual(new[] { "components:64", "systems:64" }, log);
+    }
+
+    [TestMethod]
+    public void RejectedSettingOverrides_AreReportedOnTheBuild()
+    {
+        var log = new List<string>();
+
+        var build = Build([new SettingReadingModule(log)], settingsSources: [new CommandLineSettingsSource(["--setting=Bogus.Name=1"])]);
+
+        Assert.HasCount(1, build.Declarations.SettingsFailures);
+    }
+
+    private sealed class EntityCreatingModule(bool createsInConfigure) : IModule<TestBuildContext>
+    {
+        public void RegisterComponents(ComponentRegistration registration)
+        {
+        }
+
+        public void Configure(TestBuildContext context)
+        {
+            if (createsInConfigure)
+            {
+                context.EntityManager.CreateEntity();
+            }
+        }
+
+        public void RegisterBehavior(BehaviorRegistration<TestBuildContext> registration)
+        {
+            if (!createsInConfigure)
+            {
+                registration.Context.EntityManager.CreateEntity();
+            }
+        }
+    }
+
+    [TestMethod]
+    public void Build_AnEntityCreatedInConfigure_Throws()
+    {
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() => Build([new EntityCreatingModule(createsInConfigure: true)]));
+
+        Assert.Contains("before the build completed", exception.Message);
+    }
+
+    [TestMethod]
+    public void Build_AnEntityCreatedInRegisterBehavior_Throws()
+    {
+        Assert.ThrowsExactly<InvalidOperationException>(() => Build([new EntityCreatingModule(createsInConfigure: false)]));
+    }
+
+    [TestMethod]
+    public void Build_ModReplacingAModule_WithTheSamePools_Builds()
+    {
+        var build = Build([PackedPoolModule("Core")], mods: [PackedPoolModule("ReplacementCore")]);
+
+        Assert.AreEqual("ReplacementCore", build.Modules.Single().Name);
+    }
+
+    [TestMethod]
+    public void Build_ModReplacingAModule_WithoutItsComponents_ThrowsNamingThem()
+    {
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() =>
+            Build([PackedPoolModule("Core")], mods: [new PoolRegisteringModule("ReplacementCore", _ => { })]));
+
+        Assert.Contains("ReplacementCore replaces Core but does not register: ContractTestComponent (PackedComponentPool)", exception.Message);
+    }
+
+    [TestMethod]
+    public void Build_ModReplacingAModule_WithAnotherKindOfPool_Throws()
+    {
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() =>
+            Build([PackedPoolModule("Core")], mods: [new PoolRegisteringModule("ReplacementCore", registration => registration.ComponentManager.RegisterMultiPool<ContractTestComponent>())]));
+
+        Assert.Contains("ContractTestComponent (PackedComponentPool)", exception.Message);
+    }
+
+    [TestMethod]
+    public void Declare_ReturnsWhatABuildOfTheSameSetWouldDeclare_WithoutRegisteringAnything()
+    {
+        var log = new List<string>();
+
+        var declarations = EcsBuilder.Declare(BuiltInTestModules.Factories<TestBuildContext>([new SettingReadingModule(log)]), settingsSources: [new CommandLineSettingsSource(["--setting=SettingReadingModule.Capacity=64"])]);
+
+        Assert.AreEqual(64, declarations.Settings.Get(CoreCapacity));
+        Assert.IsEmpty(log);
     }
 }

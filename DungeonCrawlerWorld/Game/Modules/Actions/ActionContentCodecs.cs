@@ -12,23 +12,23 @@ internal static class ActionContentCodecs
 {
     public const string ActionsTable = "Actions";
 
-    public static void Register(ContentTypeRegistration registration)
+    public static void Register(ContentTypeDeclarations contentTypes)
     {
-        registration.RegisterValue(new TargetingSpecCodec());
-        registration.RegisterValue(new ActionTimingCodec());
-        registration.RegisterValue(new ToggleSpecCodec());
-        registration.RegisterValue(new TogglePeriodicEffectsCodec());
-        registration.RegisterValue(new ActionDefinitionCodec());
+        contentTypes.RegisterValue(new TargetingSpecCodec());
+        contentTypes.RegisterValue(new ActionTimingCodec());
+        contentTypes.RegisterValue(new ToggleSpecCodec());
+        contentTypes.RegisterValue(new TogglePeriodicEffectsCodec());
+        contentTypes.RegisterValue(new ActionDefinitionCodec());
 
-        registration.RegisterPolymorphic<IActionActivator, DirectAction>("Direct", new DirectActionCodec());
-        registration.RegisterPolymorphic<IActionActivator, SpellActivator>("Spell", new SpellActivatorCodec());
-        registration.RegisterPolymorphic<IActionActivator, PotionActivator>("Potion", new PotionActivatorCodec());
-        registration.RegisterPolymorphic<IActionActivator, ScrollActivator>("Scroll", new ScrollActivatorCodec());
-        registration.RegisterPolymorphic<IActionActivator, WandActivator>("Wand", new WandActivatorCodec());
-        registration.RegisterPolymorphic<IActionActivator, ToggleItemActivator>("ToggleItem", new ToggleItemActivatorCodec());
+        contentTypes.RegisterPolymorphic<IActionActivator, DirectAction>("Direct", new DirectActionCodec());
+        contentTypes.RegisterPolymorphic<IActionActivator, SpellActivator>("Spell", new SpellActivatorCodec());
+        contentTypes.RegisterPolymorphic<IActionActivator, PotionActivator>("Potion", new PotionActivatorCodec());
+        contentTypes.RegisterPolymorphic<IActionActivator, ScrollActivator>("Scroll", new ScrollActivatorCodec());
+        contentTypes.RegisterPolymorphic<IActionActivator, WandActivator>("Wand", new WandActivatorCodec());
+        contentTypes.RegisterPolymorphic<IActionActivator, ToggleItemActivator>("ToggleItem", new ToggleItemActivatorCodec());
 
-        registration.RegisterPolymorphic<IEffectEntry, DodgeActivation>(nameof(DodgeActivation), new DodgeActivationCodec());
-        registration.RegisterPolymorphic<IEffectEntry, HotkeyExpansionGrant>(nameof(HotkeyExpansionGrant), new HotkeyExpansionGrantCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, DodgeActivation>(nameof(DodgeActivation), new DodgeActivationCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, HotkeyExpansionGrant>(nameof(HotkeyExpansionGrant), new HotkeyExpansionGrantCodec());
     }
 
     private sealed class TargetingSpecCodec : ContentCodec<TargetingSpec>

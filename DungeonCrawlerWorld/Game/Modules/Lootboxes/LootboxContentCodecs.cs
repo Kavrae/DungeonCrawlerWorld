@@ -6,8 +6,8 @@ namespace Game.Modules.Lootboxes;
 /// <summary>The codec for RandomSingleStackContents, which has no fields and reads back as its one shared instance; registered by LootboxModule.</summary>
 internal static class LootboxContentCodecs
 {
-    public static void Register(ContentTypeRegistration registration) =>
-        registration.RegisterPolymorphic<IItemContents, RandomSingleStackContents>("RandomSingleStack", new RandomSingleStackContentsCodec());
+    public static void Register(ContentTypeDeclarations contentTypes) =>
+        contentTypes.RegisterPolymorphic<IItemContents, RandomSingleStackContents>("RandomSingleStack", new RandomSingleStackContentsCodec());
 
     private sealed class RandomSingleStackContentsCodec : ContentCodec<RandomSingleStackContents>
     {

@@ -417,6 +417,22 @@ Implemented together, at the IDE plan's request (its Phase 4 needs both). Where 
 - The `Redirects` table is read and kept; applying it waits for entity saves (Decision 16).
 - Remove the TEMPORARY "Create runtime action" Admin Mode option (Phase 3).
 
+### Phase 6 -- Mod area files
+
+(Added 2026-10-18, moved here from `PLAN-map-areas-and-map-tab.md`.) Map areas are content too: `Areas/` (one area
+per file, rows one per line) and the `AreaPalettes`/`AreaPlacements` tables -- plus `AreaPools` once TODO.md's "Area
+pools" lands.
+- A mod folder may hold `Definitions/Areas/*.json` and the area tables, layered in load order between master and save
+  like Phase 5's tables: an area with a master area's Guid replaces it, a new Guid adds one.
+- `ModValidation` checks a mod's areas with `AreaContentValidation` in its trial build; a failing area is a
+  `ContentFailure` naming the mod, its file, row and column, and the mod is dropped like any other failing mod.
+- A mod's fixed placement may not overlap master's or another mod's; the later one in load order is refused with a
+  `ContentFailure` rather than stamped over the earlier.
+- The Workshop's Map tab marks mod-supplied areas with their mod, as the other tabs will once manifest layers know
+  their source.
+- `Mods.ExampleMod` ships one area placed in a neighborhood next to the spawn; `Mods.TestFixtures` gets a mod with an
+  area holding an undefined symbol for the failure path.
+
 ## Out of scope / follow-ups (each to become a TODO.md entry when this lands)
 
 - **The Action and Item Builder** (DevTools): edits the master manifest (and later a save's) through

@@ -1,5 +1,4 @@
-using Engine.Content;
-using Engine.Modules;
+using Engine.Bootstrap;
 using Game.Bootstrap;
 using Game.Content;
 using Game.Effects;
@@ -16,7 +15,7 @@ internal static class TestContent
 {
     private static readonly Lazy<MasterContent> Master = new(() =>
     {
-        var content = MasterContent.Load(MasterContent.DefaultDirectory, ContentTypeRegistry.Declare(GameBootstrapper.BuiltInModules().CreateAll()));
+        var content = MasterContent.Load(MasterContent.DefaultDirectory, EcsBuilder.Declare(GameBootstrapper.BuiltInModules()).ContentTypes);
         content.ThrowIfFailed();
         return content;
     });

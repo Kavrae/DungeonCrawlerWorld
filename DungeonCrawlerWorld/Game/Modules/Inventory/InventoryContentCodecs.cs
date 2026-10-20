@@ -10,11 +10,11 @@ internal static class InventoryContentCodecs
 {
     public const string ItemsTable = "Items";
 
-    public static void Register(ContentTypeRegistration registration)
+    public static void Register(ContentTypeDeclarations contentTypes)
     {
-        registration.RegisterValue(new ItemDefinitionCodec());
-        registration.RegisterValue(new ItemContentsEntryCodec());
-        registration.RegisterPolymorphic<IItemContents, SetItemContents>("Set", new SetItemContentsCodec());
+        contentTypes.RegisterValue(new ItemDefinitionCodec());
+        contentTypes.RegisterValue(new ItemContentsEntryCodec());
+        contentTypes.RegisterPolymorphic<IItemContents, SetItemContents>("Set", new SetItemContentsCodec());
     }
 
     private sealed class ItemDefinitionCodec : ContentCodec<ItemDefinition>

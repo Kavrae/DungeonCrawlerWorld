@@ -50,9 +50,9 @@ public sealed class ActionsModule : IGameModule
     public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, AurasModule.ModuleId, BodyPartEffectsModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId];
 
     /// <summary>Registers the content codecs for the serialized types this module owns.</summary>
-    public void DeclareContentTypes(ContentTypeRegistration registration)
+    public void DeclareContentTypes(ContentTypeDeclarations contentTypes)
     {
-        ActionContentCodecs.Register(registration);
+        ActionContentCodecs.Register(contentTypes);
     }
 
     public void RegisterComponents(ComponentRegistration registration)

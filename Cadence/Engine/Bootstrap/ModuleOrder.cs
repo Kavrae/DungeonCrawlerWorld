@@ -9,10 +9,11 @@ internal static class ModuleOrder
 {
     /// <summary>Orders modules so every RunsAfter/RunsBefore constraint holds, keeping the caller's order wherever nothing constrains it.</summary>
     /// <remarks>Depth-first in input order, visiting a module's predecessors (in input order) before it, so a list that already satisfies every constraint comes back unchanged.</remarks>
-    public static List<TModule> Sort<TModule>(IReadOnlyList<TModule> modules) where TModule : class, IModule
+    /// <param name="requiredModuleIds">Modules the build itself needs, whatever the modules require of each other.</param>
+    public static List<TModule> Sort<TModule>(IReadOnlyList<TModule> modules, IReadOnlyList<Guid> requiredModuleIds) where TModule : class, IModule
     {
         var modulesById = IndexById(modules);
-        ValidateRequirements(modules, modulesById);
+        ValidateRequirements(modules, modulesById, requiredModuleIds);
 
         var predecessorsByModule = FindPredecessors(modules, modulesById);
         var sortedModules = new List<TModule>(modules.Count);
@@ -50,9 +51,17 @@ internal static class ModuleOrder
         return modulesById;
     }
 
-    private static void ValidateRequirements<TModule>(IReadOnlyList<TModule> modules, Dictionary<Guid, TModule> modulesById) where TModule : class, IModule
+    private static void ValidateRequirements<TModule>(IReadOnlyList<TModule> modules, Dictionary<Guid, TModule> modulesById, IReadOnlyList<Guid> requiredModuleIds) where TModule : class, IModule
     {
         var missingRequirements = new List<string>();
+
+        foreach (var requiredId in requiredModuleIds)
+        {
+            if (!modulesById.ContainsKey(requiredId))
+            {
+                missingRequirements.Add($"The build requires module {requiredId}, which is not in the module set.");
+            }
+        }
 
         foreach (var module in modules)
         {

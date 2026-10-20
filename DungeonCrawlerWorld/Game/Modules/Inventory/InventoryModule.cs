@@ -30,9 +30,9 @@ public sealed class InventoryModule : IGameModule
     public IReadOnlyList<Guid> Requires { get; } = [ActionsModule.ModuleId, CoreModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, DeathModule.ModuleId, ManaModule.ModuleId, AbilityScoresModule.ModuleId, BodyPartEffectsModule.ModuleId, AurasModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId];
 
     /// <summary>Registers the content codecs for the serialized types this module owns.</summary>
-    public void DeclareContentTypes(ContentTypeRegistration registration)
+    public void DeclareContentTypes(ContentTypeDeclarations contentTypes)
     {
-        InventoryContentCodecs.Register(registration);
+        InventoryContentCodecs.Register(contentTypes);
     }
 
     public void RegisterComponents(ComponentRegistration registration)

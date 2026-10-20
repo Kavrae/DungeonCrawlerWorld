@@ -27,8 +27,8 @@ public sealed class GameSession
         Commands = new GameCommands(buildPass.World, context);
         Internals = new GameSessionInternals(buildPass.Factory, spawnRecordRebuilder, teleporter, context.ProcessingTierResolver, buildPass.LocalTierRoster, context.MovedEntities, context.AuraField);
         ModuleFailures = moduleFailures;
-        Settings = buildPass.Settings.Values;
-        SettingsFailures = buildPass.Settings.Failures;
+        Settings = buildPass.Declarations.Settings;
+        SettingsFailures = buildPass.Declarations.SettingsFailures;
     }
 
     public EcsContext EcsContext { get; }
@@ -37,7 +37,7 @@ public sealed class GameSession
 
     public GameCatalogs Catalogs { get; }
 
-    /// <summary>The simulation's "now" -- the same instance SystemManager.Clock advances.</summary>
+    /// <summary>The simulation's "now" -- the clock the session's SystemManager advances.</summary>
     public SimulationClock SimulationClock { get; }
 
     public GameViews Views { get; }

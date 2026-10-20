@@ -1,3 +1,4 @@
+using Engine.Bootstrap;
 using Engine.Content;
 using Engine.ECS.Components;
 using Engine.ECS.Entities;
@@ -40,32 +41,33 @@ public sealed class GameModuleContext
     /// <summary>Mixed into the runtime spawn seed so the loot box opener's sequence differs from the factory's.</summary>
     private const ulong LootboxRollSalt = 0x4C6F6F74626F7853;
 
-    /// <param name="world">The build's World, over the pools of componentManager.</param>
+    /// <param name="services">What the engine created for this build.</param>
+    /// <param name="world">The build's World, over the pools of services.ComponentManager.</param>
     /// <param name="crawlerNumbers">The session's crawler numbers; null for a build that spawns no crawlers.</param>
     /// <param name="runtimeSpawnSeed">Seeds the factory's own sequence for spawns that name no seed.</param>
     public GameModuleContext(
+        EcsBuildServices services,
         World.World world,
-        ComponentManager componentManager,
-        EntityManager entityManager,
-        EventBus eventBus,
-        SettingValues settings,
-        GameplayTagRegistry gameplayTags,
-        ContentTypeRegistry contentTypes,
         MathUtility mathUtility,
         UniqueNumberAllocator? crawlerNumbers = null,
         ulong runtimeSpawnSeed = 0)
     {
+        var componentManager = services.ComponentManager;
+        var entityManager = services.EntityManager;
+        var eventBus = services.EventBus;
+
         MapQuery = world;
         PlayerQuery = world;
         EntityMoveSync = new WorldEventSync(world);
         ComponentManager = componentManager;
         EntityManager = entityManager;
         EventBus = eventBus;
-        Settings = settings;
-        GameplayTags = gameplayTags;
-        ContentTypes = contentTypes;
+        Settings = services.Declarations.Settings;
+        GameplayTags = services.Declarations.Tags;
+        ContentTypes = services.Declarations.ContentTypes;
         MathUtility = mathUtility;
-        EntityKeys = entityManager.Keys;
+        EntityKeys = services.EntityKeys;
+        SimulationClock = services.Clock;
         Terrain = world.Terrain;
         AuraField = new AuraField(world, Terrain, Auras, eventBus);
 
@@ -170,8 +172,8 @@ public sealed class GameModuleContext
     public ProcessingTierResolver ProcessingTierResolver { get; }
 
     /// <summary>The simulation's "now", for anything a module builds that reads a FrameDeadline outside a system's own Update.</summary>
-    /// <remarks>GameBuildPass hands this same instance to SystemManager.Clock, which is what advances it.</remarks>
-    public SimulationClock SimulationClock { get; } = new();
+    /// <remarks>The build's own clock, the one its SystemManager advances.</remarks>
+    public SimulationClock SimulationClock { get; }
 
     /// <summary>Which entities are simulated, for every timer wheel a module builds: an entity is simulated while its processing tier is below ProcessingTierDivisors.SimulatedTierCount -- see SimulationScope.</summary>
     /// <remarks>

@@ -26,9 +26,9 @@ public sealed class LootboxModule : IGameModule
     }
 
     /// <summary>Registers the content codecs for the serialized types this module owns.</summary>
-    public void DeclareContentTypes(ContentTypeRegistration registration)
+    public void DeclareContentTypes(ContentTypeDeclarations contentTypes)
     {
-        LootboxContentCodecs.Register(registration);
+        LootboxContentCodecs.Register(contentTypes);
     }
 
     public void RegisterComponents(ComponentRegistration registration)

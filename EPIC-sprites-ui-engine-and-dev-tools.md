@@ -108,9 +108,12 @@ Each is its own plan; numbering is the order. Arrows are hard dependencies.
    the data-driven actions and items plan (`PLAN-data-driven-actions-and-items.md`), which supplies the
    content format it edits. The smaller tool, so it proves the split first.
 6. **Map tab** (→3, →5). Planned 2026-10-18 in `PLAN-map-areas-and-map-tab.md`, **read-only**: named map areas
-   (rows of symbols plus a legend, explicit entity placements, markers), palettes, random pools and fixed placements as
-   content, stamped into `TestMapBuilder.Plan`; the starting area becomes the first area; the tab previews areas, pools
-   and a generated neighborhood through real builds. Editing is TODO.md's "Workshop: edit map areas" (Engine, High).
+   (rows of symbols plus a legend, explicit entity placements, markers), palettes and fixed placements as content,
+   stamped into `TestMapBuilder.Plan` as instances; a 32x32 starting area for testing content is the first area; the
+   tab previews areas and a generated neighborhood through real builds; a new performance baseline across all metrics
+   when it is complete. Editing is TODO.md's "Workshop: edit map areas" (Engine, High); "Area pools", "Nested areas",
+   "Area entry points" and "Areas that follow the player" are TODO.md items (Game, Medium); mods' area files are the
+   data-driven plan's Phase 6.
    Draws with child 3's renderer over an authored layout's `IMapViewQuery`. Needs
    the hand-placed layout format in Game and its merge into `NeighborhoodPlan`, which belongs with "Real map
    generation -- neighborhood templates" (TODO.md, Game, High): the tab authors layout templates and fixed

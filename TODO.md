@@ -91,7 +91,7 @@ reading" can go.
 
 #### Workshop: edit map areas
 
-The Map tab is read-only (`PLAN-map-areas-and-map-tab.md`, child 6 of the epic): areas, palettes, pools and fixed
+The Map tab is read-only (`PLAN-map-areas-and-map-tab.md`, child 6 of the epic): areas, palettes and fixed
 placements are authored as text files until this lands. This is the edit half, on "Workshop: edit Items"'s machinery
 (document, inspector, drafts and master, Publish, disabling, undo/redo), writing the same files -- one area per file,
 rows one per line -- so a hand-written area and a saved one look the same.
@@ -103,13 +103,15 @@ rows one per line -- so a hand-written area and a saved one look the same.
 - **Entity placements and markers:** place, select, drag and delete; an inspector for the placement's fields
   (placement id, blueprint, size, layer, chance, unique and fallback); footprints drawn and refused when they leave the
   area or overlap a blocking one; markers likewise.
-- **Area properties:** name, tags, rules, transforms, uniqueness; resize with an anchor (which edge grows or shrinks).
+- **Area properties:** name, tags, description; resize with an anchor (which edge grows or shrinks). Rules,
+  transforms and uniqueness join when "Area pools" and area rules exist.
 - **Selection tools:** select a rectangle, copy, cut, paste (as a floating stamp), turn and mirror the selection.
-- **Pools and fixed placements:** edit members, weights, chance, placement rule and eligibility; place a fixed area on
-  the neighborhood preview by dragging it.
+- **Fixed placements:** place a fixed area on the neighborhood preview by dragging it. Pools (members, weights,
+  chance, placement rule, eligibility) and nested areas are edited here once "Area pools" and "Nested areas" (Game,
+  Medium) land.
 - **Feedback while editing:** validation on every edit into the Error List (an undefined symbol, a footprint over a
   wall), Reroll for `Chance`/`OneOf`, and the neighborhood preview rebuilt on save.
-- Checks: draw a new boss room from nothing, add it to the pool, and find it in the game; a hand-written area opened
+- Checks: draw a new room from nothing, place it next to the starting area, and find it in the game; a hand-written area opened
   and saved unchanged is byte-identical; an area left with an undefined symbol saves to Drafts with its row and column
   in the Error List; undo a flood fill in one step.
 
@@ -375,6 +377,24 @@ systems in a named set, and another plugin can order against, or add a run condi
 (see "Named schedules, system sets and run conditions", above). A set that a run condition turns off
 while a replacement system runs in the same slot is one way to replace a single system.
 
+#### Mod surface: hard to misuse
+
+After the build pipeline plan (`PLAN-engine-build-pipeline.md`), go over everything a mod author
+touches -- `IModule`/`IModule<TContext>`, the registration and declaration objects, `ModuleFactory`,
+`GameModuleContext` -- and remove the ways to get it wrong that compile and fail silently. Known so far:
+- `IModule`'s phases have default bodies, so a phase with a mistyped signature (`Configure(GameModuleContext
+  context, int extra)`) compiles as an unrelated method and never runs -- the same drift
+  `InputHookImplementationTests` catches for input hooks. `ModuleLoader` could check a mod's public
+  methods named like a phase against the real signatures and report a mismatch as a `ModuleFailure`.
+- `Id` defaults to `Guid.Empty`: a mod that forgets it can never replace a module, can't be named in
+  another's `Requires`, and fails only when it declares a setting. Require it from mods (the loader
+  reports a mod module with no Id), keeping the default only where nothing names the module.
+- `GameModuleContext` hands every module the raw `ComponentManager` and `EntityManager`, so a mod can
+  write any pool, spawn without the `EntityFactory` or destroy entities mid-iteration. Decide what a mod
+  should reach directly and what only through Game's services, as Presentation does through views and
+  commands.
+- Failure text: every `ModuleFailure` a mod can cause should name the mod, the phase and the fix.
+
 #### Reload mods without restarting
 
 `ModuleLoader` already loads each mod DLL into its own collectible `AssemblyLoadContext`, so unloading
@@ -620,7 +640,7 @@ the topmost/bottommost picks, and that a burning part keeps its id.
 
 #### Real map generation -- neighborhood templates, replacing TestMapBuilder
 
-Authored pieces come from `PLAN-map-areas-and-map-tab.md`: map areas, palettes and pools as content, stamped into the plan. The generator asks pools for areas by tag instead of their `Eligibility`.
+Authored pieces come from `PLAN-map-areas-and-map-tab.md` (map areas, palettes and fixed placements as content, stamped into the plan) and "Area pools" (Medium); the generator asks pools for areas by tag instead of their eligibility, and joins areas through "Area entry points" (Medium).
 
 The sliding window of 1024x1024 neighborhoods is in place: `NeighborhoodStreamer` generates each neighborhood on demand from its own
 `NeighborhoodRecord` seed through `TestMapBuilder.GenerateNeighborhood`, which is still a stand-in --
@@ -928,6 +948,69 @@ source definition. Godot TileSets can carry occluder shapes per tile (occlusion 
 a "blocks sight" and "blocks light" flag on `TerrainDefinition` (beside `BlocksMovement`), read by both.
 
 ### Medium Priority
+
+#### Area pools
+
+`PLAN-map-areas-and-map-tab.md` places areas only at fixed spots. A pool offers areas for generation to pick from: a
+pre-made boss room in the middle of an otherwise random neighborhood, or a starting area for a new game.
+- **Many to many:** a pool holds many areas, and an area can belong to many pools (the same goblin den in "Goblin
+  dens" and "Floor 1 rooms"). A pool lists its members by area Guid with a weight; nothing on the area names its pools.
+- **Selection** (DCSS vaults, CDDA weights): filter the members (eligibility -- which neighborhoods or floors, and
+  an area already used once per world is out), roll the pool's chance, pick by weight, all from the layout seed so a
+  neighborhood picks the same area on every visit.
+- **Placement rules:** centre, anywhere that fits (rolled), or an offset; optional 90° turns and mirroring per area
+  (CDDA `rotation`), turning rows, placements, markers and footprints together.
+- **Area uniqueness:** once per world, once per floor (DCSS `uniq_`/`luniq_`).
+- **The pool of starting areas replaces the 32x32 starting area** of the plan's fixed placement.
+- Stamped as instances (the plan's "Area instances"), so a pool pick and a fixed placement go through one stamp.
+- In the Workshop: pools in the Map tab's browser with each member's odds and thumbnail; the neighborhood preview shows
+  which member a seed picks. Editing pools is part of "Workshop: edit map areas" (Engine, High).
+- Real map generation ("Real map generation -- neighborhood templates", High) asks pools for areas by tag instead of
+  their eligibility.
+
+#### Nested areas
+
+An area may contain other areas: a symbol or an explicit placement that stamps another area, or an area picked from a
+pool, into the parent's box (DCSS subvaults, CDDA nested chunks). An alchemy training guild includes an "Alchemy
+station" pool, and each station in it is a small area combining floor, a table, a cauldron, storage and protective
+effects.
+- The child's box is the symbol's bounding box or the placement's position; the child must fit, and its transparent
+  cells keep the parent's.
+- Seeds: the child instance's seed comes from the parent instance's seed and the placement id, so a nested pick is
+  fixed per place like everything else in an area.
+- Nesting depth is capped and cycles are refused at load (an area that contains itself through a pool).
+- The Map tab previews the parent with its children stamped; the edit tab places a child area like an entity.
+- Needs "Area pools" for nested picks; a fixed nested area doesn't.
+
+#### Area entry points
+
+Markers that say where an area connects to its surroundings or to another area (DCSS `@`, CDDA `joins`): a door
+position, a corridor mouth, a stair.
+- An entry point is an `AreaMarker` kind with a side and a width (and later a connection type: corridor, door,
+  stairs).
+- A pool's placement rule can require that an area's entry points line up with the generated corridors, or turn the
+  area until they do.
+- Real map generation joins areas through them: a corridor from each entry point to the neighborhood's network.
+- "Areas that follow the player" uses them for both ends of a door: the door entity outside, the arrival point inside,
+  and the way back out to the door that was used.
+
+#### Areas that follow the player
+
+The first time the player enters a Training Guild building, its interior is picked at random from a pool; every
+Training Guild building entered after that leads to that same guild. To the player the door teleports them to one
+place; mechanically every entrance reuses one area instance's map data, so an item left in the guild is there when
+they come in through a door elsewhere.
+- **Already in place** (`PLAN-map-areas-and-map-tab.md`, "Area instances"): every stamp is an instance with its own
+  key and seed, separate from the definition and from world position.
+- **The binding:** a key ("Training Guild") to the instance picked the first time; per session, then saved.
+- **Where an instance lives:** its own map, as floors are separate maps, or a reserved pocket region of the world map.
+  Decide against processing tiers (the player must be Local inside it) and streaming.
+- **Doors:** a door entity carries the binding key; entering moves the player to the instance's arrival entry point and
+  remembers the door used, so leaving returns there ("Area entry points").
+- **Persistence:** what is inside -- dropped items, a killed resident -- survives leaving and returning. Today's
+  streamer destroys a neighborhood's entities on unload and regenerates its population, so this needs instance
+  contents saved and restored ("Save and load Beyond neighborhoods", Global).
+- Needs "Area pools" (the random first pick) and "Area entry points".
 
 #### Dropping items on the ground
 

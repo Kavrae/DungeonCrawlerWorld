@@ -1,6 +1,5 @@
+using Engine.Bootstrap;
 using Engine.Diagnostics;
-using Engine.ECS.Components;
-using Engine.ECS.Relationships;
 using Engine.Math;
 using Engine.Modules;
 using Engine.Settings;
@@ -15,7 +14,8 @@ namespace Game.Bootstrap;
 /// the built-ins, the way the real build combines them so a replacement stands in for the module it
 /// replaces -- not with other mods, since no mod ecosystem exists yet to justify solving cross-mod
 /// dependency ordering. Each trial is a GameBuildPass over a placeholder map with its own random
-/// sequence, so nothing a mod does during its trial is observable outside it.
+/// sequence, so nothing a mod does during its trial is observable outside it; the build itself refuses
+/// a replacement that drops a component the module it replaces registered.
 /// </remarks>
 public static class ModValidation
 {
@@ -39,8 +39,7 @@ public static class ModValidation
                 using var trialScope = EngineHooks.DiagnosticScope("Trial", mod.ModuleType.Name);
                 try
                 {
-                    ThrowIfBreaksReplacementContract(builtInModules, mod, settingsSources);
-                    GameBuildPass.Run(builtInModules, [mod], GameBuildPass.CreatePlaceholderMap(), new MathUtility(new SeededRandom()), settingsSources, initialEntityCapacity: 10, initialComponentCapacity: 10);
+                    GameBuildPass.BuildModules(builtInModules, [mod], GameBuildPass.CreatePlaceholderMap(), new MathUtility(new SeededRandom()), settingsSources, initialEntityCapacity: 10, initialComponentCapacity: 10, purpose: EcsBuildPurpose.Trial);
                     survivors.Add(mod);
                 }
                 catch (Exception exception)
@@ -51,40 +50,6 @@ public static class ModValidation
         }
 
         return new ValidatedMods(survivors, failures);
-    }
-
-    /// <summary>Throws unless a mod that replaces a built-in registers every component the built-in did, each as the same kind of pool.</summary>
-    private static void ThrowIfBreaksReplacementContract(IReadOnlyList<ModuleFactory<GameModuleContext>> builtInModules, ModuleFactory<GameModuleContext> modFactory, IReadOnlyList<ISettingsSource> settingsSources)
-    {
-        var mod = modFactory.Create();
-        if (mod.Id == Guid.Empty || builtInModules.CreateAll().FirstOrDefault(builtIn => builtIn.Id == mod.Id) is not { } replacedModule)
-        {
-            return;
-        }
-
-        var providedPools = RegisteredPools(mod, settingsSources);
-        var missingPools = RegisteredPools(replacedModule, settingsSources)
-            .Where(requiredPool => !providedPools.Contains(requiredPool))
-            .Select(missingPool => $"{missingPool.ComponentType.Name} ({missingPool.PoolKind.Name[..missingPool.PoolKind.Name.IndexOf('`')]})")
-            .ToList();
-
-        if (missingPools.Count > 0)
-        {
-            throw new InvalidOperationException($"{mod.Name} replaces {replacedModule.Name} but does not register: {string.Join(", ", missingPools)}.");
-        }
-    }
-
-    /// <summary>Each component type a module registers, with the kind of pool it registers it as (DirectComponentPool&lt;&gt; and so on, or Relationship&lt;&gt; for either side of one).</summary>
-    /// <remarks>Registered with the module's own settings as the real build would resolve them, so a setting that sizes or tunes a pool is compared as the player configured it.</remarks>
-    private static HashSet<(Type ComponentType, Type PoolKind)> RegisteredPools(IModule module, IReadOnlyList<ISettingsSource> settingsSources)
-    {
-        var componentManager = new ComponentManager(initialEntityCapacity: 1, initialComponentCapacity: 1);
-        var settings = SettingsCatalog.Declare([module]).Resolve(settingsSources).Values;
-        module.RegisterComponents(new ComponentRegistration(componentManager, settings));
-
-        return componentManager.AllPools
-            .Select(pool => (pool.ComponentType, componentManager.Relationships.IsRelationshipComponentType(pool.ComponentType) ? typeof(Relationship<>) : pool.GetType().GetGenericTypeDefinition()))
-            .ToHashSet();
     }
 }
 

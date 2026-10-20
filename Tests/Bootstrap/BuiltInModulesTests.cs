@@ -133,4 +133,28 @@ public sealed class BuiltInModulesTests
 
         CollectionAssert.AreEqual(expectedSystemOrder, recorder.SystemNames, string.Join(Environment.NewLine, recorder.SystemNames));
     }
+
+    private sealed class StreamingStandIn : ISystem
+    {
+        public byte StripeCount => 1;
+
+        public void Update(EngineTime time, byte stripeIndex)
+        {
+        }
+    }
+
+    [TestMethod]
+    [DoNotParallelize]
+    public void TheStreamingSlot_RunsBeforeSpawnMoves_ThoughRegisteredAfterTheBuild()
+    {
+        var map = new Map(new Vector3Int(40, 40, 3));
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        result.EcsContext.SystemManager.RegisterAtFrameStart(new StreamingStandIn(), GameFrameStartOrder.NeighborhoodStreaming);
+        var recorder = new SystemOrderRecorder();
+        using var frameCostSubscription = EngineHooks.FrameCosts.Subscribe(recorder);
+
+        result.EcsContext.SystemManager.Update(new EngineTime(TimeSpan.Zero, TimeSpan.FromSeconds(1d / 60), false, 1));
+
+        CollectionAssert.AreEqual(new[] { nameof(StreamingStandIn), "SpawnMoves" }, recorder.SystemNames.Take(2).ToList());
+    }
 }

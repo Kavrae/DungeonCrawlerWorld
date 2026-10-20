@@ -9,18 +9,18 @@ namespace Game.Effects.Entries;
 /// <summary>Codecs for the general effect entries in Game.Effects.Entries, each registered under its type's name; registered by Core.</summary>
 internal static class EffectEntryCodecs
 {
-    public static void Register(ContentTypeRegistration registration)
+    public static void Register(ContentTypeDeclarations contentTypes)
     {
-        registration.RegisterPolymorphic<IEffectEntry, DirectDamage>(nameof(DirectDamage), new DirectDamageCodec());
-        registration.RegisterPolymorphic<IEffectEntry, DirectHeal>(nameof(DirectHeal), new DirectHealCodec());
-        registration.RegisterPolymorphic<IEffectEntry, DirectManaRestore>(nameof(DirectManaRestore), new DirectManaRestoreCodec());
-        registration.RegisterPolymorphic<IEffectEntry, HealthDrain>(nameof(HealthDrain), new HealthDrainCodec());
-        registration.RegisterPolymorphic<IEffectEntry, ManaDrain>(nameof(ManaDrain), new ManaDrainCodec());
-        registration.RegisterPolymorphic<IEffectEntry, StatModifierGrant>(nameof(StatModifierGrant), new StatModifierGrantCodec());
-        registration.RegisterPolymorphic<IEffectEntry, StatusEffectGrant>(nameof(StatusEffectGrant), new StatusEffectGrantCodec());
-        registration.RegisterPolymorphic<IEffectEntry, StatusEffectImmunityGrant>(nameof(StatusEffectImmunityGrant), new StatusEffectImmunityGrantCodec());
-        registration.RegisterPolymorphic<IEffectEntry, StatusEffectRemoval>(nameof(StatusEffectRemoval), new StatusEffectRemovalCodec());
-        registration.RegisterPolymorphic<IEffectEntry, ChainedEffect>(nameof(ChainedEffect), new ChainedEffectCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, DirectDamage>(nameof(DirectDamage), new DirectDamageCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, DirectHeal>(nameof(DirectHeal), new DirectHealCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, DirectManaRestore>(nameof(DirectManaRestore), new DirectManaRestoreCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, HealthDrain>(nameof(HealthDrain), new HealthDrainCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, ManaDrain>(nameof(ManaDrain), new ManaDrainCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, StatModifierGrant>(nameof(StatModifierGrant), new StatModifierGrantCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, StatusEffectGrant>(nameof(StatusEffectGrant), new StatusEffectGrantCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, StatusEffectImmunityGrant>(nameof(StatusEffectImmunityGrant), new StatusEffectImmunityGrantCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, StatusEffectRemoval>(nameof(StatusEffectRemoval), new StatusEffectRemovalCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, ChainedEffect>(nameof(ChainedEffect), new ChainedEffectCodec());
     }
 
     private sealed class DirectDamageCodec : ContentCodec<DirectDamage>

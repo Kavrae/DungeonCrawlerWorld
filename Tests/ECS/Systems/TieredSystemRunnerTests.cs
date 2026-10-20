@@ -105,7 +105,7 @@ public sealed class TieredSystemRunnerTests
     public void SystemManager_RunsTieredSystemsThroughTheRunnerWithItsPolicy()
     {
         var system = FourTiersAllDue();
-        var manager = new SystemManager { SimulatedTierCount = 1 };
+        var manager = new SystemManager(simulatedTierCount: 1);
         manager.Register(system);
 
         manager.Update(Frame(0));
@@ -130,7 +130,7 @@ public sealed class TieredSystemRunnerTests
     public void SystemManager_PlainSystem_StillGetsItsRotatingStripeIndex()
     {
         var system = new RecordingPlainSystem();
-        var manager = new SystemManager { SimulatedTierCount = 1 };
+        var manager = new SystemManager(simulatedTierCount: 1);
         manager.Register(system);
 
         manager.Update(Frame(0));

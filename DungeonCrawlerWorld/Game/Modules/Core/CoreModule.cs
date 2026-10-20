@@ -34,10 +34,10 @@ public sealed class CoreModule : IGameModule
     }
 
     /// <summary>Registers the content codecs for the serialized types this module owns.</summary>
-    public void DeclareContentTypes(ContentTypeRegistration registration)
+    public void DeclareContentTypes(ContentTypeDeclarations contentTypes)
     {
-        EffectContentCodecs.Register(registration);
-        EffectEntryCodecs.Register(registration);
+        EffectContentCodecs.Register(contentTypes);
+        EffectEntryCodecs.Register(contentTypes);
     }
 
     /// <summary>Registers core components with their appropriate component pools.</summary>
