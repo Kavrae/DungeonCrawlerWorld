@@ -1210,11 +1210,14 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// wins future overlapping hit-tests against its siblings. No-op for a root window (no
     /// parent) -- UiInputController is responsible for raising a root window to the front of
     /// whichever shared tier list (BaseWindows/StaticHudWindows/DynamicHudWindows/UserWindows)
-    /// it belongs to, since Window itself has no knowledge of those.
+    /// it belongs to, since Window itself has no knowledge of those. Also a no-op inside a
+    /// Horizontal or Vertical parent: tiled children never overlap, so z-order means nothing
+    /// there, while the child list's order IS the tiling order -- raising a pressed row moved it
+    /// to the end of its list the next time the list was arranged.
     /// </summary>
     internal void RaiseToFront()
     {
-        if (_parent is null)
+        if (_parent is null || _parent._childrenTileMode != ChildElementTileMode.Floating)
         {
             return;
         }

@@ -14,6 +14,9 @@ public enum ContentRecordKind : byte
     Aura,
     Terrain,
     Blueprint,
+    Area,
+    AreaPalette,
+    AreaPlacement,
 }
 
 /// <summary>What a reference means, read from the side that holds it.</summary>
@@ -27,6 +30,18 @@ public enum ContentReferenceKind : byte
 
     /// <summary>Terrain or a blueprint radiates an aura of its own.</summary>
     RadiatesAura,
+
+    /// <summary>An area or palette lays a terrain as a floor or a wall.</summary>
+    UsesTerrain,
+
+    /// <summary>An area or palette spawns a blueprint -- a placement, a symbol's spawn, a choice or a fallback.</summary>
+    PlacesBlueprint,
+
+    /// <summary>An area takes symbols from a palette.</summary>
+    UsesPalette,
+
+    /// <summary>A fixed placement puts an area in the world.</summary>
+    PlacesArea,
 }
 
 /// <summary>One record of the session's content: what kind, its Guid (Guid.Empty for terrain, which is keyed by name), and its name.</summary>
@@ -99,6 +114,8 @@ public sealed class ContentReferenceIndex
                 Add(new ContentReference(from, AuraRecord(auraGrant.Aura), ContentReferenceKind.RadiatesAura));
             }
         }
+
+        AddAreaReferences(catalogs);
     }
 
     /// <summary>What the record names, in the order found.</summary>
@@ -110,6 +127,84 @@ public sealed class ContentReferenceIndex
         _usedByByRecord.TryGetValue((kind, id), out var references) ? references : [];
 
     private static ContentRecord AuraRecord(AuraDefinition aura) => new(ContentRecordKind.Aura, aura.Id, aura.Name);
+
+    /// <summary>What each palette and area lays and spawns, the palettes each area takes symbols from, and the area each fixed placement places.</summary>
+    private void AddAreaReferences(GameCatalogs catalogs)
+    {
+        var areas = catalogs.Areas;
+        foreach (var palette in areas.Palettes.Definitions)
+        {
+            AddLegendReferences(new ContentRecord(ContentRecordKind.AreaPalette, palette.Id, palette.Name), palette.Legend, catalogs);
+        }
+
+        foreach (var area in areas.Areas.Definitions)
+        {
+            var from = new ContentRecord(ContentRecordKind.Area, area.Id, area.Name);
+            foreach (var paletteId in area.Palettes)
+            {
+                if (areas.FindPalette(paletteId) is { } palette)
+                {
+                    Add(new ContentReference(from, new ContentRecord(ContentRecordKind.AreaPalette, palette.Id, palette.Name), ContentReferenceKind.UsesPalette));
+                }
+            }
+
+            AddLegendReferences(from, area.Legend, catalogs);
+            foreach (var placement in area.Entities)
+            {
+                AddBlueprintReference(from, placement.Blueprint, catalogs);
+                if (placement.Fallback is { } fallback)
+                {
+                    AddBlueprintReference(from, fallback, catalogs);
+                }
+            }
+        }
+
+        foreach (var placement in areas.Placements.Definitions)
+        {
+            if (areas.Areas.TryGet(placement.Area, out var area))
+            {
+                var from = new ContentRecord(ContentRecordKind.AreaPlacement, placement.Id, Builders.MapAreas.MapContentRecord.PlacementName(placement, areas));
+                Add(new ContentReference(from, new ContentRecord(ContentRecordKind.Area, area.Id, area.Name), ContentReferenceKind.PlacesArea));
+            }
+        }
+    }
+
+    private void AddLegendReferences(ContentRecord from, IReadOnlyList<Game.Areas.AreaCell> legend, GameCatalogs catalogs)
+    {
+        foreach (var cell in legend)
+        {
+            AddTerrainReference(from, cell.Terrain, catalogs);
+            AddTerrainReference(from, cell.Structure, catalogs);
+            foreach (var spawn in cell.SpawnList)
+            {
+                if (spawn.Blueprint is { } blueprint)
+                {
+                    AddBlueprintReference(from, blueprint, catalogs);
+                }
+
+                foreach (var choice in spawn.OneOfList)
+                {
+                    AddBlueprintReference(from, choice.Blueprint, catalogs);
+                }
+            }
+        }
+    }
+
+    private void AddTerrainReference(ContentRecord from, string? terrainKey, GameCatalogs catalogs)
+    {
+        if (terrainKey is not null && catalogs.Terrain.TryGetId(terrainKey, out var typeId) && catalogs.Terrain.TryGet(typeId, out var terrain))
+        {
+            Add(new ContentReference(from, new ContentRecord(ContentRecordKind.Terrain, Guid.Empty, terrain.Name), ContentReferenceKind.UsesTerrain));
+        }
+    }
+
+    private void AddBlueprintReference(ContentRecord from, Guid blueprintId, GameCatalogs catalogs)
+    {
+        if (catalogs.Definitions.TryGetId(blueprintId, out var id))
+        {
+            Add(new ContentReference(from, new ContentRecord(ContentRecordKind.Blueprint, blueprintId, catalogs.Definitions.Get(id).Name), ContentReferenceKind.PlacesBlueprint));
+        }
+    }
 
     private void AddActivatableReferences(ContentRecord from, ActivatableDefinition definition, GameCatalogs catalogs)
     {

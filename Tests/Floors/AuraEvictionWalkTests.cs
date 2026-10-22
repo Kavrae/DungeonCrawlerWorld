@@ -40,17 +40,17 @@ public sealed class AuraEvictionWalkTests
         var world = result.World;
         var ecs = result.EcsContext;
         var resolver = result.Internals.ProcessingTierResolver;
-        resolver.SetReferencePosition(FloorBuilder.PlayerSpawnOrigin());
+        resolver.SetReferencePosition(FloorBuilder.PlayerSpawnOrigin(result.Catalogs.Areas));
         resolver.SetWindowCenter(0, 0);
 
         var records = new NeighborhoodRecords(mathUtility);
         var factory = result.Internals.Factory;
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecs);
-        FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions);
-        FloorBuilder.CreatePlayer(world, ecs, mathUtility, factory, result.Catalogs.Definitions, playerEntityId, resolver);
+        FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);
+        FloorBuilder.CreatePlayer(world, ecs, mathUtility, factory, result.Catalogs.Definitions, playerEntityId, FloorBuilder.PlayerSpawnOrigin(result.Catalogs.Areas), resolver);
         world.PlayerEntityId = playerEntityId;
 
-        var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions);
+        var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);
         var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, resolver, records, builder, result.Internals.Skeletons);
         return new Session(result, streamer, playerEntityId);
     }

@@ -12,10 +12,10 @@ public readonly record struct RecordRowAppearance(string Name, string? SpriteNam
 
 /// <summary>A read-only tab over one table: every record in a searchable browser, the selected one shown in a details window, and what it is linked to.</summary>
 /// <remarks>
-/// Three top-level windows in the Base layer, laid out in the area under the tab strip: the browser (a search box over a
-/// scrolling list of headed rows) on the left, the preview (TPreview, WrapContent) beside it, and Related (LinksOf: what
-/// the record uses and what uses it) beside that. A Related line that names a record another tab shows asks the shell's
-/// TabNavigator to open it there. Selection is by reference, never record equality. The first record is selected the
+/// Top-level windows in the Base layer, laid out in the area under the tab strip: the browser (a search box over a
+/// scrolling list of headed rows) on the left, the preview (TPreview, WrapContent) beside it, an optional details pane
+/// (CreateDetailsWindow) beside that, and Related (LinksOf: what the record uses and what uses it) last. A Related line
+/// that names a record another tab shows asks the shell's TabNavigator to open it there. Selection is by reference, never record equality. The first record is selected the
 /// first time the tab opens; reopening keeps the selection; TrySelectRecord selects one by id, even one the search hides.
 /// </remarks>
 public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
@@ -30,11 +30,15 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
     private const float RowIconSize = 20f;
     private const float RowTextIndent = 28f;
 
-    /// <summary>The width every preview row is built to -- Item Details' own width beside the player's Inventory window.</summary>
-    protected const float PreviewWidth = 460f;
+    /// <summary>The width every preview row is built to by default -- Item Details' own width beside the player's Inventory window.</summary>
+    protected const float DefaultPreviewWidth = 460f;
+
+    /// <summary>The width the preview is built to; a tab whose preview needs more room (a map) widens it.</summary>
+    protected virtual float PreviewWidth => DefaultPreviewWidth;
 
     private const float RelatedWidth = 320f;
     private const string RelatedTitle = "Related";
+    private const float DefaultDetailsWidth = 360f;
     private const string NoLinksText = "None";
 
     private static readonly int SearchDebounceFrames = GameTiming.FramesForSeconds(0.3f);
@@ -53,6 +57,7 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
     private Window _listWindow = null!;
     private TPreview _previewWindow = null!;
     private Window _relatedWindow = null!;
+    private Window? _detailsWindow;
     private TRecord? _selectedRecord;
     private bool _isOpen;
 
@@ -83,24 +88,80 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
     /// <summary>What names record, for the bottom panel's Dependents -- nothing by default.</summary>
     protected virtual IReadOnlyList<WorkshopDependent> DependentsOf(TRecord record) => [];
 
+    /// <summary>The open tab's preview window.</summary>
+    protected TPreview PreviewWindow => _previewWindow;
+
+    /// <summary>The open tab's details pane, if CreateDetailsWindow made one.</summary>
+    protected Window? DetailsWindow => _detailsWindow;
+
+    /// <summary>The preview's title while record is selected -- PreviewTitle by default.</summary>
+    protected virtual string PreviewTitleFor(TRecord record) => PreviewTitle;
+
+    /// <summary>The details pane's title while record is selected -- DetailsTitle by default.</summary>
+    protected virtual string DetailsTitleFor(TRecord record) => DetailsTitle;
+
+    /// <summary>Called when record is selected, once every window shows it.</summary>
+    protected virtual void OnSelected(TRecord record)
+    {
+    }
+
+    /// <summary>Called as the tab closes, before its own windows are removed -- where a tab removes windows of its own.</summary>
+    protected virtual void OnClosing()
+    {
+    }
+
+    /// <summary>The width of the details pane, for a tab that has one (CreateDetailsWindow).</summary>
+    protected virtual float DetailsWidth => DefaultDetailsWidth;
+
+    protected virtual string DetailsTitle => "Details";
+
+    /// <summary>A details pane between the preview and Related, made from options with the pool -- or null, the default, for none.</summary>
+    protected virtual Window? CreateDetailsWindow(ElementPoolService elementPool, ElementOptions options) => null;
+
+    /// <summary>Shows record in the details pane CreateDetailsWindow made, every row built to contentWidth.</summary>
+    protected virtual void ShowInDetails(Window details, TRecord record, float contentWidth)
+    {
+    }
+
+    /// <summary>Called once the tab's windows are built, before the first record is shown -- where a tab registers its own input handlers through context.</summary>
+    protected virtual void OnOpened(WorkshopTabContext context)
+    {
+    }
+
+    /// <summary>Called when the tab's area changes, after every window has its new position and maximum size.</summary>
+    protected virtual void OnResized(Rectangle area)
+    {
+    }
+
+    /// <summary>Per-frame work of the tab's own, after the search.</summary>
+    protected virtual void OnUpdate(GameTime gameTime)
+    {
+    }
+
     public void Open(WorkshopTabContext context, Rectangle area)
     {
         _context = context;
         _isOpen = true;
         BuildBrowser(area);
         BuildPreview(area);
+        BuildDetails(area);
         BuildRelated(area);
         RebuildRows();
+        OnOpened(context);
 
         if (_selectedRecord is { } selectedRecord)
         {
             RebuildRelated(selectedRecord);
             ShowDependents(selectedRecord);
+            ShowTitles(selectedRecord);
+            OnSelected(selectedRecord);
         }
         else if (_rows.Count > 0)
         {
             Select(_rows[0].Record);
         }
+
+        ArrangeColumns();
     }
 
     public bool TrySelectRecord(Guid recordId)
@@ -129,13 +190,20 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
             return;
         }
 
+        _browserWindow.SetMaximumSize(BrowserSize(area));
         _browserWindow.SetSize(BrowserSize(area));
+        _searchBox.SetMaximumSize(new Vector2(_browserWindow.ContentSize.X, SearchBoxHeight));
         _searchBox.SetSize(new Vector2(_browserWindow.ContentSize.X, SearchBoxHeight));
+        _listWindow.SetMaximumSize(ListSize());
         _listWindow.SetSize(ListSize());
         _previewWindow.SetRelativePosition(PreviewPosition(area));
         _previewWindow.SetMaximumSize(PreviewMaximumSize(area));
+        _detailsWindow?.SetRelativePosition(DetailsPosition(area));
+        _detailsWindow?.SetMaximumSize(DetailsMaximumSize(area));
         _relatedWindow.SetRelativePosition(RelatedPosition(area));
         _relatedWindow.SetMaximumSize(RelatedMaximumSize(area));
+        OnResized(area);
+        ArrangeColumns();
     }
 
     public void Close()
@@ -145,11 +213,19 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
             return;
         }
 
+        OnClosing();
         _isOpen = false;
         _rows.Clear();
         _context.Layers.Remove(UiLayer.Base, _browserWindow);
         _context.Layers.Remove(UiLayer.Base, _previewWindow);
         _context.Layers.Remove(UiLayer.Base, _relatedWindow);
+        if (_detailsWindow is { } detailsWindow)
+        {
+            _context.Layers.Remove(UiLayer.Base, detailsWindow);
+            detailsWindow.Close();
+            _detailsWindow = null;
+        }
+
         _browserWindow.Close();
         _previewWindow.Close();
         _relatedWindow.Close();
@@ -161,6 +237,9 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         {
             RebuildRows();
         }
+
+        ArrangeColumns();
+        OnUpdate(gameTime);
     }
 
     private void BuildBrowser(Rectangle area)
@@ -212,6 +291,29 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
 
         _previewWindow.Initialize();
         _context.Layers.Add(UiLayer.Base, _previewWindow);
+    }
+
+    private void BuildDetails(Rectangle area)
+    {
+        _detailsWindow = CreateDetailsWindow(_context.UiEngine.ElementPoolService, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
+            Layout = new ElementLayoutOptions { RelativePosition = DetailsPosition(area), MaximumSize = DetailsMaximumSize(area), DisplayMode = ElementDisplayMode.WrapContent },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = DetailsTitle, ShowBorder = true, CanUserScrollVertical = true, CanUserFocus = true },
+            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
+        });
+        if (_detailsWindow is not { } detailsWindow)
+        {
+            return;
+        }
+
+        if (_selectedRecord is { } selectedRecord)
+        {
+            ShowInDetails(detailsWindow, selectedRecord, DetailsWidth);
+        }
+
+        detailsWindow.Initialize();
+        _context.Layers.Add(UiLayer.Base, detailsWindow);
     }
 
     private void BuildRelated(Rectangle area)
@@ -346,11 +448,49 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         }
 
         ShowInPreview(_previewWindow, record, PreviewWidth);
+        if (_detailsWindow is { } detailsWindow)
+        {
+            ShowInDetails(detailsWindow, record, DetailsWidth);
+        }
+
         RebuildRelated(record);
         ShowDependents(record);
+        ShowTitles(record);
+        ArrangeColumns();
+        OnSelected(record);
     }
 
     private void ShowDependents(TRecord record) => _context.ShowDependents(AppearanceOf(record).Name, DependentsOf(record));
+
+    private void ShowTitles(TRecord record)
+    {
+        _previewWindow.TitleText = PreviewTitleFor(record);
+        if (_detailsWindow is { } detailsWindow)
+        {
+            detailsWindow.TitleText = DetailsTitleFor(record);
+        }
+    }
+
+    /// <summary>Places the details pane and Related each a margin right of the actual right edge of the column before it: a window that wraps its content can be wider than the width it was built to.</summary>
+    private void ArrangeColumns()
+    {
+        var right = _previewWindow.RelativePosition.X + _previewWindow.CurrentSize.X + Margin;
+        if (_detailsWindow is { } detailsWindow)
+        {
+            MoveColumnTo(detailsWindow, right);
+            right = detailsWindow.RelativePosition.X + detailsWindow.CurrentSize.X + Margin;
+        }
+
+        MoveColumnTo(_relatedWindow, right);
+    }
+
+    private static void MoveColumnTo(Window column, float x)
+    {
+        if (column.RelativePosition.X != x)
+        {
+            column.SetRelativePosition(new Vector2(x, column.RelativePosition.Y));
+        }
+    }
 
     private static Vector2 BrowserSize(Rectangle area) => new(BrowserWidth, area.Height - Margin * 2);
 
@@ -358,9 +498,13 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
 
     private static Vector2 PreviewPosition(Rectangle area) => new(area.X + Margin * 2 + BrowserWidth, area.Y + Margin);
 
-    private static Vector2 PreviewMaximumSize(Rectangle area) => new(PreviewWidth, area.Height - Margin * 2);
+    private Vector2 PreviewMaximumSize(Rectangle area) => new(PreviewWidth, area.Height - Margin * 2);
 
-    private static Vector2 RelatedPosition(Rectangle area) => PreviewPosition(area) + new Vector2(PreviewWidth + Margin, 0);
+    private Vector2 DetailsPosition(Rectangle area) => PreviewPosition(area) + new Vector2(PreviewWidth + Margin, 0);
+
+    private Vector2 DetailsMaximumSize(Rectangle area) => new(DetailsWidth, area.Height - Margin * 2);
+
+    private Vector2 RelatedPosition(Rectangle area) => _detailsWindow is null ? DetailsPosition(area) : DetailsPosition(area) + new Vector2(DetailsWidth + Margin, 0);
 
     private static Vector2 RelatedMaximumSize(Rectangle area) => new(RelatedWidth, area.Height - Margin * 2);
 }

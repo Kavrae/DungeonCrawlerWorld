@@ -6,12 +6,16 @@ namespace Engine.Content;
 /// <summary>A record that couldn't be loaded, and why -- reported, never thrown past the loader, like a ModuleFailure.</summary>
 /// <param name="Line">1-based line in the file; 0 for a failure of the whole file.</param>
 /// <param name="RecordId">The record's Guid, when it could be read.</param>
-public sealed record ContentFailure(string File, int Line, Guid? RecordId, string Reason)
+/// <param name="Column">1-based column in Line; 0 when the failure is the whole line's.</param>
+public sealed record ContentFailure(string File, int Line, Guid? RecordId, string Reason, int Column = 0)
 {
+    /// <summary>File:line, with :column when there is one, or just the file for a failure of the whole file.</summary>
+    public string Location => Line <= 0 ? File : Column > 0 ? $"{File}:{Line}:{Column}" : $"{File}:{Line}";
+
     public override string ToString() =>
         RecordId is { } id
-            ? $"{File}:{Line} ({ContentGuid.Format(id)}): {Reason}"
-            : Line > 0 ? $"{File}:{Line}: {Reason}" : $"{File}: {Reason}";
+            ? $"{Location} ({ContentGuid.Format(id)}): {Reason}"
+            : $"{Location}: {Reason}";
 }
 
 /// <summary>A record decoded from a table: its value, or that it is disabled (and what replaces it, if anything).</summary>
@@ -33,8 +37,8 @@ public static class ContentTable
     public const string DisabledKey = "off";
     public const string ReplacementKey = "rep";
 
-    private const string FormatKey = "fmt";
-    private const string TableKey = "table";
+    public const string FormatKey = "fmt";
+    public const string TableKey = "table";
 
     private static readonly IReadOnlySet<string> EnvelopeKeys = new HashSet<string>(StringComparer.Ordinal) { DisabledKey, ReplacementKey };
 
@@ -142,22 +146,28 @@ public static class ContentTable
         try
         {
             using var document = JsonDocument.Parse(line);
-            var header = document.RootElement;
-            if (!header.TryGetProperty(FormatKey, out var format) || format.ValueKind != JsonValueKind.Number || format.GetInt32() != FormatVersion)
-            {
-                problem = $"The header must say \"{FormatKey}\":{FormatVersion}.";
-                return false;
-            }
-
-            if (!header.TryGetProperty(TableKey, out var table) || table.GetString() != tableName)
-            {
-                problem = $"The header must name table \"{tableName}\".";
-                return false;
-            }
+            return TryReadHeader(document.RootElement, tableName, out problem);
         }
         catch (JsonException exception)
         {
             problem = $"The header isn't valid JSON: {exception.Message}";
+            return false;
+        }
+    }
+
+    /// <summary>Whether header holds this format's version and names table tableName.</summary>
+    internal static bool TryReadHeader(JsonElement header, string tableName, out string problem)
+    {
+        if (header.ValueKind != JsonValueKind.Object
+            || !header.TryGetProperty(FormatKey, out var format) || format.ValueKind != JsonValueKind.Number || !format.TryGetInt32(out var version) || version != FormatVersion)
+        {
+            problem = $"The header must say \"{FormatKey}\":{FormatVersion}.";
+            return false;
+        }
+
+        if (!header.TryGetProperty(TableKey, out var table) || table.ValueKind != JsonValueKind.String || table.GetString() != tableName)
+        {
+            problem = $"The header must name table \"{tableName}\".";
             return false;
         }
 
@@ -166,6 +176,12 @@ public static class ContentTable
     }
 
     private static ContentTableRecord<T>? TryReadRecord<T>(JsonElement element, string fileName, int lineNumber, ContentTypeRegistry types, IContentReferences references, List<ContentFailure> failures)
+        where T : class =>
+        TryReadRecord<T>(element, fileName, lineNumber, types, references, failures, EnvelopeKeys);
+
+    /// <summary>One record: its id, then disabled (with its replacement) or its value through T's codec; a failure is added to failures and null returned.</summary>
+    /// <param name="envelopeKeys">Keys allowed beside the codec's own -- the disabled flag and replacement, and a document's header.</param>
+    internal static ContentTableRecord<T>? TryReadRecord<T>(JsonElement element, string fileName, int lineNumber, ContentTypeRegistry types, IContentReferences references, List<ContentFailure> failures, IReadOnlySet<string> envelopeKeys)
         where T : class
     {
         Guid? id = null;
@@ -198,7 +214,7 @@ public static class ContentTable
                 throw new ContentFormatException($"Only a disabled record has a \"{ReplacementKey}\".");
             }
 
-            var value = ContentObject.Read<T>(element, types, references, EnvelopeKeys);
+            var value = ContentObject.Read<T>(element, types, references, envelopeKeys);
             return new ContentTableRecord<T>(lineNumber, parsedId, value, IsDisabled: false, Replacement: null);
         }
         catch (ContentFormatException exception)

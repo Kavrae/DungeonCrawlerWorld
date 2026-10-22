@@ -2,6 +2,7 @@ using Builders.Actions;
 using Builders.Auras;
 using Builders.Browsing;
 using Builders.Items;
+using Builders.MapAreas;
 using Workshop;
 
 namespace Builders.References;
@@ -33,6 +34,7 @@ public static class ContentLinks
         ContentRecordKind.Action => ActionsTab.TabTitle,
         ContentRecordKind.Item => ItemsTab.TabTitle,
         ContentRecordKind.Aura => AurasTab.TabTitle,
+        ContentRecordKind.Area or ContentRecordKind.AreaPalette or ContentRecordKind.AreaPlacement => MapTab.TabTitle,
         _ => null,
     };
 
@@ -44,6 +46,10 @@ public static class ContentLinks
         ContentReferenceKind.CastsSpell => "casts",
         ContentReferenceKind.GrantsAura => "grants",
         ContentReferenceKind.RadiatesAura => "radiates",
+        ContentReferenceKind.UsesTerrain => "lays",
+        ContentReferenceKind.PlacesBlueprint => "places",
+        ContentReferenceKind.UsesPalette => "uses",
+        ContentReferenceKind.PlacesArea => "places",
         _ => kind.ToString(),
     };
 }

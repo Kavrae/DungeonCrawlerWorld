@@ -419,7 +419,7 @@ Implemented together, at the IDE plan's request (its Phase 4 needs both). Where 
 
 ### Phase 6 -- Mod area files
 
-(Added 2026-10-18, moved here from `PLAN-map-areas-and-map-tab.md`.) Map areas are content too: `Areas/` (one area
+(Added 2026-10-18 from the map areas plan, now landed: IMPLEMENTATION-NOTES "Map areas, fixed placements and the Workshop Map tab".) Map areas are content too: `Areas/` (one area
 per file, rows one per line) and the `AreaPalettes`/`AreaPlacements` tables -- plus `AreaPools` once TODO.md's "Area
 pools" lands.
 - A mod folder may hold `Definitions/Areas/*.json` and the area tables, layered in load order between master and save

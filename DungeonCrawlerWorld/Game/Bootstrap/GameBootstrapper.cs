@@ -81,9 +81,11 @@ public static class GameBootstrapper
         ModuleFactory<GameModuleContext>.For<CurrencyModule>(),
         ModuleFactory<GameModuleContext>.For<ContainersModule>(),
         ModuleFactory<GameModuleContext>.For<ShopModule>(),
+        ModuleFactory<GameModuleContext>.For<Areas.AreasModule>(),
     ];
 
     /// <summary>Builds the built-in modules with validatedMods' mods over map into a session, with the staging world its SpawnRecordRebuilder rebuilds creatures in.</summary>
+    /// <param name="collectsContentFailures">A tool's build (the IDE): content that fails is left out and reported in GameSession.ContentFailures instead of stopping the build.</param>
     /// <param name="buildsStagingWorldOnFirstRebuild">True for a host that may never rebuild a record (the IDE): the staging world waits for the first rebuild instead of being built now.</param>
     public static GameSession Build(
         ValidatedMods validatedMods,
@@ -94,15 +96,16 @@ public static class GameBootstrapper
         UniqueNumberAllocator? crawlerNumbers = null,
         ulong runtimeSpawnSeed = 0,
         IReadOnlyList<ISettingsSource>? settingsSources = null,
-        bool buildsStagingWorldOnFirstRebuild = false)
+        bool buildsStagingWorldOnFirstRebuild = false,
+        bool collectsContentFailures = false)
     {
         settingsSources ??= [];
         var builtInModules = BuiltInModules();
 
-        var session = GameBuildPass.Run(builtInModules, validatedMods.Mods, map, mathUtility, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, runtimeSpawnSeed);
+        var session = GameBuildPass.Run(builtInModules, validatedMods.Mods, map, mathUtility, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, runtimeSpawnSeed, collectsContentFailures);
         var context = session.Context;
         var spawnRecordRebuilder = new SpawnRecordRebuilder(
-            () => BuildSpawnRecordRebuilderStaging(builtInModules, validatedMods.Mods, settingsSources),
+            () => BuildSpawnRecordRebuilderStaging(builtInModules, validatedMods.Mods, settingsSources, collectsContentFailures),
             stagingKeys => new EntityBuilder(context.Definitions, context.Auras, context.Actions, context.Items, stagingKeys),
             buildsStagingWorldOnFirstRebuild);
         return new GameSession(session, validatedMods.Failures, spawnRecordRebuilder, CreateTeleporter(session.World, session.EcsContext, session.Factory, session.Factory.Skeletons));
@@ -128,9 +131,9 @@ public static class GameBootstrapper
     /// BlueprintRegistry, so a spawn record means the same blueprint in both worlds, including one registered
     /// after this runs.
     /// </remarks>
-    private static EcsContext BuildSpawnRecordRebuilderStaging(IReadOnlyList<ModuleFactory<GameModuleContext>> builtInModules, IReadOnlyList<ModuleFactory<GameModuleContext>> mods, IReadOnlyList<ISettingsSource> settingsSources)
+    private static EcsContext BuildSpawnRecordRebuilderStaging(IReadOnlyList<ModuleFactory<GameModuleContext>> builtInModules, IReadOnlyList<ModuleFactory<GameModuleContext>> mods, IReadOnlyList<ISettingsSource> settingsSources, bool collectsContentFailures)
     {
         using var stagingScope = EngineHooks.DiagnosticScope("BuildSpawnRecordRebuilderStaging");
-        return GameBuildPass.BuildModules(builtInModules, mods, GameBuildPass.CreatePlaceholderMap(), new MathUtility(new SeededRandom()), settingsSources, initialEntityCapacity: 16, initialComponentCapacity: 16, purpose: EcsBuildPurpose.Staging).EcsContext;
+        return GameBuildPass.BuildModules(builtInModules, mods, GameBuildPass.CreatePlaceholderMap(), new MathUtility(new SeededRandom()), settingsSources, initialEntityCapacity: 16, initialComponentCapacity: 16, purpose: EcsBuildPurpose.Staging, collectsContentFailures: collectsContentFailures).EcsContext;
     }
 }

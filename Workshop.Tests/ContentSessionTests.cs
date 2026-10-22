@@ -56,7 +56,7 @@ public sealed class ContentSessionTests
             }
 
             var failureLog = new StringWriter();
-            var session = ContentSession.Build(modsDirectory.FullName, [], failureLog);
+            var session = ContentSession.Build(ContentSession.ValidateMods(modsDirectory.FullName, []), [], failureLog);
             return (session, failureLog.ToString());
         }
         finally
@@ -132,10 +132,7 @@ public sealed class ContentSessionTests
         var masterDirectory = Directory.CreateTempSubdirectory();
         try
         {
-            foreach (var file in Directory.EnumerateFiles(MasterManifestDirectory()))
-            {
-                File.Copy(file, Path.Combine(masterDirectory.FullName, Path.GetFileName(file)));
-            }
+            CopyManifest(masterDirectory.FullName);
 
             File.AppendAllText(Path.Combine(masterDirectory.FullName, MasterContent.ItemsFileName), "{ not json\n");
 
@@ -143,6 +140,46 @@ public sealed class ContentSessionTests
 
             Assert.AreEqual(WorkshopProblemSeverity.Error, problem.Severity);
             StringAssert.StartsWith(problem.Source, MasterContent.ItemsFileName + ":");
+        }
+        finally
+        {
+            TryDeleteDirectory(masterDirectory.FullName);
+        }
+    }
+
+    /// <summary>The source tree's master manifest, area files included, copied into directory.</summary>
+    private static void CopyManifest(string directory)
+    {
+        var source = MasterManifestDirectory();
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(directory, Path.GetRelativePath(source, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+    }
+
+    [TestMethod]
+    public void LoadProblems_AnUndefinedSymbolInAnArea_IsListedAtItsRowAndColumn_ForTheMapTab()
+    {
+        var (session, _) = BuildWithMods();
+        var masterDirectory = Directory.CreateTempSubdirectory();
+        try
+        {
+            CopyManifest(masterDirectory.FullName);
+            var areaPath = Path.Combine(masterDirectory.FullName, MasterContent.AreasDirectoryName, "starting-area.json");
+            var lines = File.ReadAllLines(areaPath);
+            var groundLine = Array.FindIndex(lines, line => line.Contains("\"Ground\"", StringComparison.Ordinal)) + 1;
+            var quote = lines[groundLine].IndexOf('"');
+            lines[groundLine] = lines[groundLine][..(quote + 4)] + "q" + lines[groundLine][(quote + 5)..];
+            File.WriteAllLines(areaPath, lines);
+
+            var problem = ContentSession.LoadProblems(session, masterDirectory.FullName).Single();
+
+            Assert.AreEqual($"{MasterContent.AreasDirectoryName}/starting-area.json:{groundLine + 1}:{quote + 5}", problem.Source);
+            StringAssert.Contains(problem.Description, "Symbol 'q'");
+            Assert.AreEqual(Builders.MapAreas.MapTab.TabTitle, problem.TabTitle);
+            Assert.IsNotNull(problem.RecordId);
         }
         finally
         {

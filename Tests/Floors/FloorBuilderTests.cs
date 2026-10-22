@@ -44,8 +44,8 @@ public sealed class FloorBuilderTests
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
         var factory = pass.Factory;
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Auras, context.Definitions);
-        FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Auras, context.Definitions, context.Areas, context.UniqueEntities);
+        FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId, FloorBuilder.PlayerSpawnOrigin(context.Areas));
         world.PlayerEntityId = playerEntityId;
 
         Assert.IsTrue(ecsContext.EntityManager.EntityExists(world.PlayerEntityId));
@@ -79,7 +79,7 @@ public sealed class FloorBuilderTests
         var ecsContext = pass.EcsContext;
         var context = pass.Context;
 
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), pass.Factory, context.Terrain, context.Auras, context.Definitions);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), pass.Factory, context.Terrain, context.Auras, context.Definitions, context.Areas, context.UniqueEntities);
 
         var transforms = ecsContext.ComponentManager.GetDirectPool<TransformComponent>();
         var creatures = 0;
@@ -105,7 +105,7 @@ public sealed class FloorBuilderTests
         var ecsContext = pass.EcsContext;
         var context = pass.Context;
 
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), pass.Factory, context.Terrain, context.Auras, context.Definitions);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), pass.Factory, context.Terrain, context.Auras, context.Definitions, context.Areas, context.UniqueEntities);
 
         var wallId = context.Terrain.GetId(BuiltInTerrain.StoneWallKey);
         Assert.AreEqual(wallId, world.GetStructureAt(new Vector3Int(10, 2, (int)MapLayer.Ground)).TypeId);
@@ -180,15 +180,15 @@ public sealed class FloorBuilderTests
         world.EntityPlaced += resolver.EnsureTiered; // As GameBootstrapper wires it.
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
-        var origin = FloorBuilder.PlayerSpawnOrigin();
+        var origin = FloorBuilder.PlayerSpawnOrigin(context.Areas);
         resolver.SetReferencePosition(origin);
 
         var raisedDuringPopulation = new HashSet<int>();
         context.ProcessingTierEvents.TierChanged += (entityId, _) => raisedDuringPopulation.Add(entityId);
 
         var factory = pass.Factory;
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Auras, context.Definitions);
-        FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId, resolver);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Auras, context.Definitions, context.Areas, context.UniqueEntities);
+        FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId, FloorBuilder.PlayerSpawnOrigin(context.Areas), resolver);
         world.PlayerEntityId = playerEntityId;
 
         var transforms = ecsContext.ComponentManager.GetDirectPool<TransformComponent>();
@@ -261,7 +261,7 @@ public sealed class FloorBuilderTests
         var ecsContext = pass.EcsContext;
         var context = pass.Context;
         var factory = pass.Factory;
-        var builder = new Game.TestMapBuilder(ecsContext.EntityManager, factory, context.Terrain, context.Auras, context.Definitions);
+        var builder = new Game.TestMapBuilder(ecsContext.EntityManager, factory, context.Terrain, context.Auras, context.Definitions, context.Areas, context.UniqueEntities);
         return (world, ecsContext, builder, context.Definitions, factory, context.Auras);
     }
 
@@ -339,11 +339,11 @@ public sealed class FloorBuilderTests
     [TestMethod]
     public void PopulateFloor_HallwayCrossAndShopsExistOnlyInTheStartingNeighborhood()
     {
-        var (world, ecsContext, _, creatures, factory, auras) = BuildForGeneration(TwoNeighborhoodSlice);
+        var (world, ecsContext, builder, _, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
         var mathUtility = new MathUtility(new Random(1));
         var records = new NeighborhoodRecords(mathUtility);
 
-        FloorBuilder.PopulateFloor(world, ecsContext, records, factory, world.Terrain, auras, creatures);
+        builder.Populate(world, records);
 
         Assert.AreEqual(2, records.Count);
         Assert.IsTrue(records.TryGet(-1, 0, out _));
@@ -380,7 +380,7 @@ public sealed class FloorBuilderTests
             }
         }
 
-        CollectionAssert.AreEqual(new[] { (Game.TestMapBuilder.HolyGroundColumn, Game.TestMapBuilder.HolyGroundRow) }, holyGroundCells);
+        CollectionAssert.AreEqual(new[] { (14, 13) }, holyGroundCells);
     }
 
     /// <summary>Shrines are part of the place: rolled from the neighborhood's own seed, so a revisit that re-rolls the creatures finds every shrine where it was.</summary>
@@ -411,10 +411,9 @@ public sealed class FloorBuilderTests
         var plan = builder.Plan(world.Map, new NeighborhoodRecord(0, 0, seed: 42), populationSeed: 7);
         world.Map.LoadNeighborhood(plan.Layout);
 
-        // The last spawn is the fixture shrine by the player's spawn; every other shrine comes before the first creature.
-        var randomShrineCount = plan.Spawns.Take(plan.Spawns.Count - 1).Count(spawn => spawn.BlueprintId == healingShrine);
+        var randomShrineCount = plan.Spawns.TakeWhile(spawn => spawn.BlueprintId == healingShrine).Count();
         Assert.IsGreaterThan(64, randomShrineCount, "Precondition: more than one batch of shrines.");
-        Assert.IsTrue(plan.Spawns.Take(randomShrineCount).All(spawn => spawn.BlueprintId == healingShrine));
+        Assert.IsTrue(plan.Spawns.Skip(randomShrineCount + plan.Areas.Spawns.Count).All(spawn => spawn.BlueprintId != healingShrine), "A random shrine was planned after the area's spawns.");
 
         Assert.AreEqual(64, plan.SpawnRowEnds[0]);
         Assert.AreEqual(128, plan.SpawnRowEnds[1]);

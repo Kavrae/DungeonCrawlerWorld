@@ -95,20 +95,21 @@ public static class WorldSessionBootstrapper
         // population; ProcessingTierSystem's first update treats any difference as an ordinary
         // player move and walks the Local boundary.
         var tierResolver = gameSession.Internals.ProcessingTierResolver;
-        tierResolver.SetReferencePosition(FloorBuilder.PlayerSpawnOrigin());
+        var playerSpawnOrigin = FloorBuilder.PlayerSpawnOrigin(gameSession.Catalogs.Areas);
+        tierResolver.SetReferencePosition(playerSpawnOrigin);
         if (!world.Map.IsBounded)
         {
-            tierResolver.SetWindowCenter(Game.TestMapBuilder.StartingCellX, Game.TestMapBuilder.StartingCellY);
+            tierResolver.SetWindowCenter(Game.World.Neighborhoods.CellOf(playerSpawnOrigin.X), Game.World.Neighborhoods.CellOf(playerSpawnOrigin.Y));
         }
 
         using (EngineHooks.DiagnosticScope("Entity Population"))
         {
-            FloorBuilder.PopulateFloor(world, ecsContext, neighborhoodRecords, gameSession.Internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Auras, gameSession.Catalogs.Definitions);
+            FloorBuilder.PopulateFloor(world, ecsContext, neighborhoodRecords, gameSession.Internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Auras, gameSession.Catalogs.Definitions, gameSession.Catalogs.Areas, gameSession.Internals.UniqueEntities);
         }
 
         using (EngineHooks.DiagnosticScope("Player Spawn"))
         {
-            FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, gameSession.Internals.Factory, gameSession.Catalogs.Definitions, playerEntityId, tierResolver);
+            FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, gameSession.Internals.Factory, gameSession.Catalogs.Definitions, playerEntityId, playerSpawnOrigin, tierResolver);
             world.PlayerEntityId = playerEntityId;
 
             ecsContext.EventBus.Publish(new EnteredDungeonEvent());
@@ -144,7 +145,7 @@ public static class WorldSessionBootstrapper
         // First in the frame: its population records spawns into the moved-entities buffer the other
         // systems read later the same frame.
         var neighborhoodStreamer = new NeighborhoodStreamer(world, ecsContext.EntityManager, ecsContext.ComponentManager.GetDirectPool<Game.Modules.Core.Components.TransformComponent>(), ecsContext.EventBus, tierResolver, neighborhoodRecords,
-            new Game.TestMapBuilder(ecsContext.EntityManager, gameSession.Internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Auras, gameSession.Catalogs.Definitions), gameSession.Internals.Skeletons);
+            new Game.TestMapBuilder(ecsContext.EntityManager, gameSession.Internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Auras, gameSession.Catalogs.Definitions, gameSession.Catalogs.Areas, gameSession.Internals.UniqueEntities), gameSession.Internals.Skeletons);
         ecsContext.SystemManager.RegisterAtFrameStart(neighborhoodStreamer, GameFrameStartOrder.NeighborhoodStreaming);
         RegisterStreamerGauges(ecsContext.Gauges, neighborhoodStreamer);
 

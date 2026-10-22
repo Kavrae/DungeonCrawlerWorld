@@ -7,6 +7,7 @@ using Engine.Events;
 using Engine.Math;
 using Engine.Settings;
 using Engine.Tags;
+using Game.Areas;
 using Game.Blueprints;
 using Game.Blueprints.Objects;
 using Game.Content;
@@ -45,12 +46,14 @@ public sealed class GameModuleContext
     /// <param name="world">The build's World, over the pools of services.ComponentManager.</param>
     /// <param name="crawlerNumbers">The session's crawler numbers; null for a build that spawns no crawlers.</param>
     /// <param name="runtimeSpawnSeed">Seeds the factory's own sequence for spawns that name no seed.</param>
+    /// <param name="collectsContentFailures">For a tool's build (the IDE): content that fails to load or check is left out and kept in ContentFailures instead of stopping the build. Only the content checks that can leave a record out (the master manifest's records, areas) do; the rest still throw.</param>
     public GameModuleContext(
         EcsBuildServices services,
         World.World world,
         MathUtility mathUtility,
         UniqueNumberAllocator? crawlerNumbers = null,
-        ulong runtimeSpawnSeed = 0)
+        ulong runtimeSpawnSeed = 0,
+        bool collectsContentFailures = false)
     {
         var componentManager = services.ComponentManager;
         var entityManager = services.EntityManager;
@@ -66,6 +69,7 @@ public sealed class GameModuleContext
         GameplayTags = services.Declarations.Tags;
         ContentTypes = services.Declarations.ContentTypes;
         MathUtility = mathUtility;
+        CollectsContentFailures = collectsContentFailures;
         EntityKeys = services.EntityKeys;
         SimulationClock = services.Clock;
         Terrain = world.Terrain;
@@ -123,10 +127,23 @@ public sealed class GameModuleContext
     public ContentTypeRegistry ContentTypes { get; }
 
     /// <summary>The master manifest's actions, items and auras, read through ContentTypes the first time a module asks (CoreActionsModule and CoreItemsModule, in Configure).</summary>
-    /// <remarks>Each table is read when first asked for, so a build that never asks for one never reads it. A record that fails to load stops the build: the shipped content must load whole.</remarks>
-    public MasterContent Content => _content ??= MasterContent.Open(MasterContent.DefaultDirectory, ContentTypes);
+    /// <remarks>Each table is read when first asked for, so a build that never asks for one never reads it. A record that fails to load stops the build: the shipped content must load whole -- unless the build CollectsContentFailures, when it is left out.</remarks>
+    public MasterContent Content => _content ??= CollectsContentFailures
+        ? MasterContent.OpenCollectingFailures(MasterContent.DefaultDirectory, ContentTypes)
+        : MasterContent.Open(MasterContent.DefaultDirectory, ContentTypes);
 
     private MasterContent? _content;
+
+    private readonly List<ContentFailure> _checkFailures = [];
+
+    /// <summary>Whether content that fails is left out and reported in ContentFailures rather than stopping the build -- see the constructor.</summary>
+    public bool CollectsContentFailures { get; }
+
+    /// <summary>What a build that CollectsContentFailures left out: the manifest records that didn't load, then those its checks refused.</summary>
+    public IReadOnlyList<ContentFailure> ContentFailures => [.. _content?.Failures ?? [], .. _checkFailures];
+
+    /// <summary>A content check refused a record it left out of a build that CollectsContentFailures.</summary>
+    public void ReportContentFailures(IEnumerable<ContentFailure> failures) => _checkFailures.AddRange(failures);
 
     public MathUtility MathUtility { get; }
 
@@ -151,6 +168,12 @@ public sealed class GameModuleContext
 
     /// <summary>Filled during Configure -- same reasoning as Actions above; a mod could register its own achievements the same way a mod could register its own actions.</summary>
     public AchievementCatalog Achievements { get; } = new();
+
+    /// <summary>Every area, palette and fixed placement, filled during Configure by AreasModule -- same reasoning as Actions above.</summary>
+    public AreaCatalog Areas { get; } = new();
+
+    /// <summary>Which unique blueprints live or were killed this session -- see UniqueEntityRoster; the build reports deaths and destructions to it.</summary>
+    public UniqueEntityRoster UniqueEntities { get; } = new();
 
     /// <summary>Filled during Configure -- same reasoning as Actions/Achievements above; a mod could register its own items the same way.</summary>
     public ItemCatalog Items { get; } = new();

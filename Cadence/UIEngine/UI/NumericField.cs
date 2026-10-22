@@ -38,12 +38,12 @@ public sealed class NumericField(FontService fontService, ElementPoolService ele
         _step = step;
         _decimalPlaces = decimalPlaces;
         Value = Normalize(value);
-        TextSubmitted += _ => CommitText();
+        TextSubmitted += _ => CommitTypedText();
         FocusChanged += _ =>
         {
             if (!IsFocused)
             {
-                CommitText();
+                CommitTypedText();
             }
         };
     }
@@ -72,7 +72,8 @@ public sealed class NumericField(FontService fontService, ElementPoolService ele
         return true;
     }
 
-    private void CommitText()
+    /// <summary>Takes what is typed as the value now (clamped and rounded; text that isn't a number shows the value again), as leaving the field or Enter does -- for an owner that reads Value on a press that doesn't move focus.</summary>
+    public void CommitTypedText()
     {
         if (!double.TryParse(OriginalText, NumberStyles.Float, CultureInfo.InvariantCulture, out var typed))
         {

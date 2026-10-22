@@ -21,6 +21,21 @@ public sealed class NumericAndColorFieldTests
     }
 
     [TestMethod]
+    public void CommitTypedText_TakesWhatIsTyped_WhileTheFieldStillHasFocus()
+    {
+        var harness = new ControlTestHarness();
+        var field = AddNumber(harness, value: 1, minimum: -100, maximum: 100);
+        var changes = new List<double>();
+        field.ValueChanged += changes.Add;
+
+        ReplaceText(harness, field, "-42");
+        field.CommitTypedText();
+
+        Assert.AreEqual(-42d, field.Value);
+        CollectionAssert.AreEqual(new[] { -42d }, changes);
+    }
+
+    [TestMethod]
     public void TheWheel_StepsTheValue_WithinItsLimits()
     {
         var harness = new ControlTestHarness();

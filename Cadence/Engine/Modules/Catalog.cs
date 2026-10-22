@@ -22,6 +22,10 @@ public class Catalog<T>(Func<T, Guid> idSelector)
     /// <param name="definition">The definition to register.</param>
     public void Register(T definition) => _definitionsById[idSelector(definition)] = definition;
 
+    /// <summary>Removes the definition registered under id; false when there is none.</summary>
+    /// <remarks>Redirects are left as they are: id and every redirect to it then resolve as if id had never been registered -- to nothing, or onward through a redirect of id's own.</remarks>
+    public bool Remove(Guid id) => _definitionsById.Remove(id);
+
     /// <summary>Makes from resolve to whatever to resolves to, whenever nothing is registered under from.</summary>
     public void AddRedirect(Guid from, Guid to) => _redirects[from] = to;
 

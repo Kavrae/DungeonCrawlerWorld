@@ -33,10 +33,13 @@
     </None>
 
     <!--
-      The master manifest of actions, items and auras ships; Definitions\Drafts (the IDE's work in progress) never
-      does: only the Master folder is copied, so nothing the game loads can be a draft.
+      The master manifest of actions, items, auras and areas ships; Definitions\Drafts (the IDE's work in progress)
+      never does: only the Master folder is copied, so nothing the game loads can be a draft.
     -->
     <Content Include="Definitions\Master\**\*.jsonl">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Definitions\Master\Areas\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

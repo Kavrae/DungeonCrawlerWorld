@@ -12,7 +12,7 @@ namespace Workshop.Tests;
 [TestClass]
 public sealed class ContentLinksTests
 {
-    private static readonly Lazy<GameSession> Session = new(() => ContentSession.Build(Path.Combine(AppContext.BaseDirectory, "NoMods"), [], TextWriter.Null));
+    private static readonly Lazy<GameSession> Session = new(() => ContentSession.Build(ContentSession.ValidateMods(Path.Combine(AppContext.BaseDirectory, "NoMods"), []), [], TextWriter.Null));
     private static readonly Lazy<ContentReferenceIndex> Index = new(() => new ContentReferenceIndex(Session.Value.Catalogs));
 
     [TestMethod]

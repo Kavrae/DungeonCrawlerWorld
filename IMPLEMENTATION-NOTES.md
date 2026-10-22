@@ -1572,6 +1572,113 @@ record in Achievements.
   `OpenDefinition` (stack id `ItemDetailsWindow.NoStackInstanceId`; Compare does nothing).
   `GetLootboxResultsWindowRectangle` is its own outside-click hook, never folded into another window's.
 
+### Map areas, fixed placements and the Workshop Map tab (2026-10-22)
+
+Child 6 of `EPIC-sprites-ui-engine-and-dev-tools.md`, all four phases: the area format, the starting area at a fixed
+placement, the read-only Map tab, and its neighborhood preview, with a new performance baseline. Code: `Game/Areas`,
+`Engine.Content.ContentDocument`, `Game/TestMapBuilder.cs`, `DungeonCrawlerWorld/Workshop/Builders/MapAreas`.
+Follow-ups are TODO.md items: "Workshop: edit map areas" (Engine, High), "Area pools", "Nested areas", "Area entry
+points", "Areas that follow the player" (Game, Medium); mods' area files are `PLAN-data-driven-actions-and-items.md`
+Phase 6.
+
+**What the research settled** (Tiled, LDtk, DCSS vaults, CDDA JSON mapgen, Caves of Qud, Godot/Unity/Unreal, Spelunky,
+Brogue)
+- Text first, editor later: rows of symbols plus a legend (DCSS, CDDA), which a person or Claude writes and a diff
+  shows. Editor-first formats (Tiled's base64 layers, LDtk arrays) are unreadable by hand.
+- Cells mean things: a legend entry names a terrain key and blueprint Guids, never a position in a list.
+- Entities are placements of blueprints with a stable id per placement (LDtk's IID), never copies.
+- Selection is filter -> chance -> weight and placement is a rule (DCSS, CDDA) -- that half is "Area pools".
+- Uniqueness is declared, on a placement now (one living at a time, with a fallback, DCSS's `KMONS`).
+- Authored and generated are one pipeline (Qud): an area is stamped into a neighborhood's plan between the generated
+  layout and the population, on the worker, as data.
+
+**The format**
+- `AreaDefinition`: Id, Name, Description, Tags (`Area.*`, declared in `GameTags`), Width, Height, `Layers` (rows per
+  `MapLayer`, keyed by the layer's name; Ground required, a missing layer keeps what generation made), `Legend`
+  (`AreaCell`s), `Palettes` (Guids), `Entities` (`AreaEntityPlacement`) and `Markers` (`AreaMarker`).
+- **Space keeps everything generation made; every other symbol must be defined**, and a part a legend entry leaves out
+  (floor, wall, spawns) keeps too. Symbols are printable ASCII other than space, `"` and `\`, so file columns stay exact.
+- `AreaCell`: `Terrain` (a floor key; refused on Flying, which has no floor), `Structure` (a wall key) or
+  `ClearsStructure`, and `Spawns` (`AreaSpawn`: one blueprint or a weighted `OneOf`, optional size, `Chance`). The
+  legend is a list of entries with an `"s"` symbol, not an object keyed by symbol, so every key is schema-checked.
+- `AreaEntityPlacement`: `PlacementId`, X/Y (the footprint's top-left, as a `SpawnRequest`'s), Layer, Blueprint,
+  optional Size (null = the blueprint's own; kept as X/Y/Size rather than a Rectangle, so the default follows the
+  blueprint), Chance, `Unique` + `Fallback`, Description (authoring notes).
+- `AreaPalette` (Id, Name, Legend): later palettes override earlier, the area's own legend overrides all
+  (`AreaLegend.Resolve`). `AreaPlacement` (fixed): area Guid, neighborhood cell, offset in it.
+- No area rules yet (a boss room refusing teleports, a safe room): whether they are hard-coded by tag or authored is
+  undecided, and the format reserves nothing for them. The one behaviour an area has is that random population and
+  shrines stay out of every cell it defines.
+
+**Storage**
+- One area per file, `Master/Areas/*.json`, through `ContentDocument`: one indented object with the format and table
+  first, a list one element per line and anything inside a list compact on its line, so rows are one per line and a
+  placement is one line. It is still one record through a codec with an enforced schema (`off`/`rep` apply). Reading
+  keeps every value's line and column by path (`ContentSourceMap`), which is how a failure names a row's column.
+- Palettes and fixed placements are JSON Lines tables (`AreaPalettes.jsonl`, `AreaPlacements.jsonl`). Visual Studio's
+  JSON editor warns on any `.jsonl` file ("Only one top-level item"); the format stays, and each developer maps
+  `jsonl` to the text editor (Tools > Options > Text Editor > File Extension).
+- `AreasModule` (Requires Terrain) fills `GameModuleContext.Areas` (`AreaCatalog`) with each record's
+  `ContentRecordLocation`. Area files are copied to every output by `Content.csproj`, and root
+  `Directory.Build.targets` deletes area files in an output the build no longer ships -- a copy never removes one.
+
+**Checks** -- `AreaContentValidation`, after every `Configure`: rows fit Width/Height; every symbol defined; keys and
+Guids exist and blueprints are spawnable; no floor on Flying; footprints inside the area, blocking ones not
+overlapping each other or a wall; placement and marker ids unique; tags declared; fixed placements fit their
+neighborhood and don't overlap; exactly one `PlayerSpawn` across the placed areas. Failures are `ContentFailure`s
+(file, line, column, record). The game throws on any; a build made with `collectsContentFailures` (the Workshop's)
+leaves the failing records out, checks again until nothing more fails, and lists them.
+
+**Instances and stamping**
+- Every stamp is an `AreaInstance`: its own key (for a fixed placement, the placement's Guid), definition, seed and
+  world origin. Generation and the Workshop stamp instances, never a definition, so an area that follows the player
+  reuses the format and stamp unchanged.
+- **Residents are part of the place**: a fixed placement's instance seed is the neighborhood's layout seed mixed with
+  the placement's Guid (`AreaSeeds`), and each resident rolls Chance, OneOf and its seed from its own sequence (by
+  placement id or cell), so they are the same on every visit and one never shifts another.
+- `AreaStamp.Apply` is pure and worker-safe; legends are resolved to ids once per definition. Explicit placements
+  are planned first, then symbol spawns row by row.
+- `TestMapBuilder.Plan`: generated layout -> fixed placements stamped -> aura rows -> shrines and population skipping
+  covered cells (per layer) -> the areas' spawns as their own batch after the shrines and before the creatures.
+- **Uniques (confirmed):** a named blueprint placed `Unique`; one alive per session, never back once killed this
+  session, else its fallback. Decided only when the spawn happens, on the main thread (`AreaSpawner` +
+  `UniqueEntityRoster`, told of deaths and destructions by the build) -- no snapshot taken while planning. A unique's
+  seed comes from the area and placement alone, so it is the same individual anywhere. Names come from blueprints
+  only. No starting fixture is Unique (a killed Foreman would never come back).
+
+**The starting area** -- `Areas/starting-area.json`, 32x32 at neighborhood (0,0)'s origin, tagged `Area.Testing`,
+TEMPORARY until a pool of starting areas replaces it. The hallway cross clipped to the box, Holy Ground at (14,13),
+the 13 fixtures as explicit placements with their old comments, the `PlayerSpawn` marker at (17,13), which
+`FloorBuilder.PlayerSpawnOrigin(areas)` reads. All three layers are defined (`,` from the Core palette keeps
+generated terrain), so no random creature spawns in the box on any layer; the rest of the neighborhood is generated.
+The seeded world changed once (shorter arms, an empty box, fixtures' new seeds).
+
+**The Map tab (read-only)**
+- Browser sections: Placed areas, Unplaced areas, Palettes, Placements. The preview (720 wide) and details titles
+  name the kind selected; the details pane is the third column, with Cell Details (the hover readout) under it, and
+  Related the fourth. `RecordBrowserTab` gained the optional details pane, per-record titles, and columns placed
+  from each window's actual right edge.
+- **Previews are real builds** (`AreaPreviewBuild`): a session over a bounded map the area's size, a plain fill under
+  the area, the game's `AreaStamp`, factory and `MapRenderer` (`AreaMapView`: layer, zoom, pan, grid, hatched
+  transparent cells, markers, hover). Reroll changes only the preview instance's seed. An entity's own aura (a
+  shrine's glow) isn't shown: nothing is simulated.
+- **Neighborhood preview**, in a placement's preview: a world seed, the starting window as a 3x3 grid of cells and
+  8 arrows around the map. `FloorBuilder.StartingNeighborhoodRecords(seed)` gives the records a session seeded the
+  same way assigns -- the game's startup uses the same assignment, and the build draws nothing from the sequence first
+  -- so only the 9 starting-window cells are exact. Built on a worker with a spinner (builds share nothing, so they
+  may run beside the UI); the two most recent are kept. Placement Details shows the spawn count.
+- The map is as tall as the window's maximum height allows: a WrapContent window ignores its maximum size, so the
+  preview builds, measures, and rebuilds with the map shrunk by its overflow.
+
+**Fixed underneath it** -- a press no longer reorders a child in a Horizontal/Vertical parent (`Element.RaiseToFront`;
+it moved a clicked list row to the bottom at the next arrange); the Workshop tab strip and browser take a new maximum
+size on resize; `NumericField.CommitTypedText` for an owner that reads Value on a press that doesn't move focus;
+`MapRenderer` is disposable (its render targets were never released); `Catalog<T>.Remove` (redirects untouched).
+
+**Baseline** (2026-10-22, Release, seed 1, frames 600-3600, map 3072): headless A/B against `pre-build-pipeline`
+-4.8% `EcsContext.Update` (5.84 -> 5.56 ms/frame), no regressions, a different world by design; pools +0.2 MB, live
+heap -0.3 MB. Saved as `baseline-build-{release,debug}` and `...-map-areas`.
+
 ## Presentation
 
 ### Floating Text

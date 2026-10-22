@@ -37,6 +37,9 @@ public static class GameTags
 
     public static readonly GameplayTag Magic = GameplayTag.Get("Magic");
 
+    public static readonly GameplayTag Area = GameplayTag.Get("Area");
+    public static readonly GameplayTag AreaTesting = GameplayTag.Get("Area.Testing");
+
     public static readonly GameplayTag TraitDodgeable = GameplayTag.Get("Trait.Dodgeable");
     public static readonly GameplayTag TraitStaggering = GameplayTag.Get("Trait.Staggering");
 
@@ -59,6 +62,7 @@ public static class GameTags
         Item, ItemConsumable, ItemConsumablePotion, ItemConsumableScroll, ItemWand, ItemLootbox, ItemToggle,
         Damage, DamageFire, DamagePoison, DamageEnergy,
         Magic,
+        Area, AreaTesting,
         TraitDodgeable, TraitStaggering,
         StatsAbilityScore, StatsAbilityScoreStrength, StatsAbilityScoreIntelligence, StatsAbilityScoreConstitution, StatsAbilityScoreDexterity, StatsAbilityScoreCharisma, StatsAbilityScoreLuck, StatsAbilityScoreWisdom,
     ];

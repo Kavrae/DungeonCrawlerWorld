@@ -8,7 +8,7 @@ namespace Workshop.Tests;
 [TestClass]
 public sealed class ActionBrowserSectionsTests
 {
-    private static readonly Lazy<GameSession> Session = new(() => ContentSession.Build(Path.Combine(AppContext.BaseDirectory, "NoMods"), [], TextWriter.Null));
+    private static readonly Lazy<GameSession> Session = new(() => ContentSession.Build(ContentSession.ValidateMods(Path.Combine(AppContext.BaseDirectory, "NoMods"), []), [], TextWriter.Null));
 
     private static IReadOnlyList<Builders.Browsing.RecordBrowserSection<Game.Modules.Actions.ActionDefinition>> Build(string search) =>
         ActionBrowserSections.Build(Session.Value.Catalogs.ActionCatalog.Definitions, search, Session.Value.Catalogs.GameplayTags);

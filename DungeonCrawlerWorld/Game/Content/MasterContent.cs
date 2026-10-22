@@ -1,5 +1,6 @@
 using System.Text;
 using Engine.Content;
+using Game.Areas;
 using Game.Effects;
 using Game.Modules.Actions;
 using Game.Modules.Auras;
@@ -7,8 +8,12 @@ using Game.Modules.Inventory;
 
 namespace Game.Content;
 
-/// <summary>The master manifest: the shipped actions, items and auras, one JSON Lines table each.</summary>
+/// <summary>The master manifest: the shipped actions, items, auras, area palettes and area placements, one JSON Lines table each, and areas, one file each.</summary>
 /// <remarks>
+/// Areas are in the Areas folder, one ContentDocument per file read in file name order, so an area's rows are one per
+/// line; they, their palettes and placements are read with where each record came from (LocatedRecord), for the
+/// build's area checks to name the row and column a failure is at.
+///
 /// Each table is read the first time it is asked for, the auras before whichever of actions or items asks first, since
 /// those name auras by Guid -- so a build of modules that never asks for items never needs the item codec. Each table's
 /// records keep their file order, which is the order the catalogs register them in. A disabled record isn't loaded;
@@ -24,9 +29,21 @@ public sealed class MasterContent
     public const string ItemsTable = "Items";
     public const string AurasTable = "Auras";
 
+    public const string AreasTable = "Areas";
+    public const string AreaPalettesTable = "AreaPalettes";
+    public const string AreaPlacementsTable = "AreaPlacements";
+
     public const string ActionsFileName = "Actions.jsonl";
     public const string ItemsFileName = "Items.jsonl";
     public const string AurasFileName = "Auras.jsonl";
+    public const string AreaPalettesFileName = "AreaPalettes.jsonl";
+    public const string AreaPlacementsFileName = "AreaPlacements.jsonl";
+
+    /// <summary>The folder of area files, one area each (an AreasTable document).</summary>
+    public const string AreasDirectoryName = "Areas";
+
+    /// <summary>An area file's extension.</summary>
+    public const string AreaFilePattern = "*.json";
 
     private readonly string _directory;
     private readonly ContentTypeRegistry _types;
@@ -40,6 +57,12 @@ public sealed class MasterContent
     private IReadOnlyList<AuraDefinition>? _auras;
     private IReadOnlyList<ActionDefinition>? _actions;
     private IReadOnlyList<ItemDefinition>? _items;
+    private IReadOnlyList<LocatedRecord<AreaDefinition>>? _areas;
+    private IReadOnlyList<LocatedRecord<AreaPalette>>? _areaPalettes;
+    private IReadOnlyList<LocatedRecord<AreaPlacement>>? _areaPlacements;
+    private readonly Dictionary<Guid, Guid> _areaRedirects = [];
+    private readonly Dictionary<Guid, Guid> _areaPaletteRedirects = [];
+    private readonly Dictionary<Guid, Guid> _areaPlacementRedirects = [];
 
     private MasterContent(string directory, ContentTypeRegistry types, bool throwsOnFailure)
     {
@@ -57,6 +80,45 @@ public sealed class MasterContent
     public IReadOnlyList<ActionDefinition> Actions => _actions ??= LoadTable<ActionDefinition>(ActionsFileName, ActionsTable, _actionRedirects);
 
     public IReadOnlyList<ItemDefinition> Items => _items ??= LoadTable<ItemDefinition>(ItemsFileName, ItemsTable, _itemRedirects);
+
+    /// <summary>Every enabled area, one per file of the Areas folder (in file name order), with where it was read from.</summary>
+    public IReadOnlyList<LocatedRecord<AreaDefinition>> Areas => _areas ??= LoadAreas();
+
+    /// <summary>Every enabled area palette, in file order, with where it was read from.</summary>
+    public IReadOnlyList<LocatedRecord<AreaPalette>> AreaPalettes => _areaPalettes ??= ReadLocatedTable<AreaPalette>(AreaPalettesFileName, AreaPalettesTable, _areaPaletteRedirects);
+
+    /// <summary>Every enabled fixed area placement, in file order, with where it was read from.</summary>
+    public IReadOnlyList<LocatedRecord<AreaPlacement>> AreaPlacements => _areaPlacements ??= ReadLocatedTable<AreaPlacement>(AreaPlacementsFileName, AreaPlacementsTable, _areaPlacementRedirects);
+
+    /// <summary>Each disabled area that names a replacement, from its Guid to the replacement's.</summary>
+    public IReadOnlyDictionary<Guid, Guid> AreaRedirects
+    {
+        get
+        {
+            _ = Areas;
+            return _areaRedirects;
+        }
+    }
+
+    /// <summary>Each disabled area palette that names a replacement, from its Guid to the replacement's.</summary>
+    public IReadOnlyDictionary<Guid, Guid> AreaPaletteRedirects
+    {
+        get
+        {
+            _ = AreaPalettes;
+            return _areaPaletteRedirects;
+        }
+    }
+
+    /// <summary>Each disabled area placement that names a replacement, from its Guid to the replacement's.</summary>
+    public IReadOnlyDictionary<Guid, Guid> AreaPlacementRedirects
+    {
+        get
+        {
+            _ = AreaPlacements;
+            return _areaPlacementRedirects;
+        }
+    }
 
     /// <summary>Each disabled aura that names a replacement, from its Guid to the replacement's.</summary>
     public IReadOnlyDictionary<Guid, Guid> AuraRedirects
@@ -94,13 +156,19 @@ public sealed class MasterContent
     /// <summary>The manifest under directory, each table read when first asked for; a table with a record that fails throws then.</summary>
     public static MasterContent Open(string directory, ContentTypeRegistry types) => new(directory, types, throwsOnFailure: true);
 
-    /// <summary>Reads all three tables under directory now, collecting every failure in Failures rather than throwing; a table whose file is missing is empty.</summary>
+    /// <summary>The manifest under directory, each table read when first asked for, a record that fails left out and kept in Failures -- for a tool's build, which shows what is wrong instead of stopping.</summary>
+    public static MasterContent OpenCollectingFailures(string directory, ContentTypeRegistry types) => new(directory, types, throwsOnFailure: false);
+
+    /// <summary>Reads every table under directory now, collecting every failure in Failures rather than throwing; a table whose file is missing is empty.</summary>
     public static MasterContent Load(string directory, ContentTypeRegistry types)
     {
         var content = new MasterContent(directory, types, throwsOnFailure: false);
         _ = content.Auras;
         _ = content.Actions;
         _ = content.Items;
+        _ = content.AreaPalettes;
+        _ = content.AreaPlacements;
+        _ = content.Areas;
         return content;
     }
 
@@ -142,6 +210,73 @@ public sealed class MasterContent
         }
 
         return records;
+    }
+
+    private List<LocatedRecord<T>> ReadLocatedTable<T>(string fileName, string tableName, Dictionary<Guid, Guid> redirects)
+        where T : class
+    {
+        var failureCount = _failures.Count;
+        var located = new List<LocatedRecord<T>>();
+        foreach (var record in ContentTable.Read<T>(Path.Combine(_directory, fileName), tableName, _types, NoContentReferences.Instance, _failures))
+        {
+            if (Remember(record.Id, record.IsDisabled, record.Replacement, redirects))
+            {
+                located.Add(new LocatedRecord<T>(record.Value!, new ContentRecordLocation(fileName, record.Line)));
+            }
+        }
+
+        ThrowIfFailedSince(failureCount);
+        return located;
+    }
+
+    private List<LocatedRecord<AreaDefinition>> LoadAreas()
+    {
+        var failureCount = _failures.Count;
+        var located = new List<LocatedRecord<AreaDefinition>>();
+        var areasDirectory = Path.Combine(_directory, AreasDirectoryName);
+        if (!Directory.Exists(areasDirectory))
+        {
+            return located;
+        }
+
+        var paths = Directory.GetFiles(areasDirectory, AreaFilePattern);
+        Array.Sort(paths, StringComparer.Ordinal);
+        foreach (var path in paths)
+        {
+            var fileName = $"{AreasDirectoryName}/{Path.GetFileName(path)}";
+            var record = ContentDocument.Read<AreaDefinition>(File.ReadAllText(path, Encoding.UTF8), fileName, AreasTable, _types, NoContentReferences.Instance, _failures);
+            if (record is not null && Remember(record.Id, record.IsDisabled, record.Replacement, _areaRedirects))
+            {
+                located.Add(new LocatedRecord<AreaDefinition>(record.Value!, new ContentRecordLocation(fileName, 1, record.Source)));
+            }
+        }
+
+        ThrowIfFailedSince(failureCount);
+        return located;
+    }
+
+    /// <summary>Whether the record is enabled; a disabled one's replacement, if any, is kept as its redirect.</summary>
+    private static bool Remember(Guid id, bool isDisabled, Guid? replacement, Dictionary<Guid, Guid> redirects)
+    {
+        if (isDisabled)
+        {
+            if (replacement is { } replacementId)
+            {
+                redirects[id] = replacementId;
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private void ThrowIfFailedSince(int failureCount)
+    {
+        if (_throwsOnFailure && _failures.Count > failureCount)
+        {
+            ThrowIfFailed();
+        }
     }
 
     /// <summary>Writes actions and items, and every aura they name, to directory's three tables, canonically and in the order given (auras in the order first named).</summary>

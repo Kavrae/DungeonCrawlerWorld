@@ -1,0 +1,17 @@
+<Project>
+
+  <!--
+    Area files are one per file under Definitions\Master\Areas, and a copy never removes what it no longer copies:
+    an area deleted or renamed in the source tree would stay in every output folder and still be loaded. After the
+    copy, any area file in this project's output that the build didn't just ship is deleted.
+  -->
+  <Target Name="RemoveStaleAreaFiles" AfterTargets="CopyFilesToOutputDirectory" Condition="Exists('$(OutDir)Definitions\Master\Areas')">
+    <ItemGroup>
+      <_ShippedAreaFile Include="@(AllItemsFullPathWithTargetPath->'$(OutDir)%(TargetPath)')" Condition="$([System.String]::Copy('%(TargetPath)').Replace('/', '\').StartsWith('Definitions\Master\Areas\'))" />
+      <_OutputAreaFile Include="$(OutDir)Definitions\Master\Areas\*.json" />
+      <_StaleAreaFile Include="@(_OutputAreaFile)" Exclude="@(_ShippedAreaFile)" />
+    </ItemGroup>
+    <Delete Files="@(_StaleAreaFile)" />
+  </Target>
+
+</Project>

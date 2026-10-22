@@ -17,11 +17,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Cadence\Engine\Engine.csproj" />
-    <ProjectReference Include="..\..\Cadence\UIEngine\UIEngine.csproj" />
-    <ProjectReference Include="..\..\Cadence\Workshop\Workshop.csproj" />
-    <ProjectReference Include="..\Game\Game.csproj" />
-    <ProjectReference Include="..\Presentation\Presentation.csproj" />
+    <ProjectReference Include="..\..\..\Cadence\Engine\Engine.csproj" />
+    <ProjectReference Include="..\..\..\Cadence\UIEngine\UIEngine.csproj" />
+    <ProjectReference Include="..\..\..\Cadence\Workshop\Workshop.csproj" />
+    <ProjectReference Include="..\..\Game\Game.csproj" />
+    <ProjectReference Include="..\..\Presentation\Presentation.csproj" />
   </ItemGroup>
 
 </Project>

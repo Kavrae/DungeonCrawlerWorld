@@ -21,8 +21,8 @@
     <ProjectReference Include="..\Cadence\Workshop\Workshop.csproj" />
     <ProjectReference Include="..\DungeonCrawlerWorld\Game\Game.csproj" />
     <ProjectReference Include="..\DungeonCrawlerWorld\Presentation\Presentation.csproj" />
-    <ProjectReference Include="..\DungeonCrawlerWorld\Builders\Builders.csproj" />
-    <ProjectReference Include="..\DungeonCrawlerWorld\Workshop\DungeonCrawlerWorld.Workshop.csproj" />
+    <ProjectReference Include="..\DungeonCrawlerWorld\Workshop\Builders\Builders.csproj" />
+    <ProjectReference Include="..\DungeonCrawlerWorld\Workshop\App\DungeonCrawlerWorld.Workshop.csproj" />
     <!-- Build-order only: the content session tests copy these mods' DLLs into a mods folder and load them the way the game does. -->
     <ProjectReference Include="..\DungeonCrawlerWorld\Mods\Mods.ExampleMod\Mods.ExampleMod.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\DungeonCrawlerWorld\Mods\Mods.TestFixtures\Mods.TestFixtures.csproj" ReferenceOutputAssembly="false" />

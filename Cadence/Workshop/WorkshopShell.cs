@@ -114,6 +114,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
     {
         _screenSize = screenSize;
         _inputController.SetScreenSize(screenSize);
+        _tabStrip.SetMaximumSize(new Vector2(screenSize.X, TabStripHeight));
         _tabStrip.SetSize(new Vector2(screenSize.X, TabStripHeight));
         LayOutTabStrip();
         LayOutBottomPanel();

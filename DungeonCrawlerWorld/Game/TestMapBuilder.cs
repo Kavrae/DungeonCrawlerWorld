@@ -1,6 +1,6 @@
 using Engine.ECS.Entities;
 using Engine.Math;
-using Game.Blueprints.Composites;
+using Game.Areas;
 using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
 using Game.Floors;
@@ -15,19 +15,19 @@ namespace Game;
 
 /// <summary>
 /// Builds test neighborhoods across all three MapLayers, each layer with its own independent,
-/// percentage-rolled population: Ground (randomized lava/dirt/grass terrain, one cell of Holy Ground by the spawn, a Healing Shrine on about one cell in a thousand, a Goblin/Fairy/Ghost on
+/// percentage-rolled population: Ground (randomized lava/dirt/grass terrain, a Healing Shrine on about one cell in a thousand, a Goblin/Fairy/Ghost on
 /// GroundPopulationPercent of free tiles per PopulateGroundEntity's breakdown), UnderGround (a
 /// randomized dirt/lava mixture, a Ghost on UnderGroundGhostPercent of tiles per
 /// PopulateUnderGroundGhost), and Flying (a Fairy on FlyingFairyPercent of tiles per
-/// PopulateFlyingFairy) -- plus, in the starting neighborhood only, a hallway cross of walls, a
-/// handful of standalone multi-trait fixtures and the shops, via the Blueprint composition system.
+/// PopulateFlyingFairy) -- plus the areas the content places in the neighborhood (AreaPlacement), stamped
+/// over the generated layout: the starting area's hallway cross, fixtures and shops in neighborhood (0, 0).
 /// </summary>
 /// <remarks>
 /// A stand-in for real template generation. Each neighborhood is
 /// generated from its own NeighborhoodRecord, never from shared random state, and the world has no
 /// border walls: it has no edge.
 /// </remarks>
-public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory factory, TerrainRegistry terrain, AuraCatalog auras, BlueprintRegistry definitions)
+public sealed class TestMapBuilder
 {
     // TEMPORARY: halved once already from the original values (10/5/5) to reduce the creature
     // population -- Movement/HealthRegen/TerrainContacts/Auras all iterate this
@@ -54,66 +54,55 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     /// <summary>Chance any given rolled NPC (see BuildRaceEntity) is also a Crawler -- deliberately small; most NPCs are not.</summary>
     private const int CrawlerPercent = 2;
 
-    private readonly ushort _stoneFloor = terrain.GetId(BuiltInTerrain.StoneFloorKey);
-    private readonly ushort _stoneWall = terrain.GetId(BuiltInTerrain.StoneWallKey);
-    private readonly ushort _dirt = terrain.GetId(BuiltInTerrain.DirtKey);
-    private readonly ushort _lava = terrain.GetId(BuiltInTerrain.LavaKey);
-    private readonly ushort _grass = terrain.GetId(BuiltInTerrain.GrassKey);
-    private readonly ushort _holyGround = terrain.GetId(BuiltInTerrain.HolyGroundKey);
-    private readonly ushort _goblin = definitions.GetId(Goblin.Id);
-    private readonly ushort _fairy = definitions.GetId(Fairy.Id);
-    private readonly ushort _ghost = definitions.GetId(Ghost.Id);
+    private readonly EntityManager _entityManager;
+    private readonly EntityFactory _factory;
+    private readonly TerrainRegistry _terrain;
+    private readonly AuraCatalog _auras;
+    private readonly UniqueEntityRoster _uniqueEntities;
+    private readonly AreaStamp _areaStamp;
 
-    /// <summary>The starting neighborhood's fixtures, each as the parts it is made of -- see BuildFixtureEntities.</summary>
-    private readonly ushort _longDescriptionGoblin = definitions.GetId(LongDescriptionGoblin.Id);
+    /// <summary>Each neighborhood's fixed area placements, with the area each places, in catalog order.</summary>
+    private readonly Dictionary<(int CellX, int CellY), List<(AreaPlacement Placement, AreaDefinition Area)>> _fixedPlacementsByNeighborhood = [];
 
-    /// <inheritdoc cref="_longDescriptionGoblin"/>
-    private readonly ushort _goblinEngineer = definitions.GetId(GoblinEngineer.Id);
+    private readonly ushort _dirt;
+    private readonly ushort _lava;
+    private readonly ushort _grass;
+    private readonly ushort _goblin;
+    private readonly ushort _fairy;
+    private readonly ushort _ghost;
+    private readonly ushort _healingShrine;
 
-    /// <inheritdoc cref="_longDescriptionGoblin"/>
-    private readonly ushort _goblinForeman = definitions.GetId(GoblinForeman.Id);
+    /// <param name="areas">The session's areas: each neighborhood stamps the ones its fixed placements put there.</param>
+    /// <param name="uniqueEntities">Asked, as each unique placement spawns, whether its blueprint may.</param>
+    public TestMapBuilder(EntityManager entityManager, EntityFactory factory, TerrainRegistry terrain, AuraCatalog auras, BlueprintRegistry definitions, AreaCatalog areas, UniqueEntityRoster uniqueEntities)
+    {
+        _entityManager = entityManager;
+        _factory = factory;
+        _terrain = terrain;
+        _auras = auras;
+        _uniqueEntities = uniqueEntities;
+        _areaStamp = new AreaStamp(areas, terrain, definitions);
 
-    /// <inheritdoc cref="_longDescriptionGoblin"/>
-    private readonly ushort _stationaryFairyEngineer = definitions.GetId(StationaryFairyEngineer.Id);
+        _dirt = terrain.GetId(BuiltInTerrain.DirtKey);
+        _lava = terrain.GetId(BuiltInTerrain.LavaKey);
+        _grass = terrain.GetId(BuiltInTerrain.GrassKey);
+        _goblin = definitions.GetId(Goblin.Id);
+        _fairy = definitions.GetId(Fairy.Id);
+        _ghost = definitions.GetId(Ghost.Id);
+        _healingShrine = definitions.GetId(HealingShrine.Id);
 
-    /// <inheritdoc cref="_longDescriptionGoblin"/>
-    private readonly ushort _multiRace = definitions.GetId(GoblinFairy.Id);
+        foreach (var placement in areas.Placements.Definitions)
+        {
+            var neighborhood = (placement.NeighborhoodX, placement.NeighborhoodY);
+            if (!_fixedPlacementsByNeighborhood.TryGetValue(neighborhood, out var placements))
+            {
+                placements = [];
+                _fixedPlacementsByNeighborhood[neighborhood] = placements;
+            }
 
-    /// <inheritdoc cref="_longDescriptionGoblin"/>
-    private readonly ushort _multiClass = definitions.GetId(GoblinEngineerTank.Id);
-
-    /// <inheritdoc cref="_longDescriptionGoblin"/>
-    private readonly ushort _tinyGoblin = definitions.GetId(TinyGoblin.Id);
-
-    /// <inheritdoc cref="_longDescriptionGoblin"/>
-    private readonly ushort _phasingFairy = definitions.GetId(PhasingFairy.Id);
-
-    /// <inheritdoc cref="_longDescriptionGoblin"/>
-    private readonly ushort _generalShop = definitions.GetId(GeneralShop.Id);
-
-    /// <inheritdoc cref="_longDescriptionGoblin"/>
-    private readonly ushort _potionShop = definitions.GetId(PotionShop.Id);
-
-    /// <inheritdoc cref="_longDescriptionGoblin"/>
-    private readonly ushort _healingShrine = definitions.GetId(HealingShrine.Id);
-
-    /// <summary>The neighborhood holding the hallway cross, the fixtures, the shops and the player's spawn.</summary>
-    public const int StartingCellX = 0;
-
-    /// <inheritdoc cref="StartingCellX"/>
-    public const int StartingCellY = 0;
-
-    /// <summary>Where FloorBuilder aims the player: inside the hallway cross's corridor gap, counted from the starting neighborhood's origin, so nothing stands between the player and the neighborhood border 17 tiles west.</summary>
-    public const int SpawnColumn = 17;
-
-    /// <summary>The spawn row, inside the corridor gap (rows 10-16 are open at the wall columns).</summary>
-    public const int SpawnRow = 13;
-
-    /// <summary>The one cell of Holy Ground, counted from the starting neighborhood's origin: inside the hallway cross, west of the spawn, where its aura's edge reaches the spawn.</summary>
-    public const int HolyGroundColumn = 14;
-
-    /// <inheritdoc cref="HolyGroundColumn"/>
-    public const int HolyGroundRow = 13;
+            placements.Add((placement, areas.Areas.Get(placement.Area)));
+        }
+    }
 
     /// <summary>
     /// Generates every loaded neighborhood, in row-major order. World is built by the
@@ -129,19 +118,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     /// </remarks>
     public void Populate(World.World world, NeighborhoodRecords records)
     {
-        var mapBounds = world.Map.Bounds;
-        var neighborhoodsToGenerate = new List<(NeighborhoodRecord Record, int PopulationSeed)>();
-        for (var cellY = Neighborhoods.CellOf(mapBounds.MinY); cellY <= Neighborhoods.CellOf(mapBounds.MaxY - 1); cellY++)
-        {
-            for (var cellX = Neighborhoods.CellOf(mapBounds.MinX); cellX <= Neighborhoods.CellOf(mapBounds.MaxX - 1); cellX++)
-            {
-                if (world.Map.IsNeighborhoodLoaded(cellX, cellY))
-                {
-                    var neighborhoodRecord = records.GetOrCreate(cellX, cellY);
-                    neighborhoodsToGenerate.Add((neighborhoodRecord, neighborhoodRecord.NextPopulationSeed()));
-                }
-            }
-        }
+        var neighborhoodsToGenerate = AssignRecords(LoadedNeighborhoods(world.Map), records);
 
         var neighborhoodPlans = new NeighborhoodPlan[neighborhoodsToGenerate.Count];
         Parallel.For(0, neighborhoodsToGenerate.Count, neighborhoodIndex => neighborhoodPlans[neighborhoodIndex] = Plan(world.Map, neighborhoodsToGenerate[neighborhoodIndex].Record, neighborhoodsToGenerate[neighborhoodIndex].PopulationSeed));
@@ -153,6 +130,38 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
             {
             }
         }
+    }
+
+    /// <summary>Every neighborhood map has loaded, in the row-major order Populate generates them in.</summary>
+    public static IReadOnlyList<(int CellX, int CellY)> LoadedNeighborhoods(Map map)
+    {
+        var mapBounds = map.Bounds;
+        var cells = new List<(int CellX, int CellY)>();
+        for (var cellY = Neighborhoods.CellOf(mapBounds.MinY); cellY <= Neighborhoods.CellOf(mapBounds.MaxY - 1); cellY++)
+        {
+            for (var cellX = Neighborhoods.CellOf(mapBounds.MinX); cellX <= Neighborhoods.CellOf(mapBounds.MaxX - 1); cellX++)
+            {
+                if (map.IsNeighborhoodLoaded(cellX, cellY))
+                {
+                    cells.Add((cellX, cellY));
+                }
+            }
+        }
+
+        return cells;
+    }
+
+    /// <summary>Each cell's record, assigned in cells' order if it has none, and its next population seed -- every record assigned before any neighborhood is generated, as Populate does.</summary>
+    public static List<(NeighborhoodRecord Record, int PopulationSeed)> AssignRecords(IEnumerable<(int CellX, int CellY)> cells, NeighborhoodRecords records)
+    {
+        var assigned = new List<(NeighborhoodRecord Record, int PopulationSeed)>();
+        foreach (var (cellX, cellY) in cells)
+        {
+            var neighborhoodRecord = records.GetOrCreate(cellX, cellY);
+            assigned.Add((neighborhoodRecord, neighborhoodRecord.NextPopulationSeed()));
+        }
+
+        return assigned;
     }
 
     /// <summary>Generates one neighborhood on this thread -- its layout, loaded whole, then its population a row at a time -- drawing the record's next population seed.</summary>
@@ -169,12 +178,15 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
         }
     }
 
-    /// <summary>Decides one neighborhood -- its terrain, walls and shrines from record.Seed, its creatures from populationSeed -- without touching the world: safe on a worker thread.</summary>
+    /// <summary>Decides one neighborhood -- its terrain, walls, areas and shrines from record.Seed, its creatures from populationSeed -- without touching the world: safe on a worker thread.</summary>
     /// <remarks>
     /// Reads only the record's seed, the map's fixed shape (Map.CreateLayout) and what this builder
     /// resolved at construction, so the plan doesn't depend on what else was generated first, or on
-    /// which thread made it. The layout is decided whole before the population, so a creature is
-    /// always placed against the walls it will actually stand beside.
+    /// which thread made it. The layout is generated whole, then the neighborhood's fixed area
+    /// placements are stamped over it, before any population, so a creature is always placed against
+    /// the walls it will actually stand beside. Random population and shrines stay out of every cell an
+    /// area defines; the areas' own spawns are a batch of their own, after the shrines and before the
+    /// creatures.
     /// </remarks>
     /// <param name="planningCancellation">Checked once a row: a plan no longer wanted stops early and throws OperationCanceledException.</param>
     public NeighborhoodPlan Plan(Map map, NeighborhoodRecord record, int populationSeed, CancellationToken planningCancellation = default)
@@ -190,44 +202,60 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
             }
         }
 
+        var areas = new AreaStampResult();
+        if (_fixedPlacementsByNeighborhood.TryGetValue((record.CellX, record.CellY), out var fixedPlacements))
+        {
+            foreach (var (placement, area) in fixedPlacements)
+            {
+                _areaStamp.Apply(neighborhoodLayout, AreaInstance.ForFixedPlacement(placement, area, record.Seed), areas);
+            }
+        }
+
         var population = new Population(new MathUtility(new SeededRandom((ulong)(uint)populationSeed)));
-        var spawnRowEnds = new List<int>(neighborhoodLayout.MaxY - neighborhoodLayout.MinY + 1);
-        PlanHealingShrines(population, spawnRowEnds, neighborhoodLayout, record, planningCancellation);
+        var spawnRowEnds = new List<int>(neighborhoodLayout.MaxY - neighborhoodLayout.MinY + 2);
+        PlanHealingShrines(population, spawnRowEnds, neighborhoodLayout, record, areas, planningCancellation);
+
+        var uniqueSpawns = PlanAreaSpawns(population, spawnRowEnds, areas);
 
         for (var row = neighborhoodLayout.MinY; row < neighborhoodLayout.MaxY; row++)
         {
             planningCancellation.ThrowIfCancellationRequested();
             for (var column = neighborhoodLayout.MinX; column < neighborhoodLayout.MaxX; column++)
             {
-                PopulateCell(population, column, row);
+                PopulateCell(population, areas, column, row);
             }
 
             spawnRowEnds.Add(population.Spawns.Count);
         }
 
-        if (record.CellX == StartingCellX && record.CellY == StartingCellY)
-        {
-            BuildFixtureEntities(population);
-            spawnRowEnds.Add(population.Spawns.Count);
-        }
-
-        return new NeighborhoodPlan(neighborhoodLayout, TerrainAuraSources.ByRow(neighborhoodLayout, terrain, auras), population.Spawns, spawnRowEnds);
+        return new NeighborhoodPlan(neighborhoodLayout, TerrainAuraSources.ByRow(neighborhoodLayout, _terrain, _auras), population.Spawns, spawnRowEnds, areas, uniqueSpawns);
     }
 
-    /// <summary>Spawns neighborhoodPlan's shrines and creatures in order, a batch at a time, once its layout is loaded. Main thread only.</summary>
-    /// <remarks>Yields after each batch (a batch of shrines, then a row of creatures) with the number of entities it created, so a caller can spread it over frames. A creature that can't be placed is destroyed rather than left off the map.</remarks>
+    /// <summary>Spawns neighborhoodPlan's shrines, areas' residents and creatures in order, a batch at a time, once its layout is loaded. Main thread only.</summary>
+    /// <remarks>
+    /// Yields after each batch (a batch of shrines, the areas' spawns, then a row of creatures) with the number of
+    /// entities it created, so a caller can spread it over frames. A creature that can't be placed is destroyed rather
+    /// than left off the map. A unique placement asks the roster at its turn: its blueprint if none lives and none was
+    /// killed this session, else its fallback, if any.
+    /// </remarks>
     public IEnumerable<int> Spawn(NeighborhoodPlan neighborhoodPlan)
     {
         var nextSpawnIndex = 0;
         foreach (var spawnRowEnd in neighborhoodPlan.SpawnRowEnds)
         {
-            var livingBefore = entityManager.LivingEntityCount;
+            var livingBefore = _entityManager.LivingEntityCount;
             for (; nextSpawnIndex < spawnRowEnd; nextSpawnIndex++)
             {
-                factory.Spawn(neighborhoodPlan.Spawns[nextSpawnIndex]);
+                if (neighborhoodPlan.UniqueSpawns.TryGetValue(nextSpawnIndex, out var uniqueSpawn))
+                {
+                    AreaSpawner.Spawn(_factory, _uniqueEntities, uniqueSpawn);
+                    continue;
+                }
+
+                _factory.Spawn(neighborhoodPlan.Spawns[nextSpawnIndex]);
             }
 
-            yield return entityManager.LivingEntityCount - livingBefore;
+            yield return _entityManager.LivingEntityCount - livingBefore;
         }
     }
 
@@ -239,34 +267,20 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
         public List<SpawnRequest> Spawns { get; } = [];
     }
 
-    /// <summary>
-    /// Ground: stone floor under a wall where the starting neighborhood's hallway cross runs, randomized
-    /// terrain everywhere else (see PickGroundTerrain). UnderGround: a randomized dirt/lava mixture --
-    /// its own independent roll from Ground's mix, so the two layers don't mirror each other.
-    /// </summary>
+    /// <summary>Ground: randomized terrain (see PickGroundTerrain). UnderGround: a randomized dirt/lava mixture -- its own independent roll from Ground's mix, so the two layers don't mirror each other.</summary>
+    /// <remarks>Every cell is rolled, an area's included, so stamping an area over the layout shifts no other cell's terrain.</remarks>
     private void GenerateLayoutCell(NeighborhoodLayout neighborhoodLayout, MathUtility layoutRolls, int column, int row)
     {
-        if (IsHallwayWall(column, row))
-        {
-            BuildTerrain(neighborhoodLayout, _stoneFloor, column, row, TerrainLayer.Ground);
-            BuildWall(neighborhoodLayout, column, row, MapLayer.Ground);
-        }
-        else
-        {
-            // Rolled even where Holy Ground replaces it, so every other cell keeps the terrain its seed gave it.
-            var rolledGroundTerrain = PickGroundTerrain(layoutRolls);
-            BuildTerrain(neighborhoodLayout, IsHolyGround(column, row) ? _holyGround : rolledGroundTerrain, column, row, TerrainLayer.Ground);
-        }
-
+        BuildTerrain(neighborhoodLayout, PickGroundTerrain(layoutRolls), column, row, TerrainLayer.Ground);
         BuildTerrain(neighborhoodLayout, layoutRolls.Next(0, 20) == 0 ? _lava : _dirt, column, row, TerrainLayer.UnderGround);
     }
 
-    /// <summary>Plans the neighborhood's Healing Shrines: one Ground cell in GroundCellsPerHealingShrine, anywhere but on a wall -- lava included.</summary>
+    /// <summary>Plans the neighborhood's Healing Shrines: one Ground cell in GroundCellsPerHealingShrine, anywhere an area doesn't define -- lava included.</summary>
     /// <remarks>
     /// <para>
     /// Rolled from the neighborhood's layout seed, not its population seed: a shrine is part of the
     /// place, so it is in the same cell on every visit, while the creatures around it are rolled anew.
-    /// Its own sequence, so it shifts no creature's roll.
+    /// Its own sequence, so it shifts no creature's roll; every cell is rolled, an area's included.
     /// </para>
     /// <para>
     /// All of them are spawned before any creature, in batches of HealingShrinesPerSpawnBatch. First,
@@ -276,7 +290,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     /// among the creatures, they touched every page -- 31 MB of pools for 9,000 shrines.
     /// </para>
     /// </remarks>
-    private void PlanHealingShrines(Population population, List<int> spawnRowEnds, NeighborhoodLayout neighborhoodLayout, NeighborhoodRecord record, CancellationToken planningCancellation)
+    private void PlanHealingShrines(Population population, List<int> spawnRowEnds, NeighborhoodLayout neighborhoodLayout, NeighborhoodRecord record, AreaStampResult areas, CancellationToken planningCancellation)
     {
         var shrineRolls = new MathUtility(new SeededRandom((ulong)(uint)(record.Seed ^ HealingShrineSeedSalt)));
         var batchStart = population.Spawns.Count;
@@ -287,7 +301,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
             for (var column = neighborhoodLayout.MinX; column < neighborhoodLayout.MaxX; column++)
             {
                 var isShrineCell = shrineRolls.Next(0, GroundCellsPerHealingShrine) == 0;
-                if (!isShrineCell || IsHallwayWall(column, row))
+                if (!isShrineCell || areas.Covers(column, row, MapLayer.Ground))
                 {
                     continue;
                 }
@@ -307,40 +321,47 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
         }
     }
 
-    private void PopulateCell(Population population, int column, int row)
+    /// <summary>The areas' spawns as one batch, after the shrines and before the creatures, so an area's residents take their cells first; returns those of unique placements by their index.</summary>
+    private static Dictionary<int, AreaPlannedSpawn> PlanAreaSpawns(Population population, List<int> spawnRowEnds, AreaStampResult areas)
     {
-        if (!IsHallwayWall(column, row) && population.Rolls.Next(0, 100) < GroundPopulationPercent)
+        var uniqueSpawns = new Dictionary<int, AreaPlannedSpawn>();
+        if (areas.Spawns.Count == 0)
+        {
+            return uniqueSpawns;
+        }
+
+        foreach (var areaSpawn in areas.Spawns)
+        {
+            if (areaSpawn.UniqueBlueprint is not null)
+            {
+                uniqueSpawns[population.Spawns.Count] = areaSpawn;
+            }
+
+            population.Spawns.Add(areaSpawn.Request);
+        }
+
+        spawnRowEnds.Add(population.Spawns.Count);
+        return uniqueSpawns;
+    }
+
+    /// <summary>Each layer's population roll, skipped where an area defines the cell on that layer.</summary>
+    private void PopulateCell(Population population, AreaStampResult areas, int column, int row)
+    {
+        if (!areas.Covers(column, row, MapLayer.Ground) && population.Rolls.Next(0, 100) < GroundPopulationPercent)
         {
             PopulateGroundEntity(population, column, row);
         }
 
-        if (population.Rolls.Next(0, 100) < UnderGroundGhostPercent)
+        if (!areas.Covers(column, row, MapLayer.UnderGround) && population.Rolls.Next(0, 100) < UnderGroundGhostPercent)
         {
             PopulateUnderGroundGhost(population, column, row);
         }
 
-        // Flying layer: no walls of its own, so every cell is eligible.
-        if (population.Rolls.Next(0, 100) < FlyingFairyPercent)
+        // Flying layer: no walls of its own, so every cell an area leaves alone is eligible.
+        if (!areas.Covers(column, row, MapLayer.Flying) && population.Rolls.Next(0, 100) < FlyingFairyPercent)
         {
             PopulateFlyingFairy(population, column, row);
         }
-    }
-
-    private static bool IsHolyGround(int column, int row) =>
-        column == Neighborhoods.OriginOf(StartingCellX) + HolyGroundColumn && row == Neighborhoods.OriginOf(StartingCellY) + HolyGroundRow;
-
-    /// <summary>The starting neighborhood's hallway cross: wall columns 10 and 16 and wall rows 10 and 16, open where they meet.</summary>
-    private static bool IsHallwayWall(int column, int row)
-    {
-        if (Neighborhoods.CellOf(column) != StartingCellX || Neighborhoods.CellOf(row) != StartingCellY)
-        {
-            return false;
-        }
-
-        var x = column - Neighborhoods.OriginOf(StartingCellX);
-        var y = row - Neighborhoods.OriginOf(StartingCellY);
-        return (x is 10 or 16 && (y < 10 || y > 16)) ||
-            (y is 10 or 16 && (x < 10 || x > 16));
     }
 
     /// <summary>
@@ -407,7 +428,7 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
 
     /// <summary>Rolls one creature at the given size/layer -- the shared path for every PopulateEntity roll outcome. A small percentage also become Crawlers (see CrawlerPercent).</summary>
     /// <remarks>Everything the spawn itself involves -- the tier-first entity id, the build or the skeleton, the placement, the spawn move and the crawler number -- is EntityFactory's, when Spawn applies the plan; what is decided here is what this map's own population rules decide: the blueprint, the layer, the footprint, the seed and the crawler roll. A creature that won't fit where it was rolled still used its rolls, so it doesn't shift every later roll in this neighborhood.</remarks>
-    private void BuildRaceEntity(Population population, ushort blueprintId, int column, int row, Vector2Byte size, MapLayer mapLayer)
+    private static void BuildRaceEntity(Population population, ushort blueprintId, int column, int row, Vector2Byte size, MapLayer mapLayer)
     {
         var seed = population.Rolls.NextSeed();
         var isCrawler = population.Rolls.Next(0, 100) < CrawlerPercent;
@@ -422,10 +443,6 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
     private static void BuildTerrain(NeighborhoodLayout neighborhoodLayout, ushort terrainTypeId, int column, int row, TerrainLayer terrainLayer) =>
         neighborhoodLayout.SetTerrain(column, row, terrainLayer, new TerrainCell(terrainTypeId));
 
-    /// <summary>A wall is a structure cell, not an entity -- the same flyweight as terrain, on its own MapLayer store.</summary>
-    private void BuildWall(NeighborhoodLayout neighborhoodLayout, int column, int row, MapLayer mapLayer) =>
-        neighborhoodLayout.SetStructure(new Vector3Int(column, row, (int)mapLayer), new TerrainCell(_stoneWall));
-
     /// <summary>Lava 1%, dirt 39%, grass 60% -- a 0-99 roll.</summary>
     private ushort PickGroundTerrain(MathUtility layoutRolls)
     {
@@ -437,81 +454,4 @@ public sealed class TestMapBuilder(EntityManager entityManager, EntityFactory fa
             _ => _grass,
         };
     }
-
-    /// <summary>
-    /// Standalone demonstration entities, placed individually rather than through the main
-    /// population loop above (PopulateEntity). These specifically exercise capabilities
-    /// nothing in the main loop touches: multiple components of the same type on one entity
-    /// (MultiComponentPool's whole reason for existing), removing a component after blueprint
-    /// construction, and text long enough to actually word-wrap/hyphenate when selected.
-    /// </summary>
-    /// <remarks>
-    /// Each one is a blueprint, spawned the same way the bulk population is (see BuildRaceEntity):
-    /// what used to be a hand-built entity with components tweaked afterwards is now a race, a class and
-    /// a modifier part, so a fixture is reproducible from its spawn record like everything else.
-    /// </remarks>
-    private void BuildFixtureEntities(Population population)
-    {
-        // Long description: visually exercises SelectionWindowContent's word-wrap/hyphenation when
-        // selected -- the algorithm itself is unit tested, but nothing else on the map has a
-        // description long enough to actually wrap or hyphenate.
-        SpawnFixture(population, _longDescriptionGoblin, column: 2, row: 2, new Vector2Byte(2, 2));
-
-        // Huge (3x3) goblin engineer, placed standalone rather than through the population rotation.
-        SpawnFixture(population, _goblinEngineer, column: 5, row: 5, new Vector2Byte(3, 3));
-
-        // Stationary Fairy engineer: race+class composed, then movement taken away so it doesn't
-        // wander despite Fairy's own baseline movement mode.
-        SpawnFixture(population, _stationaryFairyEngineer, column: 1, row: 1);
-
-        // Ordinary moving Fairy, for contrast against the stationary one above.
-        SpawnFixture(population, _fairy, column: 17, row: 16);
-
-        // Two races in one entity's race slots (Goblin base with Fairy layered on top), stationary
-        // since a grounded-goblin/flying-fairy hybrid has no single coherent movement mode.
-        SpawnFixture(population, _multiRace, column: 17, row: 9);
-
-        // Two classes in one entity's class slots (Engineer and Tank both applied to the same Goblin).
-        SpawnFixture(population, _multiClass, column: 11, row: 2);
-
-        // Tiny-entity occupancy fixtures: 4 partially fill MapWindow's 3x3 tiny grid, 11
-        // exercise its 9-entity cap (the extra 2 are built but never drawn).
-        SpawnTinyGoblins(population, count: 4, column: 3, row: 5);
-        SpawnTinyGoblins(population, count: 11, column: 7, row: 5);
-
-        // Phasing fairy, deliberately co-located with the ordinary moving Fairy above (17,16)
-        // -- both are Flying layer, so the Phasing entity overlaps a Blocking one at the same
-        // layer, the scenario Occupancy exists to support, rather than relying on a
-        // coincidental overlap elsewhere.
-        SpawnFixture(population, _phasingFairy, column: 17, row: 16);
-
-        // One of each shop near the player's own TEMPORARY spawn point (SpawnColumn, SpawnRow --
-        // see FloorBuilder.PlayerSpawnOrigin); column offsets keep both clear of the column-16 wall
-        // corridor and of each other.
-        SpawnFixture(population, _generalShop, column: 21, row: SpawnRow);
-        SpawnFixture(population, _potionShop, column: 24, row: SpawnRow);
-
-        // A composite of a composite: GoblinEngineer plus Boss. Last, so adding it didn't shift the seeds the fixtures above draw.
-        SpawnFixture(population, _goblinForeman, column: 13, row: 5);
-
-        // A healing shrine in the corridor east of the player's spawn: its aura's edge reaches the spawn.
-        SpawnFixture(population, _healingShrine, column: 19, row: 11);
-    }
-
-    /// <inheritdoc cref="BuildFixtureEntities"/>
-    private void SpawnTinyGoblins(Population population, int count, int column, int row)
-    {
-        for (var i = 0; i < count; i++)
-        {
-            SpawnFixture(population, _tinyGoblin, column, row);
-        }
-    }
-
-    /// <summary>Plans one fixture at column/row counted from the starting neighborhood's origin, on its blueprint's own layer, at size or its blueprint's own footprint.</summary>
-    private void SpawnFixture(Population population, ushort blueprintId, int column, int row, Vector2Byte? size = null) =>
-        population.Spawns.Add(new SpawnRequest(blueprintId, Neighborhoods.OriginOf(StartingCellX) + column, Neighborhoods.OriginOf(StartingCellY) + row)
-        {
-            Size = size,
-            Seed = population.Rolls.NextSeed(),
-        });
 }

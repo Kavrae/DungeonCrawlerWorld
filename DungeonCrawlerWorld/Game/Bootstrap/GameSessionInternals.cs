@@ -1,4 +1,5 @@
 using Engine.ECS.Systems;
+using Game.Areas;
 using Game.Modules.Auras;
 using Game.Modules.ProcessingTier;
 using Game.Spawning;
@@ -15,7 +16,8 @@ public sealed class GameSessionInternals(
     ProcessingTierResolver processingTierResolver,
     LocalTierRoster localTierRoster,
     FrameEventBuffer<EntityMovedEvent> movedEntities,
-    AuraField auraField)
+    AuraField auraField,
+    UniqueEntityRoster uniqueEntities)
 {
     /// <summary>The session's one spawn path.</summary>
     public EntityFactory Factory { get; } = factory;
@@ -36,4 +38,7 @@ public sealed class GameSessionInternals(
 
     /// <summary>Where every aura reaches -- see GameModuleContext.AuraField. Bootstrap builds it once the floor is populated, so its terrain scan is a startup step rather than part of the first frame.</summary>
     public AuraField AuraField { get; } = auraField;
+
+    /// <summary>Which unique blueprints live or were killed this session -- see GameModuleContext.UniqueEntities.</summary>
+    public UniqueEntityRoster UniqueEntities { get; } = uniqueEntities;
 }

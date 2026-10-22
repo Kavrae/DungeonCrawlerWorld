@@ -4,6 +4,7 @@ using Engine.ECS.Context;
 using Engine.Math;
 using Engine.Modules;
 using Engine.Settings;
+using Game.Areas;
 using Game.Modules;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
@@ -33,6 +34,7 @@ public static class GameBuildPass
     /// <param name="mathUtility">The random sequence this build's modules draw from; a build other than the real session passes its own.</param>
     /// <param name="crawlerNumbers">The numbers a crawler draws when first built; null for a build that never builds one.</param>
     /// <param name="runtimeSpawnSeed">Seeds the factory's own sequence for spawns that name no seed.</param>
+    /// <param name="collectsContentFailures">A tool's build: content that fails is left out and reported in GameModuleContext.ContentFailures instead of stopping the build.</param>
     public static GameBuildPassResult Run(
         IReadOnlyList<ModuleFactory<GameModuleContext>> builtInModules,
         IReadOnlyList<ModuleFactory<GameModuleContext>> mods,
@@ -42,9 +44,10 @@ public static class GameBuildPass
         int initialEntityCapacity,
         int initialComponentCapacity,
         UniqueNumberAllocator? crawlerNumbers = null,
-        ulong runtimeSpawnSeed = 0)
+        ulong runtimeSpawnSeed = 0,
+        bool collectsContentFailures = false)
     {
-        var build = BuildModules(builtInModules, mods, map, mathUtility, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, runtimeSpawnSeed);
+        var build = BuildModules(builtInModules, mods, map, mathUtility, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, runtimeSpawnSeed, collectsContentFailures: collectsContentFailures);
         var ecsContext = build.EcsContext;
         var context = build.Context;
         var componentManager = ecsContext.ComponentManager;
@@ -75,7 +78,8 @@ public static class GameBuildPass
         int initialComponentCapacity,
         UniqueNumberAllocator? crawlerNumbers = null,
         ulong runtimeSpawnSeed = 0,
-        EcsBuildPurpose purpose = EcsBuildPurpose.Session)
+        EcsBuildPurpose purpose = EcsBuildPurpose.Session,
+        bool collectsContentFailures = false)
     {
         World.World? world = null;
 
@@ -93,7 +97,7 @@ public static class GameBuildPass
             CreateContext = services =>
             {
                 world = CreateWorld(services, map);
-                return new GameModuleContext(services, world, mathUtility, crawlerNumbers, runtimeSpawnSeed);
+                return new GameModuleContext(services, world, mathUtility, crawlerNumbers, runtimeSpawnSeed, collectsContentFailures);
             },
             AfterConfigure = CheckConfiguredContent,
             AfterBehavior = (context, ecsContext) => WireBuild(context, ecsContext, world!),
@@ -114,7 +118,7 @@ public static class GameBuildPass
             new TerrainRegistry());
     }
 
-    /// <summary>Resolves the blueprint definitions the modules registered, registers the auras their content names, and checks that content's tags are declared, its toggles can be switched off and its melee is Ground-only.</summary>
+    /// <summary>Resolves the blueprint definitions the modules registered, registers the auras their content names, and checks that content's tags are declared, its toggles can be switched off, its melee is Ground-only and its areas are sound.</summary>
     private static void CheckConfiguredContent(GameModuleContext context)
     {
         // Resolved now, so a broken include fails the load (or a mod's dry run) rather than its first spawn.
@@ -127,6 +131,7 @@ public static class GameBuildPass
         ContentTagValidation.EnsureDeclared(context);
         ToggleContentValidation.EnsureValid(context);
         TargetingContentValidation.EnsureValid(context);
+        AreaContentValidation.EnsureValid(context);
     }
 
     /// <summary>The game's own systems and handlers, once every module's are registered.</summary>
@@ -157,7 +162,7 @@ public static class GameBuildPass
         ecsContext.Gauges.Register("Auras", "TotalsBytes", GaugeKind.Level, () => auraField.TotalsAllocatedBytes);
     }
 
-    /// <summary>Whatever destroys an entity, the state Game keeps about it outside the component pools lets go: its map footprint and its tier bookkeeping.</summary>
+    /// <summary>Whatever destroys an entity, the state Game keeps about it outside the component pools lets go: its map footprint, its tier bookkeeping and, for a unique, its place in the roster (which also hears of its death).</summary>
     /// <remarks>
     /// Registered after every module's handlers -- the factory's, which forgets a skeleton as it is destroyed, and Auras',
     /// whose source removal reads where the source last was -- so the footprint goes last and each of these sees an
@@ -167,7 +172,9 @@ public static class GameBuildPass
     {
         var transforms = ecsContext.ComponentManager.GetDirectPool<TransformComponent>();
         var processingTierResolver = context.ProcessingTierResolver;
+        var uniqueEntities = context.UniqueEntities;
 
+        ecsContext.EventBus.Subscribe<EntityDiedEvent>(died => uniqueEntities.EntityDied(died.EntityId));
         ecsContext.EntityManager.EntityDestroying += entityId =>
         {
             if (transforms.Has(entityId))
@@ -176,6 +183,7 @@ public static class GameBuildPass
             }
 
             processingTierResolver.Forget(entityId);
+            uniqueEntities.EntityDestroying(entityId);
         };
     }
 

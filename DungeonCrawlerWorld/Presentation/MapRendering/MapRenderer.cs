@@ -34,7 +34,7 @@ namespace Presentation.MapRendering;
 /// walk, and the glow over all of it.
 /// </para>
 /// </remarks>
-public sealed class MapRenderer
+public sealed class MapRenderer : IDisposable
 {
     private const int MaxTinyEntitiesDrawn = 9;
     private const int TinyGridDimension = 3;
@@ -146,6 +146,15 @@ public sealed class MapRenderer
 
         _drawTerrainIntoCache = DrawTerrainIntoCache;
         _drawGlowOverlayIntoCache = DrawGlowOverlayIntoCache;
+    }
+
+    /// <summary>Releases the cached images' render targets -- a host that replaces its renderer (a preview showing another build) disposes the old one.</summary>
+    public void Dispose()
+    {
+        _terrainCache?.Dispose();
+        _glowCache?.Dispose();
+        _terrainCache = null;
+        _glowCache = null;
     }
 
     /// <summary>Drops both cached images: the terrain or structures they were drawn from changed.</summary>

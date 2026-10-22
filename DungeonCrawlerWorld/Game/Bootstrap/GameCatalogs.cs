@@ -1,5 +1,6 @@
 using Engine.Content;
 using Engine.Tags;
+using Game.Areas;
 using Game.Blueprints;
 using Game.Modules;
 using Game.Modules.Achievements;
@@ -36,6 +37,9 @@ public sealed class GameCatalogs(GameModuleContext context)
 
     /// <summary>Every content codec this session's modules registered -- what a manifest is read and written through.</summary>
     public ContentTypeRegistry ContentTypes { get; } = context.ContentTypes;
+
+    /// <summary>Every area, palette and fixed placement, and where each was read from.</summary>
+    public AreaCatalog Areas { get; } = context.Areas;
 
     /// <summary>Every blueprint definition, by session-local id and by Guid.</summary>
     public BlueprintRegistry Definitions { get; } = context.Definitions;

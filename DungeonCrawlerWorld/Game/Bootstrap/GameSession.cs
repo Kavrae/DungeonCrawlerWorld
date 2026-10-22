@@ -15,9 +15,12 @@ namespace Game.Bootstrap;
 /// </remarks>
 public sealed class GameSession
 {
+    private readonly Modules.GameModuleContext _context;
+
     public GameSession(GameBuildPassResult buildPass, IReadOnlyList<ModuleFailure> moduleFailures, SpawnRecordRebuilder spawnRecordRebuilder, EntityTeleporter teleporter)
     {
         var context = buildPass.Context;
+        _context = context;
 
         EcsContext = buildPass.EcsContext;
         World = buildPass.World;
@@ -25,7 +28,7 @@ public sealed class GameSession
         SimulationClock = context.SimulationClock;
         Views = new GameViews(buildPass.World, context, buildPass.LocalTierRoster);
         Commands = new GameCommands(buildPass.World, context);
-        Internals = new GameSessionInternals(buildPass.Factory, spawnRecordRebuilder, teleporter, context.ProcessingTierResolver, buildPass.LocalTierRoster, context.MovedEntities, context.AuraField);
+        Internals = new GameSessionInternals(buildPass.Factory, spawnRecordRebuilder, teleporter, context.ProcessingTierResolver, buildPass.LocalTierRoster, context.MovedEntities, context.AuraField, context.UniqueEntities);
         ModuleFailures = moduleFailures;
         Settings = buildPass.Declarations.Settings;
         SettingsFailures = buildPass.Declarations.SettingsFailures;
@@ -51,6 +54,9 @@ public sealed class GameSession
 
     /// <summary>Every setting the session's modules declared, resolved.</summary>
     public SettingValues Settings { get; }
+
+    /// <summary>What a build made with collectsContentFailures left out of its content, and why; empty otherwise.</summary>
+    public IReadOnlyList<Engine.Content.ContentFailure> ContentFailures => _context.ContentFailures;
 
     /// <summary>Every setting override that was rejected.</summary>
     public IReadOnlyList<SettingsFailure> SettingsFailures { get; }

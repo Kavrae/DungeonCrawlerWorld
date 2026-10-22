@@ -107,7 +107,7 @@ Each is its own plan; numbering is the order. Arrows are hard dependencies.
    reuses Item Details and `TargetShapePreviewElement`/`TargetShapePreviewGeometry` as they are. Pairs with
    the data-driven actions and items plan (`PLAN-data-driven-actions-and-items.md`), which supplies the
    content format it edits. The smaller tool, so it proves the split first.
-6. **Map tab** (→3, →5). Planned 2026-10-18 in `PLAN-map-areas-and-map-tab.md`, **read-only**: named map areas
+6. **Map tab** (→3, →5). Planned 2026-10-18, **landed 2026-10-22** (IMPLEMENTATION-NOTES "Map areas, fixed placements and the Workshop Map tab"), **read-only**: named map areas
    (rows of symbols plus a legend, explicit entity placements, markers), palettes and fixed placements as content,
    stamped into `TestMapBuilder.Plan` as instances; a 32x32 starting area for testing content is the first area; the
    tab previews areas and a generated neighborhood through real builds; a new performance baseline across all metrics

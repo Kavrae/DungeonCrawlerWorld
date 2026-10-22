@@ -33,14 +33,15 @@ public sealed class ContentWriter
 
     /// <summary>One value written as a single JSON object (one manifest line when compact), through T's registered codec.</summary>
     /// <param name="envelope">Writes table-level fields (a disabled record's flag and replacement) after the value's own; null for none.</param>
-    public static byte[] WriteRecord<T>(ContentTypeRegistry types, T value, bool indented = false, Action<Utf8JsonWriter>? envelope = null)
+    /// <param name="header">Writes document-level fields (a one-record file's format and table) before the value's own; null for none.</param>
+    public static byte[] WriteRecord<T>(ContentTypeRegistry types, T value, bool indented = false, Action<Utf8JsonWriter>? envelope = null, Action<Utf8JsonWriter>? header = null)
         where T : notnull
     {
         var buffer = new ArrayBufferWriter<byte>();
         using (var json = new Utf8JsonWriter(buffer, indented ? IndentedOptions : CompactOptions))
         {
             var writer = new ContentWriter(json, types);
-            writer.WriteObject(types.GetValueCodec(typeof(T)), value, discriminator: null, envelope);
+            writer.WriteObject(types.GetValueCodec(typeof(T)), value, discriminator: null, envelope, header);
         }
 
         return buffer.WrittenSpan.ToArray();
@@ -257,15 +258,34 @@ public sealed class ContentWriter
         _json.WriteEndArray();
     }
 
+    /// <summary>A list of strings, in order; omitted when empty.</summary>
+    public void StringList(string key, IReadOnlyList<string> values)
+    {
+        CheckKey(key);
+        if (values.Count == 0)
+        {
+            return;
+        }
+
+        _json.WriteStartArray(key);
+        foreach (var value in values)
+        {
+            _json.WriteStringValue(value);
+        }
+
+        _json.WriteEndArray();
+    }
+
     private void WritePolymorphicValue(Type baseType, object value)
     {
         var (name, codec) = _types.GetMember(baseType, value.GetType());
         WriteObject(codec, value, name, envelope: null);
     }
 
-    private void WriteObject(IContentCodec codec, object value, string? discriminator, Action<Utf8JsonWriter>? envelope)
+    private void WriteObject(IContentCodec codec, object value, string? discriminator, Action<Utf8JsonWriter>? envelope, Action<Utf8JsonWriter>? header = null)
     {
         _json.WriteStartObject();
+        header?.Invoke(_json);
         if (discriminator is not null)
         {
             _json.WriteString(DiscriminatorKey, discriminator);

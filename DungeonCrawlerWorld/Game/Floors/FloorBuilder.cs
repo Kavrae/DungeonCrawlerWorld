@@ -2,6 +2,7 @@ using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Engine.Tiles;
+using Game.Areas;
 using Game.Blueprints;
 using Game.Blueprints.Composites;
 using Game.Blueprints.NPCs.Generic;
@@ -51,17 +52,35 @@ public static class FloorBuilder
         }
 
         var window = Game.World.Map.Unbounded(LayerCount);
-        for (var cellY = -1; cellY <= 1; cellY++)
+        foreach (var (cellX, cellY) in StartingWindowNeighborhoods())
         {
-            for (var cellX = -1; cellX <= 1; cellX++)
-            {
-                window.LoadNeighborhood(cellX, cellY);
-            }
+            window.LoadNeighborhood(cellX, cellY);
         }
 
         window.CenterLookupOn(0, 0);
         return window;
     }
+
+    /// <summary>The neighborhoods the default map starts with loaded -- the 3x3 around (0, 0) -- in the row-major order Populate generates them in.</summary>
+    public static IReadOnlyList<(int CellX, int CellY)> StartingWindowNeighborhoods()
+    {
+        var cells = new List<(int CellX, int CellY)>(DefaultNeighborhoodsPerSide * DefaultNeighborhoodsPerSide);
+        var reach = DefaultNeighborhoodsPerSide / 2;
+        for (var cellY = -reach; cellY <= reach; cellY++)
+        {
+            for (var cellX = -reach; cellX <= reach; cellX++)
+            {
+                cells.Add((cellX, cellY));
+            }
+        }
+
+        return cells;
+    }
+
+    /// <summary>The record and first population seed each starting-window neighborhood gets in a session seeded with randomSeed, exactly as the session assigns them.</summary>
+    /// <remarks>A session draws its records from its own sequence before anything else draws from it (WorldSessionBootstrapper), so these are the game's own -- what a tool previews a seeded world's neighborhood from.</remarks>
+    public static IReadOnlyList<(NeighborhoodRecord Record, int PopulationSeed)> StartingNeighborhoodRecords(int randomSeed) =>
+        TestMapBuilder.AssignRecords(StartingWindowNeighborhoods(), new NeighborhoodRecords(new MathUtility(new SeededRandom((ulong)(uint)randomSeed))));
 
     /// <summary>Fills the floor's loaded neighborhoods: terrain, walls and everything spawned on them.</summary>
     /// <remarks>The tier resolver the factory was built with must already have its reference position set to <see cref="PlayerSpawnOrigin"/>, so every entity is born with its processing tier as its first component instead of being tiered and then migrated.</remarks>
@@ -70,8 +89,10 @@ public static class FloorBuilder
     /// <param name="definitions">The session's blueprints -- population spawns them.</param>
     /// <param name="factory">The one spawn path (see EntityFactory), which carries the tier resolver, the skeletons, the move buffer and the crawler numbers population used to take one by one.</param>
     /// <param name="records">The session's neighborhood records: each neighborhood the map covers is assigned one if it has none, and generated from it.</param>
-    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, NeighborhoodRecords records, EntityFactory factory, Terrain.TerrainRegistry terrain, Modules.Auras.AuraCatalog auras, Blueprints.BlueprintRegistry definitions) =>
-        new TestMapBuilder(ecsContext.EntityManager, factory, terrain, auras, definitions).Populate(world, records);
+    /// <param name="areas">The session's areas, stamped where their fixed placements put them.</param>
+    /// <param name="uniqueEntities">Which unique blueprints may still be spawned.</param>
+    public static void PopulateFloor(Game.World.World world, EcsContext ecsContext, NeighborhoodRecords records, EntityFactory factory, Terrain.TerrainRegistry terrain, Modules.Auras.AuraCatalog auras, Blueprints.BlueprintRegistry definitions, AreaCatalog areas, UniqueEntityRoster uniqueEntities) =>
+        new TestMapBuilder(ecsContext.EntityManager, factory, terrain, auras, definitions, areas, uniqueEntities).Populate(world, records);
 
     /// <summary>
     /// Where the player is aimed at spawning -- the actual cell is the nearest free Ground cell to
@@ -81,15 +102,12 @@ public static class FloorBuilder
     /// first update treats that as an ordinary player move from here to there and walks the Local
     /// boundary, so the small difference reconciles itself.
     /// </summary>
-    /// <remarks>
-    /// In TestMapBuilder's starting neighborhood, inside the gap its hallway cross leaves in its wall
-    /// corridors.
-    /// TEMPORARY: in the corridor gap rather than at the neighborhood's centre, so the Wall sprite is
-    /// visible on spawn and the walk west to the neighborhood border (17 tiles) is unobstructed, which
-    /// is what makes a tier crossing testable by hand. Revert once neither is needed.
-    /// </remarks>
-    public static Vector3Int PlayerSpawnOrigin() =>
-        new(Game.World.Neighborhoods.OriginOf(TestMapBuilder.StartingCellX) + TestMapBuilder.SpawnColumn, Game.World.Neighborhoods.OriginOf(TestMapBuilder.StartingCellY) + TestMapBuilder.SpawnRow, (int)MapLayer.Ground);
+    /// <remarks>The PlayerSpawn marker of the fixed placements' areas: the starting area's, in the gap its hallway cross leaves in its wall corridors.</remarks>
+    /// <exception cref="InvalidOperationException">No placed area holds a PlayerSpawn marker.</exception>
+    public static Vector3Int PlayerSpawnOrigin(AreaCatalog areas) =>
+        areas.TryFindPlayerSpawn(out var position)
+            ? position
+            : throw new InvalidOperationException($"No placed area holds a {nameof(AreaMarkerKind.PlayerSpawn)} marker.");
 
     // TEMPORARY test seeding -- exercises Poison until a real in-game source exists. Remove
     // once one does. 10 applications of a 5-tick duration each: since ApplyStack takes the
@@ -145,13 +163,14 @@ public static class FloorBuilder
     /// below (FindFreeGroundCellNear) reads live map occupancy, so it genuinely needs the floor
     /// already populated, not just the id already minted.
     /// </remarks>
+    /// <param name="spawnOrigin">Where the player is aimed at spawning -- see PlayerSpawnOrigin.</param>
     /// <param name="tierResolver">When supplied, the player is pinned Local before its blueprint is built, so every tiered pool it joins sees Local from the start and the player is never recomputed afterwards -- including while off the map. Optional for the same reason as PopulateFloor's: ProcessingTierSystem pins the player on its first update if nothing did here.</param>
     /// <param name="factory">The one spawn path (see EntityFactory) -- the player is a blueprint and a seed like every other entity, so it too carries a spawn record.</param>
-    public static void CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, EntityFactory factory, BlueprintRegistry definitions, int entityId, ProcessingTierResolver? tierResolver = null)
+    public static void CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, EntityFactory factory, BlueprintRegistry definitions, int entityId, Vector3Int spawnOrigin, ProcessingTierResolver? tierResolver = null)
     {
         tierResolver?.PinLocalAndNotify(entityId);
 
-        var spawnPosition = FindFreeGroundCellNear(world, PlayerSpawnOrigin());
+        var spawnPosition = FindFreeGroundCellNear(world, spawnOrigin);
         factory.Spawn(SpawnRequest.At(definitions.GetId(Player.Id), spawnPosition) with { Seed = mathUtility.NextSeed(), Crawler = true, ReservedEntityId = entityId });
 
         for (var i = 0; i < TestPoisonStackCount; i++)

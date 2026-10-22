@@ -217,7 +217,7 @@ public sealed class SpawnRecordRebuilderTests
         var result = Bootstrap(new Map(new Vector3Int(60, 60, 3)), new UniqueNumberAllocator(1, 1, 24));
         var world = result.World;
         var ecs = result.EcsContext;
-        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(mathUtility), result.Internals.Factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions);
+        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(mathUtility), result.Internals.Factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);
 
         var spawnRecords = ecs.ComponentManager.GetDirectPool<SpawnRecordComponent>();
         var checkedCount = 0;

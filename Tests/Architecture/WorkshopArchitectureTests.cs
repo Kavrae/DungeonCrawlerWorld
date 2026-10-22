@@ -7,8 +7,8 @@ public sealed class WorkshopArchitectureTests
     private static readonly string[] WorkshopProjectFiles =
     [
         Path.Combine("Cadence", "Workshop", "Workshop.csproj"),
-        Path.Combine("DungeonCrawlerWorld", "Workshop", "DungeonCrawlerWorld.Workshop.csproj"),
-        Path.Combine("DungeonCrawlerWorld", "Builders", "Builders.csproj"),
+        Path.Combine("DungeonCrawlerWorld", "Workshop", "App", "DungeonCrawlerWorld.Workshop.csproj"),
+        Path.Combine("DungeonCrawlerWorld", "Workshop", "Builders", "Builders.csproj"),
         Path.Combine("Workshop.Tests", "Workshop.Tests.csproj"),
     ];
 

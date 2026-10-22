@@ -25,7 +25,7 @@ internal static class TestAdminTools
             ecsContext.EventBus,
             internals.ProcessingTierResolver,
             new NeighborhoodRecords(mathUtility),
-            new TestMapBuilder(ecsContext.EntityManager, internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Auras, gameSession.Catalogs.Definitions),
+            new TestMapBuilder(ecsContext.EntityManager, internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Auras, gameSession.Catalogs.Definitions, gameSession.Catalogs.Areas, internals.UniqueEntities),
             internals.Skeletons);
 
         return new AdminTools(gameSession, neighborhoodStreamer);

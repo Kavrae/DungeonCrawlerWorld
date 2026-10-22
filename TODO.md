@@ -91,7 +91,7 @@ reading" can go.
 
 #### Workshop: edit map areas
 
-The Map tab is read-only (`PLAN-map-areas-and-map-tab.md`, child 6 of the epic): areas, palettes and fixed
+The Map tab is read-only (child 6 of the epic, landed; IMPLEMENTATION-NOTES "Map areas, fixed placements and the Workshop Map tab"): areas, palettes and fixed
 placements are authored as text files until this lands. This is the edit half, on "Workshop: edit Items"'s machinery
 (document, inspector, drafts and master, Publish, disabling, undo/redo), writing the same files -- one area per file,
 rows one per line -- so a hand-written area and a saved one look the same.
@@ -510,6 +510,32 @@ The IDE's Error List shows severity, description, table, record, field and layer
 
 ### High Priority
 
+#### Improved deterministic random -- world generation independent of player actions
+
+A seeded session should generate the same world whatever the player does. It doesn't yet: a
+neighborhood's seed is rolled from the session's one `MathUtility` (`WorldSessionBootstrapper`) the
+first time its coordinate is needed (`NeighborhoodRecords.GetOrCreate`), and that same stream is drawn
+by combat, movement, poison, burning, NPC behaviour, body-part selection and more. So which layout a
+coordinate gets depends on the route the player walked and on every roll made before they got there --
+two runs on one seed that fight one extra goblin get different neighborhoods.
+- **Derive, don't draw:** a neighborhood's seed is a pure function of the session seed and its
+  coordinate (and floor, for multi-floor), mixed the way `NeighborhoodRecord.Mix` and `AreaSeeds`
+  already do -- never the next value of a shared sequence. The same for anything else world
+  generation picks: the template combination and placement in "Real map generation" (below), area pool
+  picks, shrine and unique-entity placement.
+- **One stream per purpose:** split the session's `MathUtility` into independent streams, each seeded
+  from the session seed and a fixed salt (world generation, population, combat, movement, NPC
+  behaviour, loot, the factory's runtime spawn seeds), so a roll in one never shifts another. Find
+  every consumer of the shared one and give it the stream it belongs to; nothing in world generation
+  may reach the gameplay streams.
+- **Population:** a neighborhood's population seed is mixed from its record's seed and its visit count,
+  which is the player's doing by design (a return brings new creatures). Decide whether that stays, or
+  whether a visit's seed comes from something the player can't steer (the visit index alone is fine;
+  the frame it happened on is not).
+- **Guard it:** a test that generates the same neighborhoods on one seed after different amounts of
+  unrelated gameplay rolls, and after visiting coordinates in a different order, and gets identical
+  layouts and populations. Seeded worlds will change once, so re-record benchmark baselines.
+
 #### Attribute effects to the action or item that applied them
 
 An effect from an action or item is credited to the entity that used it and nothing else
@@ -640,7 +666,7 @@ the topmost/bottommost picks, and that a burning part keeps its id.
 
 #### Real map generation -- neighborhood templates, replacing TestMapBuilder
 
-Authored pieces come from `PLAN-map-areas-and-map-tab.md` (map areas, palettes and fixed placements as content, stamped into the plan) and "Area pools" (Medium); the generator asks pools for areas by tag instead of their eligibility, and joins areas through "Area entry points" (Medium).
+Authored pieces come from map areas (areas, palettes and fixed placements as content, stamped into the plan; IMPLEMENTATION-NOTES "Map areas, fixed placements and the Workshop Map tab") and "Area pools" (Medium); the generator asks pools for areas by tag instead of their eligibility, and joins areas through "Area entry points" (Medium).
 
 The sliding window of 1024x1024 neighborhoods is in place: `NeighborhoodStreamer` generates each neighborhood on demand from its own
 `NeighborhoodRecord` seed through `TestMapBuilder.GenerateNeighborhood`, which is still a stand-in --
@@ -951,7 +977,7 @@ a "blocks sight" and "blocks light" flag on `TerrainDefinition` (beside `BlocksM
 
 #### Area pools
 
-`PLAN-map-areas-and-map-tab.md` places areas only at fixed spots. A pool offers areas for generation to pick from: a
+Map areas (IMPLEMENTATION-NOTES "Map areas, fixed placements and the Workshop Map tab") are placed only at fixed spots. A pool offers areas for generation to pick from: a
 pre-made boss room in the middle of an otherwise random neighborhood, or a starting area for a new game.
 - **Many to many:** a pool holds many areas, and an area can belong to many pools (the same goblin den in "Goblin
   dens" and "Floor 1 rooms"). A pool lists its members by area Guid with a weight; nothing on the area names its pools.
@@ -1000,7 +1026,7 @@ The first time the player enters a Training Guild building, its interior is pick
 Training Guild building entered after that leads to that same guild. To the player the door teleports them to one
 place; mechanically every entrance reuses one area instance's map data, so an item left in the guild is there when
 they come in through a door elsewhere.
-- **Already in place** (`PLAN-map-areas-and-map-tab.md`, "Area instances"): every stamp is an instance with its own
+- **Already in place** (IMPLEMENTATION-NOTES "Map areas, fixed placements and the Workshop Map tab", "Instances and stamping"): every stamp is an instance with its own
   key and seed, separate from the definition and from world position.
 - **The binding:** a key ("Training Guild") to the instance picked the first time; per session, then saved.
 - **Where an instance lives:** its own map, as floors are separate maps, or a reserved pocket region of the world map.

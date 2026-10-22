@@ -230,6 +230,22 @@ public readonly struct ContentObject
         return results;
     }
 
+    public IReadOnlyList<string> StringList(string key)
+    {
+        if (!TryGet(key, JsonValueKind.Array, out var value))
+        {
+            return [];
+        }
+
+        var results = new List<string>(value.GetArrayLength());
+        foreach (var element in value.EnumerateArray())
+        {
+            results.Add(element.ValueKind == JsonValueKind.String ? element.GetString()! : throw Malformed(key, "a list of strings"));
+        }
+
+        return results;
+    }
+
     private bool TryGet(string key, JsonValueKind expectedKind, out JsonElement value)
     {
         if (!_element.TryGetProperty(key, out value))
