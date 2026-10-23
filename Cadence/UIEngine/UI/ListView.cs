@@ -380,7 +380,7 @@ public sealed class ListView(FontService fontService, ElementPoolService element
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
         var width = ContentSize.X;
 
@@ -427,7 +427,7 @@ public sealed class ListView(FontService fontService, ElementPoolService element
     }
 
     /// <summary>Drawn last, over any row scrolled up beneath it, at the top of what is shown.</summary>
-    private void DrawHeader(Microsoft.Xna.Framework.Graphics.SpriteBatch spriteBatch, Microsoft.Xna.Framework.Graphics.Texture2D unitRectangle, float width)
+    private void DrawHeader(SpriteEffectBatch spriteBatch, Microsoft.Xna.Framework.Graphics.Texture2D unitRectangle, float width)
     {
         var top = ScrollOffset.Y;
         spriteBatch.Draw(unitRectangle, new Rectangle(0, (int)top, (int)width, (int)HeaderHeight), HeaderColor);

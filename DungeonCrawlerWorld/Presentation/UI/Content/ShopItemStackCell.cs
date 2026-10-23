@@ -109,7 +109,7 @@ public class ShopItemStackCell(FontService fontService, ElementPoolService eleme
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
         var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
         var spriteSize = new Vector2(ContentSize.Y, ContentSize.Y);

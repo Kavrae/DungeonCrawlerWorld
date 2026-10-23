@@ -208,7 +208,7 @@ public sealed class DiagnosticsWindow(
         if (IsInVisibleBand(_layoutCursorY, frameGraphHeight))
         {
             var frameHistory = _historyScratch.AsSpan(0, liveGauges.CopyHistory(0, _historyScratch));
-            SparklineRenderer.Draw(Render.SpriteBatch, Render.UnitRectangle, new Rectangle((int)inset, (int)_layoutCursorY, (int)width, (int)frameGraphHeight), frameHistory, 0, _frameGraphMaximum, SparklineStyle.Bars, GameWindowPalette.DiagnosticsLevelSeries, GameWindowPalette.DiagnosticsGraphBackground, DiagnosticsWindowChrome.FrameBudgetMilliseconds, GameWindowPalette.DiagnosticsFrameBudgetLine);
+            SparklineRenderer.Draw(Render.Batch, Render.UnitRectangle, new Rectangle((int)inset, (int)_layoutCursorY, (int)width, (int)frameGraphHeight), frameHistory, 0, _frameGraphMaximum, SparklineStyle.Bars, GameWindowPalette.DiagnosticsLevelSeries, GameWindowPalette.DiagnosticsGraphBackground, DiagnosticsWindowChrome.FrameBudgetMilliseconds, GameWindowPalette.DiagnosticsFrameBudgetLine);
         }
 
         _layoutCursorY += frameGraphHeight;
@@ -243,7 +243,7 @@ public sealed class DiagnosticsWindow(
         var rowHeight = RowHeight;
         if (IsInVisibleBand(_layoutCursorY, rowHeight))
         {
-            LabelRenderer.Draw(Render.SpriteBatch, _font, text, new Vector2(DiagnosticsWindowChrome.RowInset, _layoutCursorY), color);
+            LabelRenderer.Draw(Render.Batch, _font, text, new Vector2(DiagnosticsWindowChrome.RowInset, _layoutCursorY), color);
         }
 
         _layoutCursorY += rowHeight;
@@ -266,7 +266,7 @@ public sealed class DiagnosticsWindow(
 
     private void DrawGaugeRow(GaugeHistory liveGauges, int rowIndex, Gauge row, float y, float inset, float width, float rowHeight)
     {
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         LabelRenderer.Draw(spriteBatch, _font, row.GaugeName, new Vector2(inset * 3, y), GameWindowPalette.DiagnosticsText);
         LabelRenderer.Draw(spriteBatch, _font, _rowValueTexts[rowIndex], new Vector2(inset + DiagnosticsWindowChrome.ValueColumnX, y), GameWindowPalette.DiagnosticsText);
         LabelRenderer.Draw(spriteBatch, _font, _rowRangeTexts[rowIndex], new Vector2(inset + DiagnosticsWindowChrome.RangeColumnX, y), GameWindowPalette.DiagnosticsText);

@@ -12,7 +12,7 @@ namespace UIEngine.Rendering;
 public static class TileFillRenderer
 {
     /// <summary>No inset, unlike DrawHealthBar's 1px outline inset -- at fillFraction 1, this exactly covers tileRectangle, matching the full-tile wash callers already draw underneath it.</summary>
-    public static void DrawFill(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle tileRectangle, float fillFraction, TileFillDirection fillDirection, Color color)
+    public static void DrawFill(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle tileRectangle, float fillFraction, TileFillDirection fillDirection, Color color)
     {
         var clampedFraction = Math.Clamp(fillFraction, 0f, 1f);
         if (clampedFraction <= 0f)

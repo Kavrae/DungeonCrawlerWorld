@@ -47,12 +47,12 @@ public sealed class FractionBarElement(FontService fontService, ElementPoolServi
         var size = ContentSize;
         var bar = new Rectangle((int)origin.X, (int)origin.Y, (int)size.X, (int)size.Y);
 
-        ResourceBarRenderer.Draw(Render.SpriteBatch, Render.UnitRectangle, bar, _fraction, _hasResource, _outlineColor, _fractionColor);
+        ResourceBarRenderer.Draw(Render.Batch, Render.UnitRectangle, bar, _fraction, _hasResource, _outlineColor, _fractionColor);
 
         if (_showValueText)
         {
             var valueFont = FontService.GetFont((int)(bar.Height * FontChrome.ResourceBarValueFontFraction));
-            ResourceBarRenderer.DrawCenteredValueText(Render.SpriteBatch, valueFont, bar, _valueText, _valueTextSize.SizeOf(valueFont, _valueText).X);
+            ResourceBarRenderer.DrawCenteredValueText(Render.Batch, valueFont, bar, _valueText, _valueTextSize.SizeOf(valueFont, _valueText).X);
         }
     }
 }

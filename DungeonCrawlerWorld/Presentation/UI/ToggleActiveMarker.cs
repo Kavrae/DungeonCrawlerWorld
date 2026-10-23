@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.UI.ColorPalettes;
 using UIEngine.UI;
+using UIEngine.Rendering;
 
 namespace Presentation.UI;
 
@@ -11,6 +12,6 @@ public static class ToggleActiveMarker
 {
     private const float GlowStrength = 1.6f;
 
-    public static void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, float alpha = 1f) =>
+    public static void Draw(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, float alpha = 1f) =>
         GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, GameWindowPalette.ToggleActiveGlow, GlowMode.InteriorFade, GlowStrength * alpha);
 }

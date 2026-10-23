@@ -16,7 +16,7 @@ public static class SparklineRenderer
     /// <param name="style">Bars rise from the bottom edge; Line draws each column's step from the previous column's value.</param>
     /// <param name="referenceValue">Draws a 1 px horizontal line at this value when it is inside the graph's range, e.g. a frame budget.</param>
     public static void Draw(
-        SpriteBatch spriteBatch,
+        SpriteEffectBatch spriteBatch,
         Texture2D unitRectangle,
         Rectangle area,
         ReadOnlySpan<double> values,

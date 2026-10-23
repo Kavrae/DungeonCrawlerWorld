@@ -226,7 +226,7 @@ public sealed class MapWindow : Window
     /// <remarks>Highlights come after the world so they land on whatever is on the tile -- terrain, an occupant's sprite or glyph, or glow -- with no depth buffer to sort them.</remarks>
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
         OverhangFade.CollectWatchedEntities(_watchedEntityIds, _mapView.PlayerEntityId, _mapViewState.InspectionMode, _mapViewState.InspectedEntityId);

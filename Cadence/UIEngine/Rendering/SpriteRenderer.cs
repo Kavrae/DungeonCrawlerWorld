@@ -13,9 +13,6 @@ namespace UIEngine.Rendering;
 /// <remarks>Both a plain and a turned or flipped cell draw into the same whole-pixel rectangle (PixelRectangle), so one never lands a pixel off the other.</remarks>
 public static class SpriteRenderer
 {
-    public static void Draw(SpriteBatch spriteBatch, Texture2D texture, Rectangle sourceRectangle, Vector2 footprintTopLeft, Vector2 footprintSize, Color tint, SpriteCellTransform transform = default) =>
-        Draw(new SpriteBatchDrawTarget(spriteBatch), texture, sourceRectangle, footprintTopLeft, footprintSize, tint, transform);
-
     public static void Draw<TTarget>(TTarget target, Texture2D texture, Rectangle sourceRectangle, Vector2 footprintTopLeft, Vector2 footprintSize, Color tint, SpriteCellTransform transform = default, SpriteDrawStyle style = default)
         where TTarget : ISpriteDrawTarget
     {

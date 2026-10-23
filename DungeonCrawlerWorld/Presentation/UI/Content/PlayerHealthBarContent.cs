@@ -142,7 +142,7 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
 
     public void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = _hostWindow.Render.SpriteBatch;
+        var spriteBatch = _hostWindow.Render.Batch;
         var unitRectangle = _hostWindow.Render.UnitRectangle;
 
         // BarRectangle(), not the static Size -- Size is the window's outer bounds (used by

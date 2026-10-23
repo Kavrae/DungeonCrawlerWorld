@@ -19,9 +19,9 @@ public enum GlowMode
 
 /// <summary>
 /// Draws a glow around or within a rectangle -- shared by any Window that opts in via SetGlow.
-/// No shader/gradient support exists in this renderer stack (SpriteBatchRenderer's
-/// unitRectangle is a flat-color quad, same constraint BorderRenderer and the map glow overlay work
-/// within), so InteriorFade/ExteriorFade approximate the fade with FadeRingCount concentric
+/// The sprite effect has no gradient mode yet (the unit rectangle is a flat-colour quad, the same
+/// constraint BorderRenderer works within; TODO.md "Shader follow-ups" draws a glow in one quad),
+/// so InteriorFade/ExteriorFade approximate the fade with FadeRingCount concentric
 /// 1px rings, reusing BorderThickness.GetEdgeRectangles the same way BorderRenderer does, against
 /// an inset (InteriorFade) or inflated (ExteriorFade) rectangle.
 /// </summary>
@@ -31,9 +31,6 @@ public static class GlowRenderer
     public const int FadeRingCount = 5;
 
     private const float FadeMaximumAlpha = 0.5f;
-
-    public static void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Color glowColor, GlowMode mode = GlowMode.ExteriorFade, float alphaMultiplier = 1f) =>
-        Draw(new SpriteBatchDrawTarget(spriteBatch), unitRectangle, bounds, glowColor, mode, alphaMultiplier);
 
     public static void Draw<TTarget>(TTarget target, Texture2D unitRectangle, Rectangle bounds, Color glowColor, GlowMode mode = GlowMode.ExteriorFade, float alphaMultiplier = 1f, SpriteDrawStyle style = default)
         where TTarget : ISpriteDrawTarget

@@ -313,25 +313,25 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
             if (row.IsDivider)
             {
                 var lineRectangle = new Rectangle(rowBounds.X, rowBounds.Y + rowBounds.Height / 2, rowBounds.Width, 1);
-                Render.SpriteBatch.Draw(Render.UnitRectangle, lineRectangle, row.Color);
+                Render.Batch.Draw(Render.UnitRectangle, lineRectangle, row.Color);
                 continue;
             }
 
-            LabelRenderer.DrawLeftAligned(Render.SpriteBatch, ContentFont, row.LeftText, rowPosition, rowSize, row.Color);
+            LabelRenderer.DrawLeftAligned(Render.Batch, ContentFont, row.LeftText, rowPosition, rowSize, row.Color);
             if (!string.IsNullOrEmpty(row.MiddleText))
             {
                 var middlePosition = rowPosition + new Vector2(_middleColumnLeft, 0);
-                LabelRenderer.DrawLeftAligned(Render.SpriteBatch, ContentFont, row.MiddleText, middlePosition, rowSize, row.Color);
+                LabelRenderer.DrawLeftAligned(Render.Batch, ContentFont, row.MiddleText, middlePosition, rowSize, row.Color);
             }
 
             if (!string.IsNullOrEmpty(row.RightText))
             {
-                LabelRenderer.DrawRightAligned(Render.SpriteBatch, ContentFont, row.RightText, _rightTextWidths[rowIndex], rowPosition, priceRowSize, row.Color);
+                LabelRenderer.DrawRightAligned(Render.Batch, ContentFont, row.RightText, _rightTextWidths[rowIndex], rowPosition, priceRowSize, row.Color);
             }
 
             if (row.GlowColor is { } glowColor)
             {
-                GlowRenderer.Draw(Render.SpriteBatch, Render.UnitRectangle, rowBounds, glowColor, GlowMode.InteriorFade);
+                GlowRenderer.Draw(Render.Batch, Render.UnitRectangle, rowBounds, glowColor, GlowMode.InteriorFade);
             }
         }
     }

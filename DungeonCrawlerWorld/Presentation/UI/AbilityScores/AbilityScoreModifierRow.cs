@@ -50,7 +50,7 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
         if (IsHovered)

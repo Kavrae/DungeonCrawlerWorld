@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using UIEngine.Rendering;
 
 namespace UIEngine.UI;
 
@@ -15,6 +16,6 @@ public static class MenuModeDimRenderer
     private const float DimAlpha = 0.55f;
     private static readonly Color DimColor = Color.Black;
 
-    public static void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, GraphicsDevice graphicsDevice)
+    public static void Draw(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, GraphicsDevice graphicsDevice)
         => spriteBatch.Draw(unitRectangle, graphicsDevice.Viewport.Bounds, DimColor * DimAlpha);
 }

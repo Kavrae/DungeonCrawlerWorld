@@ -39,7 +39,7 @@ public sealed class MapGameOverlay
     }
 
     /// <summary>Draws the targeting highlights, then the selection's: the followed entity's in Detail inspection, the selected tile's otherwise.</summary>
-    public void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    public void Draw(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
         DrawTargetingHighlights(spriteBatch, unitRectangle);
 
@@ -95,7 +95,7 @@ public sealed class MapGameOverlay
     /// the "delayed actions keep the target shape drawn on the map... until they activate" half of
     /// Combat Overhaul: Dodge (TODO.md).
     /// </summary>
-    private void DrawTargetingHighlights(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawTargetingHighlights(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
         if (_mapViewState.TargetableTiles is { Count: > 0 } targetableTiles)
         {
@@ -161,7 +161,7 @@ public sealed class MapGameOverlay
     /// needs its own affordance the player wouldn't otherwise expect. Diagonal neighbors are still
     /// reachable (click, or same-key-then-click), just not via a single key -- no hint drawn there.
     /// </summary>
-    private void DrawDodgeDirectionalHints(SpriteBatch spriteBatch)
+    private void DrawDodgeDirectionalHints(SpriteEffectBatch spriteBatch)
     {
         if (_mapViewState.ArmedActionId != BuiltInActionIds.Dodge || !TryGetPlayerPosition(out var playerPosition))
         {
@@ -180,7 +180,7 @@ public sealed class MapGameOverlay
         }
     }
 
-    private void DrawSelectedTileHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawSelectedTileHighlight(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
         if (_mapViewState.SelectedMapNodePosition is not { } selectedPosition)
         {
@@ -202,7 +202,7 @@ public sealed class MapGameOverlay
     /// in part) simply stops drawing a highlight for whichever tiles are off-screen, rather than
     /// throwing or drawing garbage -- no extra guard needed here for that case.
     /// </summary>
-    private void DrawFollowedEntityHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawFollowedEntityHighlight(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
         var entityId = _mapViewState.InspectedEntityId;
         if (entityId == -1 || !_mapView.TryGetOccupant(entityId, out var followed))
@@ -229,7 +229,7 @@ public sealed class MapGameOverlay
     /// a solid opaque border ring, the earlier technique) specifically so the sprite stays
     /// visible through the border too, not just the interior.
     /// </summary>
-    private void DrawMaskedTileHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY, Color borderColor)
+    private void DrawMaskedTileHighlight(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY, Color borderColor)
     {
         if (!_camera.TryGetTileRectangle(mapNodeX, mapNodeY, out var tileRectangle))
         {
@@ -247,7 +247,7 @@ public sealed class MapGameOverlay
     /// DrawMaskedTileHighlight's own full alpha -- and its own full-tile coverage -- exactly as
     /// the action activates.
     /// </summary>
-    private void DrawChargeFillHighlight(SpriteBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY, Color fillColor, float fillFraction)
+    private void DrawChargeFillHighlight(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY, Color fillColor, float fillFraction)
     {
         if (!_camera.TryGetTileRectangle(mapNodeX, mapNodeY, out var tileRectangle))
         {
@@ -259,7 +259,7 @@ public sealed class MapGameOverlay
     }
 
     /// <summary>The inspector's own "this tile is selected" highlight -- a light-blue interior-fade glow (see GridSquareRenderer's own use of the same GlowMode.InteriorFade for inventory cells, so the two read as the same visual language) rather than DrawMaskedTileHighlight's flat wash, so terrain/sprites underneath stay fully legible through the ring gaps instead of being tinted.</summary>
-    private void DrawSelectedTileGlow(SpriteBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY)
+    private void DrawSelectedTileGlow(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY)
     {
         if (!_camera.TryGetTileRectangle(mapNodeX, mapNodeY, out var tileRectangle))
         {

@@ -105,6 +105,6 @@ public sealed class CursorTextContent(PointerState pointerState, FontService fon
     private void DrawAt(Point mousePosition, float alpha)
     {
         var position = new Vector2(mousePosition.X, mousePosition.Y) + CursorOffset;
-        LabelRenderer.Draw(_hostWindow.Render.SpriteBatch, _font, _text, position, TextColor * alpha);
+        LabelRenderer.Draw(_hostWindow.Render.Batch, _font, _text, position, TextColor * alpha);
     }
 }

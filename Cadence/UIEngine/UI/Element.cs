@@ -259,7 +259,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
     public bool ShowFooter => FooterHeight > 0f;
 
-    /// <summary>Draws this element's header region -- Window's title bar (background/text/buttons) and Folder's icon are both just their own override of this, called from Draw whenever the header is shown (see the ShowHeader/ShowHeaderWhenMinimized gate there). No-op by default. Overrides needing SpriteBatch/Texture2D read them from Render rather than taking them as parameters.</summary>
+    /// <summary>Draws this element's header region -- Window's title bar (background/text/buttons) and Folder's icon are both just their own override of this, called from Draw whenever the header is shown (see the ShowHeader/ShowHeaderWhenMinimized gate there). No-op by default. Overrides needing the batch or Texture2D read them from Render rather than taking them as parameters.</summary>
     protected virtual void DrawHeader(GameTime gameTime) { }
 
     /// <summary>Extra per-frame Initialize work the header needs -- Window initializes its title buttons here. No-op by default.</summary>
@@ -596,7 +596,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         }
     }
 
-    /// <summary>Reads SpriteBatch/UnitRectangle from Render rather than taking them as parameters -- every override, and every recursive child Draw call below, does the same.</summary>
+    /// <summary>Reads the batch and UnitRectangle from Render rather than taking them as parameters -- every override, and every recursive child Draw call below, does the same.</summary>
     public virtual void Draw(GameTime gameTime)
     {
         if (!_isVisible)
@@ -604,7 +604,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
             return;
         }
 
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
         if (_border.Show)
@@ -639,7 +639,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
                 // A dedicated viewport translates this window's local-coordinate content onto
                 // screen and hard-clips whatever overflows it. Pushed/popped through
                 // Render (see UiRenderService.PushRenderState) rather than a raw
-                // SpriteBatch End/Begin, so a scrollable Element nested inside another scrollable
+                // batch End/Begin, so a scrollable Element nested inside another scrollable
                 // Element hands back the exact ambient state it inherited instead of clobbering
                 // it.
                 Render.PushRenderState(Render.CurrentRenderState with { Viewport = Viewport, TransformMatrix = CameraTransform });
@@ -667,7 +667,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
                 // above.
                 //
                 // Skipped when there are no children (e.g. TextWindow) -- avoids an extra
-                // SpriteBatch End/Begin and ScissorRectangle swap for a loop that draws nothing.
+                // batch End/Begin and ScissorRectangle swap for a loop that draws nothing.
                 var clippedScissor = Rectangle.Intersect(Render.CurrentRenderState.ScissorRectangle, _contentState.Rectangle);
                 Render.PushRenderState(Render.CurrentRenderState with { ScissorRectangle = clippedScissor, RasterizerState = ScissorClipRasterizerState });
 
@@ -698,7 +698,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         }
     }
 
-    private void DrawScrollbars(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawScrollbars(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
         if (_scrollbars.ShowVertical)
         {
@@ -845,7 +845,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// <summary>Shared by every scrollable element's own children-clip pass in Draw -- ScissorTestEnable is off by default on every other RasterizerState this codebase uses, so this needs to be its own instance rather than a tweaked copy of an existing one.</summary>
     private static readonly RasterizerState ScissorClipRasterizerState = new() { ScissorTestEnable = true };
 
-    /// <summary>No-op by default; TextWindow and other self-drawn elements override this directly, Window overrides it to host IElementContent. Overrides needing SpriteBatch/Texture2D read them from Render rather than taking them as parameters.</summary>
+    /// <summary>No-op by default; TextWindow and other self-drawn elements override this directly, Window overrides it to host IElementContent. Overrides needing the batch or Texture2D read them from Render rather than taking them as parameters.</summary>
     public virtual void DrawContent(GameTime gameTime) { }
 
     /// <summary>Routes a key newly pressed this frame to this window while it holds focus -- see UiInputController.RouteKeyPressesToFocusedWindow.</summary>

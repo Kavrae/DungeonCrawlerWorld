@@ -71,7 +71,7 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
         var (checkboxRectangle, labelRectangle) = ComputeLayout();
@@ -95,7 +95,7 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
     }
 
     /// <summary>Two diagonals corner-to-corner across checkboxRectangle, inset so the mark's own endpoints don't touch the checkbox's border.</summary>
-    private static void DrawCheckMark(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle checkboxRectangle)
+    private static void DrawCheckMark(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle checkboxRectangle)
     {
         var topLeft = new Vector2(checkboxRectangle.X + CheckMarkInset, checkboxRectangle.Y + CheckMarkInset);
         var topRight = new Vector2(checkboxRectangle.Right - CheckMarkInset, checkboxRectangle.Y + CheckMarkInset);
@@ -107,12 +107,12 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
     }
 
     /// <summary>unitRectangle (a 1x1 white pixel) stretched into a thickness-tall strip spanning start-to-end and rotated to match -- the standard "line as a rotated rectangle" trick this renderer has no dedicated line primitive for yet.</summary>
-    private static void DrawLine(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 start, Vector2 end)
+    private static void DrawLine(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 start, Vector2 end)
     {
         var delta = end - start;
         var length = delta.Length();
         var rotation = MathF.Atan2(delta.Y, delta.X);
-        spriteBatch.Draw(unitRectangle, start, null, CheckMarkColor, rotation, Vector2.Zero, new Vector2(length, CheckMarkThickness), SpriteEffects.None, 0f);
+        spriteBatch.Draw(unitRectangle, start, null, CheckMarkColor, rotation, Vector2.Zero, new Vector2(length, CheckMarkThickness), SpriteEffects.None);
     }
 
     /// <summary>

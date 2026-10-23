@@ -409,14 +409,14 @@ public sealed class TradeWindow(
     {
         base.DrawContent(gameTime);
 
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var labelFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont(FontChrome.DefaultFontSize));
 
         DrawHeaderColumn(spriteBatch, labelFontMeasurer, 0, "Player Value", _playerValueText);
         DrawHeaderColumn(spriteBatch, labelFontMeasurer, ColumnSize.X + ColumnGap, "Shop Value", _shopValueText);
     }
 
-    private void DrawHeaderColumn(SpriteBatch spriteBatch, FontStashTextMeasurer fontMeasurer, float x, string label, string valueText)
+    private void DrawHeaderColumn(SpriteEffectBatch spriteBatch, FontStashTextMeasurer fontMeasurer, float x, string label, string valueText)
     {
         var columnTopLeft = ContentAbsolutePosition + new Vector2(x, 0);
         var labelFootprint = new Vector2(ColumnSize.X, HeaderLabelLineHeight);

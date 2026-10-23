@@ -2866,8 +2866,9 @@ FontStashSharp; Presentation, the exe and Tests reference it.
 
 ### The sprite effect: shaders, SpriteEffectBatch, the gradient glow and outlined map text
 
-Landed 2026-10-22 (`PLAN-shaders-and-sprites-tab.md`, child 7 of `EPIC-sprites-ui-engine-and-dev-tools.md`, Phases 0-4).
-The map draws through one shader of UIEngine's own; everything else still draws on `SpriteBatch`.
+Landed 2026-10-22 (`PLAN-shaders-and-sprites-tab.md`, child 7 of `EPIC-sprites-ui-engine-and-dev-tools.md`, Phases 0-4);
+the whole UI moved onto it 2026-10-23 (`PLAN-ui-on-the-sprite-effect.md`, 7.2). Everything draws through one shader of
+UIEngine's own, in one pass; nothing in the UI uses `SpriteBatch`.
 
 - **Compiling shaders.** FNA (FNA.NET 2.1.2, FNA 25.06, SDL3 GPU) loads D3D9 `fx_2_0` effect binaries, which only the Windows
   SDK's `fxc` compiles (MonoGame's `mgcb` output can't be loaded; its tools were removed). `Cadence/UIEngine/Shaders/*.fx` are
@@ -2888,10 +2889,29 @@ The map draws through one shader of UIEngine's own; everything else still draws 
   coordinate, plus a `Vector4` style (`SpriteDrawStyle.ToVertexStyle`): mode, glow, ground row, outline layer. No field is
   spare; the next per-sprite setting adds a vertex attribute and a new `Version`. Corners follow FNA's `SpriteBatch` exactly
   (`SpriteEffectQuads`: origin normalised by the source, a flip swaps texture coordinates and never mirrors the origin).
-- **Two targets, one implementation.** The drawing helpers (`SpriteRenderer`, `SpriteOrGlyphRenderer`, `LabelRenderer`,
-  `ContrastTextRenderer`, `GlowRenderer`) are generic over `ISpriteDrawTarget`; `SpriteBatchDrawTarget` is a struct, so a
-  window's `SpriteBatch` call boxes nothing and ignores the style. `MapRenderer.Draw` opens its own pass inside the host's
-  (`UiRenderService.BeginSpriteEffectPass`/`EndSpriteEffectPass`, under the current viewport, scissor and transform).
+- **The whole UI is one pass through the effect** (7.2, 2026-10-23). Until then windows drew on `SpriteBatch` and the map
+  switched to the batch for its own pass, so outlined text outside the map stayed nine `DrawString`s a string. Moving only
+  text would have meant switching passes per string (two flushes each) or queueing text to draw later -- out of order, a
+  lower window's text over the window above it. Mainstream engines don't separate text at all (Unity's canvas, Unreal's
+  Slate, Godot, Dear ImGui: one shader for sprites and text, order from submission, batching that never changes what is on
+  top), so the UI's pass became the batch: `UiRenderService.BeginFrame`/`EndFrame` bracket the frame, `Batch` is the only
+  batch, and `PushRenderState`/`PopRenderState` end and begin it as they did the `SpriteBatch` (`SpriteBatchRenderer`,
+  `SpriteBatchDrawTarget` and `ContrastTextRenderer.DrawCopies` are gone). `SpriteDrawTargetExtensions` gives any
+  `ISpriteDrawTarget` `SpriteBatch`'s `Draw`/`DrawString` shapes with an optional style, so the conversion was a type change
+  at each call site; the helpers stay generic over the target so tests can record draws. The map sets the batch's `Glow`,
+  draws, and clears it -- a change of `Glow` flushes what is queued, so the map's quads draw lit and nothing else reads its
+  light. Every UI pixel goes through the uber shader on purpose: a plain-draw shader would end a run at every plain/styled
+  boundary, and the UI interleaves them (an icon, its outlined text, the next icon); an unlit, unoutlined draw costs one
+  texture read and a few compares on flags uniform per quad. If a GPU capture ever shows the UI's shader time mattering,
+  the first step is a branch-free plain technique from the same `.fx`, chosen per flush when every quad in it is plain (no
+  extra flushes). `UiDrawsThroughTheSpriteEffectArchitectureTests` fails any code line in UIEngine, Presentation or either
+  Workshop that names `SpriteBatch`.
+- **What 7.2 measured** (windowed Release, seed 1, frames 600-3600, three interleaved pairs against a saved build of the
+  commit before, `-SaveBaseline -BaselineName pre-ui-batch` then `-ExePath`): total draw (`Shell.Draw` + `SpriteBatch.End`)
+  medians 0.656 to 0.445 ms/frame (-32%; per pair -47%, -6%, -32% on a noisy machine, -6% the pair whose simulation cost
+  matched); the static HUD (hotbar, bars, status effects -- where the outlined text is) 0.096 to 0.050 (-48%); the map
+  window 0.490 to 0.347, since it no longer ends and restarts the pass around itself. The headless `-Compare` simulated the
+  same world at the same cost. The `GameLoop/SpriteBatch.End` row keeps its name and now times `EndFrame`.
 - **The render state is its own service** (2026-10-23). The device, both batches, the unit rectangle, the render-state
   stack and the effect pass lived on `ElementPoolService` -- the pass went there because the stack it ends and restores
   did -- until they moved into `UiRenderService`. Every element takes it as a fourth constructor argument (`Element`
@@ -2908,11 +2928,12 @@ The map draws through one shader of UIEngine's own; everything else still draws 
 - **Text through the batcher.** FontStashSharp offers two renderer interfaces; its quad-level `IFontStashRenderer2` measured
   ~30% slower than `SpriteBatch` text, its sprite-level `IFontStashRenderer` the same, so the batch implements the latter.
   Sprites cost ~10 ns more each than on `SpriteBatch` (a 40-byte vertex against 24); unturned, unflipped ones take a direct path.
-- **Measuring draw.** Compare `Draw.GameLoop.Shell.Draw` (total), not `Draw.Base.MapWindow`: before the batcher, the map's
-  sprites were flushed by whichever element next ended the shared batch, so part of their cost was counted elsewhere. A
-  same-sitting before/after: `git archive HEAD | tar -x -C Log/b7` (a short path -- the spritesheets break Windows' 260-
-  character limit under the scratchpad), build it, and run the benchmark skill with `-ExePath`/`-DiagnosticsDirectory`,
-  interleaved with the current build, in Release.
+- **Measuring draw.** Compare total draw (`Draw.GameLoop.Shell.Draw` plus `GameLoop/SpriteBatch.End`), not one window's
+  row: on the shared batch an element's quads are flushed by whichever element next ends the batch, so part of their cost
+  is counted elsewhere. A same-sitting before/after: save the before build with the benchmark skill's `-SaveBaseline
+  -BaselineName <name>` (or `git archive HEAD | tar -x -C Log/b7` and build it -- a short path, since the spritesheets
+  break Windows' 260-character limit under the scratchpad), then run it with `-ExePath` interleaved with the current build,
+  in Release. The windowed benchmark times the CPU only; the shader's cost needs a GPU frame capture (RenderDoc, PIX).
 - **Corpses desaturate** (`SpriteDrawMode.Desaturate`, `MapVisual.DrawStyle`): grey at their luminance, fully, chosen over
   partial or darkened; the looted loot bag badge desaturates the same way.
 - **The glow is light, not an overlay.** `MapGlowTexels` builds one texel per tile (premultiplied, transparent where no aura
@@ -2932,7 +2953,8 @@ The map draws through one shader of UIEngine's own; everything else still draws 
   texel and a pixel -- FontStashSharp's atlas leaves a wider gap between glyphs -- painted black at
   `1 - product(1 - alpha * neighbour)`, neighbours found from `ddx`/`ddy` of the texture coordinate), then its fill. It
   matches the nine within 2/255 on all three backends at 12-36 px and faded. 300 outlined labels: 0.063 ms against 0.277.
-  Text drawn on a `SpriteBatch` (the overlay, floating text, windows) keeps the nine (`ContrastTextRenderer.DrawCopies`).
+  Since 7.2 every outlined string in the UI is drawn this way (`ContrastTextRenderer.Draw` hands it to the target's
+  `DrawOutlinedString`); the nine copies are gone.
 
 ### The Workshop Sprites tab (read-only)
 

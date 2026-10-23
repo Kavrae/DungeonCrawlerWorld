@@ -61,7 +61,7 @@ public sealed class ActionLockContent(World world, ActionStateView actionStateVi
             return;
         }
 
-        var spriteBatch = _hostWindow.Render.SpriteBatch;
+        var spriteBatch = _hostWindow.Render.Batch;
         var unitRectangle = _hostWindow.Render.UnitRectangle;
 
         _radialFill.Glyph = _glyph;

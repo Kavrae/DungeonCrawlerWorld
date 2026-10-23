@@ -55,7 +55,7 @@ public sealed class ColorField(FontService fontService, ElementPoolService eleme
     {
         base.DrawContent(gameTime);
 
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
         var side = ContentRectangle.Height - SwatchInset * 2;
         var swatch = new Rectangle(ContentRectangle.Right - SwatchInset - side, ContentRectangle.Y + SwatchInset, side, side);

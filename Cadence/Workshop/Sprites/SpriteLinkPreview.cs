@@ -50,15 +50,7 @@ public sealed class SpriteLinkPreview(FontService fontService, ElementPoolServic
         }
 
         var tilePixels = Math.Max(1, (int)Math.Min(ContentSize.X / TestLayout[0].Length, ContentSize.Y / TestLayout.Length));
-        var batch = Render.BeginSpriteEffectPass();
-        try
-        {
-            DrawLayout(batch, entry, tilePixels);
-        }
-        finally
-        {
-            Render.EndSpriteEffectPass();
-        }
+        DrawLayout(Render.Batch, entry, tilePixels);
     }
 
     private void DrawLayout(SpriteEffectBatch batch, SpriteEntryView entry, int tilePixels)

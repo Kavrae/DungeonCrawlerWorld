@@ -108,7 +108,7 @@ public sealed class UiLayerHost(UiLayerStack layers, UiRenderService renderServi
 
             if (!_dimDrawn && window == _bottommostMenuWindow)
             {
-                MenuModeDimRenderer.Draw(renderService.SpriteBatch, renderService.UnitRectangle, renderService.GraphicsDevice);
+                MenuModeDimRenderer.Draw(renderService.Batch, renderService.UnitRectangle, renderService.GraphicsDevice);
                 _dimDrawn = true;
 
                 for (var exemptIndex = 0; exemptIndex < _menuModeExemptElements.Count; exemptIndex++)

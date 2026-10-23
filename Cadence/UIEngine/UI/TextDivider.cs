@@ -70,12 +70,12 @@ public sealed class TextDivider(FontService fontService, ElementPoolService elem
         // The font's line height keeps every label's baseline in one place and leaves room for a
         // descender inside this row, short of a scrollable parent's clip boundary.
         var textY = ContentAbsolutePosition.Y + (ContentSize.Y - _font.LineHeight) / 2f;
-        LabelRenderer.Draw(Render.SpriteBatch, _font, _text, new Vector2(ContentAbsolutePosition.X + textStart, textY), _color);
+        LabelRenderer.Draw(Render.Batch, _font, _text, new Vector2(ContentAbsolutePosition.X + textStart, textY), _color);
     }
 
     private void DrawLine(float startX, float width, float y)
     {
         var x = ContentAbsolutePosition.X + startX;
-        Render.SpriteBatch.Draw(Render.UnitRectangle, new Rectangle((int)x, (int)y, (int)width, (int)LineHeight), _color);
+        Render.Batch.Draw(Render.UnitRectangle, new Rectangle((int)x, (int)y, (int)width, (int)LineHeight), _color);
     }
 }

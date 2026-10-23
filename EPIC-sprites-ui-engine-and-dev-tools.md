@@ -126,6 +126,11 @@ Each is its own plan; numbering is the order. Arrows are hard dependencies.
    map text is two draws per glyph; and a read-only Sprites tab in `Cadence/Workshop`. Editing it and retiring the WinForms
    tool are TODO.md's "Workshop: edit sprites and retire SpriteManifestBuilder" (Engine, High), after "Workshop: edit
    Items"; the remaining shader work is "Sprite shaders and tinting" and "Shader follow-ups".
+   **7.1** (2026-10-23, commit e394572): shader performance -- a 28-byte vertex, the glow's read point in the vertex
+   shader. **7.2** (2026-10-23, `PLAN-ui-on-the-sprite-effect.md`; IMPLEMENTATION-NOTES "The sprite effect"): the whole UI
+   draws through `SpriteEffectBatch` in one pass, no `SpriteBatch` left, outlined text two quads a glyph everywhere; total
+   draw -32% (median) against 7.1. **7.3** is next: clipping in the shader, glow rings in one draw, the per-tile targeting
+   overlay and SDF glyphs (TODO.md "Shader follow-ups", "Replace the text outline with SDF glyphs").
 8. **Diagnostics tab** (→5). The debugging half of the IDE: gauges, frame costs, memory and leak reports --
    what the F3 Diagnostics window and `Log/diagnostics/` show today -- for a running game. Research first
    whether the IDE hosts the session itself (in-process, so `EngineHooks`' static channels just work, with a

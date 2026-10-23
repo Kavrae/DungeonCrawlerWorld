@@ -46,7 +46,7 @@ public sealed class FloatingTextRenderer(
     private readonly string?[] _plusAmountTexts = new string?[MaxCachedAmount + 1];
     private readonly Dictionary<StatusEffectType, SpriteView?> _statusEffectSprites = [];
 
-    public void Draw(SpriteBatch spriteBatch, int currentMapLayer)
+    public void Draw(SpriteEffectBatch spriteBatch, int currentMapLayer)
     {
         var baseFontSize = _camera.CurrentZoomLevel switch
         {
@@ -70,7 +70,7 @@ public sealed class FloatingTextRenderer(
         }
     }
 
-    private void DrawText(SpriteBatch spriteBatch, in FloatingTextInstance text, int baseFontSize)
+    private void DrawText(SpriteEffectBatch spriteBatch, in FloatingTextInstance text, int baseFontSize)
     {
         var tilePosition = text.SpawnTilePosition + FloatingTextMotion.GetOffsetTiles(text.AgeFrames, text.HorizontalDirection, text.VerticalDirection);
         if (!IsNearViewport(tilePosition))
@@ -118,7 +118,7 @@ public sealed class FloatingTextRenderer(
             && tilePosition.Y <= scrollPosition.Y + _camera.TileRows + ViewportMarginTiles;
     }
 
-    private void DrawStatusEffectIcon(SpriteBatch spriteBatch, SpriteFontBase font, StatusEffectType effectType, Vector2 topLeft, float size, float alpha)
+    private void DrawStatusEffectIcon(SpriteEffectBatch spriteBatch, SpriteFontBase font, StatusEffectType effectType, Vector2 topLeft, float size, float alpha)
     {
         var glyph = _statusEffectDisplays.TryGet(effectType, out var display) ? display.Glyph : "?";
         SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, GetStatusEffectSprite(effectType), _fontService.GetTextMeasurer(font), glyph, FloatingTextPalette.GetStatusEffectColor(effectType), topLeft, new Vector2(size, size), Color.White, alpha, outline: true);

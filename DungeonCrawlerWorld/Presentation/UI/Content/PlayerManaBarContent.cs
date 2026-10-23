@@ -60,7 +60,7 @@ public sealed class PlayerManaBarContent(World world, ActionStateView actionStat
 
     public void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = _hostWindow.Render.SpriteBatch;
+        var spriteBatch = _hostWindow.Render.Batch;
         var unitRectangle = _hostWindow.Render.UnitRectangle;
 
         // ContentSize, not the static Size -- Size is the window's outer bounds (used by

@@ -47,15 +47,7 @@ public sealed class SpritePlacementPreview(FontService fontService, ElementPoolS
     {
         var unitRectangle = Render.UnitRectangle;
         var tilePixels = Math.Max(1, (int)Math.Min(ContentSize.X / ColumnCount, ContentSize.Y / RowCount));
-        var batch = Render.BeginSpriteEffectPass();
-        try
-        {
-            DrawPreview(batch, unitRectangle, tilePixels);
-        }
-        finally
-        {
-            Render.EndSpriteEffectPass();
-        }
+        DrawPreview(Render.Batch, unitRectangle, tilePixels);
     }
 
     private void DrawPreview(SpriteEffectBatch batch, Texture2D unitRectangle, int tilePixels)

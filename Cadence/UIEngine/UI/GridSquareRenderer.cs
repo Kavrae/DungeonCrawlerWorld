@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using UIEngine.UI.ColorPalettes;
+using UIEngine.Rendering;
 
 namespace UIEngine.UI;
 
@@ -18,12 +19,12 @@ public enum GridSquareState
 /// </summary>
 public static class GridSquareRenderer
 {
-    public static void DrawBase(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Color? baseColorOverride = null)
+    public static void DrawBase(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Color? baseColorOverride = null)
     {
         spriteBatch.Draw(unitRectangle, bounds, baseColorOverride ?? WindowPalette.GridSquareBase);
     }
 
-    public static void DrawStateOverlay(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, GridSquareState state)
+    public static void DrawStateOverlay(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, GridSquareState state)
     {
         switch (state)
         {

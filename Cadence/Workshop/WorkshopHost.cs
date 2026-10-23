@@ -101,10 +101,9 @@ public sealed class WorkshopHost : Microsoft.Xna.Framework.Game
     {
         GraphicsDevice.Clear(Color.DimGray);
 
-        _uiEngine.SpriteBatchRenderer.StartSpriteBatch();
-        _uiEngine.RenderService.ResetRenderState();
+        _uiEngine.RenderService.BeginFrame();
         _shell.Draw(gameTime);
-        _uiEngine.SpriteBatchRenderer.EndSpriteBatch();
+        _uiEngine.RenderService.EndFrame();
 
         base.Draw(gameTime);
     }

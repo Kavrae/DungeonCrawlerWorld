@@ -251,7 +251,7 @@ public sealed class HotbarContent(
 
     public void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = _hostWindow.Render.SpriteBatch;
+        var spriteBatch = _hostWindow.Render.Batch;
         var unitRectangle = _hostWindow.Render.UnitRectangle;
         var playerEntityId = world.PlayerEntityId;
 
@@ -556,7 +556,7 @@ public sealed class HotbarContent(
         return textCaches;
     }
 
-    private void DrawSlot(SpriteBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, HotkeySlot slot, Rectangle bounds)
+    private void DrawSlot(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, HotkeySlot slot, Rectangle bounds)
     {
         var contentBounds = BorderThickness.Inset(bounds, SlotBorderThickness);
         var isActive = IsSlotActive(slot);
@@ -686,7 +686,7 @@ public sealed class HotbarContent(
     }
 
     /// <summary>The one place a SlotVisual actually gets drawn -- radial fill/icon, then its costs (bottom-left), its quantity (bottom-center) and countdown, if any. Shared by both BuildActionVisual and BuildItemVisual outputs, regardless of which kind produced them.</summary>
-    private void DrawSlotVisual(SpriteBatch spriteBatch, Texture2D unitRectangle, HotkeySlot slot, Rectangle bounds, Rectangle contentBounds, SlotVisual visual, float alpha)
+    private void DrawSlotVisual(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, HotkeySlot slot, Rectangle bounds, Rectangle contentBounds, SlotVisual visual, float alpha)
     {
         _radialFill.Sprite = visual.SpriteName is not null && spriteSheetService.Sprites.TryGetFirst(visual.SpriteName, out var sprite) ? sprite : null;
         _radialFill.SpriteTint = Color.White;
@@ -713,7 +713,7 @@ public sealed class HotbarContent(
     }
 
     /// <summary>No symbol here (contrast PlayerStatusEffectsContent's status-bar icon) -- just the number, centered above the slot it belongs to.</summary>
-    private void DrawCountdownAboveSlot(SpriteBatch spriteBatch, SlotTextCaches textCaches, Rectangle slotBounds, int remainingSeconds)
+    private void DrawCountdownAboveSlot(SpriteEffectBatch spriteBatch, SlotTextCaches textCaches, Rectangle slotBounds, int remainingSeconds)
     {
         var text = textCaches.Countdown.Get(remainingSeconds, static seconds => seconds.ToString());
         var textSize = textCaches.CountdownSize.SizeOf(_countdownFont, text);
@@ -723,7 +723,7 @@ public sealed class HotbarContent(
     }
 
     /// <summary>Top-left of every slot -- the bind key from HotkeySlotLayout (e.g. "Q", "1", "↑1" for a Shift-page Expansion slot). Drawn even on a locked slot (dimmed like everything else there), a preview of what the key will do once unlocked.</summary>
-    private void DrawKeyLabel(SpriteBatch spriteBatch, Rectangle bounds, HotkeySlot slot, float alpha)
+    private void DrawKeyLabel(SpriteEffectBatch spriteBatch, Rectangle bounds, HotkeySlot slot, float alpha)
     {
         var text = HotkeySlotLayout.GetKeyLabel(slot);
         var position = new Vector2(bounds.X + OverlayPadding.X, bounds.Y + OverlayPadding.Y);
@@ -731,7 +731,7 @@ public sealed class HotbarContent(
     }
 
     /// <summary>Bottom-left -- what using the slot takes, only ever called when it takes anything: each resource's amount in its own colour (CostBadgePalette), mana then health, to one decimal place since a modifier can leave a fraction.</summary>
-    private void DrawCosts(SpriteBatch spriteBatch, SlotTextCaches textCaches, Rectangle bounds, ActivationCostTotals costs, float alpha)
+    private void DrawCosts(SpriteEffectBatch spriteBatch, SlotTextCaches textCaches, Rectangle bounds, ActivationCostTotals costs, float alpha)
     {
         var x = bounds.X + OverlayPadding.X;
         x = DrawCost(spriteBatch, textCaches.ManaCost, textCaches.ManaCostSize, bounds, x, costs.Mana, CostBadgePalette.Mana, alpha);
@@ -739,7 +739,7 @@ public sealed class HotbarContent(
     }
 
     /// <summary>One resource's amount at x along the bottom edge, or nothing when it is 0. Returns where the next one starts.</summary>
-    private float DrawCost(SpriteBatch spriteBatch, KeyedCache<float, string> costText, TextSizeCache costTextSize, Rectangle bounds, float x, float amount, Color color, float alpha)
+    private float DrawCost(SpriteEffectBatch spriteBatch, KeyedCache<float, string> costText, TextSizeCache costTextSize, Rectangle bounds, float x, float amount, Color color, float alpha)
     {
         if (amount <= 0)
         {
@@ -753,7 +753,7 @@ public sealed class HotbarContent(
     }
 
     /// <summary>Bottom-center -- an item stack's quantity as "x{n}", only ever called when quantity > 1. Replaces the old ItemIconRenderer.DrawQuantityBadge call this element used to make (that method has since moved to the bottom-left corner instead, for consistency with Shop/TradeItemStackCell's own quantity placement -- InventoryItemStackCell is its one remaining consumer, unaffected by this element's own bottom-center choice).</summary>
-    private void DrawBottomCenterText(SpriteBatch spriteBatch, TextSizeCache textSize, Rectangle bounds, string text, float alpha)
+    private void DrawBottomCenterText(SpriteEffectBatch spriteBatch, TextSizeCache textSize, Rectangle bounds, string text, float alpha)
     {
         var measuredSize = textSize.SizeOf(_overlayFont, text);
         var position = new Vector2(bounds.Center.X - measuredSize.X / 2f, bounds.Bottom - measuredSize.Y - OverlayPadding.Y);

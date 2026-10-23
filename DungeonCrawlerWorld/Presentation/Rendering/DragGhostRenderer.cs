@@ -19,7 +19,7 @@ public static class DragGhostRenderer
     private const float Alpha = 0.85f;
 
     public static void Draw(
-        SpriteBatch spriteBatch,
+        SpriteEffectBatch spriteBatch,
         SpriteSheetService spriteSheetService,
         FontStashTextMeasurer glyphFontMeasurer,
         SpriteView? sprite,

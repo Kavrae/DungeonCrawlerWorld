@@ -13,15 +13,16 @@ public sealed class SpriteDrawTargetTests
 {
     private sealed class RecordingDrawTarget : ISpriteDrawTarget
     {
-        public readonly List<(Rectangle Destination, Color Color, SpriteDrawStyle Style)> Rectangles = [];
+        public readonly List<(Rectangle Destination, Rectangle? Source, Color Color, SpriteDrawStyle Style)> Rectangles = [];
+        public readonly List<(Vector2 Position, Rectangle? Source, Color Color, float Rotation, Vector2 Origin, Vector2 Scale, SpriteEffects Effects, SpriteDrawStyle Style)> TransformedDraws = [];
         public readonly List<(string Text, Vector2 Position, Color Color, SpriteDrawStyle Style)> Strings = [];
         public readonly List<(string Text, Vector2 Position, Color FillColor, float AlphaMultiplier, SpriteDrawStyle Style)> OutlinedStrings = [];
 
         public void Draw(Texture2D texture, Rectangle destination, Rectangle? source, Color color, SpriteDrawStyle style) =>
-            Rectangles.Add((destination, color, style));
+            Rectangles.Add((destination, source, color, style));
 
         public void Draw(Texture2D texture, Vector2 position, Rectangle? source, Color color, float rotation, Vector2 origin, Vector2 scale, SpriteEffects effects, SpriteDrawStyle style) =>
-            throw new AssertFailedException("No transformed draw expected.");
+            TransformedDraws.Add((position, source, color, rotation, origin, scale, effects, style));
 
         public void DrawString(SpriteFontBase font, string text, Vector2 position, Color color, SpriteDrawStyle style) =>
             Strings.Add((text, position, color, style));
@@ -32,7 +33,7 @@ public sealed class SpriteDrawTargetTests
 
     private static readonly SpriteDrawStyle Style = new(SpriteDrawMode.Plain);
 
-    /// <summary>The label leaves how to outline to the target -- a SpriteBatch's nine copies, the batch's two draws per glyph -- at a whole pixel.</summary>
+    /// <summary>The label leaves how to outline to the target -- the batch's two draws per glyph -- at a whole pixel.</summary>
     [TestMethod]
     public void OutlinedLabel_IsOneOutlinedString_RoundedToAWholePixel_WithTheStyle()
     {
@@ -44,20 +45,16 @@ public sealed class SpriteDrawTargetTests
         Assert.AreEqual(("g", new Vector2(10, 21), Color.Yellow, 0.5f, Style), target.OutlinedStrings.Single());
     }
 
-    /// <summary>What a SpriteBatch draws for outlined text: eight black copies a pixel apart, then the fill, all faded together.</summary>
+    /// <summary>Contrast text (a countdown, a key label) is one outlined string, rounded, white by default, faded fill and outline together.</summary>
     [TestMethod]
-    public void Copies_AreEightBlackCopiesThenTheFill_EachWithTheStyle()
+    public void ContrastText_IsOneOutlinedString_RoundedAndWhiteByDefault()
     {
         var target = new RecordingDrawTarget();
 
-        ContrastTextRenderer.DrawCopies(target, TestFonts.Shared.GetFont(18), "g", new Vector2(10, 21), Color.Yellow, 0.5f, Style);
+        ContrastTextRenderer.Draw(target, TestFonts.Shared.GetFont(18), "12", new Vector2(4.6f, 7.2f), alphaMultiplier: 0.5f);
 
-        Assert.AreEqual(9, target.Strings.Count);
-        Assert.IsTrue(target.Strings.Take(8).All(draw => draw.Color == ContrastTextRenderer.OutlineColor * 0.5f), "Outline copies first, faded.");
-        Assert.AreEqual(8, target.Strings.Take(8).Select(draw => draw.Position).Distinct().Count(), "Eight different offsets.");
-        Assert.IsTrue(target.Strings.Take(8).All(draw => System.Math.Abs(draw.Position.X - 10) <= 1 && System.Math.Abs(draw.Position.Y - 21) <= 1 && draw.Position != new Vector2(10, 21)), "Each a pixel from the fill.");
-        Assert.AreEqual((Color.Yellow * 0.5f, new Vector2(10, 21)), (target.Strings[8].Color, target.Strings[8].Position), "The fill last, faded, in place.");
-        Assert.IsTrue(target.Strings.All(draw => draw.Style == Style));
+        Assert.AreEqual(0, target.Strings.Count);
+        Assert.AreEqual(("12", new Vector2(5, 7), ContrastTextRenderer.FillColor, 0.5f, SpriteDrawStyle.Plain), target.OutlinedStrings.Single());
     }
 
     [TestMethod]
@@ -80,6 +77,63 @@ public sealed class SpriteDrawTargetTests
         Assert.IsTrue(drawn);
         Assert.AreEqual(1, target.Strings.Count);
         Assert.AreEqual(Style, target.Strings[0].Style);
+    }
+
+    /// <summary>SpriteBatch's rectangle shapes reach the target's rectangle draw unchanged, plain unless a style is given.</summary>
+    [TestMethod]
+    public void SpriteBatchRectangleShapes_AreTheTargetsRectangleDraw()
+    {
+        var target = new RecordingDrawTarget();
+        var destination = new Rectangle(3, 4, 30, 40);
+        var source = new Rectangle(16, 0, 16, 16);
+
+        target.Draw(null!, destination, Color.Red);
+        target.Draw(null!, destination, Color.Red, Style with { Mode = SpriteDrawMode.Desaturate });
+        target.Draw(null!, destination, source, Color.Red);
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                (destination, (Rectangle?)null, Color.Red, SpriteDrawStyle.Plain),
+                (destination, (Rectangle?)null, Color.Red, SpriteDrawStyle.Desaturated),
+                (destination, (Rectangle?)source, Color.Red, SpriteDrawStyle.Plain),
+            },
+            target.Rectangles);
+        Assert.AreEqual(0, target.TransformedDraws.Count);
+    }
+
+    /// <summary>SpriteBatch's position shapes are the target's transformed draw with SpriteBatch's defaults: unturned, origin at the top-left, unscaled, unflipped.</summary>
+    [TestMethod]
+    public void SpriteBatchPositionShapes_AreTheTransformedDraw_WithSpriteBatchsDefaults()
+    {
+        var target = new RecordingDrawTarget();
+        var position = new Vector2(5, 6);
+        var source = new Rectangle(0, 16, 16, 16);
+
+        target.Draw(null!, position, Color.Blue);
+        target.Draw(null!, position, source, Color.Blue);
+        target.Draw(null!, position, source, Color.Blue, 0.5f, new Vector2(8, 8), 2f, SpriteEffects.FlipHorizontally);
+        target.Draw(null!, position, source, Color.Blue, 0.5f, new Vector2(8, 8), new Vector2(2, 3), SpriteEffects.FlipVertically);
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                (position, (Rectangle?)null, Color.Blue, 0f, Vector2.Zero, Vector2.One, SpriteEffects.None, SpriteDrawStyle.Plain),
+                (position, (Rectangle?)source, Color.Blue, 0f, Vector2.Zero, Vector2.One, SpriteEffects.None, SpriteDrawStyle.Plain),
+                (position, (Rectangle?)source, Color.Blue, 0.5f, new Vector2(8, 8), new Vector2(2, 2), SpriteEffects.FlipHorizontally, SpriteDrawStyle.Plain),
+                (position, (Rectangle?)source, Color.Blue, 0.5f, new Vector2(8, 8), new Vector2(2, 3), SpriteEffects.FlipVertically, SpriteDrawStyle.Plain),
+            },
+            target.TransformedDraws);
+    }
+
+    [TestMethod]
+    public void SpriteBatchDrawString_IsThePlainString()
+    {
+        var target = new RecordingDrawTarget();
+
+        target.DrawString(TestFonts.Shared.GetFont(18), "g", new Vector2(1, 2), Color.Green);
+
+        Assert.AreEqual(("g", new Vector2(1, 2), Color.Green, SpriteDrawStyle.Plain), target.Strings.Single());
     }
 
     [TestMethod]

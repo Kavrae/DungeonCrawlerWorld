@@ -908,7 +908,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
     /// </remarks>
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
         if (string.IsNullOrEmpty(OriginalText) && !IsFocused && !string.IsNullOrEmpty(GhostText))
@@ -941,7 +941,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
 
     /// <summary>Draws a translucent highlight behind the current selection, if any -- called before the text itself so the highlight sits behind the glyphs, not on top of them.</summary>
     /// <remarks>Multiline draws in the local (Viewport-relative) coordinates of the RequiresContentViewport Begin/End pair the multiline text uses; single-line in absolute screen coordinates. The rectangles are kept until the text, its wrapping, the selection, the scroll, the width or the font changes.</remarks>
-    private void DrawSelectionIfAny(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawSelectionIfAny(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
         if (_selectionAnchor is not { } anchor || anchor == _caretIndex)
         {
@@ -1088,7 +1088,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
     /// rather than one fixed color that might blend into either.
     /// </summary>
     /// <remarks>The offset from the content origin is kept until the text, its wrapping, the scroll, the caret or the font changes.</remarks>
-    private void DrawCaretIfFocused(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawCaretIfFocused(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
         if (!IsFocused || !_caretVisible)
         {
@@ -1338,7 +1338,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
             return;
         }
 
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
         var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(Rectangle, FocusIndicatorThickness);

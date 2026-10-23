@@ -177,7 +177,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
         if (IsHovered || IsHighlighted)
@@ -240,7 +240,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
     /// <summary>Top-left corner, over whatever else DrawContent just drew -- see HotkeyLabel's own doc comment. Anchored to AbsolutePosition (the button's whole rectangle, outside the border inset), not ContentAbsolutePosition, with the same padding and the same Enabled-driven alpha every other part of this button's draw already uses.</summary>
     private static readonly Vector2 HotkeyLabelPadding = new(4f, 2f);
 
-    private void DrawHotkeyLabel(SpriteBatch spriteBatch)
+    private void DrawHotkeyLabel(SpriteEffectBatch spriteBatch)
     {
         if (_hotkeyLabel is null || _hotkeyLabelFont is null)
         {

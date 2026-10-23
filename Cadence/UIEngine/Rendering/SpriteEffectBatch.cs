@@ -9,8 +9,8 @@ namespace UIEngine.Rendering;
 /// <remarks>
 /// <para>
 /// Draws exactly where SpriteBatch would -- the same corners (SpriteEffectQuads), the same premultiplied colour, AlphaBlend, no
-/// depth -- so a renderer moved onto it looks the same until it asks for a style. Quads are kept until End, then drawn in the
-/// order they were given, one draw call per run of quads sharing a texture, as SpriteBatch's Deferred mode does.
+/// depth -- so a renderer moved onto it looks the same until it asks for a style. Quads are kept until End (or a change of Glow), then
+/// drawn in the order they were given, one draw call per run of quads sharing a texture, as SpriteBatch's Deferred mode does.
 /// </para>
 /// <para>
 /// Strings reach it through FontStashSharp's IFontStashRenderer, one sprite per glyph -- the route FontStashSharp's own
@@ -48,6 +48,7 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
     private SamplerState _samplerState = SamplerState.PointClamp;
     private RasterizerState _rasterizerState = RasterizerState.CullCounterClockwise;
     private Matrix _transformMatrix = Matrix.Identity;
+    private SpriteEffectGlow _glow;
 
     /// <summary>The style IFontStashRenderer.Draw gives the glyphs of the string DrawString or DrawOutlinedString is drawing.</summary>
     private SpriteDrawStyle _textStyle;
@@ -69,8 +70,22 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
 
     public GraphicsDevice GraphicsDevice { get; }
 
-    /// <summary>The light this pass's lit draws read; None (unlit) from each Begin until set.</summary>
-    public SpriteEffectGlow Glow { get; set; }
+    /// <summary>The light the lit draws read; None (unlit) from each Begin until set.</summary>
+    /// <remarks>Setting a different glow ends the run: the quads queued before it are drawn under the glow they were queued with, so a pass can light one part (the map) and leave the rest unlit.</remarks>
+    public SpriteEffectGlow Glow
+    {
+        get => _glow;
+        set
+        {
+            if (value == _glow)
+            {
+                return;
+            }
+
+            Flush();
+            _glow = value;
+        }
+    }
 
     /// <param name="rasterizerState">Null for SpriteBatch's default (CullCounterClockwise); a scissor-clipping state to clip.</param>
     /// <param name="transformMatrix">Applied to every position before the viewport's projection, as SpriteBatch.Begin's.</param>
@@ -86,7 +101,7 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
         _samplerState = samplerState;
         _rasterizerState = rasterizerState ?? RasterizerState.CullCounterClockwise;
         _transformMatrix = transformMatrix;
-        Glow = SpriteEffectGlow.None;
+        _glow = SpriteEffectGlow.None;
     }
 
     /// <summary>Draws every quad since Begin, in order.</summary>
@@ -174,7 +189,7 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
         var graphicsDevice = GraphicsDevice;
         var viewport = graphicsDevice.Viewport;
         _matrixTransform.SetValue(_transformMatrix * Matrix.CreateOrthographicOffCenter(0f, viewport.Width, viewport.Height, 0f, 0f, 1f));
-        var glow = Glow;
+        var glow = _glow;
         _glowTexture.SetValue(glow.Texture ?? _noGlowTexture);
         _glowTransform.SetValue(glow.Texture is null ? Vector4.Zero : glow.Transform);
         _glowTexelSize.SetValue(glow.Texture is null ? Vector2.One : Vector2.One / glow.TextureSize);

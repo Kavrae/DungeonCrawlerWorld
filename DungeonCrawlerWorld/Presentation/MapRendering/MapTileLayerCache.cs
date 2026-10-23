@@ -28,7 +28,7 @@ namespace Presentation.MapRendering;
 /// Rendered with no sub-tile offset and blitted at -RenderPixelOffset, so a right-drag's smooth
 /// scroll costs nothing extra: only a whole-tile scroll actually changes what a texture should
 /// contain, and that changes the image's key (MapImageKey). Rendering happens
-/// during Update, not Draw, because Draw runs inside GameLoop's already-active SpriteBatch pass
+/// during Update, not Draw, because Draw runs inside GameLoop's already-active UI pass
 /// and swapping render targets mid-pass would mean unwinding and restoring ambient state that
 /// UiRenderService's Push/PopRenderState stack deliberately owns.
 ///
@@ -60,7 +60,7 @@ public sealed class MapTileLayerCache : IDisposable
 
     /// <summary>
     /// Rebuilds the cached texture if it was invalidated or was rendered for a different key. Must be called outside
-    /// any active SpriteBatch pass -- see this class's own remarks. Does nothing at all on a frame where the image is
+    /// any active pass of the batch -- see this class's own remarks. Does nothing at all on a frame where the image is
     /// still valid, which is the overwhelming majority of them.
     /// </summary>
     /// <param name="batch">The batch to render the tiles with -- begun and ended internally, so it must not already be active.</param>
@@ -109,7 +109,7 @@ public sealed class MapTileLayerCache : IDisposable
         _graphicsDevice.SetRenderTarget(_target);
         _graphicsDevice.Clear(_backgroundColor);
 
-        // Mirrors SpriteBatchRenderer.StartSpriteBatch's own parameters -- PointClamp in
+        // Mirrors UiRenderService.BeginFrame's root state -- PointClamp in
         // particular, since every glyph here comes from a font atlas that crops under linear
         // sampling (see LabelRenderer's own note on point sampling and fractional positions).
         batch.Begin(SamplerState.PointClamp, null, Matrix.Identity);

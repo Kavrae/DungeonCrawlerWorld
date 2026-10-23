@@ -123,7 +123,7 @@ public sealed class DropdownField(FontService fontService, ElementPoolService el
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
         var text = SelectedLabel ?? Placeholder;
@@ -139,7 +139,7 @@ public sealed class DropdownField(FontService fontService, ElementPoolService el
     }
 
     /// <summary>A downward triangle of shrinking rows at the right edge -- drawn, since the font has no arrow glyph.</summary>
-    private void DrawArrow(Microsoft.Xna.Framework.Graphics.SpriteBatch spriteBatch, Microsoft.Xna.Framework.Graphics.Texture2D unitRectangle)
+    private void DrawArrow(SpriteEffectBatch spriteBatch, Microsoft.Xna.Framework.Graphics.Texture2D unitRectangle)
     {
         var content = ContentRectangle;
         var left = content.Right - ArrowRightInset - ArrowWidth;

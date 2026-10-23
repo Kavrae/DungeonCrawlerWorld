@@ -85,7 +85,7 @@ public sealed class DragGhostContent(
         var mousePosition = state.CursorPosition;
 
         DragGhostRenderer.Draw(
-            _hostWindow.Render.SpriteBatch, spriteSheetService, glyphFontMeasurer,
+            _hostWindow.Render.Batch, spriteSheetService, glyphFontMeasurer,
             sprite, glyph, glyphColor, new Vector2(mousePosition.X, mousePosition.Y), size);
     }
 }

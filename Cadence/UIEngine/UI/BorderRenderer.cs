@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using UIEngine.Rendering;
 
 namespace UIEngine.UI;
 
@@ -16,7 +17,7 @@ public static class BorderRenderer
     private static readonly Color ContrastOuterColor = Color.Black;
 
     /// <summary>flatColor only affects BorderStyle.Flat -- Outset/Inset/FlatContrast always use their own fixed color pairs, an independent two-color shading effect rather than a single overridable color. alphaMultiplier defaults to fully opaque -- HotbarContent's disabled-slot treatment is the one caller that passes a lower value, to fade a FlatContrast slot border along with everything else on that slot.</summary>
-    public static void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, BorderStyle style, Color flatColor, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier = 1f)
+    public static void Draw(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, BorderStyle style, Color flatColor, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier = 1f)
     {
         switch (style)
         {
@@ -38,7 +39,7 @@ public static class BorderRenderer
         }
     }
 
-    private static void DrawFlat(SpriteBatch spriteBatch, Texture2D unitRectangle, Color flatColor, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
+    private static void DrawFlat(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Color flatColor, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
     {
         var borderColor = flatColor * alphaMultiplier;
         spriteBatch.Draw(unitRectangle, top, borderColor);
@@ -48,7 +49,7 @@ public static class BorderRenderer
     }
 
     /// <summary>Raised look: light catches the top-left as if lit from above, dark shadows the bottom-right.</summary>
-    private static void DrawOutset(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
+    private static void DrawOutset(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
     {
         var light = LightBevelColor * alphaMultiplier;
         var dark = DarkBevelColor * alphaMultiplier;
@@ -59,7 +60,7 @@ public static class BorderRenderer
     }
 
     /// <summary>Pressed look: same lighting as Outset, reversed -- top-left now in shadow, bottom-right catching light.</summary>
-    private static void DrawInset(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
+    private static void DrawInset(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
     {
         var dark = DarkBevelColor * alphaMultiplier;
         var light = LightBevelColor * alphaMultiplier;
@@ -76,7 +77,7 @@ public static class BorderRenderer
     /// Assumes an even thickness (2px is this style's whole point) -- an odd thickness still
     /// renders, just with the inner half getting the extra pixel rather than throwing.
     /// </summary>
-    private static void DrawFlatContrast(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
+    private static void DrawFlatContrast(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
     {
         var outer = ContrastOuterColor * alphaMultiplier;
         var inner = ContrastInnerColor * alphaMultiplier;

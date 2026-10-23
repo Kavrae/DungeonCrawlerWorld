@@ -4,7 +4,7 @@ using UIEngine.UI;
 
 namespace Tests.UIEngine;
 
-/// <summary>Covers Folder's expand/collapse toggle and child tiling. Icon rendering itself (sprite vs. glyph fallback) is drawn through GraphicsDevice/SpriteBatch and isn't unit-testable headlessly -- verified in-game instead.</summary>
+/// <summary>Covers Folder's expand/collapse toggle and child tiling. Icon rendering itself (sprite vs. glyph fallback) is drawn through the GraphicsDevice and the sprite effect batch and isn't unit-testable headlessly -- verified in-game instead.</summary>
 [TestClass]
 [DoNotParallelize]
 public sealed class FolderTests

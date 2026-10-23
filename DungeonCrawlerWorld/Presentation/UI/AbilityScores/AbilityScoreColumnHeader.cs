@@ -42,7 +42,7 @@ public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoo
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
         if (IsHovered)

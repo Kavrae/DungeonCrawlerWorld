@@ -64,7 +64,7 @@ public sealed class PlayerHealthHoverContent(
             return;
         }
 
-        var spriteBatch = _hostWindow.Render.SpriteBatch;
+        var spriteBatch = _hostWindow.Render.Batch;
         var unitRectangle = _hostWindow.Render.UnitRectangle;
         var origin = _hostWindow.ContentAbsolutePosition;
         var contentSize = _hostWindow.ContentSize;
@@ -98,7 +98,7 @@ public sealed class PlayerHealthHoverContent(
 
     internal readonly record struct RowData(string Name, float Fraction, bool HasResource);
 
-    private void DrawRow(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, float contentWidth, float rowHeight, int rowIndex, string name, float fraction, bool hasResource)
+    private void DrawRow(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, float contentWidth, float rowHeight, int rowIndex, string name, float fraction, bool hasResource)
     {
         var rowTop = origin.Y + rowIndex * rowHeight;
         var barX = origin.X + contentWidth - BarWidth;

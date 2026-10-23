@@ -1,5 +1,4 @@
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using UIEngine.Fonts;
 
 namespace UIEngine.Rendering;
@@ -17,21 +16,6 @@ namespace UIEngine.Rendering;
 public static class SpriteOrGlyphRenderer
 {
     /// <summary>Draws sprite if present, else glyph if non-empty. Returns whether anything was actually drawn. outline defaults false -- a map passes true, since its glyphs sit over arbitrary terrain colours; an icon on a fixed window background doesn't need it.</summary>
-    public static bool Draw(
-        SpriteBatch spriteBatch,
-        SpriteSheetService spriteSheetService,
-        SpriteView? sprite,
-        FontStashTextMeasurer glyphFontMeasurer,
-        string glyph,
-        Color glyphColor,
-        Vector2 topLeft,
-        Vector2 size,
-        Color spriteTint,
-        float alphaMultiplier = 1f,
-        bool outline = false) =>
-        Draw(new SpriteBatchDrawTarget(spriteBatch), spriteSheetService, sprite, glyphFontMeasurer, glyph, glyphColor, topLeft, size, spriteTint, alphaMultiplier, outline);
-
-    /// <inheritdoc cref="Draw(SpriteBatch, SpriteSheetService, SpriteView?, FontStashTextMeasurer, string, Color, Vector2, Vector2, Color, float, bool)"/>
     public static bool Draw<TTarget>(
         TTarget target,
         SpriteSheetService spriteSheetService,

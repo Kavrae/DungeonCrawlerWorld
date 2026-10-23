@@ -66,8 +66,7 @@ public sealed class SpriteSheetView(FontService fontService, ElementPoolService 
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = Render.SpriteBatch;
-        var target = new SpriteBatchDrawTarget(spriteBatch);
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
         spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, (int)ContentSize.X, (int)ContentSize.Y), BackgroundColor);
 
@@ -95,7 +94,7 @@ public sealed class SpriteSheetView(FontService fontService, ElementPoolService 
         foreach (var (cell, color) in _markedCells)
         {
             var source = cell.SourceRectangle;
-            SpriteCellDrawer.DrawOutline(target, unitRectangle, new Rectangle(origin.X + source.X * _zoom, origin.Y + source.Y * _zoom, source.Width * _zoom, source.Height * _zoom), color, CellOutlineThickness);
+            SpriteCellDrawer.DrawOutline(spriteBatch, unitRectangle, new Rectangle(origin.X + source.X * _zoom, origin.Y + source.Y * _zoom, source.Width * _zoom, source.Height * _zoom), color, CellOutlineThickness);
         }
     }
 

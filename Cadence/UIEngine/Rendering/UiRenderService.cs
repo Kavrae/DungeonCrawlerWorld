@@ -3,7 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace UIEngine.Rendering;
 
-/// <summary>What everything in the UI draws with: the device, the shared SpriteBatch and SpriteEffectBatch, the unit rectangle, and the render-state stack that nested passes push and pop.</summary>
+/// <summary>What everything in the UI draws with: the device, the one SpriteEffectBatch, the unit rectangle, and the render-state stack that nested passes push and pop.</summary>
 /// <remarks>
 /// <para>
 /// One per host, built by UiEngineBootstrapper and filled once by Initialize from the host's LoadContent; until then (and in a
@@ -11,30 +11,29 @@ namespace UIEngine.Rendering;
 /// every element it builds -- and anything outside the element tree that draws (the layer host, the map renderer) takes it.
 /// </para>
 /// <para>
-/// The stack holds the ambient SpriteBatch pass: ResetRenderState starts it each frame, a scrollable element pushes a pass with its
-/// own viewport or scissor and pops back to exactly what it inherited, and a sprite-effect pass (the map) ends the SpriteBatch pass,
-/// draws through SpriteEffectBatch under the same state, and resumes it.
+/// The whole UI is one pass through the sprite effect, in call order: BeginFrame starts it each frame and EndFrame draws what is
+/// left; a scrollable element pushes a pass with its own viewport or scissor and pops back to exactly what it inherited. Sprites
+/// and text share it, so outlined text is two quads a glyph in its place, and the map lights its own draws by setting the
+/// batch's Glow and clearing it.
 /// </para>
 /// </remarks>
 public sealed class UiRenderService
 {
     /// <summary>
-    /// Full SpriteBatch.Begin parameter set plus the two GraphicsDevice properties Element.Draw's
-    /// scoped passes also swap (Viewport, ScissorRectangle) -- everything a nested pass needs to
-    /// hand back the exact ambient state it inherited once its own scope ends, rather than
-    /// resetting to some hardcoded default. See PushRenderState/PopRenderState.
+    /// What a pass begins with that the UI varies -- the sampler, the rasterizer (its scissor clip) and the transform -- plus
+    /// the two GraphicsDevice properties Element.Draw's scoped passes also swap (Viewport, ScissorRectangle): everything a
+    /// nested pass needs to hand back the exact ambient state it inherited once its own scope ends, rather than resetting to
+    /// some hardcoded default. See PushRenderState/PopRenderState.
     /// </summary>
-    public readonly record struct RenderState(SamplerState SamplerState, DepthStencilState? DepthStencilState, RasterizerState? RasterizerState, Effect? Effect, Matrix TransformMatrix, Viewport Viewport, Rectangle ScissorRectangle);
+    public readonly record struct RenderState(SamplerState SamplerState, RasterizerState? RasterizerState, Matrix TransformMatrix, Viewport Viewport, Rectangle ScissorRectangle);
 
     private readonly Stack<RenderState> _renderStateStack = new();
     private RenderState _currentRenderState;
 
     public GraphicsDevice GraphicsDevice { get; private set; } = null!;
 
-    public SpriteBatch SpriteBatch { get; private set; } = null!;
-
-    /// <summary>What a pass through the sprite effect draws with, between BeginSpriteEffectPass and EndSpriteEffectPass.</summary>
-    public SpriteEffectBatch SpriteEffectBatch { get; private set; } = null!;
+    /// <summary>What every draw in the UI goes through, between BeginFrame and EndFrame.</summary>
+    public SpriteEffectBatch Batch { get; private set; } = null!;
 
     public Texture2D UnitRectangle { get; private set; } = null!;
 
@@ -48,28 +47,26 @@ public sealed class UiRenderService
     public RenderState CurrentRenderState => _currentRenderState;
 
     /// <summary>Captures the device and what draws with it -- called once, from the host's LoadContent, after all of them exist.</summary>
-    public void Initialize(GraphicsDevice graphicsDevice, SpriteBatch spriteBatch, SpriteEffectBatch spriteEffectBatch, Texture2D unitRectangle)
+    public void Initialize(GraphicsDevice graphicsDevice, SpriteEffectBatch batch, Texture2D unitRectangle)
     {
         GraphicsDevice = graphicsDevice;
-        SpriteBatch = spriteBatch;
-        SpriteEffectBatch = spriteEffectBatch;
+        Batch = batch;
         UnitRectangle = unitRectangle;
     }
 
-    /// <summary>
-    /// Establishes the root ambient state every nested Push/PopRenderState call ultimately
-    /// unwinds back to. Called once per frame, from the host's Draw right after
-    /// SpriteBatchRenderer.StartSpriteBatch, whose own Begin call this has to mirror exactly --
-    /// there's no way to ask a SpriteBatch what parameters its currently-active Begin used.
-    /// </summary>
-    public void ResetRenderState()
+    /// <summary>Begins the frame's pass under the root state -- point sampling, no clip or transform, the device's viewport -- which every nested Push/PopRenderState ultimately unwinds back to. Called once per frame, from the host's Draw.</summary>
+    public void BeginFrame()
     {
         _renderStateStack.Clear();
-        _currentRenderState = new RenderState(SamplerState.PointClamp, null, null, null, Matrix.Identity, GraphicsDevice.Viewport, GraphicsDevice.ScissorRectangle);
+        _currentRenderState = new RenderState(SamplerState.PointClamp, null, Matrix.Identity, GraphicsDevice.Viewport, GraphicsDevice.ScissorRectangle);
+        ApplyCurrentRenderState();
     }
 
+    /// <summary>Draws what the frame's pass still holds. Pairs with BeginFrame.</summary>
+    public void EndFrame() => Batch.End();
+
     /// <summary>
-    /// Ends the currently-active SpriteBatch pass, saves it, and begins a new one with newState.
+    /// Ends the current pass, saves its state, and begins a new one with newState.
     /// Pairs with PopRenderState, which every caller must invoke exactly once for each
     /// PushRenderState (see Element.Draw's two RequiresContentViewport blocks, the only caller).
     /// Pop restores the exact prior state, not a plain Begin, so a nested scrollable Element hands
@@ -77,7 +74,7 @@ public sealed class UiRenderService
     /// </summary>
     public void PushRenderState(RenderState newState)
     {
-        SpriteBatch.End();
+        Batch.End();
         _renderStateStack.Push(_currentRenderState);
         _currentRenderState = newState;
         ApplyCurrentRenderState();
@@ -86,27 +83,8 @@ public sealed class UiRenderService
     /// <summary>See PushRenderState.</summary>
     public void PopRenderState()
     {
-        SpriteBatch.End();
+        Batch.End();
         _currentRenderState = _renderStateStack.Pop();
-        ApplyCurrentRenderState();
-    }
-
-    /// <summary>
-    /// Ends the active SpriteBatch pass and begins SpriteEffectBatch under the current render state's sampler, rasterizer (its
-    /// scissor clip) and transform -- the viewport and scissor rectangle are already the device's. Pairs with
-    /// EndSpriteEffectPass, which every caller must invoke exactly once.
-    /// </summary>
-    public SpriteEffectBatch BeginSpriteEffectPass()
-    {
-        SpriteBatch.End();
-        SpriteEffectBatch.Begin(_currentRenderState.SamplerState, _currentRenderState.RasterizerState, _currentRenderState.TransformMatrix);
-        return SpriteEffectBatch;
-    }
-
-    /// <summary>Draws what the sprite effect pass collected, then resumes the SpriteBatch pass exactly as it was. See BeginSpriteEffectPass.</summary>
-    public void EndSpriteEffectPass()
-    {
-        SpriteEffectBatch.End();
         ApplyCurrentRenderState();
     }
 
@@ -114,6 +92,6 @@ public sealed class UiRenderService
     {
         GraphicsDevice.Viewport = _currentRenderState.Viewport;
         GraphicsDevice.ScissorRectangle = _currentRenderState.ScissorRectangle;
-        SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, _currentRenderState.SamplerState, _currentRenderState.DepthStencilState, _currentRenderState.RasterizerState, _currentRenderState.Effect, _currentRenderState.TransformMatrix);
+        Batch.Begin(_currentRenderState.SamplerState, _currentRenderState.RasterizerState, _currentRenderState.TransformMatrix);
     }
 }

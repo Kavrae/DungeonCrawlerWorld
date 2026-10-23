@@ -148,60 +148,75 @@ authored. This is the editing half of its plan's former Phases 5 and 6. The read
 
 #### Shader follow-ups: glow rings, a per-tile targeting overlay, clipping, tilemap terrain
 
-Unblocked: epic child 7 (landed 2026-10-22) brought the sprite effect, `SpriteDrawStyle` and
-`SpriteEffectBatch` (a batcher of our own whose vertex carries a style field; only the map draws through it, every window
-stays on `SpriteBatch`), and moved the aura glow onto a per-tile texture the effect samples. These
-are the places the game still draws by hand what other engines draw with shaders. Each is its own phase, tested in-game and
-benchmarked windowed at a busy zoom (the headless benchmark draws nothing).
+Plan 7.3, next. Unblocked: epic child 7 (landed 2026-10-22) brought the sprite effect, `SpriteDrawStyle` and
+`SpriteEffectBatch` (a batcher of our own whose vertex carries a style field) and moved the aura glow onto a per-tile
+texture the effect samples, and 7.2 (`PLAN-ui-on-the-sprite-effect.md`, 2026-10-23) made the batch the whole UI's one pass
+-- every window draws through the effect, and no `SpriteBatch` is left. These are the places the game still draws by hand
+what other engines draw with shaders. Each is its own phase, tested in-game and benchmarked windowed at a busy zoom (the
+headless benchmark draws nothing), against a saved build of the commit before (IMPLEMENTATION-NOTES "Measuring draw").
 - **Glow rings in one draw.** `GlowRenderer`'s `InteriorFade`/`ExteriorFade` draw `FadeRingCount` (5) rings of 1 px
   rectangles -- about 20 draws per glow -- for the selected tile, the followed entity, a dodging entity, tooltips and
   windows. A glow mode draws one quad and fades by distance to the rectangle's edge in the shader (as Godot's style-box
   shadows and Unity UI effects do), keeping `FadeMaximumAlpha`'s look; `FadeRingCount` stays the fade's depth in pixels,
-  since callers inset content by it. Outside the map's pass a window draws on `SpriteBatch` with `Effect = null`; a
-  pixel-shader-only effect works under `SpriteBatch` (the plan's Phase 0), so a glow there can be a short effect pass of
-  its own, or windows move to `SpriteEffectBatch` with clipping below.
+  since callers inset content by it. Every window already draws through the effect, so it is a new `SpriteDrawMode` (or
+  a style flag) on the batch, no pass of its own.
 - **A per-tile targeting overlay.** `MapGameOverlay` draws a translucent rectangle per tile per frame for targeting masks,
   the charge fill and windup telegraphs, and rings per tile for the selected-tile glow. Write them into a per-tile texture
   like the aura glow's (more channels, or a second texture of the same kind) and let the effect draw them, so everything
   shown "on tiles" is one mechanism with almost no draws. The charge fill (a fraction of a tile) and masked borders need a
   shape per tile, not only a colour; keep what is drawn exactly as it is now.
-- **Clipping in the shader.** `UiRenderService.PushRenderState`/`PopRenderState` end and restart the `SpriteBatch` for
-  every scrollable element to change the scissor rectangle. Unity UI's `RectMask2D` clips in the shader instead, so clipping
-  never breaks a batch: a clip rectangle per vertex (`SpriteEffectVertex` gains it), discarded outside -- which means windows
-  drawing through `SpriteEffectBatch` rather than `SpriteBatch`, so decide that first. Measure draw calls and frame cost
-  in busy windows (inventory with many tabs, Item Details, the Workshop's tabs) before and after; keep the scissor for
-  anything drawn outside the effect.
+- **Clipping in the shader.** `UiRenderService.PushRenderState`/`PopRenderState` end and restart the batch for every
+  scrollable element to change the scissor rectangle. Unity UI's `RectMask2D` clips in the shader instead, so clipping
+  never breaks a batch: a clip rectangle per vertex (`SpriteEffectVertex` gains it, and a new `Version`), discarded
+  outside. Windows already draw through `SpriteEffectBatch` (7.2), so nothing else has to move first. Measure draw calls
+  and frame cost in busy windows (inventory with many tabs, Item Details, the Workshop's tabs) before and after; keep the
+  scissor for the viewport/transform pushes a scrolled element still needs.
 - **Research: tilemap terrain in a shader.** The terrain image is re-rendered on every whole-tile scroll (`MapImageKey`),
   so a camera following the player rebuilds it each step. A tilemap shader draws a layer as one quad that looks each tile's
   sprite up from a tile-id texture, making a scroll free. First measure the rebuild's cost per scroll at busy zooms; only if
   it shows as hitches, research how variants (cell seeds), linked walls (`MapWallPlan`, join masks), tops and overhangs,
   turned and flipped cells, and sprites reaching past their tile fit a lookup -- and decide whether to build it.
 
-#### Aura glow clarity: soft bleed past the reach, a highlight line around it
+#### Aura glow clarity: an FFXIV-style aura look, or a soft bleed with a highlight line; lights as their own effect
 
 Today the glow stops hard at the last tile an aura reaches: `SpriteUber.fx`'s `GlowAt` lights nothing whose own tile has no
-glow, so light shades smoothly inside the area and is cut off square at its edge. Experiment with a clearer look: let the
-light bleed a little past the affected tiles, so it reads as light rather than a painted region, and draw a thin highlight
-line along the boundary of the tiles the aura actually reaches, so the player can still see exactly where its effect
-applies.
-- **Floor only, behind everything.** The bleed and the line draw on floor surfaces only -- never on walls' faces or tops,
-  never on entities -- and sit under every entity and wall, which draw over them. The ground image (`MapTileLayerCache`)
-  holds floors and walls' faces together and is lit per pixel as one quad, so the face pixels must be told apart:
-  render the faces into an image of their own (or a mask of the floor's pixels) so only the floor gets the line and the
-  bleed. Entities stay lit along their ground row (`SpriteGlow.AlongGroundRow`) by the reach as it is now, unless the
-  experiment shows they should follow the bleed too.
-- **Not distracting.** A thin, low-alpha line in the aura's own colour, constant width in screen pixels at every zoom (the
-  outline already sizes itself this way from texture-coordinate derivatives). No animation unless a still line proves hard
-  to read. Try it over lava fields, Holy Ground, a shrine and a placed Torch, alone and overlapping, and at the farthest
-  and closest zooms; keep what reads at a glance and fades into the background otherwise.
+glow, so light shades smoothly inside the area and is cut off square at its edge, and the same glow shows both auras that
+do something (lava, Holy Ground, a shrine, Toxic Aura) and plain light (Scroll of Torch's aura, which has no effects).
+Make an aura read clearly as an area with an effect, and split plain light off from it.
+- **Primary: Final Fantasy XIV as the reference for aura glows.** FFXIV marks a lasting ground effect (a healer's
+  Asylum or Sacred Soil, a boss's puddle) as a decal on the ground: a faint tinted fill with a brighter rim at its edge,
+  drawn under characters and scenery. Research first, from footage of the game, its colour, softness, blending, the rim's
+  width and any motion, and how it stays readable without hiding the ground or competing with combat telegraphs -- then
+  build the closest fit to this map's tiles and per-tile glow texture. Write down what was taken from it and what was left
+  out, in IMPLEMENTATION-NOTES.
+- **Secondary: a soft bleed plus a highlight line.** If the FFXIV look doesn't fit, or reads worse in game: let the light
+  bleed a little past the affected tiles, so it reads as light rather than a painted region, and draw a thin highlight
+  line along the boundary of the tiles the aura actually reaches, so the player can still see exactly where its effect
+  applies.
+- **Lights are their own effect.** Lamps and torches are light, not an aura's mark: a separate shader effect (its own
+  texture or mode of the sprite effect, its own look -- warm falloff, no edge line), so the aura look only ever means
+  "something here affects you". Decide how content declares a light (a light source on a blueprint, terrain or grant,
+  rather than an aura with no effects) and move Scroll of Torch onto it; whether a light also lights walls and entities
+  is that effect's own decision, separate from the rules below.
+- **Floor only, behind everything** (both aura options). The aura look draws on floor surfaces only -- never on walls'
+  faces or tops, never on entities -- and sits under every entity and wall, which draw over it. The ground image
+  (`MapTileLayerCache`) holds floors and walls' faces together and is lit per pixel as one quad, so the face pixels must be
+  told apart: render the faces into an image of their own (or a mask of the floor's pixels) so only the floor gets it.
+  Entities stay lit along their ground row (`SpriteGlow.AlongGroundRow`) by the reach as it is now, unless the experiment
+  shows they should change too.
+- **Not distracting.** Low alpha in the aura's own colour; any line a constant width in screen pixels at every zoom (the
+  outline already sizes itself this way from texture-coordinate derivatives). Motion only if the reference calls for it
+  and it stays quiet. Try each over lava fields, Holy Ground, a shrine and Toxic Aura, alone and overlapping, next to a
+  light, and at the farthest and closest zooms; keep what reads at a glance and fades into the background otherwise.
 - **Where the edge comes from.** The glow texture is one texel per tile, already blended across auras (`AuraGlowBlend`),
-  so a line from its coverage marks where light starts and stops, not where one aura meets another. Decide whether that is
-  enough, or whether the line needs per-aura coverage (a coverage bit per aura in the field, or a second per-tile texture
+  so an edge taken from its coverage marks where glow starts and stops, not where one aura meets another. Decide whether
+  that is enough, or whether it needs per-aura coverage (a coverage bit per aura in the field, or a second per-tile texture
   for edges) -- and keep `AuraPowerView` as the only thing Presentation reads.
 - **Cost.** Every lit floor pixel pays for this, so measure GPU frame time windowed at a busy zoom before and after (the
-  headless benchmark draws nothing); read the neighbouring texels once, not per effect. Pairs with "Sprite effect: overlap
-  the glow's two texture reads" (Medium), which changes the same reads.
-- Ends with an in-game check of the cases above and a decision recorded in IMPLEMENTATION-NOTES, whether it lands or not.
+  headless benchmark draws nothing); read the neighbouring texels once, not per effect, and the light effect only where a
+  light reaches. Pairs with "Sprite effect: overlap the glow's two texture reads" (Medium), which changes the same reads.
+- Ends with an in-game check of the cases above and a decision recorded in IMPLEMENTATION-NOTES -- which aura option won,
+  and how lights are declared and drawn.
 
 #### UiInputController.Update: one key and hotkey routing path
 
@@ -2437,10 +2452,10 @@ Health window also closes the others, and that Close leaves the rest open.
 
 #### Replace the text outline with SDF glyphs and an outline shader
 
-Outlined text drawn on a `SpriteBatch` (`ContrastTextRenderer.DrawCopies`: hotbar and HUD numbers, floating text, the
-targeting overlay) is 9 `DrawString` calls -- 8 offset copies in black, then the fill. Map text already draws through
-the sprite effect in two (an outline layer, then the fill -- IMPLEMENTATION-NOTES "The sprite effect"), from the same
-bitmap atlas. What is left is scaling and the other callers: glyphs from a signed distance
+Plan 7.3. Every outlined string in the UI -- map glyphs, hotbar and HUD numbers, floating text, the targeting overlay,
+windows -- draws through the sprite effect in two quads a glyph (an outline layer, then the fill -- IMPLEMENTATION-NOTES
+"The sprite effect"; the nine-copy outline went in 7.2), from FontStashSharp's bitmap atlas. What is left is scaling:
+glyphs from a signed distance
 field atlas, and a pixel shader that turns distance into fill and outline (fill colour, outline colour and thickness,
 alpha as parameters). A distance field also stays sharp when scaled, so one atlas size could serve every font size
 `FontService` now keeps a font per pixel size for.
@@ -2451,14 +2466,13 @@ alpha as parameters). A distance field also stays sharp when scaled, so one atla
   smoothness) are the reference.
 - **The shader.** Effects are compiled and loaded (`fxc` to `fx_2_0`, `SpriteEffectService`); an SDF mode is a new
   style on `SpriteUber.fx`, or a game effect from content.
-- **Batching and order.** Map text already shares the row walk's batch with sprites (`SpriteEffectBatch`); text in
-  windows would need their passes on the batch too (or a pixel-shader-only effect under `SpriteBatch`). The atlas wants
-  linear sampling where every pass here uses `SamplerState.PointClamp`.
+- **Batching and order.** All text already shares the UI's one batch with sprites (`SpriteEffectBatch`, 7.2). The atlas
+  wants linear sampling where every pass here uses `SamplerState.PointClamp`.
 - **The look.** The outline is a hard 1 px pixel-art edge today; the shader's edge must match it (no soft
   falloff unless chosen), at every font size drawn.
 - Decide whether plain, unoutlined text moves to the same path.
 
-Try it on the map glyphs first and compare with the 9-draw outline for look and frame cost (benchmark at a busy zoom)
+Try it on the map glyphs first and compare with the two-quad outline for look and frame cost (benchmark at a busy zoom)
 before moving every caller. Separately, `FNA.NET.FontStashSharp` 2.1.1 (Feb 2026) needs FNA.NET >= 2.2.1.2602; take
 it with the next FNA.NET upgrade.
 
@@ -3325,8 +3339,8 @@ does), dissolve or fade on death (threshold against a noise texture), and petrif
 - **Room in the vertex:** the style's four fields are used (mode, glow, ground row, outline layer). A mode is a new
   `SpriteDrawMode` value where it excludes the others; a setting that combines with them (a flash amount, a palette row)
   needs a second vertex attribute and a new `SpriteEffectVertex.Version`.
-- **Outside the map:** windows still draw on `SpriteBatch`. A pixel-shader-only effect works under `SpriteBatch` (the
-  plan's Phase 0) for a window that needs one; moving windows onto the batch is "Shader follow-ups" (Engine, High).
+- **Outside the map:** since 7.2 windows draw through the same batch and effect, so a mode works in any window as it does
+  on the map (a style on the draw).
 
 **Godot reference:** every `CanvasItem` can take a `ShaderMaterial` with a `canvas_item` shader
 (`fragment() { COLOR = texture(TEXTURE, UV) * ...; }`), and `modulate`/`self_modulate` feed a colour

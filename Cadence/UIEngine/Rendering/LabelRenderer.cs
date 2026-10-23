@@ -1,6 +1,5 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using UIEngine.Fonts;
 
 namespace UIEngine.Rendering;
@@ -19,16 +18,12 @@ public static class LabelRenderer
     /// pass true so they stay legible against whatever terrain is underneath.
     ///
     /// position is rounded to the nearest whole pixel: every render pass uses SamplerState.PointClamp (see
-    /// UiRenderService.ResetRenderState), and point sampling a font atlas at a fractional position crops or shifts a
+    /// UiRenderService.BeginFrame), and point sampling a font atlas at a fractional position crops or shifts a
     /// glyph by about a texel -- which the `/ 2f` centring of GetLeftAlignedPosition/GetRightAlignedPosition produces
     /// whenever the footprint's height minus LineHeight is odd. TextWindow.DrawContent, the one direct DrawString in the UI
     /// layer, rounds the same way.
     /// </remarks>
     /// <param name="alphaMultiplier">Fades the text, its outline included -- pass it here rather than pre-multiplied into color, which would fade the fill and leave the outline solid.</param>
-    public static void Draw(SpriteBatch spriteBatch, SpriteFontBase font, string glyph, Vector2 position, Color color, bool outline = false, float alphaMultiplier = 1f) =>
-        Draw(new SpriteBatchDrawTarget(spriteBatch), font, glyph, position, color, outline, alphaMultiplier);
-
-    /// <inheritdoc cref="Draw(SpriteBatch, SpriteFontBase, string, Vector2, Color, bool, float)"/>
     public static void Draw<TTarget>(TTarget target, SpriteFontBase font, string glyph, Vector2 position, Color color, bool outline = false, float alphaMultiplier = 1f, SpriteDrawStyle style = default)
         where TTarget : ISpriteDrawTarget
     {
@@ -54,11 +49,6 @@ public static class LabelRenderer
 
     /// <param name="fontMeasurer">The font to draw in, measured -- see GetCenteredPosition.</param>
     /// <param name="alphaMultiplier">See Draw.</param>
-    public static void DrawCentered(SpriteBatch spriteBatch, FontStashTextMeasurer fontMeasurer, string glyph, Vector2 footprintTopLeft, Vector2 footprintSize, Color color, bool outline = false, float alphaMultiplier = 1f) =>
-        Draw(spriteBatch, fontMeasurer.Font, glyph, GetCenteredPosition(fontMeasurer, glyph, footprintTopLeft, footprintSize), color, outline, alphaMultiplier);
-
-    /// <param name="fontMeasurer">The font to draw in, measured -- see GetCenteredPosition.</param>
-    /// <param name="alphaMultiplier">See Draw.</param>
     public static void DrawCentered<TTarget>(TTarget target, FontStashTextMeasurer fontMeasurer, string glyph, Vector2 footprintTopLeft, Vector2 footprintSize, Color color, bool outline = false, float alphaMultiplier = 1f, SpriteDrawStyle style = default)
         where TTarget : ISpriteDrawTarget =>
         Draw(target, fontMeasurer.Font, glyph, GetCenteredPosition(fontMeasurer, glyph, footprintTopLeft, footprintSize), color, outline, alphaMultiplier, style);
@@ -77,13 +67,15 @@ public static class LabelRenderer
         footprintTopLeft + new Vector2(footprintSize.X - textWidth, (footprintSize.Y - font.LineHeight) / 2f);
 
     /// <param name="textWidth">text's measured width; see GetRightAlignedPosition.</param>
-    public static void DrawRightAligned(SpriteBatch spriteBatch, SpriteFontBase font, string text, float textWidth, Vector2 footprintTopLeft, Vector2 footprintSize, Color color) =>
-        Draw(spriteBatch, font, text, GetRightAlignedPosition(font, textWidth, footprintTopLeft, footprintSize), color);
+    public static void DrawRightAligned<TTarget>(TTarget target, SpriteFontBase font, string text, float textWidth, Vector2 footprintTopLeft, Vector2 footprintSize, Color color)
+        where TTarget : ISpriteDrawTarget =>
+        Draw(target, font, text, GetRightAlignedPosition(font, textWidth, footprintTopLeft, footprintSize), color);
 
     /// <summary>Where text must be drawn so it's flush against footprintSize's left edge and vertically centered within it -- the left-aligned counterpart to GetRightAlignedPosition (it centres against LineHeight the same way), for a row that needs both (e.g. a context-menu option's label on the left, its hotkey on the right).</summary>
     public static Vector2 GetLeftAlignedPosition(SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize) =>
         footprintTopLeft + new Vector2(0, (footprintSize.Y - font.LineHeight) / 2f);
 
-    public static void DrawLeftAligned(SpriteBatch spriteBatch, SpriteFontBase font, string text, Vector2 footprintTopLeft, Vector2 footprintSize, Color color) =>
-        Draw(spriteBatch, font, text, GetLeftAlignedPosition(font, footprintTopLeft, footprintSize), color);
+    public static void DrawLeftAligned<TTarget>(TTarget target, SpriteFontBase font, string text, Vector2 footprintTopLeft, Vector2 footprintSize, Color color)
+        where TTarget : ISpriteDrawTarget =>
+        Draw(target, font, text, GetLeftAlignedPosition(font, footprintTopLeft, footprintSize), color);
 }

@@ -29,7 +29,7 @@ public sealed class RadialFillRenderer(SpriteSheetService? spriteSheetService = 
     public Color SpriteTint { get; set; } = Color.White;
 
     /// <summary>alphaMultiplier fades BackgroundColor and the sprite/glyph together -- HotbarContent's disabled-slot treatment (see its own doc comment) -- but never the radial mask itself, which stays scoped to whether this icon is on cooldown/unaffordable, not whether the whole slot is currently faded.</summary>
-    public void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, FontStashTextMeasurer glyphFontMeasurer, Rectangle bounds, float alphaMultiplier = 1f)
+    public void Draw(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, FontStashTextMeasurer glyphFontMeasurer, Rectangle bounds, float alphaMultiplier = 1f)
     {
         spriteBatch.Draw(unitRectangle, bounds, BackgroundColor * alphaMultiplier);
 
@@ -48,7 +48,7 @@ public sealed class RadialFillRenderer(SpriteSheetService? spriteSheetService = 
         DrawRadialMask(spriteBatch, unitRectangle, bounds);
     }
 
-    private void DrawRadialMask(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds)
+    private void DrawRadialMask(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds)
     {
         var clampedFill = Math.Clamp(FillPercentage, 0f, 1f);
         if (clampedFill <= 0f)
@@ -75,8 +75,7 @@ public sealed class RadialFillRenderer(SpriteSheetService? spriteSheetService = 
                 angle,
                 new Vector2(0f, 0.5f),
                 sliverSize,
-                SpriteEffects.None,
-                0f);
+                SpriteEffects.None);
 
             angle -= angleStep;
         }

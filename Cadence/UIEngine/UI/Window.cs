@@ -313,7 +313,7 @@ public class Window : Element
 
     protected override void DrawHeader(GameTime gameTime)
     {
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
         if (!_isTransparent)

@@ -60,7 +60,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
         foreach (var offset in _offsets)
@@ -71,7 +71,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
         DrawPlayerMarker(spriteBatch, unitRectangle);
     }
 
-    private void DrawCell(SpriteBatch spriteBatch, Texture2D unitRectangle, Point offset)
+    private void DrawCell(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Point offset)
     {
         var cellOrigin = ContentAbsolutePosition + new Vector2((offset.X - _minX) * _cellSize, (offset.Y - _minY) * _cellSize);
         var outerSize = _cellSize - CellGap;
@@ -83,7 +83,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
     }
 
     /// <summary>Only the caster's own row (offset.Y == 0) and only to the right of the caster (offset.X > 0) -- the left side would show the same distance values again, redundant once the right side already reads them.</summary>
-    private void DrawDistanceNumber(SpriteBatch spriteBatch, Point offset, Vector2 cellOrigin, float outerSize)
+    private void DrawDistanceNumber(SpriteEffectBatch spriteBatch, Point offset, Vector2 cellOrigin, float outerSize)
     {
         if (offset.Y != 0 || offset.X <= 0)
         {
@@ -95,7 +95,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
     }
 
     /// <summary>The caster's own cell (0,0) -- always present, whether or not it's also one of the targeted _offsets (Self, alone or combined e.g. Adjacent | Self, targets it; most other shapes don't; either way the circle marks it).</summary>
-    private void DrawPlayerMarker(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawPlayerMarker(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
         var cellOrigin = ContentAbsolutePosition + new Vector2((0 - _minX) * _cellSize, (0 - _minY) * _cellSize);
         var center = cellOrigin + new Vector2(_cellSize / 2f, _cellSize / 2f);
@@ -109,7 +109,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
     }
 
     /// <summary>Same "sweep thin rotated rectangles around a center" technique RadialFillRenderer.DrawRadialMask already uses for its own cooldown wheel -- reimplemented directly rather than reused, since that method draws a translucent cooldown mask over an icon (a different composite), not a plain solid circle in an arbitrary color.</summary>
-    private static void DrawCircle(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 center, float radius, Color color)
+    private static void DrawCircle(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 center, float radius, Color color)
     {
         var sliverThickness = MathF.Max(1f, MathF.Tau * radius / CircleSliverCount * 1.5f);
         var sliverSize = new Vector2(radius, sliverThickness);
@@ -118,7 +118,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
 
         for (var i = 0; i < CircleSliverCount; i++)
         {
-            spriteBatch.Draw(unitRectangle, center, null, color, angle, new Vector2(0f, 0.5f), sliverSize, SpriteEffects.None, 0f);
+            spriteBatch.Draw(unitRectangle, center, null, color, angle, new Vector2(0f, 0.5f), sliverSize, SpriteEffects.None);
             angle -= angleStep;
         }
     }

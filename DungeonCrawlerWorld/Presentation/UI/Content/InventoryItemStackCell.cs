@@ -213,7 +213,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = Render.SpriteBatch;
+        var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
         var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
 
@@ -243,7 +243,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     /// their own layout. Returns isGreyedOut so a caller's own trailing text (name/price/quantity)
     /// can match this same disabled/ineligible tint without recomputing the same condition itself.
     /// </summary>
-    protected bool DrawBaseAndIcon(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Vector2 iconSize)
+    protected bool DrawBaseAndIcon(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Vector2 iconSize)
     {
         GridSquareRenderer.DrawBase(spriteBatch, unitRectangle, bounds);
         GridSquareRenderer.DrawStateOverlay(spriteBatch, unitRectangle, bounds, IsSelected ? GridSquareState.Selected : IsHovered ? GridSquareState.Hovered : GridSquareState.Normal);
@@ -274,7 +274,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     /// alongside it -- a solid black line only on the group's outer perimeter edges, so two
     /// adjacent member cells share a clean, unbroken join with no border between them at all.
     /// </summary>
-    private void DrawGroupBorder(SpriteBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawGroupBorder(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
         if (!_groupBorderTop && !_groupBorderBottom && !_groupBorderLeft && !_groupBorderRight)
         {

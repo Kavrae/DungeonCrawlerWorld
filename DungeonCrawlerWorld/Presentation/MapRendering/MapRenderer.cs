@@ -22,7 +22,7 @@ namespace Presentation.MapRendering;
 /// authored layout. Draws nothing about what the player is doing (targeting, selection): that is drawn over it by its host.
 /// </para>
 /// <para>
-/// Two calls a frame: Update, outside any SpriteBatch pass, re-renders the cached ground and wall-top images when they are
+/// Two calls a frame: Update, outside the UI's pass, re-renders the cached ground and wall-top images when they are
 /// stale; Draw rebuilds the glow texture when it is stale and blits the images under the row walk. Each is stale when the
 /// camera shows something other than what it was built for (MapImageKey), so no camera move has to announce itself. What
 /// the key can't see is told: terrain changes through InvalidateTerrain/InvalidateTerrainIn, and aura changes through
@@ -181,10 +181,10 @@ public sealed class MapRenderer : IDisposable
         return area.MinX < scroll.X + tileColumns + beside && area.MaxX > scroll.X - beside && area.MinY < scroll.Y + tileRows + below && area.MaxY > scroll.Y;
     }
 
-    /// <summary>Re-renders whichever cached image is stale for mapLayer as the camera now shows it. Must run outside any SpriteBatch pass.</summary>
+    /// <summary>Re-renders whichever cached image is stale for mapLayer as the camera now shows it. Must run outside the UI's pass.</summary>
     /// <remarks>
     /// Rendering into MapTileLayerCache's own texture means swapping render targets, and by the time anything draws,
-    /// GameLoop has already begun the shared SpriteBatch pass that UiRenderService's render-state stack owns. Run it
+    /// GameLoop has already begun the UI's pass (UiRenderService.BeginFrame). Run it
     /// after anything that moves the camera this frame, so a frame that re-centres rebuilds against the new scroll
     /// position rather than drawing the uncached path once before catching up.
     /// </remarks>
@@ -197,14 +197,15 @@ public sealed class MapRenderer : IDisposable
         }
 
         var key = MapImageKey.Of(_camera, mapLayer);
-        _groundCache?.EnsureRendered(_renderService.SpriteEffectBatch, key, _drawGroundIntoCache);
-        _topsCache?.EnsureRendered(_renderService.SpriteEffectBatch, key, _drawTopsIntoCache);
+        _groundCache?.EnsureRendered(_renderService.Batch, key, _drawGroundIntoCache);
+        _topsCache?.EnsureRendered(_renderService.Batch, key, _drawTopsIntoCache);
     }
 
     /// <summary>Draws one frame of the map: the flat fill, the ground, the walls' tops, then the row walk -- lit by the auras' glow.</summary>
     /// <remarks>
-    /// Drawn through the sprite effect in a pass of its own (UiRenderService.BeginSpriteEffectPass), inside the host's
-    /// SpriteBatch pass and under its viewport, scissor and transform, which resumes afterwards. The ground and the tops are
+    /// Drawn into the UI's one pass (UiRenderService.Batch), in its place among the windows and under their viewport, scissor
+    /// and transform: the map sets the batch's Glow for its own draws and clears it after, which ends the run, so nothing
+    /// drawn before or after reads the map's light. The ground and the tops are
     /// blitted from their cached images when those match what the camera shows, and drawn directly otherwise (the frame or two
     /// before the first render, a camera moved since Update) -- the same pixels at the old cost.
     /// The glow is light, not an overlay: the effect reads it from a texture of one texel per tile (MapGlowTexels) for what
@@ -217,15 +218,15 @@ public sealed class MapRenderer : IDisposable
     {
         var key = MapImageKey.Of(_camera, mapLayer);
         var glowTexture = _glowTexture.Ensure(_renderService.GraphicsDevice, key, _auraPower.Version);
-        var batch = _renderService.BeginSpriteEffectPass();
+        var batch = _renderService.Batch;
+        batch.Glow = SpriteEffectGlow.OverTileGrid(glowTexture, key.TileSize, _camera.TileOrigin(0, 0), MapGlowTexels.MarginTiles);
         try
         {
-            batch.Glow = SpriteEffectGlow.OverTileGrid(glowTexture, key.TileSize, _camera.TileOrigin(0, 0), MapGlowTexels.MarginTiles);
             DrawMap(batch, key, watchedEntityIds);
         }
         finally
         {
-            _renderService.EndSpriteEffectPass();
+            batch.Glow = SpriteEffectGlow.None;
         }
     }
 

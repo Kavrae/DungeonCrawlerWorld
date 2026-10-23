@@ -114,7 +114,7 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
             return;
         }
 
-        var spriteBatch = _hostWindow.Render.SpriteBatch;
+        var spriteBatch = _hostWindow.Render.Batch;
         var unitRectangle = _hostWindow.Render.UnitRectangle;
         var origin = _hostWindow.ContentAbsolutePosition;
         var iconSize = new Vector2(_hostWindow.ContentSize.Y, _hostWindow.ContentSize.Y);
@@ -132,7 +132,7 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
         }
     }
 
-    private void DrawIcon(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size, StatusEffectType effectType)
+    private void DrawIcon(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size, StatusEffectType effectType)
     {
         DrawIconBackground(spriteBatch, unitRectangle, origin, size);
 
@@ -144,7 +144,7 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
         }
     }
 
-    private void DrawPotionCooldownIcon(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size, int framesRemaining)
+    private void DrawPotionCooldownIcon(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size, int framesRemaining)
     {
         DrawIconBackground(spriteBatch, unitRectangle, origin, size);
 
@@ -157,7 +157,7 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
     }
 
     /// <summary>No-ops at count &lt;= 1 -- a lone stack doesn't need a number, the same convention ItemIconRenderer.DrawQuantityBadge already uses for item stacks.</summary>
-    private void DrawStackCount(SpriteBatch spriteBatch, Vector2 origin, Vector2 size, StatusEffectType effectType, int stackCount)
+    private void DrawStackCount(SpriteEffectBatch spriteBatch, Vector2 origin, Vector2 size, StatusEffectType effectType, int stackCount)
     {
         if (stackCount <= 1)
         {
@@ -173,14 +173,14 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
         DrawTextBelowIcon(spriteBatch, origin, size, stackCountNumber.Get(_countdownFont, stackCount));
     }
 
-    private void DrawTextBelowIcon(SpriteBatch spriteBatch, Vector2 origin, Vector2 size, (string Text, Vector2 Size) number)
+    private void DrawTextBelowIcon(SpriteEffectBatch spriteBatch, Vector2 origin, Vector2 size, (string Text, Vector2 Size) number)
     {
         var textPosition = new Vector2(origin.X + (size.X - number.Size.X) / 2f, origin.Y + size.Y + CountdownTextGap);
         ContrastTextRenderer.Draw(spriteBatch, _countdownFont, number.Text, textPosition);
     }
 
     /// <summary>The square white tile with a 1px black border shared by every status/cooldown icon here -- DrawIcon and DrawPotionCooldownIcon otherwise only differ in what's drawn on top of it.</summary>
-    private static void DrawIconBackground(SpriteBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size)
+    private static void DrawIconBackground(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size)
     {
         var outerRectangle = new Rectangle((int)origin.X, (int)origin.Y, (int)size.X, (int)size.Y);
         spriteBatch.Draw(unitRectangle, outerRectangle, Color.Black);

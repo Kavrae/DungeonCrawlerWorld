@@ -35,6 +35,6 @@ public sealed class ItemIconElement(FontService fontService, ElementPoolService 
 
     public override void DrawContent(GameTime gameTime)
     {
-        SpriteOrGlyphRenderer.Draw(Render.SpriteBatch, spriteSheetService, _sprite, _glyphFontMeasurer, _glyph, _glyphColor, ContentAbsolutePosition, ContentSize, Color.White);
+        SpriteOrGlyphRenderer.Draw(Render.Batch, spriteSheetService, _sprite, _glyphFontMeasurer, _glyph, _glyphColor, ContentAbsolutePosition, ContentSize, Color.White);
     }
 }

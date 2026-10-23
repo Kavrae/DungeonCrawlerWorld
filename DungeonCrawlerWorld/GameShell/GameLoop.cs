@@ -161,8 +161,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     {
         GraphicsDevice.Clear(Color.LightGray);
 
-        _uiEngine.SpriteBatchRenderer.StartSpriteBatch();
-        _uiEngine.RenderService.ResetRenderState();
+        _uiEngine.RenderService.BeginFrame();
 
         using (EngineHooks.FrameCost(FrameCostCategory.Draw, "GameLoop", "Shell.Draw"))
         {
@@ -171,7 +170,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
         using (EngineHooks.FrameCost(FrameCostCategory.Draw, "GameLoop", "SpriteBatch.End"))
         {
-            _uiEngine.SpriteBatchRenderer.EndSpriteBatch();
+            _uiEngine.RenderService.EndFrame();
         }
 
         base.Draw(gameTime);
