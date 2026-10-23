@@ -25,7 +25,7 @@ public sealed class SpriteEffectQuadsTests
         var arguments = TransformedDrawArguments.For(transform, WholeCell, new Vector2(Destination.X, Destination.Y), new Vector2(Destination.Width, Destination.Height));
         var sourceSize = new Vector2(WholeCell.Width, WholeCell.Height);
         var corners = new SpriteEffectVertex[4];
-        SpriteEffectQuads.Write(corners, arguments.Position, sourceSize * arguments.Scale, arguments.Rotation, arguments.Origin / sourceSize, SpriteEffectQuads.NormalizedSource(WholeCell, new Point(16, 16)), Color.White, arguments.Effects, Vector4.Zero);
+        SpriteEffectQuads.Write(corners, arguments.Position, sourceSize * arguments.Scale, arguments.Rotation, arguments.Origin / sourceSize, SpriteEffectQuads.NormalizedSource(WholeCell, new Point(16, 16)), Color.White, arguments.Effects, default);
         return corners;
     }
 
@@ -44,7 +44,6 @@ public sealed class SpriteEffectQuadsTests
         AssertPosition(new Vector2(42, 20), corners[1], "top-right");
         AssertPosition(new Vector2(10, 52), corners[2], "bottom-left");
         AssertPosition(new Vector2(42, 52), corners[3], "bottom-right");
-        Assert.AreEqual(0f, corners.Max(corner => corner.Position.Z));
     }
 
     [TestMethod]
@@ -85,7 +84,7 @@ public sealed class SpriteEffectQuadsTests
         var scale = new Vector2(2, 3);
         var sourceSize = new Vector2(16, 8);
 
-        SpriteEffectQuads.Write(corners, new Vector2(100, 50), sourceSize * scale, 0f, origin / sourceSize, new Vector4(0, 0, 1, 1), Color.White, SpriteEffects.None, Vector4.Zero);
+        SpriteEffectQuads.Write(corners, new Vector2(100, 50), sourceSize * scale, 0f, origin / sourceSize, new Vector4(0, 0, 1, 1), Color.White, SpriteEffects.None, default);
 
         AssertPosition(new Vector2(100 - 4 * 2, 50 - 2 * 3), corners[0], "top-left");
         AssertPosition(new Vector2(100 - 8 + 32, 50 - 6 + 24), corners[3], "bottom-right");

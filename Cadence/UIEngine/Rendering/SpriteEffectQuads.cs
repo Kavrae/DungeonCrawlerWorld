@@ -20,7 +20,7 @@ internal static class SpriteEffectQuads
 
     /// <param name="normalizedOrigin">The origin as a fraction of the source's size.</param>
     /// <param name="normalizedSource">The source rectangle as fractions of the texture's size: x, y, width, height.</param>
-    public static void Write(Span<SpriteEffectVertex> corners, Vector2 position, Vector2 size, float rotation, Vector2 normalizedOrigin, Vector4 normalizedSource, Color color, SpriteEffects effects, Vector4 style)
+    public static void Write(Span<SpriteEffectVertex> corners, Vector2 position, Vector2 size, float rotation, Vector2 normalizedOrigin, Vector4 normalizedSource, Color color, SpriteEffects effects, SpriteEffectVertexStyle style)
     {
         if (rotation == 0f && effects == SpriteEffects.None)
         {
@@ -38,7 +38,7 @@ internal static class SpriteEffectQuads
             var cornerY = (CornerOffsetY[corner] - normalizedOrigin.Y) * size.Y;
             corners[corner] = new SpriteEffectVertex
             {
-                Position = new Vector3(position.X + cornerX * cosine - cornerY * sine, position.Y + cornerX * sine + cornerY * cosine, 0f),
+                Position = new Vector2(position.X + cornerX * cosine - cornerY * sine, position.Y + cornerX * sine + cornerY * cosine),
                 Color = color,
                 TextureCoordinate = new Vector2(
                     normalizedSource.X + CornerOffsetX[corner ^ flip] * normalizedSource.Z,
@@ -49,17 +49,17 @@ internal static class SpriteEffectQuads
     }
 
     /// <summary>Write for the common sprite -- unturned, unflipped -- without the per-corner rotation and lookups: most of what the map draws.</summary>
-    private static void WriteUpright(Span<SpriteEffectVertex> corners, Vector2 topLeft, Vector2 size, Vector4 normalizedSource, Color color, Vector4 style)
+    private static void WriteUpright(Span<SpriteEffectVertex> corners, Vector2 topLeft, Vector2 size, Vector4 normalizedSource, Color color, SpriteEffectVertexStyle style)
     {
         var right = topLeft.X + size.X;
         var bottom = topLeft.Y + size.Y;
         var sourceRight = normalizedSource.X + normalizedSource.Z;
         var sourceBottom = normalizedSource.Y + normalizedSource.W;
 
-        corners[0] = new SpriteEffectVertex { Position = new Vector3(topLeft.X, topLeft.Y, 0f), Color = color, TextureCoordinate = new Vector2(normalizedSource.X, normalizedSource.Y), Style = style };
-        corners[1] = new SpriteEffectVertex { Position = new Vector3(right, topLeft.Y, 0f), Color = color, TextureCoordinate = new Vector2(sourceRight, normalizedSource.Y), Style = style };
-        corners[2] = new SpriteEffectVertex { Position = new Vector3(topLeft.X, bottom, 0f), Color = color, TextureCoordinate = new Vector2(normalizedSource.X, sourceBottom), Style = style };
-        corners[3] = new SpriteEffectVertex { Position = new Vector3(right, bottom, 0f), Color = color, TextureCoordinate = new Vector2(sourceRight, sourceBottom), Style = style };
+        corners[0] = new SpriteEffectVertex { Position = new Vector2(topLeft.X, topLeft.Y), Color = color, TextureCoordinate = new Vector2(normalizedSource.X, normalizedSource.Y), Style = style };
+        corners[1] = new SpriteEffectVertex { Position = new Vector2(right, topLeft.Y), Color = color, TextureCoordinate = new Vector2(sourceRight, normalizedSource.Y), Style = style };
+        corners[2] = new SpriteEffectVertex { Position = new Vector2(topLeft.X, bottom), Color = color, TextureCoordinate = new Vector2(normalizedSource.X, sourceBottom), Style = style };
+        corners[3] = new SpriteEffectVertex { Position = new Vector2(right, bottom), Color = color, TextureCoordinate = new Vector2(sourceRight, sourceBottom), Style = style };
     }
 
     /// <summary>source (or the whole texture) as fractions of a texture of textureSize: x, y, width, height.</summary>

@@ -177,6 +177,32 @@ benchmarked windowed at a busy zoom (the headless benchmark draws nothing).
   it shows as hitches, research how variants (cell seeds), linked walls (`MapWallPlan`, join masks), tops and overhangs,
   turned and flipped cells, and sprites reaching past their tile fit a lookup -- and decide whether to build it.
 
+#### Aura glow clarity: soft bleed past the reach, a highlight line around it
+
+Today the glow stops hard at the last tile an aura reaches: `SpriteUber.fx`'s `GlowAt` lights nothing whose own tile has no
+glow, so light shades smoothly inside the area and is cut off square at its edge. Experiment with a clearer look: let the
+light bleed a little past the affected tiles, so it reads as light rather than a painted region, and draw a thin highlight
+line along the boundary of the tiles the aura actually reaches, so the player can still see exactly where its effect
+applies.
+- **Floor only, behind everything.** The bleed and the line draw on floor surfaces only -- never on walls' faces or tops,
+  never on entities -- and sit under every entity and wall, which draw over them. The ground image (`MapTileLayerCache`)
+  holds floors and walls' faces together and is lit per pixel as one quad, so the face pixels must be told apart:
+  render the faces into an image of their own (or a mask of the floor's pixels) so only the floor gets the line and the
+  bleed. Entities stay lit along their ground row (`SpriteGlow.AlongGroundRow`) by the reach as it is now, unless the
+  experiment shows they should follow the bleed too.
+- **Not distracting.** A thin, low-alpha line in the aura's own colour, constant width in screen pixels at every zoom (the
+  outline already sizes itself this way from texture-coordinate derivatives). No animation unless a still line proves hard
+  to read. Try it over lava fields, Holy Ground, a shrine and a placed Torch, alone and overlapping, and at the farthest
+  and closest zooms; keep what reads at a glance and fades into the background otherwise.
+- **Where the edge comes from.** The glow texture is one texel per tile, already blended across auras (`AuraGlowBlend`),
+  so a line from its coverage marks where light starts and stops, not where one aura meets another. Decide whether that is
+  enough, or whether the line needs per-aura coverage (a coverage bit per aura in the field, or a second per-tile texture
+  for edges) -- and keep `AuraPowerView` as the only thing Presentation reads.
+- **Cost.** Every lit floor pixel pays for this, so measure GPU frame time windowed at a busy zoom before and after (the
+  headless benchmark draws nothing); read the neighbouring texels once, not per effect. Pairs with "Sprite effect: overlap
+  the glow's two texture reads" (Medium), which changes the same reads.
+- Ends with an in-game check of the cases above and a decision recorded in IMPLEMENTATION-NOTES, whether it lands or not.
+
 #### UiInputController.Update: one key and hotkey routing path
 
 `UiInputController.Update` hands the keyboard out through seven separate steps in a fixed order, each with its own
@@ -418,6 +444,20 @@ Investigate moving the shared core into Engine as optimized common elements, whi
   extension point instead; the cost of indirection on hot paths versus the optimization a shared home allows; and
   whether mods and the IDE gain from a stable engine-level contract.
 - The outcome may be "move these few, leave the rest"; the point is a decision backed by how shipped engines do it.
+
+#### Sprite effect: overlap the glow's two texture reads
+
+`SpriteUber.fx`'s `GlowAt` reads the glow texel of the tile under the read point, branches on its alpha, and only then
+reads the filtered glow -- so a lit pixel waits out two texture fetches one after the other, while an unlit tile skips the
+second read entirely. Every pixel of the map's ground image is lit (`SpriteGlow.AtPixel`), and most of it is usually unlit
+tiles, so which costs less depends on how much of the screen auras reach.
+- **The alternative:** issue both reads unconditionally and zero the filtered one by `step` on the own tile's alpha (or
+  `[flatten]` the branch), so the two fetches are in flight together and no lit pixel serializes them.
+- **Measure first:** windowed (the headless benchmark draws nothing), at a busy zoom, with few auras on screen and with
+  the screen mostly lit (Holy Ground, lava), on the branch and the flattened version; GPU frame time, not CPU. Keep
+  whichever wins on the common case, and only if the difference shows.
+- Already in place, so measure against it: the fill is part of the ground image (`MapTileLayerCache`'s background colour), the glow's read point and texel transform are the vertex
+  shader's, and one `GlowAt` serves both glow modes.
 
 ### Low Priority
 

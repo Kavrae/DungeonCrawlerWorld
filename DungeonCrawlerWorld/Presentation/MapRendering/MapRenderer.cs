@@ -103,7 +103,7 @@ public sealed class MapRenderer : IDisposable
     private readonly Action<SpriteEffectBatch, MapImageKey> _drawGroundIntoCache;
     private readonly Action<SpriteEffectBatch, MapImageKey> _drawTopsIntoCache;
 
-    /// <summary>Floors, off-map black and the cached walls' faces, rendered unlit and lit by the glow when blitted. Null until the first Update that finds a GraphicsDevice, and permanently null for a headless renderer that never gets one, which may Update but never Draw. Built on first use because UiRenderService only receives a GraphicsDevice in the host's LoadContent.</summary>
+    /// <summary>Floors, off-map black and the cached walls' faces over the flat fill, rendered unlit and lit by the glow when blitted -- so the fill is lit once, as part of the image, and never drawn under it. Null until the first Update that finds a GraphicsDevice, and permanently null for a headless renderer that never gets one, which may Update but never Draw. Built on first use because UiRenderService only receives a GraphicsDevice in the host's LoadContent.</summary>
     private MapTileLayerCache? _groundCache;
 
     /// <summary>The cached walls' tops, a separate image from _groundCache because tops are never lit: a top is the wall's roof, rows above the floor the glow lies on.</summary>
@@ -192,8 +192,8 @@ public sealed class MapRenderer : IDisposable
     {
         if (_groundCache is null && _renderService.GraphicsDevice is { } graphicsDevice)
         {
-            _groundCache = new MapTileLayerCache(graphicsDevice);
-            _topsCache = new MapTileLayerCache(graphicsDevice);
+            _groundCache = new MapTileLayerCache(graphicsDevice, MapFillColor);
+            _topsCache = new MapTileLayerCache(graphicsDevice, Color.Transparent);
         }
 
         var key = MapImageKey.Of(_camera, mapLayer);
@@ -234,10 +234,9 @@ public sealed class MapRenderer : IDisposable
         var unitRectangle = _renderService.UnitRectangle;
         var litAtPixel = SpriteDrawStyle.Plain.WithGlowAtPixel();
 
-        batch.Draw(unitRectangle, new Rectangle(0, 0, key.TileColumns * key.TileSize.X, key.TileRows * key.TileSize.Y), null, MapFillColor, litAtPixel);
-
         if (_groundCache?.Draw(batch, key, -_camera.RenderPixelOffset, litAtPixel) != true)
         {
+            batch.Draw(unitRectangle, new Rectangle(0, 0, key.TileColumns * key.TileSize.X, key.TileRows * key.TileSize.Y), null, MapFillColor, litAtPixel);
             DrawGroundDirectly(batch, key, _camera.RenderPixelOffset, SpriteGlow.AtPixel);
         }
         else if (!_plannedWalls.IsCurrentFor(key))

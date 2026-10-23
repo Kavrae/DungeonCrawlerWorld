@@ -9,23 +9,28 @@ namespace UIEngine.Rendering;
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct SpriteEffectVertex : IVertexType
 {
-    public const float Version = 3f;
+    public const float Version = 4f;
 
     public static readonly VertexDeclaration Declaration = new(
-        new VertexElement(0, VertexElementFormat.Vector3, VertexElementUsage.Position, 0),
-        new VertexElement(12, VertexElementFormat.Color, VertexElementUsage.Color, 0),
-        new VertexElement(16, VertexElementFormat.Vector2, VertexElementUsage.TextureCoordinate, 0),
-        new VertexElement(24, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 1));
+        new VertexElement(0, VertexElementFormat.Vector2, VertexElementUsage.Position, 0),
+        new VertexElement(8, VertexElementFormat.Color, VertexElementUsage.Color, 0),
+        new VertexElement(12, VertexElementFormat.Vector2, VertexElementUsage.TextureCoordinate, 0),
+        new VertexElement(20, VertexElementFormat.Color, VertexElementUsage.TextureCoordinate, 1),
+        new VertexElement(24, VertexElementFormat.Single, VertexElementUsage.TextureCoordinate, 2));
 
-    public Vector3 Position;
+    public Vector2 Position;
 
     /// <summary>Tint times alpha, premultiplied -- what SpriteBatch takes as a draw's colour.</summary>
     public Color Color;
 
     public Vector2 TextureCoordinate;
 
-    /// <summary>SpriteDrawStyle.ToVertexStyle: the mode, the glow, the ground row's y, and whether it is a glyph's outline layer.</summary>
-    public Vector4 Style;
+    /// <summary>SpriteDrawStyle.ToVertexStyle: the mode, the glow, whether it is a glyph's outline layer, and the ground row's y.</summary>
+    public SpriteEffectVertexStyle Style;
 
     readonly VertexDeclaration IVertexType.VertexDeclaration => Declaration;
 }
+
+/// <summary>A SpriteDrawStyle as SpriteEffectVertex carries it: three bytes the shader reads normalized (a Color element), a padding byte, and the ground row's y.</summary>
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public readonly record struct SpriteEffectVertexStyle(byte Mode, byte Glow, byte OutlineOnly, byte Unused, float GroundRowY);

@@ -39,14 +39,17 @@ namespace Presentation.MapRendering;
 public sealed class MapTileLayerCache : IDisposable
 {
     private readonly GraphicsDevice _graphicsDevice;
+    private readonly Color _backgroundColor;
 
     private RenderTarget2D? _target;
     private bool _isDirty = true;
     private MapImageKey _renderedKey;
 
-    public MapTileLayerCache(GraphicsDevice graphicsDevice)
+    /// <param name="backgroundColor">What the image holds where nothing is drawn: the ground's flat fill, so the blit covers it and nothing is drawn beneath, or Transparent for an image drawn over others.</param>
+    public MapTileLayerCache(GraphicsDevice graphicsDevice, Color backgroundColor)
     {
         _graphicsDevice = graphicsDevice;
+        _backgroundColor = backgroundColor;
     }
 
     /// <summary>
@@ -104,7 +107,7 @@ public sealed class MapTileLayerCache : IDisposable
         var previousTargets = _graphicsDevice.GetRenderTargets();
 
         _graphicsDevice.SetRenderTarget(_target);
-        _graphicsDevice.Clear(Color.Transparent);
+        _graphicsDevice.Clear(_backgroundColor);
 
         // Mirrors SpriteBatchRenderer.StartSpriteBatch's own parameters -- PointClamp in
         // particular, since every glyph here comes from a font atlas that crops under linear

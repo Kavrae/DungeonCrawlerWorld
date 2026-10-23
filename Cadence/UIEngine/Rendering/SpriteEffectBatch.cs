@@ -32,7 +32,7 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
     private readonly EffectParameter _matrixTransform;
     private readonly EffectParameter _glowTexture;
     private readonly EffectParameter _glowTransform;
-    private readonly EffectParameter _glowTextureSize;
+    private readonly EffectParameter _glowTexelSize;
     private readonly EffectPass _pass;
 
     /// <summary>One transparent texel: what lit draws read when the batch has no glow, so they come out unlit.</summary>
@@ -58,7 +58,7 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
         _matrixTransform = spriteEffect.Parameters["MatrixTransform"];
         _glowTexture = spriteEffect.Parameters["GlowTexture"];
         _glowTransform = spriteEffect.Parameters["GlowTransform"];
-        _glowTextureSize = spriteEffect.Parameters["GlowTextureSize"];
+        _glowTexelSize = spriteEffect.Parameters["GlowTexelSize"];
         _pass = spriteEffect.CurrentTechnique.Passes[0];
         _noGlowTexture = new Texture2D(graphicsDevice, 1, 1);
         _noGlowTexture.SetData([Color.Transparent]);
@@ -177,7 +177,7 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
         var glow = Glow;
         _glowTexture.SetValue(glow.Texture ?? _noGlowTexture);
         _glowTransform.SetValue(glow.Texture is null ? Vector4.Zero : glow.Transform);
-        _glowTextureSize.SetValue(glow.Texture is null ? Vector2.One : glow.TextureSize);
+        _glowTexelSize.SetValue(glow.Texture is null ? Vector2.One : Vector2.One / glow.TextureSize);
 
         graphicsDevice.BlendState = BlendState.AlphaBlend;
         graphicsDevice.DepthStencilState = DepthStencilState.None;

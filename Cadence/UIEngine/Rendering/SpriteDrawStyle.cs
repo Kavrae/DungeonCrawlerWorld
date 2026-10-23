@@ -1,5 +1,3 @@
-using Microsoft.Xna.Framework;
-
 namespace UIEngine.Rendering;
 
 /// <summary>How the sprite effect shades a draw, beyond its colour.</summary>
@@ -38,5 +36,5 @@ public readonly record struct SpriteDrawStyle(SpriteDrawMode Mode, SpriteGlow Gl
 
     public SpriteDrawStyle WithGlowAlongGroundRow(float groundRowY) => this with { Glow = SpriteGlow.AlongGroundRow, GroundRowY = groundRowY };
 
-    public Vector4 ToVertexStyle() => new((float)Mode, (float)Glow, GroundRowY, OutlineOnly ? 1f : 0f);
+    public SpriteEffectVertexStyle ToVertexStyle() => new((byte)Mode, (byte)Glow, OutlineOnly ? (byte)1 : (byte)0, 0, GroundRowY);
 }

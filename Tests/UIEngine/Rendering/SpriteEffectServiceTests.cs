@@ -46,6 +46,11 @@ public sealed class SpriteEffectServiceTests
         Assert.AreEqual(SpriteEffectVertex.Version, float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture));
     }
 
+    /// <summary>The declaration's offsets were written by hand: its stride is the struct's size, so no element reads another's bytes.</summary>
+    [TestMethod]
+    public void VertexDeclaration_StrideIsTheVertexSize() =>
+        Assert.AreEqual(System.Runtime.InteropServices.Marshal.SizeOf<SpriteEffectVertex>(), SpriteEffectVertex.Declaration.VertexStride);
+
     /// <summary>Every mode beyond Plain is a constant in the shader with the value SpriteDrawStyle writes into the vertex.</summary>
     [TestMethod]
     public void Shader_DeclaresEveryDrawModeWithItsValue()
@@ -57,7 +62,7 @@ public sealed class SpriteEffectServiceTests
             var match = Regex.Match(shader, $@"static\s+const\s+float\s+{mode}Mode\s*=\s*([0-9.]+)\s*;");
 
             Assert.IsTrue(match.Success, $"SpriteUber.fx declares no {mode}Mode.");
-            Assert.AreEqual(new SpriteDrawStyle(mode).ToVertexStyle().X, float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture), $"{mode}Mode");
+            Assert.AreEqual(new SpriteDrawStyle(mode).ToVertexStyle().Mode, float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture), $"{mode}Mode");
         }
     }
 
@@ -72,7 +77,7 @@ public sealed class SpriteEffectServiceTests
             var match = Regex.Match(shader, $@"static\s+const\s+float\s+Glow{glow}\s*=\s*([0-9.]+)\s*;");
 
             Assert.IsTrue(match.Success, $"SpriteUber.fx declares no Glow{glow}.");
-            Assert.AreEqual(new SpriteDrawStyle(SpriteDrawMode.Plain, glow).ToVertexStyle().Y, float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture), $"Glow{glow}");
+            Assert.AreEqual(new SpriteDrawStyle(SpriteDrawMode.Plain, glow).ToVertexStyle().Glow, float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture), $"Glow{glow}");
         }
     }
 
@@ -82,7 +87,7 @@ public sealed class SpriteEffectServiceTests
         var match = Regex.Match(File.ReadAllText(ShaderPath("SpriteUber.fx")), @"static\s+const\s+float\s+OutlineOnly\s*=\s*([0-9.]+)\s*;");
 
         Assert.IsTrue(match.Success, "SpriteUber.fx declares no OutlineOnly.");
-        Assert.AreEqual(new SpriteDrawStyle(SpriteDrawMode.Plain, OutlineOnly: true).ToVertexStyle().W, float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture));
+        Assert.AreEqual(new SpriteDrawStyle(SpriteDrawMode.Plain, OutlineOnly: true).ToVertexStyle().OutlineOnly, float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture));
     }
 
     [TestMethod]
@@ -90,7 +95,7 @@ public sealed class SpriteEffectServiceTests
     {
         var style = SpriteDrawStyle.Desaturated.WithGlowAlongGroundRow(123.5f);
 
-        Assert.AreEqual(new Microsoft.Xna.Framework.Vector4((float)SpriteDrawMode.Desaturate, (float)SpriteGlow.AlongGroundRow, 123.5f, 0f), style.ToVertexStyle());
+        Assert.AreEqual(new SpriteEffectVertexStyle((byte)SpriteDrawMode.Desaturate, (byte)SpriteGlow.AlongGroundRow, 0, 0, 123.5f), style.ToVertexStyle());
         Assert.AreEqual(SpriteGlow.AtPixel, style.WithGlowAtPixel().Glow);
         Assert.AreEqual(0f, style.WithGlowAtPixel().GroundRowY);
     }
