@@ -8,7 +8,7 @@ using UIEngine.UI.ColorPalettes;
 
 namespace UIEngine.UI;
 
-public class TextWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer) : Window(fontService, elementPoolService, labelRenderer)
+public class TextWindow(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService) : Window(fontService, elementPoolService, renderService)
 {
     public string OriginalText { get; set; } = string.Empty;
     public DisplayText DisplayText { get; set; }
@@ -47,10 +47,10 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
 
         if (Bold)
         {
-            LabelRenderer.Draw(ElementPoolService.SpriteBatch, ContentFont, DisplayText.FormattedText, origin + new Vector2(1, 0), TextColor);
+            LabelRenderer.Draw(Render.SpriteBatch, ContentFont, DisplayText.FormattedText, origin + new Vector2(1, 0), TextColor);
         }
 
-        LabelRenderer.Draw(ElementPoolService.SpriteBatch, ContentFont, DisplayText.FormattedText, origin, TextColor);
+        LabelRenderer.Draw(Render.SpriteBatch, ContentFont, DisplayText.FormattedText, origin, TextColor);
     }
 
     protected override void RecalculateFixedSize()

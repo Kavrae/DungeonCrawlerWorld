@@ -1,13 +1,13 @@
-namespace SpriteManifestBuilder;
+namespace SpriteFormat;
 
 /// <summary>
-/// One kind of linked set as this tool shows and edits it: how the slot grid lays out its slots, what each mask is called, which
+/// One kind of linked set as a tool shows it: how a slot grid lays out its slots, what each mask is called, which
 /// piece is required, and how its masks change when a piece is mirrored or turned (SpriteLinks).
 /// </summary>
-public sealed class LinkLayout
+public sealed class SpriteLinkLayout
 {
     /// <summary>A wall's top: 16 slots, one per combination of joined sides, laid out as a 3x3 room top-left, a vertical run down the right, a horizontal run along the bottom, and the lone pillar in the corner. An empty slot falls back to the fully joined piece.</summary>
-    public static readonly LinkLayout Cardinal = new(
+    public static readonly SpriteLinkLayout Cardinal = new(
         SpriteLinking.Cardinal,
         new[,]
         {
@@ -28,7 +28,7 @@ public sealed class LinkLayout
         turnClockwise: SpriteLinks.TurnedClockwise);
 
     /// <summary>A wall's face: standalone (no wall either side), left end (a wall only to the east), right end (only to the west) and middle. Only the standalone piece is required; the others fall back to it.</summary>
-    public static readonly LinkLayout Horizontal = new(
+    public static readonly SpriteLinkLayout Horizontal = new(
         SpriteLinking.Horizontal,
         new[,] { { SpriteLinks.HorizontalEast, SpriteLinks.HorizontalEast | SpriteLinks.HorizontalWest, SpriteLinks.HorizontalWest, SpriteLinks.Standalone } },
         requiredMask: SpriteLinks.Standalone,
@@ -48,7 +48,7 @@ public sealed class LinkLayout
     private readonly Func<int, (bool North, bool East, bool South, bool West)> _sidesOf;
     private readonly Func<Func<int, int, bool>, int, int, int> _compute;
 
-    private LinkLayout(
+    private SpriteLinkLayout(
         SpriteLinking linking,
         int[,] displayLayout,
         int? requiredMask,

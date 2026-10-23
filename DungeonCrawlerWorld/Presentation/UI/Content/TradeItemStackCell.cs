@@ -28,15 +28,15 @@ namespace Presentation.UI.Content;
 /// ShopItemStackCell's own wide layout entirely, the same way that class's own DrawContent already
 /// replaces InventoryItemStackCell's.
 /// </summary>
-public sealed class TradeItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService)
-    : ShopItemStackCell(fontService, elementPoolService, labelRenderer, spriteSheetService)
+public sealed class TradeItemStackCell(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService spriteSheetService)
+    : ShopItemStackCell(fontService, elementPoolService, renderService, spriteSheetService)
 {
     private readonly TextSizeCache _quantityTextSize = new();
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
         var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
 
         DrawBaseAndIcon(spriteBatch, unitRectangle, bounds, ContentSize);

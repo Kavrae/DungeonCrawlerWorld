@@ -25,11 +25,11 @@ namespace Presentation.UI.Diagnostics;
 public sealed class DiagnosticsWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
-    LabelRenderer labelRenderer,
+    UiRenderService renderService,
     EntityManager entityManager,
     PackedComponentPool<MovementComponent> movementPool,
     SimulationClock simulationClock,
-    DiagnosticsEngine? diagnostics) : Window(fontService, elementPoolService, labelRenderer)
+    DiagnosticsEngine? diagnostics) : Window(fontService, elementPoolService, renderService)
 {
     private const string GaugesOffHint = "Run with --diagnostics=gauges for live gauges.";
     private const string LeakDetectionHeading = "Leak findings";
@@ -208,7 +208,7 @@ public sealed class DiagnosticsWindow(
         if (IsInVisibleBand(_layoutCursorY, frameGraphHeight))
         {
             var frameHistory = _historyScratch.AsSpan(0, liveGauges.CopyHistory(0, _historyScratch));
-            SparklineRenderer.Draw(ElementPoolService.SpriteBatch, ElementPoolService.UnitRectangle, new Rectangle((int)inset, (int)_layoutCursorY, (int)width, (int)frameGraphHeight), frameHistory, 0, _frameGraphMaximum, SparklineStyle.Bars, GameWindowPalette.DiagnosticsLevelSeries, GameWindowPalette.DiagnosticsGraphBackground, DiagnosticsWindowChrome.FrameBudgetMilliseconds, GameWindowPalette.DiagnosticsFrameBudgetLine);
+            SparklineRenderer.Draw(Render.SpriteBatch, Render.UnitRectangle, new Rectangle((int)inset, (int)_layoutCursorY, (int)width, (int)frameGraphHeight), frameHistory, 0, _frameGraphMaximum, SparklineStyle.Bars, GameWindowPalette.DiagnosticsLevelSeries, GameWindowPalette.DiagnosticsGraphBackground, DiagnosticsWindowChrome.FrameBudgetMilliseconds, GameWindowPalette.DiagnosticsFrameBudgetLine);
         }
 
         _layoutCursorY += frameGraphHeight;
@@ -243,7 +243,7 @@ public sealed class DiagnosticsWindow(
         var rowHeight = RowHeight;
         if (IsInVisibleBand(_layoutCursorY, rowHeight))
         {
-            LabelRenderer.Draw(ElementPoolService.SpriteBatch, _font, text, new Vector2(DiagnosticsWindowChrome.RowInset, _layoutCursorY), color);
+            LabelRenderer.Draw(Render.SpriteBatch, _font, text, new Vector2(DiagnosticsWindowChrome.RowInset, _layoutCursorY), color);
         }
 
         _layoutCursorY += rowHeight;
@@ -266,7 +266,7 @@ public sealed class DiagnosticsWindow(
 
     private void DrawGaugeRow(GaugeHistory liveGauges, int rowIndex, Gauge row, float y, float inset, float width, float rowHeight)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
+        var spriteBatch = Render.SpriteBatch;
         LabelRenderer.Draw(spriteBatch, _font, row.GaugeName, new Vector2(inset * 3, y), GameWindowPalette.DiagnosticsText);
         LabelRenderer.Draw(spriteBatch, _font, _rowValueTexts[rowIndex], new Vector2(inset + DiagnosticsWindowChrome.ValueColumnX, y), GameWindowPalette.DiagnosticsText);
         LabelRenderer.Draw(spriteBatch, _font, _rowRangeTexts[rowIndex], new Vector2(inset + DiagnosticsWindowChrome.RangeColumnX, y), GameWindowPalette.DiagnosticsText);
@@ -278,12 +278,12 @@ public sealed class DiagnosticsWindow(
         var (minimum, maximum, _) = Summarize(history);
         if (row.Kind is GaugeKind.Cumulative)
         {
-            SparklineRenderer.Draw(spriteBatch, ElementPoolService.UnitRectangle, sparklineArea, history, 0, System.Math.Max(maximum, 1), SparklineStyle.Bars, GameWindowPalette.DiagnosticsEventSeries, GameWindowPalette.DiagnosticsGraphBackground);
+            SparklineRenderer.Draw(spriteBatch, Render.UnitRectangle, sparklineArea, history, 0, System.Math.Max(maximum, 1), SparklineStyle.Bars, GameWindowPalette.DiagnosticsEventSeries, GameWindowPalette.DiagnosticsGraphBackground);
         }
         else
         {
             var padding = maximum == minimum ? System.Math.Max(1, System.Math.Abs(maximum) * 0.01) : 0;
-            SparklineRenderer.Draw(spriteBatch, ElementPoolService.UnitRectangle, sparklineArea, history, minimum - padding, maximum + padding, SparklineStyle.Line, GameWindowPalette.DiagnosticsLevelSeries, GameWindowPalette.DiagnosticsGraphBackground);
+            SparklineRenderer.Draw(spriteBatch, Render.UnitRectangle, sparklineArea, history, minimum - padding, maximum + padding, SparklineStyle.Line, GameWindowPalette.DiagnosticsLevelSeries, GameWindowPalette.DiagnosticsGraphBackground);
         }
     }
 

@@ -26,8 +26,8 @@ public enum SplitSizedPane : byte
 /// sized pane, never past either pane's minimum. The owner fills FirstPane and SecondPane like any window.
 /// </summary>
 /// <remarks>Configure before Initialize, the usual contract.</remarks>
-public sealed class SplitPane(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : Element(fontService, elementPoolService, labelRenderer)
+public sealed class SplitPane(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : Element(fontService, elementPoolService, renderService)
 {
     public const float SplitterThickness = 5f;
 
@@ -150,5 +150,5 @@ public sealed class SplitPane(FontService fontService, ElementPoolService elemen
     protected override void OnPointerDragEndedAction() => _dragStartSizedPaneSize = null;
 
     public override void DrawContent(GameTime gameTime) =>
-        ElementPoolService.SpriteBatch.Draw(ElementPoolService.UnitRectangle, SplitterRectangle, SplitterColor);
+        Render.SpriteBatch.Draw(Render.UnitRectangle, SplitterRectangle, SplitterColor);
 }

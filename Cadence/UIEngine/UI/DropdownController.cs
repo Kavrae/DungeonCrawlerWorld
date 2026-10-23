@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using UIEngine.Rendering;
 using UIEngine.UI.Chrome;
 
 namespace UIEngine.UI;
@@ -15,7 +16,7 @@ namespace UIEngine.UI;
 /// rectangle there (its top-left pinned at the point, growing down and right, the native OS convention for a context
 /// menu); below an element it is anchored to the element's bottom-left, flipping above it when there is no room below.
 /// </remarks>
-public sealed class DropdownController(ElementPoolService elementPoolService)
+public sealed class DropdownController(ElementPoolService elementPoolService, UiRenderService renderService)
 {
     private Dropdown _menu = null!;
 
@@ -84,7 +85,7 @@ public sealed class DropdownController(ElementPoolService elementPoolService)
     private void Place(IReadOnlyList<DropdownOption> options, int markedIndex)
     {
         var menuSize = _menu.MeasureSize(options, _minimumWidth, _maximumHeight); // The exact size Show below will apply -- computed ahead of it so flip/clamp below sees the real footprint, not Vector2.Zero.
-        var screenBounds = ScreenBoundsOverrideForTests ?? elementPoolService.GraphicsDevice.Viewport.Bounds;
+        var screenBounds = ScreenBoundsOverrideForTests ?? renderService.GraphicsDevice.Viewport.Bounds;
         var topLeft = _placedBelowAnchor
             ? PlaceBelow(_placementAnchor, menuSize, screenBounds)
             : PopupPositioning.GetPositionWithinBounds(_placementAnchor, menuSize, PopupAnchor.SouthEast, Vector2.Zero, screenBounds);

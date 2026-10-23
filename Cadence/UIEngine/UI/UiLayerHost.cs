@@ -1,5 +1,6 @@
 using Engine.Diagnostics;
 using Microsoft.Xna.Framework;
+using UIEngine.Rendering;
 
 namespace UIEngine.UI;
 
@@ -9,9 +10,9 @@ namespace UIEngine.UI;
 /// UiLayerStack.IsMenuModeExempt opted in is pulled out of its ordinary draw slot and redrawn just above that quad --
 /// they stay reachable for input (UiInputController.TryHitTestInteraction), so they must read as usable too. Each
 /// window's update and draw is a frame-cost row named after its layer and type, timed only while something listens. The
-/// render services come from ElementPoolService, which every Element already draws with.
+/// dim is drawn through the UiRenderService every Element draws with.
 /// </remarks>
-public sealed class UiLayerHost(UiLayerStack layers, ElementPoolService elementPoolService)
+public sealed class UiLayerHost(UiLayerStack layers, UiRenderService renderService)
 {
     private const string MenuModeExemptRowName = "MenuModeExempt";
 
@@ -107,7 +108,7 @@ public sealed class UiLayerHost(UiLayerStack layers, ElementPoolService elementP
 
             if (!_dimDrawn && window == _bottommostMenuWindow)
             {
-                MenuModeDimRenderer.Draw(elementPoolService.SpriteBatch, elementPoolService.UnitRectangle, elementPoolService.GraphicsDevice);
+                MenuModeDimRenderer.Draw(renderService.SpriteBatch, renderService.UnitRectangle, renderService.GraphicsDevice);
                 _dimDrawn = true;
 
                 for (var exemptIndex = 0; exemptIndex < _menuModeExemptElements.Count; exemptIndex++)

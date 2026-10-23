@@ -17,15 +17,15 @@ namespace Presentation.UI.AbilityScores;
 /// IsHovered drives a translucent highlight overlay (see AbilityScoreWindow's own hover
 /// polling) -- immediate, unlike the hover-popup delay, since a highlight is instant feedback.
 /// </summary>
-public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : Element(fontService, elementPoolService, labelRenderer)
+public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : Element(fontService, elementPoolService, renderService)
 {
     private static readonly Color TextColor = WindowPalette.TitleTextColor;
 
     private string _name = string.Empty;
     private string _totalText = string.Empty;
-    private SpriteFontBase _nameFont = null!;
-    private SpriteFontBase _totalFont = null!;
+    private FontStashTextMeasurer _nameFontMeasurer = null!;
+    private FontStashTextMeasurer _totalFontMeasurer = null!;
 
     public AbilityScoreType Type { get; private set; }
 
@@ -36,14 +36,14 @@ public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoo
         Type = type;
         _name = type.ToString();
         _totalText = total.ToString();
-        _nameFont = FontService.GetFont((int)(headerSize.Y * GameFontChrome.AbilityScoreColumnNameFontFraction));
-        _totalFont = FontService.GetFont((int)(headerSize.Y * GameFontChrome.AbilityScoreColumnTotalFontFraction));
+        _nameFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(headerSize.Y * GameFontChrome.AbilityScoreColumnNameFontFraction)));
+        _totalFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(headerSize.Y * GameFontChrome.AbilityScoreColumnTotalFontFraction)));
     }
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
 
         if (IsHovered)
         {
@@ -52,7 +52,7 @@ public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoo
 
         var stripSize = new Vector2(ContentSize.X, ContentSize.Y / 2f);
 
-        LabelRenderer.DrawCentered(spriteBatch, _nameFont, _name, ContentAbsolutePosition, stripSize, TextColor);
-        LabelRenderer.DrawCentered(spriteBatch, _totalFont, _totalText, ContentAbsolutePosition + new Vector2(0, stripSize.Y), stripSize, TextColor);
+        LabelRenderer.DrawCentered(spriteBatch, _nameFontMeasurer, _name, ContentAbsolutePosition, stripSize, TextColor);
+        LabelRenderer.DrawCentered(spriteBatch, _totalFontMeasurer, _totalText, ContentAbsolutePosition + new Vector2(0, stripSize.Y), stripSize, TextColor);
     }
 }

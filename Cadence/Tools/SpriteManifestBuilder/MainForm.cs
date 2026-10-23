@@ -64,9 +64,9 @@ public sealed class MainForm : Form
     private readonly Control _linkedSetSection;
     private readonly Control _linkPreviewSection;
 
-    private readonly EntryPart _mainPart = new(LinkLayout.Cardinal);
-    private readonly EntryPart _facePart = new(LinkLayout.Horizontal);
-    private readonly EntryPart _topPart = new(LinkLayout.Cardinal);
+    private readonly EntryPart _mainPart = new(SpriteLinkLayout.Cardinal);
+    private readonly EntryPart _facePart = new(SpriteLinkLayout.Horizontal);
+    private readonly EntryPart _topPart = new(SpriteLinkLayout.Cardinal);
     private List<SpriteManifestEntry> _allEntries;
 
     private Image? _sheetImage;
@@ -1043,7 +1043,7 @@ public sealed class MainForm : Form
     }
 
     private PlacedCell? FaceBeneathForPreview() =>
-        IsEditingTop && LinkLayout.Horizontal.PieceFor(_facePart.CurrentVariantSet, SpriteLinks.Standalone) is { } face
+        IsEditingTop && SpriteLinkLayout.Horizontal.PieceFor(_facePart.CurrentVariantSet, SpriteLinks.Standalone) is { } face
             ? new PlacedCell(face, _facePart.PixelsPerTile, _facePart.PivotFor(face), 0)
             : null;
 
@@ -1096,7 +1096,7 @@ public sealed class MainForm : Form
         }
 
         var entry = _allEntries.FirstOrDefault(entry => entry.Name == name);
-        DrawListItem(e, entry?.Top is null ? name : $"{name}  (wall)", entry is not null && EntryRules.HasMisfit(entry));
+        DrawListItem(e, entry?.Top is null ? name : $"{name}  (wall)", entry is not null && SpriteEntryRules.HasMisfit(entry));
     }
 
     /// <summary>Fills swatch with tint ("#RRGGBB"), or leaves it empty when there is none, with a tooltip saying which.</summary>

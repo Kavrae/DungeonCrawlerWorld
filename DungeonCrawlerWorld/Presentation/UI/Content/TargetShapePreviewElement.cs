@@ -24,8 +24,8 @@ namespace Presentation.UI.Content;
 /// abstract stat either. The caster's own cell and the mirrored left side are left blank -- the
 /// left side would just repeat the same distance values already visible on the right.
 /// </summary>
-public sealed class TargetShapePreviewElement(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : Element(fontService, elementPoolService, labelRenderer)
+public sealed class TargetShapePreviewElement(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : Element(fontService, elementPoolService, renderService)
 {
     private const float CellGap = 1f;
     private const float CellBorderThickness = 1f;
@@ -45,7 +45,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
     private int _minY;
     private float _cellSize;
     private IReadOnlySet<Point>? _highlightedOffsets;
-    private SpriteFontBase _numberFont = null!;
+    private FontStashTextMeasurer _numberFontMeasurer = null!;
 
     /// <summary>highlightedOffsets is null outside comparison (every cell plain) -- see ItemDetailsWindow's own shape-match-gated diff computation for when/how it's populated.</summary>
     public void Configure(IReadOnlyList<Point> offsets, int minX, int minY, float cellSize, IReadOnlySet<Point>? highlightedOffsets = null)
@@ -55,13 +55,13 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
         _minY = minY;
         _cellSize = cellSize;
         _highlightedOffsets = highlightedOffsets;
-        _numberFont = FontService.GetFont(System.Math.Max(GameFontChrome.TargetShapePreviewMinNumberFontSize, (int)(cellSize * GameFontChrome.TargetShapePreviewNumberFontFraction)));
+        _numberFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont(System.Math.Max(GameFontChrome.TargetShapePreviewMinNumberFontSize, (int)(cellSize * GameFontChrome.TargetShapePreviewNumberFontFraction))));
     }
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
 
         foreach (var offset in _offsets)
         {
@@ -91,7 +91,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
         }
 
         var text = offset.X.ToString();
-        LabelRenderer.DrawCentered(spriteBatch, _numberFont, text, cellOrigin, new Vector2(outerSize, outerSize), DistanceNumberColor);
+        LabelRenderer.DrawCentered(spriteBatch, _numberFontMeasurer, text, cellOrigin, new Vector2(outerSize, outerSize), DistanceNumberColor);
     }
 
     /// <summary>The caster's own cell (0,0) -- always present, whether or not it's also one of the targeted _offsets (Self, alone or combined e.g. Adjacent | Self, targets it; most other shapes don't; either way the circle marks it).</summary>

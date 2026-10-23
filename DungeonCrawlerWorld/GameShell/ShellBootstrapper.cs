@@ -51,10 +51,10 @@ public static class ShellBootstrapper
             new UiLayerStack(),
             new MapViewState { ReservedEntityIds = worldSession.ReservedEntityIds },
             new MapCamera(views.MapView),
-            new ContextMenuController(new DropdownController(uiEngine.ElementPoolService)),
+            new ContextMenuController(new DropdownController(uiEngine.ElementPoolService, uiEngine.RenderService)),
             new TooltipController(),
             pointerState,
-            new CursorTextContent(pointerState, uiEngine.FontService, uiEngine.LabelRenderer));
+            new CursorTextContent(pointerState, uiEngine.FontService));
         var uiLayers = shellServices.Layers;
         var mapViewState = shellServices.MapViewState;
         var contextMenuController = shellServices.ContextMenuController;
@@ -75,7 +75,7 @@ public static class ShellBootstrapper
             commands.PlayerCommands,
             gameSession.SimulationClock);
         var playerMovementController = new PlayerMovementController(commands.PlayerCommands);
-        var dragGhostContent = new DragGhostContent(pointerState, world, catalogs.ActionCatalog, catalogs.ItemCatalog, views.InventoryView, uiEngine.FontService, uiEngine.SpriteSheetService, uiEngine.LabelRenderer);
+        var dragGhostContent = new DragGhostContent(pointerState, world, catalogs.ActionCatalog, catalogs.ItemCatalog, views.InventoryView, uiEngine.FontService, uiEngine.SpriteSheetService);
 
         ElementFactoryRegistry.RegisterAll(uiEngine, gameSession, worldSession.AdminTools, shellServices, actionTargetingController, playerMovementController);
 
@@ -146,7 +146,7 @@ public static class ShellBootstrapper
         // not Base/StaticHUD.
         questTriggerWindow.Clicked += _ => inputController.FocusElement(OpenQuestComposer(uiEngine.ElementPoolService, notificationCenter, uiLayers));
 
-        return new ShellContext(mapWindow, notificationCenter, itemWindows.Inventory, abilityScoreController, uiLayers, inputController, new UiLayerHost(uiLayers, uiEngine.ElementPoolService));
+        return new ShellContext(mapWindow, notificationCenter, itemWindows.Inventory, abilityScoreController, uiLayers, inputController, new UiLayerHost(uiLayers, uiEngine.RenderService));
     }
 
     /// <summary>Base tier: the map itself plus the debug stats footer directly beneath it -- see UiInputController's own doc comment for what each of the four tiers means. MapWindow's own factory (and every other pooled type's) is already registered by the time this runs -- see Build's ElementFactoryRegistry.RegisterAll call.</summary>
@@ -343,7 +343,7 @@ public static class ShellBootstrapper
     {
         var elementPool = uiEngine.ElementPoolService;
         elementPool.RegisterFactory<DiagnosticsWindow>(() => new DiagnosticsWindow(
-            uiEngine.FontService, elementPool, uiEngine.LabelRenderer, ecsContext.EntityManager, ecsContext.ComponentManager.GetPackedPool<MovementComponent>(), ecsContext.SystemManager.Clock, diagnostics));
+            uiEngine.FontService, elementPool, uiEngine.RenderService, ecsContext.EntityManager, ecsContext.ComponentManager.GetPackedPool<MovementComponent>(), ecsContext.SystemManager.Clock, diagnostics));
         return new DiagnosticsWindowController(elementPool, layers);
     }
 

@@ -3,7 +3,7 @@ using System.ComponentModel;
 namespace SpriteManifestBuilder;
 
 /// <summary>
-/// A linked set's slots laid out as its LinkLayout shows them -- a wall top's 16 as a 4x4 grid, a wall face's 4 in a row --
+/// A linked set's slots laid out as its SpriteLinkLayout shows them -- a wall top's 16 as a 4x4 grid, a wall face's 4 in a row --
 /// each labelled by a small diagram whose bars show the sides it joins and filled with its piece's thumbnail. A required slot
 /// left empty says so. Picks one slot, or with MultiSelect ticks any number (Copy to...).
 /// </summary>
@@ -15,8 +15,8 @@ public sealed class SlotGridControl : Control
 
     private readonly SheetImageCache _sheets;
     private readonly ToolTip _toolTip = new();
-    private LinkLayout _layout = LinkLayout.Cardinal;
-    private SpriteManifestCell?[] _slots = LinkLayout.Cardinal.NewVariantSet();
+    private SpriteLinkLayout _layout = SpriteLinkLayout.Cardinal;
+    private SpriteManifestCell?[] _slots = SpriteLinkLayout.Cardinal.NewVariantSet();
     private int _hoveredMask = -1;
 
     public SlotGridControl(SheetImageCache sheets, bool multiSelect)
@@ -41,7 +41,7 @@ public sealed class SlotGridControl : Control
 
     public event EventHandler? SelectedMaskChanged;
 
-    public void SetSlots(LinkLayout layout, SpriteManifestCell?[] slots)
+    public void SetSlots(SpriteLinkLayout layout, SpriteManifestCell?[] slots)
     {
         if (layout != _layout)
         {

@@ -22,8 +22,8 @@ public enum WorkshopBottomPanelTab : byte
 /// tab shows opens it there. Its top edge drags to make it taller or shorter.
 /// </summary>
 /// <remarks>Configure before Initialize, the usual contract. Created and laid out by WorkshopShell.</remarks>
-public sealed class WorkshopBottomPanel(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : Window(fontService, elementPoolService, labelRenderer)
+public sealed class WorkshopBottomPanel(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : Window(fontService, elementPoolService, renderService)
 {
     public const float MinimumHeight = 80f;
     public const float GripHeight = 5f;
@@ -175,14 +175,14 @@ public sealed class WorkshopBottomPanel(FontService fontService, ElementPoolServ
         }
     }
 
-    private static string GlyphOf(WorkshopProblemSeverity severity) => severity switch
+    internal static string GlyphOf(WorkshopProblemSeverity severity) => severity switch
     {
         WorkshopProblemSeverity.Error => ErrorGlyph,
         WorkshopProblemSeverity.Warning => WarningGlyph,
         _ => MessageGlyph,
     };
 
-    private static Color ColorOf(WorkshopProblemSeverity severity) => severity switch
+    internal static Color ColorOf(WorkshopProblemSeverity severity) => severity switch
     {
         WorkshopProblemSeverity.Error => Color.Red,
         WorkshopProblemSeverity.Warning => Color.DarkGoldenrod,

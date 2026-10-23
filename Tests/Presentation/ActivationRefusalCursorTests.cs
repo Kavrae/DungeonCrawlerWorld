@@ -66,8 +66,7 @@ public sealed class ActivationRefusalCursorTests
         actionCatalog.Register(TestContent.Action(BuiltInActionIds.QuickAttack));
         var itemCatalog = new ItemCatalog();
         var fontService = TestFonts.Shared;
-        var labelRenderer = new LabelRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService);
         var hotbar = new HotbarContent(
             world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog,
             fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), ScreenSize, simulationClock: new SimulationClock());

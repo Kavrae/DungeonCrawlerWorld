@@ -26,7 +26,7 @@ namespace UIEngine.UI;
 /// single filled+bordered region with centered text, reusing Element's own geometry/border/
 /// content state directly rather than a parallel copy (see Button.cs).
 /// </summary>
-public class Element(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
+public class Element(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
 {
     /// <summary>Internal, not protected: chrome behaviors (see IChromeBehavior) live outside the Element/Window hierarchy but still need a host window's FontService/ElementPoolService to build a title Button through the normal pooled ElementPoolService.CreateElement path.</summary>
     public FontService FontService { get; } = fontService;
@@ -34,8 +34,8 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// <summary>See FontService's doc comment -- same reason this is exposed internally.</summary>
     public ElementPoolService ElementPoolService { get; } = elementPoolService;
 
-    /// <summary>Internal, not protected, for the same reason as WindowService/FontService -- Button uses this to center its label the same way LabelRenderer centers map tile glyphs.</summary>
-    public LabelRenderer LabelRenderer { get; } = labelRenderer;
+    /// <summary>What this element draws with: the device, the batches, the unit rectangle and the render-state stack. Public for the same reason as FontService: content an element hosts (IElementContent) draws through its host's.</summary>
+    public UiRenderService Render { get; } = renderService;
 
     public Guid ElementId { get; } = Guid.NewGuid();
 
@@ -259,7 +259,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
     public bool ShowFooter => FooterHeight > 0f;
 
-    /// <summary>Draws this element's header region -- Window's title bar (background/text/buttons) and Folder's icon are both just their own override of this, called from Draw whenever the header is shown (see the ShowHeader/ShowHeaderWhenMinimized gate there). No-op by default. Overrides needing SpriteBatch/Texture2D read them from ElementPoolService (see its own doc comment) rather than taking them as parameters.</summary>
+    /// <summary>Draws this element's header region -- Window's title bar (background/text/buttons) and Folder's icon are both just their own override of this, called from Draw whenever the header is shown (see the ShowHeader/ShowHeaderWhenMinimized gate there). No-op by default. Overrides needing SpriteBatch/Texture2D read them from Render rather than taking them as parameters.</summary>
     protected virtual void DrawHeader(GameTime gameTime) { }
 
     /// <summary>Extra per-frame Initialize work the header needs -- Window initializes its title buttons here. No-op by default.</summary>
@@ -596,7 +596,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         }
     }
 
-    /// <summary>Reads GraphicsDevice/SpriteBatch/UnitRectangle from ElementPoolService (see its own doc comment for why this Element doesn't cache its own copies) rather than taking them as parameters -- every override, and every recursive child Draw call below, does the same.</summary>
+    /// <summary>Reads SpriteBatch/UnitRectangle from Render rather than taking them as parameters -- every override, and every recursive child Draw call below, does the same.</summary>
     public virtual void Draw(GameTime gameTime)
     {
         if (!_isVisible)
@@ -604,8 +604,8 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
             return;
         }
 
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
 
         if (_border.Show)
         {
@@ -638,15 +638,15 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
             {
                 // A dedicated viewport translates this window's local-coordinate content onto
                 // screen and hard-clips whatever overflows it. Pushed/popped through
-                // ElementPoolService (see PushRenderState's own doc comment) rather than a raw
+                // Render (see UiRenderService.PushRenderState) rather than a raw
                 // SpriteBatch End/Begin, so a scrollable Element nested inside another scrollable
                 // Element hands back the exact ambient state it inherited instead of clobbering
                 // it.
-                ElementPoolService.PushRenderState(ElementPoolService.CurrentRenderState with { Viewport = Viewport, TransformMatrix = CameraTransform });
+                Render.PushRenderState(Render.CurrentRenderState with { Viewport = Viewport, TransformMatrix = CameraTransform });
 
                 DrawContent(gameTime);
 
-                ElementPoolService.PopRenderState();
+                Render.PopRenderState();
             }
             else
             {
@@ -668,15 +668,15 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
                 //
                 // Skipped when there are no children (e.g. TextWindow) -- avoids an extra
                 // SpriteBatch End/Begin and ScissorRectangle swap for a loop that draws nothing.
-                var clippedScissor = Rectangle.Intersect(ElementPoolService.CurrentRenderState.ScissorRectangle, _contentState.Rectangle);
-                ElementPoolService.PushRenderState(ElementPoolService.CurrentRenderState with { ScissorRectangle = clippedScissor, RasterizerState = ScissorClipRasterizerState });
+                var clippedScissor = Rectangle.Intersect(Render.CurrentRenderState.ScissorRectangle, _contentState.Rectangle);
+                Render.PushRenderState(Render.CurrentRenderState with { ScissorRectangle = clippedScissor, RasterizerState = ScissorClipRasterizerState });
 
                 foreach (var childElement in _children)
                 {
                     childElement.Draw(gameTime);
                 }
 
-                ElementPoolService.PopRenderState();
+                Render.PopRenderState();
             }
             else
             {
@@ -845,7 +845,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// <summary>Shared by every scrollable element's own children-clip pass in Draw -- ScissorTestEnable is off by default on every other RasterizerState this codebase uses, so this needs to be its own instance rather than a tweaked copy of an existing one.</summary>
     private static readonly RasterizerState ScissorClipRasterizerState = new() { ScissorTestEnable = true };
 
-    /// <summary>No-op by default; TextWindow and other self-drawn elements override this directly, Window overrides it to host IElementContent. Overrides needing SpriteBatch/Texture2D read them from ElementPoolService (see its own doc comment) rather than taking them as parameters.</summary>
+    /// <summary>No-op by default; TextWindow and other self-drawn elements override this directly, Window overrides it to host IElementContent. Overrides needing SpriteBatch/Texture2D read them from Render rather than taking them as parameters.</summary>
     public virtual void DrawContent(GameTime gameTime) { }
 
     /// <summary>Routes a key newly pressed this frame to this window while it holds focus -- see UiInputController.RouteKeyPressesToFocusedWindow.</summary>

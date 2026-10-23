@@ -33,11 +33,10 @@ public sealed class InventoryGridContentActivateTests
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         var fontService = TestFonts.Shared;
-        var labelRenderer = new LabelRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, new UiRenderService()));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());

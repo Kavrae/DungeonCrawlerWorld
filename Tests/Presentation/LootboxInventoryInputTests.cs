@@ -49,11 +49,10 @@ public sealed class LootboxInventoryInputTests
         LootboxActions.Grant(componentManager, lootboxCatalog, new EventBus(), PlayerEntityId, new LootboxReward(LootboxTypes.Adventurer.Id, LootboxRarity.Bronze));
 
         var fontService = TestFonts.Shared;
-        var labelRenderer = new LabelRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, new UiRenderService()));
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 

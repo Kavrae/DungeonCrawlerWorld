@@ -38,8 +38,8 @@ public readonly record struct TooltipRow(string LeftText, string RightText, Colo
 /// below User (see UiLayer's own doc comment), so this always draws over whatever window it's
 /// describing without needing to reorder itself against that window's own tier.
 /// </summary>
-public sealed class Tooltip(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : TextWindow(fontService, elementPoolService, labelRenderer)
+public sealed class Tooltip(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : TextWindow(fontService, elementPoolService, renderService)
 {
     /// <summary>Same dark fill as WindowPalette.PanelBackgroundColor (45,45,45), but a touch more opaque -- 90% instead of the shared 85% -- dividers, columns and row glows read more clearly against it. Applied only here, not by raising WindowPalette.PanelBackgroundColor, which every other window uses.</summary>
     private static readonly Color BackgroundColor = new Color(45, 45, 45) * 0.90f;
@@ -87,7 +87,7 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
             RelayoutText();
         }
 
-        var position = PopupPositioning.GetPositionWithinBounds(target, CurrentSize, anchor, gap, screenBounds ?? ElementPoolService.GraphicsDevice.Viewport.Bounds);
+        var position = PopupPositioning.GetPositionWithinBounds(target, CurrentSize, anchor, gap, screenBounds ?? Render.GraphicsDevice.Viewport.Bounds);
         if (position != RelativePosition)
         {
             SetRelativePosition(position);
@@ -313,25 +313,25 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
             if (row.IsDivider)
             {
                 var lineRectangle = new Rectangle(rowBounds.X, rowBounds.Y + rowBounds.Height / 2, rowBounds.Width, 1);
-                ElementPoolService.SpriteBatch.Draw(ElementPoolService.UnitRectangle, lineRectangle, row.Color);
+                Render.SpriteBatch.Draw(Render.UnitRectangle, lineRectangle, row.Color);
                 continue;
             }
 
-            LabelRenderer.DrawLeftAligned(ElementPoolService.SpriteBatch, ContentFont, row.LeftText, rowPosition, rowSize, row.Color);
+            LabelRenderer.DrawLeftAligned(Render.SpriteBatch, ContentFont, row.LeftText, rowPosition, rowSize, row.Color);
             if (!string.IsNullOrEmpty(row.MiddleText))
             {
                 var middlePosition = rowPosition + new Vector2(_middleColumnLeft, 0);
-                LabelRenderer.DrawLeftAligned(ElementPoolService.SpriteBatch, ContentFont, row.MiddleText, middlePosition, rowSize, row.Color);
+                LabelRenderer.DrawLeftAligned(Render.SpriteBatch, ContentFont, row.MiddleText, middlePosition, rowSize, row.Color);
             }
 
             if (!string.IsNullOrEmpty(row.RightText))
             {
-                LabelRenderer.DrawRightAligned(ElementPoolService.SpriteBatch, ContentFont, row.RightText, _rightTextWidths[rowIndex], rowPosition, priceRowSize, row.Color);
+                LabelRenderer.DrawRightAligned(Render.SpriteBatch, ContentFont, row.RightText, _rightTextWidths[rowIndex], rowPosition, priceRowSize, row.Color);
             }
 
             if (row.GlowColor is { } glowColor)
             {
-                GlowRenderer.Draw(ElementPoolService.SpriteBatch, ElementPoolService.UnitRectangle, rowBounds, glowColor, GlowMode.InteriorFade);
+                GlowRenderer.Draw(Render.SpriteBatch, Render.UnitRectangle, rowBounds, glowColor, GlowMode.InteriorFade);
             }
         }
     }

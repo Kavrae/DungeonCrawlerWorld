@@ -12,6 +12,7 @@ public sealed record WorkshopHostOptions(
     string FontsDirectory,
     string SpritesheetsDirectory,
     string SpriteManifestFileName,
+    string EffectsDirectory,
     GameLaunchTarget GameLaunchTarget,
     Func<UiEngineContext, WorkshopTabSet> CreateTabs)
 {
@@ -67,7 +68,7 @@ public sealed class WorkshopHost : Microsoft.Xna.Framework.Game
 
     protected override void Initialize()
     {
-        _uiEngine = UiEngineBootstrapper.Build(GraphicsDevice, _options.FontsDirectory, _options.SpritesheetsDirectory, _options.SpriteManifestFileName);
+        _uiEngine = UiEngineBootstrapper.Build(GraphicsDevice, _options.FontsDirectory, _options.SpritesheetsDirectory, _options.SpriteManifestFileName, _options.EffectsDirectory);
         var tabSet = _options.CreateTabs(_uiEngine);
         _shell = new WorkshopShell(_uiEngine, tabSet, new GameLauncher(_options.GameLaunchTarget), _options.Commands, _options.GameOutputLogPath, ClientSize());
 
@@ -101,7 +102,7 @@ public sealed class WorkshopHost : Microsoft.Xna.Framework.Game
         GraphicsDevice.Clear(Color.DimGray);
 
         _uiEngine.SpriteBatchRenderer.StartSpriteBatch();
-        _uiEngine.ElementPoolService.ResetRenderState();
+        _uiEngine.RenderService.ResetRenderState();
         _shell.Draw(gameTime);
         _uiEngine.SpriteBatchRenderer.EndSpriteBatch();
 

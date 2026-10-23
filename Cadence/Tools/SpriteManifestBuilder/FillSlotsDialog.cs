@@ -7,7 +7,7 @@ public sealed class FillSlotsDialog : Form
     private readonly CheckBox _mirrorTopBottomCheckBox = new() { Text = "Mirror top-bottom ↕", AutoSize = true };
     private readonly CheckBox _turnsCheckBox = new() { Text = "Turn by quarters", AutoSize = true };
 
-    public FillSlotsDialog(LinkLayout layout)
+    public FillSlotsDialog(SpriteLinkLayout layout)
     {
         Text = "Fill empty slots";
         FormBorderStyle = FormBorderStyle.FixedDialog;

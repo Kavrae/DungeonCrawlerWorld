@@ -17,7 +17,7 @@ public sealed class CopyToSlotsDialog : Form
     private readonly ComboBox _copyAsComboBox = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
     private readonly SpriteManifestCell _piece;
 
-    public CopyToSlotsDialog(SheetImageCache sheets, LinkLayout layout, SpriteManifestCell?[] slots, int sourceMask, Size expectedSpan)
+    public CopyToSlotsDialog(SheetImageCache sheets, SpriteLinkLayout layout, SpriteManifestCell?[] slots, int sourceMask, Size expectedSpan)
     {
         _piece = slots[sourceMask] ?? throw new ArgumentException("The source slot is empty.", nameof(slots));
 

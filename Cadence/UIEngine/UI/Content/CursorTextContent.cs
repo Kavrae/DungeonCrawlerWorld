@@ -17,7 +17,7 @@ namespace UIEngine.UI.Content;
 /// live mouse position rather than relative to any window's own bounds, and User is the topmost
 /// tier, so this always renders above whatever it's reporting on.
 /// </summary>
-public sealed class CursorTextContent(PointerState pointerState, FontService fontService, LabelRenderer labelRenderer) : IElementContent
+public sealed class CursorTextContent(PointerState pointerState, FontService fontService) : IElementContent
 {
     /// <summary>Total time a message stays visible, including the fade -- roughly a standard toast duration.</summary>
     private static readonly int DisplayFrames = GameTiming.FramesForSeconds(1.0f);
@@ -105,6 +105,6 @@ public sealed class CursorTextContent(PointerState pointerState, FontService fon
     private void DrawAt(Point mousePosition, float alpha)
     {
         var position = new Vector2(mousePosition.X, mousePosition.Y) + CursorOffset;
-        labelRenderer.Draw(_hostWindow.ElementPoolService.SpriteBatch, _font, _text, position, TextColor * alpha);
+        LabelRenderer.Draw(_hostWindow.Render.SpriteBatch, _font, _text, position, TextColor * alpha);
     }
 }

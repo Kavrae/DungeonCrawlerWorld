@@ -115,6 +115,68 @@ rows one per line -- so a hand-written area and a saved one look the same.
   and saved unchanged is byte-identical; an area left with an undefined symbol saves to Drafts with its row and column
   in the Error List; undo a flood fill in one step.
 
+#### Workshop: edit sprites and retire SpriteManifestBuilder
+
+Start after "Workshop: edit Items" is complete, on its machinery. Epic child 7 (landed 2026-10-22) ended
+with a read-only Sprites tab in `Cadence/Workshop` -- sheet view, placement and link previews drawn through the sprite
+effect, warnings in the Error List -- and the WinForms `Cadence/Tools/SpriteManifestBuilder` still the way entries are
+authored. This is the editing half of its plan's former Phases 5 and 6. The read-side rules are already shared: `SpriteLinkLayout` and
+`SpriteEntryRules` moved into SpriteFormat (IMPLEMENTATION-NOTES "The Workshop Sprites tab"); the editing state
+(`EntryPart`), `SlotFiller`, the editing gestures in `EntryRules` and the copy/fill dialogs move into the tab here.
+- **Decide first: drafts for the manifest.** "Workshop: edit Items" saves a record to master or `Definitions/Drafts`. The
+  manifest is one JSON file in SpriteFormat's own model, with no codec, and nothing the game loads can fail on a sprite (a
+  missing name draws its glyph and logs one warning). Either the Sprites tab takes drafts too -- an unfinished entry held
+  out of `SpriteManifest.json` in a drafts manifest the game never loads, published when done -- or it saves straight to
+  the manifest as the WinForms tool does, with unfinished linked sets saved as they are today (null slots). Settle it
+  against how "Workshop: edit Items" ends up, and record the answer in IMPLEMENTATION-NOTES.
+- **Edit:** everything the WinForms tool edits -- new, delete (several at once), name and kind (Options, Linked set, Wall);
+  place and remove options by click and drag with a span; slots, copy-to-slots, fill-empty-slots; wall face and top;
+  variant sets, chances (totalling 100%) and tints (`ColorField`); flip and turn (a quarter turn of a non-square cell
+  refused); stretch, pixels per tile, pivot by number and by click, footprint; the already-used warning. Undo/redo, Ctrl+S,
+  the unsaved marker and the quit prompt from "Workshop: edit Items".
+- **Save:** through SpriteFormat exactly as the WinForms tool does (upsert by name, so re-saving an unchanged entry is
+  byte-identical), refusing reach and chance problems with the same messages, then reload the IDE's own
+  `SpriteManifestResolver` so the other tabs (item icons, Map previews) show the change without restarting.
+- **Retire:** once the tab does everything the WinForms tool does, delete `Cadence/Tools/SpriteManifestBuilder` and its
+  solution entry, and stop naming it in CLAUDE.md, the epic, SpriteFormat's and `SpritePlacementMath`'s comments and
+  `Content.csproj`'s note. Notes into IMPLEMENTATION-NOTES "The Sprites tab".
+- Tests: the editing types moved from the WinForms tool (`EntryPart`, `SlotFiller`, the gestures), now testable in
+  `Workshop.Tests`; saving an unchanged manifest is byte-identical; the save refusals.
+- Checks: re-create an existing entry from scratch and save -- `git diff` shows nothing; add a tinted variant and see it in
+  the Items tab's icon without restarting; undo a fill-empty-slots in one step; quit with unsaved changes and be asked;
+  build and run with the WinForms project gone.
+
+#### Shader follow-ups: glow rings, a per-tile targeting overlay, clipping, tilemap terrain
+
+Unblocked: epic child 7 (landed 2026-10-22) brought the sprite effect, `SpriteDrawStyle` and
+`SpriteEffectBatch` (a batcher of our own whose vertex carries a style field; only the map draws through it, every window
+stays on `SpriteBatch`), and moved the aura glow onto a per-tile texture the effect samples. These
+are the places the game still draws by hand what other engines draw with shaders. Each is its own phase, tested in-game and
+benchmarked windowed at a busy zoom (the headless benchmark draws nothing).
+- **Glow rings in one draw.** `GlowRenderer`'s `InteriorFade`/`ExteriorFade` draw `FadeRingCount` (5) rings of 1 px
+  rectangles -- about 20 draws per glow -- for the selected tile, the followed entity, a dodging entity, tooltips and
+  windows. A glow mode draws one quad and fades by distance to the rectangle's edge in the shader (as Godot's style-box
+  shadows and Unity UI effects do), keeping `FadeMaximumAlpha`'s look; `FadeRingCount` stays the fade's depth in pixels,
+  since callers inset content by it. Outside the map's pass a window draws on `SpriteBatch` with `Effect = null`; a
+  pixel-shader-only effect works under `SpriteBatch` (the plan's Phase 0), so a glow there can be a short effect pass of
+  its own, or windows move to `SpriteEffectBatch` with clipping below.
+- **A per-tile targeting overlay.** `MapGameOverlay` draws a translucent rectangle per tile per frame for targeting masks,
+  the charge fill and windup telegraphs, and rings per tile for the selected-tile glow. Write them into a per-tile texture
+  like the aura glow's (more channels, or a second texture of the same kind) and let the effect draw them, so everything
+  shown "on tiles" is one mechanism with almost no draws. The charge fill (a fraction of a tile) and masked borders need a
+  shape per tile, not only a colour; keep what is drawn exactly as it is now.
+- **Clipping in the shader.** `UiRenderService.PushRenderState`/`PopRenderState` end and restart the `SpriteBatch` for
+  every scrollable element to change the scissor rectangle. Unity UI's `RectMask2D` clips in the shader instead, so clipping
+  never breaks a batch: a clip rectangle per vertex (`SpriteEffectVertex` gains it), discarded outside -- which means windows
+  drawing through `SpriteEffectBatch` rather than `SpriteBatch`, so decide that first. Measure draw calls and frame cost
+  in busy windows (inventory with many tabs, Item Details, the Workshop's tabs) before and after; keep the scissor for
+  anything drawn outside the effect.
+- **Research: tilemap terrain in a shader.** The terrain image is re-rendered on every whole-tile scroll (`MapImageKey`),
+  so a camera following the player rebuilds it each step. A tilemap shader draws a layer as one quad that looks each tile's
+  sprite up from a tile-id texture, making a scroll free. First measure the rebuild's cost per scroll at busy zooms; only if
+  it shows as hitches, research how variants (cell seeds), linked walls (`MapWallPlan`, join masks), tops and overhangs,
+  turned and flipped cells, and sprites reaching past their tile fit a lookup -- and decide whether to build it.
+
 #### UiInputController.Update: one key and hotkey routing path
 
 `UiInputController.Update` hands the keyboard out through seven separate steps in a fixed order, each with its own
@@ -1478,20 +1540,6 @@ Until then a shop or small building is a single entity up to Huge, like the 2x2 
 
 ### Low Priority
 
-#### Aura glow shouldn't tint wall tops
-
-`MapRenderer`'s glow overlay (`DrawGlowOverlay`, from `AuraGlowBlend` per tile) is a translucent rect over every
-tile, blitted after the row walk -- so it lands on whatever covers that tile, including a wall's top (cached or
-live overhang) sitting over the floor the aura actually reaches. A top is the wall's roof, a row or two above
-the tile beneath it, and glowing like lava or holy ground reads wrong. The glow should tint what stands on the
-ground -- floors, occupants, a wall's face -- but not tops.
-
-- Where a top covers a tile, leave that tile out of the glow pass, or draw the glow before tops: the glow
-  cache would then go under the walls' cached tops (`MapWallPlan.CachedPieces`, tops last) and the row walk's
-  top overhangs, while still over occupants. A second glow pass split by `MapOverhang.IsTop` is one way.
-- A top covering only part of a tile (placement narrower than a tile) should leave the uncovered part glowing.
-- Check at the lava rows and Holy Ground in neighborhood (0,0), behind a wall run.
-
 #### Terrain contact as a range-0 aura -- revisit if contact needs to come from entities
 
 Terrain contact (`TerrainContactSystem`) and auras (`AuraSystem`) now hold the same `Effect` lists,
@@ -2349,8 +2397,10 @@ Health window also closes the others, and that Close leaves the rest open.
 
 #### Replace the text outline with SDF glyphs and an outline shader
 
-Every outlined text draw (`ContrastTextRenderer`: map glyphs, badges, hotbar and HUD numbers, floating text) is 9
-`DrawString` calls -- 8 offset copies in black, then the fill. Draw it once instead: glyphs from a signed distance
+Outlined text drawn on a `SpriteBatch` (`ContrastTextRenderer.DrawCopies`: hotbar and HUD numbers, floating text, the
+targeting overlay) is 9 `DrawString` calls -- 8 offset copies in black, then the fill. Map text already draws through
+the sprite effect in two (an outline layer, then the fill -- IMPLEMENTATION-NOTES "The sprite effect"), from the same
+bitmap atlas. What is left is scaling and the other callers: glyphs from a signed distance
 field atlas, and a pixel shader that turns distance into fill and outline (fill colour, outline colour and thickness,
 alpha as parameters). A distance field also stays sharp when scaled, so one atlas size could serve every font size
 `FontService` now keeps a font per pixel size for.
@@ -2359,13 +2409,11 @@ alpha as parameters). A distance field also stays sharp when scaled, so one atla
   glyphs itself (`FT_RENDER_MODE_SDF`, FreeType 2.11+) -- a rasterizer setting or patch there, or an atlas of our
   own built from FreeType's SDF bitmaps. Upstream's SDF mode and its `SDFTextBatch.DrawStrokeString` (thickness,
   smoothness) are the reference.
-- **The shader.** Nothing here loads an `Effect` yet (`MapRenderer` tints corpses grey for want of one), so this
-  brings in effect compilation and loading: find what shader format FNA.NET's graphics backend takes and how it's
-  built.
-- **Batching and order.** Outlined glyphs draw among sprites (the map's row walk), and an effect is set per
-  `SpriteBatch.Begin`, so either outlined text gets its own pass -- changing draw order and adding flushes and
-  scissor resets -- or one shader draws both sprites and SDF text. The atlas wants linear sampling where every pass
-  here uses `SamplerState.PointClamp`.
+- **The shader.** Effects are compiled and loaded (`fxc` to `fx_2_0`, `SpriteEffectService`); an SDF mode is a new
+  style on `SpriteUber.fx`, or a game effect from content.
+- **Batching and order.** Map text already shares the row walk's batch with sprites (`SpriteEffectBatch`); text in
+  windows would need their passes on the batch too (or a pixel-shader-only effect under `SpriteBatch`). The atlas wants
+  linear sampling where every pass here uses `SamplerState.PointClamp`.
 - **The look.** The outline is a hard 1 px pixel-art edge today; the shader's edge must match it (no soft
   falloff unless chosen), at every font size drawn.
 - Decide whether plain, unoutlined text moves to the same path.
@@ -3227,31 +3275,59 @@ the perception item stays the source of truth.
 
 #### Sprite shaders and tinting
 
-Part of `EPIC-sprites-ui-engine-and-dev-tools.md` (child 7).
-
-No custom shaders exist; every sprite draws with `SpriteBatch`'s default effect, tinted at most by a
-colour multiply. Several items want per-sprite effects: "Investigate mask-based recoloring for shared
-sprites" (Low -- palette swaps), hit feedback ("Gameplay Cues", Game -- a white flash), selection and
-highlight ("Highlighted-tile visual redesign", Low -- outlines), death (dissolve or fade), Phasing
-(already alpha), and petrification or poison (desaturate or tint).
-- **A small set of sprite effects,** each an FNA `Effect` (HLSL compiled to FNA's format) with
-  parameters: palette swap (a lookup texture maps greyscale mask values to colours), flash (mix toward
-  a colour by an amount), outline (sample neighbouring texels), desaturate, dissolve (threshold against
-  a noise texture).
-- **Batched by effect:** `SpriteBatch` can only use one effect per `Begin`/`End`, so draws are grouped
-  by effect, which fights the row-ordered occupant pass in the tall-sprites plan. Options: per-sprite
-  parameters packed into the vertex colour (one "uber" effect reads flash amount and palette row from
-  the colour channels, so one batch serves everything), or a few effects and accept extra batches.
-  The packed-colour approach keeps draw order intact.
-- **Content pipeline:** FNA loads effects compiled with `fxc` (DirectX 9-style effect binaries,
-  translated at runtime by MojoShader); the `Content` project doesn't compile anything today, so this
-  adds a shader build step.
+The pipeline exists (epic child 7, IMPLEMENTATION-NOTES "The sprite effect"): the map draws through UIEngine's
+`SpriteEffectBatch` and one effect, `SpriteUber.fx`, with each draw's `SpriteDrawStyle` in its vertex; it desaturates
+corpses, lights what stands in an aura's glow and outlines map text. The modes other items want are still to come, each
+added to the same effect when its feature arrives: palette swap ("Investigate mask-based recoloring for shared sprites",
+Low -- a lookup texture maps greyscale mask values to colours), a flash ("Gameplay Cues", Game -- mix toward a colour by an
+amount), a sprite outline ("Highlighted-tile visual redesign", Low -- sample neighbouring texels, as the text outline
+does), dissolve or fade on death (threshold against a noise texture), and petrification or poison (desaturate or tint).
+- **Room in the vertex:** the style's four fields are used (mode, glow, ground row, outline layer). A mode is a new
+  `SpriteDrawMode` value where it excludes the others; a setting that combines with them (a flash amount, a palette row)
+  needs a second vertex attribute and a new `SpriteEffectVertex.Version`.
+- **Outside the map:** windows still draw on `SpriteBatch`. A pixel-shader-only effect works under `SpriteBatch` (the
+  plan's Phase 0) for a window that needs one; moving windows onto the batch is "Shader follow-ups" (Engine, High).
 
 **Godot reference:** every `CanvasItem` can take a `ShaderMaterial` with a `canvas_item` shader
 (`fragment() { COLOR = texture(TEXTURE, UV) * ...; }`), and `modulate`/`self_modulate` feed a colour
 through to it. Palette swaps, flashes and outlines are the standard examples. Godot batches items
 that share a material, so games that want many per-sprite variations use the same trick as above --
 parameters through `modulate` or vertex colour into one shared material -- to keep batching.
+
+#### Rounded sprite lighting: shade the glow as if a sprite were curved
+
+Unblocked: epic child 7 (landed 2026-10-22) brought the gradient glow, read along each sprite's ground row. A sprite in
+a glow is tinted by the same linear gradient as the floor under it, so it reads flat. Shade the glow on a sprite as if it
+were a vertical cylinder instead: bright and slowly falling off on the side facing the light, about linear in the middle,
+falling off quickly on the far side -- a rounded look, the cheap form of the normal-mapped 2D lighting in Godot
+(`CanvasTexture` normal maps) and Unity's 2D lights.
+- **The curve:** with `u` the pixel's position across the sprite (0 to 1), the surface faces `normal.x = 2u - 1`,
+  `normal.z = sqrt(1 - normal.x^2)`, and the glow is scaled by `max(0, dot(normal, lightDirection))`. Scale the curve so
+  its mean across the sprite equals the plain linear glow there, so a sprite is shaped, not brighter than its floor.
+- **The light's direction from the glow itself:** read the glow at the footprint's left and right edges along its ground
+  row; their difference gives the light's side and how far it leans. Equal on both sides (standing in the middle of lava)
+  is an even glow. Left and right only: the glow is read along the ground row, and top-to-bottom shading in a three-quarter
+  top-down view reads as front lighting, not roundness.
+- **It shapes only the glow.** The glow is a tint over the sprite, not darkness, so only sprites in light look rounded and
+  the far side never goes darker than the sprite's own colour. A darker far side needs an ambient light level -- "Visual 2D
+  lighting" (Presentation, Medium) -- and would use the same curve.
+- **Pixel art:** compute the shade per sprite texel, not per screen pixel (one shade per art pixel), and try quantizing it
+  into 2-4 bands (cel shading); compare both against the smooth curve in game at every zoom.
+- **Steps, each tried in game before the next:**
+  1. A cylinder the width of the drawn sprite: the sprite's horizontal extent rides in the vertex -- `SpriteEffectVertex`
+     has no spare style field left (mode, glow, ground row, outline layer), so it gains a second attribute and a new
+     `Version`.
+  2. If thin sprites in wide cells look wrong (most of the curve lands on empty pixels): each row's leftmost and rightmost
+     opaque texel, precomputed per sprite at load or by the Sprites tab, as the cylinder's width per row.
+  3. If that still reads poorly: normal maps -- a second image per sprite with each pixel's surface direction, drawn or
+     generated from the sprite's shape (Laigter, SpriteIlluminator, or a generator in the Sprites tab) -- at the cost of an
+     art step and twice the sprite-sheet memory.
+- **Cost:** two extra glow reads per sprite pixel from the same few-KB texture plus about 10 arithmetic operations --
+  expected to be a few hundredths of a millisecond at 1080p; normal maps add one texture read per pixel. The two edge
+  reads are the same for the whole sprite, so they move to the vertex shader: `tex2Dlod` in `vs_3_0` works on SDL3 GPU /
+  Vulkan, D3D11 and OpenGL (the plan's Phase 0). The effect is `vs_3_0`/`ps_3_0` already, so no instruction limit is in the
+  way. The sprite's left and right edges ride in that new vertex attribute. Benchmark windowed at a
+  busy zoom against the plan's Phase 3.
 
 #### Rich text
 
@@ -3384,7 +3460,7 @@ events, so a drag from the inventory onto a map tile is one drag, not two system
 
 #### Abstract element pool factory registration
 
-Every `RegisterFactory<T>` call hand-writes the same `FontService`/`ElementPoolService`/`LabelRenderer`
+Every `RegisterFactory<T>` call hand-writes the same `FontService`/`ElementPoolService`/`UiRenderService`
 triple with only a few type-specific extras varying. Worth a helper taking just the extras. Boilerplate,
 not error-prone -- low priority.
 

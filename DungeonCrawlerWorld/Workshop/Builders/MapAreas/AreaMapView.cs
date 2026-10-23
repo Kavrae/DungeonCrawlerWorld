@@ -18,8 +18,8 @@ namespace Builders.MapAreas;
 /// symbol is a space, or when the area has no rows for that layer at all. While LoadingText is set, a spinner is drawn
 /// over whatever is shown.
 /// </remarks>
-public sealed class AreaMapView(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService)
-    : Element(fontService, elementPoolService, labelRenderer)
+public sealed class AreaMapView(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService spriteSheetService)
+    : Element(fontService, elementPoolService, renderService)
 {
     private const int MarkerLabelFontSize = 11;
     private const int AreaLabelFontSize = 14;
@@ -83,7 +83,7 @@ public sealed class AreaMapView(FontService fontService, ElementPoolService elem
         var views = scene.Session.Views;
         _camera = new MapCamera(views.MapView);
         _camera.Initialize(ContentSize);
-        _renderer = new MapRenderer(views.MapView, views.AuraPower, _camera, ElementPoolService, FontService, spriteSheetService, LabelRenderer);
+        _renderer = new MapRenderer(views.MapView, views.AuraPower, _camera, Render, FontService, spriteSheetService);
 
         if (scene.Area is { } instance)
         {
@@ -162,8 +162,8 @@ public sealed class AreaMapView(FontService fontService, ElementPoolService elem
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
         if (_renderer is { } renderer && _camera is { } camera && _scene is { } scene)
         {
             DrawScene(spriteBatch, unitRectangle, renderer, camera, scene);
@@ -199,7 +199,7 @@ public sealed class AreaMapView(FontService fontService, ElementPoolService elem
 
     private void DrawScene(SpriteBatch spriteBatch, Texture2D unitRectangle, MapRenderer renderer, MapCamera camera, IMapPreviewScene scene)
     {
-        renderer.Draw(spriteBatch, (int)Layer, NoWatchedEntities);
+        renderer.Draw((int)Layer, NoWatchedEntities);
 
         if (scene.Area is { } area)
         {

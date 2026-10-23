@@ -20,7 +20,7 @@ namespace Tests.UIEngine;
 [DoNotParallelize]
 public sealed class ResizeScrollReproTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
     private static (Window Outer, Window Column) CreateResizableOuterWithScrollableColumn(ElementPoolService windowService, int rowCount, float rowHeight)
     {

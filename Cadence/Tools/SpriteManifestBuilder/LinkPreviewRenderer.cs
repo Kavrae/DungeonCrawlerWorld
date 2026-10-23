@@ -52,13 +52,13 @@ public static class LinkPreviewRenderer
                     continue;
                 }
 
-                if (face is not null && !IsWall(x, y + 1) && LinkLayout.Horizontal.PieceFor(face.Slots, LinkLayout.Horizontal.Compute(IsWall, x, y)) is { } facePiece)
+                if (face is not null && !IsWall(x, y + 1) && SpriteLinkLayout.Horizontal.PieceFor(face.Slots, SpriteLinkLayout.Horizontal.Compute(IsWall, x, y)) is { } facePiece)
                 {
                     var faceTiles = SpritePlacementRules.DrawnTiles(facePiece.SourceSize(), face.PixelsPerTile, face.PivotFor(facePiece), 1);
                     CellDrawing.Draw(graphics, sheets, facePiece, ToPixels(faceTiles, x, y, tilePixels));
                 }
 
-                var topPiece = LinkLayout.Cardinal.PieceFor(topSlots, LinkLayout.Cardinal.Compute(IsWall, x, y));
+                var topPiece = SpriteLinkLayout.Cardinal.PieceFor(topSlots, SpriteLinkLayout.Cardinal.Compute(IsWall, x, y));
                 var topTiles = topPiece is null
                     ? SpritePlacementRules.DrawnTiles(new Size(1, 1), null, Point.Empty, 1, raisedRows)
                     : SpritePlacementRules.DrawnTiles(topPiece.SourceSize(), topPixelsPerTile, topPivotFor(topPiece), 1, raisedRows);

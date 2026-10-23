@@ -37,13 +37,13 @@ namespace Presentation.UI.Trade;
 public sealed class TradeWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
-    LabelRenderer labelRenderer,
+    UiRenderService renderService,
     InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
     Engine.ECS.Systems.SimulationClock simulationClock)
-    : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
+    : Window(fontService, elementPoolService, renderService), IWholeWindowDropTarget
 {
     private readonly ItemCatalog _itemCatalog = inventoryServices.ItemCatalog;
     private readonly InventoryView _inventoryView = inventoryServices.InventoryView;
@@ -409,21 +409,21 @@ public sealed class TradeWindow(
     {
         base.DrawContent(gameTime);
 
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var labelFont = FontService.GetFont(FontChrome.DefaultFontSize);
+        var spriteBatch = Render.SpriteBatch;
+        var labelFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont(FontChrome.DefaultFontSize));
 
-        DrawHeaderColumn(spriteBatch, labelFont, 0, "Player Value", _playerValueText);
-        DrawHeaderColumn(spriteBatch, labelFont, ColumnSize.X + ColumnGap, "Shop Value", _shopValueText);
+        DrawHeaderColumn(spriteBatch, labelFontMeasurer, 0, "Player Value", _playerValueText);
+        DrawHeaderColumn(spriteBatch, labelFontMeasurer, ColumnSize.X + ColumnGap, "Shop Value", _shopValueText);
     }
 
-    private void DrawHeaderColumn(SpriteBatch spriteBatch, SpriteFontBase font, float x, string label, string valueText)
+    private void DrawHeaderColumn(SpriteBatch spriteBatch, FontStashTextMeasurer fontMeasurer, float x, string label, string valueText)
     {
         var columnTopLeft = ContentAbsolutePosition + new Vector2(x, 0);
         var labelFootprint = new Vector2(ColumnSize.X, HeaderLabelLineHeight);
         var valueFootprint = new Vector2(ColumnSize.X, HeaderHeight - HeaderLabelLineHeight);
 
-        LabelRenderer.DrawCentered(spriteBatch, font, label, columnTopLeft, labelFootprint, Color.White);
-        LabelRenderer.DrawCentered(spriteBatch, font, valueText, columnTopLeft + new Vector2(0, HeaderLabelLineHeight), valueFootprint, Color.White);
+        LabelRenderer.DrawCentered(spriteBatch, fontMeasurer, label, columnTopLeft, labelFootprint, Color.White);
+        LabelRenderer.DrawCentered(spriteBatch, fontMeasurer, valueText, columnTopLeft + new Vector2(0, HeaderLabelLineHeight), valueFootprint, Color.White);
     }
 
     private void BuildColumn(float x, int entityId, bool isShopSide)

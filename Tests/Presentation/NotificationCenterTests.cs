@@ -30,16 +30,15 @@ public sealed class NotificationCenterTests
     private static ElementPoolService CreateWindowService()
     {
         var fontService = TestFonts.Shared;
-        var labelRenderer = new LabelRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService);
         windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
+            fontService, windowService, new UiRenderService(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
         return windowService;
     }
 
     private static NotificationCenter CreateNotificationCenter(ElementPoolService windowService, UiLayerStack layers, EventBus? eventBus = null)
     {
-        var contextMenuController = new ContextMenuController(new DropdownController(windowService));
+        var contextMenuController = new ContextMenuController(new DropdownController(windowService, new UiRenderService()));
         contextMenuController.Dropdowns.Initialize(layers);
 
         var notificationCenter = new NotificationCenter(windowService, eventBus ?? new EventBus(), layers, contextMenuController);
@@ -132,12 +131,11 @@ public sealed class NotificationCenterTests
     private static (ElementPoolService WindowService, Func<Folder> GetFolder) CreateWindowServiceCapturingFolder()
     {
         var fontService = TestFonts.Shared;
-        var labelRenderer = new LabelRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService);
         Folder? capturedFolder = null;
         windowService.RegisterFactory<Folder>(() =>
         {
-            capturedFolder = new Folder(fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
+            capturedFolder = new Folder(fontService, windowService, new UiRenderService(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
             return capturedFolder;
         });
         return (windowService, () => capturedFolder ?? throw new InvalidOperationException("Folder not created yet."));
@@ -321,7 +319,6 @@ public sealed class NotificationCenterTests
     public void ClickingCloseButton_OnNewerOverlappingNotification_ClosesOnlyThatOne()
     {
         var fontService = TestFonts.Shared;
-        var labelRenderer = new LabelRenderer();
         var capturedPopups = new List<TextWindow>();
 
         // Replaces the default TextWindow factory just to capture each created
@@ -329,14 +326,14 @@ public sealed class NotificationCenterTests
         // way to get real Button/ButtonRectangle references (needed to click precisely,
         // since a WrapContent popup's exact size depends on font metrics) without duplicating
         // Window's internal layout math in the test.
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer, createTextWindow: pool =>
+        var windowService = TestElementPoolServiceFactory.Create(fontService, createTextWindow: pool =>
         {
-            var window = new TextWindow(fontService, pool, new LabelRenderer());
+            var window = new TextWindow(fontService, pool, new UiRenderService());
             capturedPopups.Add(window);
             return window;
         });
         windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
+            fontService, windowService, new UiRenderService(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
 
         var layers = new UiLayerStack();
         var notificationCenter = CreateNotificationCenter(windowService, layers);
@@ -367,16 +364,15 @@ public sealed class NotificationCenterTests
     private static (ElementPoolService WindowService, List<TextWindow> CapturedPopups) CreateWindowServiceCapturingTextWindows()
     {
         var fontService = TestFonts.Shared;
-        var labelRenderer = new LabelRenderer();
         var capturedPopups = new List<TextWindow>();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer, createTextWindow: pool =>
+        var windowService = TestElementPoolServiceFactory.Create(fontService, createTextWindow: pool =>
         {
-            var window = new TextWindow(fontService, pool, new LabelRenderer());
+            var window = new TextWindow(fontService, pool, new UiRenderService());
             capturedPopups.Add(window);
             return window;
         });
         windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, labelRenderer, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
+            fontService, windowService, new UiRenderService(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
         return (windowService, capturedPopups);
     }
 
@@ -424,7 +420,7 @@ public sealed class NotificationCenterTests
         var eventBus = new EventBus();
         var layers = new UiLayerStack();
         var windowService = CreateWindowService();
-        var contextMenuController = new ContextMenuController(new DropdownController(windowService));
+        var contextMenuController = new ContextMenuController(new DropdownController(windowService, new UiRenderService()));
         contextMenuController.Dropdowns.Initialize(layers);
         var notificationCenter = new NotificationCenter(windowService, eventBus, layers, contextMenuController);
         notificationCenter.Initialize();

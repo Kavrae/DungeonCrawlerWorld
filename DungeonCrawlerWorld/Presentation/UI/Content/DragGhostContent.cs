@@ -31,8 +31,7 @@ public sealed class DragGhostContent(
     ItemCatalog itemCatalog,
     InventoryView inventoryView,
     FontService fontService,
-    SpriteSheetService spriteSheetService,
-    LabelRenderer labelRenderer) : IElementContent
+    SpriteSheetService spriteSheetService) : IElementContent
 {
     private Window _hostWindow = null!;
 
@@ -82,11 +81,11 @@ public sealed class DragGhostContent(
 
         var size = state.SourceSize;
         SpriteView? sprite = spriteName is not null && spriteSheetService.Sprites.TryGetFirst(spriteName, out var spriteView) ? spriteView : null;
-        var font = fontService.GetFont((int)(size.Y * GameFontChrome.DragGhostGlyphFontFraction));
+        var glyphFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont((int)(size.Y * GameFontChrome.DragGhostGlyphFontFraction)));
         var mousePosition = state.CursorPosition;
 
         DragGhostRenderer.Draw(
-            _hostWindow.ElementPoolService.SpriteBatch, spriteSheetService, labelRenderer, font,
+            _hostWindow.Render.SpriteBatch, spriteSheetService, glyphFontMeasurer,
             sprite, glyph, glyphColor, new Vector2(mousePosition.X, mousePosition.Y), size);
     }
 }

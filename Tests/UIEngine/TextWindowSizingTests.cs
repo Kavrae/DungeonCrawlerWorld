@@ -16,7 +16,7 @@ namespace Tests.UIEngine;
 [DoNotParallelize]
 public sealed class TextWindowSizingTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
     private static TextWindow CreateWrapContentTextWindow(ElementPoolService windowService, string text, Vector2 maximumSize)
     {

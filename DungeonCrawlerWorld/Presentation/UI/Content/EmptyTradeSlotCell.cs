@@ -16,14 +16,14 @@ namespace Presentation.UI.Content;
 /// glow call, nothing else -- created with ShowBorder false and ContentColor Transparent (the same
 /// options every real cell already uses), so there is no border or background to suppress either.
 /// </summary>
-public sealed class EmptyTradeSlotCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : Element(fontService, elementPoolService, labelRenderer)
+public sealed class EmptyTradeSlotCell(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : Element(fontService, elementPoolService, renderService)
 {
     protected override bool IsHitTestable => false;
 
     public override void DrawContent(GameTime gameTime)
     {
         var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
-        GlowRenderer.Draw(ElementPoolService.SpriteBatch, ElementPoolService.UnitRectangle, bounds, Color.White, GlowMode.InteriorFade);
+        GlowRenderer.Draw(Render.SpriteBatch, Render.UnitRectangle, bounds, Color.White, GlowMode.InteriorFade);
     }
 }

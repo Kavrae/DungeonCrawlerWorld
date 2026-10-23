@@ -1,6 +1,6 @@
-using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using UIEngine.Fonts;
 
 namespace UIEngine.Rendering;
 
@@ -20,28 +20,44 @@ public static class SpriteOrGlyphRenderer
     public static bool Draw(
         SpriteBatch spriteBatch,
         SpriteSheetService spriteSheetService,
-        LabelRenderer labelRenderer,
         SpriteView? sprite,
-        SpriteFontBase glyphFont,
+        FontStashTextMeasurer glyphFontMeasurer,
         string glyph,
         Color glyphColor,
         Vector2 topLeft,
         Vector2 size,
         Color spriteTint,
         float alphaMultiplier = 1f,
-        bool outline = false)
+        bool outline = false) =>
+        Draw(new SpriteBatchDrawTarget(spriteBatch), spriteSheetService, sprite, glyphFontMeasurer, glyph, glyphColor, topLeft, size, spriteTint, alphaMultiplier, outline);
+
+    /// <inheritdoc cref="Draw(SpriteBatch, SpriteSheetService, SpriteView?, FontStashTextMeasurer, string, Color, Vector2, Vector2, Color, float, bool)"/>
+    public static bool Draw<TTarget>(
+        TTarget target,
+        SpriteSheetService spriteSheetService,
+        SpriteView? sprite,
+        FontStashTextMeasurer glyphFontMeasurer,
+        string glyph,
+        Color glyphColor,
+        Vector2 topLeft,
+        Vector2 size,
+        Color spriteTint,
+        float alphaMultiplier = 1f,
+        bool outline = false,
+        SpriteDrawStyle style = default)
+        where TTarget : ISpriteDrawTarget
     {
         if (sprite is { } spriteView)
         {
             var texture = spriteSheetService.GetTexture(spriteView.Sheet);
             var tint = spriteView.Tint is { } cellTint ? Multiply(spriteTint, cellTint) : spriteTint;
-            SpriteRenderer.Draw(spriteBatch, texture, spriteView.SourceRectangle, topLeft, size, tint * alphaMultiplier, spriteView.Transform);
+            SpriteRenderer.Draw(target, texture, spriteView.SourceRectangle, topLeft, size, tint * alphaMultiplier, spriteView.Transform, style);
             return true;
         }
 
         if (!string.IsNullOrEmpty(glyph))
         {
-            labelRenderer.DrawCentered(spriteBatch, glyphFont, glyph, topLeft, size, glyphColor, outline, alphaMultiplier);
+            LabelRenderer.DrawCentered(target, glyphFontMeasurer, glyph, topLeft, size, glyphColor, outline, alphaMultiplier, style);
             return true;
         }
 

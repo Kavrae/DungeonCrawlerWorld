@@ -17,18 +17,17 @@ internal sealed class ControlTestHarness
     public ControlTestHarness()
     {
         var fontService = TestFonts.Shared;
-        var labelRenderer = new LabelRenderer();
-        Pool = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        Pool = TestElementPoolServiceFactory.Create(fontService);
         Layers = new UiLayerStack();
         Dropdowns = TestElementPoolServiceFactory.CreateDropdownController(Pool, Layers);
         var contextMenus = new ContextMenuController(Dropdowns);
-        Pool.RegisterFactory(() => new NumericField(fontService, Pool, labelRenderer, null, contextMenus));
-        Pool.RegisterFactory(() => new ColorField(fontService, Pool, labelRenderer, null, contextMenus));
-        Pool.RegisterFactory(() => new DropdownField(fontService, Pool, labelRenderer, Dropdowns));
-        Pool.RegisterFactory(() => new ListView(fontService, Pool, labelRenderer));
-        Pool.RegisterFactory(() => new ListEditor(fontService, Pool, labelRenderer));
-        Pool.RegisterFactory(() => new SplitPane(fontService, Pool, labelRenderer));
-        Pool.RegisterFactory(() => new ModalDialog(fontService, Pool, labelRenderer));
+        Pool.RegisterFactory(() => new NumericField(fontService, Pool, new UiRenderService(), null, contextMenus));
+        Pool.RegisterFactory(() => new ColorField(fontService, Pool, new UiRenderService(), null, contextMenus));
+        Pool.RegisterFactory(() => new DropdownField(fontService, Pool, new UiRenderService(), Dropdowns));
+        Pool.RegisterFactory(() => new ListView(fontService, Pool, new UiRenderService()));
+        Pool.RegisterFactory(() => new ListEditor(fontService, Pool, new UiRenderService()));
+        Pool.RegisterFactory(() => new SplitPane(fontService, Pool, new UiRenderService()));
+        Pool.RegisterFactory(() => new ModalDialog(fontService, Pool, new UiRenderService()));
         Input = new UiInputController(Layers, ScreenSize, new PointerState(), [], [], Dropdowns) { StartTextInput = static () => { }, StopTextInput = static () => { } };
     }
 

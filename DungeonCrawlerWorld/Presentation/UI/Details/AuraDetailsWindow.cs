@@ -19,10 +19,10 @@ namespace Presentation.UI.Details;
 public sealed class AuraDetailsWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
-    LabelRenderer labelRenderer,
+    UiRenderService renderService,
     ActionCatalog actionCatalog,
     GameplayTagRegistry gameplayTags)
-    : Window(fontService, elementPoolService, labelRenderer)
+    : Window(fontService, elementPoolService, renderService)
 {
     private const string GlowSwatchGlyph = "●";
 

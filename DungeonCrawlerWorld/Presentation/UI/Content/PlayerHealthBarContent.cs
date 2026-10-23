@@ -57,7 +57,7 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
 
     private int _hoveredFrames;
 
-    /// <summary>Test-only seam onto the popup this content owns/drives -- see the internal Update overload below for why the real screen-bounds source (ElementPoolService.GraphicsDevice, unavailable headlessly) is also parameterized out for tests.</summary>
+    /// <summary>Test-only seam onto the popup this content owns/drives -- see the internal Update overload below for why the real screen-bounds source (Render.GraphicsDevice, unavailable headlessly) is also parameterized out for tests.</summary>
     internal Window HoverPopup => _hoverPopup;
 
     /// <summary>The "current / maximum" text the bar draws, or null when the player has no health to show.</summary>
@@ -84,11 +84,11 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
     }
 
     /// <summary>Whether the player currently has a SimpleHealthComponent and what fraction of effective max health remains is decided here -- Draw only reads the cached fraction and maps it to a fill color/width.</summary>
-    public void Update(GameTime gameTime) => Update(Mouse.GetState(), _hostWindow.ElementPoolService.GraphicsDevice.Viewport.Bounds);
+    public void Update(GameTime gameTime) => Update(Mouse.GetState(), _hostWindow.Render.GraphicsDevice.Viewport.Bounds);
 
     /// <summary>
     /// Takes explicit MouseState/screenBounds rather than reading Mouse.GetState()/
-    /// ElementPoolService.GraphicsDevice itself -- the same seam UiInputController's own
+    /// Render.GraphicsDevice itself -- the same seam UiInputController's own
     /// dual-overload Update uses, extended to both of this method's real-environment reads (not
     /// just MouseState) so a test can drive the real hover/positioning pipeline with synthetic
     /// values instead of calling a private hover method directly or requiring a real
@@ -142,8 +142,8 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
 
     public void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = _hostWindow.ElementPoolService.SpriteBatch;
-        var unitRectangle = _hostWindow.ElementPoolService.UnitRectangle;
+        var spriteBatch = _hostWindow.Render.SpriteBatch;
+        var unitRectangle = _hostWindow.Render.UnitRectangle;
 
         // BarRectangle(), not the static Size -- Size is the window's outer bounds (used by
         // ShellBootstrapper to position/size the host window itself); the actual drawable

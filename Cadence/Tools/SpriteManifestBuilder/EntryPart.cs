@@ -6,9 +6,9 @@ namespace SpriteManifestBuilder;
 /// between a wall's face and top never mixes their cells.
 /// </summary>
 /// <param name="layout">The kind of linked set this part's slots are, when it is one: Cardinal for a top or a plain linked set, Horizontal for a wall's face.</param>
-public sealed class EntryPart(LinkLayout layout)
+public sealed class EntryPart(SpriteLinkLayout layout)
 {
-    public LinkLayout Layout { get; } = layout;
+    public SpriteLinkLayout Layout { get; } = layout;
 
     public List<SpriteManifestCell> Options { get; } = [];
 

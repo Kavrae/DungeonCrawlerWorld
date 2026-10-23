@@ -26,7 +26,7 @@ public sealed class PlayerManaBarContentTests
     {
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
         var fontService = TestFonts.Shared;
-        var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService);
 
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
         if (mana is { } playerMana)

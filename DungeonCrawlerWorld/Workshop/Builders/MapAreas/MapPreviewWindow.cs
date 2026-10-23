@@ -28,8 +28,8 @@ namespace Builders.MapAreas;
 /// is given.
 /// </para>
 /// </remarks>
-public sealed class MapPreviewWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, AreaPreviewCache previews, GameCatalogs catalogs)
-    : Window(fontService, elementPoolService, labelRenderer)
+public sealed class MapPreviewWindow(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, AreaPreviewCache previews, GameCatalogs catalogs)
+    : Window(fontService, elementPoolService, renderService)
 {
     public const int DefaultWorldSeed = 1;
 

@@ -8,8 +8,8 @@ namespace Tests.UIEngine;
 [DoNotParallelize]
 public sealed class ElementPoolServiceTests
 {
-    private sealed class DerivedTextWindow(global::UIEngine.Fonts.FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-        : TextWindow(fontService, elementPoolService, labelRenderer);
+    private sealed class DerivedTextWindow(global::UIEngine.Fonts.FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+        : TextWindow(fontService, elementPoolService, renderService);
 
     private static ElementOptions FixedOptions() => new()
     {
@@ -25,9 +25,9 @@ public sealed class ElementPoolServiceTests
     [TestMethod]
     public void RegisterFactory_SecondFactoryForOneType_Throws()
     {
-        var pool = TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+        var pool = TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
-        var exception = Assert.ThrowsExactly<InvalidOperationException>(() => pool.RegisterFactory(() => new Window(TestFonts.Shared, pool, new LabelRenderer())));
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() => pool.RegisterFactory(() => new Window(TestFonts.Shared, pool, new UiRenderService())));
 
         Assert.Contains(nameof(Window), exception.Message);
     }
@@ -36,7 +36,7 @@ public sealed class ElementPoolServiceTests
     public void CreateElement_FactoryMakingASubclass_ThrowsNamingBoth()
     {
         var pool = new ElementPoolService();
-        pool.RegisterFactory<TextWindow>(() => new DerivedTextWindow(TestFonts.Shared, pool, new LabelRenderer()));
+        pool.RegisterFactory<TextWindow>(() => new DerivedTextWindow(TestFonts.Shared, pool, new UiRenderService()));
 
         var exception = Assert.ThrowsExactly<InvalidOperationException>(() => pool.CreateElement<TextWindow>(null, FixedOptions()));
 
@@ -46,8 +46,8 @@ public sealed class ElementPoolServiceTests
     [TestMethod]
     public void CloseElement_TypeWithNoPool_IsTornDownAgainOnALaterClose()
     {
-        var pool = TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
-        var unpooledWindow = new DerivedTextWindow(TestFonts.Shared, pool, new LabelRenderer());
+        var pool = TestElementPoolServiceFactory.Create(TestFonts.Shared);
+        var unpooledWindow = new DerivedTextWindow(TestFonts.Shared, pool, new UiRenderService());
         unpooledWindow.Build(null, ContainerOptions());
         unpooledWindow.AddChild(pool.CreateElement<Window>(unpooledWindow, FixedOptions()));
         pool.CloseElement(unpooledWindow);
@@ -62,7 +62,7 @@ public sealed class ElementPoolServiceTests
     [TestMethod]
     public void CloseElement_Twice_ReturnsItToItsPoolOnce()
     {
-        var pool = TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+        var pool = TestElementPoolServiceFactory.Create(TestFonts.Shared);
         var window = pool.CreateElement<Window>(null, FixedOptions());
 
         pool.CloseElement(window);

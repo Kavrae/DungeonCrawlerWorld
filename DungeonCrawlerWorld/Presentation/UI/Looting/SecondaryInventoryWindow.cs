@@ -40,7 +40,7 @@ namespace Presentation.UI.Looting;
 public sealed class SecondaryInventoryWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
-    LabelRenderer labelRenderer,
+    UiRenderService renderService,
     InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
@@ -48,7 +48,7 @@ public sealed class SecondaryInventoryWindow(
     Engine.ECS.Systems.SimulationClock simulationClock,
     EntityNaming entityNaming,
     HealthView healthView)
-    : Window(fontService, elementPoolService, labelRenderer)
+    : Window(fontService, elementPoolService, renderService)
 {
     private static readonly Vector2 IconSize = new(48, 48);
     private const float Padding = 8f;

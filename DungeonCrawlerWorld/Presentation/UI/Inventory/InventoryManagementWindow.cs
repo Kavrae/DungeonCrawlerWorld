@@ -40,12 +40,12 @@ namespace Presentation.UI.Inventory;
 public sealed class InventoryManagementWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
-    LabelRenderer labelRenderer,
+    UiRenderService renderService,
     InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    Engine.ECS.Systems.SimulationClock simulationClock) : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
+    Engine.ECS.Systems.SimulationClock simulationClock) : Window(fontService, elementPoolService, renderService), IWholeWindowDropTarget
 {
     private TabbedContent _tabbedContent = null!;
     private CurrencyRowContent _currencyRowContent = null!;

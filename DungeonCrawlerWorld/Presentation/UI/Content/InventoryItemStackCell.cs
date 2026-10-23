@@ -48,8 +48,8 @@ public enum CellCompareState
 /// slot mid-drag.
 /// </summary>
 /// <summary>Not sealed -- ShopItemStackCell subclasses this for the shop-mode grid (sprite+name+price layout instead of icon+quantity-badge), reusing Configure/the base fill+hover/selected/eligible-glow drawing via its own DrawContent override. See that class's own doc comment.</summary>
-public class InventoryItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService)
-    : Element(fontService, elementPoolService, labelRenderer), IContentDragSource
+public class InventoryItemStackCell(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService spriteSheetService)
+    : Element(fontService, elementPoolService, renderService), IContentDragSource
 {
     private static readonly Color GroupBorderColor = Color.Black;
     private const float GroupBorderThickness = 2f;
@@ -68,7 +68,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     private bool _groupBorderBottom;
     private bool _groupBorderLeft;
     private bool _groupBorderRight;
-    protected SpriteFontBase _iconGlyphFont = null!;
+    protected FontStashTextMeasurer _iconGlyphFontMeasurer = null!;
     protected SpriteFontBase _quantityFont = null!;
     protected SpriteFontBase _badgeFont = null!;
 
@@ -189,7 +189,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         _groupBorderBottom = false;
         _groupBorderLeft = false;
         _groupBorderRight = false;
-        _iconGlyphFont = FontService.GetFont((int)(cellSize.Y * GameFontChrome.InventoryStackIconGlyphFontFraction));
+        _iconGlyphFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(cellSize.Y * GameFontChrome.InventoryStackIconGlyphFontFraction)));
         _quantityFont = FontService.GetFont((int)(cellSize.Y * GameFontChrome.InventoryStackQuantityFontFraction));
         _badgeFont = FontService.GetFont((int)(cellSize.Y * GameFontChrome.InventoryStackBadgeFontFraction));
         _mergedStackBadgeWidth = _badgeFont.MeasureString(MergedStackBadgeText).X;
@@ -213,8 +213,8 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
         var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
 
         DrawBaseAndIcon(spriteBatch, unitRectangle, bounds, ContentSize);
@@ -258,7 +258,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         var spriteTint = isGreyedOut ? Color.Gray : Color.White;
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, LabelRenderer, _sprite, _iconGlyphFont, _glyph, glyphColor, ContentAbsolutePosition, iconSize, spriteTint);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, _sprite, _iconGlyphFontMeasurer, _glyph, glyphColor, ContentAbsolutePosition, iconSize, spriteTint);
 
         if (IsToggledOn)
         {

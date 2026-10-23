@@ -42,7 +42,7 @@ public sealed class AuraGlowBlendTests
 
         blend.BeginPass();
 
-        Assert.IsTrue(blend.TryGetGlow(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out var glowColor, out var totalPower));
+        Assert.IsTrue(blend.TryGetGlow(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out var glowColor, out var totalPower, out _));
         Assert.AreEqual(Color.Orange, glowColor);
         Assert.AreEqual(8, totalPower);
     }
@@ -55,7 +55,7 @@ public sealed class AuraGlowBlendTests
 
         blend.BeginPass();
 
-        Assert.IsFalse(blend.TryGetGlow(SourcePosition.X + 50, SourcePosition.Y, SourcePosition.Z, out _, out var totalPower));
+        Assert.IsFalse(blend.TryGetGlow(SourcePosition.X + 50, SourcePosition.Y, SourcePosition.Z, out _, out var totalPower, out _));
         Assert.AreEqual(0, totalPower);
     }
 
@@ -69,9 +69,23 @@ public sealed class AuraGlowBlendTests
         blend.BeginPass();
 
         // At the first source: power 8 of Red, 2 of Green.
-        Assert.IsTrue(blend.TryGetGlow(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out var glowColor, out var totalPower));
+        Assert.IsTrue(blend.TryGetGlow(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out var glowColor, out var totalPower, out _));
         Assert.AreEqual(new Color((byte)(255 * 8 / 10f), (byte)(128 * 2 / 10f), (byte)0), glowColor);
         Assert.AreEqual(10, totalPower);
+    }
+
+    [TestMethod]
+    public void GlowOpacityMultiplier_IsAveragedByEachAurasPower()
+    {
+        var (field, auras, blend) = Build();
+        auras.Register(OrangeAura with { GlowOpacityMultiplier = 0.9f });
+        field.AddSource(SourcePosition, new AuraSourceComponent(OrangeAuraId, power: 6, size: 0));
+        field.AddSource(SourcePosition, new AuraSourceComponent(RedAuraId, power: 2, size: 0));
+
+        blend.BeginPass();
+
+        Assert.IsTrue(blend.TryGetGlow(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out _, out _, out var glowOpacityMultiplier));
+        Assert.AreEqual((0.9f * 6 + 0.5f * 2) / 8, glowOpacityMultiplier, 0.0001f);
     }
 
     [TestMethod]
@@ -84,7 +98,7 @@ public sealed class AuraGlowBlendTests
         auras.Register(new AuraDefinition(OrangeAuraGuid, "Orange", Color.Purple));
         blend.BeginPass();
 
-        Assert.IsTrue(blend.TryGetGlow(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out var glowColor, out _));
+        Assert.IsTrue(blend.TryGetGlow(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out var glowColor, out _, out _));
         Assert.AreEqual(Color.Purple, glowColor);
     }
 
@@ -100,7 +114,7 @@ public sealed class AuraGlowBlendTests
 
         blend.BeginPass();
 
-        Assert.IsTrue(blend.TryGetGlow(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out var glowColor, out var totalPower));
+        Assert.IsTrue(blend.TryGetGlow(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out var glowColor, out var totalPower, out _));
         Assert.AreEqual(Color.Orange, glowColor);
         Assert.AreEqual(8, totalPower);
     }

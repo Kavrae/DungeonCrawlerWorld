@@ -18,7 +18,7 @@ namespace Tests.UIEngine;
 [DoNotParallelize]
 public sealed class WindowViewportTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
     [TestMethod]
     public void SetRelativePosition_UpdatesWindowViewportToMatchContentRectangle()

@@ -1,6 +1,6 @@
 namespace SpriteManifestBuilder;
 
-/// <summary>The checks behind the sheet gestures and the warnings: option hit-testing, duplicates, and whether a cell fits its entry's span.</summary>
+/// <summary>The checks behind the sheet gestures and the warnings: option hit-testing, duplicates, and whether a cell fits its entry's span (SpriteEntryRules, in this tool's Size).</summary>
 public static class EntryRules
 {
     /// <summary>The topmost (most recently added) option on sheetPath containing sourcePixel, or -1.</summary>
@@ -37,33 +37,16 @@ public static class EntryRules
         return -1;
     }
 
-    public static bool Fits(SpriteManifestCell cell, Size span) =>
-        cell.EffectiveColumnSpan == span.Width && cell.EffectiveRowSpan == span.Height;
+    public static bool Fits(SpriteManifestCell cell, Size span) => SpriteEntryRules.Fits(cell, span.Width, span.Height);
 
-    public static int CountMisfits(IEnumerable<SpriteManifestCell?> cells, Size span) =>
-        cells.Count(cell => cell is not null && !Fits(cell, span));
+    public static int CountMisfits(IEnumerable<SpriteManifestCell?> cells, Size span) => SpriteEntryRules.CountMisfits(cells, span.Width, span.Height);
 
-    /// <summary>The span a part was authored at: the one saved with it, else (one saved before spans were) its most common cell span, else 1x1.</summary>
+    /// <inheritdoc cref="SpriteEntryRules.SpanOf(IEnumerable{SpriteManifestCell?}, int, int)"/>
     public static Size SpanOf(IEnumerable<SpriteManifestCell?> cells, int savedColumnSpan, int savedRowSpan)
     {
-        if (savedColumnSpan > 0 || savedRowSpan > 0)
-        {
-            return new Size(Math.Max(1, savedColumnSpan), Math.Max(1, savedRowSpan));
-        }
-
-        return cells
-            .OfType<SpriteManifestCell>()
-            .GroupBy(cell => new Size(cell.EffectiveColumnSpan, cell.EffectiveRowSpan))
-            .OrderByDescending(group => group.Count())
-            .Select(group => group.Key)
-            .DefaultIfEmpty(new Size(1, 1))
-            .First();
+        var (columns, rows) = SpriteEntryRules.SpanOf(cells, savedColumnSpan, savedRowSpan);
+        return new Size(columns, rows);
     }
-
-    /// <summary>Whether any cell of the entry, or of a wall's top, doesn't fit the span its part was authored at.</summary>
-    public static bool HasMisfit(SpriteManifestEntry entry) =>
-        CountMisfits(entry.Cells, SpanOf(entry.Cells, entry.ColumnSpan, entry.RowSpan)) > 0 ||
-        entry.Top is { } top && CountMisfits(top.Cells, SpanOf(top.Cells, top.ColumnSpan, top.RowSpan)) > 0;
 
     /// <summary>The span-sized option whose top-left grid cell is topLeft, or null when it would run off the sheet.</summary>
     public static SpriteManifestCell? SpanningFrom(string sheetPath, Point topLeft, Size span, int cellWidth, int cellHeight, Size sheetSize)

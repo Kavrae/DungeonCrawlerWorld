@@ -10,8 +10,8 @@ namespace UIEngine.UI;
 /// Draws whatever fraction/colors Configure was last given, for callers that already
 /// have the number in hand.
 /// </remarks>
-public sealed class FractionBarElement(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : Element(fontService, elementPoolService, labelRenderer)
+public sealed class FractionBarElement(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : Element(fontService, elementPoolService, renderService)
 {
     private float _fraction;
     private bool _hasResource;
@@ -47,12 +47,12 @@ public sealed class FractionBarElement(FontService fontService, ElementPoolServi
         var size = ContentSize;
         var bar = new Rectangle((int)origin.X, (int)origin.Y, (int)size.X, (int)size.Y);
 
-        ResourceBarRenderer.Draw(ElementPoolService.SpriteBatch, ElementPoolService.UnitRectangle, bar, _fraction, _hasResource, _outlineColor, _fractionColor);
+        ResourceBarRenderer.Draw(Render.SpriteBatch, Render.UnitRectangle, bar, _fraction, _hasResource, _outlineColor, _fractionColor);
 
         if (_showValueText)
         {
             var valueFont = FontService.GetFont((int)(bar.Height * FontChrome.ResourceBarValueFontFraction));
-            ResourceBarRenderer.DrawCenteredValueText(ElementPoolService.SpriteBatch, valueFont, bar, _valueText, _valueTextSize.SizeOf(valueFont, _valueText).X);
+            ResourceBarRenderer.DrawCenteredValueText(Render.SpriteBatch, valueFont, bar, _valueText, _valueTextSize.SizeOf(valueFont, _valueText).X);
         }
     }
 }

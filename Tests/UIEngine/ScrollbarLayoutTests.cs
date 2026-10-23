@@ -11,7 +11,7 @@ public sealed class ScrollbarLayoutTests
 {
     private const float RowHeight = 20f;
 
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
     private static Window CreateColumn(ElementPoolService windowService, Element? parent, Vector2 size, ScrollbarVisibility? scrollbarVisibility = null)
     {

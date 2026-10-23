@@ -38,17 +38,17 @@ public static class BuilderTabs
     {
         var elementPool = uiEngine.ElementPoolService;
         var fontService = uiEngine.FontService;
-        var labelRenderer = uiEngine.LabelRenderer;
+        var renderService = uiEngine.RenderService;
         var catalogs = gameSession.Catalogs;
 
-        elementPool.RegisterFactory(() => new ItemDetailsWindow(fontService, elementPool, labelRenderer, catalogs.ActionCatalog, catalogs.GameplayTags, gameSession.Views.ActionStateView, gameSession.World));
-        elementPool.RegisterFactory(() => new ActionDetailsWindow(fontService, elementPool, labelRenderer, catalogs.ActionCatalog, catalogs.GameplayTags));
-        elementPool.RegisterFactory(() => new AuraDetailsWindow(fontService, elementPool, labelRenderer, catalogs.ActionCatalog, catalogs.GameplayTags));
-        elementPool.RegisterFactory(() => new ItemIconElement(fontService, elementPool, labelRenderer, uiEngine.SpriteSheetService));
-        elementPool.RegisterFactory(() => new TargetShapePreviewElement(fontService, elementPool, labelRenderer));
-        elementPool.RegisterFactory(() => new AreaMapView(fontService, elementPool, labelRenderer, uiEngine.SpriteSheetService));
-        elementPool.RegisterFactory(() => new MapPreviewWindow(fontService, elementPool, labelRenderer, areaPreviews, catalogs));
-        elementPool.RegisterFactory(() => new MapDetailsWindow(fontService, elementPool, labelRenderer, catalogs));
-        elementPool.RegisterFactory(() => new CellDetailsWindow(fontService, elementPool, labelRenderer));
+        elementPool.RegisterFactory(() => new ItemDetailsWindow(fontService, elementPool, renderService, catalogs.ActionCatalog, catalogs.GameplayTags, gameSession.Views.ActionStateView, gameSession.World));
+        elementPool.RegisterFactory(() => new ActionDetailsWindow(fontService, elementPool, renderService, catalogs.ActionCatalog, catalogs.GameplayTags));
+        elementPool.RegisterFactory(() => new AuraDetailsWindow(fontService, elementPool, renderService, catalogs.ActionCatalog, catalogs.GameplayTags));
+        elementPool.RegisterFactory(() => new ItemIconElement(fontService, elementPool, renderService, uiEngine.SpriteSheetService));
+        elementPool.RegisterFactory(() => new TargetShapePreviewElement(fontService, elementPool, renderService));
+        elementPool.RegisterFactory(() => new AreaMapView(fontService, elementPool, renderService, uiEngine.SpriteSheetService));
+        elementPool.RegisterFactory(() => new MapPreviewWindow(fontService, elementPool, renderService, areaPreviews, catalogs));
+        elementPool.RegisterFactory(() => new MapDetailsWindow(fontService, elementPool, renderService, catalogs));
+        elementPool.RegisterFactory(() => new CellDetailsWindow(fontService, elementPool, renderService));
     }
 }

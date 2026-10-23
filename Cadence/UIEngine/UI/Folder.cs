@@ -25,11 +25,11 @@ public sealed class Folder : Element
     /// <summary>The icon FolderOptions.SpriteName names, resolved when the folder is built; null draws the fallback glyph.</summary>
     private SpriteView? _sprite;
     private string _fallbackGlyph = string.Empty;
-    private SpriteFontBase _fallbackGlyphFont = null!;
+    private FontStashTextMeasurer _fallbackGlyphFontMeasurer = null!;
     private Color _backgroundColor;
 
-    public Folder(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService)
-        : base(fontService, elementPoolService, labelRenderer)
+    public Folder(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService spriteSheetService)
+        : base(fontService, elementPoolService, renderService)
     {
         _spriteSheetService = spriteSheetService;
     }
@@ -42,7 +42,7 @@ public sealed class Folder : Element
         _iconSize = folderOptions?.IconSize ?? DefaultIconSize;
         _sprite = _spriteSheetService.Sprites.FirstOrNull(folderOptions?.SpriteName);
         _fallbackGlyph = folderOptions?.FallbackGlyph ?? string.Empty;
-        _fallbackGlyphFont = FontService.GetFont((int)(_iconSize.Y * FontChrome.FolderFallbackGlyphFontFraction));
+        _fallbackGlyphFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(_iconSize.Y * FontChrome.FolderFallbackGlyphFontFraction)));
         _backgroundColor = folderOptions?.BackgroundColor ?? WindowPalette.HeaderBackground;
 
         _canContainChildren = true;
@@ -105,8 +105,8 @@ public sealed class Folder : Element
     /// <summary>Background fill, then sprite-else-glyph icon via the shared SpriteOrGlyphRenderer.</summary>
     protected override void DrawHeader(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
 
         if (!IsTransparent)
         {
@@ -120,6 +120,6 @@ public sealed class Folder : Element
         var iconTopLeft = HeaderAbsolutePosition + (HeaderSize - _iconSize) / 2f;
 
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, LabelRenderer, _sprite, _fallbackGlyphFont, _fallbackGlyph, Color.Black, iconTopLeft, _iconSize, Color.White);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _sprite, _fallbackGlyphFontMeasurer, _fallbackGlyph, Color.Black, iconTopLeft, _iconSize, Color.White);
     }
 }

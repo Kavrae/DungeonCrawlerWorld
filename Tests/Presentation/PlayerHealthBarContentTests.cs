@@ -41,7 +41,7 @@ public sealed class PlayerHealthBarContentTests
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
         var fontService = TestFonts.Shared;
         var layers = new UiLayerStack();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService);
 
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
 

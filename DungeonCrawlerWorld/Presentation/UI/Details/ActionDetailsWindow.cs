@@ -17,10 +17,10 @@ namespace Presentation.UI.Details;
 public sealed class ActionDetailsWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
-    LabelRenderer labelRenderer,
+    UiRenderService renderService,
     ActionCatalog actionCatalog,
     GameplayTagRegistry gameplayTags)
-    : Window(fontService, elementPoolService, labelRenderer)
+    : Window(fontService, elementPoolService, renderService)
 {
     private readonly ActivatableDetailsSections _sections = new(elementPoolService, fontService, actionCatalog, gameplayTags);
 

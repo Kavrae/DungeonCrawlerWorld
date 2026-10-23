@@ -1,6 +1,6 @@
-using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using UIEngine.Fonts;
 using UIEngine.Rendering;
 
 namespace Presentation.Rendering;
@@ -21,8 +21,7 @@ public static class DragGhostRenderer
     public static void Draw(
         SpriteBatch spriteBatch,
         SpriteSheetService spriteSheetService,
-        LabelRenderer labelRenderer,
-        SpriteFontBase glyphFont,
+        FontStashTextMeasurer glyphFontMeasurer,
         SpriteView? sprite,
         string glyph,
         Color glyphColor,
@@ -30,6 +29,6 @@ public static class DragGhostRenderer
         Vector2 size)
     {
         var topLeft = centerPosition - size / 2f;
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, labelRenderer, sprite, glyphFont, glyph, glyphColor, topLeft, size, Color.White, Alpha);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, sprite, glyphFontMeasurer, glyph, glyphColor, topLeft, size, Color.White, Alpha);
     }
 }

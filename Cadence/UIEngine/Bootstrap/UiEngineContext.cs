@@ -10,26 +10,29 @@ namespace UIEngine.Bootstrap;
 public sealed class UiEngineContext(
     FontService fontService,
     SpriteBatchRenderer spriteBatchRenderer,
-    LabelRenderer labelRenderer,
+    SpriteEffectService spriteEffectService,
+    SpriteEffectBatch spriteEffectBatch,
+    UiRenderService renderService,
     SpriteSheetService spriteSheetService,
     ElementPoolService elementPoolService)
 {
     public FontService FontService { get; } = fontService;
     public SpriteBatchRenderer SpriteBatchRenderer { get; } = spriteBatchRenderer;
-    public LabelRenderer LabelRenderer { get; } = labelRenderer;
+    public SpriteEffectService SpriteEffectService { get; } = spriteEffectService;
+
+    /// <summary>What everything draws with (UiRenderService); the one every element takes.</summary>
+    public UiRenderService RenderService { get; } = renderService;
+
     public SpriteSheetService SpriteSheetService { get; } = spriteSheetService;
     public ElementPoolService ElementPoolService { get; } = elementPoolService;
 
     /// <summary>
-    /// Captures the render services ElementPoolService needs for every Element's Draw/DrawContent/
-    /// DrawHeader (see ElementPoolService.Initialize's own doc comment) -- called once, from
-    /// the host's LoadContent, after GraphicsDevice/unitRectangle both exist. Sources spriteBatch
-    /// from this context's own SpriteBatchRenderer rather than taking it as a parameter too, since
-    /// UiEngineContext already owns that reference -- a host only needs to cross into
-    /// the framework once, through this one call, not reach into ElementPoolService directly.
+    /// Fills RenderService with the device and what draws with it -- called once, from the host's LoadContent, after
+    /// GraphicsDevice/unitRectangle both exist. Sources the batches from this context's own SpriteBatchRenderer and sprite
+    /// effect batch, so a host crosses into the framework once, through this one call.
     /// </summary>
     public void LoadContent(GraphicsDevice graphicsDevice, Texture2D unitRectangle) =>
-        ElementPoolService.Initialize(graphicsDevice, SpriteBatchRenderer.GetSpriteBatch(), unitRectangle);
+        RenderService.Initialize(graphicsDevice, SpriteBatchRenderer.GetSpriteBatch(), spriteEffectBatch, unitRectangle);
 
     /// <summary>Registers the element factories of every control UIEngine itself defines, so no host repeats the list.</summary>
     /// <remarks>
@@ -40,27 +43,27 @@ public sealed class UiEngineContext(
     {
         var pool = ElementPoolService;
         var fonts = FontService;
-        var labels = LabelRenderer;
         var sprites = SpriteSheetService;
+        var render = RenderService;
 
-        pool.RegisterFactory(() => new Window(fonts, pool, labels));
-        pool.RegisterFactory(() => new TextWindow(fonts, pool, labels));
-        pool.RegisterFactory(() => new Button(fonts, pool, labels, sprites));
-        pool.RegisterFactory(() => new TextBox(fonts, pool, labels, cursorTextContent, contextMenuController));
-        pool.RegisterFactory(() => new NumericField(fonts, pool, labels, cursorTextContent, contextMenuController));
-        pool.RegisterFactory(() => new ColorField(fonts, pool, labels, cursorTextContent, contextMenuController));
-        pool.RegisterFactory(() => new Dropdown(fonts, pool, labels));
-        pool.RegisterFactory(() => new DropdownField(fonts, pool, labels, contextMenuController.Dropdowns));
-        pool.RegisterFactory(() => new ListView(fonts, pool, labels));
-        pool.RegisterFactory(() => new ListEditor(fonts, pool, labels));
-        pool.RegisterFactory(() => new SplitPane(fonts, pool, labels));
-        pool.RegisterFactory(() => new ModalDialog(fonts, pool, labels));
-        pool.RegisterFactory(() => new Tooltip(fonts, pool, labels));
-        pool.RegisterFactory(() => new Folder(fonts, pool, labels, sprites));
-        pool.RegisterFactory(() => new GridControl(fonts, pool, labels));
-        pool.RegisterFactory(() => new Toggle(fonts, pool, labels));
-        pool.RegisterFactory(() => new TextDivider(fonts, pool, labels));
-        pool.RegisterFactory(() => new SeparatorBar(fonts, pool, labels));
-        pool.RegisterFactory(() => new FractionBarElement(fonts, pool, labels));
+        pool.RegisterFactory(() => new Window(fonts, pool, render));
+        pool.RegisterFactory(() => new TextWindow(fonts, pool, render));
+        pool.RegisterFactory(() => new Button(fonts, pool, render, sprites));
+        pool.RegisterFactory(() => new TextBox(fonts, pool, render, cursorTextContent, contextMenuController));
+        pool.RegisterFactory(() => new NumericField(fonts, pool, render, cursorTextContent, contextMenuController));
+        pool.RegisterFactory(() => new ColorField(fonts, pool, render, cursorTextContent, contextMenuController));
+        pool.RegisterFactory(() => new Dropdown(fonts, pool, render));
+        pool.RegisterFactory(() => new DropdownField(fonts, pool, render, contextMenuController.Dropdowns));
+        pool.RegisterFactory(() => new ListView(fonts, pool, render));
+        pool.RegisterFactory(() => new ListEditor(fonts, pool, render));
+        pool.RegisterFactory(() => new SplitPane(fonts, pool, render));
+        pool.RegisterFactory(() => new ModalDialog(fonts, pool, render));
+        pool.RegisterFactory(() => new Tooltip(fonts, pool, render));
+        pool.RegisterFactory(() => new Folder(fonts, pool, render, sprites));
+        pool.RegisterFactory(() => new GridControl(fonts, pool, render));
+        pool.RegisterFactory(() => new Toggle(fonts, pool, render));
+        pool.RegisterFactory(() => new TextDivider(fonts, pool, render));
+        pool.RegisterFactory(() => new SeparatorBar(fonts, pool, render));
+        pool.RegisterFactory(() => new FractionBarElement(fonts, pool, render));
     }
 }

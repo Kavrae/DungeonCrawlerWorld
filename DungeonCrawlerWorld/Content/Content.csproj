@@ -25,6 +25,14 @@
       manual csproj edit too, and forgetting one is exactly what a missing-file exception at
       runtime looks like (a real bug hit in practice, not hypothetical).
     -->
+    <!--
+      The game's own compiled effects (fx_2_0, SpriteEffectService.Load); an Effects\SpriteUber.fxb replaces UIEngine's
+      embedded sprite effect when it declares the same vertex version. None ship yet.
+    -->
+    <Content Include="Effects\*.fxb">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+
     <Content Include="Spritesheets\**\*.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

@@ -15,23 +15,24 @@ using UIEngine.UI;
 
 namespace Presentation.MapRendering;
 
-/// <summary>Draws the map as the world looks through a camera: the flat fill, terrain and walls, everything standing on them, and the aura glow.</summary>
+/// <summary>Draws the map as the world looks through a camera: the flat fill, terrain and walls, and everything standing on them, lit by the auras' glow.</summary>
 /// <remarks>
 /// <para>
 /// Reads the world only through IMapViewQuery and AuraPowerView, so the game feeds it a live session and a map editor an
 /// authored layout. Draws nothing about what the player is doing (targeting, selection): that is drawn over it by its host.
 /// </para>
 /// <para>
-/// Two calls a frame: Update, outside any SpriteBatch pass, re-renders the cached terrain and glow images when they are
-/// stale; Draw blits them around the row walk. Each image is stale when the camera shows something other than what it was
-/// rendered for (MapImageKey), so no camera move has to announce itself. What the key can't see is told: terrain
-/// changes through InvalidateTerrain/InvalidateTerrainIn, and aura changes through AuraPowerView.Version, read here.
+/// Two calls a frame: Update, outside any SpriteBatch pass, re-renders the cached ground and wall-top images when they are
+/// stale; Draw rebuilds the glow texture when it is stale and blits the images under the row walk. Each is stale when the
+/// camera shows something other than what it was built for (MapImageKey), so no camera move has to announce itself. What
+/// the key can't see is told: terrain changes through InvalidateTerrain/InvalidateTerrainIn, and aura changes through
+/// AuraPowerView.Version, read here.
 /// </para>
 /// <para>
 /// Draw order is significant, not incidental -- each pass lands on top of the previous one with no depth buffer
-/// (SpriteSortMode.Deferred submits in call order): the flat fill first so everything else has something to draw over,
-/// then terrain (a terrain's sprite is its background; terrain with none shows the flat fill under its glyph), the row
-/// walk, and the glow over all of it.
+/// (SpriteEffectBatch draws in call order): the flat fill first so everything else has something to draw over,
+/// then the ground (a terrain's sprite is its background; terrain with none shows the flat fill under its glyph), the
+/// walls' tops, and the row walk. The glow is not a pass: the sprite effect lights each draw as it is made (see Draw).
 /// </para>
 /// </remarks>
 public sealed class MapRenderer : IDisposable
@@ -60,12 +61,6 @@ public sealed class MapRenderer : IDisposable
     /// <summary>Fraction of a tile's own size the charging-action badge renders at, matching LootBagBadgeSizeFraction's own scale.</summary>
     private const float ChargingBadgeSizeFraction = 0.4f;
 
-    /// <summary>The summed aura power at a tile that glows at full brightness; anything more glows no brighter.</summary>
-    private const int FullGlowPower = 8;
-
-    /// <summary>Halves the glow so a full-strength one still lets whatever's standing on that tile -- terrain, an occupant sprite/glyph -- read through, rather than washing it out at the source tile itself.</summary>
-    private const float GlowOpacityMultiplier = 0.5f;
-
     private static readonly Color MapFillColor = new(40, 40, 40);
 
     /// <summary>What a tile off the loaded map is drawn as, so the edge of the world reads as an edge rather than as floor with nothing on it.</summary>
@@ -74,16 +69,15 @@ public sealed class MapRenderer : IDisposable
     private readonly IMapViewQuery _mapView;
     private readonly AuraPowerView _auraPower;
     private readonly MapCamera _camera;
-    private readonly ElementPoolService _elementPoolService;
+    private readonly UiRenderService _renderService;
     private readonly SpriteSheetService _spriteSheetService;
-    private readonly LabelRenderer _labelRenderer;
-    private readonly AuraGlowBlend _auraGlowBlend;
 
-    private readonly SpriteFontBase _mediumFont;
-    private readonly SpriteFontBase _largeFont;
-    private readonly SpriteFontBase _hugeFont;
-    private readonly SpriteFontBase _tinyFont;
-    private readonly SpriteFontBase _badgeFont;
+
+    private readonly FontStashTextMeasurer _mediumFontMeasurer;
+    private readonly FontStashTextMeasurer _largeFontMeasurer;
+    private readonly FontStashTextMeasurer _hugeFontMeasurer;
+    private readonly FontStashTextMeasurer _tinyFontMeasurer;
+    private readonly FontStashTextMeasurer _badgeFontMeasurer;
 
     /// <summary>
     /// LootBag-Red resolved once, not per badge per frame -- a sprite lookup by name is a
@@ -106,63 +100,67 @@ public sealed class MapRenderer : IDisposable
     private readonly List<Rectangle> _watchedRectangles = [];
 
     /// <summary>The image passes, as delegates made once rather than per Update.</summary>
-    private readonly Action<SpriteBatch, MapImageKey> _drawTerrainIntoCache;
-    private readonly Action<SpriteBatch, MapImageKey> _drawGlowOverlayIntoCache;
+    private readonly Action<SpriteEffectBatch, MapImageKey> _drawGroundIntoCache;
+    private readonly Action<SpriteEffectBatch, MapImageKey> _drawTopsIntoCache;
 
-    /// <summary>Null until the first Update that finds a GraphicsDevice, and permanently null for a headless renderer that never gets one -- Draw's fallback paths cover both cases. Built on first use because ElementPoolService only receives a GraphicsDevice in GameLoop.LoadContent.</summary>
-    private MapTileLayerCache? _terrainCache;
+    /// <summary>Floors, off-map black and the cached walls' faces, rendered unlit and lit by the glow when blitted. Null until the first Update that finds a GraphicsDevice, and permanently null for a headless renderer that never gets one, which may Update but never Draw. Built on first use because UiRenderService only receives a GraphicsDevice in the host's LoadContent.</summary>
+    private MapTileLayerCache? _groundCache;
 
-    /// <summary>The aura glow overlay's own cached rendering -- a separate texture from _terrainCache because it is blitted on the other side of the occupants.</summary>
-    private MapTileLayerCache? _glowCache;
+    /// <summary>The cached walls' tops, a separate image from _groundCache because tops are never lit: a top is the wall's roof, rows above the floor the glow lies on.</summary>
+    private MapTileLayerCache? _topsCache;
 
-    /// <summary>The AuraPowerView.Version _glowCache was last rendered against -- a source appearing, moving or expiring changes the glow without changing the camera.</summary>
-    private int _renderedGlowVersion = -1;
+    /// <summary>The auras' glow as the texture the sprite effect reads, rebuilt when the grid or the auras change.</summary>
+    private readonly MapGlowTexture _glowTexture;
+
+    /// <summary>The grid _wallPlan was last planned for; the cached tops and the row walk's overhangs read the plan, so it must match what is drawn.</summary>
+    private readonly MapBuildStamp _plannedWalls = new();
 
     public MapRenderer(
         IMapViewQuery mapView,
         AuraPowerView auraPower,
         MapCamera camera,
-        ElementPoolService elementPoolService,
+        UiRenderService renderService,
         FontService fontService,
-        SpriteSheetService spriteSheetService,
-        LabelRenderer labelRenderer)
+        SpriteSheetService spriteSheetService)
     {
         _mapView = mapView;
         _auraPower = auraPower;
         _camera = camera;
-        _elementPoolService = elementPoolService;
+        _renderService = renderService;
         _spriteSheetService = spriteSheetService;
-        _labelRenderer = labelRenderer;
-        _auraGlowBlend = new AuraGlowBlend(auraPower);
+        _glowTexture = new MapGlowTexture(new MapGlowTexels(mapView, new AuraGlowBlend(auraPower)));
         _terrainCells = new MapTerrainCells(mapView, spriteSheetService.Sprites);
 
-        _mediumFont = fontService.GetFont(GameFontChrome.MapMediumFontSize);
-        _largeFont = fontService.GetFont(GameFontChrome.MapLargeFontSize);
-        _hugeFont = fontService.GetFont(GameFontChrome.MapHugeFontSize);
-        _tinyFont = fontService.GetFont(GameFontChrome.MapTinyFontSize); // ~1/3 of _mediumFont, for the tiny-entity grid.
-        _badgeFont = fontService.GetFont(GameFontChrome.MapBadgeFontSize); // Double _tinyFont, for the up/down layer-occupancy badges -- legible at a glance without competing with the main glyph.
+        _mediumFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont(GameFontChrome.MapMediumFontSize));
+        _largeFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont(GameFontChrome.MapLargeFontSize));
+        _hugeFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont(GameFontChrome.MapHugeFontSize));
+        _tinyFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont(GameFontChrome.MapTinyFontSize)); // ~1/3 of the medium font, for the tiny-entity grid.
+        _badgeFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont(GameFontChrome.MapBadgeFontSize)); // Double the tiny font, for the up/down layer-occupancy badges -- legible at a glance without competing with the main glyph.
 
         _lootBagSprite = spriteSheetService.Sprites.TryGetFirst(LootBagSpriteName, out var lootBagSprite) ? lootBagSprite : null;
 
-        _drawTerrainIntoCache = DrawTerrainIntoCache;
-        _drawGlowOverlayIntoCache = DrawGlowOverlayIntoCache;
+        _drawGroundIntoCache = DrawGroundIntoCache;
+        _drawTopsIntoCache = DrawTopsIntoCache;
     }
 
-    /// <summary>Releases the cached images' render targets -- a host that replaces its renderer (a preview showing another build) disposes the old one.</summary>
+    /// <summary>Releases the cached images' render targets and the glow texture -- a host that replaces its renderer (a preview showing another build) disposes the old one.</summary>
     public void Dispose()
     {
-        _terrainCache?.Dispose();
-        _glowCache?.Dispose();
-        _terrainCache = null;
-        _glowCache = null;
+        _groundCache?.Dispose();
+        _topsCache?.Dispose();
+        _glowTexture.Dispose();
+        _groundCache = null;
+        _topsCache = null;
     }
 
-    /// <summary>Drops both cached images: the terrain or structures they were drawn from changed.</summary>
-    /// <remarks>Both, not only the terrain image, so the terrain image and the glow never disagree about which cells they describe.</remarks>
+    /// <summary>Drops the cached images and the glow: the terrain or structures they were drawn from changed.</summary>
+    /// <remarks>The glow too, so the images and the glow never disagree about which cells they describe.</remarks>
     public void InvalidateTerrain()
     {
-        _terrainCache?.Invalidate();
-        _glowCache?.Invalidate();
+        _groundCache?.Invalidate();
+        _topsCache?.Invalidate();
+        _glowTexture.Invalidate();
+        _plannedWalls.Invalidate();
     }
 
     /// <summary>InvalidateTerrain, only when area overlaps what the images are drawn from: a neighborhood streams in a row at a time, mostly out of view.</summary>
@@ -186,111 +184,113 @@ public sealed class MapRenderer : IDisposable
     /// <summary>Re-renders whichever cached image is stale for mapLayer as the camera now shows it. Must run outside any SpriteBatch pass.</summary>
     /// <remarks>
     /// Rendering into MapTileLayerCache's own texture means swapping render targets, and by the time anything draws,
-    /// GameLoop has already begun the shared SpriteBatch pass that ElementPoolService's render-state stack owns. Run it
+    /// GameLoop has already begun the shared SpriteBatch pass that UiRenderService's render-state stack owns. Run it
     /// after anything that moves the camera this frame, so a frame that re-centres rebuilds against the new scroll
     /// position rather than drawing the uncached path once before catching up.
     /// </remarks>
     public void Update(int mapLayer)
     {
-        if (_terrainCache is null && _elementPoolService.GraphicsDevice is { } graphicsDevice)
+        if (_groundCache is null && _renderService.GraphicsDevice is { } graphicsDevice)
         {
-            _terrainCache = new MapTileLayerCache(graphicsDevice);
-            _glowCache = new MapTileLayerCache(graphicsDevice);
-        }
-
-        if (_renderedGlowVersion != _auraPower.Version)
-        {
-            _renderedGlowVersion = _auraPower.Version;
-            _glowCache?.Invalidate();
+            _groundCache = new MapTileLayerCache(graphicsDevice);
+            _topsCache = new MapTileLayerCache(graphicsDevice);
         }
 
         var key = MapImageKey.Of(_camera, mapLayer);
-        _terrainCache?.EnsureRendered(_elementPoolService.SpriteBatch, key, _drawTerrainIntoCache);
-        _glowCache?.EnsureRendered(_elementPoolService.SpriteBatch, key, _drawGlowOverlayIntoCache);
+        _groundCache?.EnsureRendered(_renderService.SpriteEffectBatch, key, _drawGroundIntoCache);
+        _topsCache?.EnsureRendered(_renderService.SpriteEffectBatch, key, _drawTopsIntoCache);
     }
 
-    /// <summary>Draws one frame of the map: the flat fill, terrain, the row walk, then the glow.</summary>
-    /// <remarks>Terrain and glow are blitted from their cached images when those match what the camera shows, and drawn directly otherwise (the frame or two before the first render, a camera moved since Update, a headless renderer) -- the same pixels at the old cost.</remarks>
+    /// <summary>Draws one frame of the map: the flat fill, the ground, the walls' tops, then the row walk -- lit by the auras' glow.</summary>
+    /// <remarks>
+    /// Drawn through the sprite effect in a pass of its own (UiRenderService.BeginSpriteEffectPass), inside the host's
+    /// SpriteBatch pass and under its viewport, scissor and transform, which resumes afterwards. The ground and the tops are
+    /// blitted from their cached images when those match what the camera shows, and drawn directly otherwise (the frame or two
+    /// before the first render, a camera moved since Update) -- the same pixels at the old cost.
+    /// The glow is light, not an overlay: the effect reads it from a texture of one texel per tile (MapGlowTexels) for what
+    /// stands on the ground -- the fill, the ground and walls' faces at each pixel, everything else standing along its footprint's ground row --
+    /// and never for walls' tops or the cues drawn over the map (health bars, badges).
+    /// </remarks>
     /// <param name="watchedEntityIds">The entities whose drawn sprites overhangs fade over, so whoever stands behind a wall stays visible.</param>
-    public void Draw(SpriteBatch spriteBatch, int mapLayer, IReadOnlyList<int> watchedEntityIds)
+    /// <remarks>Needs the GraphicsDevice: unlike Update, it is never called on a headless renderer.</remarks>
+    public void Draw(int mapLayer, IReadOnlyList<int> watchedEntityIds)
     {
-        var unitRectangle = _elementPoolService.UnitRectangle;
         var key = MapImageKey.Of(_camera, mapLayer);
-
-        spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, key.TileColumns * key.TileSize.X, key.TileRows * key.TileSize.Y), MapFillColor);
-
-        if (_terrainCache?.Draw(spriteBatch, key, -_camera.RenderPixelOffset) != true)
+        var glowTexture = _glowTexture.Ensure(_renderService.GraphicsDevice, key, _auraPower.Version);
+        var batch = _renderService.BeginSpriteEffectPass();
+        try
         {
-            DrawTerrainDirectly(spriteBatch, key, _camera.RenderPixelOffset);
+            batch.Glow = SpriteEffectGlow.OverTileGrid(glowTexture, key.TileSize, _camera.TileOrigin(0, 0), MapGlowTexels.MarginTiles);
+            DrawMap(batch, key, watchedEntityIds);
         }
-
-        DrawOccupants(spriteBatch, unitRectangle, key, watchedEntityIds);
-
-        if (_glowCache?.Draw(spriteBatch, key, -_camera.RenderPixelOffset) != true)
+        finally
         {
-            DrawGlowOverlay(spriteBatch, unitRectangle, key, _camera.RenderPixelOffset);
+            _renderService.EndSpriteEffectPass();
         }
     }
 
-    /// <summary>Renders the glow overlay at whole-tile positions with no sub-tile offset, for MapTileLayerCache to capture -- the caller applies the offset once when blitting.</summary>
-    private void DrawGlowOverlayIntoCache(SpriteBatch spriteBatch, MapImageKey key) =>
-        DrawGlowOverlay(spriteBatch, _elementPoolService.UnitRectangle, key, Vector2.Zero);
-
-    /// <summary>
-    /// The auras' glow (see AuraGlowBlend), drawn as a translucent overlay on top of terrain and
-    /// occupant sprites, so it shows the same over a full-tile sprite as over a glyph on the flat fill.
-    /// </summary>
-    private void DrawGlowOverlay(SpriteBatch spriteBatch, Texture2D unitRectangle, MapImageKey key, Vector2 pixelOffset)
+    private void DrawMap(SpriteEffectBatch batch, MapImageKey key, IReadOnlyList<int> watchedEntityIds)
     {
-        _auraGlowBlend.BeginPass();
+        var unitRectangle = _renderService.UnitRectangle;
+        var litAtPixel = SpriteDrawStyle.Plain.WithGlowAtPixel();
 
-        for (var columnIndex = 0; columnIndex < key.TileColumns; columnIndex++)
+        batch.Draw(unitRectangle, new Rectangle(0, 0, key.TileColumns * key.TileSize.X, key.TileRows * key.TileSize.Y), null, MapFillColor, litAtPixel);
+
+        if (_groundCache?.Draw(batch, key, -_camera.RenderPixelOffset, litAtPixel) != true)
         {
-            for (var rowIndex = 0; rowIndex < key.TileRows; rowIndex++)
-            {
-                var mapNodeX = columnIndex + key.Scroll.X;
-                var mapNodeY = rowIndex + key.Scroll.Y;
-
-                if (!_mapView.IsOnMap(new Vector3Int(mapNodeX, mapNodeY, 0)) || !_auraGlowBlend.TryGetGlow(mapNodeX, mapNodeY, key.MapLayer, out var glowColor, out var totalPower))
-                {
-                    continue;
-                }
-
-                var tileOrigin = new Vector2(columnIndex * key.TileSize.X, rowIndex * key.TileSize.Y) - pixelOffset;
-                var destination = new Rectangle((int)tileOrigin.X, (int)tileOrigin.Y, key.TileSize.X, key.TileSize.Y);
-                var glowFactor = Math.Min(totalPower, FullGlowPower) / (float)FullGlowPower;
-                spriteBatch.Draw(unitRectangle, destination, glowColor * glowFactor * GlowOpacityMultiplier);
-            }
+            DrawGroundDirectly(batch, key, _camera.RenderPixelOffset, SpriteGlow.AtPixel);
         }
+        else if (!_plannedWalls.IsCurrentFor(key))
+        {
+            PlanWalls(key);
+        }
+
+        if (_topsCache?.Draw(batch, key, -_camera.RenderPixelOffset, SpriteDrawStyle.Plain) != true)
+        {
+            DrawCachedTops(batch, key, _camera.RenderPixelOffset);
+        }
+
+        DrawOccupants(batch, unitRectangle, key, watchedEntityIds);
     }
 
     /// <summary>
-    /// Renders the terrain at whole-tile positions with no sub-tile offset,
-    /// for MapTileLayerCache to capture into its texture -- the caller applies the offset once when
-    /// blitting that texture instead of every tile applying it individually.
+    /// Renders the ground at whole-tile positions with no sub-tile offset, unlit, for MapTileLayerCache to capture into its
+    /// texture -- the caller applies the offset once when blitting that texture, and the glow with it.
     /// </summary>
     /// <remarks>
     /// Terrain is drawn as its own full pass, ahead of every occupant, and that ordering is
     /// load-bearing rather than incidental: a multi-tile entity's sprite is drawn once from its
     /// origin tile covering its whole footprint, so a neighbouring tile's terrain draw -- a later
-    /// call, and SpriteSortMode.Deferred submits in call order with no depth buffer -- would
+    /// call, and SpriteEffectBatch submits in call order with no depth buffer -- would
     /// otherwise land on top of part of that footprint. Since terrain lives in its own texture
     /// blitted before any occupant, that separation is structural rather than something the loop
     /// order has to keep getting right.
     /// </remarks>
-    private void DrawTerrainIntoCache(SpriteBatch spriteBatch, MapImageKey key)
+    private void DrawGroundIntoCache(SpriteEffectBatch batch, MapImageKey key)
     {
         using (EngineHooks.FrameCost(FrameCostCategory.Update, "Map", "Terrain cache rebuild"))
         {
-            DrawTerrainDirectly(spriteBatch, key, Vector2.Zero);
+            DrawGroundDirectly(batch, key, Vector2.Zero, SpriteGlow.None);
         }
     }
 
-    /// <summary>The uncached path: the same floors, walls and off-map black MapTileLayerCache captures, drawn straight to the screen at the given sub-tile offset. Used to render into the cache (offset zero) and as Draw's fallback when the cache doesn't match. Either way it rebuilds the overhang list the row walk draws, so the list always matches the image.</summary>
-    private void DrawTerrainDirectly(SpriteBatch spriteBatch, MapImageKey key, Vector2 pixelOffset)
+    /// <summary>Renders the cached walls' tops at whole-tile positions for their own image, after the ground image planned them.</summary>
+    private void DrawTopsIntoCache(SpriteEffectBatch batch, MapImageKey key) =>
+        DrawCachedTops(batch, key, Vector2.Zero);
+
+    /// <summary>Reads the grid's cells and plans its walls -- which pieces the images cache and which the row walk draws as overhangs.</summary>
+    private void PlanWalls(MapImageKey key)
+    {
+        _terrainCells.Read(key.Scroll, key.TileColumns, key.TileRows, key.MapLayer);
+        _wallPlan.Plan(_terrainCells, key.Scroll, key.TileColumns, key.TileRows);
+        _plannedWalls.Record(key);
+    }
+
+    /// <summary>The uncached path for the ground: the same floors, off-map black and cached walls' faces MapTileLayerCache captures, drawn straight to the screen at the given sub-tile offset. Used to render into the cache (offset zero, unlit) and as Draw's fallback when the cache doesn't match (lit at each pixel, as the blit is). Either way it re-plans the walls, so the tops and the overhangs the row walk draws always match the image.</summary>
+    private void DrawGroundDirectly(SpriteEffectBatch batch, MapImageKey key, Vector2 pixelOffset, SpriteGlow glow)
     {
         var tileSize = key.TileSize;
-        _terrainCells.Read(key.Scroll, key.TileColumns, key.TileRows, key.MapLayer);
+        PlanWalls(key);
 
         for (var columnIndex = 0; columnIndex < key.TileColumns; columnIndex++)
         {
@@ -302,54 +302,65 @@ public sealed class MapRenderer : IDisposable
 
                 if (!_terrainCells.IsOnMap(mapNodeX, mapNodeY))
                 {
-                    spriteBatch.Draw(_elementPoolService.UnitRectangle, new Rectangle((int)tileOrigin.X, (int)tileOrigin.Y, tileSize.X, tileSize.Y), OffMapColor);
+                    batch.Draw(_renderService.UnitRectangle, new Rectangle((int)tileOrigin.X, (int)tileOrigin.Y, tileSize.X, tileSize.Y), null, OffMapColor, SpriteDrawStyle.Plain);
                     continue;
                 }
 
-                DrawFloor(spriteBatch, mapNodeX, mapNodeY, tileOrigin, tileSize);
+                DrawFloor(batch, mapNodeX, mapNodeY, tileOrigin, tileSize, glow);
             }
         }
 
-        DrawStructures(spriteBatch, key, pixelOffset);
-    }
-
-    /// <summary>Every wall's face and top that MapWallPlan caches, faces then tops; the rest it leaves on its Overhangs for the row walk.</summary>
-    private void DrawStructures(SpriteBatch spriteBatch, MapImageKey key, Vector2 pixelOffset)
-    {
-        _wallPlan.Plan(_terrainCells, key.Scroll, key.TileColumns, key.TileRows);
-
         foreach (var piece in _wallPlan.CachedPieces)
         {
-            DrawStructurePiece(spriteBatch, piece, key, pixelOffset);
+            if (!piece.IsTop)
+            {
+                DrawStructurePiece(batch, piece, key, pixelOffset, glow);
+            }
+        }
+    }
+
+    /// <summary>Every wall's top that the last wall plan caches, unlit; faces are the ground's, and the rest are the row walk's overhangs.</summary>
+    private void DrawCachedTops(SpriteEffectBatch batch, MapImageKey key, Vector2 pixelOffset)
+    {
+        foreach (var piece in _wallPlan.CachedPieces)
+        {
+            if (piece.IsTop)
+            {
+                DrawStructurePiece(batch, piece, key, pixelOffset, SpriteGlow.None);
+            }
         }
     }
 
     /// <summary>A wall's face or top on the tile it sits on, sized and placed by its sprite's placement.</summary>
-    private void DrawStructurePiece(SpriteBatch spriteBatch, MapOverhang piece, MapImageKey key, Vector2 pixelOffset)
+    private void DrawStructurePiece(SpriteEffectBatch batch, MapOverhang piece, MapImageKey key, Vector2 pixelOffset, SpriteGlow glow)
     {
         var tileSize = new Vector2(key.TileSize.X, key.TileSize.Y);
         var tileOrigin = new Vector2((piece.AnchorX - key.Scroll.X) * tileSize.X, (piece.AnchorY - key.Scroll.Y) * tileSize.Y) - pixelOffset;
-        DrawVisual(spriteBatch, piece.Visual, _mediumFont, tileOrigin, tileSize, new Vector2Byte(1, 1), out _);
+        DrawVisual(batch, piece.Visual, _mediumFontMeasurer, tileOrigin, tileSize, new Vector2Byte(1, 1), glow, groundRowY: 0f, out _);
     }
 
-    /// <summary>The tile's floor, stretched to its tile -- static, so it belongs in the cached terrain texture. Walls are DrawStructures'.</summary>
-    private void DrawFloor(SpriteBatch spriteBatch, int mapNodeX, int mapNodeY, Vector2 tileOrigin, Point tileSize)
+    /// <summary>The tile's floor, stretched to its tile -- static, so it belongs in the cached ground image. Walls are the wall plan's.</summary>
+    private void DrawFloor(SpriteEffectBatch batch, int mapNodeX, int mapNodeY, Vector2 tileOrigin, Point tileSize, SpriteGlow glow)
     {
         if (_terrainCells.TryGetFloor(mapNodeX, mapNodeY, out var floor))
         {
-            DrawVisual(spriteBatch, floor, _mediumFont, tileOrigin, new Vector2(tileSize.X, tileSize.Y), footprintTiles: null, out _);
+            DrawVisual(batch, floor, _mediumFontMeasurer, tileOrigin, new Vector2(tileSize.X, tileSize.Y), footprintTiles: null, glow, groundRowY: 0f, out _);
         }
     }
+
+    /// <summary>The y, in draw space, of the centre of a footprint's lowest row -- what something standing on it is lit along.</summary>
+    private static float GroundRowY(Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize) =>
+        footprintTopLeft.Y + footprintSize.Y - tileSize.Y / 2f;
 
     /// <summary>Every occupant of the visible grid, drawn on top of the terrain -- corpses, the Tiny sub-grid, Blocking occupants, Phasing overlays, then every tile's up/down layer badges -- in the order MapDrawOrder plans.</summary>
     /// <remarks>
     /// Rows top to bottom, each row left to right, anything that stands up drawn from the lowest row of its footprint (see
     /// MapDrawOrder): a later row overlaps an earlier one, which is what lets a sprite reach above its own tile. The order is
     /// chosen for what overlaps what, not for speed -- Map's per-cell arrays are X-fastest, and walking them row-major or
-    /// column-major was measured to make no difference against the same warm cache. SpriteSortMode.Deferred draws in call
+    /// column-major was measured to make no difference against the same warm cache. SpriteEffectBatch draws in call
     /// order with no depth buffer, so the plan's order is the draw order.
     /// </remarks>
-    private void DrawOccupants(SpriteBatch spriteBatch, Texture2D unitRectangle, MapImageKey key, IReadOnlyList<int> watchedEntityIds)
+    private void DrawOccupants(SpriteEffectBatch batch, Texture2D unitRectangle, MapImageKey key, IReadOnlyList<int> watchedEntityIds)
     {
         var scroll = key.Scroll;
         _drawOrder.Plan(_mapView, scroll, key.TileColumns, key.TileRows, key.MapLayer, _mapView.Bounds.Depth, _wallPlan.Overhangs);
@@ -366,8 +377,8 @@ public sealed class MapRenderer : IDisposable
             switch (item.Kind)
             {
                 case MapDrawItemKind.Corpse:
-                    TryDrawEntityVisual(spriteBatch, item.EntityId, FontForSize(item.Size.X), footprintTopLeft, footprintSize, item.Size);
-                    DrawLootBagBadge(spriteBatch, _mapView.GetStatus(item.EntityId).LootBag, footprintTopLeft, footprintSize, key.TileSize);
+                    TryDrawEntityVisual(batch, item.EntityId, FontMeasurerForSize(item.Size.X), footprintTopLeft, footprintSize, item.Size, GroundRowY(footprintTopLeft, footprintSize, key.TileSize));
+                    DrawLootBagBadge(batch, _mapView.GetStatus(item.EntityId).LootBag, footprintTopLeft, footprintSize, key.TileSize);
                     break;
 
                 case MapDrawItemKind.Tiny:
@@ -377,7 +388,7 @@ public sealed class MapRenderer : IDisposable
                         tinyDrawnCount = 0;
                     }
 
-                    if (tinyDrawnCount < MaxTinyEntitiesDrawn && DrawTinyOccupant(spriteBatch, item.EntityId, footprintTopLeft, key.TileSize, tinyDrawnCount))
+                    if (tinyDrawnCount < MaxTinyEntitiesDrawn && DrawTinyOccupant(batch, item.EntityId, footprintTopLeft, key.TileSize, tinyDrawnCount))
                     {
                         tinyDrawnCount++;
                     }
@@ -385,19 +396,19 @@ public sealed class MapRenderer : IDisposable
                     break;
 
                 case MapDrawItemKind.Blocking:
-                    DrawPrimaryOccupant(spriteBatch, unitRectangle, item.EntityId, item.Size, footprintTopLeft, footprintSize, key.TileSize);
+                    DrawPrimaryOccupant(batch, unitRectangle, item.EntityId, item.Size, footprintTopLeft, footprintSize, key.TileSize);
                     break;
 
                 case MapDrawItemKind.Phasing:
-                    TryDrawEntityVisual(spriteBatch, item.EntityId, FontForSize(item.Size.X), footprintTopLeft, footprintSize, item.Size, PhasingAlphaMultiplier);
+                    TryDrawEntityVisual(batch, item.EntityId, FontMeasurerForSize(item.Size.X), footprintTopLeft, footprintSize, item.Size, GroundRowY(footprintTopLeft, footprintSize, key.TileSize), PhasingAlphaMultiplier);
                     break;
 
                 case MapDrawItemKind.LayerBadge:
-                    DrawLayerBadges(spriteBatch, item.HasHigherLayer, item.HasLowerLayer, footprintTopLeft, key.TileSize);
+                    DrawLayerBadges(batch, item.HasHigherLayer, item.HasLowerLayer, footprintTopLeft, key.TileSize);
                     break;
 
                 case MapDrawItemKind.Overhang:
-                    DrawOverhang(spriteBatch, _wallPlan.Overhangs[item.EntityId], footprintTopLeft, footprintSize);
+                    DrawOverhang(batch, _wallPlan.Overhangs[item.EntityId], footprintTopLeft, footprintSize);
                     break;
             }
         }
@@ -422,67 +433,70 @@ public sealed class MapRenderer : IDisposable
         }
     }
 
-    /// <summary>A wall's live face or top, faded where it is drawn over a watched entity (OverhangFade).</summary>
-    private void DrawOverhang(SpriteBatch spriteBatch, MapOverhang overhang, Vector2 tileOrigin, Vector2 tileSize)
+    /// <summary>A wall's live face or top, faded where it is drawn over a watched entity (OverhangFade). A face is lit at each pixel, as a cached face is when the ground image is blitted, so a wall reads the same whichever way its face is drawn; a top is never lit.</summary>
+    private void DrawOverhang(SpriteEffectBatch batch, MapOverhang overhang, Vector2 tileOrigin, Vector2 tileSize)
     {
         var overhangRectangle = OverhangFade.WatchedRectangle(tileOrigin, tileSize, new Vector2Byte(1, 1), overhang.Visual.Sprite);
         var alpha = OverhangFade.AlphaFor(overhangRectangle, _watchedRectangles);
-        DrawVisual(spriteBatch, overhang.Visual, _mediumFont, tileOrigin, tileSize, new Vector2Byte(1, 1), out _, alpha);
+        var glow = overhang.IsTop ? SpriteGlow.None : SpriteGlow.AtPixel;
+        DrawVisual(batch, overhang.Visual, _mediumFontMeasurer, tileOrigin, tileSize, new Vector2Byte(1, 1), glow, groundRowY: 0f, out _, alpha);
     }
 
-    /// <summary>Draws entityId's sprite if it has one, else falls back to its glyph -- see DrawVisual. Returns whether anything was actually drawn.</summary>
-    private bool TryDrawEntityVisual(SpriteBatch spriteBatch, int entityId, SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize, Vector2Byte footprintTiles, float alphaMultiplier = 1f) =>
-        TryDrawEntityVisual(spriteBatch, entityId, font, footprintTopLeft, footprintSize, footprintTiles, out _, alphaMultiplier);
+    /// <summary>Draws entityId's sprite if it has one, else falls back to its glyph, lit along groundRowY -- see DrawVisual. Returns whether anything was actually drawn.</summary>
+    private bool TryDrawEntityVisual(SpriteEffectBatch batch, int entityId, FontStashTextMeasurer fontMeasurer, Vector2 footprintTopLeft, Vector2 footprintSize, Vector2Byte footprintTiles, float groundRowY, float alphaMultiplier = 1f) =>
+        TryDrawEntityVisual(batch, entityId, fontMeasurer, footprintTopLeft, footprintSize, footprintTiles, groundRowY, out _, alphaMultiplier);
 
-    /// <inheritdoc cref="TryDrawEntityVisual(SpriteBatch, int, SpriteFontBase, Vector2, Vector2, Vector2Byte, float)"/>
+    /// <inheritdoc cref="TryDrawEntityVisual(SpriteEffectBatch, int, FontStashTextMeasurer, Vector2, Vector2, Vector2Byte, float, float)"/>
     /// <param name="drawnTop">Where the top of what was drawn landed, for cues that sit above it; the footprint's top for a glyph or a miss.</param>
-    private bool TryDrawEntityVisual(SpriteBatch spriteBatch, int entityId, SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize, Vector2Byte footprintTiles, out float drawnTop, float alphaMultiplier = 1f)
+    private bool TryDrawEntityVisual(SpriteEffectBatch batch, int entityId, FontStashTextMeasurer fontMeasurer, Vector2 footprintTopLeft, Vector2 footprintSize, Vector2Byte footprintTiles, float groundRowY, out float drawnTop, float alphaMultiplier = 1f)
     {
         drawnTop = footprintTopLeft.Y;
-        return _mapView.TryGetVisual(entityId, out var visual) && DrawVisual(spriteBatch, _spriteSheetService.Sprites.Resolve(visual), font, footprintTopLeft, footprintSize, footprintTiles, out drawnTop, alphaMultiplier);
+        return _mapView.TryGetVisual(entityId, out var visual) && DrawVisual(batch, _spriteSheetService.Sprites.Resolve(visual), fontMeasurer, footprintTopLeft, footprintSize, footprintTiles, SpriteGlow.AlongGroundRow, groundRowY, out drawnTop, alphaMultiplier);
     }
 
-    /// <summary>The one place that turns a resolved visual into a draw, shared by every per-tile visual draw. A sprite with a placement is sized and positioned by it (SpritePlacementMath) -- it may reach above and beside its footprint -- and one without fills the footprint, as a glyph does. A corpse draws with a flat Color.Gray tint instead of its normal color -- a color-multiply override, not a true desaturation shader (no shader/Effect infrastructure exists here). Delegates the actual draw to SpriteOrGlyphRenderer, shared with Folder/inventory item cells.</summary>
+    /// <summary>The one place that turns a resolved visual into a draw, shared by every per-tile visual draw. A sprite with a placement is sized and positioned by it (SpritePlacementMath) -- it may reach above and beside its footprint -- and one without fills the footprint, as a glyph does. A corpse draws in its own colours, desaturated by the sprite effect (MapVisual.DrawStyle). Delegates the actual draw to SpriteOrGlyphRenderer, shared with Folder/inventory item cells.</summary>
     /// <param name="footprintTiles">The footprint in tiles, which a placed sprite scales with; null draws a sprite stretched to the footprint whatever its placement (a floor).</param>
-    private bool DrawVisual(SpriteBatch spriteBatch, MapVisual visual, SpriteFontBase font, Vector2 footprintTopLeft, Vector2 footprintSize, Vector2Byte? footprintTiles, out float drawnTop, float alphaMultiplier = 1f)
+    /// <param name="glow">Where it reads the glow: at each pixel for a floor or a face, along groundRowY for anything else standing, never for a top.</param>
+    private bool DrawVisual(SpriteEffectBatch batch, MapVisual visual, FontStashTextMeasurer fontMeasurer, Vector2 footprintTopLeft, Vector2 footprintSize, Vector2Byte? footprintTiles, SpriteGlow glow, float groundRowY, out float drawnTop, float alphaMultiplier = 1f)
     {
         drawnTop = footprintTopLeft.Y;
+        var style = visual.DrawStyle with { Glow = glow, GroundRowY = groundRowY };
         if (visual.Sprite is not { } sprite)
         {
-            return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _labelRenderer, (SpriteView?)null, font, visual.Glyph, visual.IsDead ? Color.Gray : visual.GlyphColor, footprintTopLeft, footprintSize, Color.White, alphaMultiplier, outline: true);
+            return SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, (SpriteView?)null, fontMeasurer, visual.Glyph, visual.GlyphColor, footprintTopLeft, footprintSize, Color.White, alphaMultiplier, outline: true, style);
         }
 
         var (drawnTopLeft, drawnSize) = footprintTiles is { } tiles
             ? SpritePlacementMath.DrawnRectangle(footprintTopLeft, footprintSize, tiles, new Point(sprite.SourceRectangle.Width, sprite.SourceRectangle.Height), sprite.Placement)
             : (footprintTopLeft, footprintSize);
         drawnTop = drawnTopLeft.Y;
-        return SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _labelRenderer, sprite, font, string.Empty, Color.White, drawnTopLeft, drawnSize, visual.IsDead ? Color.Gray : Color.White, alphaMultiplier, outline: true);
+        return SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, sprite, fontMeasurer, string.Empty, Color.White, drawnTopLeft, drawnSize, Color.White, alphaMultiplier, outline: true, style);
     }
 
-    /// <summary>One Tiny occupant in the tile's 3x3 sub-grid, at the cell for how many of the tile's Tiny occupants were drawn before it. Returns whether anything was drawn, so an occupant with no visual doesn't take a cell.</summary>
-    private bool DrawTinyOccupant(SpriteBatch spriteBatch, int entityId, Vector2 tileOrigin, Point tileSize, int drawnBefore)
+    /// <summary>One Tiny occupant in the tile's 3x3 sub-grid, at the cell for how many of the tile's Tiny occupants were drawn before it, lit along its tile's row. Returns whether anything was drawn, so an occupant with no visual doesn't take a cell.</summary>
+    private bool DrawTinyOccupant(SpriteEffectBatch batch, int entityId, Vector2 tileOrigin, Point tileSize, int drawnBefore)
     {
         var subCellSize = new Point(tileSize.X / TinyGridDimension, tileSize.Y / TinyGridDimension);
         var subColumn = drawnBefore % TinyGridDimension;
         var subRow = drawnBefore / TinyGridDimension;
         var subCellTopLeft = new Vector2(tileOrigin.X + subColumn * subCellSize.X, tileOrigin.Y + subRow * subCellSize.Y);
 
-        return TryDrawEntityVisual(spriteBatch, entityId, _tinyFont, subCellTopLeft, new Vector2(subCellSize.X, subCellSize.Y), new Vector2Byte(1, 1));
+        return TryDrawEntityVisual(batch, entityId, _tinyFontMeasurer, subCellTopLeft, new Vector2(subCellSize.X, subCellSize.Y), new Vector2Byte(1, 1), tileOrigin.Y + tileSize.Y / 2f);
     }
 
     /// <summary>A Blocking occupant, its health bar and loot badge, its charging badge and its dodge glow. The health bar and charging badge follow the drawn sprite (a tall sprite's head would otherwise cover them); the loot badge and dodge glow are about the footprint and stay on it.</summary>
-    private void DrawPrimaryOccupant(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, Vector2Byte size, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize)
+    private void DrawPrimaryOccupant(SpriteEffectBatch batch, Texture2D unitRectangle, int entityId, Vector2Byte size, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize)
     {
         var status = _mapView.GetStatus(entityId);
 
-        TryDrawEntityVisual(spriteBatch, entityId, FontForSize(size.X), footprintTopLeft, footprintSize, size, out var drawnTop);
+        TryDrawEntityVisual(batch, entityId, FontMeasurerForSize(size.X), footprintTopLeft, footprintSize, size, GroundRowY(footprintTopLeft, footprintSize, tileSize), out var drawnTop);
         var cueTop = SpritePlacementMath.CueTop(drawnTop, footprintTopLeft.Y);
-        DrawEntityIcons(spriteBatch, unitRectangle, entityId, status, footprintTopLeft, footprintSize, tileSize, cueTop);
+        DrawEntityIcons(batch, unitRectangle, entityId, status, footprintTopLeft, footprintSize, tileSize, cueTop);
 
         // Unlike DrawEntityIcons (health bar/loot badge), the charging badge must show for the
         // player too -- drawn here, directly, rather than inside DrawEntityIcons' own early
         // player-skip guard.
-        DrawChargingBadge(spriteBatch, entityId, footprintTopLeft, footprintSize, tileSize, cueTop);
+        DrawChargingBadge(batch, entityId, footprintTopLeft, footprintSize, tileSize, cueTop);
 
         // Dodging is a temporary, brief immunity window (Combat Overhaul: Dodge) -- an inner-fade
         // glow framing the entity's own footprint on top of its sprite (the same GlowMode.InteriorFade
@@ -495,30 +509,30 @@ public sealed class MapRenderer : IDisposable
         // as too subtle to notice at the un-boosted default.
         if (status.IsDodging)
         {
-            GlowRenderer.Draw(spriteBatch, unitRectangle, new Rectangle((int)footprintTopLeft.X, (int)footprintTopLeft.Y, (int)footprintSize.X, (int)footprintSize.Y), DodgingGlowColor, GlowMode.InteriorFade, DodgingGlowAlphaMultiplier);
+            GlowRenderer.Draw(batch, unitRectangle, new Rectangle((int)footprintTopLeft.X, (int)footprintTopLeft.Y, (int)footprintSize.X, (int)footprintSize.Y), DodgingGlowColor, GlowMode.InteriorFade, DodgingGlowAlphaMultiplier);
         }
     }
 
     /// <summary>
     /// The LootBag-Red badge, shared by a corpse (DrawOccupants) and a live, still-Blocking
     /// container (DrawEntityIcons -- lootable while alive, unlike a corpse). Nothing when the
-    /// entity carries no items; full color if its loot window has never been opened, grey once it
-    /// has. Small and single-tile-sized, anchored to the top-right corner of the entity's own full
+    /// entity carries no items; full color if its loot window has never been opened, desaturated
+    /// once it has, as a corpse is. Small and single-tile-sized, anchored to the top-right corner of the entity's own full
     /// footprint rather than its origin tile, so a multi-tile corpse gets its badge on its actual
     /// top-right tile.
     /// </summary>
-    private void DrawLootBagBadge(SpriteBatch spriteBatch, LootBagState lootBag, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize)
+    private void DrawLootBagBadge(SpriteEffectBatch batch, LootBagState lootBag, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize)
     {
         if (lootBag == LootBagState.None || _lootBagSprite is not { } lootBagSprite)
         {
             return;
         }
 
-        var tint = lootBag == LootBagState.Looted ? Color.Gray : Color.White;
+        var style = lootBag == LootBagState.Looted ? SpriteDrawStyle.Desaturated : SpriteDrawStyle.Plain;
         var badgeSize = new Vector2(tileSize.X, tileSize.Y) * LootBagBadgeSizeFraction;
         var badgePosition = new Vector2(footprintTopLeft.X + footprintSize.X - badgeSize.X, footprintTopLeft.Y);
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _labelRenderer, lootBagSprite, _badgeFont, string.Empty, tint, badgePosition, badgeSize, tint, outline: true);
+        SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, lootBagSprite, _badgeFontMeasurer, string.Empty, Color.White, badgePosition, badgeSize, Color.White, outline: true, style: style);
     }
 
     /// <summary>
@@ -529,7 +543,7 @@ public sealed class MapRenderer : IDisposable
     /// Called directly from DrawPrimaryOccupant, not from DrawEntityIcons, since the player must see their own charging
     /// badge too and DrawEntityIcons deliberately skips the player entirely.
     /// </summary>
-    private void DrawChargingBadge(SpriteBatch spriteBatch, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize, float cueTop)
+    private void DrawChargingBadge(SpriteEffectBatch batch, int entityId, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize, float cueTop)
     {
         if (!_mapView.TryGetChargingAction(entityId, out var action))
         {
@@ -540,10 +554,10 @@ public sealed class MapRenderer : IDisposable
         var badgePosition = new Vector2(footprintTopLeft.X + (footprintSize.X - badgeSize.X) / 2f, cueTop - badgeSize.Y);
 
         SpriteView? actionSprite = action.SpriteName is { } spriteName && _spriteSheetService.Sprites.TryGetFirst(spriteName, out var icon) ? icon : null;
-        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _labelRenderer, actionSprite, _badgeFont, action.Glyph, action.GlyphColor, badgePosition, badgeSize, Color.White, outline: true);
+        SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, actionSprite, _badgeFontMeasurer, action.Glyph, action.GlyphColor, badgePosition, badgeSize, Color.White, outline: true);
     }
 
-    private void DrawEntityIcons(SpriteBatch spriteBatch, Texture2D unitRectangle, int entityId, EntityStatusView status, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize, float cueTop)
+    private void DrawEntityIcons(SpriteEffectBatch batch, Texture2D unitRectangle, int entityId, EntityStatusView status, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize, float cueTop)
     {
         if (entityId == _mapView.PlayerEntityId)
         {
@@ -552,7 +566,7 @@ public sealed class MapRenderer : IDisposable
 
         if (status.HealthFraction is { } healthFraction)
         {
-            DrawHealthBar(spriteBatch, unitRectangle, healthFraction, footprintTopLeft, footprintSize, cueTop);
+            DrawHealthBar(batch, unitRectangle, healthFraction, footprintTopLeft, footprintSize, cueTop);
         }
 
         // A container is lootable while alive, unlike a creature (only lootable once dead, see
@@ -561,33 +575,33 @@ public sealed class MapRenderer : IDisposable
         // stacks and must not show a loot-bag badge for those.
         if (status.IsContainer)
         {
-            DrawLootBagBadge(spriteBatch, status.LootBag, footprintTopLeft, footprintSize, tileSize);
+            DrawLootBagBadge(batch, status.LootBag, footprintTopLeft, footprintSize, tileSize);
         }
     }
 
     /// <summary>Thin bar at cueTop -- the top of the drawn sprite, or of the footprint if that is higher -- only drawn below full health (EntityStatusView.HealthFraction is null otherwise). Black backdrop doubles as the outline and the "missing health" portion; the fill rect insets 1px and its width (not the outline's) scales with the health fraction.</summary>
-    private static void DrawHealthBar(SpriteBatch spriteBatch, Texture2D unitRectangle, float healthFraction, Vector2 footprintTopLeft, Vector2 footprintSize, float cueTop)
+    private static void DrawHealthBar(SpriteEffectBatch batch, Texture2D unitRectangle, float healthFraction, Vector2 footprintTopLeft, Vector2 footprintSize, float cueTop)
     {
         var barWidth = footprintSize.X * HealthBarWidthFraction;
         var barX = footprintTopLeft.X + (footprintSize.X - barWidth) / 2f;
         var barY = cueTop;
 
         var outerRectangle = new Rectangle((int)barX, (int)barY, (int)barWidth, HealthBarHeightPixels);
-        spriteBatch.Draw(unitRectangle, outerRectangle, HealthBarPalette.OutlineColor);
+        batch.Draw(unitRectangle, outerRectangle, null, HealthBarPalette.OutlineColor, SpriteDrawStyle.Plain);
 
         var innerWidth = (int)((outerRectangle.Width - 2) * healthFraction);
         if (innerWidth > 0)
         {
-            spriteBatch.Draw(unitRectangle, new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, innerWidth, HealthBarHeightPixels - 2), HealthBarPalette.FractionColor(healthFraction));
+            batch.Draw(unitRectangle, new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, innerWidth, HealthBarHeightPixels - 2), null, HealthBarPalette.FractionColor(healthFraction), SpriteDrawStyle.Plain);
         }
     }
 
-    /// <summary>Medium/large/huge glyph font by an entity's footprint width.</summary>
-    private SpriteFontBase FontForSize(int sizeX) => sizeX switch
+    /// <summary>Medium/large/huge glyph font, measured, by an entity's footprint width.</summary>
+    private FontStashTextMeasurer FontMeasurerForSize(int sizeX) => sizeX switch
     {
-        1 => _mediumFont,
-        2 => _largeFont,
-        _ => _hugeFont,
+        1 => _mediumFontMeasurer,
+        2 => _largeFontMeasurer,
+        _ => _hugeFontMeasurer,
     };
 
     /// <summary>
@@ -597,18 +611,18 @@ public sealed class MapRenderer : IDisposable
     /// drawn on it -- so MapDrawOrder plans every badge after every occupant, where no later
     /// row's tall sprite can paint over it.
     /// </summary>
-    private void DrawLayerBadges(SpriteBatch spriteBatch, bool hasHigherLayer, bool hasLowerLayer, Vector2 tileOrigin, Point tileSize)
+    private void DrawLayerBadges(SpriteEffectBatch batch, bool hasHigherLayer, bool hasLowerLayer, Vector2 tileOrigin, Point tileSize)
     {
         if (hasHigherLayer)
         {
-            var drawPosition = new Vector2(tileOrigin.X + tileSize.X - _badgeFont.LineHeight, tileOrigin.Y);
-            _labelRenderer.Draw(spriteBatch, _badgeFont, "^", drawPosition, UpLayerBadgeColor, outline: true);
+            var drawPosition = new Vector2(tileOrigin.X + tileSize.X - _badgeFontMeasurer.Font.LineHeight, tileOrigin.Y);
+            LabelRenderer.Draw(batch, _badgeFontMeasurer.Font, "^", drawPosition, UpLayerBadgeColor, outline: true);
         }
 
         if (hasLowerLayer)
         {
-            var drawPosition = new Vector2(tileOrigin.X + tileSize.X - _badgeFont.LineHeight, tileOrigin.Y + tileSize.Y - _badgeFont.LineHeight);
-            _labelRenderer.Draw(spriteBatch, _badgeFont, "v", drawPosition, DownLayerBadgeColor, outline: true);
+            var drawPosition = new Vector2(tileOrigin.X + tileSize.X - _badgeFontMeasurer.Font.LineHeight, tileOrigin.Y + tileSize.Y - _badgeFontMeasurer.Font.LineHeight);
+            LabelRenderer.Draw(batch, _badgeFontMeasurer.Font, "v", drawPosition, DownLayerBadgeColor, outline: true);
         }
     }
 }

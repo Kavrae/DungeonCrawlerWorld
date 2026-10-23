@@ -12,8 +12,8 @@ namespace UIEngine.UI;
 /// text is read when Enter submits it or the box loses focus; text that isn't a colour puts the last one back.
 /// </summary>
 /// <remarks>Configure before Initialize, the usual contract; SetValue changes it afterwards without raising ValueChanged.</remarks>
-public sealed class ColorField(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null)
-    : TextBox(fontService, elementPoolService, labelRenderer, cursorTextContent, contextMenuController)
+public sealed class ColorField(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null)
+    : TextBox(fontService, elementPoolService, renderService, cursorTextContent, contextMenuController)
 {
     private const int SwatchInset = 2;
 
@@ -55,8 +55,8 @@ public sealed class ColorField(FontService fontService, ElementPoolService eleme
     {
         base.DrawContent(gameTime);
 
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
         var side = ContentRectangle.Height - SwatchInset * 2;
         var swatch = new Rectangle(ContentRectangle.Right - SwatchInset - side, ContentRectangle.Y + SwatchInset, side, side);
         spriteBatch.Draw(unitRectangle, swatch, WindowPalette.BorderColor);

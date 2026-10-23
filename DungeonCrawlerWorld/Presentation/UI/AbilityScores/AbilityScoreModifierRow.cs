@@ -19,8 +19,8 @@ namespace Presentation.UI.AbilityScores;
 /// AbilityScoreWindow's hover popup reads. IsHovered mirrors AbilityScoreColumnHeader's own
 /// immediate highlight-on-hover.
 /// </summary>
-public sealed class AbilityScoreModifierRow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : Element(fontService, elementPoolService, labelRenderer)
+public sealed class AbilityScoreModifierRow(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : Element(fontService, elementPoolService, renderService)
 {
     /// <summary>Clears the column's own InteriorFade glow (see AbilityScoreWindow.BuildColumns' SetOverlayGlow on the list window this row tiles inside) -- GlowRenderer's 5 rings reach 5px deep from the list window's own right edge, which this row's right edge sits flush against, so right-aligned text needs at least that much clearance plus a little breathing room to avoid sitting under the glow.</summary>
     private const float Padding = 8f;
@@ -50,8 +50,8 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
 
         if (IsHovered)
         {

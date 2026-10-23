@@ -12,8 +12,8 @@ namespace UIEngine.UI;
 /// the narrower bar is purely a DrawContent detail; the element's own bounds stay full width/
 /// height to avoid disturbing that chain.
 /// </summary>
-public sealed class SeparatorBar(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : Element(fontService, elementPoolService, labelRenderer)
+public sealed class SeparatorBar(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : Element(fontService, elementPoolService, renderService)
 {
     private const float WidthFraction = 0.75f;
 
@@ -26,6 +26,6 @@ public sealed class SeparatorBar(FontService fontService, ElementPoolService ele
         var barWidth = ContentSize.X * WidthFraction;
         var barPosition = ContentAbsolutePosition + new Vector2((ContentSize.X - barWidth) / 2f, 0);
 
-        ElementPoolService.SpriteBatch.Draw(ElementPoolService.UnitRectangle, new Rectangle((int)barPosition.X, (int)barPosition.Y, (int)barWidth, (int)ContentSize.Y), _color);
+        Render.SpriteBatch.Draw(Render.UnitRectangle, new Rectangle((int)barPosition.X, (int)barPosition.Y, (int)barWidth, (int)ContentSize.Y), _color);
     }
 }

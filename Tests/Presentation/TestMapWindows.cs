@@ -42,7 +42,7 @@ internal static class TestMapWindows
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(mapSizeX, mapSizeY, mapSizeZ)));
         var mapViewState = new MapViewState();
         var fontService = TestFonts.Shared;
-        var windowService = TestElementPoolServiceFactory.Create(fontService, new LabelRenderer());
+        var windowService = TestElementPoolServiceFactory.Create(fontService);
 
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(100, 50));
 
@@ -99,13 +99,14 @@ internal static class TestMapWindows
         var auraPower = new AuraPowerView(new AuraField(world, terrain, auras, eventBus), auras);
 
         var floatingTextController = new FloatingTextController(eventBus, new SimulationClock());
-        var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, fontService, new Game.Modules.StatusEffects.StatusEffectDisplayRegistry(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new LabelRenderer());
+        var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, fontService, new Game.Modules.StatusEffects.StatusEffectDisplayRegistry(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
 
-        var mapRenderer = new MapRenderer(mapView, auraPower, camera, windowService, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new LabelRenderer());
-        var mapGameOverlay = new MapGameOverlay(mapView, mapViewState, camera, actionTargeting, fontService, new LabelRenderer());
+        var renderService = new UiRenderService();
+        var mapRenderer = new MapRenderer(mapView, auraPower, camera, renderService, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
+        var mapGameOverlay = new MapGameOverlay(mapView, mapViewState, camera, actionTargeting, fontService);
 
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(
-            fontService, windowService, mapView, playerActionGate, mapViewState, eventBus, new LabelRenderer(),
+            fontService, windowService, mapView, playerActionGate, mapViewState, eventBus, renderService,
             camera, mapRenderer, mapGameOverlay, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer, new AdminContextMenuOptions(TestAdminTools.Create())));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions

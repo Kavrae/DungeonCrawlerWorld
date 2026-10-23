@@ -32,13 +32,12 @@ public sealed class CurrencyRowContentTests
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
         var fontService = TestFonts.Shared;
-        var labelRenderer = new LabelRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService));
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, new UiRenderService(), spriteSheetService));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)));
-        var contextMenuController = new ContextMenuController(new DropdownController(windowService));
+        var contextMenuController = new ContextMenuController(new DropdownController(windowService, new UiRenderService()));
         contextMenuController.Dropdowns.Initialize(new UiLayerStack());
 
         var content = new CurrencyRowContent(EntityId, TestInventoryServices.Over(componentManager, new ItemCatalog(), world, new EventBus()), world, contextMenuController, windowService, static () => null);
@@ -108,10 +107,9 @@ public sealed class CurrencyRowContentTests
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
         var fontService = TestFonts.Shared;
-        var labelRenderer = new LabelRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService));
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, new UiRenderService(), spriteSheetService));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());

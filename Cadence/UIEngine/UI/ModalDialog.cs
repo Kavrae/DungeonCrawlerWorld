@@ -30,8 +30,8 @@ public sealed record ModalDialogRequest(string Title, IReadOnlyList<DialogButton
 /// cancel button's when the dialog is closed with Escape or its close button.
 /// </summary>
 /// <remarks>Opened only through Show. A chosen button closes the dialog on the update after the click, then runs.</remarks>
-public sealed class ModalDialog(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : Window(fontService, elementPoolService, labelRenderer)
+public sealed class ModalDialog(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : Window(fontService, elementPoolService, renderService)
 {
     public const float ButtonHeight = 26f;
     private const float ButtonMinimumWidth = 80f;

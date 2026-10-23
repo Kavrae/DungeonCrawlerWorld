@@ -15,7 +15,7 @@ namespace Tests.UIEngine;
 [DoNotParallelize]
 public sealed class UiLayerStackTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
     private static Window CreateWindow(ElementPoolService windowService) =>
         windowService.CreateElement<Window>(null, new ElementOptions());

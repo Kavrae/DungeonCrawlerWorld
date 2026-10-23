@@ -112,11 +112,10 @@ public sealed class MapRendererTests
         mapView.AddBlocking(4, 4);
         var camera = new MapCamera(mapView);
         camera.Initialize(new Vector2(360, 360));
-        var labelRenderer = new LabelRenderer();
         var auras = TestAuras.GlowOnlyCatalog();
         var auraPower = new AuraPowerView(new AuraField(TestWorlds.Create(new Map(new Vector3Int(64, 64, 1))), new TerrainRegistry(), auras, new EventBus()), auras);
 
-        var renderer = new MapRenderer(mapView, auraPower, camera, TestElementPoolServiceFactory.Create(TestFonts.Shared, labelRenderer), TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), labelRenderer);
+        var renderer = new MapRenderer(mapView, auraPower, camera, new UiRenderService(), TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
 
         renderer.Update(0);
         renderer.InvalidateTerrain();

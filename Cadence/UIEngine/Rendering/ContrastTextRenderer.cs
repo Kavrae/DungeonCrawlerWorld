@@ -25,15 +25,28 @@ public static class ContrastTextRenderer
 
     /// <summary>position is the text's own top-left -- callers differ only in where they place it (centred above, within or below an icon). alphaMultiplier defaults to fully opaque -- a lower value fades the outline and the fill together, as a disabled icon's text does. fillColor defaults to FillColor (white) -- LabelRenderer passes its caller-supplied glyph color instead, since glyph fill color is meaningful (race/terrain tinting) and only the outline needs to stay fixed black.</summary>
     /// <remarks>position is rounded to the nearest whole pixel, as LabelRenderer.Draw rounds it: a glyph drawn at a fractional position under PointClamp is cropped by about a texel.</remarks>
-    public static void Draw(SpriteBatch spriteBatch, SpriteFontBase font, string text, Vector2 position, float alphaMultiplier = 1f, Color? fillColor = null)
+    public static void Draw(SpriteBatch spriteBatch, SpriteFontBase font, string text, Vector2 position, float alphaMultiplier = 1f, Color? fillColor = null) =>
+        Draw(new SpriteBatchDrawTarget(spriteBatch), font, text, position, alphaMultiplier, fillColor);
+
+    /// <inheritdoc cref="Draw(SpriteBatch, SpriteFontBase, string, Vector2, float, Color?)"/>
+    /// <remarks>The target draws it as it draws outlined text best (ISpriteDrawTarget.DrawOutlinedString): a SpriteBatch as nine copies (DrawCopies), SpriteEffectBatch once, outlined by the sprite effect.</remarks>
+    public static void Draw<TTarget>(TTarget target, SpriteFontBase font, string text, Vector2 position, float alphaMultiplier = 1f, Color? fillColor = null, SpriteDrawStyle style = default)
+        where TTarget : ISpriteDrawTarget
     {
         var roundedPosition = new Vector2(MathF.Round(position.X), MathF.Round(position.Y));
+        target.DrawOutlinedString(font, text, roundedPosition, fillColor ?? FillColor, alphaMultiplier, style);
+    }
+
+    /// <summary>The outline as eight black copies of text a pixel apart, then the fill over them, each faded by alphaMultiplier.</summary>
+    public static void DrawCopies<TTarget>(TTarget target, SpriteFontBase font, string text, Vector2 position, Color fillColor, float alphaMultiplier, SpriteDrawStyle style)
+        where TTarget : ISpriteDrawTarget
+    {
         var outline = OutlineColor * alphaMultiplier;
         foreach (var offset in OutlineOffsets)
         {
-            spriteBatch.DrawString(font, text, roundedPosition + offset, outline);
+            target.DrawString(font, text, position + offset, outline, style);
         }
 
-        spriteBatch.DrawString(font, text, roundedPosition, (fillColor ?? FillColor) * alphaMultiplier);
+        target.DrawString(font, text, position, fillColor * alphaMultiplier, style);
     }
 }

@@ -27,17 +27,15 @@ public sealed class MapGameOverlay
     private readonly MapViewState _mapViewState;
     private readonly MapCamera _camera;
     private readonly ActionTargetingController _actionTargeting;
-    private readonly LabelRenderer _labelRenderer;
-    private readonly SpriteFontBase _badgeFont;
+    private readonly FontStashTextMeasurer _badgeFontMeasurer;
 
-    public MapGameOverlay(IMapViewQuery mapView, MapViewState mapViewState, MapCamera camera, ActionTargetingController actionTargeting, FontService fontService, LabelRenderer labelRenderer)
+    public MapGameOverlay(IMapViewQuery mapView, MapViewState mapViewState, MapCamera camera, ActionTargetingController actionTargeting, FontService fontService)
     {
         _mapView = mapView;
         _mapViewState = mapViewState;
         _camera = camera;
         _actionTargeting = actionTargeting;
-        _labelRenderer = labelRenderer;
-        _badgeFont = fontService.GetFont(GameFontChrome.MapBadgeFontSize);
+        _badgeFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont(GameFontChrome.MapBadgeFontSize));
     }
 
     /// <summary>Draws the targeting highlights, then the selection's: the followed entity's in Detail inspection, the selected tile's otherwise.</summary>
@@ -178,7 +176,7 @@ public sealed class MapGameOverlay
                 continue;
             }
 
-            _labelRenderer.DrawCentered(spriteBatch, _badgeFont, label, new Vector2(tileRectangle.X, tileRectangle.Y), new Vector2(tileRectangle.Width, tileRectangle.Height), Color.White, outline: true);
+            LabelRenderer.DrawCentered(spriteBatch, _badgeFontMeasurer, label, new Vector2(tileRectangle.X, tileRectangle.Y), new Vector2(tileRectangle.Width, tileRectangle.Height), Color.White, outline: true);
         }
     }
 

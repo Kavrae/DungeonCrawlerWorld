@@ -34,6 +34,7 @@ public enum AuraMagnitude : byte
 /// <param name="Effects">What the aura does each tick to an entity in range; none for an aura that only glows.</param>
 /// <param name="Tags">What kind of aura this is, for modifiers conditioned on a tag.</param>
 /// <param name="Falloff">How each source's value changes from its power at the source to the edge of its size.</param>
+/// <param name="GlowOpacityMultiplier">The glow's opacity where the aura is at full power, scaled down with its power below that; half by default, so whatever the glow lies on still reads through. From 0 to 1; the glow clamps anything outside that.</param>
 public sealed record AuraDefinition(
     Guid Id,
     string Name,
@@ -41,7 +42,8 @@ public sealed record AuraDefinition(
     IReadOnlyList<Effect>? Effects = null,
     GameplayTagSet Tags = default,
     AuraMagnitude Magnitude = AuraMagnitude.Power,
-    AuraFalloff Falloff = AuraFalloff.Linear)
+    AuraFalloff Falloff = AuraFalloff.Linear,
+    float GlowOpacityMultiplier = 0.5f)
 {
     public IReadOnlyList<Effect> Effects { get; init; } = Effects ?? [];
 

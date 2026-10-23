@@ -27,8 +27,7 @@ public sealed class FloatingTextRenderer(
     MapCamera camera,
     FontService fontService,
     StatusEffectDisplayRegistry statusEffectDisplays,
-    SpriteSheetService spriteSheetService,
-    LabelRenderer labelRenderer)
+    SpriteSheetService spriteSheetService)
 {
     private const int MaxCachedAmount = 9999;
     private const string CriticalMarker = "!";
@@ -42,7 +41,6 @@ public sealed class FloatingTextRenderer(
     private readonly FontService _fontService = fontService;
     private readonly StatusEffectDisplayRegistry _statusEffectDisplays = statusEffectDisplays;
     private readonly SpriteSheetService _spriteSheetService = spriteSheetService;
-    private readonly LabelRenderer _labelRenderer = labelRenderer;
 
     private readonly string?[] _amountTexts = new string?[MaxCachedAmount + 1];
     private readonly string?[] _plusAmountTexts = new string?[MaxCachedAmount + 1];
@@ -123,7 +121,7 @@ public sealed class FloatingTextRenderer(
     private void DrawStatusEffectIcon(SpriteBatch spriteBatch, SpriteFontBase font, StatusEffectType effectType, Vector2 topLeft, float size, float alpha)
     {
         var glyph = _statusEffectDisplays.TryGet(effectType, out var display) ? display.Glyph : "?";
-        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, _labelRenderer, GetStatusEffectSprite(effectType), font, glyph, FloatingTextPalette.GetStatusEffectColor(effectType), topLeft, new Vector2(size, size), Color.White, alpha, outline: true);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, _spriteSheetService, GetStatusEffectSprite(effectType), _fontService.GetTextMeasurer(font), glyph, FloatingTextPalette.GetStatusEffectColor(effectType), topLeft, new Vector2(size, size), Color.White, alpha, outline: true);
     }
 
     private SpriteView? GetStatusEffectSprite(StatusEffectType effectType)

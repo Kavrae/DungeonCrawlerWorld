@@ -40,7 +40,6 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
 
     private const float CountdownTextGap = 1f;
 
-    private readonly LabelRenderer _labelRenderer = new();
     private readonly List<StatusEffectType> _activeEffectTypes = [];
 
     /// <summary>Poison/Burning's own current stack counts, keyed by type -- only ever holds entries for types that actually want a count shown (see DrawIcon's own Poison/Burning check, mirrored in RefreshStatusEffectState below).</summary>
@@ -66,7 +65,7 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
     private readonly BelowIconNumber _potionCooldownNumber = new();
 
     private Window _hostWindow = null!;
-    private SpriteFontBase _font = null!;
+    private FontStashTextMeasurer _glyphFontMeasurer = null!;
     private SpriteFontBase _countdownFont = null!;
 
     public void Initialize(Window hostWindow)
@@ -75,7 +74,7 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
 
         // Glyph drawn smaller than its background square -- a glyph sized to exactly fill the
         // square read as cramped/touching the border.
-        _font = fontService.GetFont((int)(Size.Y * GameFontChrome.PlayerStatusGlyphFontFraction));
+        _glyphFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont((int)(Size.Y * GameFontChrome.PlayerStatusGlyphFontFraction)));
         _countdownFont = fontService.GetFont((int)(Size.Y * GameFontChrome.PlayerStatusCountdownFontFraction));
     }
 
@@ -115,8 +114,8 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
             return;
         }
 
-        var spriteBatch = _hostWindow.ElementPoolService.SpriteBatch;
-        var unitRectangle = _hostWindow.ElementPoolService.UnitRectangle;
+        var spriteBatch = _hostWindow.Render.SpriteBatch;
+        var unitRectangle = _hostWindow.Render.UnitRectangle;
         var origin = _hostWindow.ContentAbsolutePosition;
         var iconSize = new Vector2(_hostWindow.ContentSize.Y, _hostWindow.ContentSize.Y);
 
@@ -137,7 +136,7 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
     {
         DrawIconBackground(spriteBatch, unitRectangle, origin, size);
 
-        _labelRenderer.DrawCentered(spriteBatch, _font, GetGlyph(effectType), origin, size, GetColor(effectType));
+        LabelRenderer.DrawCentered(spriteBatch, _glyphFontMeasurer, GetGlyph(effectType), origin, size, GetColor(effectType));
 
         if (_stackCountsByType.TryGetValue(effectType, out var stackCount))
         {
@@ -151,7 +150,7 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
 
         if (itemCatalog.TryGet(BuiltInItemIds.HealthPotion, out var healthPotion))
         {
-            _labelRenderer.DrawCentered(spriteBatch, _font, healthPotion.Glyph, origin, size, healthPotion.GlyphColor);
+            LabelRenderer.DrawCentered(spriteBatch, _glyphFontMeasurer, healthPotion.Glyph, origin, size, healthPotion.GlyphColor);
         }
 
         DrawTextBelowIcon(spriteBatch, origin, size, _potionCooldownNumber.Get(_countdownFont, PotionCooldownEffects.RemainingSeconds(framesRemaining)));

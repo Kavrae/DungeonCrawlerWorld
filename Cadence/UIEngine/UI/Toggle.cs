@@ -22,8 +22,8 @@ namespace UIEngine.UI;
 /// hit-target checkbox convention -- only the checkbox square itself gets the Inset/Outset+color
 /// treatment; the label is plain text, no background of its own.
 /// </summary>
-public sealed class Toggle(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : Element(fontService, elementPoolService, labelRenderer)
+public sealed class Toggle(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : Element(fontService, elementPoolService, renderService)
 {
     /// <summary>Side length of the checkbox square -- public so a caller (e.g. GridControl, sizing its own row layout before this element's ContentSize exists yet) can compute how much total width a given label needs without duplicating the number.</summary>
     public const float CheckboxSize = 14f;
@@ -42,7 +42,7 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
     private Color _onColor;
     private Color _offColor;
     private Color _labelColor;
-    private SpriteFontBase _font = null!;
+    private FontStashTextMeasurer _fontMeasurer = null!;
     private Action<bool>? _onToggled;
 
     public bool IsOn { get; private set; }
@@ -55,7 +55,7 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
         _onColor = onColor;
         _offColor = offColor;
         _labelColor = labelColor;
-        _font = font;
+        _fontMeasurer = FontService.GetTextMeasurer(font);
         _onToggled = onToggled;
         IsOn = defaultOn;
     }
@@ -71,8 +71,8 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
 
         var (checkboxRectangle, labelRectangle) = ComputeLayout();
 
@@ -90,7 +90,7 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
 
         if (!string.IsNullOrWhiteSpace(_label))
         {
-            LabelRenderer.DrawCentered(spriteBatch, _font, _label, new Vector2(labelRectangle.X, labelRectangle.Y), new Vector2(labelRectangle.Width, labelRectangle.Height), _labelColor);
+            LabelRenderer.DrawCentered(spriteBatch, _fontMeasurer, _label, new Vector2(labelRectangle.X, labelRectangle.Y), new Vector2(labelRectangle.Width, labelRectangle.Height), _labelColor);
         }
     }
 

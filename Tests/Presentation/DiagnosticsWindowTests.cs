@@ -32,9 +32,9 @@ public sealed class DiagnosticsWindowTests
     private static Harness BuildHarness(DiagnosticsEngine? diagnostics = null)
     {
         var ecsContext = BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)), initialEntityCapacity: 100, initialComponentCapacity: 50).EcsContext;
-        var elementPool = TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+        var elementPool = TestElementPoolServiceFactory.Create(TestFonts.Shared);
         elementPool.RegisterFactory<DiagnosticsWindow>(() => new DiagnosticsWindow(
-            TestFonts.Shared, elementPool, new LabelRenderer(), ecsContext.EntityManager, ecsContext.ComponentManager.GetPackedPool<MovementComponent>(), ecsContext.SystemManager.Clock, diagnostics));
+            TestFonts.Shared, elementPool, new UiRenderService(), ecsContext.EntityManager, ecsContext.ComponentManager.GetPackedPool<MovementComponent>(), ecsContext.SystemManager.Clock, diagnostics));
         var layers = new UiLayerStack();
         var controller = new DiagnosticsWindowController(elementPool, layers);
         var input = TestUiInputController.Create(layers, ScreenSize, ecsContext.ComponentManager, TestPlayerQuery.NoPlayer, new EventBus(), new Game.Modules.Inventory.ItemCatalog(), diagnosticsWindowController: controller);

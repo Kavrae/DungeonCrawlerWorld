@@ -116,8 +116,8 @@ public class Window : Element
 
     public bool CanUserMinimize { get; set; }
 
-    public Window(FontService fontService, ElementPoolService windowService, LabelRenderer labelRenderer)
-        : base(fontService, windowService, labelRenderer)
+    public Window(FontService fontService, ElementPoolService windowService, UiRenderService renderService)
+        : base(fontService, windowService, renderService)
     {
         TitleFont = fontService.GetFont(FontChrome.WindowTitleFontSize);
         _titleFontMeasurer = fontService.GetTextMeasurer(TitleFont);
@@ -313,8 +313,8 @@ public class Window : Element
 
     protected override void DrawHeader(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
 
         if (!_isTransparent)
         {

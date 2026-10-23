@@ -9,7 +9,7 @@ namespace Tests.UIEngine;
 [DoNotParallelize]
 public sealed class WindowGlowTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
     private static Window CreateWindow(ElementPoolService windowService)
     {

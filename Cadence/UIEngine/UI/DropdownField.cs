@@ -14,8 +14,8 @@ namespace UIEngine.UI;
 /// list is open closes it. Focused, Space, Enter or Down opens it too, and the dropdown's own Up/Down/Enter choose.
 /// </summary>
 /// <remarks>Its choices are set with SetOptions, before or after Initialize.</remarks>
-public sealed class DropdownField(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, DropdownController dropdowns)
-    : Element(fontService, elementPoolService, labelRenderer)
+public sealed class DropdownField(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, DropdownController dropdowns)
+    : Element(fontService, elementPoolService, renderService)
 {
     /// <summary>How tall the open list may grow before it scrolls.</summary>
     public const float ListMaximumHeight = 300f;
@@ -123,8 +123,8 @@ public sealed class DropdownField(FontService fontService, ElementPoolService el
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
 
         var text = SelectedLabel ?? Placeholder;
         var textColor = SelectedLabel is null ? WindowPalette.GhostText : WindowPalette.BodyTextColor;

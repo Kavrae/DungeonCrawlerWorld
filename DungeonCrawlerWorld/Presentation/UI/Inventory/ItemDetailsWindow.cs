@@ -54,12 +54,12 @@ namespace Presentation.UI.Inventory;
 public sealed class ItemDetailsWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
-    LabelRenderer labelRenderer,
+    UiRenderService renderService,
     ActionCatalog actionCatalog,
     GameplayTagRegistry gameplayTags,
     ActionStateView actionStateView,
     IPlayerQuery playerQuery)
-    : Window(fontService, elementPoolService, labelRenderer)
+    : Window(fontService, elementPoolService, renderService)
 {
     /// <summary>The stack id Configure is given for an item shown from its definition alone (a loot box reward whose stack is gone) -- there's no stack to compare, so Compare does nothing.</summary>
     public const uint NoStackInstanceId = 0;

@@ -43,7 +43,6 @@ public sealed class PlayerHealthHoverContent(
     /// <summary>The popup's own desired content-area size -- PlayerHealthBarContent adds its host window's border inset on top of this when sizing the popup window itself.</summary>
     public static readonly Vector2 ContentSize = new(RowContentWidth, RowHeight * MaxRowCount);
 
-    private readonly LabelRenderer _labelRenderer = new();
     private readonly List<RowData> _scratchRows = [];
 
     private Window _hostWindow = null!;
@@ -65,8 +64,8 @@ public sealed class PlayerHealthHoverContent(
             return;
         }
 
-        var spriteBatch = _hostWindow.ElementPoolService.SpriteBatch;
-        var unitRectangle = _hostWindow.ElementPoolService.UnitRectangle;
+        var spriteBatch = _hostWindow.Render.SpriteBatch;
+        var unitRectangle = _hostWindow.Render.UnitRectangle;
         var origin = _hostWindow.ContentAbsolutePosition;
         var contentSize = _hostWindow.ContentSize;
         var rowHeight = contentSize.Y / MaxRowCount;
@@ -105,7 +104,7 @@ public sealed class PlayerHealthHoverContent(
         var barX = origin.X + contentWidth - BarWidth;
         var nameWidth = System.Math.Max(0f, barX - origin.X - NameBarGap);
 
-        _labelRenderer.DrawLeftAligned(spriteBatch, _font, name, new Vector2(origin.X, rowTop), new Vector2(nameWidth, rowHeight), Color.Black);
+        LabelRenderer.DrawLeftAligned(spriteBatch, _font, name, new Vector2(origin.X, rowTop), new Vector2(nameWidth, rowHeight), Color.Black);
 
         var barY = rowTop + (rowHeight - BarHeight) / 2f;
         var barRectangle = new Rectangle((int)barX, (int)barY, (int)BarWidth, (int)BarHeight);

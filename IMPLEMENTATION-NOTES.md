@@ -2863,3 +2863,92 @@ FontStashSharp; Presentation, the exe and Tests reference it.
   row was built with). The hotbar is menu-mode exempt and hovered while the game runs, so a timer in its summary must
   tick: `HotbarController.UpdateSummary` rebuilds only when its gate changes (slot, bound, blocker), so a timer added to
   the summary adds its shown seconds to that gate. None is shown there today -- cooldowns draw on the slot itself.
+
+### The sprite effect: shaders, SpriteEffectBatch, the gradient glow and outlined map text
+
+Landed 2026-10-22 (`PLAN-shaders-and-sprites-tab.md`, child 7 of `EPIC-sprites-ui-engine-and-dev-tools.md`, Phases 0-4).
+The map draws through one shader of UIEngine's own; everything else still draws on `SpriteBatch`.
+
+- **Compiling shaders.** FNA (FNA.NET 2.1.2, FNA 25.06, SDL3 GPU) loads D3D9 `fx_2_0` effect binaries, which only the Windows
+  SDK's `fxc` compiles (MonoGame's `mgcb` output can't be loaded; its tools were removed). `Cadence/UIEngine/Shaders/*.fx` are
+  compiled to `.fxb` and checked in with the source's SHA-256 (`.fxb.sha256`); UIEngine.csproj's `CompileSpriteEffects`
+  recompiles a source whose hash changed when `fxc` is found (the SDK's newest through the registry, or `-p:FxcPath=`) and
+  fails the build when it isn't. Hashes, not timestamps, because a checkout resets timestamps; `.gitattributes` keeps the
+  three file kinds byte-exact (`core.autocrlf` would otherwise change the source's bytes). Every pass is `vs_3_0`/`ps_3_0`.
+- **Backends.** Phase 0 checked everything on SDL3 GPU / Vulkan (the default), D3D11 and OpenGL (`FNA3D_FORCE_DRIVER`).
+  SDL3 GPU's Direct3D 12 can't start in this FNA build at all ("Required shader format ... not provided"), shaders or not.
+- **Where the shader lives.** The core sprite effect (`SpriteUber.fx`) is embedded in UIEngine.dll: it is half of a contract
+  whose other half is the vertex layout, so they are built together and any Cadence game gets it with no content step. Game
+  and mod effects load from content (`SpriteEffectService.Load`, `Content/Effects/*.fxb`). A content `SpriteUber.fxb`
+  replaces the embedded one only if its `VertexVersion` parameter equals `SpriteEffectVertex.Version` (3 today); otherwise
+  one `Console.Error` line names the file and both versions.
+- **A batcher of our own, not packed colours.** `SpriteBatch`'s vertex is one RGBA8 colour, too small for tint, alpha and the
+  per-sprite settings, so the map draws through `SpriteEffectBatch`: deferred quads in call order, flushed per texture run as
+  `SpriteBatch` does, each corner a `SpriteEffectVertex` -- `SpriteBatch`'s position, premultiplied colour and texture
+  coordinate, plus a `Vector4` style (`SpriteDrawStyle.ToVertexStyle`): mode, glow, ground row, outline layer. No field is
+  spare; the next per-sprite setting adds a vertex attribute and a new `Version`. Corners follow FNA's `SpriteBatch` exactly
+  (`SpriteEffectQuads`: origin normalised by the source, a flip swaps texture coordinates and never mirrors the origin).
+- **Two targets, one implementation.** The drawing helpers (`SpriteRenderer`, `SpriteOrGlyphRenderer`, `LabelRenderer`,
+  `ContrastTextRenderer`, `GlowRenderer`) are generic over `ISpriteDrawTarget`; `SpriteBatchDrawTarget` is a struct, so a
+  window's `SpriteBatch` call boxes nothing and ignores the style. `MapRenderer.Draw` opens its own pass inside the host's
+  (`UiRenderService.BeginSpriteEffectPass`/`EndSpriteEffectPass`, under the current viewport, scissor and transform).
+- **The render state is its own service** (2026-10-23). The device, both batches, the unit rectangle, the render-state
+  stack and the effect pass lived on `ElementPoolService` -- the pass went there because the stack it ends and restores
+  did -- until they moved into `UiRenderService`. Every element takes it as a fourth constructor argument (`Element`
+  exposes it as `Render` for the `IElementContent` it hosts), as does every factory; it is not handed on through the pool,
+  which would hold a dependency it never uses and hide the one every element has. `DropdownController`, `MapRenderer`,
+  `UiLayerHost` and the hosts' frame reset, which used the pool only to draw, take it directly.
+- **The drawing helpers hold nothing** (2026-10-23). `LabelRenderer` was the one helper built as an instance and handed to
+  every element, and only for its cache of each glyph's ink centre -- a fact about a font, not about drawing. The cache is
+  the font's `FontStashTextMeasurer`'s (`GetInkCenterAtOrigin`, beside its widths), so `LabelRenderer` is static like
+  `SpriteOrGlyphRenderer`, `SpriteRenderer`, `ContrastTextRenderer` and `GlowRenderer`, and centring takes the measurer:
+  `LabelRenderer.DrawCentered(target, fontMeasurer, ...)`, `SpriteOrGlyphRenderer.Draw(..., glyphFontMeasurer, ...)`. A
+  caller keeps the measurer where it kept the font (`FontService.GetTextMeasurer`, one per font, kept), so every caller
+  shares one cache per font where two panes once each built their own.
+- **Text through the batcher.** FontStashSharp offers two renderer interfaces; its quad-level `IFontStashRenderer2` measured
+  ~30% slower than `SpriteBatch` text, its sprite-level `IFontStashRenderer` the same, so the batch implements the latter.
+  Sprites cost ~10 ns more each than on `SpriteBatch` (a 40-byte vertex against 24); unturned, unflipped ones take a direct path.
+- **Measuring draw.** Compare `Draw.GameLoop.Shell.Draw` (total), not `Draw.Base.MapWindow`: before the batcher, the map's
+  sprites were flushed by whichever element next ended the shared batch, so part of their cost was counted elsewhere. A
+  same-sitting before/after: `git archive HEAD | tar -x -C Log/b7` (a short path -- the spritesheets break Windows' 260-
+  character limit under the scratchpad), build it, and run the benchmark skill with `-ExePath`/`-DiagnosticsDirectory`,
+  interleaved with the current build, in Release.
+- **Corpses desaturate** (`SpriteDrawMode.Desaturate`, `MapVisual.DrawStyle`): grey at their luminance, fully, chosen over
+  partial or darkened; the looted loot bag badge desaturates the same way.
+- **The glow is light, not an overlay.** `MapGlowTexels` builds one texel per tile (premultiplied, transparent where no aura
+  reaches or off the map) over the grid plus a 3-tile margin (the walk's overscan of 2, plus 1 for filtering), into a texture
+  `MapRenderer` rebuilds when the grid or `AuraPowerView.Version` changes. `SpriteEffectGlow` maps draw space to texels so a
+  tile's centre is its texel's centre; the effect reads it with linear filtering (its own `sampler_state`), so light shades
+  smoothly, and lights nothing where the read point's own tile is unlit, so the gradient stops in a hard line at an aura's
+  last tile, on purpose. Floors and wall faces (the ground image as blitted, the fill, and live face overhangs, so a face
+  looks the same cached or live) read it per pixel; anything else standing -- occupants, glyphs -- reads it at the pixel's x
+  along its footprint's ground row, so it shades side to side like its floor and a tall head never takes the row above. Wall tops, health bars and badges are unlit (the overlay used to tint them).
+  The cached terrain image is two: the ground (lit as blitted) and the tops (unlit). Each aura's opacity at full power is
+  its own, `AuraDefinition.GlowOpacityMultiplier` (content key `go`, default 0.5; lava 0.75), averaged by power where auras
+  overlap.
+- **Outlined map text is two draws per glyph, not nine.** One draw per glyph matched the nine at 18-36 px but not at 12 px
+  (close glyphs' outlines covered a neighbour's fill) nor faded (eight faded copies compound to a near-opaque body). So
+  `SpriteEffectBatch.DrawOutlinedString` keeps the nine's order: the string's outline layer (`OutlineOnly`; quads grown a
+  texel and a pixel -- FontStashSharp's atlas leaves a wider gap between glyphs -- painted black at
+  `1 - product(1 - alpha * neighbour)`, neighbours found from `ddx`/`ddy` of the texture coordinate), then its fill. It
+  matches the nine within 2/255 on all three backends at 12-36 px and faded. 300 outlined labels: 0.063 ms against 0.277.
+  Text drawn on a `SpriteBatch` (the overlay, floating text, windows) keeps the nine (`ContrastTextRenderer.DrawCopies`).
+
+### The Workshop Sprites tab (read-only)
+
+Landed 2026-10-22 (`PLAN-shaders-and-sprites-tab.md`, Phase 5). `Cadence/Workshop/Sprites`: engine-side, on SpriteFormat
+and UIEngine only, added to the game's IDE by its App after Map (`--tab=Sprites`).
+
+- **Layout.** Entries in a `ListView` (name, kind, cells; the worst problem's glyph), the sheet (`SpriteSheetView`: the
+  selected entry's grid and cells marked, a wall's face gold and top cyan; the wheel zooms 1x-16x about the centre, a
+  right-drag pans; a choice of sheet when an entry draws from several), and details (`SpriteEntrySummary`, the placement
+  preview with a 1x1-3x3 footprint, the link preview). Both previews draw through the sprite effect, so a tint, turn or
+  placement looks exactly as on the map.
+- **Problems.** `SpriteEntryView.Problems`: what the game refuses at load (`SpriteManifestValidation`) is an Error, a cell
+  that doesn't fit its part's span or a missing sheet a Warning. They join the Error List through `SpritesTab.Problems`,
+  which the App adds to its load problems; an entry's id is a Guid derived from its name (entries are named, not numbered),
+  so activating a problem selects it.
+- **Shared with the WinForms tool, not copied.** `SpriteLinkLayout` (was the tool's `LinkLayout`) and `SpriteEntryRules`
+  (spans and misfits) moved into SpriteFormat; the tool's `EntryRules` keeps its editing gestures and calls them. `EntryPart`,
+  `SlotFiller` and its GDI+ painters stay with the tool until "Workshop: edit sprites and retire SpriteManifestBuilder"
+  (TODO.md) moves editing into the tab and deletes it.

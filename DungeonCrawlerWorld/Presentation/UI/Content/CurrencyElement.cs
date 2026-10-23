@@ -21,13 +21,13 @@ namespace Presentation.UI.Content;
 /// every frame by the owning content class, OnRightClicked inherited free from Element). No
 /// IsSelected/click-to-inspect concept -- hover + drag + right-click only, matching what was asked.
 /// </summary>
-public sealed class CurrencyElement(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService)
-    : Element(fontService, elementPoolService, labelRenderer), IContentDragSource
+public sealed class CurrencyElement(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService spriteSheetService)
+    : Element(fontService, elementPoolService, renderService), IContentDragSource
 {
     private const float IconGap = 4f;
 
     private SpriteFontBase _textFont = null!;
-    private SpriteFontBase _glyphFont = null!;
+    private FontStashTextMeasurer _glyphFontMeasurer = null!;
     private int _amount;
 
     /// <summary>The amount as drawn and its measured size, rebuilt only when the amount, label or font changes.</summary>
@@ -67,7 +67,7 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
         _showLabel = showLabel;
         _textColorOverride = textColor;
         _textFont = FontService.GetFont(FontChrome.DefaultFontSize);
-        _glyphFont = FontService.GetFont((int)(elementSize.Y * GameFontChrome.IconGlyphFontFraction));
+        _glyphFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(elementSize.Y * GameFontChrome.IconGlyphFontFraction)));
     }
 
     /// <summary>Called every frame by the owning CurrencyRowContent -- Currency has no version watcher, so an unconditional re-read is the simplest correct option (same cost the old CurrencyRow.Format paid every Update).</summary>
@@ -75,8 +75,8 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
         var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
 
         GridSquareRenderer.DrawBase(spriteBatch, unitRectangle, bounds);
@@ -96,7 +96,7 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
         // "Gold : 10" then the sprite immediately after, not stranded at the far side of the row.
         var iconPosition = new Vector2(textPosition.X + textSize.X + IconGap, ContentAbsolutePosition.Y);
         SpriteView? sprite = spriteSheetService.Sprites.TryGetFirst(spriteName, out var spriteView) ? spriteView : null;
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, LabelRenderer, sprite, _glyphFont, glyph, glyphColor, iconPosition, IconSize, Color.White);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, sprite, _glyphFontMeasurer, glyph, glyphColor, iconPosition, IconSize, Color.White);
     }
 
     /// <summary>Picks up this row's currency. The ghost is IconSize -- the square icon alone; the whole "Gold : 10 [sprite]" bounds stretched it horizontally.</summary>

@@ -46,22 +46,21 @@ public sealed class InventoryManagementWindowTests
         InventoryActions.AddItem(componentManager, EntityId, firstItemId, quantity: 1);
 
         var fontService = TestFonts.Shared;
-        var labelRenderer = new LabelRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, labelRenderer, spriteSheetService));
-        windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, labelRenderer));
-        windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, labelRenderer));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
-        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, labelRenderer, spriteSheetService));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
+        windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, new UiRenderService()));
+        windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, new UiRenderService()));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, new UiRenderService()));
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, new UiRenderService(), spriteSheetService));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)));
-        var contextMenuController = new ContextMenuController(new DropdownController(windowService));
+        var contextMenuController = new ContextMenuController(new DropdownController(windowService, new UiRenderService()));
         contextMenuController.Dropdowns.Initialize(new UiLayerStack());
         var mapViewState = new MapViewState();
 
         windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            fontService, windowService, labelRenderer, TestInventoryServices.Over(componentManager, itemCatalog, world, new EventBus()), world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
+            fontService, windowService, new UiRenderService(), TestInventoryServices.Over(componentManager, itemCatalog, world, new EventBus()), world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());

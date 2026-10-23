@@ -62,9 +62,8 @@ public sealed class HealthWindowControllerTests
     {
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
         var fontService = TestFonts.Shared;
-        var labelRenderer = new LabelRenderer();
         var layers = new UiLayerStack();
-        var pool = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var pool = TestElementPoolServiceFactory.Create(fontService);
 
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
 
@@ -82,14 +81,14 @@ public sealed class HealthWindowControllerTests
         var auras = new AuraCatalog();
         var pointerState = new PointerState();
 
-        pool.RegisterFactory<Tooltip>(() => new Tooltip(fontService, pool, labelRenderer));
+        pool.RegisterFactory<Tooltip>(() => new Tooltip(fontService, pool, new UiRenderService()));
         var tooltipController = new TooltipController { ScreenBoundsOverrideForTests = new Rectangle(0, 0, 2000, 2000) };
         tooltipController.Initialize(pool, layers);
 
-        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, labelRenderer, new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), new StatModifierView(componentManager), TestActionStateViews.Over(componentManager), BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog, TestGameplayTags.BuiltIn, simulationClock: new SimulationClock(),
+        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, new UiRenderService(), new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), new StatModifierView(componentManager), TestActionStateViews.Over(componentManager), BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog, TestGameplayTags.BuiltIn, simulationClock: new SimulationClock(),
             TestActionSources.Naming(terrain, auras), tooltipController, pointerState));
-        pool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, pool, labelRenderer));
-        pool.RegisterFactory<FractionBarElement>(() => new FractionBarElement(fontService, pool, labelRenderer));
+        pool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, pool, new UiRenderService()));
+        pool.RegisterFactory<FractionBarElement>(() => new FractionBarElement(fontService, pool, new UiRenderService()));
 
         var health = new HealthWindowController(pool, world);
         health.Initialize(layers);

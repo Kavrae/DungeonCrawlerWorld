@@ -17,7 +17,7 @@ namespace Tests.UIEngine;
 [DoNotParallelize]
 public sealed class TextBoxTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
     private static TextBox CreateTextBox(ElementPoolService windowService, bool multiline = false)
     {

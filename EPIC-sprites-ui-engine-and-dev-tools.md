@@ -1,6 +1,6 @@
 # Epic: Sprites out of Game, a UIEngine, and the Engine IDE
 
-(Epic -- a plan of plans. Child 1 landed 2026-10-11, child 2 2026-10-13, child 3 2026-10-14, child 4 2026-10-14 (ahead of child 5 by choice), child 5 2026-10-18 (view-only tabs; editing moved to TODO.md); the rest are not started. Each child below gets its own
+(Epic -- a plan of plans. Child 1 landed 2026-10-11, child 2 2026-10-13, child 3 2026-10-14, child 4 2026-10-14 (ahead of child 5 by choice), child 5 2026-10-18 (view-only tabs; editing moved to TODO.md), child 6 2026-10-22 (read-only), child 7 2026-10-22 (read-only Sprites tab; editing moved to TODO.md); child 8 is not started. Each child below gets its own
 `PLAN-*.md` when it starts, and is phased and tested in-game like any other plan. Decided 2026-10-11.)
 
 ## Why
@@ -118,11 +118,14 @@ Each is its own plan; numbering is the order. Arrows are hard dependencies.
    the hand-placed layout format in Game and its merge into `NeighborhoodPlan`, which belongs with "Real map
    generation -- neighborhood templates" (TODO.md, Game, High): the tab authors layout templates and fixed
    pieces; "Composite buildings" (TODO.md, Game) are its first multi-entity placements.
-7. **Shaders, then the Sprites tab** (→4, →5). "Sprite shaders and tinting" (TODO.md, Presentation) in
-   UIEngine: the packed vertex-colour "uber" effect keeps the row walk's order; adds an `fxc` build step to
-   Content. Tint multiply, phasing alpha, overhang fade and glow move onto it, and "Aura glow shouldn't tint
-   wall tops" (TODO.md, Presentation, Low) is easier there. After this, SpriteManifestBuilder's GDI+ preview
-   can no longer match: it becomes the IDE's Sprites tab, and the WinForms app is retired.
+7. **Shaders, then the Sprites tab** (→4, →5). Landed 2026-10-22 (`PLAN-shaders-and-sprites-tab.md`; notes in
+   IMPLEMENTATION-NOTES "The sprite effect: shaders, SpriteEffectBatch, the gradient glow and outlined map text" and "The
+   Workshop Sprites tab (read-only)"): an `fxc` build step and an embedded sprite effect in UIEngine; the map draws through
+   `SpriteEffectBatch`, a vertex of its own carrying each draw's style rather than a packed colour, so the row walk keeps
+   its order; corpses desaturate; the glow is light read by the effect, smooth across tiles, never on wall tops; outlined
+   map text is two draws per glyph; and a read-only Sprites tab in `Cadence/Workshop`. Editing it and retiring the WinForms
+   tool are TODO.md's "Workshop: edit sprites and retire SpriteManifestBuilder" (Engine, High), after "Workshop: edit
+   Items"; the remaining shader work is "Sprite shaders and tinting" and "Shader follow-ups".
 8. **Diagnostics tab** (→5). The debugging half of the IDE: gauges, frame costs, memory and leak reports --
    what the F3 Diagnostics window and `Log/diagnostics/` show today -- for a running game. Research first
    whether the IDE hosts the session itself (in-process, so `EngineHooks`' static channels just work, with a

@@ -36,7 +36,7 @@ public sealed class TargetingModeSwitchTests
         var components = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 16, initialComponentCapacity: 16));
         var mapViewState = new MapViewState();
         var pointerState = new PointerState();
-        var cursorText = new CursorTextContent(pointerState, TestFonts.Shared, new LabelRenderer());
+        var cursorText = new CursorTextContent(pointerState, TestFonts.Shared);
         var playerQuery = new TestPlayerQuery(PlayerEntityId);
         var modeSwitch = new TargetingModeSwitch(mapViewState, TestActionStateViews.Over(components), playerQuery, cursorText);
         var input = TestUiInputController.Create(new UiLayerStack(), ScreenSize, components, playerQuery, new EventBus(), new ItemCatalog(), mapViewState: mapViewState, pointerState: pointerState, targetingModeSwitch: modeSwitch);

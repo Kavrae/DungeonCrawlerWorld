@@ -41,4 +41,7 @@ public sealed class AuraPowerView(AuraField auraField, AuraCatalog auras)
 
     /// <summary>The colour the aura glows, read from its current definition.</summary>
     public Color GlowColorOf(byte auraId) => auras.Get(auraId).GlowColor;
+
+    /// <summary>The aura glow's opacity at full power, read from its current definition.</summary>
+    public float GlowOpacityMultiplierOf(byte auraId) => auras.Get(auraId).GlowOpacityMultiplier;
 }

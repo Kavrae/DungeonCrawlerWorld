@@ -18,13 +18,13 @@ public sealed class LabelRendererTests
     [TestMethod]
     public void GetCenteredPosition_ResultingGlyphInkCenterMatchesFootprintCenter()
     {
-        var renderer = new LabelRenderer();
         var font = TestFonts.Shared.GetFont(24);
+        var fontMeasurer = TestFonts.Shared.GetTextMeasurer(font);
         const string glyph = "g";
         var footprintTopLeft = new Vector2(30, 60);
         var footprintSize = new Vector2(72, 72); // e.g. a 3x3 Huge footprint at 24px tiles.
 
-        var position = renderer.GetCenteredPosition(font, glyph, footprintTopLeft, footprintSize);
+        var position = LabelRenderer.GetCenteredPosition(fontMeasurer, glyph, footprintTopLeft, footprintSize);
 
         var inkBoundsAtZero = font.TextBounds(glyph, Vector2.Zero, null, 0f, 0f);
         var inkCenter = position + new Vector2((inkBoundsAtZero.X + inkBoundsAtZero.X2) / 2f, (inkBoundsAtZero.Y + inkBoundsAtZero.Y2) / 2f);
@@ -43,13 +43,13 @@ public sealed class LabelRendererTests
     [TestMethod]
     public void GetCenteredPosition_LargerFootprint_MovesPositionFurtherFromOrigin()
     {
-        var renderer = new LabelRenderer();
         var font = TestFonts.Shared.GetFont(36);
+        var fontMeasurer = TestFonts.Shared.GetTextMeasurer(font);
         const string glyph = "g";
         var origin = Vector2.Zero;
 
-        var oneTilePosition = renderer.GetCenteredPosition(font, glyph, origin, new Vector2(12, 12));
-        var threeTilePosition = renderer.GetCenteredPosition(font, glyph, origin, new Vector2(36, 36));
+        var oneTilePosition = LabelRenderer.GetCenteredPosition(fontMeasurer, glyph, origin, new Vector2(12, 12));
+        var threeTilePosition = LabelRenderer.GetCenteredPosition(fontMeasurer, glyph, origin, new Vector2(36, 36));
 
         Assert.IsGreaterThan(oneTilePosition.X, threeTilePosition.X);
         Assert.IsGreaterThan(oneTilePosition.Y, threeTilePosition.Y);
@@ -58,33 +58,33 @@ public sealed class LabelRendererTests
     [TestMethod]
     public void GetCenteredPosition_FootprintTopLeftOffset_TranslatesResultByTheSameAmount()
     {
-        var renderer = new LabelRenderer();
         var font = TestFonts.Shared.GetFont(8);
+        var fontMeasurer = TestFonts.Shared.GetTextMeasurer(font);
         const string glyph = "f";
         var footprintSize = new Vector2(12, 12);
 
-        var atOrigin = renderer.GetCenteredPosition(font, glyph, Vector2.Zero, footprintSize);
-        var shifted = renderer.GetCenteredPosition(font, glyph, new Vector2(100, 200), footprintSize);
+        var atOrigin = LabelRenderer.GetCenteredPosition(fontMeasurer, glyph, Vector2.Zero, footprintSize);
+        var shifted = LabelRenderer.GetCenteredPosition(fontMeasurer, glyph, new Vector2(100, 200), footprintSize);
 
         Assert.AreEqual(atOrigin.X + 100, shifted.X, 0.01f);
         Assert.AreEqual(atOrigin.Y + 200, shifted.Y, 0.01f);
     }
 
     /// <summary>
-    /// Regression coverage for the ink-center cache being keyed by (font, glyph), not font
-    /// alone -- "g" and "," have very different ink shapes/positions at the same font size,
+    /// Regression coverage for the ink-center cache being keyed by glyph within its font, not by
+    /// the font alone -- "g" and "," have very different ink shapes/positions at the same font size,
     /// so a key collision would make their centered positions come back identical.
     /// </summary>
     [TestMethod]
     public void GetCenteredPosition_DifferentGlyphsSameFont_AreNotConflated()
     {
-        var renderer = new LabelRenderer();
         var font = TestFonts.Shared.GetFont(24);
+        var fontMeasurer = TestFonts.Shared.GetTextMeasurer(font);
         var footprintTopLeft = Vector2.Zero;
         var footprintSize = new Vector2(24, 24);
 
-        var positionG = renderer.GetCenteredPosition(font, "g", footprintTopLeft, footprintSize);
-        var positionComma = renderer.GetCenteredPosition(font, ",", footprintTopLeft, footprintSize);
+        var positionG = LabelRenderer.GetCenteredPosition(fontMeasurer, "g", footprintTopLeft, footprintSize);
+        var positionComma = LabelRenderer.GetCenteredPosition(fontMeasurer, ",", footprintTopLeft, footprintSize);
 
         Assert.AreNotEqual(positionG, positionComma);
     }
@@ -93,14 +93,14 @@ public sealed class LabelRendererTests
     [TestMethod]
     public void GetCenteredPosition_RepeatedAndInterleavedLookups_ReturnConsistentResults()
     {
-        var renderer = new LabelRenderer();
         var font = TestFonts.Shared.GetFont(24);
+        var fontMeasurer = TestFonts.Shared.GetTextMeasurer(font);
         var footprintTopLeft = new Vector2(5, 5);
         var footprintSize = new Vector2(24, 24);
 
-        var first = renderer.GetCenteredPosition(font, "g", footprintTopLeft, footprintSize);
-        renderer.GetCenteredPosition(font, "A", footprintTopLeft, footprintSize); // Interleave a different glyph.
-        var second = renderer.GetCenteredPosition(font, "g", footprintTopLeft, footprintSize);
+        var first = LabelRenderer.GetCenteredPosition(fontMeasurer, "g", footprintTopLeft, footprintSize);
+        LabelRenderer.GetCenteredPosition(fontMeasurer, "A", footprintTopLeft, footprintSize); // Interleave a different glyph.
+        var second = LabelRenderer.GetCenteredPosition(fontMeasurer, "g", footprintTopLeft, footprintSize);
 
         Assert.AreEqual(first, second);
     }
@@ -118,12 +118,11 @@ public sealed class LabelRendererTests
     [TestMethod]
     public void GetLeftAlignedPosition_FootprintExactlyLineHeightTall_NoVerticalOffset()
     {
-        var renderer = new LabelRenderer();
         var font = TestFonts.Shared.GetFont(24);
         var footprintTopLeft = new Vector2(10, 20);
         var footprintSize = new Vector2(200, font.LineHeight);
 
-        var position = renderer.GetLeftAlignedPosition(font, footprintTopLeft, footprintSize);
+        var position = LabelRenderer.GetLeftAlignedPosition(font, footprintTopLeft, footprintSize);
 
         Assert.AreEqual(footprintTopLeft.Y, position.Y, 0.01f);
     }
@@ -131,12 +130,11 @@ public sealed class LabelRendererTests
     [TestMethod]
     public void GetRightAlignedPosition_FootprintExactlyLineHeightTall_NoVerticalOffset()
     {
-        var renderer = new LabelRenderer();
         var font = TestFonts.Shared.GetFont(24);
         var footprintTopLeft = new Vector2(10, 20);
         var footprintSize = new Vector2(200, font.LineHeight);
 
-        var position = renderer.GetRightAlignedPosition(font, font.MeasureString("Some Source : +2").X, footprintTopLeft, footprintSize);
+        var position = LabelRenderer.GetRightAlignedPosition(font, font.MeasureString("Some Source : +2").X, footprintTopLeft, footprintSize);
 
         Assert.AreEqual(footprintTopLeft.Y, position.Y, 0.01f);
     }
@@ -145,13 +143,12 @@ public sealed class LabelRendererTests
     [TestMethod]
     public void GetRightAlignedPosition_FlushesTextToTheFootprintsRightEdge()
     {
-        var renderer = new LabelRenderer();
         var font = TestFonts.Shared.GetFont(24);
         var footprintTopLeft = Vector2.Zero;
         var footprintSize = new Vector2(200, font.LineHeight);
         const string text = "Some Source : +2";
 
-        var position = renderer.GetRightAlignedPosition(font, font.MeasureString(text).X, footprintTopLeft, footprintSize);
+        var position = LabelRenderer.GetRightAlignedPosition(font, font.MeasureString(text).X, footprintTopLeft, footprintSize);
 
         Assert.AreEqual(footprintSize.X - font.MeasureString(text).X, position.X, 0.01f);
     }
@@ -160,13 +157,12 @@ public sealed class LabelRendererTests
     [TestMethod]
     public void GetRightAlignedPosition_DifferentStringsSameFootprint_SameVerticalPosition()
     {
-        var renderer = new LabelRenderer();
         var font = TestFonts.Shared.GetFont(24);
         var footprintTopLeft = new Vector2(10, 20);
         var footprintSize = new Vector2(200, 40);
 
-        var withDescender = renderer.GetRightAlignedPosition(font, font.MeasureString("Source : +2").X, footprintTopLeft, footprintSize);
-        var withoutDescender = renderer.GetRightAlignedPosition(font, font.MeasureString("AC : 5").X, footprintTopLeft, footprintSize);
+        var withDescender = LabelRenderer.GetRightAlignedPosition(font, font.MeasureString("Source : +2").X, footprintTopLeft, footprintSize);
+        var withoutDescender = LabelRenderer.GetRightAlignedPosition(font, font.MeasureString("AC : 5").X, footprintTopLeft, footprintSize);
 
         Assert.AreEqual(withDescender.Y, withoutDescender.Y, 0.01f);
     }

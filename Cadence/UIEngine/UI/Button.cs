@@ -25,8 +25,8 @@ namespace UIEngine.UI;
 /// factory, so a button that wants an icon (Folder's sprite-or-glyph treatment) opts in through
 /// ElementOptions.Button.SpriteName without every other consumer threading a service it never uses.
 /// </summary>
-public sealed class Button(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService? spriteSheetService = null)
-    : Element(fontService, elementPoolService, labelRenderer)
+public sealed class Button(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService? spriteSheetService = null)
+    : Element(fontService, elementPoolService, renderService)
 {
     /// <summary>What ContentFont is reset to on every Build, so a pooled button never keeps a font a previous user set.</summary>
     private readonly SpriteFontBase _defaultContentFont = fontService.GetFont(FontChrome.DefaultFontSize);
@@ -177,8 +177,8 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
 
         if (IsHovered || IsHighlighted)
         {
@@ -201,7 +201,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         if (_hasSpriteIcon && spriteSheetService is not null)
         {
             var spriteTint = Enabled ? Color.White : Color.Gray;
-            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, LabelRenderer, _sprite, ContentFont, LeftText, textColor, ContentAbsolutePosition, ContentSize, spriteTint);
+            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, _sprite, FontService.GetTextMeasurer(ContentFont), LeftText, textColor, ContentAbsolutePosition, ContentSize, spriteTint);
         }
         else if (string.IsNullOrEmpty(RightText) && !LeftAlign)
         {
@@ -212,7 +212,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
             // MeasureString's line box is a poor stand-in for a glyph's actual rendered ink.
             if (!string.IsNullOrEmpty(LeftText))
             {
-                LabelRenderer.DrawCentered(spriteBatch, ContentFont, LeftText, ContentAbsolutePosition, ContentSize, textColor);
+                LabelRenderer.DrawCentered(spriteBatch, FontService.GetTextMeasurer(ContentFont), LeftText, ContentAbsolutePosition, ContentSize, textColor);
             }
         }
         else

@@ -19,7 +19,7 @@ namespace Tests.Presentation;
 [DoNotParallelize]
 public sealed class NotificationMinimizeBehaviorTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
     private static Window CreateWindowWithCloseAndNotificationMinimize(ElementPoolService windowService, Action onMinimize)
     {

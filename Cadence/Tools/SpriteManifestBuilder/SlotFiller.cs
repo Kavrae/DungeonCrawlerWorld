@@ -16,7 +16,7 @@ public static class SlotFiller
     private readonly record struct Step(Func<int, int> TransformMask, Func<SpriteManifestCell, SpriteManifestCell> TransformPiece, bool IsQuarterTurn);
 
     /// <returns>How many empty slots were filled.</returns>
-    public static int FillEmptySlots(LinkLayout layout, SpriteManifestCell?[] slots, bool mirrorLeftRight, bool mirrorTopBottom, bool turns)
+    public static int FillEmptySlots(SpriteLinkLayout layout, SpriteManifestCell?[] slots, bool mirrorLeftRight, bool mirrorTopBottom, bool turns)
     {
         var steps = new List<Step>(3);
         if (mirrorLeftRight)

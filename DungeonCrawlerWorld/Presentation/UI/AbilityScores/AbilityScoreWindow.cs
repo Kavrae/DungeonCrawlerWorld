@@ -32,8 +32,8 @@ namespace Presentation.UI.AbilityScores;
 /// header/modifier-row hover popup shown/hidden through the shared TooltipController (see its own
 /// doc comment).
 /// </summary>
-public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, AbilityScoreView abilityScoreView, StatModifierView statModifierView, ActionSourceNaming actionSourceNaming, SimulationClock simulationClock, PointerState pointerState)
-    : Window(fontService, elementPoolService, labelRenderer)
+public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, AbilityScoreView abilityScoreView, StatModifierView statModifierView, ActionSourceNaming actionSourceNaming, SimulationClock simulationClock, PointerState pointerState)
+    : Window(fontService, elementPoolService, renderService)
 {
     private const float HeaderHeight = 50f;
     private const float RowHeight = 20f;
@@ -268,7 +268,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
 
         // A window that grows to the right could otherwise end up partly off-screen -- the same
         // clamp AbilityScoreWindowController's own initial placement already applies.
-        var screenBounds = ElementPoolService.GraphicsDevice.Viewport.Bounds;
+        var screenBounds = Render.GraphicsDevice.Viewport.Bounds;
         SetRelativePosition(RectangleClamp.ClampInside(RelativePosition, CurrentSize, screenBounds));
     }
 

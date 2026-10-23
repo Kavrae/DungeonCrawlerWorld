@@ -28,8 +28,8 @@ public sealed record ListViewRow(IReadOnlyList<string> Cells, string? IconGlyph 
 /// cells as numbers when both read as one, and as text otherwise; rows that compare equal keep the order SetRows gave.
 /// The selection is the row itself, so it survives a sort, and SetRows keeps it when the new rows still hold it.
 /// </remarks>
-public sealed class ListView(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : Element(fontService, elementPoolService, labelRenderer)
+public sealed class ListView(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : Element(fontService, elementPoolService, renderService)
 {
     public const float RowHeight = 20f;
     public const float HeaderHeight = 22f;
@@ -44,7 +44,7 @@ public sealed class ListView(FontService fontService, ElementPoolService element
 
     private readonly SpriteFontBase _font = fontService.GetFont(FontChrome.DefaultFontSize);
 
-    private readonly ITextMeasurer _textMeasurer = fontService.GetTextMeasurer(fontService.GetFont(FontChrome.DefaultFontSize));
+    private readonly FontStashTextMeasurer _textMeasurer = fontService.GetTextMeasurer(fontService.GetFont(FontChrome.DefaultFontSize));
 
     private IReadOnlyList<ListViewColumn> _columns = [];
     private bool _showIconColumn;
@@ -380,8 +380,8 @@ public sealed class ListView(FontService fontService, ElementPoolService element
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
         var width = ContentSize.X;
 
         var firstVisible = System.Math.Max(0, (int)(ScrollOffset.Y / RowHeight));
@@ -405,7 +405,7 @@ public sealed class ListView(FontService fontService, ElementPoolService element
             {
                 if (row.IconGlyph is { Length: > 0 } glyph)
                 {
-                    LabelRenderer.DrawCentered(spriteBatch, _font, glyph, new Vector2(x, top), new Vector2(IconColumnWidth, RowHeight), row.IconColor ?? WindowPalette.BodyTextColor);
+                    LabelRenderer.DrawCentered(spriteBatch, _textMeasurer, glyph, new Vector2(x, top), new Vector2(IconColumnWidth, RowHeight), row.IconColor ?? WindowPalette.BodyTextColor);
                 }
 
                 x += IconColumnWidth;

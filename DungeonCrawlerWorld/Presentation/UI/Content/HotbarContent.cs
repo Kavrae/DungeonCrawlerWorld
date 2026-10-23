@@ -91,10 +91,10 @@ public sealed class HotbarContent(
     /// </summary>
     public bool IsAcceptingDrag { get; set; }
 
-    private readonly RadialFillRenderer _radialFill = new(new LabelRenderer(), spriteSheetService);
+    private readonly RadialFillRenderer _radialFill = new(spriteSheetService);
 
     private Window _hostWindow = null!;
-    private SpriteFontBase _font = null!;
+    private FontStashTextMeasurer _glyphFontMeasurer = null!;
     private SpriteFontBase _overlayFont = null!;
     private SpriteFontBase _countdownFont = null!;
 
@@ -164,7 +164,7 @@ public sealed class HotbarContent(
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
-        _font = fontService.GetFont((int)(SlotSize.Y * GameFontChrome.HotbarSlotGlyphFontFraction));
+        _glyphFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont((int)(SlotSize.Y * GameFontChrome.HotbarSlotGlyphFontFraction)));
         _overlayFont = fontService.GetFont((int)(SlotSize.Y * GameFontChrome.HotbarOverlayFontFraction));
         _countdownFont = fontService.GetFont((int)(SlotSize.Y * GameFontChrome.HotbarCountdownFontFraction));
     }
@@ -251,8 +251,8 @@ public sealed class HotbarContent(
 
     public void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = _hostWindow.ElementPoolService.SpriteBatch;
-        var unitRectangle = _hostWindow.ElementPoolService.UnitRectangle;
+        var spriteBatch = _hostWindow.Render.SpriteBatch;
+        var unitRectangle = _hostWindow.Render.UnitRectangle;
         var playerEntityId = world.PlayerEntityId;
 
         foreach (var (slot, bounds) in SlotBounds())
@@ -694,7 +694,7 @@ public sealed class HotbarContent(
         _radialFill.GlyphColor = visual.GlyphColor;
         _radialFill.BackgroundColor = WindowPalette.ControlBackground;
         _radialFill.FillPercentage = visual.FillPercentage;
-        _radialFill.Draw(spriteBatch, unitRectangle, _font, contentBounds, alpha);
+        _radialFill.Draw(spriteBatch, unitRectangle, _glyphFontMeasurer, contentBounds, alpha);
 
         if (!visual.Costs.IsFree)
         {

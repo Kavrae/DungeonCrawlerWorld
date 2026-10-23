@@ -1,6 +1,6 @@
-using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using UIEngine.Fonts;
 using UIEngine.Rendering;
 
 namespace Presentation.Rendering;
@@ -12,7 +12,7 @@ namespace Presentation.Rendering;
 /// slots are the one caller that supplies it (items can have real sprites, unlike abilities
 /// today) and sets Sprite/SpriteTint per draw.
 /// </summary>
-public sealed class RadialFillRenderer(LabelRenderer labelRenderer, SpriteSheetService? spriteSheetService = null)
+public sealed class RadialFillRenderer(SpriteSheetService? spriteSheetService = null)
 {
     private const int SliverCount = 72;
     private static readonly Color MaskColor = new Color(64, 64, 64) * 0.5f;
@@ -29,7 +29,7 @@ public sealed class RadialFillRenderer(LabelRenderer labelRenderer, SpriteSheetS
     public Color SpriteTint { get; set; } = Color.White;
 
     /// <summary>alphaMultiplier fades BackgroundColor and the sprite/glyph together -- HotbarContent's disabled-slot treatment (see its own doc comment) -- but never the radial mask itself, which stays scoped to whether this icon is on cooldown/unaffordable, not whether the whole slot is currently faded.</summary>
-    public void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, SpriteFontBase font, Rectangle bounds, float alphaMultiplier = 1f)
+    public void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, FontStashTextMeasurer glyphFontMeasurer, Rectangle bounds, float alphaMultiplier = 1f)
     {
         spriteBatch.Draw(unitRectangle, bounds, BackgroundColor * alphaMultiplier);
 
@@ -38,11 +38,11 @@ public sealed class RadialFillRenderer(LabelRenderer labelRenderer, SpriteSheetS
 
         if (Sprite is { } sprite && spriteSheetService is not null)
         {
-            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, labelRenderer, sprite, font, Glyph, GlyphColor, position, size, SpriteTint, alphaMultiplier);
+            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, sprite, glyphFontMeasurer, Glyph, GlyphColor, position, size, SpriteTint, alphaMultiplier);
         }
         else
         {
-            labelRenderer.DrawCentered(spriteBatch, font, Glyph, position, size, GlyphColor * alphaMultiplier);
+            LabelRenderer.DrawCentered(spriteBatch, glyphFontMeasurer, Glyph, position, size, GlyphColor * alphaMultiplier);
         }
 
         DrawRadialMask(spriteBatch, unitRectangle, bounds);

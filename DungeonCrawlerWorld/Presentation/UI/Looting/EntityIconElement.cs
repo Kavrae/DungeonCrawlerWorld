@@ -18,20 +18,20 @@ namespace Presentation.UI.Looting;
 public sealed class EntityIconElement(
     FontService fontService,
     ElementPoolService elementPoolService,
-    LabelRenderer labelRenderer,
+    UiRenderService renderService,
     SpriteSheetService spriteSheetService,
     IMapViewQuery mapView)
-    : Element(fontService, elementPoolService, labelRenderer)
+    : Element(fontService, elementPoolService, renderService)
 {
     private int _entityId;
     private MapVisual? _fixedVisual;
-    private SpriteFontBase _glyphFont = null!;
+    private FontStashTextMeasurer _glyphFontMeasurer = null!;
 
     public void Configure(int entityId, Vector2 iconSize)
     {
         _entityId = entityId;
         _fixedVisual = null;
-        _glyphFont = FontService.GetFont((int)(iconSize.Y * GameFontChrome.IconGlyphFontFraction));
+        _glyphFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(iconSize.Y * GameFontChrome.IconGlyphFontFraction)));
     }
 
     /// <summary>Shows a visual that belongs to no entity -- a terrain or structure cell's, as one picture.</summary>
@@ -39,21 +39,21 @@ public sealed class EntityIconElement(
     {
         _entityId = -1;
         _fixedVisual = spriteSheetService.Sprites.Resolve(visual);
-        _glyphFont = FontService.GetFont((int)(iconSize.Y * GameFontChrome.IconGlyphFontFraction));
+        _glyphFontMeasurer = FontService.GetTextMeasurer(FontService.GetFont((int)(iconSize.Y * GameFontChrome.IconGlyphFontFraction)));
     }
 
     public override void DrawContent(GameTime gameTime)
     {
         if (_fixedVisual is { } visual)
         {
-            SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, LabelRenderer, visual.Sprite, _glyphFont, visual.Glyph, visual.GlyphColor, ContentAbsolutePosition, ContentSize, Color.White);
+            SpriteOrGlyphRenderer.Draw(Render.SpriteBatch, spriteSheetService, visual.Sprite, _glyphFontMeasurer, visual.Glyph, visual.GlyphColor, ContentAbsolutePosition, ContentSize, Color.White);
             return;
         }
 
         if (mapView.TryGetVisual(_entityId, out var entityView))
         {
             var entityVisual = spriteSheetService.Sprites.Resolve(entityView);
-            SpriteOrGlyphRenderer.Draw(ElementPoolService.SpriteBatch, spriteSheetService, LabelRenderer, entityVisual.Sprite, _glyphFont, entityVisual.Glyph, entityVisual.GlyphColor, ContentAbsolutePosition, ContentSize, Color.White);
+            SpriteOrGlyphRenderer.Draw(Render.SpriteBatch, spriteSheetService, entityVisual.Sprite, _glyphFontMeasurer, entityVisual.Glyph, entityVisual.GlyphColor, ContentAbsolutePosition, ContentSize, Color.White);
         }
     }
 }

@@ -33,8 +33,4 @@
     <ProjectReference Include="..\Presentation\Presentation.csproj" />
     <ProjectReference Include="..\Content\Content.csproj" />
   </ItemGroup>
-  <Target Name="RestoreDotnetTools" BeforeTargets="Restore">
-    <Message Text="Restoring dotnet tools" Importance="High" />
-    <Exec Command="dotnet tool restore" />
-  </Target>
 </Project>

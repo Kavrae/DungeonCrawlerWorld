@@ -19,7 +19,7 @@ public interface IElementContent
 
     void Update(GameTime gameTime);
 
-    /// <summary>Implementations needing SpriteBatch/Texture2D read them off the host window passed to Initialize -- hostWindow.ElementPoolService.SpriteBatch/UnitRectangle (see ElementPoolService's own doc comment for why they're sourced this way instead of taken as parameters).</summary>
+    /// <summary>Implementations needing SpriteBatch/Texture2D read them off the host window passed to Initialize -- hostWindow.Render.SpriteBatch/UnitRectangle (UiRenderService), the same service every element draws with.</summary>
     void DrawContent(GameTime gameTime);
 
     /// <summary>Default-implemented as a no-op so existing content types don't need to change.</summary>

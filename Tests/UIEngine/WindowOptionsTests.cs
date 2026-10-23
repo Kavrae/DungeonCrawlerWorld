@@ -16,7 +16,7 @@ namespace Tests.UIEngine;
 [DoNotParallelize]
 public sealed class WindowOptionsTests
 {
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
     [TestMethod]
     public void CreateWindow_AllGroupsUnset_FallsBackToDefaults()

@@ -23,8 +23,8 @@ namespace UIEngine.UI;
 /// Up/Down moved to (see MoveHighlight) -- and Enter chooses it. A marked row (a DropdownField's current value) draws an
 /// accent at its left edge.
 /// </remarks>
-public sealed class Dropdown(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : Window(fontService, elementPoolService, labelRenderer)
+public sealed class Dropdown(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : Window(fontService, elementPoolService, renderService)
 {
     private const float RowHeight = 22f;
 

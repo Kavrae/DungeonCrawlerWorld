@@ -27,6 +27,7 @@ internal static class AuraContentCodecs
             ContentField.TagSet("t", "Tags"),
             ContentField.Enum<AuraMagnitude>("mg", "Magnitude"),
             ContentField.Enum<AuraFalloff>("fo", "Falloff"),
+            ContentField.Number("go", "Glow opacity multiplier", 0, 1),
         ]);
 
         public override void WriteProperties(ContentWriter writer, AuraDefinition value)
@@ -38,6 +39,7 @@ internal static class AuraContentCodecs
             writer.Tags("t", value.Tags);
             writer.Enum("mg", value.Magnitude, AuraMagnitude.Power);
             writer.Enum("fo", value.Falloff, AuraFalloff.Linear);
+            writer.Number("go", value.GlowOpacityMultiplier, 0.5f);
         }
 
         public override AuraDefinition Read(ContentObject element) => new(
@@ -47,7 +49,8 @@ internal static class AuraContentCodecs
             element.List<Effect>("fx"),
             element.Tags("t"),
             element.Enum("mg", AuraMagnitude.Power),
-            element.Enum("fo", AuraFalloff.Linear));
+            element.Enum("fo", AuraFalloff.Linear),
+            element.Number("go", 0.5f));
     }
 
     /// <summary>The aura is its Guid in the Auras table, resolved when the record is read -- the table is loaded before anything that grants one.</summary>

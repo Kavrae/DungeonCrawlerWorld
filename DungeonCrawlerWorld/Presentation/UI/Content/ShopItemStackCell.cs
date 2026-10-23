@@ -27,8 +27,8 @@ namespace Presentation.UI.Content;
 /// name+price row), reusing Configure/SetPrice/SetStockStatus/the favorable-price coloring via its
 /// own DrawContent override. See that class's own doc comment.
 /// </summary>
-public class ShopItemStackCell(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, SpriteSheetService spriteSheetService)
-    : InventoryItemStackCell(fontService, elementPoolService, labelRenderer, spriteSheetService)
+public class ShopItemStackCell(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService spriteSheetService)
+    : InventoryItemStackCell(fontService, elementPoolService, renderService, spriteSheetService)
 {
     private const float TextPadding = 4f;
 
@@ -109,8 +109,8 @@ public class ShopItemStackCell(FontService fontService, ElementPoolService eleme
 
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
         var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
         var spriteSize = new Vector2(ContentSize.Y, ContentSize.Y);
 

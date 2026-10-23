@@ -24,18 +24,17 @@ public sealed class DetailsWindowsTests
     private static ElementPoolService CreateElementPool()
     {
         var context = Build.Value.Context;
-        var labelRenderer = new LabelRenderer();
         var fontService = TestFonts.Shared;
-        var elementPool = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
+        var elementPool = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var actionStateView = TestActionStateViews.Over(Build.Value.EcsContext.ComponentManager, context.Actions, context.Items);
 
-        elementPool.RegisterFactory(() => new TextDivider(fontService, elementPool, labelRenderer));
-        elementPool.RegisterFactory(() => new ItemIconElement(fontService, elementPool, labelRenderer, spriteSheetService));
-        elementPool.RegisterFactory(() => new TargetShapePreviewElement(fontService, elementPool, labelRenderer));
-        elementPool.RegisterFactory(() => new ItemDetailsWindow(fontService, elementPool, labelRenderer, context.Actions, context.GameplayTags, actionStateView, TestPlayerQuery.NoPlayer));
-        elementPool.RegisterFactory(() => new ActionDetailsWindow(fontService, elementPool, labelRenderer, context.Actions, context.GameplayTags));
-        elementPool.RegisterFactory(() => new AuraDetailsWindow(fontService, elementPool, labelRenderer, context.Actions, context.GameplayTags));
+        elementPool.RegisterFactory(() => new TextDivider(fontService, elementPool, new UiRenderService()));
+        elementPool.RegisterFactory(() => new ItemIconElement(fontService, elementPool, new UiRenderService(), spriteSheetService));
+        elementPool.RegisterFactory(() => new TargetShapePreviewElement(fontService, elementPool, new UiRenderService()));
+        elementPool.RegisterFactory(() => new ItemDetailsWindow(fontService, elementPool, new UiRenderService(), context.Actions, context.GameplayTags, actionStateView, TestPlayerQuery.NoPlayer));
+        elementPool.RegisterFactory(() => new ActionDetailsWindow(fontService, elementPool, new UiRenderService(), context.Actions, context.GameplayTags));
+        elementPool.RegisterFactory(() => new AuraDetailsWindow(fontService, elementPool, new UiRenderService(), context.Actions, context.GameplayTags));
         return elementPool;
     }
 

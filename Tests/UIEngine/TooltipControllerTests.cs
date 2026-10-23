@@ -7,7 +7,7 @@ namespace Tests.UIEngine;
 /// consumer's Update runs last in a frame wins" stomping race structurally impossible. The actual arbitration behavior (one owner's Show, then a different owner's Hide,
 /// leaves the first owner's tooltip still showing) isn't exercised here the same way TooltipTests
 /// doesn't exercise Tooltip.ShowNear directly -- Show ultimately calls Tooltip.ShowNear, whose own
-/// SetRelativePosition call reads ElementPoolService.GraphicsDevice.Viewport.Bounds, never wired
+/// SetRelativePosition call reads Render.GraphicsDevice.Viewport.Bounds, never wired
 /// up headlessly (see TooltipTests' own doc comment). What's covered here instead is the one thing
 /// that's both safe to call headlessly and actually load-bearing: Hide checks ownership *before*
 /// ever touching the underlying Tooltip, so an unrelated consumer's routine "nothing hovered"

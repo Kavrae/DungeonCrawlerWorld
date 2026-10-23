@@ -18,7 +18,7 @@ public sealed class ScrollbarInputTests
     private static readonly Vector2 LargeScreenSize = new(2000, 2000);
     private const float RowHeight = 20f;
 
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
     private static MouseState MouseAt(Point position, ButtonState leftButton) =>
         new(position.X, position.Y, 0, leftButton, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);

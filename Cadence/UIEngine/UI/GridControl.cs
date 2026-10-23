@@ -19,8 +19,8 @@ namespace UIEngine.UI;
 /// subclass, since it composes several children and owns its own event/update logic. The sort
 /// control is click-to-cycle.
 /// </summary>
-public sealed class GridControl(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer)
-    : Window(fontService, elementPoolService, labelRenderer)
+public sealed class GridControl(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+    : Window(fontService, elementPoolService, renderService)
 {
     public const float RowHeight = 24f;
 

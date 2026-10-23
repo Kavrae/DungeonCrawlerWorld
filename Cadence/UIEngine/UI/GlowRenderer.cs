@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using UIEngine.Rendering;
 
 namespace UIEngine.UI;
 
@@ -31,18 +32,22 @@ public static class GlowRenderer
 
     private const float FadeMaximumAlpha = 0.5f;
 
-    public static void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Color glowColor, GlowMode mode = GlowMode.ExteriorFade, float alphaMultiplier = 1f)
+    public static void Draw(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Color glowColor, GlowMode mode = GlowMode.ExteriorFade, float alphaMultiplier = 1f) =>
+        Draw(new SpriteBatchDrawTarget(spriteBatch), unitRectangle, bounds, glowColor, mode, alphaMultiplier);
+
+    public static void Draw<TTarget>(TTarget target, Texture2D unitRectangle, Rectangle bounds, Color glowColor, GlowMode mode = GlowMode.ExteriorFade, float alphaMultiplier = 1f, SpriteDrawStyle style = default)
+        where TTarget : ISpriteDrawTarget
     {
         switch (mode)
         {
             case GlowMode.InteriorFull:
-                spriteBatch.Draw(unitRectangle, bounds, glowColor * (FadeMaximumAlpha * alphaMultiplier));
+                target.Draw(unitRectangle, bounds, null, glowColor * (FadeMaximumAlpha * alphaMultiplier), style);
                 break;
             case GlowMode.InteriorFade:
-                DrawFadeRings(spriteBatch, unitRectangle, bounds, glowColor, alphaMultiplier, inward: true);
+                DrawFadeRings(target, unitRectangle, bounds, glowColor, alphaMultiplier, inward: true, style);
                 break;
             case GlowMode.ExteriorFade:
-                DrawFadeRings(spriteBatch, unitRectangle, bounds, glowColor, alphaMultiplier, inward: false);
+                DrawFadeRings(target, unitRectangle, bounds, glowColor, alphaMultiplier, inward: false, style);
                 break;
         }
     }
@@ -51,7 +56,8 @@ public static class GlowRenderer
     // such that a hypothetical ring FadeRingCount+1 would land exactly on 0.
     private static float RingAlpha(int ringIndex) => FadeMaximumAlpha * (1f - (ringIndex - 1) / (float)FadeRingCount);
 
-    private static void DrawFadeRings(SpriteBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Color glowColor, float alphaMultiplier, bool inward)
+    private static void DrawFadeRings<TTarget>(TTarget target, Texture2D unitRectangle, Rectangle bounds, Color glowColor, float alphaMultiplier, bool inward, SpriteDrawStyle style)
+        where TTarget : ISpriteDrawTarget
     {
         for (var ringIndex = 1; ringIndex <= FadeRingCount; ringIndex++)
         {
@@ -66,10 +72,10 @@ public static class GlowRenderer
             var ringColor = glowColor * (RingAlpha(ringIndex) * alphaMultiplier);
 
             var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(ringBounds, BorderThickness.Uniform(Vector2.One));
-            spriteBatch.Draw(unitRectangle, top, ringColor);
-            spriteBatch.Draw(unitRectangle, bottom, ringColor);
-            spriteBatch.Draw(unitRectangle, left, ringColor);
-            spriteBatch.Draw(unitRectangle, right, ringColor);
+            target.Draw(unitRectangle, top, null, ringColor, style);
+            target.Draw(unitRectangle, bottom, null, ringColor, style);
+            target.Draw(unitRectangle, left, null, ringColor, style);
+            target.Draw(unitRectangle, right, null, ringColor, style);
         }
     }
 }

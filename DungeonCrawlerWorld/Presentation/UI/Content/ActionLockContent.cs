@@ -20,10 +20,10 @@ public sealed class ActionLockContent(World world, ActionStateView actionStateVi
 
     private const int ContentInset = 2;
 
-    private readonly RadialFillRenderer _radialFill = new(new LabelRenderer());
+    private readonly RadialFillRenderer _radialFill = new();
 
     private Window _hostWindow = null!;
-    private SpriteFontBase _font = null!;
+    private FontStashTextMeasurer _glyphFontMeasurer = null!;
 
     private bool _hasActionLock;
     private string _glyph = string.Empty;
@@ -33,7 +33,7 @@ public sealed class ActionLockContent(World world, ActionStateView actionStateVi
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
-        _font = fontService.GetFont((int)(Size.Y * GameFontChrome.ActionLockGlyphFontFraction));
+        _glyphFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont((int)(Size.Y * GameFontChrome.ActionLockGlyphFontFraction)));
     }
 
     /// <summary>Whether the player currently has an action lock to show, and its fill fraction, is decided here -- Draw only reads the cached result and turns it into pixels.</summary>
@@ -61,8 +61,8 @@ public sealed class ActionLockContent(World world, ActionStateView actionStateVi
             return;
         }
 
-        var spriteBatch = _hostWindow.ElementPoolService.SpriteBatch;
-        var unitRectangle = _hostWindow.ElementPoolService.UnitRectangle;
+        var spriteBatch = _hostWindow.Render.SpriteBatch;
+        var unitRectangle = _hostWindow.Render.UnitRectangle;
 
         _radialFill.Glyph = _glyph;
         _radialFill.GlyphColor = _glyphColor;
@@ -77,6 +77,6 @@ public sealed class ActionLockContent(World world, ActionStateView actionStateVi
             (int)contentSize.X - ContentInset * 2,
             (int)contentSize.Y - ContentInset * 2);
 
-        _radialFill.Draw(spriteBatch, unitRectangle, _font, bounds);
+        _radialFill.Draw(spriteBatch, unitRectangle, _glyphFontMeasurer, bounds);
     }
 }

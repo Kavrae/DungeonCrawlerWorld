@@ -55,7 +55,7 @@ namespace Presentation.UI;
 public sealed class HealthWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
-    LabelRenderer labelRenderer,
+    UiRenderService renderService,
     HealthView healthView,
     StatModifierView statModifierView,
     ActionStateView actionStateView,
@@ -67,7 +67,7 @@ public sealed class HealthWindow(
     ActionSourceNaming actionSourceNaming,
     TooltipController tooltipController,
     PointerState pointerState)
-    : Window(fontService, elementPoolService, labelRenderer)
+    : Window(fontService, elementPoolService, renderService)
 {
     private static readonly Color BodyTextColor = Color.White;
 

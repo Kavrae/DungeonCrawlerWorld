@@ -1,0 +1,5 @@
+# Shader sources are hashed byte for byte against the hash checked in beside their compiled binary (UIEngine.csproj's
+# CompileSpriteEffects), so line endings must never be converted on checkout.
+*.fx -text
+*.fxb binary
+*.fxb.sha256 -text

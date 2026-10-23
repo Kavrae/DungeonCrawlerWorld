@@ -27,14 +27,14 @@ namespace Presentation.UI.Shops;
 public sealed class ShopWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
-    LabelRenderer labelRenderer,
+    UiRenderService renderService,
     InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
     Engine.ECS.Systems.SimulationClock simulationClock,
     EntityNaming entityNaming)
-    : Window(fontService, elementPoolService, labelRenderer), IWholeWindowDropTarget
+    : Window(fontService, elementPoolService, renderService), IWholeWindowDropTarget
 {
     private static readonly Vector2 IconSize = new(48, 48);
     private const float Padding = 8f;

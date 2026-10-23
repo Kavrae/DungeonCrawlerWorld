@@ -18,7 +18,7 @@ public sealed class UiInputControllerScreenSizeTests
 
     private static (UiInputController Controller, Window Window) CreateMovableWindowAt(Vector2 relativePosition, Vector2 screenSize)
     {
-        var elementPoolService = TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+        var elementPoolService = TestElementPoolServiceFactory.Create(TestFonts.Shared);
         var window = elementPoolService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },

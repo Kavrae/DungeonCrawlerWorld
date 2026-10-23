@@ -15,7 +15,7 @@ public sealed class WindowFooterTests
 {
     private const float FooterHeight = 24f;
 
-    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared, new LabelRenderer());
+    private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
     /// <summary>Trivial IElementContent stub -- records the hostWindow it was given so a test can inspect its ContentSize/AbsolutePosition/Rectangle directly.</summary>
     private sealed class StubFooterContent : IElementContent

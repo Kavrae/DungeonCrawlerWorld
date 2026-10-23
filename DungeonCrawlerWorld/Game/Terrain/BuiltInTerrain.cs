@@ -26,9 +26,10 @@ public static class BuiltInTerrain
     private const byte LavaAuraSize = 3;
 
     /// <summary>Lava's own aura: each tick tops one body part, picked at random, up to the aura's power at the entity in Burning stacks.</summary>
-    /// <remarks>A different part each tick, each burning on its own, so the longer an entity stays the more of it is alight. An entity without body parts burns as a whole.</remarks>
+    /// <remarks>A different part each tick, each burning on its own, so the longer an entity stays the more of it is alight. An entity without body parts burns as a whole. Its glow is half again as opaque as the default, so the danger reads from a distance across the smooth falloff.</remarks>
     public static readonly AuraDefinition LavaAura = new(new Guid("d9f6a1c4-8b2e-4f3a-9c1d-000000000301"), "Lava", Color.DarkOrange,
-        [new Effect([new StatusEffectGrant(StatusEffectType.Burning, StackCount: 1, StatusEffectGrantMode.TopUpTo, BodyPartTargeting.Random)])]);
+        [new Effect([new StatusEffectGrant(StatusEffectType.Burning, StackCount: 1, StatusEffectGrantMode.TopUpTo, BodyPartTargeting.Random)])],
+        GlowOpacityMultiplier: 0.75f);
 
     /// <summary>The Burning stacks standing in lava holds on the part touching it.</summary>
     private const int LavaContactBurningStacks = 8;

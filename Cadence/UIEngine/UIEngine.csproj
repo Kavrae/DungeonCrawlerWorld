@@ -28,4 +28,58 @@
     <InternalsVisibleTo Include="Tests" />
   </ItemGroup>
 
+  <!--
+    Sprite effects: each Shaders\*.fx is compiled by fxc to an fx_2_0 binary (Shaders\*.fxb) that is checked in beside it with
+    the source's SHA-256 (Shaders\*.fxb.sha256), and embedded in this assembly. A build recompiles a source whose hash no longer
+    matches when fxc is found (the Windows SDK's newest, or FxcPath), and fails when it isn't, so a stale binary never ships.
+    Hashes, not timestamps: a checkout resets timestamps (.gitattributes keeps the bytes exact). Each binary is embedded from
+    inside the target, after it may have been compiled, so a new shader's first build embeds it too.
+  -->
+  <ItemGroup>
+    <SpriteEffectSource Include="Shaders\*.fx" />
+  </ItemGroup>
+
+  <Target Name="CompileSpriteEffects" BeforeTargets="BeforeBuild" DependsOnTargets="FindFxc" Condition="'@(SpriteEffectSource)' != ''" Outputs="%(SpriteEffectSource.Identity)">
+    <PropertyGroup>
+      <SpriteEffectSourcePath>%(SpriteEffectSource.FullPath)</SpriteEffectSourcePath>
+      <SpriteEffectBinaryPath>%(SpriteEffectSource.RootDir)%(SpriteEffectSource.Directory)%(SpriteEffectSource.Filename).fxb</SpriteEffectBinaryPath>
+      <SpriteEffectHashPath>$(SpriteEffectBinaryPath).sha256</SpriteEffectHashPath>
+      <SpriteEffectRecordedHash />
+      <SpriteEffectIsStale />
+    </PropertyGroup>
+
+    <GetFileHash Files="$(SpriteEffectSourcePath)" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Hash" PropertyName="SpriteEffectSourceHash" />
+    </GetFileHash>
+    <ReadLinesFromFile File="$(SpriteEffectHashPath)" Condition="Exists('$(SpriteEffectHashPath)')">
+      <Output TaskParameter="Lines" PropertyName="SpriteEffectRecordedHash" />
+    </ReadLinesFromFile>
+
+    <PropertyGroup>
+      <SpriteEffectIsStale Condition="'$(SpriteEffectSourceHash)' != '$(SpriteEffectRecordedHash)' Or !Exists('$(SpriteEffectBinaryPath)')">true</SpriteEffectIsStale>
+    </PropertyGroup>
+
+    <Error Condition="'$(SpriteEffectIsStale)' == 'true' And !Exists('$(FxcPath)')"
+           Text="$(SpriteEffectSourcePath) changed since $(SpriteEffectBinaryPath) was compiled (its hash no longer matches $(SpriteEffectHashPath)), and fxc.exe can't be found to recompile it. Install the Windows SDK, or pass -p:FxcPath=&lt;path to fxc.exe&gt;." />
+    <Exec Condition="'$(SpriteEffectIsStale)' == 'true'"
+          Command="&quot;$(FxcPath)&quot; /nologo /T fx_2_0 /Fo &quot;$(SpriteEffectBinaryPath)&quot; &quot;$(SpriteEffectSourcePath)&quot;" />
+    <WriteLinesToFile Condition="'$(SpriteEffectIsStale)' == 'true'" File="$(SpriteEffectHashPath)" Lines="$(SpriteEffectSourceHash)" Overwrite="true" />
+
+    <ItemGroup>
+      <EmbeddedResource Include="$(SpriteEffectBinaryPath)" LogicalName="UIEngine.Shaders.%(SpriteEffectSource.Filename).fxb" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="FindFxc" Condition="'$(FxcPath)' == ''">
+    <PropertyGroup>
+      <WindowsKitsRoot10 Condition="'$(WindowsKitsRoot10)' == '' And $([MSBuild]::IsOSPlatform('Windows'))">$([MSBuild]::GetRegistryValueFromView('HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows Kits\Installed Roots', 'KitsRoot10', null, RegistryView.Registry64, RegistryView.Registry32))</WindowsKitsRoot10>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(WindowsKitsRoot10)' != ''">
+      <FxcCandidate Include="$(WindowsKitsRoot10)bin\10.*\x64\fxc.exe" />
+    </ItemGroup>
+    <PropertyGroup Condition="'@(FxcCandidate)' != ''">
+      <FxcPath>%(FxcCandidate.FullPath)</FxcPath>
+    </PropertyGroup>
+  </Target>
+
 </Project>

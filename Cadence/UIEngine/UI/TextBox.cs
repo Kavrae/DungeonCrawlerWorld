@@ -25,7 +25,7 @@ namespace UIEngine.UI;
 /// instead (replacing any active selection first), but only when Multiline -- a
 /// single-line box treats Shift+Enter the same as a plain Enter.
 /// </summary>
-public class TextBox(FontService fontService, ElementPoolService elementPoolService, LabelRenderer labelRenderer, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null) : TextWindow(fontService, elementPoolService, labelRenderer)
+public class TextBox(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null) : TextWindow(fontService, elementPoolService, renderService)
 {
     private static readonly Color FocusIndicatorColor = WindowPalette.FocusAccentColor;
     private static readonly BorderThickness FocusIndicatorThickness = BorderThickness.Uniform(new Vector2(2, 2));
@@ -908,8 +908,8 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
     /// </remarks>
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
 
         if (string.IsNullOrEmpty(OriginalText) && !IsFocused && !string.IsNullOrEmpty(GhostText))
         {
@@ -1338,8 +1338,8 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
             return;
         }
 
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
 
         var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(Rectangle, FocusIndicatorThickness);
         spriteBatch.Draw(unitRectangle, top, FocusIndicatorColor);

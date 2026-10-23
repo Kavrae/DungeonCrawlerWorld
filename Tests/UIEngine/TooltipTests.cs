@@ -6,7 +6,7 @@ namespace Tests.UIEngine;
 
 /// <summary>
 /// Covers Tooltip's rows through SetRows + UpdateText, and ShowNear's relayout rules. ShowNear is given its screenBounds,
-/// since its default reads ElementPoolService.GraphicsDevice.Viewport.Bounds, which only the real render loop wires up.
+/// since its default reads Render.GraphicsDevice.Viewport.Bounds, which only the real render loop wires up.
 /// </summary>
 [TestClass]
 [DoNotParallelize]
@@ -15,9 +15,8 @@ public sealed class TooltipTests
     private static Tooltip Build()
     {
         var fontService = TestFonts.Shared;
-        var labelRenderer = new LabelRenderer();
-        var windowService = TestElementPoolServiceFactory.Create(fontService, labelRenderer);
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, labelRenderer));
+        var windowService = TestElementPoolServiceFactory.Create(fontService);
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, new UiRenderService()));
 
         var tooltip = windowService.CreateElement<Tooltip>(null, new ElementOptions
         {

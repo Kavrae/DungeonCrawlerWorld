@@ -13,17 +13,21 @@ namespace UIEngine.Rendering;
 /// <remarks>Both a plain and a turned or flipped cell draw into the same whole-pixel rectangle (PixelRectangle), so one never lands a pixel off the other.</remarks>
 public static class SpriteRenderer
 {
-    public static void Draw(SpriteBatch spriteBatch, Texture2D texture, Rectangle sourceRectangle, Vector2 footprintTopLeft, Vector2 footprintSize, Color tint, SpriteCellTransform transform = default)
+    public static void Draw(SpriteBatch spriteBatch, Texture2D texture, Rectangle sourceRectangle, Vector2 footprintTopLeft, Vector2 footprintSize, Color tint, SpriteCellTransform transform = default) =>
+        Draw(new SpriteBatchDrawTarget(spriteBatch), texture, sourceRectangle, footprintTopLeft, footprintSize, tint, transform);
+
+    public static void Draw<TTarget>(TTarget target, Texture2D texture, Rectangle sourceRectangle, Vector2 footprintTopLeft, Vector2 footprintSize, Color tint, SpriteCellTransform transform = default, SpriteDrawStyle style = default)
+        where TTarget : ISpriteDrawTarget
     {
         var destinationRectangle = PixelRectangle.Snapped(footprintTopLeft, footprintSize);
         if (transform.IsNone)
         {
-            spriteBatch.Draw(texture, destinationRectangle, sourceRectangle, tint);
+            target.Draw(texture, destinationRectangle, sourceRectangle, tint, style);
             return;
         }
 
         var arguments = TransformedDrawArguments.For(transform, sourceRectangle, new Vector2(destinationRectangle.X, destinationRectangle.Y), new Vector2(destinationRectangle.Width, destinationRectangle.Height));
-        spriteBatch.Draw(texture, arguments.Position, sourceRectangle, tint, arguments.Rotation, arguments.Origin, arguments.Scale, arguments.Effects, 0f);
+        target.Draw(texture, arguments.Position, sourceRectangle, tint, arguments.Rotation, arguments.Origin, arguments.Scale, arguments.Effects, style);
     }
 }
 

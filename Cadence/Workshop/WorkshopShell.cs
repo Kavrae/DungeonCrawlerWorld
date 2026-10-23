@@ -74,7 +74,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
         _gameLauncher = gameLauncher;
         _screenSize = screenSize;
         _commands = [.. PlayCommands(gameLauncher), .. hostCommands];
-        _contextMenuController = new ContextMenuController(new DropdownController(uiEngine.ElementPoolService));
+        _contextMenuController = new ContextMenuController(new DropdownController(uiEngine.ElementPoolService, uiEngine.RenderService));
         _tabFont = uiEngine.FontService.GetFont(FontChrome.DefaultFontSize);
         _gameOutputLog = OpenGameOutputLog(gameOutputLogPath);
 
@@ -85,7 +85,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
 
         IUiInputHandler[] commandHotkeys = [.. _commands.Select(command => new KeyPressInputHandler(command.Hotkey, () => command.Run(this), firesWhileTyping: true, command.Modifiers))];
         _inputController = new UiInputController(_layers, screenSize, new PointerState(), commandHotkeys, [], _contextMenuController.Dropdowns);
-        _layerHost = new UiLayerHost(_layers, uiEngine.ElementPoolService);
+        _layerHost = new UiLayerHost(_layers, uiEngine.RenderService);
         _tabNavigator = new TabNavigator(tabs, OpenTab, this);
         _bottomPanel = BuildBottomPanel(tabSet.LoadProblems);
         _tabContexts = [.. tabs.Select(_ => new WorkshopTabContext(uiEngine, _layers, _contextMenuController, this, _inputController, _tabNavigator, _bottomPanel))];
@@ -234,7 +234,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
     private WorkshopBottomPanel BuildBottomPanel(IReadOnlyList<WorkshopProblem> loadProblems)
     {
         var elementPool = _uiEngine.ElementPoolService;
-        elementPool.RegisterFactory(() => new WorkshopBottomPanel(_uiEngine.FontService, elementPool, _uiEngine.LabelRenderer));
+        elementPool.RegisterFactory(() => new WorkshopBottomPanel(_uiEngine.FontService, elementPool, _uiEngine.RenderService));
         var panel = elementPool.CreateElement<WorkshopBottomPanel>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },

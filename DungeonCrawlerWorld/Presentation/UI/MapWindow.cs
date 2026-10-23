@@ -96,7 +96,7 @@ public sealed class MapWindow : Window
         PlayerActionGate playerActionGate,
         MapViewState mapViewState,
         EventBus eventBus,
-        LabelRenderer labelRenderer,
+        UiRenderService renderService,
         MapCamera camera,
         MapRenderer renderer,
         MapGameOverlay overlay,
@@ -105,7 +105,7 @@ public sealed class MapWindow : Window
         ContextMenuController contextMenuController,
         FloatingTextController floatingTextController,
         FloatingTextRenderer floatingTextRenderer,
-        AdminContextMenuOptions adminContextMenuOptions) : base(fontService, elementPoolService, labelRenderer)
+        AdminContextMenuOptions adminContextMenuOptions) : base(fontService, elementPoolService, renderService)
     {
         _mapView = mapView;
         _playerActionGate = playerActionGate;
@@ -226,11 +226,11 @@ public sealed class MapWindow : Window
     /// <remarks>Highlights come after the world so they land on whatever is on the tile -- terrain, an occupant's sprite or glyph, or glow -- with no depth buffer to sort them.</remarks>
     public override void DrawContent(GameTime gameTime)
     {
-        var spriteBatch = ElementPoolService.SpriteBatch;
-        var unitRectangle = ElementPoolService.UnitRectangle;
+        var spriteBatch = Render.SpriteBatch;
+        var unitRectangle = Render.UnitRectangle;
 
         OverhangFade.CollectWatchedEntities(_watchedEntityIds, _mapView.PlayerEntityId, _mapViewState.InspectionMode, _mapViewState.InspectedEntityId);
-        _renderer.Draw(spriteBatch, _mapViewState.CurrentMapLayer, _watchedEntityIds);
+        _renderer.Draw(_mapViewState.CurrentMapLayer, _watchedEntityIds);
         _overlay.Draw(spriteBatch, unitRectangle);
         _floatingTextRenderer.Draw(spriteBatch, _mapViewState.CurrentMapLayer);
     }
