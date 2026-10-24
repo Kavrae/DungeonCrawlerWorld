@@ -12,10 +12,10 @@ public sealed class SpriteEffectQuadsTests
     private static readonly Rectangle Destination = new(10, 20, 32, 32);
     private static readonly Rectangle WholeCell = new(0, 0, 16, 16);
 
-    private static SpriteEffectVertex[] RectangleQuad(Rectangle destination, Rectangle? source, Point textureSize, Color color = default, SpriteDrawStyle style = default)
+    private static SpriteEffectVertex[] RectangleQuad(Rectangle destination, Rectangle? source, Point textureSize, Color color = default, SpriteDrawStyle style = default, SpriteEffectClipRectangle? clip = null)
     {
         var corners = new SpriteEffectVertex[4];
-        SpriteEffectQuads.Write(corners, new Vector2(destination.X, destination.Y), new Vector2(destination.Width, destination.Height), 0f, Vector2.Zero, SpriteEffectQuads.NormalizedSource(source, textureSize), color, SpriteEffects.None, style.ToVertexStyle());
+        SpriteEffectQuads.Write(corners, new Vector2(destination.X, destination.Y), new Vector2(destination.Width, destination.Height), 0f, Vector2.Zero, SpriteEffectQuads.NormalizedSource(source, textureSize), color, SpriteEffects.None, style.ToVertexStyle(), clip ?? SpriteEffectClipRectangle.None);
         return corners;
     }
 
@@ -25,7 +25,7 @@ public sealed class SpriteEffectQuadsTests
         var arguments = TransformedDrawArguments.For(transform, WholeCell, new Vector2(Destination.X, Destination.Y), new Vector2(Destination.Width, Destination.Height));
         var sourceSize = new Vector2(WholeCell.Width, WholeCell.Height);
         var corners = new SpriteEffectVertex[4];
-        SpriteEffectQuads.Write(corners, arguments.Position, sourceSize * arguments.Scale, arguments.Rotation, arguments.Origin / sourceSize, SpriteEffectQuads.NormalizedSource(WholeCell, new Point(16, 16)), Color.White, arguments.Effects, default);
+        SpriteEffectQuads.Write(corners, arguments.Position, sourceSize * arguments.Scale, arguments.Rotation, arguments.Origin / sourceSize, SpriteEffectQuads.NormalizedSource(WholeCell, new Point(16, 16)), Color.White, arguments.Effects, default, SpriteEffectClipRectangle.None);
         return corners;
     }
 
@@ -84,7 +84,7 @@ public sealed class SpriteEffectQuadsTests
         var scale = new Vector2(2, 3);
         var sourceSize = new Vector2(16, 8);
 
-        SpriteEffectQuads.Write(corners, new Vector2(100, 50), sourceSize * scale, 0f, origin / sourceSize, new Vector4(0, 0, 1, 1), Color.White, SpriteEffects.None, default);
+        SpriteEffectQuads.Write(corners, new Vector2(100, 50), sourceSize * scale, 0f, origin / sourceSize, new Vector4(0, 0, 1, 1), Color.White, SpriteEffects.None, default, SpriteEffectClipRectangle.None);
 
         AssertPosition(new Vector2(100 - 4 * 2, 50 - 2 * 3), corners[0], "top-left");
         AssertPosition(new Vector2(100 - 8 + 32, 50 - 6 + 24), corners[3], "bottom-right");
@@ -126,6 +126,45 @@ public sealed class SpriteEffectQuadsTests
 
         Assert.AreEqual(expectedU, screenTopLeft.TextureCoordinate.X, Tolerance);
         Assert.AreEqual(expectedV, screenTopLeft.TextureCoordinate.Y, Tolerance);
+    }
+
+    [TestMethod]
+    public void EveryCorner_CarriesTheClip()
+    {
+        var clip = SpriteEffectClipRectangle.From(new Rectangle(5, 6, 100, 50));
+        var corners = RectangleQuad(Destination, null, new Point(64, 64), clip: clip);
+
+        Assert.IsTrue(corners.All(corner => corner.Clip == clip));
+        Assert.AreEqual(new SpriteEffectClipRectangle(5, 6, 105, 56), clip);
+    }
+
+    [TestMethod]
+    public void ClipRectangle_BeyondAShort_IsClamped()
+    {
+        Assert.AreEqual(new SpriteEffectClipRectangle(short.MinValue, -5, short.MaxValue, 10), SpriteEffectClipRectangle.From(new Rectangle(-40000, -5, 80000, 15)));
+    }
+
+    [TestMethod]
+    [DataRow(42, 20, 10, 10, true)]
+    [DataRow(0, 0, 10, 20, true)]
+    [DataRow(0, 0, 11, 21, false)]
+    [DataRow(41, 51, 10, 10, false)]
+    [DataRow(20, 30, 4, 4, false)]
+    [DataRow(10, 52, 32, 8, true)]
+    public void LiesOutside_OnlyWhenTheQuadMissesTheClipEntirely(int clipX, int clipY, int clipWidth, int clipHeight, bool expected)
+    {
+        var corners = RectangleQuad(Destination, null, new Point(64, 64));
+
+        Assert.AreEqual(expected, SpriteEffectQuads.LiesOutside(corners, new Rectangle(clipX, clipY, clipWidth, clipHeight)));
+    }
+
+    [TestMethod]
+    public void LiesOutside_ReadsATurnedQuadsCorners()
+    {
+        var corners = TransformedQuad(new SpriteCellTransform(90, false, false));
+
+        Assert.IsFalse(SpriteEffectQuads.LiesOutside(corners, new Rectangle(Destination.Right - 1, Destination.Bottom - 1, 5, 5)));
+        Assert.IsTrue(SpriteEffectQuads.LiesOutside(corners, new Rectangle(Destination.Right, Destination.Bottom, 5, 5)));
     }
 
     [TestMethod]

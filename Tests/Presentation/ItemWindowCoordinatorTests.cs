@@ -11,12 +11,14 @@ using Game.Modules.Actions.Activators;
 using Game.Modules.Currency.Components;
 using Game.Modules.Death;
 using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
 using Game.Modules.Lootboxes;
 using Game.Modules.Shops.Components;
 using Game.Spawning;
 using Game.Tags;
 using Game.Views;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
@@ -44,7 +46,7 @@ public sealed class ItemWindowCoordinatorTests
 
     private static readonly Guid PotionItemId = Guid.NewGuid();
 
-    private sealed record Harness(ItemWindowCoordinator Coordinator, MapWindow MapWindow, MapViewState MapViewState, Engine.ECS.Components.ComponentManager ComponentManager);
+    private sealed record Harness(ItemWindowCoordinator Coordinator, MapWindow MapWindow, MapViewState MapViewState, Engine.ECS.Components.ComponentManager ComponentManager, UiLayerStack Layers, ItemCatalog ItemCatalog, ContextMenuController ContextMenuController);
 
     private static Harness Build()
     {
@@ -123,7 +125,7 @@ public sealed class ItemWindowCoordinatorTests
             new LootboxCommands(new LootboxOpener(componentManager, lootboxCatalog, itemCatalog, seed: 1)),
             mapViewState.ReservedEntityIds);
 
-        return new Harness(coordinator, mapHarness.MapWindow, mapViewState, componentManager);
+        return new Harness(coordinator, mapHarness.MapWindow, mapViewState, componentManager, layers, itemCatalog, contextMenuController);
     }
 
     private static int? OpenSecondaryTarget(Harness harness) => harness.Coordinator.Inventory.GetSecondaryTargetEntityId!();
@@ -209,5 +211,52 @@ public sealed class ItemWindowCoordinatorTests
 
         Assert.AreEqual(anchorStackId, harness.Coordinator.ItemDetails.CurrentStackInstanceId);
         Assert.HasCount(1, harness.Coordinator.ItemComparison.ColumnRectangles);
+    }
+
+    [TestMethod]
+    public void HoldingEscape_OverInventoryAndSeveralComparisonColumns_ClosesEveryMenuWindowAndLeavesMenuMode()
+    {
+        var harness = Build();
+        var anchorStackId = InventoryActions.AddItem(harness.ComponentManager, PlayerEntityId, PotionItemId, quantity: 1);
+        var stackPool = harness.ComponentManager.GetMultiPool<InventoryItemStackComponent>();
+        var firstComparedStack = new InventoryItemStackComponent(PotionItemId, 1);
+        var secondComparedStack = new InventoryItemStackComponent(PotionItemId, 1);
+        var thirdComparedStack = new InventoryItemStackComponent(PotionItemId, 1);
+        stackPool.Add(PlayerEntityId, firstComparedStack);
+        stackPool.Add(PlayerEntityId, secondComparedStack);
+        stackPool.Add(PlayerEntityId, thirdComparedStack);
+        harness.Coordinator.Inventory.OpenInventoryWindow();
+        harness.Coordinator.ItemComparison.Arm(PlayerEntityId, anchorStackId);
+        harness.Coordinator.Inventory.OnItemSelected!(PlayerEntityId, firstComparedStack.StackInstanceId);
+        harness.Coordinator.Inventory.OnItemSelected!(PlayerEntityId, secondComparedStack.StackInstanceId);
+        harness.Coordinator.Inventory.OnItemSelected!(PlayerEntityId, thirdComparedStack.StackInstanceId);
+        Assert.HasCount(3, harness.Coordinator.ItemComparison.ColumnRectangles, "Sanity check: three comparison columns beside the anchor.");
+
+        var controller = TestUiInputController.Create(
+            harness.Layers,
+            new Vector2(2000, 2000),
+            harness.ComponentManager,
+            TestPlayerQuery.NoPlayer,
+            new EventBus(),
+            harness.ItemCatalog,
+            contextMenuController: harness.ContextMenuController,
+            itemDetailsWindowController: harness.Coordinator.ItemDetails,
+            itemComparisonController: harness.Coordinator.ItemComparison,
+            mapViewState: harness.MapViewState,
+            inventoryWindowController: harness.Coordinator.Inventory);
+
+        var escapeHeld = new KeyboardState(Keys.Escape);
+        var mouseIdle = new MouseState();
+        for (var frame = 0; frame < 40; frame++)
+        {
+            controller.Update(escapeHeld, mouseIdle);
+        }
+
+        Assert.IsNull(harness.Coordinator.Inventory.PlayerInventoryWindow);
+        Assert.IsFalse(harness.Coordinator.ItemDetails.IsOpen);
+        Assert.IsEmpty(harness.Coordinator.ItemComparison.ColumnRectangles);
+        Assert.IsFalse(harness.Layers[UiLayer.DynamicHud].OfType<ItemDetailsWindow>().Any(), "No Item Details window may be left in the DynamicHud layer.");
+        Assert.IsNull(harness.Layers.BottommostMenuWindow, "No menu window may be left in a layer to draw the dim under.");
+        Assert.IsFalse(harness.Layers.IsMenuModeActive, "Menu mode, and the game's pause with it, must end once every menu window has closed.");
     }
 }

@@ -19,13 +19,41 @@
 // (the pixel itself, or its column on the ground row) and the pixel shader receives texel coordinates; GlowTexelSize is one
 // texel in texture coordinates. Where the tile under the read point has no glow, nothing is lit, so the light never spreads
 // past the last tile it reaches.
+//
+// A fade (FadeInwardMode, FadeOutwardMode) is a glow drawn as one quad of the unit rectangle, so the texture coordinate runs
+// 0-1 across it: a pixel's distance to the quad's edge in screen pixels is that coordinate's distance to 0 or 1 over its change
+// per pixel. The draw's colour fades linearly over StyleFlags.w pixels -- full at the start, nothing at the depth: inward from a
+// pixel inside the edge (a window's 1 px border sits on it) to a clear area the depth further in, outward from the rectangle
+// the quad was grown around, which stays clear. Distance to the clear area or the rectangle is Euclidean, so a fade's corners
+// are rounded: outward, its outer edge; inward, the clear area's.
+//
+// Every draw carries a clip rectangle in draw space (ClipRectangle: left, top inclusive; right, bottom exclusive), and the
+// pixel shader discards a pixel outside it -- how a scrolled element clips its content without ending the batch. The vertex
+// shader turns it into four distances from the vertex to its edges, which interpolate exactly across the quad; the pixel
+// shader discards on the nearest (a temporary: MojoShader refuses a discard straight from an input register).
+//
+// The tile overlay (TileOverlayMode, SpriteEffectTileOverlay) is drawn as one quad over a grid of tiles, and each pixel shows
+// its tile's layers instead of a texel: TileOverlayTransform maps draw space to tile coordinates (tile (0,0) spans [0, 1)),
+// and the tile's TileOverlayTexelsPerTile texels, read point-sampled, are its wash, its fills (from the tile's bottom up to
+// their fraction, the top edge anti-aliased over a pixel), its ring (an inward fade, as FadeInwardMode's) and the fractions
+// -- premultiplied, laid over each other in that order.
 
 float4x4 MatrixTransform;
-float VertexVersion = 4;
+float VertexVersion = 7;
 float4 GlowTransform;
 float2 GlowTexelSize;
+float4 TileOverlayTransform;
+float2 TileOverlayTexelSize;
 
 static const float DesaturateMode = 1;
+static const float FadeInwardMode = 2;
+static const float FadeOutwardMode = 3;
+static const float TileOverlayMode = 4;
+static const float TileOverlayTexelsPerTile = 5;
+static const float TileOverlayWashTexel = 0;
+static const float TileOverlayFirstFillTexel = 1;
+static const float TileOverlayRingTexel = 3;
+static const float TileOverlayFractionsTexel = 4;
 static const float NoGlow = 0;
 static const float GlowAtPixel = 1;
 static const float GlowAlongGroundRow = 2;
@@ -46,6 +74,17 @@ sampler GlowSampler : register(s1) = sampler_state
     AddressV = Clamp;
 };
 
+texture TileOverlayTexture;
+sampler TileOverlaySampler : register(s2) = sampler_state
+{
+    Texture = <TileOverlayTexture>;
+    MinFilter = Point;
+    MagFilter = Point;
+    MipFilter = None;
+    AddressU = Clamp;
+    AddressV = Clamp;
+};
+
 struct SpriteVertex
 {
     float4 Position : POSITION0;
@@ -53,6 +92,7 @@ struct SpriteVertex
     float2 TexCoord : TEXCOORD0;
     float4 StyleFlags : TEXCOORD1;
     float GroundRowY : TEXCOORD2;
+    float4 ClipRectangle : TEXCOORD3;
 };
 
 struct ShadedVertex
@@ -60,8 +100,10 @@ struct ShadedVertex
     float4 Position : POSITION0;
     float4 Color : COLOR0;
     float2 TexCoord : TEXCOORD0;
-    float3 Style : TEXCOORD1;
+    float4 Style : TEXCOORD1;
     float2 GlowTexel : TEXCOORD2;
+    float4 ClipDistances : TEXCOORD3;
+    float2 OverlayTile : TEXCOORD4;
 };
 
 bool Is(float flag, float value)
@@ -75,10 +117,12 @@ ShadedVertex TransformSprite(SpriteVertex input)
     output.Position = mul(input.Position, MatrixTransform);
     output.Color = input.Color;
     output.TexCoord = input.TexCoord;
-    output.Style = round(input.StyleFlags.xyz * StyleFlagScale);
+    output.Style = round(input.StyleFlags * StyleFlagScale);
 
     float2 glowReadPoint = float2(input.Position.x, Is(output.Style.y, GlowAlongGroundRow) ? input.GroundRowY : input.Position.y);
     output.GlowTexel = glowReadPoint * GlowTransform.xy + GlowTransform.zw;
+    output.ClipDistances = float4(input.Position.xy - input.ClipRectangle.xy, input.ClipRectangle.zw - input.Position.xy);
+    output.OverlayTile = input.Position.xy * TileOverlayTransform.xy + TileOverlayTransform.zw;
     return output;
 }
 
@@ -116,8 +160,61 @@ float4 OutlineOf(float2 texCoord, float2 texelAcross, float2 texelDown, float al
     return float4(0, 0, 0, 1 - clear);
 }
 
+float InwardFadeAt(float2 pixelsFromEdges, float depthPixels)
+{
+    float pixelsOutsideClearArea = length(max(depthPixels + 1 - pixelsFromEdges, 0));
+    return min(pixelsFromEdges.x, pixelsFromEdges.y) > 1 && pixelsOutsideClearArea > 0 ? saturate((pixelsOutsideClearArea + 0.5) / depthPixels) : 0;
+}
+
+float FadeOf(float2 texCoord, float2 texelAcross, float2 texelDown, float mode, float depthPixels)
+{
+    float2 texCoordPerPixel = float2(length(float2(texelAcross.x, texelDown.x)), length(float2(texelAcross.y, texelDown.y)));
+    float2 pixelsFromEdges = min(texCoord, 1 - texCoord) / max(texCoordPerPixel, 0.000001);
+    if (Is(mode, FadeInwardMode))
+    {
+        return InwardFadeAt(pixelsFromEdges, depthPixels);
+    }
+
+    float pixelsOutsideRectangle = length(max(depthPixels - pixelsFromEdges, 0));
+    return pixelsOutsideRectangle > 0 ? saturate(1 - (pixelsOutsideRectangle - 0.5) / depthPixels) : 0;
+}
+
+float4 TileOverlayTexelAt(float2 tile, float texelIndex)
+{
+    float2 texel = float2(tile.x * TileOverlayTexelsPerTile + texelIndex + 0.5, tile.y + 0.5);
+    return tex2Dlod(TileOverlaySampler, float4(texel * TileOverlayTexelSize, 0, 0));
+}
+
+float4 Over(float4 top, float4 under)
+{
+    return top + under * (1 - top.a);
+}
+
+float4 TileOverlayAt(float2 overlayTile)
+{
+    float2 tile = floor(overlayTile);
+    float2 withinTile = overlayTile - tile;
+    float2 tilePixels = 1 / TileOverlayTransform.xy;
+    float4 fractions = TileOverlayTexelAt(tile, TileOverlayFractionsTexel);
+    float pixelsAboveBottom = (1 - withinTile.y) * tilePixels.y;
+
+    float4 shaded = TileOverlayTexelAt(tile, TileOverlayWashTexel);
+    shaded = Over(TileOverlayTexelAt(tile, TileOverlayFirstFillTexel) * saturate(fractions.x * tilePixels.y - pixelsAboveBottom + 0.5), shaded);
+    shaded = Over(TileOverlayTexelAt(tile, TileOverlayFirstFillTexel + 1) * saturate(fractions.y * tilePixels.y - pixelsAboveBottom + 0.5), shaded);
+
+    float ringDepthPixels = round(fractions.z * StyleFlagScale);
+    if (ringDepthPixels > 0)
+    {
+        shaded = Over(TileOverlayTexelAt(tile, TileOverlayRingTexel) * InwardFadeAt(min(withinTile, 1 - withinTile) * tilePixels, ringDepthPixels), shaded);
+    }
+
+    return shaded;
+}
+
 float4 ShadeSprite(ShadedVertex input) : COLOR0
 {
+    clip(min(min(input.ClipDistances.x, input.ClipDistances.y), min(input.ClipDistances.z, input.ClipDistances.w)));
+
     float2 texelAcross = ddx(input.TexCoord);
     float2 texelDown = ddy(input.TexCoord);
     float4 shaded = tex2D(SpriteSampler, input.TexCoord) * input.Color;
@@ -130,6 +227,14 @@ float4 ShadeSprite(ShadedVertex input) : COLOR0
     if (Is(input.Style.x, DesaturateMode))
     {
         shaded.rgb = dot(shaded.rgb, LuminanceWeights);
+    }
+    else if (Is(input.Style.x, TileOverlayMode))
+    {
+        shaded = TileOverlayAt(input.OverlayTile);
+    }
+    else if (input.Style.x > DesaturateMode + 0.5)
+    {
+        shaded *= FadeOf(input.TexCoord, texelAcross, texelDown, input.Style.x, input.Style.w);
     }
 
     if (!Is(input.Style.y, NoGlow))

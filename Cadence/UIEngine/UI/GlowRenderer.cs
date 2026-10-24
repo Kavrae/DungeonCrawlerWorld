@@ -10,69 +10,39 @@ public enum GlowMode
     /// <summary>A single flat overlay at half the glow color's saturation across the entire bounds -- no rings.</summary>
     InteriorFull,
 
-    /// <summary>Rings fading inward from the border toward the center of bounds.</summary>
+    /// <summary>A fade inward from the border toward the center of bounds.</summary>
     InteriorFade,
 
-    /// <summary>Rings fading outward from the border away from bounds.</summary>
+    /// <summary>A fade outward from the border away from bounds.</summary>
     ExteriorFade,
 }
 
-/// <summary>
-/// Draws a glow around or within a rectangle -- shared by any Window that opts in via SetGlow.
-/// The sprite effect has no gradient mode yet (the unit rectangle is a flat-colour quad, the same
-/// constraint BorderRenderer works within; TODO.md "Shader follow-ups" draws a glow in one quad),
-/// so InteriorFade/ExteriorFade approximate the fade with FadeRingCount concentric
-/// 1px rings, reusing BorderThickness.GetEdgeRectangles the same way BorderRenderer does, against
-/// an inset (InteriorFade) or inflated (ExteriorFade) rectangle.
-/// </summary>
+/// <summary>Draws a glow around or within a rectangle -- shared by any Window that opts in via SetGlow.</summary>
+/// <remarks>Every mode is one quad of the unit rectangle; InteriorFade and ExteriorFade are faded by the sprite effect (SpriteDrawMode.FadeInward/FadeOutward) over FadeRingCount screen pixels, the outward one on bounds grown by that depth.</remarks>
 public static class GlowRenderer
 {
-    /// <summary>How far in pixels InteriorFade/ExteriorFade extend from bounds' own edge (one 1px ring per pixel of depth) -- public so a caller drawing text or other content right up against a glowing rectangle's edge can inset by this same amount and avoid sitting under the fade (see Tooltip.DrawContent's own band-table price column).</summary>
+    /// <summary>How far in pixels InteriorFade/ExteriorFade extend from bounds' own edge -- public so a caller drawing text or other content right up against a glowing rectangle's edge can inset by this same amount and avoid sitting under the fade (see Tooltip.DrawContent's own band-table price column).</summary>
     public const int FadeRingCount = 5;
 
-    private const float FadeMaximumAlpha = 0.5f;
+    /// <summary>The glow colour's alpha at its strongest -- public so something drawing the same glow another way (the map's tile overlay ring) matches it.</summary>
+    public const float FadeMaximumAlpha = 0.5f;
 
     public static void Draw<TTarget>(TTarget target, Texture2D unitRectangle, Rectangle bounds, Color glowColor, GlowMode mode = GlowMode.ExteriorFade, float alphaMultiplier = 1f, SpriteDrawStyle style = default)
         where TTarget : ISpriteDrawTarget
     {
+        var color = glowColor * (FadeMaximumAlpha * alphaMultiplier);
         switch (mode)
         {
             case GlowMode.InteriorFull:
-                target.Draw(unitRectangle, bounds, null, glowColor * (FadeMaximumAlpha * alphaMultiplier), style);
+                target.Draw(unitRectangle, bounds, null, color, style);
                 break;
             case GlowMode.InteriorFade:
-                DrawFadeRings(target, unitRectangle, bounds, glowColor, alphaMultiplier, inward: true, style);
+                target.Draw(unitRectangle, bounds, null, color, style.WithFade(SpriteDrawMode.FadeInward, FadeRingCount));
                 break;
             case GlowMode.ExteriorFade:
-                DrawFadeRings(target, unitRectangle, bounds, glowColor, alphaMultiplier, inward: false, style);
+                var grownBounds = new Rectangle(bounds.X - FadeRingCount, bounds.Y - FadeRingCount, bounds.Width + FadeRingCount * 2, bounds.Height + FadeRingCount * 2);
+                target.Draw(unitRectangle, grownBounds, null, color, style.WithFade(SpriteDrawMode.FadeOutward, FadeRingCount));
                 break;
-        }
-    }
-
-    // ringIndex=1 (closest to the border) -> FadeMaximumAlpha, and the falloff continues linearly
-    // such that a hypothetical ring FadeRingCount+1 would land exactly on 0.
-    private static float RingAlpha(int ringIndex) => FadeMaximumAlpha * (1f - (ringIndex - 1) / (float)FadeRingCount);
-
-    private static void DrawFadeRings<TTarget>(TTarget target, Texture2D unitRectangle, Rectangle bounds, Color glowColor, float alphaMultiplier, bool inward, SpriteDrawStyle style)
-        where TTarget : ISpriteDrawTarget
-    {
-        for (var ringIndex = 1; ringIndex <= FadeRingCount; ringIndex++)
-        {
-            var ringBounds = inward
-                ? BorderThickness.Inset(bounds, BorderThickness.Uniform(new Vector2(ringIndex, ringIndex)))
-                : new Rectangle(
-                    bounds.X - ringIndex,
-                    bounds.Y - ringIndex,
-                    bounds.Width + ringIndex * 2,
-                    bounds.Height + ringIndex * 2);
-
-            var ringColor = glowColor * (RingAlpha(ringIndex) * alphaMultiplier);
-
-            var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(ringBounds, BorderThickness.Uniform(Vector2.One));
-            target.Draw(unitRectangle, top, null, ringColor, style);
-            target.Draw(unitRectangle, bottom, null, ringColor, style);
-            target.Draw(unitRectangle, left, null, ringColor, style);
-            target.Draw(unitRectangle, right, null, ringColor, style);
         }
     }
 }

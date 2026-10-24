@@ -161,7 +161,7 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
 ### Enemy Attack Indicator + follow-up combat/performance work
 
 The charge-fill indicator: TODO.md's own top-priority
-"Enemy Attack Indicator" -- a bottom-up per-tile fill (`UIEngine/Rendering/TileFillRenderer.cs`)
+"Enemy Attack Indicator" -- a bottom-up per-tile fill (since plan 7.3 a fill layer of the map's tile overlay, `MapOverlayTexels`)
 showing a Delayed action's windup progress (0% at charge start -> 100% at activation), layered over
 the existing flat telegraph wash from Combat Overhaul: Dodge above. Two further fixes landed
 alongside it, found while chasing the framerate regressions that surfaced during that work:
@@ -2867,8 +2867,9 @@ FontStashSharp; Presentation, the exe and Tests reference it.
 ### The sprite effect: shaders, SpriteEffectBatch, the gradient glow and outlined map text
 
 Landed 2026-10-22 (`PLAN-shaders-and-sprites-tab.md`, child 7 of `EPIC-sprites-ui-engine-and-dev-tools.md`, Phases 0-4);
-the whole UI moved onto it 2026-10-23 (`PLAN-ui-on-the-sprite-effect.md`, 7.2). Everything draws through one shader of
-UIEngine's own, in one pass; nothing in the UI uses `SpriteBatch`.
+the whole UI moved onto it 2026-10-23 (`PLAN-ui-on-the-sprite-effect.md`, 7.2); glows, clipping and the map's targeting
+overlay moved into it 2026-10-23/24 (`PLAN-shader-follow-ups.md`, 7.3). Everything draws through one shader of UIEngine's
+own, in one pass; nothing in the UI uses `SpriteBatch`, and nothing ends the pass to scroll or clip.
 
 - **Compiling shaders.** FNA (FNA.NET 2.1.2, FNA 25.06, SDL3 GPU) loads D3D9 `fx_2_0` effect binaries, which only the Windows
   SDK's `fxc` compiles (MonoGame's `mgcb` output can't be loaded; its tools were removed). `Cadence/UIEngine/Shaders/*.fx` are
@@ -2881,7 +2882,7 @@ UIEngine's own, in one pass; nothing in the UI uses `SpriteBatch`.
 - **Where the shader lives.** The core sprite effect (`SpriteUber.fx`) is embedded in UIEngine.dll: it is half of a contract
   whose other half is the vertex layout, so they are built together and any Cadence game gets it with no content step. Game
   and mod effects load from content (`SpriteEffectService.Load`, `Content/Effects/*.fxb`). A content `SpriteUber.fxb`
-  replaces the embedded one only if its `VertexVersion` parameter equals `SpriteEffectVertex.Version` (3 today); otherwise
+  replaces the embedded one only if its `VertexVersion` parameter equals `SpriteEffectVertex.Version` (7 today); otherwise
   one `Console.Error` line names the file and both versions.
 - **A batcher of our own, not packed colours.** `SpriteBatch`'s vertex is one RGBA8 colour, too small for tint, alpha and the
   per-sprite settings, so the map draws through `SpriteEffectBatch`: deferred quads in call order, flushed per texture run as
@@ -2895,7 +2896,7 @@ UIEngine's own, in one pass; nothing in the UI uses `SpriteBatch`.
   lower window's text over the window above it. Mainstream engines don't separate text at all (Unity's canvas, Unreal's
   Slate, Godot, Dear ImGui: one shader for sprites and text, order from submission, batching that never changes what is on
   top), so the UI's pass became the batch: `UiRenderService.BeginFrame`/`EndFrame` bracket the frame, `Batch` is the only
-  batch, and `PushRenderState`/`PopRenderState` end and begin it as they did the `SpriteBatch` (`SpriteBatchRenderer`,
+  batch, and `PushRenderState`/`PopRenderState` ended and began it as they did the `SpriteBatch` until 7.3 (`SpriteBatchRenderer`,
   `SpriteBatchDrawTarget` and `ContrastTextRenderer.DrawCopies` are gone). `SpriteDrawTargetExtensions` gives any
   `ISpriteDrawTarget` `SpriteBatch`'s `Draw`/`DrawString` shapes with an optional style, so the conversion was a type change
   at each call site; the helpers stay generic over the target so tests can record draws. The map sets the batch's `Glow`,
@@ -2955,6 +2956,44 @@ UIEngine's own, in one pass; nothing in the UI uses `SpriteBatch`.
   matches the nine within 2/255 on all three backends at 12-36 px and faded. 300 outlined labels: 0.063 ms against 0.277.
   Since 7.2 every outlined string in the UI is drawn this way (`ContrastTextRenderer.Draw` hands it to the target's
   `DrawOutlinedString`); the nine copies are gone.
+- **Pixel-exact is not a goal** (7.3, the user's rule): when drawing moves into the shader, a faster or smoother look wins
+  over matching the old quads, as long as it tells the player the same thing.
+- **A glow is one quad** (7.3 Phase 1). `GlowRenderer`'s `InteriorFade`/`ExteriorFade` were five 1 px rectangular rings of
+  four edge rectangles each (20 quads; 40 for the double glows on attention and compare-eligible cells). They are now one
+  quad of the unit rectangle in `SpriteDrawMode.FadeInward`/`FadeOutward`, the depth (`FadeRingCount`, 5) in the vertex's
+  spare style byte: the shader finds each pixel's distance to the edge from the texture coordinate over its `ddx`/`ddy` and
+  fades linearly from `FadeMaximumAlpha` to nothing -- the rings' alphas at every pixel centre at 1:1. Inward leaves the
+  first pixel clear (a window's 1 px border sits there), as the rings did. Corners were tried rounded and kept: the
+  distance to the clear area (inward) or the rectangle (outward) is Euclidean.
+- **Clipping is per quad, not a pass** (7.3 Phase 2). Every scrollable element used to end and restart the batch up to
+  four times (a viewport and transform around its content, a scissor around its children). Now each quad carries a clip
+  rectangle (`SpriteEffectClipRectangle`, four shorts; vertex 36 bytes) and the shader discards outside it, and the batch
+  holds a `DrawOffset` added to positions as they are queued -- `CameraTransform` was only ever a translation. So
+  `UiRenderService.RenderState` is `(DrawOffset, ClipRectangle?)`, push and pop set them on the batch without ending it,
+  and the device's viewport and scissor are the screen's all frame. A quad wholly outside its clip is never queued. A glow
+  or tile overlay is placed in the draw space it was set in, so changing the offset while one is set flushes first.
+  **MojoShader refuses `texkill` straight from an input register** (`clip(input.ClipDistances)` compiled under `fxc` and
+  crashed the game at load); the shader discards on a computed minimum. No test loads the effect, so a shader change is
+  only proven by running the game -- the windowed benchmark caught this one.
+- **The map's targeting overlay is one quad** (7.3 Phase 3). `MapGameOverlay` drew a wash per tile, a backdrop and a fill
+  per telegraphed tile, and the selection ring's 20 quads per selected tile. It now writes each tile's layers into
+  `MapOverlayTexels` -- five texels a tile (`SpriteEffectTileOverlay`): a wash (every flat wash and charge backdrop
+  composited in order), two fills (the two nearest to resolving, larger first), a ring, and the fractions -- uploads them
+  and draws one quad in `SpriteDrawMode.TileOverlay`, whose pixels read their tile's texels point-sampled and lay them
+  over each other; a fill's top edge is anti-aliased over a pixel and the ring is `FadeInward`'s. **Uploading one texture
+  every frame stalled the CPU** (map draw +73% in a matched pair): the GPU may still be reading it from the frame before.
+  Rotating through three (`TexturesInFlight`) removed it -- the rule for any texture written every frame.
+- **What 7.3 measured** (windowed Release, three interleaved pairs per phase against a saved build of the phase before):
+  every phase level in the default view, which has few glows, scrollable windows or telegraphs; the headless `-Compare`
+  simulated the same world each time. The gains are in the cases the default view doesn't show (an inventory full of
+  compare glows, a long scrolled tab, a crowd of telegraphs), checked by eye.
+- **No tilemap shader** (7.3 Phase 4). Rebuilding the cached terrain image on a camera step (a probe scrolling one tile
+  every 10 frames, then reverted): 0.6-0.9 ms at the default zoom (worst 2.5), 1.7-2.2 ms at Neighborhood (worst 5),
+  5.6-6.7 ms at Borough (worst 14). A per-tile lookup shader can't take sprites reaching two tiles past their own, faces and
+  tops, and live overhangs without becoming a second renderer; scrolling the cached image and redrawing only the exposed
+  strip would be the fix if one were needed. None is: Borough is a stand-in for a mini-map that will draw a simplified map
+  of its own, Neighborhood will become zoom for aiming long-ranged actions that snaps back, and the player-triggered zooms
+  go when the mini-map comes.
 
 ### The Workshop Sprites tab (read-only)
 

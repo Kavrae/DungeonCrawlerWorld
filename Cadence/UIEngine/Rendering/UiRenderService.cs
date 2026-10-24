@@ -3,7 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace UIEngine.Rendering;
 
-/// <summary>What everything in the UI draws with: the device, the one SpriteEffectBatch, the unit rectangle, and the render-state stack that nested passes push and pop.</summary>
+/// <summary>What everything in the UI draws with: the device, the one SpriteEffectBatch, the unit rectangle, and the render-state stack that scrolled and clipped content pushes and pops.</summary>
 /// <remarks>
 /// <para>
 /// One per host, built by UiEngineBootstrapper and filled once by Initialize from the host's LoadContent; until then (and in a
@@ -12,20 +12,23 @@ namespace UIEngine.Rendering;
 /// </para>
 /// <para>
 /// The whole UI is one pass through the sprite effect, in call order: BeginFrame starts it each frame and EndFrame draws what is
-/// left; a scrollable element pushes a pass with its own viewport or scissor and pops back to exactly what it inherited. Sprites
-/// and text share it, so outlined text is two quads a glyph in its place, and the map lights its own draws by setting the
-/// batch's Glow and clearing it.
+/// left; a scrollable element pushes the offset its content is drawn at and the rectangle it is clipped to, and pops back to
+/// exactly what it inherited -- neither ends the pass (SpriteEffectBatch.DrawOffset, ClipRectangle). Sprites and text share
+/// it, so outlined text is two quads a glyph in its place, and the map lights its own draws by setting the batch's Glow and
+/// clearing it.
 /// </para>
 /// </remarks>
 public sealed class UiRenderService
 {
-    /// <summary>
-    /// What a pass begins with that the UI varies -- the sampler, the rasterizer (its scissor clip) and the transform -- plus
-    /// the two GraphicsDevice properties Element.Draw's scoped passes also swap (Viewport, ScissorRectangle): everything a
-    /// nested pass needs to hand back the exact ambient state it inherited once its own scope ends, rather than resetting to
-    /// some hardcoded default. See PushRenderState/PopRenderState.
-    /// </summary>
-    public readonly record struct RenderState(SamplerState SamplerState, RasterizerState? RasterizerState, Matrix TransformMatrix, Viewport Viewport, Rectangle ScissorRectangle);
+    /// <summary>What a nested scope draws under: the offset added to its positions and the rectangle it may show in (null for anywhere), in screen pixels.</summary>
+    public readonly record struct RenderState(Vector2 DrawOffset, Rectangle? ClipRectangle)
+    {
+        public static RenderState Root => new(Vector2.Zero, null);
+
+        /// <summary>This state clipped to rectangle as well -- the intersection with any clip already in force, so a nested scope never shows outside its ancestors.</summary>
+        public RenderState ClippedTo(Rectangle rectangle) =>
+            this with { ClipRectangle = ClipRectangle is { } inherited ? Rectangle.Intersect(inherited, rectangle) : rectangle };
+    }
 
     private readonly Stack<RenderState> _renderStateStack = new();
     private RenderState _currentRenderState;
@@ -37,13 +40,7 @@ public sealed class UiRenderService
 
     public Texture2D UnitRectangle { get; private set; } = null!;
 
-    /// <summary>
-    /// Currently-active ambient render state. Element.Draw's own scoped passes only ever compose
-    /// a new RenderState off this one (via `with`, overriding just the field(s) that pass cares
-    /// about) rather than constructing one from scratch -- see Draw's two RequiresContentViewport
-    /// blocks -- so anything they don't explicitly touch keeps flowing through unchanged no
-    /// matter how deep the nesting.
-    /// </summary>
+    /// <summary>The state draws are under now; Element.Draw composes each scope's from it (ClippedTo, a new DrawOffset).</summary>
     public RenderState CurrentRenderState => _currentRenderState;
 
     /// <summary>Captures the device and what draws with it -- called once, from the host's LoadContent, after all of them exist.</summary>
@@ -54,44 +51,35 @@ public sealed class UiRenderService
         UnitRectangle = unitRectangle;
     }
 
-    /// <summary>Begins the frame's pass under the root state -- point sampling, no clip or transform, the device's viewport -- which every nested Push/PopRenderState ultimately unwinds back to. Called once per frame, from the host's Draw.</summary>
+    /// <summary>Begins the frame's pass under the root state -- no offset, no clip -- which every nested Push/PopRenderState unwinds back to. Called once per frame, from the host's Draw.</summary>
     public void BeginFrame()
     {
         _renderStateStack.Clear();
-        _currentRenderState = new RenderState(SamplerState.PointClamp, null, Matrix.Identity, GraphicsDevice.Viewport, GraphicsDevice.ScissorRectangle);
-        ApplyCurrentRenderState();
+        _currentRenderState = RenderState.Root;
+        Batch.Begin();
     }
 
     /// <summary>Draws what the frame's pass still holds. Pairs with BeginFrame.</summary>
     public void EndFrame() => Batch.End();
 
-    /// <summary>
-    /// Ends the current pass, saves its state, and begins a new one with newState.
-    /// Pairs with PopRenderState, which every caller must invoke exactly once for each
-    /// PushRenderState (see Element.Draw's two RequiresContentViewport blocks, the only caller).
-    /// Pop restores the exact prior state, not a plain Begin, so a nested scrollable Element hands
-    /// back whatever RasterizerState/TransformMatrix/SamplerState its ancestor's pass had active.
-    /// </summary>
+    /// <summary>Saves the current state and draws under newState until the matching PopRenderState, which every caller invokes exactly once for each push (Element.Draw's two RequiresContentViewport blocks).</summary>
     public void PushRenderState(RenderState newState)
     {
-        Batch.End();
         _renderStateStack.Push(_currentRenderState);
         _currentRenderState = newState;
         ApplyCurrentRenderState();
     }
 
-    /// <summary>See PushRenderState.</summary>
+    /// <summary>Returns to exactly the state the matching PushRenderState saved.</summary>
     public void PopRenderState()
     {
-        Batch.End();
         _currentRenderState = _renderStateStack.Pop();
         ApplyCurrentRenderState();
     }
 
     private void ApplyCurrentRenderState()
     {
-        GraphicsDevice.Viewport = _currentRenderState.Viewport;
-        GraphicsDevice.ScissorRectangle = _currentRenderState.ScissorRectangle;
-        Batch.Begin(_currentRenderState.SamplerState, _currentRenderState.RasterizerState, _currentRenderState.TransformMatrix);
+        Batch.DrawOffset = _currentRenderState.DrawOffset;
+        Batch.ClipRectangle = _currentRenderState.ClipRectangle;
     }
 }

@@ -146,37 +146,6 @@ authored. This is the editing half of its plan's former Phases 5 and 6. The read
   the Items tab's icon without restarting; undo a fill-empty-slots in one step; quit with unsaved changes and be asked;
   build and run with the WinForms project gone.
 
-#### Shader follow-ups: glow rings, a per-tile targeting overlay, clipping, tilemap terrain
-
-Plan 7.3, next. Unblocked: epic child 7 (landed 2026-10-22) brought the sprite effect, `SpriteDrawStyle` and
-`SpriteEffectBatch` (a batcher of our own whose vertex carries a style field) and moved the aura glow onto a per-tile
-texture the effect samples, and 7.2 (`PLAN-ui-on-the-sprite-effect.md`, 2026-10-23) made the batch the whole UI's one pass
--- every window draws through the effect, and no `SpriteBatch` is left. These are the places the game still draws by hand
-what other engines draw with shaders. Each is its own phase, tested in-game and benchmarked windowed at a busy zoom (the
-headless benchmark draws nothing), against a saved build of the commit before (IMPLEMENTATION-NOTES "Measuring draw").
-- **Glow rings in one draw.** `GlowRenderer`'s `InteriorFade`/`ExteriorFade` draw `FadeRingCount` (5) rings of 1 px
-  rectangles -- about 20 draws per glow -- for the selected tile, the followed entity, a dodging entity, tooltips and
-  windows. A glow mode draws one quad and fades by distance to the rectangle's edge in the shader (as Godot's style-box
-  shadows and Unity UI effects do), keeping `FadeMaximumAlpha`'s look; `FadeRingCount` stays the fade's depth in pixels,
-  since callers inset content by it. Every window already draws through the effect, so it is a new `SpriteDrawMode` (or
-  a style flag) on the batch, no pass of its own.
-- **A per-tile targeting overlay.** `MapGameOverlay` draws a translucent rectangle per tile per frame for targeting masks,
-  the charge fill and windup telegraphs, and rings per tile for the selected-tile glow. Write them into a per-tile texture
-  like the aura glow's (more channels, or a second texture of the same kind) and let the effect draw them, so everything
-  shown "on tiles" is one mechanism with almost no draws. The charge fill (a fraction of a tile) and masked borders need a
-  shape per tile, not only a colour; keep what is drawn exactly as it is now.
-- **Clipping in the shader.** `UiRenderService.PushRenderState`/`PopRenderState` end and restart the batch for every
-  scrollable element to change the scissor rectangle. Unity UI's `RectMask2D` clips in the shader instead, so clipping
-  never breaks a batch: a clip rectangle per vertex (`SpriteEffectVertex` gains it, and a new `Version`), discarded
-  outside. Windows already draw through `SpriteEffectBatch` (7.2), so nothing else has to move first. Measure draw calls
-  and frame cost in busy windows (inventory with many tabs, Item Details, the Workshop's tabs) before and after; keep the
-  scissor for the viewport/transform pushes a scrolled element still needs.
-- **Research: tilemap terrain in a shader.** The terrain image is re-rendered on every whole-tile scroll (`MapImageKey`),
-  so a camera following the player rebuilds it each step. A tilemap shader draws a layer as one quad that looks each tile's
-  sprite up from a tile-id texture, making a scroll free. First measure the rebuild's cost per scroll at busy zooms; only if
-  it shows as hitches, research how variants (cell seeds), linked walls (`MapWallPlan`, join masks), tops and overhangs,
-  turned and flipped cells, and sprites reaching past their tile fit a lookup -- and decide whether to build it.
-
 #### Aura glow clarity: an FFXIV-style aura look, or a soft bleed with a highlight line; lights as their own effect
 
 Today the glow stops hard at the last tile an aura reaches: `SpriteUber.fx`'s `GlowAt` lights nothing whose own tile has no
@@ -2452,7 +2421,7 @@ Health window also closes the others, and that Close leaves the rest open.
 
 #### Replace the text outline with SDF glyphs and an outline shader
 
-Plan 7.3. Every outlined string in the UI -- map glyphs, hotbar and HUD numbers, floating text, the targeting overlay,
+Epic child 7, after 7.3 (`PLAN-shader-follow-ups.md` Decision 8 left it out). Every outlined string in the UI -- map glyphs, hotbar and HUD numbers, floating text, the targeting overlay,
 windows -- draws through the sprite effect in two quads a glyph (an outline layer, then the fill -- IMPLEMENTATION-NOTES
 "The sprite effect"; the nine-copy outline went in 7.2), from FontStashSharp's bitmap atlas. What is left is scaling:
 glyphs from a signed distance
@@ -2468,8 +2437,11 @@ alpha as parameters). A distance field also stays sharp when scaled, so one atla
   style on `SpriteUber.fx`, or a game effect from content.
 - **Batching and order.** All text already shares the UI's one batch with sprites (`SpriteEffectBatch`, 7.2). The atlas
   wants linear sampling where every pass here uses `SamplerState.PointClamp`.
-- **The look.** The outline is a hard 1 px pixel-art edge today; the shader's edge must match it (no soft
-  falloff unless chosen), at every font size drawn.
+- **The look.** The outline is a hard 1 px pixel-art edge today. The shader's edge needn't match it pixel for pixel
+  (`PLAN-shader-follow-ups.md` Decision 9): it must read at least as clearly at every font size drawn, with its
+  thickness and softness chosen by eye at the smallest sizes (the 12 px hotbar numbers) -- a slightly thicker,
+  anti-aliased or size-scaled outline is fine. Keep the outline under the fill across a whole string (neighbouring
+  glyphs' outlines never cover a fill), which is a legibility rule, not a look.
 - Decide whether plain, unoutlined text moves to the same path.
 
 Try it on the map glyphs first and compare with the two-quad outline for look and frame cost (benchmark at a busy zoom)

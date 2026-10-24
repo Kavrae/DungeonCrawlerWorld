@@ -23,6 +23,10 @@ public readonly record struct SpriteEffectGlow(Texture2D? Texture, Vector4 Trans
     public static Vector4 TransformFor(Point tileSize, Vector2 gridOrigin, int marginTiles) =>
         new(1f / tileSize.X, 1f / tileSize.Y, marginTiles - gridOrigin.X / tileSize.X, marginTiles - gridOrigin.Y / tileSize.Y);
 
+    /// <summary>transform for positions moved by drawOffset (SpriteEffectBatch.DrawOffset): a moved position reads the texel its unmoved one did.</summary>
+    public static Vector4 TransformAfterOffset(Vector4 transform, Vector2 drawOffset) =>
+        new(transform.X, transform.Y, transform.Z - drawOffset.X * transform.X, transform.W - drawOffset.Y * transform.Y);
+
     /// <summary>The texel coordinates transform maps drawPosition to -- what the effect reads at -- texel k spanning [k, k + 1).</summary>
     public static Vector2 TexelPositionOf(Vector4 transform, Vector2 drawPosition) =>
         new(drawPosition.X * transform.X + transform.Z, drawPosition.Y * transform.Y + transform.W);

@@ -82,6 +82,24 @@ public sealed class SpriteEffectServiceTests
     }
 
     [TestMethod]
+    [DataRow("TileOverlayTexelsPerTile", SpriteEffectTileOverlay.TexelsPerTile)]
+    [DataRow("TileOverlayWashTexel", SpriteEffectTileOverlay.WashTexel)]
+    [DataRow("TileOverlayFirstFillTexel", SpriteEffectTileOverlay.FirstFillTexel)]
+    [DataRow("TileOverlayRingTexel", SpriteEffectTileOverlay.RingTexel)]
+    [DataRow("TileOverlayFractionsTexel", SpriteEffectTileOverlay.FractionsTexel)]
+    public void Shader_DeclaresTheTileOverlayLayoutWithItsValues(string constant, int expected)
+    {
+        var match = Regex.Match(File.ReadAllText(ShaderPath("SpriteUber.fx")), $@"static\s+const\s+float\s+{constant}\s*=\s*([0-9.]+)\s*;");
+
+        Assert.IsTrue(match.Success, $"SpriteUber.fx declares no {constant}.");
+        Assert.AreEqual(expected, float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture));
+    }
+
+    [TestMethod]
+    public void TileOverlay_HoldsTwoFillsBetweenTheWashAndTheRing() =>
+        Assert.AreEqual(SpriteEffectTileOverlay.RingTexel, SpriteEffectTileOverlay.FirstFillTexel + SpriteEffectTileOverlay.FillsPerTile);
+
+    [TestMethod]
     public void Shader_DeclaresTheOutlineLayerWithItsValue()
     {
         var match = Regex.Match(File.ReadAllText(ShaderPath("SpriteUber.fx")), @"static\s+const\s+float\s+OutlineOnly\s*=\s*([0-9.]+)\s*;");
@@ -98,6 +116,14 @@ public sealed class SpriteEffectServiceTests
         Assert.AreEqual(new SpriteEffectVertexStyle((byte)SpriteDrawMode.Desaturate, (byte)SpriteGlow.AlongGroundRow, 0, 0, 123.5f), style.ToVertexStyle());
         Assert.AreEqual(SpriteGlow.AtPixel, style.WithGlowAtPixel().Glow);
         Assert.AreEqual(0f, style.WithGlowAtPixel().GroundRowY);
+    }
+
+    [TestMethod]
+    public void DrawStyle_WritesAFadesModeAndDepthIntoTheVertex()
+    {
+        var style = SpriteDrawStyle.Plain.WithGlowAtPixel().WithFade(SpriteDrawMode.FadeOutward, 5);
+
+        Assert.AreEqual(new SpriteEffectVertexStyle((byte)SpriteDrawMode.FadeOutward, (byte)SpriteGlow.AtPixel, 0, 5, 0f), style.ToVertexStyle());
     }
 
     [TestMethod]

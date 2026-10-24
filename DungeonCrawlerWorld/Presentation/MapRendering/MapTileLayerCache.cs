@@ -109,10 +109,7 @@ public sealed class MapTileLayerCache : IDisposable
         _graphicsDevice.SetRenderTarget(_target);
         _graphicsDevice.Clear(_backgroundColor);
 
-        // Mirrors UiRenderService.BeginFrame's root state -- PointClamp in
-        // particular, since every glyph here comes from a font atlas that crops under linear
-        // sampling (see LabelRenderer's own note on point sampling and fractional positions).
-        batch.Begin(SamplerState.PointClamp, null, Matrix.Identity);
+        batch.Begin();
         drawTiles(batch, key);
         batch.End();
 

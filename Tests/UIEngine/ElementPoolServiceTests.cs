@@ -72,4 +72,23 @@ public sealed class ElementPoolServiceTests
         var second = pool.CreateElement<Window>(null, FixedOptions());
         Assert.AreNotSame(first, second);
     }
+
+    [TestMethod]
+    public void Close_ReachedAgainFromItsOwnClosedHandler_NeverPoolsAWindowRentedInThatHandler()
+    {
+        var pool = TestElementPoolServiceFactory.Create(TestFonts.Shared);
+        var closingWindow = pool.CreateElement<Window>(null, FixedOptions());
+        Window? replacementWindow = null;
+        closingWindow.Closed += closed =>
+        {
+            closed.Close();
+            replacementWindow = pool.CreateElement<Window>(null, FixedOptions());
+        };
+
+        closingWindow.Close();
+
+        Assert.IsNotNull(replacementWindow);
+        Assert.IsTrue(replacementWindow.IsVisible, "The window rented while the first was closing must still be live after that close finishes.");
+        Assert.AreNotSame(replacementWindow, pool.CreateElement<Window>(null, FixedOptions()), "The live replacement must not have been returned to the pool.");
+    }
 }

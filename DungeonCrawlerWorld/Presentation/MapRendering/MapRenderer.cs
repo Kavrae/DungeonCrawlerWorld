@@ -203,8 +203,8 @@ public sealed class MapRenderer : IDisposable
 
     /// <summary>Draws one frame of the map: the flat fill, the ground, the walls' tops, then the row walk -- lit by the auras' glow.</summary>
     /// <remarks>
-    /// Drawn into the UI's one pass (UiRenderService.Batch), in its place among the windows and under their viewport, scissor
-    /// and transform: the map sets the batch's Glow for its own draws and clears it after, which ends the run, so nothing
+    /// Drawn into the UI's one pass (UiRenderService.Batch), in its place among the windows and under their draw offset
+    /// and clip: the map sets the batch's Glow for its own draws and clears it after, which ends the run, so nothing
     /// drawn before or after reads the map's light. The ground and the tops are
     /// blitted from their cached images when those match what the camera shows, and drawn directly otherwise (the frame or two
     /// before the first render, a camera moved since Update) -- the same pixels at the old cost.

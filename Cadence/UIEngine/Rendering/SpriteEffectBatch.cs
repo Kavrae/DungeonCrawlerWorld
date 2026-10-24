@@ -15,8 +15,12 @@ namespace UIEngine.Rendering;
 /// <para>
 /// Strings reach it through FontStashSharp's IFontStashRenderer, one sprite per glyph -- the route FontStashSharp's own
 /// SpriteBatch drawing takes, measured faster than its quad-level IFontStashRenderer2 -- so text stays in the same order as
-/// everything around it. Positions are mapped by an orthographic projection of the viewport at End, after the Begin's
-/// transform -- SpriteBatch's own mapping.
+/// everything around it. Positions are moved by DrawOffset as they are queued and mapped by an orthographic projection of the
+/// viewport at End -- SpriteBatch's own mapping, with a translation for its transform.
+/// </para>
+/// <para>
+/// Scrolling and clipping never end a run: DrawOffset and ClipRectangle are taken by each quad as it is queued (the clip in
+/// its vertices, for the effect to discard by), so a scrolled list nested in a window draws in the same run as the window.
 /// </para>
 /// <para>
 /// Outlined text is two draws per glyph, not ContrastTextRenderer's nine, in the nine's order: the whole string's outline
@@ -33,9 +37,12 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
     private readonly EffectParameter _glowTexture;
     private readonly EffectParameter _glowTransform;
     private readonly EffectParameter _glowTexelSize;
+    private readonly EffectParameter _tileOverlayTexture;
+    private readonly EffectParameter _tileOverlayTransform;
+    private readonly EffectParameter _tileOverlayTexelSize;
     private readonly EffectPass _pass;
 
-    /// <summary>One transparent texel: what lit draws read when the batch has no glow, so they come out unlit.</summary>
+    /// <summary>One transparent texel: what lit draws read when the batch has no glow, so they come out unlit, and what a tile overlay draw reads with no overlay.</summary>
     private readonly Texture2D _noGlowTexture;
     private readonly DynamicVertexBuffer _vertexBuffer;
     private readonly IndexBuffer _indexBuffer;
@@ -45,10 +52,14 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
     private int _quadCount;
 
     private bool _isDrawing;
-    private SamplerState _samplerState = SamplerState.PointClamp;
-    private RasterizerState _rasterizerState = RasterizerState.CullCounterClockwise;
-    private Matrix _transformMatrix = Matrix.Identity;
     private SpriteEffectGlow _glow;
+    private SpriteEffectTileOverlay _tileOverlay;
+
+    /// <summary>The DrawOffset in force when Glow or TileOverlay was set (or the offset last changed while one was): their transforms were given in draw space before it.</summary>
+    private Vector2 _placementDrawOffset;
+    private Vector2 _drawOffset;
+    private Rectangle? _clipRectangle;
+    private SpriteEffectClipRectangle _vertexClip = SpriteEffectClipRectangle.None;
 
     /// <summary>The style IFontStashRenderer.Draw gives the glyphs of the string DrawString or DrawOutlinedString is drawing.</summary>
     private SpriteDrawStyle _textStyle;
@@ -60,6 +71,9 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
         _glowTexture = spriteEffect.Parameters["GlowTexture"];
         _glowTransform = spriteEffect.Parameters["GlowTransform"];
         _glowTexelSize = spriteEffect.Parameters["GlowTexelSize"];
+        _tileOverlayTexture = spriteEffect.Parameters["TileOverlayTexture"];
+        _tileOverlayTransform = spriteEffect.Parameters["TileOverlayTransform"];
+        _tileOverlayTexelSize = spriteEffect.Parameters["TileOverlayTexelSize"];
         _pass = spriteEffect.CurrentTechnique.Passes[0];
         _noGlowTexture = new Texture2D(graphicsDevice, 1, 1);
         _noGlowTexture.SetData([Color.Transparent]);
@@ -71,7 +85,7 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
     public GraphicsDevice GraphicsDevice { get; }
 
     /// <summary>The light the lit draws read; None (unlit) from each Begin until set.</summary>
-    /// <remarks>Setting a different glow ends the run: the quads queued before it are drawn under the glow they were queued with, so a pass can light one part (the map) and leave the rest unlit.</remarks>
+    /// <remarks>Setting a different glow ends the run: the quads queued before it are drawn under the glow they were queued with, so a pass can light one part (the map) and leave the rest unlit. Its transform is in draw space as the caller sees it, before DrawOffset.</remarks>
     public SpriteEffectGlow Glow
     {
         get => _glow;
@@ -84,13 +98,65 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
 
             Flush();
             _glow = value;
+            _placementDrawOffset = _drawOffset;
         }
     }
 
-    /// <param name="rasterizerState">Null for SpriteBatch's default (CullCounterClockwise); a scissor-clipping state to clip.</param>
-    /// <param name="transformMatrix">Applied to every position before the viewport's projection, as SpriteBatch.Begin's.</param>
+    /// <summary>What TileOverlay draws read; None from each Begin until set.</summary>
+    /// <remarks>Setting a different overlay ends the run, as Glow does. Its transform is in draw space as the caller sees it, before DrawOffset.</remarks>
+    public SpriteEffectTileOverlay TileOverlay
+    {
+        get => _tileOverlay;
+        set
+        {
+            if (value == _tileOverlay)
+            {
+                return;
+            }
+
+            Flush();
+            _tileOverlay = value;
+            _placementDrawOffset = _drawOffset;
+        }
+    }
+
+    /// <summary>Added to every position drawn from now on: how a scrolled element's content, drawn in its own coordinates, lands on screen. Zero from each Begin.</summary>
+    /// <remarks>Changing it draws nothing, except while a glow or tile overlay is set: each is placed in the draw space it was set in, so the quads queued before the change are drawn first.</remarks>
+    public Vector2 DrawOffset
+    {
+        get => _drawOffset;
+        set
+        {
+            if (value == _drawOffset)
+            {
+                return;
+            }
+
+            if (_glow.Texture is not null || _tileOverlay.Texture is not null)
+            {
+                Flush();
+                _placementDrawOffset = value;
+            }
+
+            _drawOffset = value;
+        }
+    }
+
+    /// <summary>Where everything drawn from now on may show, in screen pixels (draw space after DrawOffset); null for anywhere. Null from each Begin.</summary>
+    /// <remarks>Each quad carries it and the effect discards what falls outside, so changing it never ends a run; a quad wholly outside is not queued at all.</remarks>
+    public Rectangle? ClipRectangle
+    {
+        get => _clipRectangle;
+        set
+        {
+            _clipRectangle = value;
+            _vertexClip = value is { } rectangle ? SpriteEffectClipRectangle.From(rectangle) : SpriteEffectClipRectangle.None;
+        }
+    }
+
+    /// <summary>Opens a pass: point sampling, no offset, no clip, unlit, no tile overlay.</summary>
     /// <exception cref="InvalidOperationException">A Begin is already open.</exception>
-    public void Begin(SamplerState samplerState, RasterizerState? rasterizerState, Matrix transformMatrix)
+    public void Begin()
     {
         if (_isDrawing)
         {
@@ -98,10 +164,11 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
         }
 
         _isDrawing = true;
-        _samplerState = samplerState;
-        _rasterizerState = rasterizerState ?? RasterizerState.CullCounterClockwise;
-        _transformMatrix = transformMatrix;
         _glow = SpriteEffectGlow.None;
+        _tileOverlay = SpriteEffectTileOverlay.None;
+        _placementDrawOffset = Vector2.Zero;
+        _drawOffset = Vector2.Zero;
+        ClipRectangle = null;
     }
 
     /// <summary>Draws every quad since Begin, in order.</summary>
@@ -155,8 +222,21 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
         Draw(texture, position, source, color, rotation, Vector2.Zero, scale, SpriteEffects.None, _textStyle);
     }
 
-    private void AddQuad(Texture2D texture, Vector2 position, Vector2 size, float rotation, Vector2 normalizedOrigin, Vector4 normalizedSource, Color color, SpriteEffects effects, SpriteDrawStyle style) =>
-        SpriteEffectQuads.Write(ReserveQuad(texture), position, size, rotation, normalizedOrigin, normalizedSource, color, effects, style.ToVertexStyle());
+    private void AddQuad(Texture2D texture, Vector2 position, Vector2 size, float rotation, Vector2 normalizedOrigin, Vector4 normalizedSource, Color color, SpriteEffects effects, SpriteDrawStyle style)
+    {
+        if (style.Glow == SpriteGlow.AlongGroundRow)
+        {
+            style = style with { GroundRowY = style.GroundRowY + _drawOffset.Y };
+        }
+
+        var corners = ReserveQuad(texture);
+        SpriteEffectQuads.Write(corners, position + _drawOffset, size, rotation, normalizedOrigin, normalizedSource, color, effects, style.ToVertexStyle(), _vertexClip);
+        if (_clipRectangle is { } clip && SpriteEffectQuads.LiesOutside(corners, clip))
+        {
+            _quadCount--;
+            _textures[_quadCount] = null!;
+        }
+    }
 
     /// <summary>The next quad's four corners, after recording its texture.</summary>
     /// <exception cref="InvalidOperationException">No Begin is open.</exception>
@@ -188,17 +268,21 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
 
         var graphicsDevice = GraphicsDevice;
         var viewport = graphicsDevice.Viewport;
-        _matrixTransform.SetValue(_transformMatrix * Matrix.CreateOrthographicOffCenter(0f, viewport.Width, viewport.Height, 0f, 0f, 1f));
+        _matrixTransform.SetValue(Matrix.CreateOrthographicOffCenter(0f, viewport.Width, viewport.Height, 0f, 0f, 1f));
         var glow = _glow;
         _glowTexture.SetValue(glow.Texture ?? _noGlowTexture);
-        _glowTransform.SetValue(glow.Texture is null ? Vector4.Zero : glow.Transform);
+        _glowTransform.SetValue(glow.Texture is null ? Vector4.Zero : SpriteEffectGlow.TransformAfterOffset(glow.Transform, _placementDrawOffset));
         _glowTexelSize.SetValue(glow.Texture is null ? Vector2.One : Vector2.One / glow.TextureSize);
+        var tileOverlay = _tileOverlay;
+        _tileOverlayTexture.SetValue(tileOverlay.Texture ?? _noGlowTexture);
+        _tileOverlayTransform.SetValue(tileOverlay.Texture is null ? Vector4.One : SpriteEffectGlow.TransformAfterOffset(tileOverlay.Transform, _placementDrawOffset));
+        _tileOverlayTexelSize.SetValue(tileOverlay.Texture is null ? Vector2.One : Vector2.One / tileOverlay.TextureSize);
 
         graphicsDevice.BlendState = BlendState.AlphaBlend;
         graphicsDevice.DepthStencilState = DepthStencilState.None;
-        graphicsDevice.RasterizerState = _rasterizerState;
+        graphicsDevice.RasterizerState = RasterizerState.CullCounterClockwise;
         _pass.Apply();
-        graphicsDevice.SamplerStates[0] = _samplerState;
+        graphicsDevice.SamplerStates[0] = SamplerState.PointClamp;
         graphicsDevice.SetVertexBuffer(_vertexBuffer);
         graphicsDevice.Indices = _indexBuffer;
 

@@ -898,11 +898,9 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
     /// draws last so it's never hidden behind either branch's text.
     /// </summary>
     /// <remarks>
-    /// Deliberately doesn't use the shared scrollable-window Viewport/scissor clipping
-    /// (Element.Draw's RequiresContentViewport path, driven by CanUserScrollHorizontal/Vertical)
-    /// for the single-line case: that mechanism nests a second spriteBatch End/Begin pair mid-draw,
-    /// which corrupts an already-active outer End/Begin pair when this TextBox is itself drawn
-    /// nested inside an ancestor window that's also scrollable. Multiline still opts into that
+    /// Doesn't use the shared scrollable-window offset and clip (Element.Draw's
+    /// RequiresContentViewport path, driven by CanUserScrollHorizontal/Vertical) for the
+    /// single-line case: it draws in absolute coordinates and scrolls its text itself. Multiline opts into that
     /// machinery via CanUserScrollVertical (word-wrap already keeps every line within the content width, so
     /// there's nothing horizontal left to clip).
     /// </remarks>
@@ -940,7 +938,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
     }
 
     /// <summary>Draws a translucent highlight behind the current selection, if any -- called before the text itself so the highlight sits behind the glyphs, not on top of them.</summary>
-    /// <remarks>Multiline draws in the local (Viewport-relative) coordinates of the RequiresContentViewport Begin/End pair the multiline text uses; single-line in absolute screen coordinates. The rectangles are kept until the text, its wrapping, the selection, the scroll, the width or the font changes.</remarks>
+    /// <remarks>Multiline draws in the local (Viewport-relative) coordinates of the RequiresContentViewport scope the multiline text uses; single-line in absolute screen coordinates. The rectangles are kept until the text, its wrapping, the selection, the scroll, the width or the font changes.</remarks>
     private void DrawSelectionIfAny(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
         if (_selectionAnchor is not { } anchor || anchor == _caretIndex)
@@ -1107,7 +1105,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
     /// <summary>
     /// The caret's position relative to the content origin. Multiline is drawn in the same local
     /// (Viewport-relative) coordinates DrawContent's base.DrawContent call already uses, since it's
-    /// drawn inside the same RequiresContentViewport Begin/End pair; single-line is drawn from
+    /// drawn inside the same RequiresContentViewport scope; single-line is drawn from
     /// ContentAbsolutePosition, matching its own GetVisibleWindowText draw call, and measures from
     /// _visibleStartIndex (the window's own scrolled start) rather than 0 -- a caret past the
     /// visible window's start needs its X measured from where drawing actually begins, not from

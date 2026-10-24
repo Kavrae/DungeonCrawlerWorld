@@ -250,7 +250,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// the footer host window as an ordinary child, so adding FooterHeight on top the way header
     /// does would double-count it; no current consumer is WrapContent, so this is left
     /// unsupported rather than solved speculatively. Also only correct while this element itself
-    /// is not scrollable (CanUserScrollVertical/Horizontal false) -- Draw's children scissor-clip
+    /// is not scrollable (CanUserScrollVertical/Horizontal false) -- Draw's children clip
     /// intersects with ContentRectangle, which by construction ends exactly where the footer
     /// begins, so a scrollable element's own footer would be clipped away entirely; neither
     /// current consumer's outer window scrolls itself, only an inner content window does.
@@ -518,8 +518,8 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// horizontal delta a caller passes. Folded into CameraTransform (see
     /// RecalculateCameraTransform) rather than requiring every DrawContent implementation to
     /// manually offset its own draw calls -- content keeps drawing in the same local
-    /// coordinates it always has; RequiresContentViewport's per-window viewport (see Draw)
-    /// picks the offset up automatically.
+    /// coordinates it always has; RequiresContentViewport's draw offset (see Draw) picks the
+    /// scroll up automatically.
     /// </summary>
     public void ScrollBy(Vector2 delta)
     {
@@ -535,8 +535,8 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         RecalculateCameraTransform();
 
         // Child windows (as opposed to DrawContent, e.g. TextWindow's own wrapped text) aren't
-        // drawn through the CameraTransform pass at all -- see Draw's child-window loop, which
-        // runs outside RequiresContentViewport's transformed/clipped Begin/End pair -- so
+        // drawn at the content's offset at all -- see Draw's child-window loop, which keeps the
+        // inherited draw offset and only clips -- so
         // ScrollOffset only moves them at all because RecalculateAbsolutePositions folds it in
         // directly. Re-arranging here is what actually pushes a scroll into their positions.
         Arrange();
@@ -555,9 +555,8 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     }
 
     /// <summary>
-    /// -ScrollOffset as a translation: content drawn in local coordinates (i.e. under
-    /// RequiresContentViewport's own Begin(..., CameraTransform) pass, see Draw) shifts by
-    /// this before the per-window viewport maps it onto screen, which is what makes scrolling
+    /// -ScrollOffset as a translation: content drawn in local coordinates (RequiresContentViewport's
+    /// scope, see Draw) shifts by this as well as by the viewport's origin, which is what makes scrolling
     /// work without any DrawContent implementation needing to know about ScrollOffset itself.
     /// No rotation or zoom.
     /// </summary>
@@ -636,13 +635,11 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
             if (RequiresContentViewport)
             {
-                // A dedicated viewport translates this window's local-coordinate content onto
-                // screen and hard-clips whatever overflows it. Pushed/popped through
-                // Render (see UiRenderService.PushRenderState) rather than a raw
-                // batch End/Begin, so a scrollable Element nested inside another scrollable
-                // Element hands back the exact ambient state it inherited instead of clobbering
-                // it.
-                Render.PushRenderState(Render.CurrentRenderState with { Viewport = Viewport, TransformMatrix = CameraTransform });
+                // The content is drawn in local coordinates: offset to the viewport's origin less the scroll, and clipped to
+                // the viewport within whatever clip is already in force. Pushed/popped through Render, so a scrollable
+                // Element nested inside another hands back the exact state it inherited.
+                var contentOffset = new Vector2(Viewport.X + CameraTransform.Translation.X, Viewport.Y + CameraTransform.Translation.Y);
+                Render.PushRenderState(Render.CurrentRenderState.ClippedTo(Viewport.Bounds) with { DrawOffset = contentOffset });
 
                 DrawContent(gameTime);
 
@@ -655,21 +652,11 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
             if (RequiresContentViewport && _children.Count > 0)
             {
-                // Unlike the viewport swap above (which only ever wraps this element's own
-                // DrawContent), children draw in absolute screen coordinates, not local ones, so
-                // they need an actual scissor clip rather than a viewport/transform remap -- a
-                // child scrolled toward negative local space (see ScrollBy's own doc comment: it
-                // only ever folds ScrollOffset into children's position math, nothing clips their
-                // drawing) would otherwise render in full whichever screen position that puts it
-                // at, however far outside this element's own bounds that is. Intersected with whatever
-                // scissor is already active -- scrollable windows nest (TabbedContent's scrollable body
-                // hosting a scrollable grid) -- via PushRenderState/CurrentRenderState, same reasoning as the viewport swap
-                // above.
-                //
-                // Skipped when there are no children (e.g. TextWindow) -- avoids an extra
-                // batch End/Begin and ScissorRectangle swap for a loop that draws nothing.
-                var clippedScissor = Rectangle.Intersect(Render.CurrentRenderState.ScissorRectangle, _contentState.Rectangle);
-                Render.PushRenderState(Render.CurrentRenderState with { ScissorRectangle = clippedScissor, RasterizerState = ScissorClipRasterizerState });
+                // Unlike the content above, children draw in absolute screen coordinates (ScrollBy folds the scroll into
+                // their positions), so they keep the inherited offset and only need clipping -- a child scrolled out of
+                // view would otherwise draw in full wherever that puts it. Intersected with whatever clip is already in
+                // force, since scrollable windows nest (TabbedContent's scrollable body hosting a scrollable grid).
+                Render.PushRenderState(Render.CurrentRenderState.ClippedTo(_contentState.Rectangle));
 
                 foreach (var childElement in _children)
                 {
@@ -842,8 +829,6 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         ScrollBy(pageDelta * System.Math.Sign(direction));
     }
 
-    /// <summary>Shared by every scrollable element's own children-clip pass in Draw -- ScissorTestEnable is off by default on every other RasterizerState this codebase uses, so this needs to be its own instance rather than a tweaked copy of an existing one.</summary>
-    private static readonly RasterizerState ScissorClipRasterizerState = new() { ScissorTestEnable = true };
 
     /// <summary>No-op by default; TextWindow and other self-drawn elements override this directly, Window overrides it to host IElementContent. Overrides needing the batch or Texture2D read them from Render rather than taking them as parameters.</summary>
     public virtual void DrawContent(GameTime gameTime) { }
@@ -2077,9 +2062,31 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         OnRightClicked = null;
     }
 
+    /// <summary>True from the moment Close starts until the element is back in its pool.</summary>
+    private bool _isClosing;
+
+    /// <summary>Raises Closed, then returns the element to its pool.</summary>
+    /// <remarks>
+    /// A Close reached again from inside the Closed handlers is a no-op: closing it there would pool the element while its
+    /// handlers still run, a handler could rent it again as a new window, and the outer Close would then pool that live
+    /// window, leaving it in its layer with no handler left to remove it.
+    /// </remarks>
     public void Close()
     {
-        Closed?.Invoke(this);
-        ElementPoolService.CloseElement(this);
+        if (_isClosing)
+        {
+            return;
+        }
+
+        _isClosing = true;
+        try
+        {
+            Closed?.Invoke(this);
+            ElementPoolService.CloseElement(this);
+        }
+        finally
+        {
+            _isClosing = false;
+        }
     }
 }

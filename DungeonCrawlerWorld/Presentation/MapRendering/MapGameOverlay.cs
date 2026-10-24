@@ -1,5 +1,4 @@
 using Engine.Math;
-using FontStashSharp;
 using Game.Modules.Actions;
 using Game.Views;
 using Microsoft.Xna.Framework;
@@ -15,8 +14,12 @@ using UIEngine.UI;
 namespace Presentation.MapRendering;
 
 /// <summary>Draws what the player is doing on the map over the world MapRenderer drew: targeting and footprint highlights, windup charge fills, Dodge's WASD hints, and the selected tile's or followed entity's glow.</summary>
-/// <remarks>The game's overlay, not the map's: it reads the player's targeting and inspection state (ActionTargetingController, MapViewState). Every highlight is placed by the camera's tile rectangles and no-ops for a tile outside the visible grid.</remarks>
-public sealed class MapGameOverlay
+/// <remarks>
+/// The game's overlay, not the map's: it reads the player's targeting and inspection state (ActionTargetingController,
+/// MapViewState). Everything shown on tiles is written into MapOverlayTexels each frame and drawn as one quad over the visible
+/// grid through the sprite effect's tile overlay; a tile outside the grid is ignored. Dodge's letters are text, drawn after.
+/// </remarks>
+public sealed class MapGameOverlay : IDisposable
 {
     private const float TargetSelectionMaskAlpha = 0.5f;
 
@@ -28,6 +31,12 @@ public sealed class MapGameOverlay
     private readonly MapCamera _camera;
     private readonly ActionTargetingController _actionTargeting;
     private readonly FontStashTextMeasurer _badgeFontMeasurer;
+    /// <summary>How many textures the overlay rotates through, so a frame's upload never writes a texture an earlier frame still in flight on the GPU reads.</summary>
+    private const int TexturesInFlight = 3;
+
+    private readonly MapOverlayTexels _texels = new();
+    private readonly Texture2D?[] _textures = new Texture2D?[TexturesInFlight];
+    private int _nextTextureIndex;
 
     public MapGameOverlay(IMapViewQuery mapView, MapViewState mapViewState, MapCamera camera, ActionTargetingController actionTargeting, FontService fontService)
     {
@@ -38,18 +47,62 @@ public sealed class MapGameOverlay
         _badgeFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont(GameFontChrome.MapBadgeFontSize));
     }
 
-    /// <summary>Draws the targeting highlights, then the selection's: the followed entity's in Detail inspection, the selected tile's otherwise.</summary>
+    /// <summary>Draws the targeting highlights and the selection's -- the followed entity's in Detail inspection, the selected tile's otherwise -- as one tile overlay, then Dodge's letters.</summary>
     public void Draw(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
-        DrawTargetingHighlights(spriteBatch, unitRectangle);
+        _texels.Begin(_camera.CurrentScrollPosition, _camera.TileColumns, _camera.TileRows);
+        AddTargetingHighlights();
 
         if (_mapViewState.InspectionMode == InspectionMode.Detail)
         {
-            DrawFollowedEntityHighlight(spriteBatch, unitRectangle);
+            AddFollowedEntityHighlight();
         }
         else
         {
-            DrawSelectedTileHighlight(spriteBatch, unitRectangle);
+            AddSelectedTileHighlight();
+        }
+
+        if (!_texels.IsEmpty)
+        {
+            DrawTileOverlay(spriteBatch, unitRectangle);
+        }
+
+        DrawDodgeDirectionalHints(spriteBatch);
+    }
+
+    public void Dispose()
+    {
+        for (var index = 0; index < _textures.Length; index++)
+        {
+            _textures[index]?.Dispose();
+            _textures[index] = null;
+        }
+    }
+
+    private void DrawTileOverlay(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
+    {
+        var texture = _textures[_nextTextureIndex];
+        if (texture is null || texture.Width != _texels.Width || texture.Height != _texels.Height)
+        {
+            texture?.Dispose();
+            texture = new Texture2D(spriteBatch.GraphicsDevice, _texels.Width, _texels.Height);
+            _textures[_nextTextureIndex] = texture;
+        }
+
+        _nextTextureIndex = (_nextTextureIndex + 1) % TexturesInFlight;
+        texture.SetData(_texels.Texels, 0, _texels.Width * _texels.Height);
+
+        var tileSize = _camera.CurrentTileSize;
+        var gridOrigin = _camera.TileOrigin(0, 0);
+        var gridSize = new Vector2(_texels.Columns * tileSize.X, _texels.Rows * tileSize.Y);
+        spriteBatch.TileOverlay = SpriteEffectTileOverlay.OverTileGrid(texture, tileSize, gridOrigin);
+        try
+        {
+            spriteBatch.Draw(unitRectangle, gridOrigin, null, Color.White, 0f, Vector2.Zero, gridSize, SpriteEffects.None, new SpriteDrawStyle(SpriteDrawMode.TileOverlay));
+        }
+        finally
+        {
+            spriteBatch.TileOverlay = SpriteEffectTileOverlay.None;
         }
     }
 
@@ -65,51 +118,43 @@ public sealed class MapGameOverlay
     /// computed once at arm time) -- a 50% CombatTargetPalette.PlayerArmColor wash for "targetable, not
     /// currently hovered," a 50% PlayerTargetColor wash for whichever of those tiles the armed
     /// shape's hover-resolved footprint (see ActionTargetingController.HoveredFootprint,
-    /// recomputed every Update) actually covers right now. A separate, independent draw call
-    /// from DrawSelectedTileHighlight below -- the two are conceptually distinct (ability
-    /// targeting vs. the inspector's click-to-select), even though both now share the same
-    /// border-plus-mask technique (see DrawMaskedTileHighlight).
+    /// recomputed every Update) actually covers right now. Conceptually distinct from
+    /// AddSelectedTileHighlight below (ability targeting vs. the inspector's click-to-select).
     ///
-    /// A second pass then draws whatever's left of HoveredFootprint that TargetableTiles didn't
+    /// A second pass then adds whatever's left of HoveredFootprint that TargetableTiles didn't
     /// already cover -- needed for Burst: TargetableTiles is capped strictly at the action's own
     /// Range (ActionTargetingController.ComputeTargetableTiles' reachable-area scatter), but
     /// TargetShapeResolver.ResolveBurst's actual hit footprint is AreaSize-radius around the
     /// anchor tile once that anchor passes the Range check -- i.e. the real splash can (and
     /// often does) reach past Range even though the anchor itself never could. Without this pass
-    /// the highlight understated what the ability actually hits (confirmed in-game: entities
-    /// outside the drawn splat still took the effect). Safe to always run: ResolveBurst (and
-    /// every other shape) only ever populates HoveredFootprint from an in-range anchor to begin
-    /// with, so this never draws a tile that wouldn't actually be hit; it also naturally no-ops
-    /// for every shape whose own footprint can't exceed Range in the first place (SingleTarget/
-    /// Line/Cone), since TargetableTiles already covers all of those.
+    /// the highlight understated what the ability actually hits. Safe to always run: every shape
+    /// only ever populates HoveredFootprint from an in-range anchor, so this never marks a tile
+    /// that wouldn't actually be hit.
     ///
     /// Once a Delayed ability is actually queued, Disarm already clears TargetableTiles (there's
     /// nothing left to aim), but the player benefits from still seeing exactly which tiles are
-    /// about to be hit once the windup ends -- so this falls back to highlighting
-    /// ActionTargetingController.PendingWindupTargetTiles (the already-resolved,
-    /// locked-in footprint) in the same dark green used for a confirmed hover target, for as long
-    /// as that pending action exists. Separately (and unconditionally, every frame, regardless of
-    /// the player's own armed/pending state above), every OTHER entity's own in-flight Delayed
-    /// windup is telegraphed too, in red or yellow depending on whether it's Dodgeable -- see
-    /// CombatTargetPalette and ActionTargetingController.AllPendingWindupTargets. This is
-    /// the "delayed actions keep the target shape drawn on the map... until they activate" half of
-    /// Combat Overhaul: Dodge (TODO.md).
+    /// about to be hit once the windup ends -- so this falls back to
+    /// ActionTargetingController.PendingWindupTargetTiles (the already-resolved, locked-in
+    /// footprint) as a charge fill in the confirmed-target green, for as long as that pending action
+    /// exists. Separately (and unconditionally, every frame), every OTHER entity's own in-flight
+    /// Delayed windup is telegraphed too, in red or yellow depending on whether it's Dodgeable --
+    /// see CombatTargetPalette and ActionTargetingController.AllPendingWindupTargets.
     /// </summary>
-    private void DrawTargetingHighlights(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
+    private void AddTargetingHighlights()
     {
         if (_mapViewState.TargetableTiles is { Count: > 0 } targetableTiles)
         {
             foreach (var tile in targetableTiles)
             {
-                var borderColor = _actionTargeting.HoveredFootprintContains(tile) ? CombatTargetPalette.PlayerTargetColor : CombatTargetPalette.PlayerArmColor;
-                DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, borderColor);
+                var washColor = _actionTargeting.HoveredFootprintContains(tile) ? CombatTargetPalette.PlayerTargetColor : CombatTargetPalette.PlayerArmColor;
+                _texels.AddWash(tile.X, tile.Y, washColor * TargetSelectionMaskAlpha);
             }
 
             foreach (var tile in _actionTargeting.HoveredFootprint)
             {
                 if (!targetableTiles.Contains(tile))
                 {
-                    DrawMaskedTileHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, CombatTargetPalette.PlayerTargetColor);
+                    _texels.AddWash(tile.X, tile.Y, CombatTargetPalette.PlayerTargetColor * TargetSelectionMaskAlpha);
                 }
             }
         }
@@ -118,15 +163,12 @@ public sealed class MapGameOverlay
             var fillFraction = _mapView.GetChargeFraction(_mapView.PlayerEntityId);
             foreach (var tile in pendingTargetTiles)
             {
-                DrawChargeFillHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, CombatTargetPalette.PlayerTargetColor, fillFraction);
+                AddChargeFill(tile.X, tile.Y, CombatTargetPalette.PlayerTargetColor, fillFraction);
             }
         }
 
-        // Every OTHER entity's own Delayed-action telegraph -- red (undodgeable) or yellow
-        // (Dodgeable), per Combat Overhaul: Dodge. The player's own is already drawn above (dark
-        // green, "player target"), so it's skipped here to avoid drawing it twice.
-        // AllPendingWindupTargets itself already scopes this to Local processing tier (see
-        // that method's own doc comment) -- no second tier check is needed here.
+        // The player's own telegraph is already added above (dark green), so it's skipped here.
+        // AllPendingWindupTargets itself already scopes this to the Local processing tier.
         foreach (var (entityId, targetTiles, isDodgeable) in _actionTargeting.AllPendingWindupTargets())
         {
             if (entityId == _mapView.PlayerEntityId)
@@ -134,15 +176,13 @@ public sealed class MapGameOverlay
                 continue;
             }
 
-            var borderColor = isDodgeable ? CombatTargetPalette.EnemyDodgeableColor : CombatTargetPalette.EnemyUndodgeableColor;
+            var fillColor = isDodgeable ? CombatTargetPalette.EnemyDodgeableColor : CombatTargetPalette.EnemyUndodgeableColor;
             var fillFraction = _mapView.GetChargeFraction(entityId);
             foreach (var tile in targetTiles)
             {
-                DrawChargeFillHighlight(spriteBatch, unitRectangle, tile.X, tile.Y, borderColor, fillFraction);
+                AddChargeFill(tile.X, tile.Y, fillColor, fillFraction);
             }
         }
-
-        DrawDodgeDirectionalHints(spriteBatch);
     }
 
     /// <summary>WASD's own screen-direction offsets from the player -- matches ActionTargetingController.TryClaimDodgeDirectionalKey's identical mapping.</summary>
@@ -180,29 +220,25 @@ public sealed class MapGameOverlay
         }
     }
 
-    private void DrawSelectedTileHighlight(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
+    private void AddSelectedTileHighlight()
     {
         if (_mapViewState.SelectedMapNodePosition is not { } selectedPosition)
         {
             return;
         }
 
-        DrawSelectedTileGlow(spriteBatch, unitRectangle, selectedPosition.X, selectedPosition.Y);
+        AddSelectedTileGlow(selectedPosition.X, selectedPosition.Y);
     }
 
     /// <summary>
     /// Detail/Admin inspection's own highlight -- tracks the followed entity's live
     /// TransformComponent.Position every frame instead of a frozen tile position (see
-    /// DrawSelectedTileHighlight, Basic mode's equivalent), so the highlight moves with the
+    /// AddSelectedTileHighlight, Basic mode's equivalent), so the highlight moves with the
     /// entity as it walks. Highlights every tile of the entity's own footprint (TransformComponent.
     /// Size), not just its origin tile -- a multi-tile (Huge) entity should read as fully
     /// selected, the same footprint MapRenderer draws the entity's sprite across.
-    /// DrawMaskedTileHighlight already no-ops cleanly per-tile when a given tile falls outside
-    /// the camera's currently visible viewport, so an entity that walks off-screen (in whole or
-    /// in part) simply stops drawing a highlight for whichever tiles are off-screen, rather than
-    /// throwing or drawing garbage -- no extra guard needed here for that case.
     /// </summary>
-    private void DrawFollowedEntityHighlight(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
+    private void AddFollowedEntityHighlight()
     {
         var entityId = _mapViewState.InspectedEntityId;
         if (entityId == -1 || !_mapView.TryGetOccupant(entityId, out var followed))
@@ -214,58 +250,25 @@ public sealed class MapGameOverlay
         {
             for (var offsetY = 0; offsetY < followed.Size.Y; offsetY++)
             {
-                DrawSelectedTileGlow(spriteBatch, unitRectangle, followed.Position.X + offsetX, followed.Position.Y + offsetY);
+                AddSelectedTileGlow(followed.Position.X + offsetX, followed.Position.Y + offsetY);
             }
         }
     }
 
     /// <summary>
-    /// A uniform translucent borderColor wash (TargetSelectionMaskAlpha alpha) over the whole
-    /// tile -- shared by the inspector's single-tile Gold selection and DrawTargetingHighlights'
-    /// per-tile ability-targeting colors. Drawn after MapRenderer's world (not before,
-    /// like terrain) so it lands on top of whatever's actually on the tile --
-    /// terrain/occupant sprite, glyph, or glow -- rather than getting hidden underneath an opaque
-    /// sprite the way this used to. The whole tile is translucent (not just an inset "mask" with
-    /// a solid opaque border ring, the earlier technique) specifically so the sprite stays
-    /// visible through the border too, not just the interior.
-    /// </summary>
-    private void DrawMaskedTileHighlight(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY, Color borderColor)
-    {
-        if (!_camera.TryGetTileRectangle(mapNodeX, mapNodeY, out var tileRectangle))
-        {
-            return;
-        }
-
-        spriteBatch.Draw(unitRectangle, tileRectangle, borderColor * TargetSelectionMaskAlpha);
-    }
-
-    /// <summary>
     /// A charging Delayed action's own per-tile telegraph -- an always-visible, dim full-tile
-    /// backdrop (ChargeBackdropAlphaFraction of DrawMaskedTileHighlight's own alpha, so a
-    /// multi-tile target shape still reads as one coherent zone from the first frame of the
-    /// windup) plus a brighter bottom-up fill on top that grows with fillFraction, reaching
-    /// DrawMaskedTileHighlight's own full alpha -- and its own full-tile coverage -- exactly as
-    /// the action activates.
+    /// backdrop (ChargeBackdropAlphaFraction of the targeting wash's alpha, so a multi-tile target
+    /// shape still reads as one coherent zone from the first frame of the windup) plus a brighter
+    /// bottom-up fill on top that grows with fillFraction, reaching the targeting wash's full alpha
+    /// -- and its own full-tile coverage -- exactly as the action activates.
     /// </summary>
-    private void DrawChargeFillHighlight(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY, Color fillColor, float fillFraction)
+    private void AddChargeFill(int mapNodeX, int mapNodeY, Color fillColor, float fillFraction)
     {
-        if (!_camera.TryGetTileRectangle(mapNodeX, mapNodeY, out var tileRectangle))
-        {
-            return;
-        }
-
-        spriteBatch.Draw(unitRectangle, tileRectangle, fillColor * TargetSelectionMaskAlpha * ChargeBackdropAlphaFraction);
-        TileFillRenderer.DrawFill(spriteBatch, unitRectangle, tileRectangle, fillFraction, TileFillDirection.BottomToTop, fillColor * TargetSelectionMaskAlpha);
+        _texels.AddWash(mapNodeX, mapNodeY, fillColor * (TargetSelectionMaskAlpha * ChargeBackdropAlphaFraction));
+        _texels.AddFill(mapNodeX, mapNodeY, fillColor * TargetSelectionMaskAlpha, fillFraction);
     }
 
-    /// <summary>The inspector's own "this tile is selected" highlight -- a light-blue interior-fade glow (see GridSquareRenderer's own use of the same GlowMode.InteriorFade for inventory cells, so the two read as the same visual language) rather than DrawMaskedTileHighlight's flat wash, so terrain/sprites underneath stay fully legible through the ring gaps instead of being tinted.</summary>
-    private void DrawSelectedTileGlow(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, int mapNodeX, int mapNodeY)
-    {
-        if (!_camera.TryGetTileRectangle(mapNodeX, mapNodeY, out var tileRectangle))
-        {
-            return;
-        }
-
-        GlowRenderer.Draw(spriteBatch, unitRectangle, tileRectangle, GameWindowPalette.Selected, GlowMode.InteriorFade);
-    }
+    /// <summary>The inspector's own "this tile is selected" highlight -- a light-blue inward glow, the same as GlowRenderer's InteriorFade (inventory cells use it too, so the two read as the same visual language), so terrain and sprites underneath stay legible rather than tinted.</summary>
+    private void AddSelectedTileGlow(int mapNodeX, int mapNodeY) =>
+        _texels.SetRing(mapNodeX, mapNodeY, GameWindowPalette.Selected * GlowRenderer.FadeMaximumAlpha, GlowRenderer.FadeRingCount);
 }

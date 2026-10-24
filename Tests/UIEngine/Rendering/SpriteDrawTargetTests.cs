@@ -137,13 +137,38 @@ public sealed class SpriteDrawTargetTests
     }
 
     [TestMethod]
-    public void FadingGlow_DrawsItsRingsThroughTheTarget_WithTheStyle()
+    public void InteriorFade_IsOneQuadOverTheBounds_FadedInward_KeepingTheStyle()
+    {
+        var target = new RecordingDrawTarget();
+        var litStyle = Style.WithGlowAtPixel();
+
+        GlowRenderer.Draw(target, null!, new Rectangle(10, 20, 32, 16), Color.LightGreen, GlowMode.InteriorFade, 0.5f, litStyle);
+
+        Assert.AreEqual(
+            (new Rectangle(10, 20, 32, 16), (Rectangle?)null, Color.LightGreen * 0.25f, litStyle with { Mode = SpriteDrawMode.FadeInward, FadeDepthPixels = GlowRenderer.FadeRingCount }),
+            target.Rectangles.Single());
+    }
+
+    [TestMethod]
+    public void ExteriorFade_IsOneQuadOverTheBoundsGrownByTheDepth_FadedOutward()
+    {
+        var target = new RecordingDrawTarget();
+        var depth = GlowRenderer.FadeRingCount;
+
+        GlowRenderer.Draw(target, null!, new Rectangle(10, 20, 32, 16), Color.Gold, GlowMode.ExteriorFade);
+
+        Assert.AreEqual(
+            (new Rectangle(10 - depth, 20 - depth, 32 + depth * 2, 16 + depth * 2), (Rectangle?)null, Color.Gold * 0.5f, new SpriteDrawStyle(SpriteDrawMode.FadeOutward, FadeDepthPixels: (byte)depth)),
+            target.Rectangles.Single());
+    }
+
+    [TestMethod]
+    public void InteriorFull_IsOneUnfadedQuadOverTheBounds()
     {
         var target = new RecordingDrawTarget();
 
-        GlowRenderer.Draw(target, null!, new Rectangle(0, 0, 32, 32), Color.LightGreen, GlowMode.InteriorFade, style: Style);
+        GlowRenderer.Draw(target, null!, new Rectangle(10, 20, 32, 16), Color.Gold, GlowMode.InteriorFull, style: Style);
 
-        Assert.AreEqual(GlowRenderer.FadeRingCount * 4, target.Rectangles.Count);
-        Assert.IsTrue(target.Rectangles.All(draw => draw.Style == Style));
+        Assert.AreEqual((new Rectangle(10, 20, 32, 16), (Rectangle?)null, Color.Gold * 0.5f, Style), target.Rectangles.Single());
     }
 }
