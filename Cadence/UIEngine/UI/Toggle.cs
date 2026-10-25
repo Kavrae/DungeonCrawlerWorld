@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using UIEngine.Fonts;
 using UIEngine.Rendering;
+using UIEngine.UI.ColorPalettes;
 
 namespace UIEngine.UI;
 
@@ -35,6 +36,7 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
     private const float CheckMarkInset = 2f;
 
     private const float CheckMarkThickness = 2f;
+    private const float DisabledOpacity = 0.45f;
     private static readonly Color CheckMarkColor = Color.White;
 
     private string _label = string.Empty;
@@ -46,6 +48,11 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
     private Action<bool>? _onToggled;
 
     public bool IsOn { get; private set; }
+
+    /// <summary>A disabled toggle keeps its state, draws its checkbox darkened (WindowPalette.DisabledBackground) with its mark, border and label dimmed, and is never hit-tested, so a click can't flip it.</summary>
+    public bool Enabled { get; set; } = true;
+
+    protected override bool IsHitTestable => base.IsHitTestable && Enabled;
 
     /// <summary>Shows isOn without notifying onToggled -- for a caller that keeps several toggles in step (an "All" toggle and the ones it covers).</summary>
     public void SetIsOn(bool isOn) => IsOn = isOn;
@@ -61,6 +68,7 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
         _fontMeasurer = FontService.GetTextMeasurer(font);
         _onToggled = onToggled;
         IsOn = defaultOn;
+        Enabled = true;
     }
 
     /// <summary>Flips state and notifies onToggled -- fires from OnContentClickAction (before the base Clicked event, see Element's own doc comment on that ordering), the same "subclass owns its own click behavior" mechanism TextWindow already uses rather than this element self-subscribing to its own public event.</summary>
@@ -79,43 +87,45 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
 
         var (checkboxRectangle, labelRectangle) = ComputeLayout();
 
-        spriteBatch.Draw(unitRectangle, checkboxRectangle, IsOn ? _onColor : _offColor);
+        var opacity = Enabled ? 1f : DisabledOpacity;
+        var checkboxColor = IsOn ? _onColor : _offColor;
+        spriteBatch.Draw(unitRectangle, checkboxRectangle, Enabled ? checkboxColor : WindowPalette.DisabledBackground(checkboxColor));
 
         var borderStyle = IsOn ? BorderStyle.Inset : BorderStyle.Outset;
         var thickness = BorderThickness.Uniform(Vector2.One);
         var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(checkboxRectangle, thickness);
-        BorderRenderer.Draw(spriteBatch, unitRectangle, borderStyle, Color.White, top, bottom, left, right);
+        BorderRenderer.Draw(spriteBatch, unitRectangle, borderStyle, Color.White * opacity, top, bottom, left, right);
 
         if (IsOn)
         {
-            DrawCheckMark(spriteBatch, unitRectangle, checkboxRectangle);
+            DrawCheckMark(spriteBatch, unitRectangle, checkboxRectangle, CheckMarkColor * opacity);
         }
 
         if (!string.IsNullOrWhiteSpace(_label))
         {
-            LabelRenderer.DrawCentered(spriteBatch, _fontMeasurer, _label, new Vector2(labelRectangle.X, labelRectangle.Y), new Vector2(labelRectangle.Width, labelRectangle.Height), _labelColor);
+            LabelRenderer.DrawCentered(spriteBatch, _fontMeasurer, _label, new Vector2(labelRectangle.X, labelRectangle.Y), new Vector2(labelRectangle.Width, labelRectangle.Height), _labelColor * opacity);
         }
     }
 
     /// <summary>Two diagonals corner-to-corner across checkboxRectangle, inset so the mark's own endpoints don't touch the checkbox's border.</summary>
-    private static void DrawCheckMark(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle checkboxRectangle)
+    private static void DrawCheckMark(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle checkboxRectangle, Color color)
     {
         var topLeft = new Vector2(checkboxRectangle.X + CheckMarkInset, checkboxRectangle.Y + CheckMarkInset);
         var topRight = new Vector2(checkboxRectangle.Right - CheckMarkInset, checkboxRectangle.Y + CheckMarkInset);
         var bottomLeft = new Vector2(checkboxRectangle.X + CheckMarkInset, checkboxRectangle.Bottom - CheckMarkInset);
         var bottomRight = new Vector2(checkboxRectangle.Right - CheckMarkInset, checkboxRectangle.Bottom - CheckMarkInset);
 
-        DrawLine(spriteBatch, unitRectangle, topLeft, bottomRight);
-        DrawLine(spriteBatch, unitRectangle, topRight, bottomLeft);
+        DrawLine(spriteBatch, unitRectangle, topLeft, bottomRight, color);
+        DrawLine(spriteBatch, unitRectangle, topRight, bottomLeft, color);
     }
 
     /// <summary>unitRectangle (a 1x1 white pixel) stretched into a thickness-tall strip spanning start-to-end and rotated to match -- the standard "line as a rotated rectangle" trick this renderer has no dedicated line primitive for yet.</summary>
-    private static void DrawLine(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 start, Vector2 end)
+    private static void DrawLine(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 start, Vector2 end, Color color)
     {
         var delta = end - start;
         var length = delta.Length();
         var rotation = MathF.Atan2(delta.Y, delta.X);
-        spriteBatch.Draw(unitRectangle, start, null, CheckMarkColor, rotation, Vector2.Zero, new Vector2(length, CheckMarkThickness), SpriteEffects.None);
+        spriteBatch.Draw(unitRectangle, start, null, color, rotation, Vector2.Zero, new Vector2(length, CheckMarkThickness), SpriteEffects.None);
     }
 
     /// <summary>

@@ -22,7 +22,7 @@ public sealed class DebugTabView(DebugTabServices services, WorkshopDebugging de
 
     public DebugLaunchSection Launch { get; } = new(services, debugging);
 
-    public DebugLiveSection Live { get; } = new(services);
+    public DebugLiveSection Live { get; } = new(services, debugging: debugging);
 
     public DebugReportsSection Reports { get; } = new(services, debugging);
 
@@ -76,10 +76,14 @@ public sealed class DebugTabView(DebugTabServices services, WorkshopDebugging de
         Reports.Resize(sectionBounds);
     }
 
-    /// <summary>Updates the section shown: Live's view of the link's session, or Reports. UI thread, once per frame.</summary>
+    /// <summary>Updates the section shown: Launch Settings, Live's view of the link's session, or Reports. UI thread, once per frame.</summary>
     public void Update()
     {
-        if (Section == DebugSection.Live)
+        if (Section == DebugSection.Launch)
+        {
+            Launch.Update();
+        }
+        else if (Section == DebugSection.Live)
         {
             Live.Update(debugging.Link.Session);
         }
@@ -92,6 +96,7 @@ public sealed class DebugTabView(DebugTabServices services, WorkshopDebugging de
     public void ShowSection(DebugSection section)
     {
         Section = section;
+        debugging.ShowsReports = section == DebugSection.Reports;
         Launch.Window.IsVisible = section == DebugSection.Launch;
         Live.Window.IsVisible = section == DebugSection.Live;
         Reports.SetVisible(section == DebugSection.Reports);
@@ -109,6 +114,7 @@ public sealed class DebugTabView(DebugTabServices services, WorkshopDebugging de
     public void Close()
     {
         debugging.GameLaunched -= ShowLiveOnLaunch;
+        debugging.ShowsReports = false;
         DebugTabElements.Close(services, _switch);
         DebugTabElements.Close(services, Launch.Window);
         DebugTabElements.Close(services, Live.Window);

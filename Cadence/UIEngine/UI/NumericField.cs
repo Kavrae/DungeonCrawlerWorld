@@ -67,6 +67,11 @@ public sealed class NumericField(FontService fontService, ElementPoolService ele
 
     protected override bool OnMouseWheelAction(int notches)
     {
+        if (!AcceptsEdits)
+        {
+            return false;
+        }
+
         ChangeValue(Value + notches * _step);
         SetText(Format(Value));
         return true;

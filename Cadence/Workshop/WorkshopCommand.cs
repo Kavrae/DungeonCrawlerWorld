@@ -8,8 +8,12 @@ namespace Workshop;
 /// <param name="Hotkey">The key that runs it from anywhere in the IDE, typing included.</param>
 /// <param name="Modifiers">The modifiers held with Hotkey, exactly.</param>
 /// <param name="Run">What it does; it may report on the shell's status line.</param>
-public sealed record WorkshopCommand(string Title, Keys Hotkey, KeyModifiers Modifiers, Action<IWorkshopStatus> Run)
+/// <param name="IsShown">Whether its tile is on the strip now, asked every frame; null shows it always. The hotkey works either way.</param>
+public sealed record WorkshopCommand(string Title, Keys Hotkey, KeyModifiers Modifiers, Action<IWorkshopStatus> Run, Func<bool>? IsShown = null)
 {
+    /// <summary>Whether its tile is on the strip now.</summary>
+    public bool ShowsTile => IsShown?.Invoke() ?? true;
+
     /// <summary>"Ctrl+F5"-style text for the hotkey.</summary>
     public string HotkeyText
     {

@@ -102,6 +102,9 @@ public sealed class DiagnosticsGaugeList(FontService fontService, ElementPoolSer
         SelectionChanged?.Invoke();
     }
 
+    /// <summary>The height of every row with the header row, unscrolled.</summary>
+    public float RowsHeight => DebugTabChrome.GaugeListRowHeight * (_rows.Count + 1);
+
     /// <summary>The content-local top of gaugeIndex's row; -1 when it isn't listed.</summary>
     public float RowTopOf(int gaugeIndex)
     {

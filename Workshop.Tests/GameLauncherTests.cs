@@ -127,6 +127,62 @@ public sealed class GameLauncherTests
     }
 
     [TestMethod]
+    public void Stop_EndsARunningGame_AndPlayStartsAnotherOne()
+    {
+        var launcher = LauncherFor("/c ping -n 30 127.0.0.1 > nul");
+        Assert.IsTrue(launcher.TryLaunch(out _));
+
+        Assert.IsTrue(launcher.Stop(out var status));
+
+        Assert.AreEqual(GameLauncher.GameStoppedStatus, status);
+        Assert.AreEqual(GameLauncher.GameStoppedStatus, launcher.Status);
+        Assert.IsFalse(launcher.IsGameRunning);
+        Assert.IsTrue(launcher.LastExit!.WasStopped);
+        Assert.IsTrue(launcher.TryLaunch(out status), status);
+        launcher.Stop(out _);
+    }
+
+    [TestMethod]
+    public void Stop_DuringTheBuild_StartsNoGame_AndPlayStartsAgain()
+    {
+        var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        var launcher = new GameLauncher(new GameLaunchTarget(cmd, "/c echo game-ran", Environment.SystemDirectory, new ProcessCommand(cmd, "/c ping -n 30 127.0.0.1 > nul", Environment.SystemDirectory)));
+        Assert.IsTrue(launcher.TryLaunch(out _, buildFirst: true));
+        Thread.Sleep(300);
+
+        Assert.IsTrue(launcher.Stop(out _));
+        Thread.Sleep(500);
+
+        Assert.IsFalse(launcher.IsGameRunning);
+        Assert.AreEqual(GameLauncher.GameStoppedStatus, launcher.Status);
+        Assert.IsFalse(OutputOf(launcher).Any(line => line.Text == "game-ran"));
+        Assert.IsTrue(launcher.TryLaunch(out var status), status);
+        WaitUntilNotRunning(launcher);
+        CollectionAssert.Contains(OutputOf(launcher), new GameOutputLine("game-ran", IsError: false));
+    }
+
+    [TestMethod]
+    public void Stop_WithNothingRunning_StopsNothing()
+    {
+        var launcher = LauncherFor("/c exit");
+
+        Assert.IsFalse(launcher.Stop(out var status));
+        Assert.AreEqual("Nothing is running.", status);
+        Assert.AreEqual(string.Empty, launcher.Status);
+    }
+
+    [TestMethod]
+    public void AGameThatExits_KeepsItsExitCodeAndLastErrorLine()
+    {
+        var launcher = LauncherFor("/c (echo first)1>&2 & (echo last)1>&2 & exit 2");
+
+        Assert.IsTrue(launcher.TryLaunch(out _));
+        WaitUntilNotRunning(launcher);
+
+        Assert.AreEqual(new GameExit(2, 2, "last", WasStopped: false), launcher.LastExit);
+    }
+
+    [TestMethod]
     public void BuildFirst_ASucceedingBuild_ThenStartsTheGame()
     {
         var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");

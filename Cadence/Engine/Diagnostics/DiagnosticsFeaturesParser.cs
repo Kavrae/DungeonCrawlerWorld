@@ -5,7 +5,7 @@ namespace Engine.Diagnostics;
 /// <cleanupVersion>1</cleanupVersion>
 public static class DiagnosticsFeaturesParser
 {
-    private const string ArgumentPrefix = "--diagnostics=";
+    public const string ArgumentPrefix = "--diagnostics=";
 
     public static DiagnosticsFeatures Parse(IEnumerable<string> args)
     {

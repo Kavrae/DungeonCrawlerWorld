@@ -19,7 +19,8 @@ internal sealed class DebugTabHarness : IDisposable
     private MouseState _mouse;
     private KeyboardState _keyboard;
 
-    public DebugTabHarness(string optionsPath, IReadOnlyList<string>? reportDirectories = null)
+    /// <param name="launchTarget">What Play would start; a game that isn't there by default.</param>
+    public DebugTabHarness(string optionsPath, IReadOnlyList<string>? reportDirectories = null, GameLaunchTarget? launchTarget = null)
     {
         var fonts = SharedFonts;
         var render = new UiRenderService();
@@ -34,13 +35,14 @@ internal sealed class DebugTabHarness : IDisposable
         Pool.RegisterFactory(() => new TextBox(fonts, Pool, render));
         Pool.RegisterFactory(() => new ListView(fonts, Pool, render));
         Pool.RegisterFactory(() => new NumericField(fonts, Pool, render));
+        Pool.RegisterFactory(() => new FractionBarElement(fonts, Pool, render));
         var dropdowns = new DropdownController(Pool, render) { ScreenBoundsOverrideForTests = new Rectangle(0, 0, (int)ScreenSize.X, (int)ScreenSize.Y) };
         dropdowns.Initialize(Layers);
         Pool.RegisterFactory(() => new DropdownField(fonts, Pool, render, dropdowns));
         DebugTabServices.RegisterElementFactories(Pool, fonts, render);
         Input = new UiInputController(Layers, ScreenSize, new PointerState(), [], [], dropdowns) { StartTextInput = static () => { }, StopTextInput = static () => { } };
 
-        Launcher = new GameLauncher(new GameLaunchTarget(Path.Combine("bin", "Game.exe"), "--map-size=1024", "bin"));
+        Launcher = new GameLauncher(launchTarget ?? new GameLaunchTarget(Path.Combine("bin", "Game.exe"), "--map-size=1024", "bin"));
         Debugging = new WorkshopDebugging(new DiagnosticsLinkListener(historyCapacity: 2_000), new DebugLaunchOptionsStore(optionsPath), Launcher, reportDirectories);
         Debugging.Link.Start();
         ContextMenus = new ContextMenuController(dropdowns);
@@ -70,10 +72,12 @@ internal sealed class DebugTabHarness : IDisposable
     /// <summary>What the Live section shows instead of the listener's session, when set.</summary>
     public LiveDiagnosticsSession? Session { get; set; }
 
-    /// <summary>One frame: the input, every layer's update, then the view's.</summary>
+    /// <summary>One frame: the input, every layer's update, the link and the run's status, then the view's.</summary>
     public void Frame()
     {
         Input.Update(_keyboard, _mouse);
+        Debugging.Link.Update();
+        Debugging.Update(Status);
         foreach (var layer in UiLayerStack.LayersAscending())
         {
             foreach (var element in Layers[layer].ToArray())

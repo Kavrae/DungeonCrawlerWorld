@@ -72,7 +72,7 @@ internal static class HeadlessBenchmark
                 session.GameSession.EcsContext.Update(new EngineTime(frameDuration * frame, frameDuration, IsRunningSlowly: false, frame));
             }
 
-            Console.WriteLine($"[Headless] Fingerprint {Fingerprint(session)}");
+            Console.WriteLine(HeadlessArgument.FormatFingerprintLine(Fingerprint(session)));
             return 0;
         }
         finally

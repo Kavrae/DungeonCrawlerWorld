@@ -338,6 +338,9 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// <summary>Changes the content background color after creation -- ElementContentOptions.ContentColor only ever sets it once, at CreateElement time; this is for a control that needs its own background to react to later state changes (e.g. GridControl's toggle buttons tinting differently once on).</summary>
     public void SetContentColor(Color color) => _contentState.BackgroundColor = color;
 
+    /// <summary>The colour the content background is filled with: ContentColor, unless a control's state changes how it looks (a disabled text box darkens it).</summary>
+    protected virtual Color ContentBackgroundColor => _contentState.BackgroundColor;
+
     /// <summary>Changes the gap tiled after this element (see RetileChildren) after creation -- ElementLayoutOptions.SpacingAfter only ever sets it once, at CreateElement time; this is for a pooled/reused element whose spacing needs to change later.</summary>
     public void SetSpacingAfter(float spacingAfter) => _geometry.SpacingAfter = spacingAfter;
 
@@ -380,6 +383,9 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     protected Vector2 ScrollbarGutterSize => new(
         _scrollbars.ShowVertical ? WindowChrome.ScrollbarThickness : 0f,
         _scrollbars.ShowHorizontal ? WindowChrome.ScrollbarThickness : 0f);
+
+    /// <summary>How much larger this element is than its content area on each axis -- border, header, padding, footer and the scrollbars shown -- whatever its current size, so a caller can size it to fit content it knows the size of.</summary>
+    public Vector2 ContentInset => BorderInsetDoubled + ChildContentPaddingDoubled + new Vector2(0, HeaderInsetHeight + FooterHeight) + ScrollbarGutterSize;
 
     /// <summary>Overflow below this many pixels doesn't earn a scrollbar.</summary>
     private const float ScrollbarOverflowThreshold = 0.5f;
@@ -630,7 +636,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
                 // that area (see ElementContentState's own doc comment), so filling just Rectangle
                 // would leave the padding band itself unpainted, a visible gap of whatever's behind
                 // this element between its border and its (deliberately smaller) content fill.
-                spriteBatch.Draw(unitRectangle, _contentState.BackgroundRectangle, _contentState.BackgroundColor);
+                spriteBatch.Draw(unitRectangle, _contentState.BackgroundRectangle, ContentBackgroundColor);
             }
 
             // The content is drawn in local coordinates, offset to ContentDrawOrigin, and a scrollable element's is

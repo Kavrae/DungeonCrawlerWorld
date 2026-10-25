@@ -249,7 +249,8 @@ Each phase ends with the Workshop and the game running and a stop for testing be
 
 ## Out of scope / follow-ups
 
-- **The other launch options** -- TODO.md "Workshop Debug tab: launch options" (Engine, Medium).
+- **The other launch options** -- TODO.md "Workshop Debug tab: launch options" (Engine, Medium), planned in
+  `PLAN-workshop-debug-tab-launch-options.md`.
 - **Saving and reopening a live capture** -- TODO.md "Workshop Debug tab: save a live capture" (Engine, Medium).
 - Requests over the link: console commands ("Console variables and console commands"), entity inspection, the AI
   debugger and debug drawing ("Debug drawing and an AI debugger"), pausing or stepping the simulation from the IDE.

@@ -7,7 +7,7 @@ namespace Engine.Diagnostics;
 /// <cleanupVersion>1</cleanupVersion>
 public static class DiagnosticsLinkArgument
 {
-    private const string ArgumentPrefix = "--diagnostics-link=";
+    public const string ArgumentPrefix = "--diagnostics-link=";
 
     /// <summary>The link's endpoint, or null when args has none or it is not a loopback address and port.</summary>
     public static IPEndPoint? Parse(IEnumerable<string> args)

@@ -105,6 +105,9 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
     /// <summary>Raised when Enter (or Shift+Enter on a non-multiline box) submits the current text.</summary>
     public event Action<string>? TextSubmitted;
 
+    /// <summary>Raised whenever the text changes, typed or set from outside the box, with the new text.</summary>
+    public event Action<string>? TextChanged;
+
     /// <summary>Placeholder text shown whenever the box is both empty and unfocused (see DrawContent) -- null (the default) draws nothing, so every existing TextBox usage is unaffected.</summary>
     public string? GhostText { get; set; }
 
@@ -112,6 +115,16 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
 
     /// <summary>True to show text the user can select and copy but not change: typing, Backspace, Delete, Cut and Paste do nothing, and SetText still replaces it.</summary>
     public bool IsReadOnly { get; set; }
+
+    /// <summary>A disabled box keeps its text, draws its content background darkened (WindowPalette.DisabledBackground), and is never hit-tested, so it can't be focused, typed into or selected.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Whether typing, Backspace, Delete, Cut and Paste change the text: enabled and not read-only.</summary>
+    protected bool AcceptsEdits => Enabled && !IsReadOnly;
+
+    protected override bool IsHitTestable => base.IsHitTestable && Enabled;
+
+    protected override Color ContentBackgroundColor => Enabled ? base.ContentBackgroundColor : WindowPalette.DisabledBackground(base.ContentBackgroundColor);
 
     public override void Build(Element? parent, ElementOptions options)
     {
@@ -135,6 +148,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
         GhostText = null;
         GhostTextColor = WindowPalette.GhostText;
         IsReadOnly = false;
+        Enabled = true;
     }
 
     public override void Initialize()
@@ -174,7 +188,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
 
     protected override void OnTextInputAction(char character)
     {
-        if (IsReadOnly || char.IsControl(character) || !AcceptsCharacter(character))
+        if (!AcceptsEdits || char.IsControl(character) || !AcceptsCharacter(character))
         {
             return;
         }
@@ -195,7 +209,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
         {
             if (shiftHeld && _multiline)
             {
-                if (IsReadOnly)
+                if (!AcceptsEdits)
                 {
                     return;
                 }
@@ -234,7 +248,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
 
         if (ctrlHeld && WasKeyPressed(keyboardState, previousKeyboardState, Keys.X))
         {
-            if (CopySelectionToClipboard() && !IsReadOnly)
+            if (CopySelectionToClipboard() && AcceptsEdits)
             {
                 TryDeleteSelection();
             }
@@ -243,7 +257,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
 
         if (ctrlHeld && WasKeyPressed(keyboardState, previousKeyboardState, Keys.V))
         {
-            if (!IsReadOnly)
+            if (AcceptsEdits)
             {
                 PasteFromClipboard();
             }
@@ -255,7 +269,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
         // edit-hook's own edge-triggered HandleKeyPress -- see ShouldFire's own doc comment for
         // why Backspace/Delete moved here alongside the arrows rather than staying split across
         // two different input hooks with two different repeat behaviors.
-        if (ShouldFire(Keys.Back, keyboardState) && !IsReadOnly && !TryDeleteSelection())
+        if (ShouldFire(Keys.Back, keyboardState) && AcceptsEdits && !TryDeleteSelection())
         {
             if (ctrlHeld && _caretIndex > 0)
             {
@@ -271,7 +285,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
             }
         }
 
-        if (ShouldFire(Keys.Delete, keyboardState) && !IsReadOnly && !TryDeleteSelection())
+        if (ShouldFire(Keys.Delete, keyboardState) && AcceptsEdits && !TryDeleteSelection())
         {
             if (ctrlHeld && _caretIndex < OriginalText.Length)
             {
@@ -448,7 +462,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
 
         return
         [
-            new DropdownOption("Cut", "Ctrl+X", hasSelection && !IsReadOnly, () =>
+            new DropdownOption("Cut", "Ctrl+X", hasSelection && AcceptsEdits, () =>
             {
                 if (CopySelectionToClipboard())
                 {
@@ -456,7 +470,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
                 }
             }),
             new DropdownOption("Copy", "Ctrl+C", hasSelection, () => CopySelectionToClipboard()),
-            new DropdownOption("Paste", "Ctrl+V", !IsReadOnly && SDL.SDL_HasClipboardText(), PasteFromClipboard),
+            new DropdownOption("Paste", "Ctrl+V", AcceptsEdits && SDL.SDL_HasClipboardText(), PasteFromClipboard),
             new DropdownOption("Select All", "Ctrl+A", OriginalText.Length > 0, () =>
             {
                 MoveCaretTo(OriginalText.Length);
@@ -897,8 +911,13 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
 
     private void SetTextAndAutoSize(string newText)
     {
+        var changed = newText != OriginalText;
         UpdateText(newText);
         AutoSizeToContent();
+        if (changed)
+        {
+            TextChanged?.Invoke(newText);
+        }
     }
 
     /// <summary>

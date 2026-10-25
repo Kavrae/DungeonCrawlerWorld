@@ -2,6 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using UIEngine.Rendering;
 using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Tests.UIEngine;
 
@@ -297,6 +298,32 @@ public sealed class TextBoxTests
 
         textBox.SetText("replaced");
         Assert.AreEqual("replaced", textBox.OriginalText);
+    }
+
+    [TestMethod]
+    public void Disabled_IgnoresTypingBackspaceAndDelete_AndOffersNoCutOrPaste()
+    {
+        var textBox = CreateTextBox(CreateWindowService());
+        textBox.SetText("fixed");
+        textBox.Enabled = false;
+
+        textBox.HandleTextInput('x');
+        textBox.HandleHotkeys(new KeyboardState(Keys.Back), new KeyboardState());
+        textBox.HandleHotkeys(new KeyboardState(Keys.Home), new KeyboardState());
+        textBox.HandleHotkeys(new KeyboardState(Keys.Delete), new KeyboardState());
+        Assert.AreEqual("fixed", textBox.OriginalText);
+
+        var options = textBox.BuildContextMenuOptions();
+        Assert.IsFalse(options[0].Enabled, "Cut");
+        Assert.IsFalse(options[2].Enabled, "Paste");
+    }
+
+    [TestMethod]
+    public void DisabledBackground_DarkensTowardBlack_KeepingAlpha()
+    {
+        var darkened = WindowPalette.DisabledBackground(new Color(200, 100, 50, 128));
+
+        Assert.AreEqual(new Color(140, 70, 35, 128), darkened);
     }
 
     [TestMethod]

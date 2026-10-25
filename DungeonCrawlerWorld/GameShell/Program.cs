@@ -11,12 +11,11 @@ var benchmarkFrameRange = BenchmarkFrameRange.Parse(args);
 var mapSizeOverride = DungeonCrawlerWorld.MapSizeArgument.Parse(args);
 IReadOnlyList<ISettingsSource> settingsSources = [new CommandLineSettingsSource(args)];
 
-// Headless is benchmark-only: with no range there is nothing to stop it, and no window to close.
-if (args.Contains("--headless", StringComparer.OrdinalIgnoreCase))
+if (HeadlessArgument.IsPresent(args))
 {
     if (benchmarkFrameRange is not { } headlessRange)
     {
-        Console.Error.WriteLine("--headless requires --benchmark-frames=START-END.");
+        Console.Error.WriteLine(HeadlessArgument.RequiresRangeMessage);
         return 2;
     }
 

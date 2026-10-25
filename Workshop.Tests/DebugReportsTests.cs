@@ -139,14 +139,21 @@ public sealed class DebugReportsTests
         Select(reports, DiagnosticsReportKind.Benchmark);
 
         harness.Click(reports.OpenButton);
-        harness.Click(reports.Viewer.TileFor(LiveView.FrameCosts));
+        harness.Click(reports.TabTileFor(LiveView.FrameCosts));
 
         Assert.IsFalse(reports.ShowsComparison);
         var list = reports.Viewer.ReportViews.ListFor(LiveView.FrameCosts);
         var aura = list.RowsInDisplayOrder.First(static row => row.Cells[2] == "AuraSystem");
         Assert.AreEqual("0.5000", aura.Cells[3]);
-        StringAssert.StartsWith(reports.Viewer.ConnectionText, "From benchmark-");
-        StringAssert.StartsWith(reports.Viewer.ViewMessageText, "Milliseconds per frame");
+        StringAssert.StartsWith(reports.Viewer.Window.TitleText, "Report: benchmark-");
+        Assert.AreEqual(string.Empty, reports.Viewer.ConnectionText);
+        Assert.AreEqual("Milliseconds per frame.", reports.Viewer.ViewMessageText);
+
+        harness.Click(reports.TabTileFor(LiveView.Startup));
+
+        Assert.AreEqual("No startup report available.", reports.Viewer.ViewMessageText);
+        harness.Click(reports.TabTileFor(LiveView.Gauges));
+        Assert.AreEqual("No gauge report available.", reports.Viewer.GaugeList.Message);
     }
 
     [TestMethod]
@@ -196,13 +203,14 @@ public sealed class DebugReportsTests
         harness.Click(reports.CompareButton);
 
         Assert.IsTrue(reports.ShowsComparison);
-        var rows = reports.ComparisonList.RowsInDisplayOrder.Select(static row => (BenchmarkComparisonRow)row.Tag!).ToArray();
+        var rows = reports.ComparisonListFor(LiveView.FrameCosts).RowsInDisplayOrder.Select(static row => (BenchmarkComparisonRow)row.Tag!).ToArray();
         CollectionAssert.AreEqual(new[] { "Update.SystemManager.AuraSystem", "Update.SystemManager.GoneSystem", "Update.SystemManager.MovementSystem" }, rows.Select(static row => row.Name).ToArray());
         Assert.AreEqual(BenchmarkComparisonFlag.Regression, rows[0].Flag);
         Assert.AreEqual(100.0, rows[0].ChangePercent);
         Assert.AreEqual(BenchmarkComparisonFlag.Improvement, rows[1].Flag);
         Assert.AreEqual(BenchmarkComparisonFlag.None, rows[2].Flag);
-        Assert.IsNotNull(reports.ComparisonList.RowColorOf(reports.ComparisonList.RowsInDisplayOrder.First()));
+        var frameCosts = reports.ComparisonListFor(LiveView.FrameCosts);
+        Assert.IsNotNull(frameCosts.RowColorOf(frameCosts.RowsInDisplayOrder.First()));
         StringAssert.Contains(reports.ComparisonSummary, "Frame costs: 1 up, 1 down");
     }
 
@@ -215,7 +223,7 @@ public sealed class DebugReportsTests
         reports.OpenEntry(EntryOf(reports, DiagnosticsReportKind.AbComparison));
 
         Assert.IsTrue(reports.ShowsComparison);
-        var row = (BenchmarkComparisonRow)reports.ComparisonList.RowsInDisplayOrder.Single().Tag!;
+        var row = (BenchmarkComparisonRow)reports.ComparisonListFor(LiveView.FrameCosts).RowsInDisplayOrder.Single().Tag!;
         Assert.AreEqual(0.3909, row.Previous);
         Assert.AreEqual(0.3751, row.Current);
         Assert.AreEqual(-4.0, row.ChangePercent);
@@ -300,7 +308,7 @@ public sealed class DebugReportsTests
         Assert.AreEqual(DebugReportsSection.ComparedRowColor, reports.ReportList.RowColorOf(comparedRow));
         Assert.AreEqual(DebugReportsSection.ComparedButtonColor, reports.CompareButton.ContentColor);
         Assert.AreEqual(DebugReportsSection.BaselineRowColor, reports.ReportList.RowColorOf(RowOf(reports, DiagnosticsReportKind.SavedRun)));
-        Assert.AreEqual($"Previous: {SavedRunFileName}", reports.ComparisonPrevious);
+        Assert.AreEqual($"Compare: {((DiagnosticsReportEntry)comparedRow.Tag!).FileName} with {SavedRunFileName}", reports.ComparisonWindow.TitleText);
         Assert.DoesNotContain("Current:", reports.ComparisonSummary);
     }
 
@@ -328,23 +336,104 @@ public sealed class DebugReportsTests
     }
 
     [TestMethod]
-    public void TheAllTab_ShowsNoComparison_AndATabShowsItAgain()
+    public void TheAllTab_ShowsEveryComparedView_InTurn_ATabOnlyItsOwn_AndGaugesANote()
     {
         using var harness = OpenReports();
         var reports = harness.View.Reports;
         reports.UseAsBaseline(EntryOf(reports, DiagnosticsReportKind.SavedRun));
         reports.CompareWithBaseline(EntryOf(reports, DiagnosticsReportKind.Benchmark));
+        harness.Frame();
 
-        harness.Click(reports.TabTileFor(null));
+        Assert.IsNull(reports.SelectedTab);
+        Assert.IsTrue(reports.ShowsComparison);
+        Assert.IsTrue(reports.ComparisonWindow.IsVisible);
+        Assert.IsFalse(reports.Viewer.Window.IsVisible);
+        Assert.IsTrue(reports.ComparisonWindow.CanUserScrollVertical);
+        foreach (var view in ReportComparison.Views)
+        {
+            StringAssert.StartsWith(reports.ComparisonMessageFor(view), view == LiveView.FrameCosts ? "Frame costs in" : string.Empty);
+            Assert.AreNotEqual(string.Empty, reports.ComparisonMessageFor(view));
+        }
 
-        Assert.IsFalse(reports.ShowsComparison);
-        Assert.AreEqual(string.Empty, reports.ComparisonPrevious);
-        Assert.IsTrue(reports.Viewer.Window.IsVisible);
+        var frameCosts = reports.ComparisonListFor(LiveView.FrameCosts);
+        Assert.HasCount(3, frameCosts.RowsInDisplayOrder.ToList());
+        Assert.IsFalse(frameCosts.CanUserScrollVertical, "Under All each list is as tall as its rows; the window scrolls.");
+        Assert.AreEqual(ListView.HeaderHeight + 3 * ListView.RowHeight, frameCosts.ContentSize.Y, 0.5f);
+        Assert.AreEqual(string.Empty, reports.ComparisonNote);
 
         harness.Click(reports.TabTileFor(LiveView.FrameCosts));
 
         Assert.IsTrue(reports.ShowsComparison);
-        Assert.HasCount(3, reports.ComparisonList.RowsInDisplayOrder.ToList());
+        Assert.AreNotEqual(string.Empty, reports.ComparisonMessageFor(LiveView.FrameCosts));
+        Assert.AreEqual(string.Empty, reports.ComparisonMessageFor(LiveView.Memory));
+        Assert.IsTrue(frameCosts.CanUserScrollVertical);
+        Assert.IsFalse(reports.ComparisonWindow.CanUserScrollVertical);
+
+        harness.Click(reports.TabTileFor(LiveView.Gauges));
+
+        Assert.AreEqual(DebugReportsSection.GaugesNotComparedText, reports.ComparisonNote);
+        Assert.IsTrue(ReportComparison.Views.All(view => reports.ComparisonMessageFor(view).Length == 0));
+        Assert.IsFalse(frameCosts.IsVisible);
+    }
+
+    [TestMethod]
+    public void TheTabRow_SpansThePage_OverTheBrowserOnTheLeft_AndTheReportOnTheRight()
+    {
+        using var harness = OpenReports();
+        var reports = harness.View.Reports;
+
+        var allTile = reports.TabTileFor(null).Rectangle;
+        var gaugesTile = reports.TabTileFor(LiveView.Gauges).Rectangle;
+        Assert.AreEqual(allTile.Right, gaugesTile.Left);
+        Assert.AreEqual(allTile.Top, gaugesTile.Top);
+        Assert.IsLessThanOrEqualTo(reports.Browser.Rectangle.Top, allTile.Bottom);
+        Assert.IsLessThanOrEqualTo(reports.Viewer.Window.Rectangle.Top, allTile.Bottom);
+        Assert.IsLessThanOrEqualTo(reports.Viewer.Window.Rectangle.Left, reports.Browser.Rectangle.Right);
+        Assert.AreEqual(reports.Browser.Rectangle.Top, reports.Viewer.Window.Rectangle.Top);
+        Assert.IsLessThanOrEqualTo(reports.ReportList.Rectangle.Top, reports.OpenButton.Rectangle.Bottom);
+        Assert.IsTrue(reports.ReportList.RowsInDisplayOrder.All(static row => row.Cells.Count == 3), "Kind, date and detail only.");
+    }
+
+    [TestMethod]
+    public void TheGaugesTab_ListsOnlyTheGaugeSeries_AndShowsOnlyAnOpenReportsGauges()
+    {
+        using var harness = OpenReports();
+        var reports = harness.View.Reports;
+        reports.OpenEntry(EntryOf(reports, DiagnosticsReportKind.Gauges));
+
+        harness.Click(reports.TabTileFor(LiveView.Gauges));
+
+        CollectionAssert.AreEqual(new[] { DiagnosticsReportKind.Gauges }, reports.ReportList.RowsInDisplayOrder.Select(static row => ((DiagnosticsReportEntry)row.Tag!).Kind).ToArray());
+        CollectionAssert.AreEqual(new[] { LiveView.Gauges }, reports.Viewer.ShownViews.ToArray());
+        Assert.IsTrue(reports.Viewer.Timeline.IsVisible);
+        Assert.IsTrue(reports.Viewer.GaugeList.IsVisible);
+    }
+
+    [TestMethod]
+    public void AnOpenReport_UnderAll_ShowsEveryViewItHolds_InTurn_AndATabShowsOnlyIts()
+    {
+        using var harness = OpenReports();
+        var reports = harness.View.Reports;
+        var benchmark = EntryOf(reports, DiagnosticsReportKind.Benchmark);
+
+        reports.OpenEntry(benchmark);
+        harness.Frame();
+
+        Assert.IsNull(reports.SelectedTab);
+        CollectionAssert.AreEqual(Enum.GetValues<LiveView>().Where(benchmark.Holds).ToArray(), reports.Viewer.ShownViews.ToArray());
+        Assert.IsTrue(reports.Viewer.Window.CanUserScrollVertical);
+        StringAssert.StartsWith(reports.Viewer.MessageTextFor(LiveView.FrameCosts), "Frame costs: Milliseconds per frame");
+        var frameCosts = reports.Viewer.ReportViews.ListFor(LiveView.FrameCosts);
+        Assert.IsTrue(frameCosts.IsVisible);
+        Assert.IsFalse(frameCosts.CanUserScrollVertical);
+        Assert.AreEqual(ListView.HeaderHeight + frameCosts.RowsInDisplayOrder.Count() * ListView.RowHeight, frameCosts.ContentSize.Y, 0.5f, "Every row fits inside the list's border.");
+        Assert.IsFalse(reports.Viewer.Timeline.IsVisible, "A benchmark holds no gauges.");
+
+        harness.Click(reports.TabTileFor(LiveView.Memory));
+
+        CollectionAssert.AreEqual(new[] { LiveView.Memory }, reports.Viewer.ShownViews.ToArray());
+        Assert.IsFalse(reports.Viewer.Window.CanUserScrollVertical);
+        Assert.IsFalse(frameCosts.IsVisible);
     }
 
     [TestMethod]
@@ -364,7 +453,7 @@ public sealed class DebugReportsTests
         Assert.IsNull(reports.Comparison);
         Assert.IsFalse(reports.ShowsComparison);
         Assert.IsNull(reports.ReportList.SelectedRow);
-        Assert.AreEqual(string.Empty, reports.ComparisonPrevious);
+        Assert.AreEqual("Compare", reports.ComparisonWindow.TitleText);
         Assert.IsFalse(reports.ReportList.RowsInDisplayOrder.Any(row => reports.ReportList.RowColorOf(row) is not null));
     }
 
@@ -377,18 +466,19 @@ public sealed class DebugReportsTests
 
         reports.CompareWithBaseline(EntryOf(reports, DiagnosticsReportKind.Memory));
 
-        Assert.AreEqual(LiveView.Memory, reports.SelectedTab);
-        var rows = reports.ComparisonList.RowsInDisplayOrder.Select(static row => (BenchmarkComparisonRow)row.Tag!).ToDictionary(static row => row.Name);
+        harness.Click(reports.TabTileFor(LiveView.Memory));
+
+        var rows = reports.ComparisonListFor(LiveView.Memory).RowsInDisplayOrder.Select(static row => (BenchmarkComparisonRow)row.Tag!).ToDictionary(static row => row.Name);
         Assert.AreEqual(2048 / (1024.0 * 1024.0), rows["HealthComponent"].Current, 1e-12);
         Assert.AreEqual(1024 / (1024.0 * 1024.0), rows["HealthComponent"].Previous, 1e-12);
         Assert.AreEqual(0, rows["GoneComponent"].Current);
-        StringAssert.StartsWith(reports.ComparisonMessage, "Memory in MB");
+        StringAssert.StartsWith(reports.ComparisonMessageFor(LiveView.Memory), "Memory in MB");
 
         harness.Click(reports.TabTileFor(LiveView.FrameCosts));
 
         Assert.AreEqual(LiveView.FrameCosts, reports.SelectedTab);
-        Assert.IsEmpty(reports.ComparisonList.RowsInDisplayOrder);
-        Assert.AreEqual("Neither file holds frame costs.", reports.ComparisonMessage);
+        Assert.IsEmpty(reports.ComparisonListFor(LiveView.FrameCosts).RowsInDisplayOrder);
+        Assert.AreEqual("Neither file holds frame costs.", reports.ComparisonMessageFor(LiveView.FrameCosts));
     }
 
     [TestMethod]
@@ -400,8 +490,7 @@ public sealed class DebugReportsTests
 
         reports.CompareWithBaseline(EntryOf(reports, DiagnosticsReportKind.Startup));
 
-        Assert.AreEqual(LiveView.Startup, reports.SelectedTab);
-        var rows = reports.ComparisonList.RowsInDisplayOrder.Select(static row => (BenchmarkComparisonRow)row.Tag!).ToDictionary(static row => row.Name);
+        var rows = reports.ComparisonListFor(LiveView.Startup).RowsInDisplayOrder.Select(static row => (BenchmarkComparisonRow)row.Tag!).ToDictionary(static row => row.Name);
         Assert.AreEqual(600, rows["World Session Setup"].Previous);
         Assert.AreEqual(900, rows["World Session Setup"].Current);
         Assert.AreEqual(40, rows["World Session Setup / Configure"].Previous);

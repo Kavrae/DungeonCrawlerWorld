@@ -11,28 +11,42 @@ namespace Workshop.Debug;
 /// <summary>The Debug tab's Reports section: every report and saved benchmark run in the report folders, newest first, opened in the same views as Live, and two reports compared.</summary>
 /// <remarks>
 /// <para>
-/// The browser lists what DiagnosticsReportCatalog finds, read off the UI thread when the section first shows and on
-/// Refresh. Opening a row (Open, a double-click, Enter or its right-click menu) reads it into a recorded session the Live
-/// views show below -- frame costs, memory, a gauge series' graphs, startup scopes; an A/B opens as the comparison it recorded.
+/// A row of tabs runs across the top -- All, then gauges, frame costs, memory, leaks and startup -- over two columns: on the
+/// left the toolbar and the browser, on the right the opened report or the comparison. The tabs are the page's one choice of
+/// what to look at: they pick what the browser lists (All every report, any other only the reports holding it) and what the
+/// right column shows of the opened report or the comparison (All every view it has, one after another).
 /// </para>
 /// <para>
-/// The tabs under the toolbar -- All, then frame costs, memory, leaks and startup -- pick what the browser lists: All every
-/// report, any other only the reports holding it. Compare takes a baseline -- "Use as baseline" -- and another report, and
-/// compares what both hold (ReportComparison); the selected tab's comparison shows below, every item largest change first,
-/// rows past the threshold coloured, and All shows none. The baseline's row and button show green and the compared report's
-/// yellow; a report is never compared with itself. Refresh clears both.
+/// The browser lists what DiagnosticsReportCatalog finds, read off the UI thread when the section first shows and on
+/// Refresh. Opening a row (Open, a double-click, Enter or its right-click menu) reads it into a recorded session the Live
+/// views show -- frame costs, memory, a gauge series' graphs, startup scopes; an A/B opens as the comparison it recorded.
+/// </para>
+/// <para>
+/// Compare takes a baseline -- "Use as baseline" -- and another report, and compares what both hold (ReportComparison),
+/// every item largest change first, rows past the threshold coloured; gauges are series, never compared. The baseline's row
+/// and button show green and the compared report's yellow; a report is never compared with itself. Refresh clears both.
+/// </para>
+/// <para>
+/// A benchmark a connected game completes (WorkshopDebugging.CompletedBenchmark) is a Refresh too, after which its report
+/// is selected and opened -- the next time the section shows, if it isn't showing; nothing switches to the section by itself.
 /// </para>
 /// </remarks>
 public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebugging debugging)
 {
     public const string WindowTitle = "Reports";
 
+    /// <summary>What the comparison says under the Gauges tab.</summary>
+    public const string GaugesNotComparedText = "Gauges aren't compared: each report's gauges are a series over time. Open a report to see its graph.";
+
     private const float ToolbarButtonGap = 4f;
     private const float ThresholdLabelWidth = 90f;
     private const float ThresholdFieldWidth = 70f;
     private const float TabTileWidth = 100f;
-    private const float MinimumBrowserHeight = 200f;
-    private const float MaximumBrowserHeight = 320f;
+    private const float BrowserWidth = 520f;
+    private const float KindColumnWidth = 100f;
+    private const float DateColumnWidth = 140f;
+    private const float MinimumDetailColumnWidth = 120f;
+    private const float ListScrollbarAllowance = 24f;
     private const string CompareHint = "Use a report as the baseline, select another, then Compare with baseline.";
 
     public static readonly Color BaselineRowColor = Color.LightGreen * 0.8f;
@@ -44,20 +58,22 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
     private static readonly Color ImprovementColor = Color.LightGreen * 0.6f;
 
     private readonly List<(LiveView? View, TextWindow Tile)> _tabTiles = [];
+    private readonly Dictionary<LiveView, TextWindow> _compareMessages = [];
+    private readonly Dictionary<LiveView, ListView> _compareLists = [];
     private Task<IReadOnlyList<DiagnosticsReportEntry>>? _scan;
     private IReadOnlyList<DiagnosticsReportEntry> _entries = [];
+    private Window _tabBar = null!;
     private Window _browser = null!;
     private Button _open = null!;
     private Button _useAsBaseline = null!;
     private Button _compare = null!;
     private NumericField _threshold = null!;
     private TextWindow _baselineLabel = null!;
-    private TextWindow _previousLabel = null!;
     private ListView _list = null!;
     private Window _compareWindow = null!;
     private TextWindow _compareSummary = null!;
-    private TextWindow _compareMessage = null!;
-    private ListView _compareList = null!;
+    private TextWindow _compareNote = null!;
+    private DiagnosticsReportEntry? _openEntry;
     private DiagnosticsReportEntry? _baselineEntry;
     private LiveDiagnosticsSession? _baselineSession;
     private DiagnosticsReportEntry? _comparedEntry;
@@ -68,20 +84,30 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
     private bool _showsComparison;
     private bool _isVisible;
     private bool _hasScanned;
+    private int _shownCompletedBenchmarkVersion;
+    private string? _completedReportToOpen;
+    private bool _rescansWhenDone;
 
-    /// <summary>The opened report's views: the Live section's, over a recorded session.</summary>
-    public DebugLiveSection Viewer { get; } = new(services, "Report", "No report open: select one above, then Open it.");
+    /// <summary>The opened report's views: the Live section's, over a recorded session, with no switch of their own -- the page's tabs choose.</summary>
+    public DebugLiveSection Viewer { get; } = new(services, "Report", "No report open: select one, then Open it.", hasViewSwitch: false);
 
     public ListView ReportList => _list;
 
-    public ListView ComparisonList => _compareList;
+    /// <summary>The comparison's rows for view, whether or not they are shown.</summary>
+    public ListView ComparisonListFor(LiveView view) => _compareLists[view];
+
+    /// <summary>The line over view's comparison, as shown; empty when it isn't shown.</summary>
+    public string ComparisonMessageFor(LiveView view) => _compareMessages[view].IsVisible ? _compareMessages[view].OriginalText : string.Empty;
 
     public string ComparisonSummary => _compareSummary.OriginalText;
 
-    /// <summary>"Previous: " and the file compared against, beside the tabs; empty with no comparison or under All.</summary>
-    public string ComparisonPrevious => _previousLabel.OriginalText;
+    /// <summary>What the comparison says in place of rows -- under the Gauges tab; empty otherwise.</summary>
+    public string ComparisonNote => _compareNote.IsVisible ? _compareNote.OriginalText : string.Empty;
 
-    public string ComparisonMessage => _compareMessage.OriginalText;
+    /// <summary>The comparison's window, titled with the two files compared.</summary>
+    public Window ComparisonWindow => _compareWindow;
+
+    public Window Browser => _browser;
 
     public Button OpenButton => _open;
 
@@ -103,8 +129,8 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
     /// <summary>The session the opened report reads into; null when none is open or it opened as a comparison.</summary>
     public LiveDiagnosticsSession? OpenSession => _openSession;
 
-    /// <summary>True when the comparison, not the opened report, shows under the browser: one was made and a tab other than All is selected.</summary>
-    public bool ShowsComparison => _showsComparison && _selectedTab is not null;
+    /// <summary>True when the comparison, not the opened report, shows in the right column.</summary>
+    public bool ShowsComparison => _showsComparison;
 
     public DiagnosticsReportEntry? Baseline => _baselineEntry;
 
@@ -113,48 +139,51 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
     /// <summary>The comparison shown; null before one.</summary>
     public ReportComparison? Comparison => _comparison;
 
-    /// <summary>The tab selected: what the browser lists and the comparison shows; null for All.</summary>
+    /// <summary>The tab selected: what the browser lists and the right column shows; null for All.</summary>
     public LiveView? SelectedTab => _selectedTab;
 
-    /// <summary>view's tile under the toolbar; null for All.</summary>
+    /// <summary>view's tile in the tab row; null for All.</summary>
     public TextWindow TabTileFor(LiveView? view) => _tabTiles.First(entry => entry.View == view).Tile;
 
     public void Open(Rectangle bounds)
     {
-        var (browserBounds, viewerBounds) = Rows(bounds);
+        var (tabBarBounds, browserBounds, detailsBounds) = Areas(bounds);
+        _tabBar = CreateTabBar(tabBarBounds);
+        _tabTiles.Clear();
+        var tileX = 0f;
+        foreach (var view in TabViews)
+        {
+            _tabTiles.Add((view, DebugTabElements.CreateTile(services, _tabBar, new Vector2(tileX, 0), TabTileWidth, view is { } shown ? LabelOf(shown) : "All", () => ShowTab(view))));
+            tileX += TabTileWidth;
+        }
+
         _browser = DebugTabElements.CreateWindow(services, browserBounds, WindowTitle);
         var x = 0f;
         CreateButton("Refresh", ref x, StartScan);
         _open = CreateButton("Open", ref x, () => WithSelected(OpenEntry));
         _useAsBaseline = CreateButton("Use as baseline", ref x, () => WithSelected(UseAsBaseline));
         _compare = CreateButton("Compare with baseline", ref x, () => WithSelected(CompareWithBaseline));
-        DebugTabElements.CreateText(services, _browser, new Vector2(x, 0), new Vector2(ThresholdLabelWidth, DebugTabChrome.RowHeight), "Threshold %");
-        x += ThresholdLabelWidth;
-        _threshold = DebugTabElements.CreateChild<NumericField>(services, _browser, new Vector2(x, 0), new Vector2(ThresholdFieldWidth, DebugTabChrome.RowHeight), showBorder: true);
+        DebugTabElements.CreateText(services, _browser, new Vector2(0, SecondToolbarRowTop), new Vector2(ThresholdLabelWidth, DebugTabChrome.RowHeight), "Threshold %");
+        _threshold = DebugTabElements.CreateChild<NumericField>(services, _browser, new Vector2(ThresholdLabelWidth, SecondToolbarRowTop), new Vector2(ThresholdFieldWidth, DebugTabChrome.RowHeight), showBorder: true);
         _threshold.Configure(BenchmarkComparison.DefaultThresholdPercent, 1, 500);
         _threshold.ValueChanged += _ => RefreshComparison();
-        x += ThresholdFieldWidth + DebugTabChrome.Margin;
-        _baselineLabel = DebugTabElements.CreateText(services, _browser, new Vector2(x, 0), new Vector2(System.Math.Max(1, _browser.ContentSize.X - x), DebugTabChrome.RowHeight), string.Empty);
-        _tabTiles.Clear();
-        var tileX = 0f;
-        foreach (var view in TabViews)
-        {
-            _tabTiles.Add((view, DebugTabElements.CreateTile(services, _browser, new Vector2(tileX, TabsTop), TabTileWidth, view is { } shown ? LabelOf(shown) : "All", () => ShowTab(view))));
-            tileX += TabTileWidth;
-        }
-
-        var previousX = System.Math.Max(x, tileX + DebugTabChrome.Margin);
-        _previousLabel = DebugTabElements.CreateText(services, _browser, new Vector2(previousX, TabsTop), new Vector2(System.Math.Max(1, _browser.ContentSize.X - previousX), DebugTabChrome.RowHeight), string.Empty);
+        _baselineLabel = DebugTabElements.CreateText(services, _browser, new Vector2(BaselineLabelLeft, SecondToolbarRowTop), new Vector2(BaselineLabelWidth(), DebugTabChrome.RowHeight), string.Empty);
         _list = DebugTabElements.CreateChild<ListView>(services, _browser, new Vector2(0, ListTop), ListSize(), showBorder: true);
-        _list.SetColumns([new("Kind", 100), new("Date", 140), new("Seed", 80), new("Frames", 100), new("Detail", 380), new("File", 260)], showIconColumn: false);
+        _list.SetColumns(BrowserColumns(), showIconColumn: false);
         _list.RowActivated += _ => WithSelected(OpenEntry);
         services.AddInputHandler(new ReportRowMenuInputHandler(this));
 
-        Viewer.Open(viewerBounds);
-        _compareWindow = DebugTabElements.CreateWindow(services, viewerBounds, "Compare");
+        Viewer.Open(detailsBounds);
+        _compareWindow = DebugTabElements.CreateWindow(services, detailsBounds, "Compare");
         _compareSummary = DebugTabElements.CreateText(services, _compareWindow, Vector2.Zero, new Vector2(_compareWindow.ContentSize.X, DebugTabChrome.RowHeight), CompareHint);
-        _compareMessage = DebugTabElements.CreateText(services, _compareWindow, new Vector2(0, CompareMessageTop), new Vector2(_compareWindow.ContentSize.X, DebugTabChrome.RowHeight), string.Empty);
-        _compareList = DebugTabElements.CreateChild<ListView>(services, _compareWindow, new Vector2(0, CompareListTop), CompareListSize(), showBorder: true);
+        _compareNote = DebugTabElements.CreateText(services, _compareWindow, Vector2.Zero, new Vector2(_compareWindow.ContentSize.X, DebugTabChrome.RowHeight), GaugesNotComparedText);
+        _compareMessages.Clear();
+        _compareLists.Clear();
+        foreach (var view in ReportComparison.Views)
+        {
+            _compareMessages[view] = DebugTabElements.CreateText(services, _compareWindow, Vector2.Zero, new Vector2(_compareWindow.ContentSize.X, DebugTabChrome.RowHeight), string.Empty);
+            _compareLists[view] = DebugTabElements.CreateChild<ListView>(services, _compareWindow, Vector2.Zero, Vector2.One, showBorder: true);
+        }
 
         RefreshComparison();
         ShowTab(_selectedTab);
@@ -162,21 +191,21 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
 
     public void Resize(Rectangle bounds)
     {
-        var (browserBounds, viewerBounds) = Rows(bounds);
+        var (tabBarBounds, browserBounds, detailsBounds) = Areas(bounds);
+        DebugTabElements.Place(_tabBar, tabBarBounds);
         DebugTabElements.Place(_browser, browserBounds);
         _list.SetSize(ListSize());
-        _baselineLabel.SetSize(new Vector2(System.Math.Max(1, _browser.ContentSize.X - _baselineLabel.RelativePosition.X), DebugTabChrome.RowHeight));
-        _previousLabel.SetSize(new Vector2(System.Math.Max(1, _browser.ContentSize.X - _previousLabel.RelativePosition.X), DebugTabChrome.RowHeight));
-        Viewer.Resize(viewerBounds);
-        DebugTabElements.Place(_compareWindow, viewerBounds);
+        _baselineLabel.SetSize(new Vector2(BaselineLabelWidth(), DebugTabChrome.RowHeight));
+        Viewer.Resize(detailsBounds);
+        DebugTabElements.Place(_compareWindow, detailsBounds);
         _compareSummary.SetSize(new Vector2(_compareWindow.ContentSize.X, DebugTabChrome.RowHeight));
-        _compareMessage.SetSize(new Vector2(_compareWindow.ContentSize.X, DebugTabChrome.RowHeight));
-        _compareList.SetSize(CompareListSize());
+        LayOutComparison();
     }
 
     /// <summary>Takes up a finished scan and shows the opened report. UI thread, once per frame, while the section shows.</summary>
     public void Update()
     {
+        TakeUpCompletedBenchmark();
         if (_scan is { IsCompleted: true } scan)
         {
             _scan = null;
@@ -187,9 +216,20 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
             {
                 services.Status.Show($"Couldn't read the report folders: {exception.GetBaseException().Message}");
             }
+
+            if (_rescansWhenDone)
+            {
+                _rescansWhenDone = false;
+                StartScan();
+            }
+            else if (_completedReportToOpen is { } fileName)
+            {
+                _completedReportToOpen = null;
+                OpenCompletedBenchmark(fileName);
+            }
         }
 
-        if (!ShowsComparison)
+        if (!_showsComparison)
         {
             Viewer.Update(_openSession);
         }
@@ -198,18 +238,24 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
     public void SetVisible(bool isVisible)
     {
         _isVisible = isVisible;
-        if (isVisible && !_hasScanned)
+        if (isVisible)
         {
-            StartScan();
+            TakeUpCompletedBenchmark();
+            if (!_hasScanned)
+            {
+                StartScan();
+            }
         }
 
+        _tabBar.IsVisible = isVisible;
         _browser.IsVisible = isVisible;
-        Viewer.Window.IsVisible = isVisible && !ShowsComparison;
-        _compareWindow.IsVisible = isVisible && ShowsComparison;
+        Viewer.Window.IsVisible = isVisible && !_showsComparison;
+        _compareWindow.IsVisible = isVisible && _showsComparison;
     }
 
     public void Close()
     {
+        DebugTabElements.Close(services, _tabBar);
         DebugTabElements.Close(services, _browser);
         DebugTabElements.Close(services, Viewer.Window);
         DebugTabElements.Close(services, _compareWindow);
@@ -245,29 +291,8 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
         new("Compare with baseline", null, Enabled: entry.CanBeCompared && _baselineEntry is not null && !IsBaseline(entry), () => CompareWithBaseline(entry)),
     ];
 
-    /// <summary>Opens entry: into the views below, or as the comparison an A/B recorded.</summary>
-    public void OpenEntry(DiagnosticsReportEntry entry)
-    {
-        try
-        {
-            if (entry.Kind == DiagnosticsReportKind.AbComparison)
-            {
-                var (previous, current) = DiagnosticsReportFiles.OpenAbComparison(entry);
-                ShowComparison(entry, $"{entry.FileName} (A, baseline build)", previous, $"{entry.FileName} (B, current build)", current);
-                return;
-            }
-
-            _openSession = DiagnosticsReportFiles.OpenSession(entry);
-            Viewer.Window.TitleText = $"Report: {entry.FileName}";
-            _showsComparison = false;
-            SetVisible(_isVisible);
-            services.Status.Show($"Opened {entry.FileName}.");
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
-        {
-            services.Status.Show($"Couldn't open {entry.FileName}: {exception.Message}");
-        }
-    }
+    /// <summary>Opens entry: into the right column's views, or as the comparison an A/B recorded.</summary>
+    public void OpenEntry(DiagnosticsReportEntry entry) => OpenEntry(entry, announces: true);
 
     /// <summary>Makes entry the baseline later reports are compared with.</summary>
     public void UseAsBaseline(DiagnosticsReportEntry entry)
@@ -321,7 +346,7 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
         }
     }
 
-    /// <summary>Selects view's tab: the browser lists only the reports holding it, and the comparison shows it; null (All) lists every report and shows no comparison.</summary>
+    /// <summary>Selects view's tab: the browser lists only the reports holding it, and the right column shows only it; null (All) lists every report and shows every view, one after another.</summary>
     public void ShowTab(LiveView? view)
     {
         _selectedTab = view;
@@ -332,13 +357,107 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
 
         ShowEntries();
         ShowMarks();
-        ShowComparisonRows();
-        SetVisible(_isVisible);
+        ShowDetails();
     }
 
-    private static IReadOnlyList<LiveView?> TabViews => [null, .. ReportComparison.Views.Select(static view => (LiveView?)view)];
+    private static IReadOnlyList<LiveView?> TabViews => [null, .. Enum.GetValues<LiveView>().Select(static view => (LiveView?)view)];
 
     private bool Lists(DiagnosticsReportEntry entry) => _selectedTab is not { } tab || entry.Holds(tab);
+
+    /// <param name="announces">Say on the status line that it opened; false when the status line already says why.</param>
+    private void OpenEntry(DiagnosticsReportEntry entry, bool announces)
+    {
+        try
+        {
+            if (entry.Kind == DiagnosticsReportKind.AbComparison)
+            {
+                var (previous, current) = DiagnosticsReportFiles.OpenAbComparison(entry);
+                ShowComparison(entry, $"{entry.FileName} (A, baseline build)", previous, $"{entry.FileName} (B, current build)", current);
+                return;
+            }
+
+            _openSession = DiagnosticsReportFiles.OpenSession(entry);
+            _openEntry = entry;
+            Viewer.Window.TitleText = $"Report: {entry.FileName}";
+            _showsComparison = false;
+            ShowDetails();
+            if (announces)
+            {
+                services.Status.Show($"Opened {entry.FileName}.");
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            services.Status.Show($"Couldn't open {entry.FileName}: {exception.Message}");
+        }
+    }
+
+    /// <summary>The right column for the selected tab: the comparison, or the opened report -- every view it holds under All, else the tab's view.</summary>
+    private void ShowDetails()
+    {
+        SetVisible(_isVisible);
+        if (_showsComparison)
+        {
+            LayOutComparison();
+            return;
+        }
+
+        if (_selectedTab is { } view)
+        {
+            Viewer.ShowView(view);
+            return;
+        }
+
+        Viewer.ShowViews(_openEntry is { } entry ? ViewsHeldBy(entry) : []);
+    }
+
+    /// <summary>The views entry holds, in the tabs' order; every one when it names none, so each says what it lacks.</summary>
+    private static IReadOnlyList<LiveView> ViewsHeldBy(DiagnosticsReportEntry entry)
+    {
+        var held = Enum.GetValues<LiveView>().Where(entry.Holds).ToList();
+        return held.Count > 0 ? held : Enum.GetValues<LiveView>();
+    }
+
+    /// <summary>A benchmark a game completed since the section last looked: read the folders again, then open its report.</summary>
+    private void TakeUpCompletedBenchmark()
+    {
+        if (debugging.CompletedBenchmarkVersion == _shownCompletedBenchmarkVersion || debugging.CompletedBenchmark is not { } completion)
+        {
+            return;
+        }
+
+        _shownCompletedBenchmarkVersion = debugging.CompletedBenchmarkVersion;
+        _completedReportToOpen = Path.GetFileName(completion.BenchmarkReportPath);
+        if (IsScanning)
+        {
+            _rescansWhenDone = true;
+            return;
+        }
+
+        StartScan();
+    }
+
+    /// <summary>Selects and opens the report named fileName, listing every report if the selected tab hides it; says so when the folders don't hold it.</summary>
+    private void OpenCompletedBenchmark(string fileName)
+    {
+        if (_entries.FirstOrDefault(entry => string.Equals(entry.FileName, fileName, StringComparison.OrdinalIgnoreCase)) is not { } entry)
+        {
+            services.Status.Show($"The completed benchmark's report, {fileName}, isn't in the report folders.");
+            return;
+        }
+
+        if (!Lists(entry))
+        {
+            ShowTab(null);
+        }
+
+        if (_list.RowsInDisplayOrder.FirstOrDefault(row => ReferenceEquals(row.Tag, entry)) is { } row)
+        {
+            _list.Select(row, scrollIntoView: true);
+        }
+
+        OpenEntry(entry, announces: false);
+    }
 
     private void ClearSelections()
     {
@@ -351,9 +470,9 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
         _list.Select(null, scrollIntoView: false);
         _compareWindow.TitleText = "Compare";
         _compareSummary.UpdateText(CompareHint);
+        FillComparisonLists();
         ShowMarks();
-        ShowComparisonRows();
-        SetVisible(_isVisible);
+        ShowDetails();
     }
 
     private bool IsBaseline(DiagnosticsReportEntry entry) => _baselineEntry is { } baseline && SameFile(baseline, entry);
@@ -387,19 +506,16 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
         }
     }
 
-    /// <summary>Compares current with previous, keeping the selected tab if it has rows, else selecting the first that does.</summary>
+    /// <summary>Compares current with previous and shows it in the right column, under whichever tab is selected.</summary>
     private void ShowComparison(DiagnosticsReportEntry comparedEntry, string previousName, LiveDiagnosticsSession previous, string currentName, LiveDiagnosticsSession current)
     {
         _comparedEntry = comparedEntry;
         _comparedSessions = (previousName, previous, currentName, current);
-        RefreshComparison();
-        var comparison = _comparison!;
-        var view = _selectedTab is { } selected && comparison.TabFor(selected).Rows.Count > 0
-            ? selected
-            : ReportComparison.Views.FirstOrDefault(candidate => comparison.TabFor(candidate).Rows.Count > 0, _selectedTab ?? LiveView.FrameCosts);
         _compareWindow.TitleText = $"Compare: {currentName} with {previousName}";
         _showsComparison = true;
-        ShowTab(view);
+        RefreshComparison();
+        ShowMarks();
+        ShowDetails();
     }
 
     private void RefreshComparison()
@@ -411,7 +527,8 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
 
         _comparison = ReportComparison.Compare(sessions.PreviousName, sessions.Previous, sessions.CurrentName, sessions.Current, _threshold.Value);
         _compareSummary.UpdateText(SummaryOf(_comparison, _threshold.Value));
-        ShowComparisonRows();
+        FillComparisonLists();
+        LayOutComparison();
     }
 
     private static string SummaryOf(ReportComparison comparison, double thresholdPercent)
@@ -422,38 +539,85 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
         return $"Past {thresholdPercent:0.#}%   {string.Join("   ", counts)}";
     }
 
-    /// <summary>The selected tab's rows, coloured past the threshold, under a line saying what they are or why there are none; and the previous file's name beside the tabs.</summary>
-    private void ShowComparisonRows()
+    /// <summary>Every compared view's rows, coloured past the threshold, under a line saying what they are or why there are none.</summary>
+    private void FillComparisonLists()
     {
-        if (_comparison is not { } comparison || _comparedSessions is not { } sessions || _selectedTab is not { } view)
+        foreach (var view in ReportComparison.Views)
         {
-            _previousLabel.UpdateText(string.Empty);
-            _compareMessage.UpdateText(string.Empty);
-            _compareList.SetRows([]);
-            return;
-        }
+            var list = _compareLists[view];
+            if (_comparison is not { } comparison)
+            {
+                list.SetRows([]);
+                _compareMessages[view].UpdateText(string.Empty);
+                continue;
+            }
 
-        _previousLabel.UpdateText($"Previous: {sessions.PreviousName}");
-        var tab = comparison.TabFor(view);
-        _compareList.SetColumns([new("Item", 420), new($"Previous ({tab.Unit})", 130), new($"Current ({tab.Unit})", 130), new("Change", 100), new("Change %", 80), new("Ratio", 70), new("Flag", 100)], showIconColumn: false);
-        var rows = tab.Rows.Select(row => new ListViewRow(
-        [
-            row.Name,
-            Format(tab.Unit, row.Previous),
-            Format(tab.Unit, row.Current),
-            (row.Change >= 0 ? "+" : string.Empty) + Format(tab.Unit, row.Change),
-            row.ChangePercent?.ToString("0.0", CultureInfo.InvariantCulture) ?? "n/a",
-            row.Ratio?.ToString("0.000", CultureInfo.InvariantCulture) ?? "n/a",
-            row.Flag == BenchmarkComparisonFlag.None ? string.Empty : row.Flag.ToString(),
-        ],
-        Tag: row)).ToList();
-        _compareList.SetRows(rows);
-        _compareList.SetRowColors(rows
-            .Where(static row => ((BenchmarkComparisonRow)row.Tag!).Flag != BenchmarkComparisonFlag.None)
-            .Select(static row => KeyValuePair.Create(row, ((BenchmarkComparisonRow)row.Tag!).Flag == BenchmarkComparisonFlag.Regression ? RegressionColor : ImprovementColor)));
-        _compareMessage.UpdateText(tab.Unavailable ?? (rows.Count == 0
-            ? $"Nothing to compare: neither holds any {LabelOf(view).ToLowerInvariant()}."
-            : $"{LabelOf(view)} in {tab.Unit}, largest change first."));
+            var tab = comparison.TabFor(view);
+            list.SetColumns([new("Item", 420), new($"Previous ({tab.Unit})", 130), new($"Current ({tab.Unit})", 130), new("Change", 100), new("Change %", 80), new("Ratio", 70), new("Flag", 100)], showIconColumn: false);
+            var rows = tab.Rows.Select(row => new ListViewRow(
+            [
+                row.Name,
+                Format(tab.Unit, row.Previous),
+                Format(tab.Unit, row.Current),
+                (row.Change >= 0 ? "+" : string.Empty) + Format(tab.Unit, row.Change),
+                row.ChangePercent?.ToString("0.0", CultureInfo.InvariantCulture) ?? "n/a",
+                row.Ratio?.ToString("0.000", CultureInfo.InvariantCulture) ?? "n/a",
+                row.Flag == BenchmarkComparisonFlag.None ? string.Empty : row.Flag.ToString(),
+            ],
+            Tag: row)).ToList();
+            list.SetRows(rows);
+            list.SetRowColors(rows
+                .Where(static row => ((BenchmarkComparisonRow)row.Tag!).Flag != BenchmarkComparisonFlag.None)
+                .Select(static row => KeyValuePair.Create(row, ((BenchmarkComparisonRow)row.Tag!).Flag == BenchmarkComparisonFlag.Regression ? RegressionColor : ImprovementColor)));
+            _compareMessages[view].UpdateText(tab.Unavailable ?? (rows.Count == 0
+                ? $"Nothing to compare: neither holds any {LabelOf(view).ToLowerInvariant()}."
+                : $"{LabelOf(view)} in {tab.Unit}, largest change first."));
+        }
+    }
+
+    /// <summary>Places the comparison for the selected tab under its summary: every compared view in turn, as tall as its rows, under All; the tab's view filling the window under another; a note under Gauges.</summary>
+    private void LayOutComparison()
+    {
+        var width = _compareWindow.ContentSize.X;
+        var height = _compareWindow.ContentSize.Y;
+        var y = DebugTabChrome.RowHeight + DebugTabChrome.RowGap;
+        var hasComparison = _comparison is not null;
+        _compareWindow.CanUserScrollVertical = _selectedTab is null;
+        _compareWindow.ScrollTo(Vector2.Zero);
+        _compareNote.IsVisible = hasComparison && _selectedTab == LiveView.Gauges;
+        DebugTabElements.Place(_compareNote, new Rectangle(0, (int)y, (int)width, (int)DebugTabChrome.RowHeight));
+        foreach (var view in ReportComparison.Views)
+        {
+            var message = _compareMessages[view];
+            var list = _compareLists[view];
+            var isShown = hasComparison && (_selectedTab is null || _selectedTab == view);
+            message.IsVisible = isShown;
+            list.IsVisible = isShown && list.RowsInDisplayOrder.Any();
+            if (!isShown)
+            {
+                continue;
+            }
+
+            DebugTabElements.Place(message, new Rectangle(0, (int)y, (int)width, (int)DebugTabChrome.RowHeight));
+            y += DebugTabChrome.RowHeight;
+            if (_selectedTab is not null)
+            {
+                list.CanUserScrollVertical = true;
+                DebugTabElements.Place(list, new Rectangle(0, (int)y, (int)width, (int)System.Math.Max(DebugTabChrome.RowHeight, height - y)));
+                continue;
+            }
+
+            var rowCount = list.RowsInDisplayOrder.Count();
+            if (rowCount == 0)
+            {
+                continue;
+            }
+
+            list.CanUserScrollVertical = false;
+            var listHeight = LiveReportViews.WholeHeightOf(list, rowCount);
+            DebugTabElements.Place(list, new Rectangle(0, (int)y, (int)width, (int)listHeight));
+            y += listHeight + DebugTabChrome.RowGap;
+        }
     }
 
     private static string Format(string unit, double value) => value.ToString(unit switch
@@ -505,10 +669,7 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
         [
             KindLabel(entry.Kind),
             entry.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
-            entry.Seed?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,
-            entry.StartFrame is { } start && entry.EndFrame is { } end ? $"{start}-{end}" : string.Empty,
             entry.Detail,
-            entry.FileName,
         ],
         Tag: entry))]);
         var reselected = selectedPath is null ? null : _list.RowsInDisplayOrder.FirstOrDefault(row => string.Equals(((DiagnosticsReportEntry)row.Tag!).FilePath, selectedPath, StringComparison.OrdinalIgnoreCase));
@@ -529,6 +690,21 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
         _ => view.ToString(),
     };
 
+    private Window CreateTabBar(Rectangle bounds)
+    {
+        var tabBar = services.Pool.CreateElement<Window>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(bounds.X, bounds.Y), Size = new Vector2(bounds.Width, bounds.Height), MaximumSize = new Vector2(4000, 4000), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+        });
+        tabBar.ContentPadding = Vector2.Zero;
+        tabBar.Initialize();
+        services.Layers.Add(UiLayer.Base, tabBar);
+        return tabBar;
+    }
+
     private Button CreateButton(string label, ref float x, Action onClicked)
     {
         var width = services.Fonts.GetFont(FontChrome.DefaultFontSize).MeasureString(label).X + 20;
@@ -545,27 +721,32 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
         return button;
     }
 
-    private static float TabsTop => DebugTabChrome.RowHeight + DebugTabChrome.RowGap;
+    /// <summary>Kind and date, then the detail filling what is left of the browser's width.</summary>
+    private IReadOnlyList<ListViewColumn> BrowserColumns() =>
+        [new("Kind", KindColumnWidth), new("Date", DateColumnWidth), new("Detail", System.Math.Max(MinimumDetailColumnWidth, _browser.ContentSize.X - KindColumnWidth - DateColumnWidth - ListScrollbarAllowance))];
 
-    private static float ListTop => TabsTop + DebugTabChrome.RowHeight + DebugTabChrome.RowGap;
+    private static float SecondToolbarRowTop => DebugTabChrome.RowHeight + DebugTabChrome.RowGap;
 
-    private static float CompareMessageTop => DebugTabChrome.RowHeight + DebugTabChrome.RowGap;
+    private static float BaselineLabelLeft => ThresholdLabelWidth + ThresholdFieldWidth + DebugTabChrome.Margin;
 
-    private static float CompareListTop => CompareMessageTop + DebugTabChrome.RowHeight;
+    private static float ListTop => SecondToolbarRowTop + DebugTabChrome.RowHeight + DebugTabChrome.RowGap;
+
+    private float BaselineLabelWidth() => System.Math.Max(1, _browser.ContentSize.X - BaselineLabelLeft);
 
     private Vector2 ListSize() =>
         new(_browser.ContentSize.X, System.Math.Max(DebugTabChrome.RowHeight, _browser.ContentSize.Y - ListTop));
 
-    private Vector2 CompareListSize() =>
-        new(_compareWindow.ContentSize.X, System.Math.Max(DebugTabChrome.RowHeight, _compareWindow.ContentSize.Y - CompareListTop));
-
-    private static (Rectangle Browser, Rectangle Viewer) Rows(Rectangle bounds)
+    /// <summary>The tab row across the top, then the browser on the left and the opened report or comparison on the right.</summary>
+    private static (Rectangle TabBar, Rectangle Browser, Rectangle Details) Areas(Rectangle bounds)
     {
-        var browserHeight = (int)System.Math.Clamp(bounds.Height * 0.38f, MinimumBrowserHeight, MaximumBrowserHeight);
-        var viewerTop = bounds.Y + browserHeight + (int)DebugTabChrome.RowGap;
+        var columnsTop = bounds.Y + (int)(DebugTabChrome.RowHeight + DebugTabChrome.RowGap);
+        var columnsHeight = System.Math.Max(100, bounds.Bottom - columnsTop);
+        var browserWidth = (int)System.Math.Min(BrowserWidth, bounds.Width / 2f);
+        var detailsLeft = bounds.X + browserWidth + (int)DebugTabChrome.Margin;
         return (
-            new Rectangle(bounds.X, bounds.Y, bounds.Width, browserHeight),
-            new Rectangle(bounds.X, viewerTop, bounds.Width, System.Math.Max(100, bounds.Bottom - viewerTop)));
+            new Rectangle(bounds.X, bounds.Y, bounds.Width, (int)DebugTabChrome.RowHeight),
+            new Rectangle(bounds.X, columnsTop, browserWidth, columnsHeight),
+            new Rectangle(detailsLeft, columnsTop, System.Math.Max(100, bounds.Right - detailsLeft), columnsHeight));
     }
 
     /// <summary>Selects the report row under position and opens its menu there; nothing off the rows or while the section is hidden.</summary>

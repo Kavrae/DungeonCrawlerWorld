@@ -40,6 +40,7 @@ var options = new WorkshopHostOptions(
     })
 {
     GameOutputLogPath = Path.Combine(RepositoryPaths.LogDirectory(), "workshop-game-output.log"),
+    DebugLaunchOptionsPath = DebugLaunchOptionsStore.FilePathForGame("DungeonCrawlerWorld"),
     DiagnosticsReportDirectories = [Path.Combine(RepositoryPaths.LogDirectory(), "diagnostics"), Path.Combine(RepositoryPaths.LogDirectory(), "phase-benchmarks")],
 };
 

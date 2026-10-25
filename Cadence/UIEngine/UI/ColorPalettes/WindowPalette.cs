@@ -52,6 +52,17 @@ public static class WindowPalette
     /// <summary>Generic dark control background -- icon slots, GridControl's tiles and buttons, TabbedContent's tab tiles.</summary>
     public static Color ControlBackground = new(45, 45, 45);
 
+    /// <summary>How far a disabled control's content background is darkened toward black, as Windows greys a disabled box or checkbox.</summary>
+    public static float DisabledDarkening = 0.3f;
+
+    /// <summary>background darkened by DisabledDarkening, its alpha kept: what a disabled text box or checkbox fills with.</summary>
+    public static Color DisabledBackground(Color background)
+    {
+        var darkened = Color.Lerp(background, Color.Black, DisabledDarkening);
+        darkened.A = background.A;
+        return darkened;
+    }
+
     /// <summary>Scrollbar track, and the corner square where two tracks meet.</summary>
     public static Color ScrollbarTrackColor = new(25, 25, 25);
 

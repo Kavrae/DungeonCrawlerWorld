@@ -410,6 +410,8 @@ Exclusive systems (`&mut World`) are the escape hatch that applies changes direc
 
 #### Workshop Debug tab: launch options
 
+**Planned:** `PLAN-workshop-debug-tab-launch-options.md` (2026-10-24, decisions settled 2026-10-25).
+
 The Debug Options tab was folded into the Debug tab (`PLAN-workshop-diagnostics-tab.md`, epic child 8, 2026-10-24),
 which builds its Launch section with the diagnostics feature checkboxes only. Every other debug setting is still a
 command-line flag typed by hand: `--seed=N`, `--map-size=N`, `--benchmark-frames=START-END`, `--headless`, and

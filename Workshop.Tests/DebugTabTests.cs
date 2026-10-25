@@ -52,6 +52,30 @@ public sealed class DebugTabTests
         new((int)list.ContentAbsolutePosition.X + 60, (int)(list.ContentAbsolutePosition.Y + list.RowTopOf(gaugeIndex) - list.ScrollOffset.Y + DebugTabChrome.GaugeListRowHeight / 2));
 
     [TestMethod]
+    public void TheFrameGraph_IsPartOfTheGaugesView_AboveTheGaugeList_AndHiddenUnderAnyOther()
+    {
+        using var harness = new DebugTabHarness(_optionsPath);
+        harness.Session = SessionWith("FrameBudget, Gauges", 120, TwoGauges);
+        harness.View.ShowSection(DebugSection.Live);
+        harness.Frame();
+        var live = harness.View.Live;
+
+        Assert.AreEqual(LiveView.Gauges, live.View);
+        Assert.IsTrue(live.Timeline.IsVisible);
+        Assert.IsTrue(live.WindowChoice.IsVisible);
+        Assert.IsLessThanOrEqualTo(live.WindowChoice.Rectangle.Top, live.TileFor(LiveView.Gauges).Rectangle.Bottom);
+        Assert.IsLessThanOrEqualTo(live.Timeline.Rectangle.Top, live.WindowChoice.Rectangle.Bottom);
+        Assert.IsLessThanOrEqualTo(live.GaugeList.Rectangle.Top, live.Timeline.Rectangle.Bottom);
+
+        harness.Click(live.TileFor(LiveView.FrameCosts));
+
+        Assert.IsFalse(live.Timeline.IsVisible);
+        Assert.IsFalse(live.WindowChoice.IsVisible);
+        Assert.IsFalse(live.Freeze.IsVisible);
+        Assert.IsFalse(live.GaugeList.IsVisible);
+    }
+
+    [TestMethod]
     public void Launch_StartsWithFrameBudgetAndGauges_AndShowsTheWholeCommandLine()
     {
         using var harness = new DebugTabHarness(_optionsPath);

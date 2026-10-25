@@ -55,7 +55,7 @@ public sealed class LiveReportViews(DebugTabServices services)
         _lists[LiveView.Startup] = CreateList(parent, [new("Phase", 520, Sortable: false), new("ms", 100, Sortable: false)]);
     }
 
-    /// <summary>Shows view's list in bounds, when it has rows; hides every other list.</summary>
+    /// <summary>Shows view's list in bounds, scrolling its rows, when it has rows; hides every other list.</summary>
     public void Show(LiveView view, Rectangle bounds)
     {
         foreach (var (listView, list) in _lists)
@@ -63,10 +63,44 @@ public sealed class LiveReportViews(DebugTabServices services)
             list.IsVisible = listView == view && list.RowsInDisplayOrder.Any();
             if (listView == view)
             {
+                list.CanUserScrollVertical = true;
                 DebugTabElements.Place(list, bounds);
             }
         }
     }
+
+    /// <summary>Hides every list, for a caller that then places some with ShowWhole.</summary>
+    public void HideAll()
+    {
+        foreach (var list in _lists.Values)
+        {
+            list.IsVisible = false;
+        }
+    }
+
+    /// <summary>Shows view's list at top, as tall as all its rows so its parent scrolls them, when it has rows; returns its height, 0 when it has none.</summary>
+    public float ShowWhole(LiveView view, float top, float width)
+    {
+        var list = _lists[view];
+        var rowCount = list.RowsInDisplayOrder.Count();
+        list.IsVisible = rowCount > 0;
+        if (rowCount == 0)
+        {
+            return 0;
+        }
+
+        list.CanUserScrollVertical = false;
+        var height = WholeHeightOf(list, rowCount);
+        DebugTabElements.Place(list, new Rectangle(0, (int)top, (int)width, (int)height));
+        return height;
+    }
+
+    /// <summary>How tall list must be to show rowCount rows and its header without scrolling, border and padding included.</summary>
+    public static float WholeHeightOf(ListView list, int rowCount) =>
+        list.ContentInset.Y + ListView.HeaderHeight + rowCount * ListView.RowHeight;
+
+    /// <summary>Changes whenever a list's rows are replaced -- what a caller showing them whole lays out again for.</summary>
+    public int RowsVersion { get; private set; }
 
     /// <summary>Rebuilds the lists from session's reports when a new one has arrived. UI thread, once per frame.</summary>
     public void Update(LiveDiagnosticsSession? session)
@@ -114,8 +148,8 @@ public sealed class LiveReportViews(DebugTabServices services)
         };
         if (features is { } runFeatures && !runFeatures.HasFlag(feature.Item1))
         {
-            return session.Source is { } source
-                ? $"{Path.GetFileName(source)} holds no {feature.Item2.ToLowerInvariant()} report."
+            return session.Source is not null
+                ? NotAvailableText(view)
                 : $"{feature.Item2} is off for this run: tick {feature.Item2} under Launch Settings, then Play again.";
         }
 
@@ -134,7 +168,7 @@ public sealed class LiveReportViews(DebugTabServices services)
         var time = report.TimestampUtc.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
         return view switch
         {
-            LiveView.FrameCosts when session.FrameCostsArePerFrame => $"Milliseconds per frame, from {Path.GetFileName(session.Source ?? string.Empty)}.",
+            LiveView.FrameCosts when session.FrameCostsArePerFrame => "Milliseconds per frame.",
             LiveView.FrameCosts => $"Milliseconds spent per second, from the report at {time}; change since the one before.",
             LiveView.Memory => $"Every component pool, from the report at {time}.",
             LiveView.Leaks => report.Leaks is { Count: > 0 } leaks ? $"{leaks.Count} possible leak(s) at {time}, also in the Error List." : $"No leak indicators at {time}.",
@@ -142,10 +176,21 @@ public sealed class LiveReportViews(DebugTabServices services)
         };
     }
 
+    /// <summary>What a report read from a file says for a view it holds nothing for; the file's name is the viewer's title, so it isn't repeated.</summary>
+    public static string NotAvailableText(LiveView view) => view switch
+    {
+        LiveView.FrameCosts => "No frame cost report available.",
+        LiveView.Memory => "No memory report available.",
+        LiveView.Leaks => "No leak report available.",
+        LiveView.Startup => "No startup report available.",
+        _ => "No gauge report available.",
+    };
+
     private void SetRows(LiveView view, IReadOnlyList<ListViewRow> rows, int? sortDescendingByColumn)
     {
         var list = _lists[view];
         list.SetRows(rows);
+        RowsVersion++;
         if (sortDescendingByColumn is not { } column)
         {
             return;

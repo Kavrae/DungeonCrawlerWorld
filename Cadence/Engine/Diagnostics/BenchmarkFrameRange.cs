@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Engine.Diagnostics;
 
 /// <summary>The simulation frames a FrameRangeBenchmark measures: StartFrame inclusive to EndFrame exclusive.</summary>
@@ -9,7 +11,7 @@ namespace Engine.Diagnostics;
 /// <cleanupVersion>1</cleanupVersion>
 public readonly record struct BenchmarkFrameRange
 {
-    private const string ArgumentPrefix = "--benchmark-frames=";
+    public const string ArgumentPrefix = "--benchmark-frames=";
 
     public BenchmarkFrameRange(long startFrame, long endFrame)
     {
@@ -28,6 +30,9 @@ public readonly record struct BenchmarkFrameRange
 
     /// <summary>How many simulation frames the range covers.</summary>
     public long FrameCount => EndFrame - StartFrame;
+
+    /// <summary>The argument Parse reads back as this range.</summary>
+    public string FormatArgument() => $"{ArgumentPrefix}{StartFrame.ToString(CultureInfo.InvariantCulture)}-{EndFrame.ToString(CultureInfo.InvariantCulture)}";
 
     /// <summary>Reads the range from args; null when absent or malformed (not "start-end" with 0 &lt;= start &lt; end).</summary>
     public static BenchmarkFrameRange? Parse(IEnumerable<string> args)

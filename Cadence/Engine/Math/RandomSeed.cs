@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Engine.Math;
 
 /// <summary>
@@ -19,7 +21,7 @@ namespace Engine.Math;
 /// <cleanupVersion>1</cleanupVersion>
 public static class RandomSeed
 {
-    private const string ArgumentPrefix = "--seed=";
+    public const string ArgumentPrefix = "--seed=";
 
     /// <summary>Reads the seed from args, or generates one when absent or unparseable.</summary>
     /// <param name="args">The process's own command-line arguments.</param>
@@ -37,6 +39,9 @@ public static class RandomSeed
 
         return Generate();
     }
+
+    /// <summary>The argument Parse reads back as seed.</summary>
+    public static string FormatArgument(int seed) => $"{ArgumentPrefix}{seed.ToString(CultureInfo.InvariantCulture)}";
 
     /// <summary>A fresh seed for a session that didn't ask for a specific one -- still recorded and replayable, see this class's own doc comment.</summary>
     public static int Generate() => Random.Shared.Next();

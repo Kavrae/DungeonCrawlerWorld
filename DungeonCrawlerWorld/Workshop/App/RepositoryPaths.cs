@@ -22,10 +22,10 @@ internal static class RepositoryPaths
 
     public static string GameExecutablePath() => Path.Combine(GameShellOutputDirectory(), GameExecutableFileName);
 
-    /// <summary>Builds GameShell in the IDE's own configuration; null when the IDE isn't running from a source tree.</summary>
+    /// <summary>Builds GameShell in the IDE's own configuration, with build nodes of its own so Stop can end them without touching another build's; null when the IDE isn't running from a source tree.</summary>
     public static ProcessCommand? GameShellBuildCommand() =>
         RepositoryRoot() is { } root
-            ? new ProcessCommand("dotnet", $"build \"{Path.Combine(root, "DungeonCrawlerWorld", "GameShell", "GameShell.csproj")}\" -c {BuildConfiguration} --nologo", root)
+            ? new ProcessCommand("dotnet", $"build \"{Path.Combine(root, "DungeonCrawlerWorld", "GameShell", "GameShell.csproj")}\" -c {BuildConfiguration} --nologo -nodeReuse:false", root)
             : null;
 
     /// <summary>The master manifest in the source tree -- the copy the IDE edits; the IDE's own copy when it isn't running from a source tree.</summary>
