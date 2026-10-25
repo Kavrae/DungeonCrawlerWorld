@@ -6,6 +6,7 @@ using UIEngine.Input;
 using UIEngine.UI;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
+using Workshop.Debug;
 
 namespace Workshop;
 
@@ -16,9 +17,10 @@ namespace Workshop;
 /// the framework's own element factories; a tab registers the factories of anything else it creates.
 ///
 /// Commands sit at the strip's right edge -- Play, Build and Play when the launch target can build, then the host's own --
-/// with the status line to their left. Tabs fill the rest from the left; tabs that don't fit move behind an overflow tile
+/// with the Debug tab, which the shell adds to every Workshop, left of them and the status line left of that. Tabs fill the rest from the left; tabs that don't fit move behind an overflow tile
 /// that lists them. The game's captured output is drained every frame into the IDE's standard output and, when the host
-/// gives one, a log file. The bottom panel is in the Base layer below the tab area, and dragging its top edge gives the
+/// gives one, a log file. Play tells the game where the shell's DiagnosticsLinkListener listens, and the status line
+/// shows that link's connection when it changes. The bottom panel is in the Base layer below the tab area, and dragging its top edge gives the
 /// open tab the height it leaves.
 /// </remarks>
 public sealed class WorkshopShell : IWorkshopStatus, IDisposable
@@ -51,6 +53,12 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
     private readonly List<GameOutputLine> _drainedOutput = [];
     private readonly StreamWriter? _gameOutputLog;
     private readonly WorkshopBottomPanel _bottomPanel;
+    private readonly WorkshopDebugging _debugging;
+
+    /// <summary>The host's tabs come first in _tabs; the one after them is the pinned Debug tab.</summary>
+    private readonly int _hostTabCount;
+
+    private float _pinnedTabTileWidth;
 
     private Window _tabStrip = null!;
     private TextWindow _overflowTile = null!;
@@ -59,21 +67,28 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
     private int _openTabIndex = -1;
     private int _visibleTabCount;
     private int _shownLauncherStatusVersion;
+    private LiveDiagnosticsSession? _shownDiagnosticsSession;
+    private int _shownDiagnosticsStatusVersion;
+    private IReadOnlyList<WorkshopProblem> _loadProblems = [];
+    private LiveDiagnosticsSession? _shownLeaksSession;
+    private int _shownLeaksReportVersion;
+    private int _shownLeakProblemCount;
     private float _bottomPanelHeight = InitialBottomPanelHeight;
 
-    public WorkshopShell(UiEngineContext uiEngine, WorkshopTabSet tabSet, GameLauncher gameLauncher, IReadOnlyList<WorkshopCommand> hostCommands, string? gameOutputLogPath, Vector2 screenSize)
+    /// <param name="tabSet">The host's tabs, laid out from the strip's left; the shell adds the Debug tab, pinned at the right beside the commands.</param>
+    /// <param name="debugLaunchOptionsPath">Where the Debug tab keeps this user's launch options.</param>
+    /// <param name="diagnosticsReportDirectories">The folders the Debug tab's Reports section lists.</param>
+    public WorkshopShell(UiEngineContext uiEngine, WorkshopTabSet tabSet, GameLauncher gameLauncher, IReadOnlyList<WorkshopCommand> hostCommands, string? gameOutputLogPath, Vector2 screenSize, string debugLaunchOptionsPath, IReadOnlyList<string> diagnosticsReportDirectories)
     {
-        var tabs = tabSet.Tabs;
-        if (tabs.Count == 0)
-        {
-            throw new ArgumentException("The IDE needs at least one tab.", nameof(tabSet));
-        }
-
         _uiEngine = uiEngine;
-        _tabs = tabs;
         _gameLauncher = gameLauncher;
+        _debugging = new WorkshopDebugging(new DiagnosticsLinkListener(), new DebugLaunchOptionsStore(debugLaunchOptionsPath), gameLauncher, diagnosticsReportDirectories);
+        _debugging.Link.Start();
+        _hostTabCount = tabSet.Tabs.Count;
+        _tabs = [.. tabSet.Tabs, new DebugTab(uiEngine, _debugging)];
+        var tabs = _tabs;
         _screenSize = screenSize;
-        _commands = [.. PlayCommands(gameLauncher), .. hostCommands];
+        _commands = [.. PlayCommands(), .. hostCommands];
         _contextMenuController = new ContextMenuController(new DropdownController(uiEngine.ElementPoolService, uiEngine.RenderService));
         _tabFont = uiEngine.FontService.GetFont(FontChrome.DefaultFontSize);
         _gameOutputLog = OpenGameOutputLog(gameOutputLogPath);
@@ -87,6 +102,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
         _inputController = new UiInputController(_layers, screenSize, new PointerState(), commandHotkeys, [], _contextMenuController.Dropdowns);
         _layerHost = new UiLayerHost(_layers, uiEngine.RenderService);
         _tabNavigator = new TabNavigator(tabs, OpenTab, this);
+        _loadProblems = tabSet.LoadProblems;
         _bottomPanel = BuildBottomPanel(tabSet.LoadProblems);
         _tabContexts = [.. tabs.Select(_ => new WorkshopTabContext(uiEngine, _layers, _contextMenuController, this, _inputController, _tabNavigator, _bottomPanel))];
 
@@ -102,6 +118,9 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
         _inputController.Update();
         _tabNavigator.ProcessPendingRequest();
         ShowLauncherStatusIfChanged();
+        _debugging.Link.Update();
+        ShowDiagnosticsStatusIfChanged();
+        ShowLeakProblemsIfChanged();
         ForwardGameOutput();
         _tabs[_openTabIndex].Update(gameTime);
         _layerHost.Update(gameTime);
@@ -128,22 +147,67 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
     {
         _gameOutputLog?.Dispose();
         _gameLauncher.Dispose();
+        _debugging.Dispose();
     }
 
-    private static IEnumerable<WorkshopCommand> PlayCommands(GameLauncher gameLauncher)
+    private IEnumerable<WorkshopCommand> PlayCommands()
     {
-        yield return new WorkshopCommand("Play", Keys.F5, KeyModifiers.None, status => status.Show(Launch(gameLauncher, buildFirst: false)));
+        yield return new WorkshopCommand("Play", Keys.F5, KeyModifiers.None, status => status.Show(Launch(buildFirst: false)));
 
-        if (gameLauncher.CanBuild)
+        if (_gameLauncher.CanBuild)
         {
-            yield return new WorkshopCommand("Build and Play", Keys.F5, KeyModifiers.Control, status => status.Show(Launch(gameLauncher, buildFirst: true)));
+            yield return new WorkshopCommand("Build and Play", Keys.F5, KeyModifiers.Control, status => status.Show(Launch(buildFirst: true)));
         }
     }
 
-    private static string Launch(GameLauncher gameLauncher, bool buildFirst)
+    /// <summary>Starts the game told where the diagnostics link listens, with the Debug tab's launch options.</summary>
+    private string Launch(bool buildFirst)
     {
-        gameLauncher.TryLaunch(out var status, buildFirst: buildFirst);
+        if (_gameLauncher.TryLaunch(out var status, _debugging.LaunchArguments, buildFirst))
+        {
+            _debugging.NotifyGameLaunched();
+        }
+
         return status;
+    }
+
+    private void ShowDiagnosticsStatusIfChanged()
+    {
+        if (_debugging.Link.Session is not { } session)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(session, _shownDiagnosticsSession) && session.StatusVersion == _shownDiagnosticsStatusVersion)
+        {
+            return;
+        }
+
+        _shownDiagnosticsSession = session;
+        _shownDiagnosticsStatusVersion = session.StatusVersion;
+        Show(session.StatusText);
+    }
+
+    /// <summary>Puts the connected game's latest leak findings in the Error List after the load problems, whichever tab is open; a new game's first report replaces the last game's.</summary>
+    private void ShowLeakProblemsIfChanged()
+    {
+        var session = _debugging.Link.Session;
+        var reportVersion = session?.PeriodicReportVersion ?? 0;
+        if (ReferenceEquals(session, _shownLeaksSession) && reportVersion == _shownLeaksReportVersion)
+        {
+            return;
+        }
+
+        _shownLeaksSession = session;
+        _shownLeaksReportVersion = reportVersion;
+        var leakProblems = DiagnosticsProblems.LeaksOf(session?.LatestPeriodicReport);
+        if (leakProblems.Count == 0 && _shownLeakProblemCount == 0)
+        {
+            return;
+        }
+
+        _shownLeakProblemCount = leakProblems.Count;
+        _bottomPanel.SetProblems([.. _loadProblems, .. leakProblems]);
     }
 
     private static StreamWriter? OpenGameOutputLog(string? path)
@@ -206,7 +270,14 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
             var capturedTabIndex = tabIndex;
             tile.Clicked += _ => OpenTab(capturedTabIndex);
             _tabTiles.Add(tile);
-            _tabTileWidths.Add(width);
+            if (tabIndex < _hostTabCount)
+            {
+                _tabTileWidths.Add(width);
+            }
+            else
+            {
+                _pinnedTabTileWidth = width;
+            }
         }
 
         _overflowTile = CreateStripTile(OverflowTileWidth, OverflowTileLabel);
@@ -283,7 +354,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
         return tile;
     }
 
-    /// <summary>Places the commands from the right edge, the status line left of them, and as many tabs as fit from the left, the rest behind the overflow tile.</summary>
+    /// <summary>Places the commands from the right edge, the Debug tab left of them, the status line left of that, and as many of the host's tabs as fit from the left, the rest behind the overflow tile.</summary>
     private void LayOutTabStrip()
     {
         var right = _screenSize.X;
@@ -293,6 +364,9 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
             _commandTiles[index].Tile.SetRelativePosition(new Vector2(right, 0));
         }
 
+        right -= _pinnedTabTileWidth;
+        _tabTiles[_hostTabCount].SetRelativePosition(new Vector2(right, 0));
+
         var statusWidth = System.Math.Max(0, System.Math.Min(StatusWidth, right / 2));
         right -= statusWidth;
         _statusText.SetSize(new Vector2(statusWidth, TabStripHeight));
@@ -300,7 +374,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
 
         _visibleTabCount = TabStripLayout.VisibleTabCount(_tabTileWidths, right, OverflowTileWidth);
         var x = 0f;
-        for (var tabIndex = 0; tabIndex < _tabTiles.Count; tabIndex++)
+        for (var tabIndex = 0; tabIndex < _hostTabCount; tabIndex++)
         {
             var isVisible = tabIndex < _visibleTabCount;
             _tabTiles[tabIndex].IsVisible = isVisible;
@@ -311,7 +385,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
             }
         }
 
-        _overflowTile.IsVisible = _visibleTabCount < _tabTiles.Count;
+        _overflowTile.IsVisible = _visibleTabCount < _hostTabCount;
         _overflowTile.SetRelativePosition(new Vector2(x, 0));
         ShowOpenTabSelected();
     }
@@ -320,7 +394,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
     private void OpenOverflowMenu()
     {
         var options = new List<DropdownOption>();
-        for (var tabIndex = _visibleTabCount; tabIndex < _tabs.Count; tabIndex++)
+        for (var tabIndex = _visibleTabCount; tabIndex < _hostTabCount; tabIndex++)
         {
             var capturedTabIndex = tabIndex;
             options.Add(new DropdownOption(_tabs[tabIndex].Title, null, Enabled: tabIndex != _openTabIndex, () => OpenTab(capturedTabIndex)));
@@ -357,7 +431,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
             StyleTile(_tabTiles[index], isSelected: index == _openTabIndex);
         }
 
-        StyleTile(_overflowTile, isSelected: _openTabIndex >= _visibleTabCount);
+        StyleTile(_overflowTile, isSelected: _openTabIndex >= _visibleTabCount && _openTabIndex < _hostTabCount);
     }
 
     private static void StyleTile(TextWindow tile, bool isSelected)

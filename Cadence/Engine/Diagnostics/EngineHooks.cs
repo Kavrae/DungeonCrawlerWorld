@@ -24,6 +24,9 @@ public static class EngineHooks
     /// <summary>The start and end of the simulated session, emitted by EcsContext.BeginSession and EcsContext.Dispose -- never by a build that is not simulated (a mod's trial build, a staging rebuild).</summary>
     public static readonly EngineHookChannel<ISimulationSessionListener> Sessions = new(nameof(Sessions));
 
+    /// <summary>The host's own updates and draws, emitted by a windowed game's loop -- with or without a simulation frame in them.</summary>
+    public static readonly EngineHookChannel<IHostFrameListener> HostFrames = new(nameof(HostFrames));
+
     /// <summary>Named, nested spans of work: EcsBuilder's stages and each module's phase within them, and the host's own startup steps.</summary>
     public static readonly EngineHookChannel<IDiagnosticScopeListener> DiagnosticScopes = new(nameof(DiagnosticScopes));
 

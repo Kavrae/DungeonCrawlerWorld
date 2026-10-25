@@ -182,12 +182,12 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
 
         if (IsHovered || IsHighlighted)
         {
-            spriteBatch.Draw(unitRectangle, ContentRectangle, HoverOverlayColor);
+            spriteBatch.Draw(unitRectangle, LocalContentRectangle, HoverOverlayColor);
         }
 
         if (IsMarked)
         {
-            spriteBatch.Draw(unitRectangle, new Rectangle(ContentRectangle.X, ContentRectangle.Y, MarkerWidth, ContentRectangle.Height), WindowPalette.FocusAccentColor);
+            spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, MarkerWidth, LocalContentRectangle.Height), WindowPalette.FocusAccentColor);
         }
 
         var textColor = Enabled ? TextColor : Color.Gray;
@@ -201,7 +201,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
         if (_hasSpriteIcon && spriteSheetService is not null)
         {
             var spriteTint = Enabled ? Color.White : Color.Gray;
-            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, _sprite, FontService.GetTextMeasurer(ContentFont), LeftText, textColor, ContentAbsolutePosition, ContentSize, spriteTint);
+            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, _sprite, FontService.GetTextMeasurer(ContentFont), LeftText, textColor, Vector2.Zero, ContentSize, spriteTint);
         }
         else if (string.IsNullOrEmpty(RightText) && !LeftAlign)
         {
@@ -212,7 +212,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
             // MeasureString's line box is a poor stand-in for a glyph's actual rendered ink.
             if (!string.IsNullOrEmpty(LeftText))
             {
-                LabelRenderer.DrawCentered(spriteBatch, FontService.GetTextMeasurer(ContentFont), LeftText, ContentAbsolutePosition, ContentSize, textColor);
+                LabelRenderer.DrawCentered(spriteBatch, FontService.GetTextMeasurer(ContentFont), LeftText, Vector2.Zero, ContentSize, textColor);
             }
         }
         else
@@ -220,7 +220,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
             // A hotkey column is present, or LeftAlign was explicitly requested (a context-menu
             // option row) -- left/right split instead, inset by HorizontalTextInset so neither
             // column sits flush against the row's edges.
-            var textFootprintPosition = ContentAbsolutePosition + new Vector2(HorizontalTextInset, 0);
+            var textFootprintPosition = new Vector2(HorizontalTextInset, 0);
             var textFootprintSize = ContentSize - new Vector2(HorizontalTextInset * 2, 0);
 
             if (!string.IsNullOrEmpty(LeftText))
@@ -247,7 +247,7 @@ public sealed class Button(FontService fontService, ElementPoolService elementPo
             return;
         }
 
-        var position = AbsolutePosition + HotkeyLabelPadding;
+        var position = ToContentLocal(AbsolutePosition) + HotkeyLabelPadding;
         ContrastTextRenderer.Draw(spriteBatch, _hotkeyLabelFont, _hotkeyLabel, position, Enabled ? 1f : 0.5f);
     }
 }

@@ -13,8 +13,11 @@ namespace Engine.Diagnostics;
 /// only re-samples once its sample interval has elapsed since the last sample, not every frame.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class ComponentMemoryTracker(ComponentManager componentManager)
+public sealed class ComponentMemoryTracker(ComponentManager componentManager, EntityPopulationPolicy? populations = null)
 {
+    /// <summary>What a pool any living entity can hold is held against.</summary>
+    public const string EveryEntityPopulation = "Every entity";
+
     private static readonly long SampleIntervalTimestampTicks = System.Diagnostics.Stopwatch.Frequency * 2;
 
     private readonly List<ComponentMemoryEntry> _snapshot = [];
@@ -40,12 +43,23 @@ public sealed class ComponentMemoryTracker(ComponentManager componentManager)
         {
             if (pool is IMemoryReportingComponentPool memoryReportingPool)
             {
-                _snapshot.Add(new ComponentMemoryEntry(pool.ComponentType.Name, memoryReportingPool.Count, memoryReportingPool.EstimatedBytes));
+                _snapshot.Add(new ComponentMemoryEntry(pool.ComponentType.Name, memoryReportingPool.Count, memoryReportingPool.EstimatedBytes, PopulationOf(pool.ComponentType)));
             }
         }
 
         _snapshot.Sort(static (a, b) => b.EstimatedBytes.CompareTo(a.EstimatedBytes));
         _hasSampled = true;
         _lastSampleTimestamp = nowTimestamp;
+    }
+
+    /// <summary>The population that can hold componentType: every entity, or the game's partial population; null without a population split.</summary>
+    private string? PopulationOf(Type componentType)
+    {
+        if (populations is null)
+        {
+            return null;
+        }
+
+        return populations.IsHeldByEveryEntity(componentType) ? EveryEntityPopulation : populations.PartialPopulationName;
     }
 }

@@ -37,7 +37,7 @@ public sealed class TradeItemStackCell(FontService fontService, ElementPoolServi
     {
         var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
-        var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
+        var bounds = LocalContentRectangle;
 
         DrawBaseAndIcon(spriteBatch, unitRectangle, bounds, ContentSize);
 
@@ -52,6 +52,6 @@ public sealed class TradeItemStackCell(FontService fontService, ElementPoolServi
         // needs to fit a 3-digit-or-more quantity legibly.
         var quantityFont = FontService.GetFont((int)(ContentSize.Y * CompactStatFontSizeFraction));
         var quantityText = _quantityText.Get(_quantity, static quantity => quantity.ToString());
-        ItemIconRenderer.DrawBottomAligned(spriteBatch, quantityFont, quantityText, _quantityTextSize.SizeOf(quantityFont, quantityText), ContentAbsolutePosition, ContentSize, alignRight: false, Color.White);
+        ItemIconRenderer.DrawBottomAligned(spriteBatch, quantityFont, quantityText, _quantityTextSize.SizeOf(quantityFont, quantityText), Vector2.Zero, ContentSize, alignRight: false, Color.White);
     }
 }

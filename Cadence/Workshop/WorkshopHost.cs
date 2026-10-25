@@ -24,6 +24,12 @@ public sealed record WorkshopHostOptions(
 
     /// <summary>Where the game's captured output is appended while it runs; null keeps it in the IDE's own standard output only.</summary>
     public string? GameOutputLogPath { get; init; }
+
+    /// <summary>Where the Debug tab keeps this user's launch options -- outside the repository.</summary>
+    public string DebugLaunchOptionsPath { get; init; } = Debug.DebugLaunchOptionsStore.DefaultFilePath;
+
+    /// <summary>The folders the Debug tab's Reports section lists diagnostics reports and saved benchmark runs from.</summary>
+    public IReadOnlyList<string> DiagnosticsReportDirectories { get; init; } = [];
 }
 
 /// <summary>Cadence Workshop's host loop: the framework, the shell and its tabs, in a resizable window with no simulation.</summary>
@@ -70,7 +76,7 @@ public sealed class WorkshopHost : Microsoft.Xna.Framework.Game
     {
         _uiEngine = UiEngineBootstrapper.Build(GraphicsDevice, _options.FontsDirectory, _options.SpritesheetsDirectory, _options.SpriteManifestFileName, _options.EffectsDirectory);
         var tabSet = _options.CreateTabs(_uiEngine);
-        _shell = new WorkshopShell(_uiEngine, tabSet, new GameLauncher(_options.GameLaunchTarget), _options.Commands, _options.GameOutputLogPath, ClientSize());
+        _shell = new WorkshopShell(_uiEngine, tabSet, new GameLauncher(_options.GameLaunchTarget), _options.Commands, _options.GameOutputLogPath, ClientSize(), _options.DebugLaunchOptionsPath, _options.DiagnosticsReportDirectories);
 
         Window.Title = _options.WindowTitle;
         Window.ClientSizeChanged += OnClientSizeChanged;

@@ -209,6 +209,32 @@ public sealed class PoolMemoryReportTests
     }
 
     [TestMethod]
+    public void TheWrittenReport_ReadsBack_WithEveryPool()
+    {
+        var (components, entities) = CreateWorld();
+        components.GetPackedPool<Counter>().Add(entities.CreateEntity(), new Counter { Value = 1 });
+        var report = new PoolMemoryReport(components, entities);
+        report.CaptureBaseline();
+        var directory = Path.Combine(Path.GetTempPath(), $"pool-memory-report-{Guid.NewGuid():N}");
+
+        try
+        {
+            var read = DiagnosticsReportReader.ReadMemoryReport(File.ReadAllBytes(report.WriteReport(directory, randomSeed: 7, new BenchmarkFrameRange(10, 20))));
+
+            Assert.AreEqual(7, read.RandomSeed);
+            Assert.AreEqual(10, read.StartFrame);
+            Assert.HasCount(3, read.Pools);
+            var counter = read.Pools.Single(static pool => pool.ComponentType == nameof(Counter));
+            Assert.AreEqual(1, counter.Count);
+            Assert.IsGreaterThan(0, counter.EstimatedBytes);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void WriteReport_WritesJsonAndTextWithEveryPool()
     {
         var (components, entities) = CreateWorld();

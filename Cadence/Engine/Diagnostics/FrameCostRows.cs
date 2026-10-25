@@ -2,10 +2,6 @@ using System.Runtime.CompilerServices;
 
 namespace Engine.Diagnostics;
 
-/// <summary>One frame-cost row's name: its category, its group (the recorder) and its item (the system, event or window).</summary>
-/// <cleanupVersion>1</cleanupVersion>
-internal readonly record struct FrameCostRowName(FrameCostCategory Category, string GroupName, string ItemName);
-
 /// <summary>A frame-cost recorder's rows, each holding its totals, found by name with no string hashing on the common path.</summary>
 /// <remarks>
 /// Emit sites pass the same string instances every time (constants, a type's cached Name, an enum's cached name), so a row
@@ -31,12 +27,20 @@ internal sealed class FrameCostRows<TTotals> where TTotals : struct
     public ref TTotals TotalsAt(int rowIndex) => ref _rowTotals[rowIndex];
 
     /// <summary>The totals of the row with this name, adding an empty row the first time the name is seen.</summary>
+    /// <remarks>The index is found first: adding a row may replace the totals array, so it must not be read before.</remarks>
     public ref TTotals GetOrAdd(FrameCostCategory category, string groupName, string itemName)
+    {
+        var rowIndex = GetOrAddRowIndex(category, groupName, itemName);
+        return ref _rowTotals[rowIndex];
+    }
+
+    /// <summary>The index of the row with this name, adding an empty row the first time the name is seen.</summary>
+    public int GetOrAddRowIndex(FrameCostCategory category, string groupName, string itemName)
     {
         var name = new FrameCostRowName(category, groupName, itemName);
         if (_rowIndexByNameReference.TryGetValue(name, out var rowIndex))
         {
-            return ref _rowTotals[rowIndex];
+            return rowIndex;
         }
 
         if (!_rowIndexByNameValue.TryGetValue(name, out rowIndex))
@@ -55,7 +59,7 @@ internal sealed class FrameCostRows<TTotals> where TTotals : struct
             _rowIndexByNameReference.Add(name, rowIndex);
         }
 
-        return ref _rowTotals[rowIndex];
+        return rowIndex;
     }
 
     /// <summary>The row with this name, compared by value, if it was ever added.</summary>

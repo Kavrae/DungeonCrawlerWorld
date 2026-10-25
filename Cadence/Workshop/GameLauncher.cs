@@ -100,6 +100,13 @@ public sealed class GameLauncher(GameLaunchTarget target) : IDisposable
         }
     }
 
+    /// <summary>The command line a launch with extraArguments starts the game with: the executable, quoted, then its arguments.</summary>
+    public string CommandLineFor(string? extraArguments)
+    {
+        var arguments = ArgumentsFor(extraArguments);
+        return arguments.Length == 0 ? $"\"{target.ExecutablePath}\"" : $"\"{target.ExecutablePath}\" {arguments}";
+    }
+
     /// <summary>Moves every output line received since the last call into destination, oldest first, and returns how many.</summary>
     public int DrainOutput(List<GameOutputLine> destination)
     {
@@ -175,10 +182,9 @@ public sealed class GameLauncher(GameLaunchTarget target) : IDisposable
 
         _runningGame?.Dispose();
         _errorLineCount = 0;
-        var arguments = string.IsNullOrWhiteSpace(extraArguments) ? target.Arguments : $"{target.Arguments} {extraArguments}".Trim();
         try
         {
-            _runningGame = StartCapturing(target.ExecutablePath, arguments, target.WorkingDirectory, OnGameExited);
+            _runningGame = StartCapturing(target.ExecutablePath, ArgumentsFor(extraArguments), target.WorkingDirectory, OnGameExited);
         }
         catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
@@ -196,6 +202,9 @@ public sealed class GameLauncher(GameLaunchTarget target) : IDisposable
         status = SetStatus("Game started.");
         return true;
     }
+
+    private string ArgumentsFor(string? extraArguments) =>
+        string.IsNullOrWhiteSpace(extraArguments) ? target.Arguments : $"{target.Arguments} {extraArguments}".Trim();
 
     private Process? StartCapturing(string executablePath, string arguments, string workingDirectory, EventHandler? exited = null)
     {

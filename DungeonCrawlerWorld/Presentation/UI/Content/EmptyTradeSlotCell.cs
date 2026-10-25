@@ -23,7 +23,7 @@ public sealed class EmptyTradeSlotCell(FontService fontService, ElementPoolServi
 
     public override void DrawContent(GameTime gameTime)
     {
-        var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
+        var bounds = LocalContentRectangle;
         GlowRenderer.Draw(Render.Batch, Render.UnitRectangle, bounds, Color.White, GlowMode.InteriorFade);
     }
 }

@@ -96,9 +96,17 @@ public sealed class EventBus
 
         if (EngineHooks.FrameCosts.Listener is { } frameCostRecorder)
         {
+            var eventTypeName = EventTypeNameOf<T>();
+            frameCostRecorder.Begin(FrameCostCategory.Update, "EventBus", eventTypeName);
             var start = Stopwatch.GetTimestamp();
-            subscribers.Invoke(eventData);
-            frameCostRecorder.Record(FrameCostCategory.Update, "EventBus", EventTypeNameOf<T>(), Stopwatch.GetElapsedTime(start));
+            try
+            {
+                subscribers.Invoke(eventData);
+            }
+            finally
+            {
+                frameCostRecorder.Record(FrameCostCategory.Update, "EventBus", eventTypeName, Stopwatch.GetElapsedTime(start));
+            }
         }
         else
         {

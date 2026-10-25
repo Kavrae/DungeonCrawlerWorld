@@ -55,10 +55,10 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
 
         if (IsHovered)
         {
-            spriteBatch.Draw(unitRectangle, new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y), WindowPalette.HighlightColor);
+            spriteBatch.Draw(unitRectangle, LocalContentRectangle, WindowPalette.HighlightColor);
         }
 
         var footprintSize = new Vector2(ContentSize.X - Padding, ContentSize.Y);
-        LabelRenderer.DrawRightAligned(spriteBatch, _font, _text, _textSize.SizeOf(_font, _text).X, ContentAbsolutePosition, footprintSize, TextColor);
+        LabelRenderer.DrawRightAligned(spriteBatch, _font, _text, _textSize.SizeOf(_font, _text).X, Vector2.Zero, footprintSize, TextColor);
     }
 }

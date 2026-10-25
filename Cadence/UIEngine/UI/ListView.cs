@@ -68,6 +68,9 @@ public sealed class ListView(FontService fontService, ElementPoolService element
     private int _framesSinceLastRowClick = int.MaxValue;
     private ListViewRow? _lastClickedRow;
 
+    /// <summary>Rows drawn on a colour of their owner's choosing, by the row itself; the selected row's highlight wins.</summary>
+    private readonly Dictionary<ListViewRow, Color> _rowColors = new(ReferenceEqualityComparer.Instance);
+
     public ListViewRow? SelectedRow { get; private set; }
 
     /// <summary>The column the rows are sorted by, or -1 for SetRows's order.</summary>
@@ -100,6 +103,7 @@ public sealed class ListView(FontService fontService, ElementPoolService element
         _sortAscending = true;
         _framesSinceLastRowClick = int.MaxValue;
         _lastClickedRow = null;
+        _rowColors.Clear();
         SelectedRow = null;
         CanUserScrollVertical = true;
         _contentState.BackgroundColor = options.Content?.ContentColor ?? Color.White;
@@ -131,6 +135,37 @@ public sealed class ListView(FontService fontService, ElementPoolService element
         }
     }
 
+    /// <summary>Draws each of colors' rows on its colour, replacing the colours set before; the selected row keeps the selection's highlight.</summary>
+    public void SetRowColors(IEnumerable<KeyValuePair<ListViewRow, Color>> colors)
+    {
+        _rowColors.Clear();
+        foreach (var (row, color) in colors)
+        {
+            _rowColors[row] = color;
+        }
+    }
+
+    /// <summary>The row under screenPosition; null over the header, past the last row, or outside the list.</summary>
+    public ListViewRow? RowAt(Point screenPosition)
+    {
+        if (!ContentRectangle.Contains(screenPosition))
+        {
+            return null;
+        }
+
+        var localY = screenPosition.Y - ContentAbsolutePosition.Y;
+        if (localY < HeaderHeight)
+        {
+            return null;
+        }
+
+        var displayIndex = (int)((localY - HeaderHeight + ScrollOffset.Y) / RowHeight);
+        return displayIndex >= 0 && displayIndex < _order.Length ? _rows[_order[displayIndex]] : null;
+    }
+
+    /// <summary>The colour SetRowColors gave row, if any.</summary>
+    public Color? RowColorOf(ListViewRow row) => _rowColors.TryGetValue(row, out var color) ? color : null;
+
     /// <summary>Sorts by columnIndex -- ascending when it isn't already the sort column, reversed when it is.</summary>
     public void SortBy(int columnIndex)
     {
@@ -142,8 +177,8 @@ public sealed class ListView(FontService fontService, ElementPoolService element
         Sort();
     }
 
-    /// <summary>Selects row (null clears the selection), scrolling it into view.</summary>
-    public void Select(ListViewRow? row)
+    /// <summary>Selects row (null clears the selection), scrolling it into view unless scrollIntoView is false -- for an owner restoring a selection the user may have scrolled away from.</summary>
+    public void Select(ListViewRow? row, bool scrollIntoView = true)
     {
         if (ReferenceEquals(row, SelectedRow))
         {
@@ -151,7 +186,7 @@ public sealed class ListView(FontService fontService, ElementPoolService element
         }
 
         SelectedRow = row;
-        if (row is not null)
+        if (row is not null && scrollIntoView)
         {
             ScrollIntoView(Array.IndexOf(_order, IndexOfRow(row)));
         }
@@ -394,6 +429,10 @@ public sealed class ListView(FontService fontService, ElementPoolService element
             if (ReferenceEquals(row, SelectedRow))
             {
                 spriteBatch.Draw(unitRectangle, new Rectangle(0, (int)top, (int)width, (int)RowHeight), SelectedRowColor);
+            }
+            else if (_rowColors.TryGetValue(row, out var rowColor))
+            {
+                spriteBatch.Draw(unitRectangle, new Rectangle(0, (int)top, (int)width, (int)RowHeight), rowColor);
             }
             else if (displayIndex % 2 == 1)
             {

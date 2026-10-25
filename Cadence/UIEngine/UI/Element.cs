@@ -633,22 +633,13 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
                 spriteBatch.Draw(unitRectangle, _contentState.BackgroundRectangle, _contentState.BackgroundColor);
             }
 
-            if (RequiresContentViewport)
-            {
-                // The content is drawn in local coordinates: offset to the viewport's origin less the scroll, and clipped to
-                // the viewport within whatever clip is already in force. Pushed/popped through Render, so a scrollable
-                // Element nested inside another hands back the exact state it inherited.
-                var contentOffset = new Vector2(Viewport.X + CameraTransform.Translation.X, Viewport.Y + CameraTransform.Translation.Y);
-                Render.PushRenderState(Render.CurrentRenderState.ClippedTo(Viewport.Bounds) with { DrawOffset = contentOffset });
-
-                DrawContent(gameTime);
-
-                Render.PopRenderState();
-            }
-            else
-            {
-                DrawContent(gameTime);
-            }
+            // The content is drawn in local coordinates, offset to ContentDrawOrigin, and a scrollable element's is
+            // clipped to its viewport within whatever clip is already in force. Pushed/popped through Render, so an
+            // Element nested inside another hands back the exact state it inherited.
+            var contentRenderState = RequiresContentViewport ? Render.CurrentRenderState.ClippedTo(Viewport.Bounds) : Render.CurrentRenderState;
+            Render.PushRenderState(contentRenderState with { DrawOffset = ContentDrawOrigin });
+            DrawContent(gameTime);
+            Render.PopRenderState();
 
             if (RequiresContentViewport && _children.Count > 0)
             {
@@ -830,8 +821,32 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     }
 
 
-    /// <summary>No-op by default; TextWindow and other self-drawn elements override this directly, Window overrides it to host IElementContent. Overrides needing the batch or Texture2D read them from Render rather than taking them as parameters.</summary>
+    /// <summary>Draws this element's own content, in local coordinates: (0, 0) is the content area's top-left, scrolled with it -- see ContentDrawOrigin.</summary>
+    /// <remarks>
+    /// No-op by default; TextWindow and other self-drawn elements override this directly, Window overrides it to host
+    /// IElementContent. Overrides needing the batch or Texture2D read them from Render rather than taking them as
+    /// parameters. Something placed in screen coordinates -- the cursor, another element's rectangle -- is converted with
+    /// ToContentLocal; LocalContentRectangle is the content area itself.
+    /// </remarks>
     public virtual void DrawContent(GameTime gameTime) { }
+
+    /// <summary>Where DrawContent's (0, 0) is on screen: the content area's top-left, less the scroll for a scrollable element.</summary>
+    public Vector2 ContentDrawOrigin => RequiresContentViewport
+        ? new Vector2(Viewport.X + CameraTransform.Translation.X, Viewport.Y + CameraTransform.Translation.Y)
+        : ContentAbsolutePosition;
+
+    /// <summary>The content area in DrawContent's local coordinates: at (0, 0), ContentRectangle's size.</summary>
+    public Rectangle LocalContentRectangle => new(0, 0, _contentState.Rectangle.Width, _contentState.Rectangle.Height);
+
+    /// <summary>screenPosition in DrawContent's local coordinates.</summary>
+    public Vector2 ToContentLocal(Vector2 screenPosition) => screenPosition - ContentDrawOrigin;
+
+    /// <summary>screenRectangle in DrawContent's local coordinates.</summary>
+    public Rectangle ToContentLocal(Rectangle screenRectangle)
+    {
+        var origin = ContentDrawOrigin;
+        return new Rectangle(screenRectangle.X - (int)origin.X, screenRectangle.Y - (int)origin.Y, screenRectangle.Width, screenRectangle.Height);
+    }
 
     /// <summary>Routes a key newly pressed this frame to this window while it holds focus -- see UiInputController.RouteKeyPressesToFocusedWindow.</summary>
     internal void HandleKeyPress(Keys key) => OnKeyPressAction(key);

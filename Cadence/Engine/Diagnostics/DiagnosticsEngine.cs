@@ -1,5 +1,6 @@
 using Engine.ECS.Context;
 using System.Diagnostics;
+using System.Net;
 
 namespace Engine.Diagnostics;
 
@@ -19,8 +20,11 @@ namespace Engine.Diagnostics;
 /// session gets fresh ones.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSessionListener, IDisposable
+public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSessionListener, IHostFrameListener, IDisposable
 {
+    private const string FrameGroupName = "GameLoop";
+    private const string FrameItemName = "EcsContext.Update (all systems)";
+
     private static readonly long ReportIntervalTimestampTicks = Stopwatch.Frequency * 5;
 
     private readonly string _outputDirectory = DiagnosticsPaths.OutputDirectory;
@@ -28,6 +32,7 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
     private readonly StartupProfiler? _startupProfiler;
     private readonly FrameRangeBenchmark? _benchmark;
     private readonly IFrameCostRecorder? _frameCostRecorder;
+    private readonly DiagnosticsLink? _link;
     private readonly List<IDisposable> _hookSubscriptions = [];
     private readonly bool _writesPeriodicReports;
     private ComponentMemoryTracker? _componentMemoryTracker;
@@ -50,11 +55,17 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
     /// <param name="randomSeed">The session's simulation seed, stamped on every report -- see RandomSeed.</param>
     /// <param name="benchmarkFrameRange">Simulation frames to benchmark, or null for none -- see FrameRangeBenchmark. Independent of features: a benchmark records through the same instrumentation whether or not FrameBudget is also on.</param>
     /// <param name="writesPeriodicReports">False for a headless run: no periodic sampling, console ranking or latest.json, which would overwrite a windowed run's. Its reports are the benchmark's.</param>
-    public DiagnosticsEngine(DiagnosticsFeatures features, int? randomSeed = null, BenchmarkFrameRange? benchmarkFrameRange = null, bool writesPeriodicReports = true)
+    /// <param name="linkEndPoint">Where an IDE listens for this run's diagnostics, or null for no link -- see DiagnosticsLink and DiagnosticsLinkArgument.</param>
+    public DiagnosticsEngine(DiagnosticsFeatures features, int? randomSeed = null, BenchmarkFrameRange? benchmarkFrameRange = null, bool writesPeriodicReports = true, IPEndPoint? linkEndPoint = null)
     {
         Features = features;
         RandomSeed = randomSeed;
         _writesPeriodicReports = writesPeriodicReports;
+
+        if (linkEndPoint is not null)
+        {
+            _link = new DiagnosticsLink(linkEndPoint, features, randomSeed, Console.Error);
+        }
 
         if (features.HasFlag(DiagnosticsFeatures.FrameBudget))
         {
@@ -91,7 +102,7 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
     public int? RandomSeed { get; }
 
     /// <summary>Subscribes every enabled feature to the EngineHooks channel it listens to.</summary>
-    /// <remarks>Frame costs are recorded while FrameBudget is on or a benchmark range was given, feeding both when both are. Simulation frames are heard whenever any feature is on or a benchmark range was given, sessions while Memory, LeakDetection or Gauges is, and scopes while Startup is, until the first simulation frame.</remarks>
+    /// <remarks>Frame costs are recorded while FrameBudget is on or a benchmark range was given, feeding both when both are. Simulation frames are heard whenever any feature is on, a benchmark range was given or a link was, sessions while Memory, LeakDetection or Gauges is or a link was, host frames while a link was, and scopes while Startup is, until the first simulation frame. A link starts connecting here.</remarks>
     /// <exception cref="InvalidOperationException">This engine was already started, or another listener holds a channel it needs.</exception>
     public void Start()
     {
@@ -107,14 +118,20 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
             _hookSubscriptions.Add(EngineHooks.FrameCosts.Subscribe(frameCostRecorder));
         }
 
-        if (Features != DiagnosticsFeatures.None || _benchmark is not null)
+        if (Features != DiagnosticsFeatures.None || _benchmark is not null || _link is not null)
         {
             _hookSubscriptions.Add(EngineHooks.SimulationFrames.Subscribe(this));
         }
 
-        if ((Features & (DiagnosticsFeatures.Memory | DiagnosticsFeatures.LeakDetection | DiagnosticsFeatures.Gauges)) != DiagnosticsFeatures.None)
+        if ((Features & (DiagnosticsFeatures.Memory | DiagnosticsFeatures.LeakDetection | DiagnosticsFeatures.Gauges)) != DiagnosticsFeatures.None || _link is not null)
         {
             _hookSubscriptions.Add(EngineHooks.Sessions.Subscribe(this));
+        }
+
+        if (_link is { } link)
+        {
+            _hookSubscriptions.Add(EngineHooks.HostFrames.Subscribe(this));
+            link.Start();
         }
 
         if (_startupProfiler is { } startupProfiler)
@@ -123,7 +140,7 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
         }
     }
 
-    /// <summary>Unsubscribes from every EngineHooks channel Start subscribed to, and waits for a periodic report still being written.</summary>
+    /// <summary>Unsubscribes from every EngineHooks channel Start subscribed to, waits for a periodic report still being written, and closes the link once it has sent what it holds.</summary>
     public void Dispose()
     {
         foreach (var hookSubscription in _hookSubscriptions)
@@ -134,7 +151,11 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
         _hookSubscriptions.Clear();
         EndStartupScopes();
         _pendingReport.Wait();
+        _link?.Dispose();
     }
+
+    /// <summary>True once a link was given and has closed -- it failed, the IDE went away, or this engine was disposed.</summary>
+    public bool IsLinkClosed => _link?.IsClosed ?? false;
 
     /// <summary>Stops StartupProfiler recording scopes: what builds after the first simulation frame (a staging rebuild) is not startup.</summary>
     private void EndStartupScopes()
@@ -175,7 +196,7 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
 
         if (Features.HasFlag(DiagnosticsFeatures.Memory))
         {
-            _componentMemoryTracker = new ComponentMemoryTracker(componentManager);
+            _componentMemoryTracker = new ComponentMemoryTracker(componentManager, session.EntityPopulations);
 
             if (_benchmark is { IsComplete: false })
             {
@@ -199,6 +220,8 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
                 _gaugeSeriesReport = new GaugeSeriesReport(_gaugeTracker, benchmark.Range);
             }
         }
+
+        _link?.SessionStarted(_gaugeTracker?.Gauges ?? []);
     }
 
     /// <summary>Drops the session's trackers, so nothing keeps measuring -- or holding -- pools that are going away.</summary>
@@ -221,6 +244,7 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
             Console.WriteLine($"[Gauges] Session ended before frame {unfinishedGaugeSeriesReport.Range.EndFrame}; no gauge report written.");
         }
 
+        _link?.SessionEnded();
         _activeSession = null;
         _componentMemoryTracker = null;
         _poolMemoryReport = null;
@@ -230,11 +254,18 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
         _gaugeHistory = null;
     }
 
+    /// <summary>Hands the host's update to the link, which counts the update rate and notices a pause.</summary>
+    void IHostFrameListener.HostUpdated(bool simulated) => _link?.HostUpdated(simulated);
+
+    /// <summary>Hands the host's draw to the link, which counts the draw rate.</summary>
+    void IHostFrameListener.HostDrew() => _link?.HostDrew();
+
     /// <summary>Ends startup's scope recording at the first frame, and opens the benchmark range as its first frame starts.</summary>
     /// <remarks>With Memory on, PoolMemoryReport's baseline copy is taken first, before the benchmark's clock starts.</remarks>
     void ISimulationFrameListener.SimulationFrameStarting(long frameCount)
     {
         EndStartupScopes();
+        _frameCostRecorder?.Begin(FrameCostCategory.Update, FrameGroupName, FrameItemName);
 
         if (_benchmark is not { IsComplete: false } benchmark)
         {
@@ -250,24 +281,26 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
     }
 
     /// <summary>
-    /// Records the frame's whole cost as "GameLoop" / "EcsContext.Update (all systems)" and samples the gauges, feeds that cost
+    /// Records the frame's whole cost as "GameLoop" / "EcsContext.Update (all systems)", samples the gauges and records them on the link, feeds that cost
     /// to StartupProfiler's stability detection until stable, closes the benchmark range after its last
     /// frame, then samples and reports on the periodic cadence.
     /// </summary>
     /// <remarks>StartupProfiler needs this measured cost rather than the gap between frames -- see StartupProfiler.Tick.</remarks>
     void ISimulationFrameListener.SimulationFrameEnded(long frameCount, TimeSpan elapsed)
     {
-        _frameCostRecorder?.Record(FrameCostCategory.Update, "GameLoop", "EcsContext.Update (all systems)", elapsed);
+        _frameCostRecorder?.Record(FrameCostCategory.Update, FrameGroupName, FrameItemName, elapsed);
         _gaugeTracker?.Sample();
         _gaugeSeriesReport?.Record(frameCount, elapsed);
         _gaugeHistory?.Record(frameCount, elapsed);
+        _link?.RecordFrame(frameCount, elapsed, _gaugeTracker);
 
         if (_startupProfiler is { IsStable: false } startupProfiler)
         {
             startupProfiler.Tick(elapsed);
             if (startupProfiler.IsStable)
             {
-                startupProfiler.WriteReport(_outputDirectory);
+                var startupReportJson = startupProfiler.WriteReport(_outputDirectory);
+                _link?.SendStartupReport(startupReportJson);
             }
         }
 
@@ -291,19 +324,22 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
         var path = benchmark.WriteReport(_outputDirectory, RandomSeed);
         Console.WriteLine($"[Benchmark] Frames {benchmark.Range.StartFrame}-{benchmark.Range.EndFrame} written to {path}");
 
+        string? memoryPath = null;
         if (_poolMemoryReport is { HasBaseline: true } completedMemoryReport)
         {
-            var memoryPath = completedMemoryReport.WriteReport(_outputDirectory, RandomSeed, benchmark.Range);
+            memoryPath = completedMemoryReport.WriteReport(_outputDirectory, RandomSeed, benchmark.Range);
             Console.WriteLine($"[Memory] Frames {benchmark.Range.StartFrame}-{benchmark.Range.EndFrame} written to {memoryPath}");
         }
 
+        string? gaugesPath = null;
         if (_gaugeSeriesReport is { IsComplete: true } completedGaugeSeriesReport)
         {
-            var gaugesPath = completedGaugeSeriesReport.WriteReport(_outputDirectory, RandomSeed);
+            gaugesPath = completedGaugeSeriesReport.WriteReport(_outputDirectory, RandomSeed);
             Console.WriteLine($"[Gauges] Frames {benchmark.Range.StartFrame}-{benchmark.Range.EndFrame} written to {gaugesPath}");
         }
 
         _gaugeSeriesReport = null;
+        _link?.SendBenchmarkCompleted(new DiagnosticsLinkBenchmarkCompletion(benchmark.Range.StartFrame, benchmark.Range.EndFrame, path, memoryPath, gaugesPath));
     }
 
     /// <summary>
@@ -337,6 +373,7 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
 
         var report = new PeriodicReport(
             _outputDirectory,
+            _link,
             Features,
             RandomSeed,
             _frameBudgetTracker?.Snapshot.ToArray(),
@@ -354,7 +391,8 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
             ReportFrameBudgetToConsole(report.FrameBudgetSnapshot);
             if (report.Features != DiagnosticsFeatures.None)
             {
-                DiagnosticsReportWriter.Write(report.OutputDirectory, report.Features, report.RandomSeed, report.FrameBudgetSnapshot, report.ComponentMemorySnapshot, report.LeakFindings, report.GaugeSummaries);
+                var reportJson = DiagnosticsReportWriter.Write(report.OutputDirectory, report.Features, report.RandomSeed, report.FrameBudgetSnapshot, report.ComponentMemorySnapshot, report.LeakFindings, report.GaugeSummaries);
+                report.Link?.SendPeriodicReport(reportJson);
             }
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -381,6 +419,7 @@ public sealed class DiagnosticsEngine : ISimulationFrameListener, ISimulationSes
     /// <summary>One periodic report's snapshots, copied so the trackers can keep sampling while it is written.</summary>
     private sealed record PeriodicReport(
         string OutputDirectory,
+        DiagnosticsLink? Link,
         DiagnosticsFeatures Features,
         int? RandomSeed,
         FrameCostEntry[]? FrameBudgetSnapshot,

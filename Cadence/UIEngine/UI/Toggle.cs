@@ -47,6 +47,9 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
 
     public bool IsOn { get; private set; }
 
+    /// <summary>Shows isOn without notifying onToggled -- for a caller that keeps several toggles in step (an "All" toggle and the ones it covers).</summary>
+    public void SetIsOn(bool isOn) => IsOn = isOn;
+
     /// <summary>Must be called after CreateElement but before Initialize -- the usual Configure contract. font should be whatever the caller already measured label's width with (see GridControl's own row-layout comment) -- a mismatch would let the label clip against whatever fixed width the caller chose.</summary>
     public void Configure(string label, LabelPosition labelPosition, bool defaultOn, Color onColor, Color offColor, Color labelColor, SpriteFontBase font, Action<bool> onToggled)
     {
@@ -123,7 +126,7 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
     /// </summary>
     private (Rectangle Checkbox, Rectangle Label) ComputeLayout()
     {
-        var origin = ContentAbsolutePosition;
+        var origin = Vector2.Zero;
         var size = ContentSize;
         var checkboxSize = (int)CheckboxSize;
 

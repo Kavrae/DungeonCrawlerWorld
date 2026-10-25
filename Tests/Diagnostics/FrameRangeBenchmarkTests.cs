@@ -25,6 +25,22 @@ public sealed class FrameRangeBenchmarkTests
         }
     }
 
+    /// <summary>Its rows start with room for 16 and grow; a row added past that must land in the grown storage.</summary>
+    [TestMethod]
+    public void Record_ManyDistinctItems_KeepsEveryOnesTotal()
+    {
+        var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(1, 10));
+        benchmark.SimulationFrameStarting(1);
+
+        for (var itemIndex = 0; itemIndex < 100; itemIndex++)
+        {
+            benchmark.Record(FrameCostCategory.Update, "SystemManager", $"System{itemIndex}", TimeSpan.FromMilliseconds(itemIndex));
+        }
+
+        Assert.AreEqual(99, benchmark.GetTotalMilliseconds(FrameCostCategory.Update, "SystemManager", "System99"), 1e-9);
+        Assert.AreEqual(17, benchmark.GetTotalMilliseconds(FrameCostCategory.Update, "SystemManager", "System17"), 1e-9);
+    }
+
     [TestMethod]
     public void Record_OnlyCountsFramesInsideTheRange()
     {

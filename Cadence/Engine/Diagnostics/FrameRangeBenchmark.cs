@@ -100,7 +100,7 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
         Directory.CreateDirectory(outputDirectory);
 
         var processId = Environment.ProcessId;
-        var report = new BenchmarkReport(
+        var report = new DiagnosticsBenchmarkReport(
             DateTime.UtcNow,
             randomSeed,
             processId,
@@ -116,9 +116,9 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
         return path;
     }
 
-    private Dictionary<string, List<BenchmarkItem>> GroupByCategory(FrameCostCategory category)
+    private Dictionary<string, IReadOnlyList<DiagnosticsBenchmarkItem>> GroupByCategory(FrameCostCategory category)
     {
-        var groups = new Dictionary<string, List<BenchmarkItem>>();
+        var groups = new Dictionary<string, List<DiagnosticsBenchmarkItem>>();
         for (var rowIndex = 0; rowIndex < _entryTotals.Count; rowIndex++)
         {
             var (entryCategory, groupName, itemName) = _entryTotals.NameAt(rowIndex);
@@ -134,7 +134,7 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
                 groups[groupName] = items;
             }
 
-            items.Add(new BenchmarkItem(itemName, entryTotals.TotalMilliseconds, entryTotals.TotalMilliseconds / Range.FrameCount, entryTotals.WorstMilliseconds));
+            items.Add(new DiagnosticsBenchmarkItem(itemName, entryTotals.TotalMilliseconds, entryTotals.TotalMilliseconds / Range.FrameCount, entryTotals.WorstMilliseconds));
         }
 
         foreach (var items in groups.Values)
@@ -142,7 +142,7 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
             items.Sort(static (a, b) => b.TotalMilliseconds.CompareTo(a.TotalMilliseconds));
         }
 
-        return groups;
+        return groups.ToDictionary(static group => group.Key, static group => (IReadOnlyList<DiagnosticsBenchmarkItem>)group.Value);
     }
 
     private struct EntryTotals
@@ -151,18 +151,4 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
         public double WorstMilliseconds;
         public int RecordCount;
     }
-
-    private sealed record BenchmarkReport(
-        DateTime TimestampUtc,
-        int? RandomSeed,
-        int ProcessId,
-        long StartFrame,
-        long EndFrame,
-        long FrameCount,
-        double WallClockMilliseconds,
-        Dictionary<string, List<BenchmarkItem>> Update,
-        Dictionary<string, List<BenchmarkItem>> Draw);
-
-    /// <param name="WorstMilliseconds">The largest single recording -- one frame's cost for a system or EcsContext.Update, one dispatch for an event.</param>
-    private sealed record BenchmarkItem(string Name, double TotalMilliseconds, double MillisecondsPerFrame, double WorstMilliseconds);
 }

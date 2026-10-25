@@ -46,14 +46,14 @@ public sealed class EntityIconElement(
     {
         if (_fixedVisual is { } visual)
         {
-            SpriteOrGlyphRenderer.Draw(Render.Batch, spriteSheetService, visual.Sprite, _glyphFontMeasurer, visual.Glyph, visual.GlyphColor, ContentAbsolutePosition, ContentSize, Color.White);
+            SpriteOrGlyphRenderer.Draw(Render.Batch, spriteSheetService, visual.Sprite, _glyphFontMeasurer, visual.Glyph, visual.GlyphColor, Vector2.Zero, ContentSize, Color.White);
             return;
         }
 
         if (mapView.TryGetVisual(_entityId, out var entityView))
         {
             var entityVisual = spriteSheetService.Sprites.Resolve(entityView);
-            SpriteOrGlyphRenderer.Draw(Render.Batch, spriteSheetService, entityVisual.Sprite, _glyphFontMeasurer, entityVisual.Glyph, entityVisual.GlyphColor, ContentAbsolutePosition, ContentSize, Color.White);
+            SpriteOrGlyphRenderer.Draw(Render.Batch, spriteSheetService, entityVisual.Sprite, _glyphFontMeasurer, entityVisual.Glyph, entityVisual.GlyphColor, Vector2.Zero, ContentSize, Color.White);
         }
     }
 }

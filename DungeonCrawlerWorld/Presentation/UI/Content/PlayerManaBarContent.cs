@@ -67,9 +67,7 @@ public sealed class PlayerManaBarContent(World world, ActionStateView actionStat
         // ShellBootstrapper to position/size the host window itself); the actual drawable
         // area is whatever's left after its border insets that, so the bar has to size itself
         // off ContentSize to fit inside the border rather than drawing over it.
-        var origin = _hostWindow.ContentAbsolutePosition;
-        var contentSize = _hostWindow.ContentSize;
-        var outerRectangle = new Rectangle((int)origin.X, (int)origin.Y, (int)contentSize.X, (int)contentSize.Y);
+        var outerRectangle = _hostWindow.LocalContentRectangle;
 
         ResourceBarRenderer.Draw(spriteBatch, unitRectangle, outerRectangle, _manaFraction, _hasMana, ManaBarPalette.OutlineColor, ManaBarPalette.FractionColor);
 

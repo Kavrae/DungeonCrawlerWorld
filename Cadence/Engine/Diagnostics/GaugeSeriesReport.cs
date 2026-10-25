@@ -64,7 +64,7 @@ public sealed class GaugeSeriesReport
     /// <param name="randomSeed">The seed of the session measured -- two reports are only comparable when it matches.</param>
     public string WriteReport(string outputDirectory, int? randomSeed)
     {
-        var items = new List<GaugeSeriesItem>(_gaugeSeries.Length + 1)
+        var items = new List<DiagnosticsGaugeSeriesItem>(_gaugeSeries.Length + 1)
         {
             CreateItem(FrameGroupName, UpdateMillisecondsGaugeName, GaugeKind.Level, _updateMillisecondsSeries),
         };
@@ -76,7 +76,7 @@ public sealed class GaugeSeriesReport
         }
 
         var processId = Environment.ProcessId;
-        var report = new GaugeReport(DateTime.UtcNow, randomSeed, processId, Range.StartFrame, Range.EndFrame, Range.FrameCount, RecordedFrameCount, items);
+        var report = new DiagnosticsGaugeSeriesReport(DateTime.UtcNow, randomSeed, processId, Range.StartFrame, Range.EndFrame, Range.FrameCount, RecordedFrameCount, items);
 
         Directory.CreateDirectory(outputDirectory);
         var stem = Path.Combine(outputDirectory, $"gauges-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{processId}");
@@ -85,7 +85,7 @@ public sealed class GaugeSeriesReport
         return stem + ".json";
     }
 
-    private GaugeSeriesItem CreateItem(string groupName, string gaugeName, GaugeKind kind, double[] series)
+    private DiagnosticsGaugeSeriesItem CreateItem(string groupName, string gaugeName, GaugeKind kind, double[] series)
     {
         var minimum = double.MaxValue;
         var maximum = double.MinValue;
@@ -116,11 +116,11 @@ public sealed class GaugeSeriesReport
         }
 
         return kind is GaugeKind.Cumulative
-            ? new GaugeSeriesItem(groupName, gaugeName, kind.ToString(), null, null, null, RoundForReport(total), RoundForReport(maximum), maximumFrame, framesNonzero, roundedSeries)
-            : new GaugeSeriesItem(groupName, gaugeName, kind.ToString(), RoundForReport(minimum), RoundForReport(maximum), RoundForReport(total / series.Length), null, null, maximumFrame, null, roundedSeries);
+            ? new DiagnosticsGaugeSeriesItem(groupName, gaugeName, kind.ToString(), null, null, null, RoundForReport(total), RoundForReport(maximum), maximumFrame, framesNonzero, roundedSeries)
+            : new DiagnosticsGaugeSeriesItem(groupName, gaugeName, kind.ToString(), RoundForReport(minimum), RoundForReport(maximum), RoundForReport(total / series.Length), null, null, maximumFrame, null, roundedSeries);
     }
 
-    private static IEnumerable<string> FormatText(GaugeReport report)
+    private static IEnumerable<string> FormatText(DiagnosticsGaugeSeriesReport report)
     {
         yield return $"[Gauges] seed {report.RandomSeed}, frames {report.StartFrame}-{report.EndFrame}, {report.RecordedFrameCount:N0} of {report.FrameCount:N0} recorded";
         foreach (var item in report.Gauges)
@@ -130,29 +130,4 @@ public sealed class GaugeSeriesReport
                 : $"  {item.Group}/{item.Name}: mean {FormatForReport(item.Mean)} (min {FormatForReport(item.Minimum)}, max {FormatForReport(item.Maximum)} at frame {item.MaximumFrame})";
         }
     }
-
-    private sealed record GaugeReport(
-        DateTime TimestampUtc,
-        int? RandomSeed,
-        int ProcessId,
-        long StartFrame,
-        long EndFrame,
-        long FrameCount,
-        long RecordedFrameCount,
-        List<GaugeSeriesItem> Gauges);
-
-    /// <param name="MaximumFrame">The first frame holding Maximum (a level) or MaximumPerFrame (a cumulative gauge).</param>
-    /// <param name="Series">One value per frame of the range, StartFrame first: a level as read, a cumulative gauge's change that frame.</param>
-    private sealed record GaugeSeriesItem(
-        string Group,
-        string Name,
-        string Kind,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? Minimum,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? Maximum,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? Mean,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? Total,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? MaximumPerFrame,
-        long MaximumFrame,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? FramesNonzero,
-        double[] Series);
 }

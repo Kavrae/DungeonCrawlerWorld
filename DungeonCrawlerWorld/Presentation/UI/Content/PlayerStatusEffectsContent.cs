@@ -116,7 +116,7 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
 
         var spriteBatch = _hostWindow.Render.Batch;
         var unitRectangle = _hostWindow.Render.UnitRectangle;
-        var origin = _hostWindow.ContentAbsolutePosition;
+        var origin = Vector2.Zero;
         var iconSize = new Vector2(_hostWindow.ContentSize.Y, _hostWindow.ContentSize.Y);
 
         for (var i = 0; i < _activeEffectTypes.Count; i++)

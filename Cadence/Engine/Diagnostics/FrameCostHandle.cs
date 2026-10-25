@@ -19,6 +19,7 @@ public readonly struct FrameCostHandle : IDisposable
         _category = category;
         _groupName = groupName;
         _itemName = itemName;
+        recorder.Begin(category, groupName, itemName);
         _startTimestamp = Stopwatch.GetTimestamp();
     }
 

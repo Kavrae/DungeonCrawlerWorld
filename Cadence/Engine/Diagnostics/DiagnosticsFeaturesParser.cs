@@ -20,6 +20,31 @@ public static class DiagnosticsFeaturesParser
         return DiagnosticsFeatures.None;
     }
 
+    /// <summary>The argument Parse reads back as features: "all" when every feature is on, "none" when none is, else each feature's token.</summary>
+    public static string FormatArgument(DiagnosticsFeatures features)
+    {
+        if ((features & DiagnosticsFeatures.All) == DiagnosticsFeatures.All)
+        {
+            return $"{ArgumentPrefix}all";
+        }
+
+        var tokens = new List<string>();
+        AddTokenIfSet(tokens, features, DiagnosticsFeatures.FrameBudget, "frame");
+        AddTokenIfSet(tokens, features, DiagnosticsFeatures.Memory, "memory");
+        AddTokenIfSet(tokens, features, DiagnosticsFeatures.Startup, "startup");
+        AddTokenIfSet(tokens, features, DiagnosticsFeatures.LeakDetection, "leak");
+        AddTokenIfSet(tokens, features, DiagnosticsFeatures.Gauges, "gauges");
+        return $"{ArgumentPrefix}{(tokens.Count == 0 ? "none" : string.Join(',', tokens))}";
+    }
+
+    private static void AddTokenIfSet(List<string> tokens, DiagnosticsFeatures features, DiagnosticsFeatures feature, string token)
+    {
+        if (features.HasFlag(feature))
+        {
+            tokens.Add(token);
+        }
+    }
+
     private static DiagnosticsFeatures ParseValue(string value)
     {
         var features = DiagnosticsFeatures.None;

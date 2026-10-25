@@ -6,6 +6,7 @@ using Engine.Settings;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Presentation.Rendering;
+using System.Net;
 using UIEngine.Bootstrap;
 
 namespace DungeonCrawlerWorld;
@@ -59,7 +60,8 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     /// <param name="randomSeed">Seed for the shared MathUtility every system and blueprint draws from -- see RandomSeed. Defaults to a generated one so a caller that doesn't care (tests constructing a GameLoop directly) still gets a reproducible, reportable session rather than an unseeded one.</param>
     /// <param name="benchmarkFrameRange">Simulation frames to benchmark, or null -- see FrameRangeBenchmark (Program.cs passes --benchmark-frames= here).</param>
     /// <param name="mapSizeOverride">Square map width and height, or null for the default -- see MapSizeArgument (Program.cs passes --map-size= here).</param>
-    public GameLoop(IReadOnlyList<ISettingsSource> settingsSources, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, int? randomSeed = null, BenchmarkFrameRange? benchmarkFrameRange = null, int? mapSizeOverride = null)
+    /// <param name="diagnosticsLink">Where an IDE listens for this run's diagnostics, or null -- see DiagnosticsLinkArgument (Program.cs passes --diagnostics-link= here).</param>
+    public GameLoop(IReadOnlyList<ISettingsSource> settingsSources, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, int? randomSeed = null, BenchmarkFrameRange? benchmarkFrameRange = null, int? mapSizeOverride = null, IPEndPoint? diagnosticsLink = null)
     {
         _randomSeed = randomSeed ?? RandomSeed.Generate();
         _mapSizeOverride = mapSizeOverride;
@@ -70,7 +72,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
         // build phases -- start as close to process start as this class can observe; Initialize()
         // itself is one of the things being timed. Memory/LeakDetection attach when the session
         // begins.
-        _diagnostics = new DiagnosticsEngine(diagnosticsFeatures, _randomSeed, benchmarkFrameRange);
+        _diagnostics = new DiagnosticsEngine(diagnosticsFeatures, _randomSeed, benchmarkFrameRange, linkEndPoint: diagnosticsLink);
         _diagnostics.Start();
 
         //TODO : Make this configurable as a set size OR full screen calculation.
@@ -126,11 +128,14 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     {
         _shell.PreSimulationUpdate();
 
-        if (!(_shell.MapWindow.IsPaused || _shell.Layers.IsMenuModeActive))
+        var simulates = !(_shell.MapWindow.IsPaused || _shell.Layers.IsMenuModeActive);
+        if (simulates)
         {
             _frameCount++;
             _worldSession.GameSession.EcsContext.Update(new EngineTime(gameTime.TotalGameTime, gameTime.ElapsedGameTime, gameTime.IsRunningSlowly, _frameCount));
         }
+
+        EngineHooks.HostFrames.Listener?.HostUpdated(simulates);
 
         using (EngineHooks.FrameCost(FrameCostCategory.Update, "GameLoop", "Shell.Update"))
         {
@@ -173,6 +178,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
             _uiEngine.RenderService.EndFrame();
         }
 
+        EngineHooks.HostFrames.Listener?.HostDrew();
         base.Draw(gameTime);
     }
 

@@ -66,7 +66,7 @@ public sealed class PlayerHealthHoverContent(
 
         var spriteBatch = _hostWindow.Render.Batch;
         var unitRectangle = _hostWindow.Render.UnitRectangle;
-        var origin = _hostWindow.ContentAbsolutePosition;
+        var origin = Vector2.Zero;
         var contentSize = _hostWindow.ContentSize;
         var rowHeight = contentSize.Y / MaxRowCount;
 

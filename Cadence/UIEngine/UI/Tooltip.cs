@@ -53,7 +53,7 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
         SetContentColor(options.Content?.ContentColor ?? BackgroundColor);
 
         // Forces RequiresContentViewport for every Tooltip, whatever chrome the caller passed: the
-        // body text then draws in the viewport's local coordinates, the path multi-line TextWindows
+        // body text and rows are then clipped to the viewport, the path multi-line TextWindows
         // render cleanly through. MaximumSize is generous enough that content never needs to
         // scroll, so the scrollbar stays hidden.
         CanUserScrollVertical = true;
@@ -291,7 +291,7 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
         // Raw content-area origin (no LinePadding baked in yet, unlike the base class's own
         // "origin" for body text) -- the row block applies its own (LinePadding + RowPadding)
         // inset on the left, distinct from the plain LinePadding-only inset the body text uses.
-        var contentTopLeft = RequiresContentViewport ? Vector2.Zero : ContentAbsolutePosition;
+        var contentTopLeft = Vector2.Zero;
         var blockLeft = LinePadding + RowPadding;
         var blockTop = ContentFont.LineHeight * DisplayText.LineCount + LinePadding + RowPadding;
         var rowWidth = System.Math.Max(0f, _contentState.Size.X - (LinePadding + RowPadding) * 2);

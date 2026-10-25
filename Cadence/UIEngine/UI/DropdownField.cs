@@ -128,7 +128,7 @@ public sealed class DropdownField(FontService fontService, ElementPoolService el
 
         var text = SelectedLabel ?? Placeholder;
         var textColor = SelectedLabel is null ? WindowPalette.GhostText : WindowPalette.BodyTextColor;
-        var textPosition = ContentAbsolutePosition + new Vector2(HorizontalTextInset, 0);
+        var textPosition = new Vector2(HorizontalTextInset, 0);
         var textSize = ContentSize - new Vector2(HorizontalTextInset * 2 + ArrowWidth + ArrowRightInset, 0);
         if (text.Length > 0)
         {
@@ -141,7 +141,7 @@ public sealed class DropdownField(FontService fontService, ElementPoolService el
     /// <summary>A downward triangle of shrinking rows at the right edge -- drawn, since the font has no arrow glyph.</summary>
     private void DrawArrow(SpriteEffectBatch spriteBatch, Microsoft.Xna.Framework.Graphics.Texture2D unitRectangle)
     {
-        var content = ContentRectangle;
+        var content = LocalContentRectangle;
         var left = content.Right - ArrowRightInset - ArrowWidth;
         var rows = (ArrowWidth + 1) / 2;
         var top = content.Y + (content.Height - rows) / 2;

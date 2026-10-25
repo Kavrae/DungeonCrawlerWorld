@@ -76,7 +76,7 @@ public sealed class PoolMemoryReport(ComponentManager componentManager, EntityMa
         var liveHeapBytes = GC.GetTotalMemory(forceFullCollection: true);
         using var process = Process.GetCurrentProcess();
 
-        var report = new MemoryReport(
+        var report = new DiagnosticsMemoryReport(
             DateTime.UtcNow,
             randomSeed,
             Environment.ProcessId,
@@ -99,7 +99,7 @@ public sealed class PoolMemoryReport(ComponentManager componentManager, EntityMa
         return stem + ".json";
     }
 
-    private static IEnumerable<string> FormatText(MemoryReport report)
+    private static IEnumerable<string> FormatText(DiagnosticsMemoryReport report)
     {
         yield return $"[Memory] seed {report.RandomSeed}, frames {report.StartFrame}-{report.EndFrame}, {report.LivingEntities:N0} living entities";
         yield return $"Allocated before range: {report.AllocatedBytesBeforeRange / 1048576.0:N0} MB, collections gen0/1/2: {report.Gen0CollectionsBeforeRange}/{report.Gen1CollectionsBeforeRange}/{report.Gen2CollectionsBeforeRange}";
@@ -117,21 +117,6 @@ public sealed class PoolMemoryReport(ComponentManager componentManager, EntityMa
 
     private readonly record struct ProcessFigures(long AllocatedBytes, int Gen0Collections, int Gen1Collections, int Gen2Collections);
 
-    private sealed record MemoryReport(
-        DateTime TimestampUtc,
-        int? RandomSeed,
-        int ProcessId,
-        long StartFrame,
-        long EndFrame,
-        int LivingEntities,
-        long AllocatedBytesBeforeRange,
-        int Gen0CollectionsBeforeRange,
-        int Gen1CollectionsBeforeRange,
-        int Gen2CollectionsBeforeRange,
-        long LiveHeapBytesAtEnd,
-        long PeakWorkingSetBytes,
-        long TotalPoolBytes,
-        IReadOnlyList<PoolMemoryReportEntry> Pools);
 
     /// <summary>A pool's typed baseline copy, created per component type through reflection since the report only sees the untyped pool list.</summary>
     private abstract class PoolSampler

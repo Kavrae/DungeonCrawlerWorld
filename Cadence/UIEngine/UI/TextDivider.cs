@@ -49,7 +49,7 @@ public sealed class TextDivider(FontService fontService, ElementPoolService elem
         var textStart = margin + _textPosition * ContentSize.X;
         var textEnd = textStart + _textWidth;
         var rightEdge = ContentSize.X - margin;
-        var lineY = ContentAbsolutePosition.Y + (ContentSize.Y - LineHeight) / 2f;
+        var lineY = (ContentSize.Y - LineHeight) / 2f;
 
         // MeasureString's bounding box runs right up against the last glyph's own ink -- without
         // this gap the right-side line rendered as if it were touching/overlapping the text.
@@ -69,13 +69,12 @@ public sealed class TextDivider(FontService fontService, ElementPoolService elem
         // glyphs this label has, so labels with and without descenders would sit at different heights.
         // The font's line height keeps every label's baseline in one place and leaves room for a
         // descender inside this row, short of a scrollable parent's clip boundary.
-        var textY = ContentAbsolutePosition.Y + (ContentSize.Y - _font.LineHeight) / 2f;
-        LabelRenderer.Draw(Render.Batch, _font, _text, new Vector2(ContentAbsolutePosition.X + textStart, textY), _color);
+        var textY = (ContentSize.Y - _font.LineHeight) / 2f;
+        LabelRenderer.Draw(Render.Batch, _font, _text, new Vector2(textStart, textY), _color);
     }
 
     private void DrawLine(float startX, float width, float y)
     {
-        var x = ContentAbsolutePosition.X + startX;
-        Render.Batch.Draw(Render.UnitRectangle, new Rectangle((int)x, (int)y, (int)width, (int)LineHeight), _color);
+        Render.Batch.Draw(Render.UnitRectangle, new Rectangle((int)startX, (int)y, (int)width, (int)LineHeight), _color);
     }
 }

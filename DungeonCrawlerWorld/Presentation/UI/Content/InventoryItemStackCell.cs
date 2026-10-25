@@ -215,19 +215,19 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     {
         var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
-        var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
+        var bounds = LocalContentRectangle;
 
         DrawBaseAndIcon(spriteBatch, unitRectangle, bounds, ContentSize);
 
         if (_quantity > 1)
         {
             var quantityText = _quantityBadgeText.Get(_quantity, static quantity => quantity.ToString());
-            ItemIconRenderer.DrawQuantityBadge(spriteBatch, _quantityFont, quantityText, _quantityBadgeTextSize.SizeOf(_quantityFont, quantityText), ContentAbsolutePosition, ContentSize);
+            ItemIconRenderer.DrawQuantityBadge(spriteBatch, _quantityFont, quantityText, _quantityBadgeTextSize.SizeOf(_quantityFont, quantityText), Vector2.Zero, ContentSize);
         }
 
         if (MergedStackBadgeVisible)
         {
-            var badgePosition = new Vector2(ContentAbsolutePosition.X + ContentSize.X - _mergedStackBadgeWidth, ContentAbsolutePosition.Y);
+            var badgePosition = new Vector2(ContentSize.X - _mergedStackBadgeWidth, 0);
             ContrastTextRenderer.Draw(spriteBatch, _badgeFont, MergedStackBadgeText, badgePosition);
         }
 
@@ -258,7 +258,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
         var spriteTint = isGreyedOut ? Color.Gray : Color.White;
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 
-        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, _sprite, _iconGlyphFontMeasurer, _glyph, glyphColor, ContentAbsolutePosition, iconSize, spriteTint);
+        SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, _sprite, _iconGlyphFontMeasurer, _glyph, glyphColor, Vector2.Zero, iconSize, spriteTint);
 
         if (IsToggledOn)
         {
@@ -281,7 +281,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
             return;
         }
 
-        var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
+        var bounds = LocalContentRectangle;
         var thickness = BorderThickness.Uniform(new Vector2(GroupBorderThickness, GroupBorderThickness));
         var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(bounds, thickness);
 

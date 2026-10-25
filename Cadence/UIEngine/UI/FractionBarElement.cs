@@ -43,9 +43,7 @@ public sealed class FractionBarElement(FontService fontService, ElementPoolServi
 
     public override void DrawContent(GameTime gameTime)
     {
-        var origin = ContentAbsolutePosition;
-        var size = ContentSize;
-        var bar = new Rectangle((int)origin.X, (int)origin.Y, (int)size.X, (int)size.Y);
+        var bar = LocalContentRectangle;
 
         ResourceBarRenderer.Draw(Render.Batch, Render.UnitRectangle, bar, _fraction, _hasResource, _outlineColor, _fractionColor);
 

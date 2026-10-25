@@ -60,6 +60,7 @@ public sealed class UiEngineContext(
         pool.RegisterFactory(() => new Folder(fonts, pool, render, sprites));
         pool.RegisterFactory(() => new GridControl(fonts, pool, render));
         pool.RegisterFactory(() => new Toggle(fonts, pool, render));
+        pool.RegisterFactory(() => new ToggleList(fonts, pool, render));
         pool.RegisterFactory(() => new TextDivider(fonts, pool, render));
         pool.RegisterFactory(() => new SeparatorBar(fonts, pool, render));
         pool.RegisterFactory(() => new FractionBarElement(fonts, pool, render));

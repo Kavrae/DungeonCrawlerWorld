@@ -80,18 +80,21 @@ public sealed class StartupProfiler : IDiagnosticScopeListener
     }
 
     /// <summary>Writes the current phase list and stability result to outputDirectory as a one-shot startup-&lt;timestamp&gt;.json.</summary>
-    public void WriteReport(string outputDirectory)
+    /// <returns>The JSON it wrote.</returns>
+    public string WriteReport(string outputDirectory)
     {
         Directory.CreateDirectory(outputDirectory);
 
-        var report = new StartupReport(
+        var report = new DiagnosticsStartupReport(
             DateTime.UtcNow,
             IsStable,
             TimeToStable?.TotalMilliseconds,
-            _phases.ConvertAll(static phase => new StartupReportPhase(phase.Name, phase.Milliseconds, phase.Depth)));
+            [.. _phases]);
 
+        var reportJson = JsonSerializer.Serialize(report, JsonOptions);
         var fileName = $"startup-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json";
-        File.WriteAllText(Path.Combine(outputDirectory, fileName), JsonSerializer.Serialize(report, JsonOptions));
+        File.WriteAllText(Path.Combine(outputDirectory, fileName), reportJson);
+        return reportJson;
     }
 
     private void RecordFrameSample(double milliseconds)
@@ -136,8 +139,4 @@ public sealed class StartupProfiler : IDiagnosticScopeListener
             TimeToStable = Stopwatch.GetElapsedTime(_constructedTimestamp);
         }
     }
-
-    private sealed record StartupReport(DateTime TimestampUtc, bool IsStable, double? TimeToStableMilliseconds, List<StartupReportPhase> Phases);
-
-    private sealed record StartupReportPhase(string Name, double Milliseconds, int Depth);
 }

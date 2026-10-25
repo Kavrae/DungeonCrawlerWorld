@@ -5,6 +5,7 @@ using Engine.Settings;
 Game.GameFrameRate.Apply();
 
 var diagnosticsFeatures = DiagnosticsFeaturesParser.Parse(args);
+var diagnosticsLink = DiagnosticsLinkArgument.Parse(args);
 var randomSeed = RandomSeed.Parse(args);
 var benchmarkFrameRange = BenchmarkFrameRange.Parse(args);
 var mapSizeOverride = DungeonCrawlerWorld.MapSizeArgument.Parse(args);
@@ -19,9 +20,9 @@ if (args.Contains("--headless", StringComparer.OrdinalIgnoreCase))
         return 2;
     }
 
-    return DungeonCrawlerWorld.HeadlessBenchmark.Run(randomSeed, headlessRange, settingsSources, mapSizeOverride, diagnosticsFeatures);
+    return DungeonCrawlerWorld.HeadlessBenchmark.Run(randomSeed, headlessRange, settingsSources, mapSizeOverride, diagnosticsFeatures, diagnosticsLink);
 }
 
-using var game = new DungeonCrawlerWorld.GameLoop(settingsSources, diagnosticsFeatures, randomSeed, benchmarkFrameRange, mapSizeOverride);
+using var game = new DungeonCrawlerWorld.GameLoop(settingsSources, diagnosticsFeatures, randomSeed, benchmarkFrameRange, mapSizeOverride, diagnosticsLink);
 game.Run();
 return 0;

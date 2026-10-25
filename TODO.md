@@ -15,6 +15,30 @@ Global), each split High/Medium/Low priority. Landed work lives in `IMPLEMENTATI
 
 ### High Priority
 
+#### Investigate component pools with a high cost per holder
+
+Find out why a few pools take so many bytes for the few entities holding them, and cut what is avoidable. The Workshop
+Debug tab's Live > Memory view (2026-10-24, sorted by Bytes/holder), all in the "Built" population:
+
+| Component | Holders | Bytes/holder |
+|---|---|---|
+| ActionCooldownComponent | 1 | 25,856 |
+| TestDummyComponent | 1 | 24,576 |
+| ShopComponent | 2 | 19,968 |
+| DisplayTextComponent | 1 | 16,896 |
+| HotkeyExpansionUnlockComponent | 1 | 15,396 |
+| ContainerComponent | 1 | 12,288 |
+| UnclaimedAchievementLootboxComponent | 2 | 12,156 |
+| AchievementUnlockedComponent | 3 | 8,104 |
+
+- **Where the bytes go:** for each, split the estimate (`IMemoryReportingComponentPool.EstimatedBytes`) into its parts --
+  the id-to-index pages (`EntityPages`, 1024 ids a page, one page for each id range a holder falls in), the dense storage's
+  starting capacity (`InitialComponentCapacity` or the registration's own `initialCapacity`), and the component's own size.
+- **What to change:** whatever is avoidable for a pool this sparse -- a smaller starting capacity for a rare pool, a cheaper
+  page for a range with one holder, or holding the data somewhere else (a singleton, a per-shop table) -- and check the
+  estimate itself is right.
+- **Measure** with `Invoke-MemoryReport.ps1 -Compare` against a baseline saved just before.
+
 #### Class exceptions: runtime class grants
 
 NPC classes come from spawn rules and fit two fixed class slots. The player's don't: a first class on
@@ -384,26 +408,35 @@ system ordered after it. `commands.spawn(...)` reserves the `Entity` immediately
 Exclusive systems (`&mut World`) are the escape hatch that applies changes directly.
 `DeferredWorld` (what hooks get) can queue commands but not change structure.
 
-#### Workshop Debug Options tab
+#### Workshop Debug tab: launch options
 
-Every debug setting the game has is a command-line flag today, typed by hand into a launch profile or a terminal:
-`--seed=N`, `--map-size=N`, `--diagnostics=frame,memory,startup,leak,gauges` (or `all`), `--benchmark-frames=START-END`,
-`--headless`, and `--setting=Module.Setting=Value` for module settings. Cadence Workshop's Play and Build and Play start
-the game with none of them.
-- A **Debug Options** tab with a control for each: a number field for the seed (plus "random") and the map size, a
-  checkbox per diagnostics feature (and All), a start and end frame for the benchmark range, a headless checkbox
-  (disabled unless a range is set, the way `Program.cs` refuses it), and a row per declared module setting, typed by
-  its `SettingKey<T>` (bool as a checkbox, numbers as number fields, enums as dropdowns) from `SettingsCatalog`.
-- **Where it sits:** beside the Play and Build and Play command tiles at the strip's right edge, not among the builder
-  tabs on the left -- it configures how the game is launched, so it belongs with the commands that launch it.
-- **What it does:** Play and Build and Play pass its arguments (`GameLaunchTarget.Arguments`). The status line or the
-  tile's tooltip shows the command line they start the game with, so nothing is hidden. The options persist per user
-  between IDE runs, never in a content file (IMPLEMENTATION-NOTES, "Where the manifest lives": editor state never goes in
-  content).
-- Generic in Cadence's Workshop: the engine-level flags (seed, diagnostics, benchmark range, headless, settings) are
-  Engine's, so the tab is shell-owned. A game adds rows for its own flags (`--map-size`) through a hook, as it adds
-  tabs.
-- Uses Phase 4's controls (`PLAN-ide-shell-and-actions-items-tab.md`): number field, dropdown, checkbox (`Toggle`).
+The Debug Options tab was folded into the Debug tab (`PLAN-workshop-diagnostics-tab.md`, epic child 8, 2026-10-24),
+which builds its Launch section with the diagnostics feature checkboxes only. Every other debug setting is still a
+command-line flag typed by hand: `--seed=N`, `--map-size=N`, `--benchmark-frames=START-END`, `--headless`, and
+`--setting=Module.Setting=Value` for module settings. Add them to the Launch section:
+- A number field for the seed (plus "random") and the map size, a start and end frame for the benchmark range, a
+  headless checkbox (disabled unless a range is set, the way `Program.cs` refuses it), and a row per declared module
+  setting, typed by its `SettingKey<T>` (bool as a checkbox, numbers as number fields, enums as dropdowns) from
+  `SettingsCatalog`.
+- Already in place from the plan: the tab at the strip's right edge beside Play, Play and Build and Play passing the
+  Launch section's arguments, the full command line shown, per-user persistence never in content.
+- Generic in Cadence's Workshop: the engine-level flags (seed, benchmark range, headless, settings) are Engine's, so
+  the section is shell-owned. A game adds rows for its own flags (`--map-size`) through a hook, as it adds tabs.
+- A headless benchmark started here runs with no window; its report arrives over the diagnostics link and opens in the
+  Reports section when it completes.
+
+#### Workshop Debug tab: save a live capture
+
+The Debug tab's Live section (`PLAN-workshop-diagnostics-tab.md`) keeps 10 minutes of a connected game's frames,
+gauges and reports in memory, and loses them on the next Play. Unreal Insights records a live session as it streams and
+reopens it later as a `.utrace` file.
+- **Save capture:** write the session -- the hello (seed, features, gauge descriptors), the frame history, every
+  periodic report and the startup report -- to `Log/diagnostics/capture-*.json` (or a compact binary beside it, decided
+  by size), with the seed and frame range in its name.
+- **Reopen:** captures appear in the Reports browser and open in the Live views, frozen, with the frame graph scrollable
+  across the whole capture.
+- **Record to file as it streams** (optional, a checkbox in the Launch section), so a crash or a long session isn't lost.
+- Captures can be compared like benchmark runs (per-gauge and per-cost changes between two captures).
 
 #### Common game elements in Engine: actions, auras, items and the activator base
 
@@ -595,6 +628,22 @@ The IDE's Error List shows severity, description, table, record, field and layer
 ## Game
 
 ### High Priority
+
+#### Resolve highest performance costs
+
+Find and fix what costs the most per frame. Headless Release, seed 1, frames 600-3600, map 3072 (2026-10-24, A/B
+`Log/phase-benchmarks/ab-20261024-135715.json`): `EcsContext.Update` 1.60 ms/frame, of which
+`TestCombatBehaviorSystem` 0.60, `AuraSystem` 0.38, `MovementSystem` 0.19 and `BurningSystem` 0.10 -- the four are 80%
+of it. Run-to-run spread is ~3%, so a change must beat that to count.
+- **The averages:** profile the top systems in Release, work out where the time goes (lookups, scans, cache misses,
+  work repeated per visit), and fix the largest first.
+- **The worst frame:** the slowest frame in every run is frame 1097 at ~8-9 ms, over five times the average frame:
+  `DeathSystem`, almost all of it inside `AuraSourceRemovedEvent` (6.5-9 ms) -- a death removing aura sources and
+  rescanning. Find out what that death removes and why its rescan costs that much.
+- **GC pauses:** a gen-0/gen-1 collection every 130-145 frames adds 2-3 ms to the frame it lands on; which frame
+  depends on allocation elsewhere, so it can land on the worst one (seen with `--diagnostics-link`). Reduce what each
+  frame allocates (`Process/AllocatedBytes` gauge, 40-110 KB per frame here).
+- **Measure each fix** with a `phase-performance-testing` A/B, Release, against a baseline saved just before it.
 
 #### Improved deterministic random -- world generation independent of player actions
 

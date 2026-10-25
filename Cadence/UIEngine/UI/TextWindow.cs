@@ -43,7 +43,7 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
             return;
         }
 
-        var origin = (RequiresContentViewport ? Vector2.Zero : ContentAbsolutePosition) + new Vector2(LinePadding, LinePadding);
+        var origin = new Vector2(LinePadding, LinePadding);
 
         if (Bold)
         {

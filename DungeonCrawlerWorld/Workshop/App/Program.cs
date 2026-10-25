@@ -3,13 +3,14 @@ using DungeonCrawlerWorld.Workshop;
 using Engine.Settings;
 using Presentation.Rendering;
 using Workshop;
+using Workshop.Debug;
 using Workshop.Sprites;
 
 Game.GameFrameRate.Apply();
 
 IReadOnlyList<ISettingsSource> settingsSources = [new CommandLineSettingsSource(args)];
 var tabName = TabArgument.Parse(args);
-IReadOnlyList<string> tabTitles = [.. BuilderTabs.Titles, SpritesTab.TabTitle, ControlGalleryTab.TabTitle];
+IReadOnlyList<string> tabTitles = [.. BuilderTabs.Titles, SpritesTab.TabTitle, ControlGalleryTab.TabTitle, DebugTab.TabTitle];
 if (tabName is not null && !tabTitles.Contains(tabName, StringComparer.OrdinalIgnoreCase))
 {
     Console.Error.WriteLine($"--tab={tabName} names no tab. Tabs: {string.Join(", ", tabTitles)}.");
@@ -39,6 +40,7 @@ var options = new WorkshopHostOptions(
     })
 {
     GameOutputLogPath = Path.Combine(RepositoryPaths.LogDirectory(), "workshop-game-output.log"),
+    DiagnosticsReportDirectories = [Path.Combine(RepositoryPaths.LogDirectory(), "diagnostics"), Path.Combine(RepositoryPaths.LogDirectory(), "phase-benchmarks")],
 };
 
 using var workshop = new WorkshopHost(options);

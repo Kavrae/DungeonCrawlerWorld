@@ -158,9 +158,17 @@ public sealed class SystemManager(SimulationClock? clock = null, int simulatedTi
 
                 if (frameCostRecorder is not null)
                 {
+                    var systemName = entry.System.GetType().Name;
+                    frameCostRecorder.Begin(FrameCostCategory.Update, "SystemManager", systemName);
                     var start = Stopwatch.GetTimestamp();
-                    Run(entry, time, stripeIndex);
-                    frameCostRecorder.Record(FrameCostCategory.Update, "SystemManager", entry.System.GetType().Name, Stopwatch.GetElapsedTime(start));
+                    try
+                    {
+                        Run(entry, time, stripeIndex);
+                    }
+                    finally
+                    {
+                        frameCostRecorder.Record(FrameCostCategory.Update, "SystemManager", systemName, Stopwatch.GetElapsedTime(start));
+                    }
                 }
                 else
                 {

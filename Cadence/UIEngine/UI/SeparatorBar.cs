@@ -24,7 +24,7 @@ public sealed class SeparatorBar(FontService fontService, ElementPoolService ele
     public override void DrawContent(GameTime gameTime)
     {
         var barWidth = ContentSize.X * WidthFraction;
-        var barPosition = ContentAbsolutePosition + new Vector2((ContentSize.X - barWidth) / 2f, 0);
+        var barPosition = new Vector2((ContentSize.X - barWidth) / 2f, 0);
 
         Render.Batch.Draw(Render.UnitRectangle, new Rectangle((int)barPosition.X, (int)barPosition.Y, (int)barWidth, (int)ContentSize.Y), _color);
     }

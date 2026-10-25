@@ -33,7 +33,6 @@ public sealed class DiagnosticsWindow(
 {
     private const string GaugesOffHint = "Run with --diagnostics=gauges for live gauges.";
     private const string LeakDetectionHeading = "Leak findings";
-    private const double BytesPerMegabyte = 1024 * 1024;
 
     private readonly double[] _historyScratch = new double[GaugeHistory.HistoryFrameCount];
     private readonly List<string> _headerLines = [];
@@ -162,17 +161,15 @@ public sealed class DiagnosticsWindow(
         {
             var row = liveGauges.Rows[rowIndex];
             var history = _historyScratch.AsSpan(0, liveGauges.CopyHistory(rowIndex, _historyScratch));
-            var (minimum, maximum, total) = Summarize(history);
-            _rowValueTexts[rowIndex] = FormatGaugeValue(row.GaugeName, liveGauges.GetLatestValue(rowIndex));
-            _rowRangeTexts[rowIndex] = row.Kind is GaugeKind.Cumulative
-                ? $"total {FormatGaugeValue(row.GaugeName, total)}"
-                : $"{FormatGaugeValue(row.GaugeName, minimum)} - {FormatGaugeValue(row.GaugeName, maximum)}";
+            var unit = GaugeUnits.Of(row.GaugeName);
+            _rowValueTexts[rowIndex] = GaugeValueFormatting.Format(unit, liveGauges.GetLatestValue(rowIndex));
+            _rowRangeTexts[rowIndex] = GaugeValueFormatting.FormatSummary(row.Kind, unit, GaugeWindowStatistics.Of(history));
         }
 
         var frameHistory = _historyScratch.AsSpan(0, liveGauges.CopyHistory(0, _historyScratch));
-        var (_, frameMaximum, _) = Summarize(frameHistory);
+        var frameMaximum = GaugeWindowStatistics.Of(frameHistory).Maximum;
         _frameGraphMaximum = System.Math.Max(frameMaximum, DiagnosticsWindowChrome.FrameBudgetMilliseconds * 1.25);
-        _frameGraphLabel = $"Update {_rowValueTexts[0]}   max {FormatGaugeValue("Milliseconds", frameMaximum)}";
+        _frameGraphLabel = $"Update {_rowValueTexts[0]}   max {GaugeValueFormatting.Format(GaugeUnit.Milliseconds, frameMaximum)}";
     }
 
     /// <summary>Walks every line of the window from the top, drawing it when isDrawing is set, and returns the height it all takes.</summary>
@@ -275,7 +272,7 @@ public sealed class DiagnosticsWindow(
         var verticalGap = DiagnosticsWindowChrome.SparklineVerticalGap;
         var sparklineArea = new Rectangle((int)(inset + width - sparklineWidth), (int)(y + verticalGap), (int)sparklineWidth, (int)(rowHeight - verticalGap * 2));
         var history = _historyScratch.AsSpan(0, liveGauges.CopyHistory(rowIndex, _historyScratch));
-        var (minimum, maximum, _) = Summarize(history);
+        var (minimum, maximum, _, _) = GaugeWindowStatistics.Of(history);
         if (row.Kind is GaugeKind.Cumulative)
         {
             SparklineRenderer.Draw(spriteBatch, Render.UnitRectangle, sparklineArea, history, 0, System.Math.Max(maximum, 1), SparklineStyle.Bars, GameWindowPalette.DiagnosticsEventSeries, GameWindowPalette.DiagnosticsGraphBackground);
@@ -287,39 +284,4 @@ public sealed class DiagnosticsWindow(
         }
     }
 
-    private static (double Minimum, double Maximum, double Total) Summarize(ReadOnlySpan<double> history)
-    {
-        if (history.IsEmpty)
-        {
-            return (0, 0, 0);
-        }
-
-        var minimum = double.MaxValue;
-        var maximum = double.MinValue;
-        var total = 0d;
-        foreach (var value in history)
-        {
-            minimum = System.Math.Min(minimum, value);
-            maximum = System.Math.Max(maximum, value);
-            total += value;
-        }
-
-        return (minimum, maximum, total);
-    }
-
-    /// <summary>Formats a gauge's value by its name's unit suffix: "...Bytes" in MB, "...Milliseconds" in ms, anything else as a count.</summary>
-    private static string FormatGaugeValue(string gaugeName, double value)
-    {
-        if (gaugeName.EndsWith("Bytes", StringComparison.Ordinal))
-        {
-            return $"{value / BytesPerMegabyte:N1} MB";
-        }
-
-        if (gaugeName.EndsWith("Milliseconds", StringComparison.Ordinal))
-        {
-            return $"{value:N2} ms";
-        }
-
-        return value == System.Math.Floor(value) ? value.ToString("N0") : value.ToString("N2");
-    }
 }

@@ -47,12 +47,12 @@ public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoo
 
         if (IsHovered)
         {
-            spriteBatch.Draw(unitRectangle, new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y), WindowPalette.HighlightColor);
+            spriteBatch.Draw(unitRectangle, LocalContentRectangle, WindowPalette.HighlightColor);
         }
 
         var stripSize = new Vector2(ContentSize.X, ContentSize.Y / 2f);
 
-        LabelRenderer.DrawCentered(spriteBatch, _nameFontMeasurer, _name, ContentAbsolutePosition, stripSize, TextColor);
-        LabelRenderer.DrawCentered(spriteBatch, _totalFontMeasurer, _totalText, ContentAbsolutePosition + new Vector2(0, stripSize.Y), stripSize, TextColor);
+        LabelRenderer.DrawCentered(spriteBatch, _nameFontMeasurer, _name, Vector2.Zero, stripSize, TextColor);
+        LabelRenderer.DrawCentered(spriteBatch, _totalFontMeasurer, _totalText, new Vector2(0, stripSize.Y), stripSize, TextColor);
     }
 }

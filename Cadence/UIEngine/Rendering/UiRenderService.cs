@@ -62,7 +62,7 @@ public sealed class UiRenderService
     /// <summary>Draws what the frame's pass still holds. Pairs with BeginFrame.</summary>
     public void EndFrame() => Batch.End();
 
-    /// <summary>Saves the current state and draws under newState until the matching PopRenderState, which every caller invokes exactly once for each push (Element.Draw's two RequiresContentViewport blocks).</summary>
+    /// <summary>Saves the current state and draws under newState until the matching PopRenderState, which every caller invokes exactly once for each push (Element.Draw's content and scrolled-children blocks).</summary>
     public void PushRenderState(RenderState newState)
     {
         _renderStateStack.Push(_currentRenderState);

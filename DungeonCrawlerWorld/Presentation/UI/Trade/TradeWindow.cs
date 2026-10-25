@@ -418,7 +418,7 @@ public sealed class TradeWindow(
 
     private void DrawHeaderColumn(SpriteEffectBatch spriteBatch, FontStashTextMeasurer fontMeasurer, float x, string label, string valueText)
     {
-        var columnTopLeft = ContentAbsolutePosition + new Vector2(x, 0);
+        var columnTopLeft = new Vector2(x, 0);
         var labelFootprint = new Vector2(ColumnSize.X, HeaderLabelLineHeight);
         var valueFootprint = new Vector2(ColumnSize.X, HeaderHeight - HeaderLabelLineHeight);
 

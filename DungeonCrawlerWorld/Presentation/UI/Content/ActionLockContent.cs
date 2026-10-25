@@ -69,13 +69,8 @@ public sealed class ActionLockContent(World world, ActionStateView actionStateVi
         _radialFill.BackgroundColor = Color.Blue;
         _radialFill.FillPercentage = _fillPercentage;
 
-        var origin = _hostWindow.ContentAbsolutePosition;
         var contentSize = _hostWindow.ContentSize;
-        var bounds = new Rectangle(
-            (int)origin.X + ContentInset,
-            (int)origin.Y + ContentInset,
-            (int)contentSize.X - ContentInset * 2,
-            (int)contentSize.Y - ContentInset * 2);
+        var bounds = new Rectangle(ContentInset, ContentInset, (int)contentSize.X - ContentInset * 2, (int)contentSize.Y - ContentInset * 2);
 
         _radialFill.Draw(spriteBatch, unitRectangle, _glyphFontMeasurer, bounds);
     }

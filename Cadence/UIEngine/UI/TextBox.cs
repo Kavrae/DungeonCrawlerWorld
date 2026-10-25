@@ -110,6 +110,9 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
 
     public Color GhostTextColor { get; set; } = WindowPalette.GhostText;
 
+    /// <summary>True to show text the user can select and copy but not change: typing, Backspace, Delete, Cut and Paste do nothing, and SetText still replaces it.</summary>
+    public bool IsReadOnly { get; set; }
+
     public override void Build(Element? parent, ElementOptions options)
     {
         base.Build(parent, options);
@@ -131,6 +134,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
         _lastClickIndex = -1;
         GhostText = null;
         GhostTextColor = WindowPalette.GhostText;
+        IsReadOnly = false;
     }
 
     public override void Initialize()
@@ -170,7 +174,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
 
     protected override void OnTextInputAction(char character)
     {
-        if (char.IsControl(character) || !AcceptsCharacter(character))
+        if (IsReadOnly || char.IsControl(character) || !AcceptsCharacter(character))
         {
             return;
         }
@@ -191,6 +195,11 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
         {
             if (shiftHeld && _multiline)
             {
+                if (IsReadOnly)
+                {
+                    return;
+                }
+
                 TryDeleteSelection();
                 var insertIndex = _caretIndex;
                 SetTextAndAutoSize(OriginalText[..insertIndex] + "\n" + OriginalText[insertIndex..]);
@@ -225,7 +234,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
 
         if (ctrlHeld && WasKeyPressed(keyboardState, previousKeyboardState, Keys.X))
         {
-            if (CopySelectionToClipboard())
+            if (CopySelectionToClipboard() && !IsReadOnly)
             {
                 TryDeleteSelection();
             }
@@ -234,7 +243,11 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
 
         if (ctrlHeld && WasKeyPressed(keyboardState, previousKeyboardState, Keys.V))
         {
-            PasteFromClipboard();
+            if (!IsReadOnly)
+            {
+                PasteFromClipboard();
+            }
+
             return;
         }
 
@@ -242,7 +255,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
         // edit-hook's own edge-triggered HandleKeyPress -- see ShouldFire's own doc comment for
         // why Backspace/Delete moved here alongside the arrows rather than staying split across
         // two different input hooks with two different repeat behaviors.
-        if (ShouldFire(Keys.Back, keyboardState) && !TryDeleteSelection())
+        if (ShouldFire(Keys.Back, keyboardState) && !IsReadOnly && !TryDeleteSelection())
         {
             if (ctrlHeld && _caretIndex > 0)
             {
@@ -258,7 +271,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
             }
         }
 
-        if (ShouldFire(Keys.Delete, keyboardState) && !TryDeleteSelection())
+        if (ShouldFire(Keys.Delete, keyboardState) && !IsReadOnly && !TryDeleteSelection())
         {
             if (ctrlHeld && _caretIndex < OriginalText.Length)
             {
@@ -435,7 +448,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
 
         return
         [
-            new DropdownOption("Cut", "Ctrl+X", hasSelection, () =>
+            new DropdownOption("Cut", "Ctrl+X", hasSelection && !IsReadOnly, () =>
             {
                 if (CopySelectionToClipboard())
                 {
@@ -443,7 +456,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
                 }
             }),
             new DropdownOption("Copy", "Ctrl+C", hasSelection, () => CopySelectionToClipboard()),
-            new DropdownOption("Paste", "Ctrl+V", SDL.SDL_HasClipboardText(), PasteFromClipboard),
+            new DropdownOption("Paste", "Ctrl+V", !IsReadOnly && SDL.SDL_HasClipboardText(), PasteFromClipboard),
             new DropdownOption("Select All", "Ctrl+A", OriginalText.Length > 0, () =>
             {
                 MoveCaretTo(OriginalText.Length);
@@ -898,11 +911,11 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
     /// draws last so it's never hidden behind either branch's text.
     /// </summary>
     /// <remarks>
-    /// Doesn't use the shared scrollable-window offset and clip (Element.Draw's
+    /// Doesn't use the shared scrollable-window scroll and clip (Element.Draw's
     /// RequiresContentViewport path, driven by CanUserScrollHorizontal/Vertical) for the
-    /// single-line case: it draws in absolute coordinates and scrolls its text itself. Multiline opts into that
+    /// single-line case: it scrolls its text itself. Multiline opts into that
     /// machinery via CanUserScrollVertical (word-wrap already keeps every line within the content width, so
-    /// there's nothing horizontal left to clip).
+    /// there's nothing horizontal left to clip). Both draw in local coordinates, like every DrawContent.
     /// </remarks>
     public override void DrawContent(GameTime gameTime)
     {
@@ -911,13 +924,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
 
         if (string.IsNullOrEmpty(OriginalText) && !IsFocused && !string.IsNullOrEmpty(GhostText))
         {
-            // Multiline still uses the local-coordinate Viewport (RequiresContentViewport, via
-            // CanUserScrollVertical) TextWindow's own DrawContent relies on -- no current
-            // multiline TextBox sets GhostText, but this keeps the origin correct if one ever
-            // does, rather than assuming every ghost-text box is single-line. No caret to draw
-            // here either way -- ghost text only shows while unfocused.
-            var origin = RequiresContentViewport ? Vector2.Zero : ContentAbsolutePosition;
-            LabelRenderer.Draw(spriteBatch, ContentFont, GhostText, origin + new Vector2(LinePadding, LinePadding), GhostTextColor);
+            LabelRenderer.Draw(spriteBatch, ContentFont, GhostText, new Vector2(LinePadding, LinePadding), GhostTextColor);
             return;
         }
 
@@ -931,14 +938,14 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
         {
             var maximumWidth = _contentState.Size.X - ContentPadding.X * 2;
             var visibleText = GetVisibleWindowText(DisplayText.FormattedText, _visibleStartIndex, maximumWidth);
-            LabelRenderer.Draw(spriteBatch, ContentFont, visibleText, ContentAbsolutePosition + new Vector2(LinePadding, LinePadding), TextColor);
+            LabelRenderer.Draw(spriteBatch, ContentFont, visibleText, new Vector2(LinePadding, LinePadding), TextColor);
         }
 
         DrawCaretIfFocused(spriteBatch, unitRectangle);
     }
 
     /// <summary>Draws a translucent highlight behind the current selection, if any -- called before the text itself so the highlight sits behind the glyphs, not on top of them.</summary>
-    /// <remarks>Multiline draws in the local (Viewport-relative) coordinates of the RequiresContentViewport scope the multiline text uses; single-line in absolute screen coordinates. The rectangles are kept until the text, its wrapping, the selection, the scroll, the width or the font changes.</remarks>
+    /// <remarks>Drawn in DrawContent's local coordinates. The rectangles are kept until the text, its wrapping, the selection, the scroll, the width or the font changes.</remarks>
     private void DrawSelectionIfAny(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
         if (_selectionAnchor is not { } anchor || anchor == _caretIndex)
@@ -956,11 +963,9 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
                 ? textBox.BuildMultilineSelectionRectangles(key.SelectionStart, key.SelectionEnd)
                 : textBox.BuildSingleLineSelectionRectangles(key.SelectionStart, key.SelectionEnd, key.MaximumWidth));
 
-        var originX = _multiline ? 0 : (int)ContentAbsolutePosition.X;
-        var originY = _multiline ? 0 : (int)ContentAbsolutePosition.Y;
         foreach (var rectangle in selectionRectangles)
         {
-            spriteBatch.Draw(unitRectangle, new Rectangle(rectangle.X + originX, rectangle.Y + originY, rectangle.Width, rectangle.Height), SelectionColor);
+            spriteBatch.Draw(unitRectangle, rectangle, SelectionColor);
         }
     }
 
@@ -1097,16 +1102,14 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
             (OriginalText, DisplayText.FormattedText, _multiline, _visibleStartIndex, _caretIndex, ContentFont),
             this,
             static (_, textBox) => textBox.ComputeCaretOffset());
-        var position = (_multiline ? Vector2.Zero : ContentAbsolutePosition) + caretOffset;
+        var position = caretOffset;
         var caretRectangle = new Rectangle((int)MathF.Round(position.X), (int)MathF.Round(position.Y), CaretWidth, (int)ContentFont.LineHeight);
         spriteBatch.Draw(unitRectangle, caretRectangle, TextColor);
     }
 
     /// <summary>
-    /// The caret's position relative to the content origin. Multiline is drawn in the same local
-    /// (Viewport-relative) coordinates DrawContent's base.DrawContent call already uses, since it's
-    /// drawn inside the same RequiresContentViewport scope; single-line is drawn from
-    /// ContentAbsolutePosition, matching its own GetVisibleWindowText draw call, and measures from
+    /// The caret's position relative to the content origin, in DrawContent's local coordinates like
+    /// the text it sits in; single-line measures from
     /// _visibleStartIndex (the window's own scrolled start) rather than 0 -- a caret past the
     /// visible window's start needs its X measured from where drawing actually begins, not from
     /// the start of the whole line.

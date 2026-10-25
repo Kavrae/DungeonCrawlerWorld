@@ -77,7 +77,7 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
     {
         var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
-        var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
+        var bounds = LocalContentRectangle;
 
         GridSquareRenderer.DrawBase(spriteBatch, unitRectangle, bounds);
         GridSquareRenderer.DrawStateOverlay(spriteBatch, unitRectangle, bounds, IsHovered ? GridSquareState.Hovered : GridSquareState.Normal);
@@ -89,12 +89,12 @@ public sealed class CurrencyElement(FontService fontService, ElementPoolService 
             var builtText = key.ShowLabel ? $"{key.Label} : {key.Amount}" : $"{key.Amount}";
             return (builtText, key.Font.MeasureString(builtText));
         });
-        var textPosition = ContentAbsolutePosition + new Vector2(0, (ContentSize.Y - textSize.Y) / 2f);
+        var textPosition = new Vector2(0, (ContentSize.Y - textSize.Y) / 2f);
         LabelRenderer.Draw(spriteBatch, _textFont, text, textPosition, _textColorOverride ?? WindowPalette.BodyTextColor);
 
         // Sits IconGap past the text's own measured width, not pinned to the element's right edge --
         // "Gold : 10" then the sprite immediately after, not stranded at the far side of the row.
-        var iconPosition = new Vector2(textPosition.X + textSize.X + IconGap, ContentAbsolutePosition.Y);
+        var iconPosition = new Vector2(textPosition.X + textSize.X + IconGap, 0);
         SpriteView? sprite = spriteSheetService.Sprites.TryGetFirst(spriteName, out var spriteView) ? spriteView : null;
         SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, sprite, _glyphFontMeasurer, glyph, glyphColor, iconPosition, IconSize, Color.White);
     }

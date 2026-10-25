@@ -111,23 +111,23 @@ public class ShopItemStackCell(FontService fontService, ElementPoolService eleme
     {
         var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
-        var bounds = new Rectangle((int)ContentAbsolutePosition.X, (int)ContentAbsolutePosition.Y, (int)ContentSize.X, (int)ContentSize.Y);
+        var bounds = LocalContentRectangle;
         var spriteSize = new Vector2(ContentSize.Y, ContentSize.Y);
 
         var isGreyedOut = DrawBaseAndIcon(spriteBatch, unitRectangle, bounds, spriteSize);
 
         var textColor = isGreyedOut ? Color.Gray : Color.White;
-        var textLeft = ContentAbsolutePosition.X + spriteSize.X + TextPadding;
+        var textLeft = spriteSize.X + TextPadding;
         var textWidth = System.Math.Max(0f, ContentSize.X - spriteSize.X - TextPadding);
         var halfHeight = ContentSize.Y / 2f;
 
         var truncatedName = _truncatedName.Get((_itemName, textWidth, _badgeFont), FontService, static (key, fontService) => StringUtility.TruncateWithEllipsis(fontService.GetTextMeasurer(key.Font), key.Name, key.Width));
-        LabelRenderer.DrawLeftAligned(spriteBatch, _badgeFont, truncatedName, new Vector2(textLeft, ContentAbsolutePosition.Y + NameTopPadding), new Vector2(textWidth, halfHeight - NameTopPadding), textColor);
+        LabelRenderer.DrawLeftAligned(spriteBatch, _badgeFont, truncatedName, new Vector2(textLeft, NameTopPadding), new Vector2(textWidth, halfHeight - NameTopPadding), textColor);
 
         var priceColor = isGreyedOut ? Color.Gray : PriceIsFavorable ? FavorableColor : PriceIsUnfavorable ? UnfavorableColor : textColor;
 
         var priceFont = FontService.GetFont((int)(ContentSize.Y * CompactStatFontSizeFraction));
-        var priceRowPosition = new Vector2(textLeft, ContentAbsolutePosition.Y + halfHeight);
+        var priceRowPosition = new Vector2(textLeft, halfHeight);
         var priceRowSize = new Vector2(textWidth, halfHeight);
 
         if (_quantity > 1)

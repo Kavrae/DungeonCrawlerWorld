@@ -134,7 +134,11 @@ Each is its own plan; numbering is the order. Arrows are hard dependencies.
    the pass, the map's targeting overlay is one quad over a per-tile texture, and a tilemap terrain shader was measured and
    not built (only the non-playable zooms rebuild slowly); the GPU captures are open. SDF glyphs were left out of 7.3 (they
    change the font pipeline, not the effect) and stay TODO.md's "Replace the text outline with SDF glyphs".
-8. **Diagnostics tab** (→5). The debugging half of the IDE: gauges, frame costs, memory and leak reports --
+8. **Diagnostics tab** (→5). Planned 2026-10-23 in `PLAN-workshop-diagnostics-tab.md`, decisions settled 2026-10-24:
+   the IDE connects to the game Play started (a loopback link the game connects to, inside `DiagnosticsEngine`); one
+   **Debug** tab (`Cadence/Workshop/Debug`, beside Play) holds Launch (the diagnostics feature checkboxes; the other
+   options are TODO.md "Workshop Debug tab: launch options"), Live and Reports with benchmark Compare; saving a live
+   capture is TODO.md "Workshop Debug tab: save a live capture". The debugging half of the IDE: gauges, frame costs, memory and leak reports --
    what the F3 Diagnostics window and `Log/diagnostics/` show today -- for a running game. Research first
    whether the IDE hosts the session itself (in-process, so `EngineHooks`' static channels just work, with a
    game view tab) or attaches to a separate game process (a transport for gauge samples and reports, and a

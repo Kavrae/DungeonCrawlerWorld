@@ -73,7 +73,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
 
     private void DrawCell(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Point offset)
     {
-        var cellOrigin = ContentAbsolutePosition + new Vector2((offset.X - _minX) * _cellSize, (offset.Y - _minY) * _cellSize);
+        var cellOrigin = new Vector2((offset.X - _minX) * _cellSize, (offset.Y - _minY) * _cellSize);
         var outerSize = _cellSize - CellGap;
 
         var fillColor = _highlightedOffsets?.Contains(offset) == true ? HighlightedCellFillColor : CellFillColor;
@@ -97,7 +97,7 @@ public sealed class TargetShapePreviewElement(FontService fontService, ElementPo
     /// <summary>The caster's own cell (0,0) -- always present, whether or not it's also one of the targeted _offsets (Self, alone or combined e.g. Adjacent | Self, targets it; most other shapes don't; either way the circle marks it).</summary>
     private void DrawPlayerMarker(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
-        var cellOrigin = ContentAbsolutePosition + new Vector2((0 - _minX) * _cellSize, (0 - _minY) * _cellSize);
+        var cellOrigin = new Vector2((0 - _minX) * _cellSize, (0 - _minY) * _cellSize);
         var center = cellOrigin + new Vector2(_cellSize / 2f, _cellSize / 2f);
         var radius = _cellSize / 2f - PlayerMarkerInset;
         if (radius <= 0)

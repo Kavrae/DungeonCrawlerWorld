@@ -283,6 +283,39 @@ public sealed class TextBoxTests
     }
 
     [TestMethod]
+    public void ReadOnly_IgnoresTypingBackspaceAndDelete_ButSetTextStillReplacesIt()
+    {
+        var textBox = CreateTextBox(CreateWindowService());
+        textBox.SetText("fixed");
+        textBox.IsReadOnly = true;
+
+        textBox.HandleTextInput('x');
+        textBox.HandleHotkeys(new KeyboardState(Keys.Back), new KeyboardState());
+        textBox.HandleHotkeys(new KeyboardState(Keys.Home), new KeyboardState());
+        textBox.HandleHotkeys(new KeyboardState(Keys.Delete), new KeyboardState());
+        Assert.AreEqual("fixed", textBox.OriginalText);
+
+        textBox.SetText("replaced");
+        Assert.AreEqual("replaced", textBox.OriginalText);
+    }
+
+    [TestMethod]
+    public void ReadOnly_WithASelection_OffersCopyAndSelectAll_NotCutOrPaste()
+    {
+        var textBox = CreateTextBox(CreateWindowService());
+        textBox.SetText("copy me");
+        textBox.IsReadOnly = true;
+        textBox.HandleHotkeys(new KeyboardState(Keys.LeftControl, Keys.A), new KeyboardState());
+
+        var options = textBox.BuildContextMenuOptions();
+
+        Assert.IsFalse(options[0].Enabled, "Cut");
+        Assert.IsTrue(options[1].Enabled, "Copy");
+        Assert.IsFalse(options[2].Enabled, "Paste");
+        Assert.IsTrue(options[3].Enabled, "Select All");
+    }
+
+    [TestMethod]
     public void BuildContextMenuOptions_WithSelection_CutAndCopyEnabled()
     {
         var textBox = CreateTextBox(CreateWindowService());

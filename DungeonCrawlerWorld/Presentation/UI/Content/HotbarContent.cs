@@ -255,8 +255,9 @@ public sealed class HotbarContent(
         var unitRectangle = _hostWindow.Render.UnitRectangle;
         var playerEntityId = world.PlayerEntityId;
 
-        foreach (var (slot, bounds) in SlotBounds())
+        foreach (var (slot, screenBounds) in SlotBounds())
         {
+            var bounds = _hostWindow.ToContentLocal(screenBounds);
             DrawSlot(spriteBatch, unitRectangle, playerEntityId, slot, bounds);
 
             if (IsAcceptingDrag)
