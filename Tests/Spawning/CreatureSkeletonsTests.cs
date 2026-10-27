@@ -28,8 +28,7 @@ public sealed class CreatureSkeletonsTests
     private static Session BuildSession(UniqueNumberAllocator? crawlerNumbers = null)
     {
         var map = new Map(new MapBounds(-Neighborhoods.SizeTiles, 0, 2 * Neighborhoods.SizeTiles, Rows, 3));
-        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers ?? new UniqueNumberAllocator(1, 1, 24));
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers ?? new UniqueNumberAllocator(1, 1, 24));
         var world = result.World;
         var ecs = result.EcsContext;
         var resolver = result.Internals.ProcessingTierResolver;
@@ -37,8 +36,8 @@ public sealed class CreatureSkeletonsTests
         resolver.SetWindowCenter(0, 0);
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecs);
-        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(mathUtility), result.Internals.Factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);
-        FloorBuilder.CreatePlayer(world, ecs, mathUtility, result.Internals.Factory, result.Catalogs.Definitions, playerEntityId, FloorBuilder.PlayerSpawnOrigin(result.Catalogs.Areas), resolver);
+        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(worldSeed: 1, floorNumber: FloorBuilder.FirstFloorNumber), result.Internals.Factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);
+        FloorBuilder.CreatePlayer(world, ecs, sessionSeed: 1, result.Internals.Factory, result.Catalogs.Definitions, playerEntityId, FloorBuilder.PlayerSpawnOrigin(result.Catalogs.Areas), resolver);
         world.PlayerEntityId = playerEntityId;
         result.Internals.MovedEntities.ClearFrame();
 

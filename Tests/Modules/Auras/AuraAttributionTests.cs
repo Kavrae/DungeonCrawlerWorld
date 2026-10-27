@@ -59,7 +59,7 @@ public sealed class AuraAttributionTests
 
     private static Session BuildSession()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new Random(1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), sessionSeed: 1, initialEntityCapacity: 200, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(SourcePosition);
         return new Session(build);
     }

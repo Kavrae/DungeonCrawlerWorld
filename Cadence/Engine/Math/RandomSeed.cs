@@ -3,7 +3,7 @@ using System.Globalization;
 namespace Engine.Math;
 
 /// <summary>
-/// The seed the shared MathUtility's randomizer is built from -- parsed from a
+/// The session seed every other seed and random stream is derived from -- parsed from a
 /// "--seed=12345" command-line argument, or generated fresh when none is given.
 /// </summary>
 /// <remarks>
@@ -25,7 +25,7 @@ public static class RandomSeed
 
     /// <summary>Reads the seed from args, or generates one when absent or unparseable.</summary>
     /// <param name="args">The process's own command-line arguments.</param>
-    /// <returns>The seed to construct the shared randomizer from.</returns>
+    /// <returns>The session seed.</returns>
     public static int Parse(IEnumerable<string> args)
     {
         foreach (var arg in args)

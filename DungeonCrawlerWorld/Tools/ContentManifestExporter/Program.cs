@@ -8,7 +8,7 @@ const string OutputPrefix = "--output=";
 var outputDirectory = args.FirstOrDefault(argument => argument.StartsWith(OutputPrefix, StringComparison.OrdinalIgnoreCase))?[OutputPrefix.Length..]
     ?? Path.Combine(FindRepositoryRoot(), "DungeonCrawlerWorld", "Content", "Definitions", "Master");
 
-var build = GameBuildPass.Run(GameBootstrapper.BuiltInModules(), [], GameBuildPass.CreatePlaceholderMap(), new MathUtility(new SeededRandom()), [], initialEntityCapacity: 16, initialComponentCapacity: 16);
+var build = GameBuildPass.Run(GameBootstrapper.BuiltInModules(), [], GameBuildPass.CreatePlaceholderMap(), sessionSeed: 0, [], initialEntityCapacity: 16, initialComponentCapacity: 16);
 var context = build.Context;
 
 MasterContent.Write(outputDirectory, context.Actions.Definitions, context.Items.Definitions, context.ContentTypes);

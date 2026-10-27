@@ -1,3 +1,4 @@
+using Engine.Math;
 using Engine.ECS.Systems;
 using Game.Modules.Burning.Components;
 using Game.Modules.Burning.Systems;
@@ -24,6 +25,9 @@ namespace Game.Modules.Burning;
 public sealed class BurningModule : IGameModule
 {
     public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000008");
+
+    /// <summary>The stream a burn tick picks the body part it lands on from.</summary>
+    public static readonly RandomStreamKey TickRandomStream = new(ModuleId, "Ticks");
 
     public Guid Id => ModuleId;
 
@@ -65,7 +69,7 @@ public sealed class BurningModule : IGameModule
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             context.EventBus,
             context.PlayerQuery,
-            context.MathUtility,
+            context.RandomStreams.Get(TickRandomStream),
             statModifiers,
             bodyParts,
             deadEntities,

@@ -29,14 +29,13 @@ public sealed class NeighborhoodStreamerTests
     private static Session Build(int budgetPerFrame = NeighborhoodStreamer.DefaultBudgetPerFrame)
     {
         var map = new Map(new MapBounds(0, 0, 2 * Neighborhoods.SizeTiles, Rows, 3));
-        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
         var crawlerNumbers = new UniqueNumberAllocator(1, 1, 24);
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
         var world = result.World;
         var ecs = result.EcsContext;
         result.Internals.ProcessingTierResolver.SetReferencePosition(Reference);
 
-        var records = new NeighborhoodRecords(mathUtility);
+        var records = new NeighborhoodRecords(worldSeed: 1, floorNumber: FloorBuilder.FirstFloorNumber);
         var factory = result.Internals.Factory;
         FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);
         result.Internals.MovedEntities.ClearFrame();
@@ -280,15 +279,14 @@ public sealed class NeighborhoodStreamerTests
             map.UnloadNeighborhood(cellX, 0);
         }
 
-        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
         var crawlerNumbers = new UniqueNumberAllocator(1, 1, 24);
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, mathUtility, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
         var world = result.World;
         var ecs = result.EcsContext;
         result.Internals.ProcessingTierResolver.SetReferencePosition(Reference);
         result.Internals.ProcessingTierResolver.SetWindowCenter(0, 0);
 
-        var records = new NeighborhoodRecords(mathUtility);
+        var records = new NeighborhoodRecords(worldSeed: 1, floorNumber: FloorBuilder.FirstFloorNumber);
         var skeletons = result.Internals.Skeletons;
         var factory = result.Internals.Factory;
         FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);

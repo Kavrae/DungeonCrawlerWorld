@@ -210,7 +210,7 @@ public sealed class DiagnosticsLinkTests
         engine?.Start();
 
         var map = new Map(new Vector3Int(40, 40, 3));
-        var session = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)5)), initialEntityCapacity: 1_000, initialComponentCapacity: 100, runtimeSpawnSeed: 5);
+        var session = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 5, initialEntityCapacity: 1_000, initialComponentCapacity: 100);
         using var ecsContext = session.EcsContext;
         var factory = session.Internals.Factory;
         for (var index = 0; index < 6; index++)

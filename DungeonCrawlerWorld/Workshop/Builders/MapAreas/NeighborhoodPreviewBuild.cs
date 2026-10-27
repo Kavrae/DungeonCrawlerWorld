@@ -45,7 +45,7 @@ public sealed class NeighborhoodPreviewBuild : IMapPreviewScene
     /// <exception cref="ArgumentOutOfRangeException">The cell isn't one of FloorBuilder.StartingWindowNeighborhoods.</exception>
     public static NeighborhoodPreviewBuild Build(int seed, int cellX, int cellY, Func<Map, GameSession> buildSession)
     {
-        var (record, populationSeed) = FloorBuilder.StartingNeighborhoodRecords(seed)
+        var (record, populationSeed) = FloorBuilder.StartingNeighborhoodRecords(seed, FloorBuilder.FirstFloorNumber)
             .FirstOrDefault(entry => entry.Record.CellX == cellX && entry.Record.CellY == cellY);
         if (record is null)
         {

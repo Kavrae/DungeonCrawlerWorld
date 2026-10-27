@@ -633,45 +633,22 @@ The IDE's Error List shows severity, description, table, record, field and layer
 
 #### Resolve highest performance costs
 
-Find and fix what costs the most per frame. Headless Release, seed 1, frames 600-3600, map 3072 (2026-10-24, A/B
-`Log/phase-benchmarks/ab-20261024-135715.json`): `EcsContext.Update` 1.60 ms/frame, of which
-`TestCombatBehaviorSystem` 0.60, `AuraSystem` 0.38, `MovementSystem` 0.19 and `BurningSystem` 0.10 -- the four are 80%
-of it. Run-to-run spread is ~3%, so a change must beat that to count.
+Find and fix what costs the most per frame. Headless Release, seed 1, frames 600-3600, map 3072 (2026-10-27, the
+world since deterministic generation, fingerprint `AE2E5D7BDDC0CE36`; baseline `baseline-build-release-deterministic-generation`,
+`Log/phase-benchmarks/20261027-233439.json`): `EcsContext.Update` 1.56 ms/frame, of which `TestCombatBehaviorSystem`
+0.61, `AuraSystem` 0.35, `MovementSystem` 0.18 and `BurningSystem` 0.09 -- the four are 79% of it. Run-to-run spread
+is ~3%, so a change must beat that to count.
 - **The averages:** profile the top systems in Release, work out where the time goes (lookups, scans, cache misses,
   work repeated per visit), and fix the largest first.
-- **The worst frame:** the slowest frame in every run is frame 1097 at ~8-9 ms, over five times the average frame:
-  `DeathSystem`, almost all of it inside `AuraSourceRemovedEvent` (6.5-9 ms) -- a death removing aura sources and
-  rescanning. Find out what that death removes and why its rescan costs that much.
-- **GC pauses:** a gen-0/gen-1 collection every 130-145 frames adds 2-3 ms to the frame it lands on; which frame
-  depends on allocation elsewhere, so it can land on the worst one (seen with `--diagnostics-link`). Reduce what each
-  frame allocates (`Process/AllocatedBytes` gauge, 40-110 KB per frame here).
+- **The worst frame:** the slowest frame in every run is frame 727 at 6.5-16 ms (it varies run to run), four to ten
+  times the average frame, with no GC on it: `DeathSystem` (5.2-13.4 ms), almost all of it inside
+  `AuraSourceRemovedEvent` (4.8-12.6 ms) -- a death removing aura sources and rescanning. Find out what that death
+  removes and why its rescan costs that much.
+- **GC pauses:** 21 gen-0 collections in the 3000 frames (one every ~143), 7 of them also gen-1, each adding 2.3-3.8 ms
+  to the frame it lands on (frames 713, 1643, 2064, 2495, 2933 among the slowest); which frame depends on allocation
+  elsewhere, so it can land on the worst one (seen with `--diagnostics-link`). Reduce what each frame allocates
+  (`Process/AllocatedBytes` gauge: 67 KB per frame on average, 439 KB at most, at frame 3023).
 - **Measure each fix** with a `phase-performance-testing` A/B, Release, against a baseline saved just before it.
-
-#### Improved deterministic random -- world generation independent of player actions
-
-A seeded session should generate the same world whatever the player does. It doesn't yet: a
-neighborhood's seed is rolled from the session's one `MathUtility` (`WorldSessionBootstrapper`) the
-first time its coordinate is needed (`NeighborhoodRecords.GetOrCreate`), and that same stream is drawn
-by combat, movement, poison, burning, NPC behaviour, body-part selection and more. So which layout a
-coordinate gets depends on the route the player walked and on every roll made before they got there --
-two runs on one seed that fight one extra goblin get different neighborhoods.
-- **Derive, don't draw:** a neighborhood's seed is a pure function of the session seed and its
-  coordinate (and floor, for multi-floor), mixed the way `NeighborhoodRecord.Mix` and `AreaSeeds`
-  already do -- never the next value of a shared sequence. The same for anything else world
-  generation picks: the template combination and placement in "Real map generation" (below), area pool
-  picks, shrine and unique-entity placement.
-- **One stream per purpose:** split the session's `MathUtility` into independent streams, each seeded
-  from the session seed and a fixed salt (world generation, population, combat, movement, NPC
-  behaviour, loot, the factory's runtime spawn seeds), so a roll in one never shifts another. Find
-  every consumer of the shared one and give it the stream it belongs to; nothing in world generation
-  may reach the gameplay streams.
-- **Population:** a neighborhood's population seed is mixed from its record's seed and its visit count,
-  which is the player's doing by design (a return brings new creatures). Decide whether that stays, or
-  whether a visit's seed comes from something the player can't steer (the visit index alone is fine;
-  the frame it happened on is not).
-- **Guard it:** a test that generates the same neighborhoods on one seed after different amounts of
-  unrelated gameplay rolls, and after visiting coordinates in a different order, and gets identical
-  layouts and populations. Seeded worlds will change once, so re-record benchmark baselines.
 
 #### Attribute effects to the action or item that applied them
 
@@ -805,6 +782,12 @@ Starting points from the plan's research (section 6): keep a rolling plan one ri
 window, and roll each neighborhood's record (template choices plus its own seed) against its
 already-assigned neighbors when the window shifts. By the time a neighborhood's tiles are generated,
 every edge it shares is decided (the rolling equivalent of CDDA's overmap or Qud's world map).
+
+**Keep generation order-independent** (IMPLEMENTATION-NOTES "Deterministic world generation"): every choice is derived
+with `SeedMix` from the session seed and coordinates, never drawn from a sequence. A neighborhood's choices may read its
+neighbours' derived values, never which neighbour was decided first: a shared edge is decided from the pair's own seed
+(both coordinates, smaller first), and a template is picked from the neighborhood's seed among those compatible with
+its four edges. `WorldGenerationIndependenceTests` must keep passing.
 Interaction templates should be constraints on a single shared edge, since a record is rolled with
 only some of its neighbors known. Generation reads only the record's own seed, never a shared
 sequence, so contents don't depend on generation order or thread timing. Spelunky's role-based room

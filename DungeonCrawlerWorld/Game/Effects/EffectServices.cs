@@ -10,6 +10,7 @@ using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
+using Game.Modules.Core;
 using Game.Modules.Death;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
@@ -50,6 +51,9 @@ public sealed record EffectServices(
     AuraAnchors AuraAnchors,
     FloatingTextFeed FloatingTextFeed)
 {
+    /// <summary>The stream every effect entry rolls from: damage variance, crits, procs, and the body part an effect lands on.</summary>
+    public static readonly RandomStreamKey RandomStream = new(CoreModule.ModuleId, "Effects");
+
     /// <summary>The modules whose pools the services are made from. A module that applies effects (reads GameModuleContext.EffectServices) lists these in its Requires.</summary>
     public static IReadOnlyList<Guid> RequiredModuleIds { get; } =
     [

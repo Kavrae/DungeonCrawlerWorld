@@ -58,7 +58,7 @@ public sealed class GameBootstrapperTests
     }
 
     private static GameSession BuildWithModsFrom(string modsDirectory) =>
-        GameBootstrapper.Build(ModValidation.Validate(modsDirectory, []), new Map(new Vector3Int(5, 5, 1)), new MathUtility(), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        GameBootstrapper.Build(ModValidation.Validate(modsDirectory, []), new Map(new Vector3Int(5, 5, 1)), sessionSeed: 0, initialEntityCapacity: 100, initialComponentCapacity: 50);
 
     /// <summary>
     /// ModuleLoader's collectible AssemblyLoadContext is never explicitly unloaded (by

@@ -1,3 +1,4 @@
+using Engine.Math;
 using Engine.ECS.Systems;
 using Engine.Modules;
 using Game.Modules.Death;
@@ -23,6 +24,9 @@ namespace Game.Modules.Poison;
 public sealed class PoisonModule : IGameModule
 {
     public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000009");
+
+    /// <summary>The stream a poison tick picks the body part it lands on from.</summary>
+    public static readonly RandomStreamKey TickRandomStream = new(ModuleId, "Ticks");
 
     public Guid Id => ModuleId;
 
@@ -79,7 +83,7 @@ public sealed class PoisonModule : IGameModule
             componentManager.GetPackedPool<SimpleHealthComponent>(),
             context.EventBus,
             context.PlayerQuery,
-            context.MathUtility,
+            context.RandomStreams.Get(TickRandomStream),
             statModifiers,
             bodyParts,
             componentManager.GetPackedPool<DeadComponent>(),

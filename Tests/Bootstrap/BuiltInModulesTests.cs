@@ -43,7 +43,7 @@ public sealed class BuiltInModulesTests
             var closure = RequiresClosure(module, GameBootstrapper.BuiltInModules().CreateAll());
             try
             {
-                BuiltInTestModules.BuildModules(closure, new Map(new Vector3Int(10, 10, 3)), new MathUtility(new SeededRandom((ulong)1)));
+                BuiltInTestModules.BuildModules(closure, new Map(new Vector3Int(10, 10, 3)), sessionSeed: 1);
             }
             catch (Exception exception)
             {
@@ -78,7 +78,7 @@ public sealed class BuiltInModulesTests
     public void BuiltInTestComponents_RegistersTheSamePoolsAsTheGame()
     {
         var map = new Map(new Vector3Int(40, 40, 3));
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 50);
 
         var testComponents = BuiltInTestComponents.RegisterAll(new Engine.ECS.Components.ComponentManager(100, 50));
 
@@ -92,7 +92,7 @@ public sealed class BuiltInModulesTests
     public void BuiltInSystems_RunInThePinnedOrder()
     {
         var map = new Map(new Vector3Int(40, 40, 3));
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 50);
         var recorder = new SystemOrderRecorder();
         using var frameCostSubscription = EngineHooks.FrameCosts.Subscribe(recorder);
 
@@ -148,7 +148,7 @@ public sealed class BuiltInModulesTests
     public void TheStreamingSlot_RunsBeforeSpawnMoves_ThoughRegisteredAfterTheBuild()
     {
         var map = new Map(new Vector3Int(40, 40, 3));
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 50);
         result.EcsContext.SystemManager.RegisterAtFrameStart(new StreamingStandIn(), GameFrameStartOrder.NeighborhoodStreaming);
         var recorder = new SystemOrderRecorder();
         using var frameCostSubscription = EngineHooks.FrameCosts.Subscribe(recorder);

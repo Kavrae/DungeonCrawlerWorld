@@ -30,7 +30,7 @@ public sealed class BuiltInGameplayTagsTests
     }
 
     private static GameBuildPassResult Run(params ModuleFactory<GameModuleContext>[] mods) =>
-        GameBuildPass.Run(GameBootstrapper.BuiltInModules(), mods, new Map(new Vector3Int(5, 5, 1)), new MathUtility(), [], initialEntityCapacity: 10, initialComponentCapacity: 10);
+        GameBuildPass.Run(GameBootstrapper.BuiltInModules(), mods, new Map(new Vector3Int(5, 5, 1)), sessionSeed: 0, [], initialEntityCapacity: 10, initialComponentCapacity: 10);
 
     [TestMethod]
     public void All_ListsEveryGameTagsField()

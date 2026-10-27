@@ -135,7 +135,7 @@ public sealed class MapTabTests
         const int worldSeed = 7;
         var preview = NeighborhoodPreviewBuild.Build(worldSeed, 0, 0, map => ContentSession.BuildPreview(Mods.Value, map, []));
 
-        var (record, populationSeed) = Game.Floors.FloorBuilder.StartingNeighborhoodRecords(worldSeed).Single(entry => entry.Record.CellX == 0 && entry.Record.CellY == 0);
+        var (record, populationSeed) = Game.Floors.FloorBuilder.StartingNeighborhoodRecords(worldSeed, Game.Floors.FloorBuilder.FirstFloorNumber).Single(entry => entry.Record.CellX == 0 && entry.Record.CellY == 0);
         Assert.AreEqual(record.Seed, preview.Record.Seed);
         Assert.AreEqual(populationSeed, preview.PopulationSeed);
         Assert.AreEqual(StartingArea.Id, preview.Stamp.Instances.Single().Definition.Id);

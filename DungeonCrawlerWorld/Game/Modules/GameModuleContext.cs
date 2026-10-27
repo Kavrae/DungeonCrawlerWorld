@@ -39,20 +39,16 @@ public sealed class GameModuleContext
     /// <summary>The modules whose pools the context itself is built from: transforms and occupancy (Core), processing tiers (ProcessingTier) and spawn records (Blueprints).</summary>
     public static IReadOnlyList<Guid> FoundationModuleIds { get; } = [CoreModule.ModuleId, ProcessingTierModule.ModuleId, BlueprintsModule.ModuleId];
 
-    /// <summary>Mixed into the runtime spawn seed so the loot box opener's sequence differs from the factory's.</summary>
-    private const ulong LootboxRollSalt = 0x4C6F6F74626F7853;
-
     /// <param name="services">What the engine created for this build.</param>
     /// <param name="world">The build's World, over the pools of services.ComponentManager.</param>
     /// <param name="crawlerNumbers">The session's crawler numbers; null for a build that spawns no crawlers.</param>
-    /// <param name="runtimeSpawnSeed">Seeds the factory's own sequence for spawns that name no seed.</param>
+    /// <param name="sessionSeed">The seed every random stream of the build is derived from (RandomStreams).</param>
     /// <param name="collectsContentFailures">For a tool's build (the IDE): content that fails to load or check is left out and kept in ContentFailures instead of stopping the build. Only the content checks that can leave a record out (the master manifest's records, areas) do; the rest still throw.</param>
     public GameModuleContext(
         EcsBuildServices services,
         World.World world,
-        MathUtility mathUtility,
+        int sessionSeed,
         UniqueNumberAllocator? crawlerNumbers = null,
-        ulong runtimeSpawnSeed = 0,
         bool collectsContentFailures = false)
     {
         var componentManager = services.ComponentManager;
@@ -68,7 +64,7 @@ public sealed class GameModuleContext
         Settings = services.Declarations.Settings;
         GameplayTags = services.Declarations.Tags;
         ContentTypes = services.Declarations.ContentTypes;
-        MathUtility = mathUtility;
+        RandomStreams = new RandomStreams(sessionSeed);
         CollectsContentFailures = collectsContentFailures;
         EntityKeys = services.EntityKeys;
         SimulationClock = services.Clock;
@@ -86,12 +82,12 @@ public sealed class GameModuleContext
 
         Lootboxes = new LootboxCatalog(Items);
         Items.AddDefinitionSource(Lootboxes);
-        LootboxOpener = new LootboxOpener(componentManager, Lootboxes, Items, runtimeSpawnSeed ^ LootboxRollSalt);
+        LootboxOpener = new LootboxOpener(componentManager, Lootboxes, Items, RandomStreams.SeedFor(LootboxOpener.RandomStream));
 
         SimulationScope = new SimulationScope(new ProcessingTierQuery(tiers).IsSimulated);
         FloatingTextFeed = new FloatingTextFeed(eventBus, tiers, transforms);
-        EntityFactory = new EntityFactory(Definitions, Auras, Actions, Items, world, entityManager, componentManager, MovedEntities, SimulationClock, ProcessingTierEvents, ProcessingTierResolver, crawlerNumbers, runtimeSpawnSeed);
-        _effectServices = new Lazy<EffectServices>(() => EffectServices.For(componentManager, EntityKeys, eventBus, mathUtility, PlayerQuery, Definitions, StatusEffectAppliers, Auras, FloatingTextFeed,
+        EntityFactory = new EntityFactory(Definitions, Auras, Actions, Items, world, entityManager, componentManager, MovedEntities, SimulationClock, ProcessingTierEvents, ProcessingTierResolver, crawlerNumbers, RandomStreams.SeedFor(EntityFactory.RuntimeSeedStream));
+        _effectServices = new Lazy<EffectServices>(() => EffectServices.For(componentManager, EntityKeys, eventBus, RandomStreams.Get(EffectServices.RandomStream), PlayerQuery, Definitions, StatusEffectAppliers, Auras, FloatingTextFeed,
             entityManager, position => EntityFactory.Spawn(SpawnRequest.At(Definitions.GetId(AuraAnchor.Id), position))));
         _toggles = new Lazy<Toggles>(() => new Toggles(componentManager.GetMultiPool<ActiveToggleComponent>(), EffectServices));
         _targetResolution = new Lazy<TargetResolution>(() => new TargetResolution(world, transforms, EntityKeys, EffectServices.DeadEntities, componentManager.GetMultiPool<NonBlockingComponent>(), EffectServices.AbilityScores));
@@ -145,7 +141,8 @@ public sealed class GameModuleContext
     /// <summary>A content check refused a record it left out of a build that CollectsContentFailures.</summary>
     public void ReportContentFailures(IEnumerable<ContentFailure> failures) => _checkFailures.AddRange(failures);
 
-    public MathUtility MathUtility { get; }
+    /// <summary>The build's random streams: every gameplay roll draws from its own module's stream, so a roll in one never shifts another. Never read by world generation.</summary>
+    public RandomStreams RandomStreams { get; }
 
     /// <summary>
     /// Filled during Configure by every effect module -- see StatusEffectApplierRegistry's own doc
@@ -181,7 +178,7 @@ public sealed class GameModuleContext
     /// <summary>Every loot box type, filled during Configure, and the item definition of each type and rarity once it has been granted.</summary>
     public LootboxCatalog Lootboxes { get; }
 
-    /// <summary>Opens an entity's loot boxes, drawing from its own sequence seeded from the runtime spawn seed.</summary>
+    /// <summary>Opens an entity's loot boxes, drawing from its own sequence (LootboxOpener.RandomStream).</summary>
     public LootboxOpener LootboxOpener { get; }
 
     /// <summary>MovementSystem's confirmed moves this frame, shared with TerrainContactSystem/AuraSystem so they can react without a per-move EventBus dispatch -- see FrameEventBuffer's own doc comment.</summary>

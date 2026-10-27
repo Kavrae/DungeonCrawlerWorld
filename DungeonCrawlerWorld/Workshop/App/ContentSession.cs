@@ -32,7 +32,7 @@ public static class ContentSession
 
     public static GameSession Build(ValidatedMods validatedMods, IReadOnlyList<ISettingsSource> settingsSources, TextWriter failureLog)
     {
-        var gameSession = GameBootstrapper.Build(validatedMods, GameBuildPass.CreatePlaceholderMap(), new MathUtility(new SeededRandom()), InitialEntityCapacity, InitialComponentCapacity, settingsSources: settingsSources, buildsStagingWorldOnFirstRebuild: true, collectsContentFailures: true);
+        var gameSession = GameBootstrapper.Build(validatedMods, GameBuildPass.CreatePlaceholderMap(), sessionSeed: 0, InitialEntityCapacity, InitialComponentCapacity, settingsSources: settingsSources, buildsStagingWorldOnFirstRebuild: true, collectsContentFailures: true);
 
         foreach (var failure in gameSession.ModuleFailures)
         {
@@ -54,7 +54,7 @@ public static class ContentSession
 
     /// <summary>A session over map with the same mods and settings as the IDE's own, for a preview built on it (an area, or a neighborhood, as the game builds it) -- with crawler numbers, since generation spawns crawlers.</summary>
     public static GameSession BuildPreview(ValidatedMods validatedMods, Map map, IReadOnlyList<ISettingsSource> settingsSources) =>
-        GameBootstrapper.Build(validatedMods, map, new MathUtility(new SeededRandom()), PreviewEntityCapacity, PreviewComponentCapacity, new UniqueNumberAllocator(PreviewCrawlerNumberSeed, MinimumPreviewCrawlerNumber, PreviewCrawlerNumberBits), settingsSources: settingsSources, buildsStagingWorldOnFirstRebuild: true, collectsContentFailures: true);
+        GameBootstrapper.Build(validatedMods, map, sessionSeed: 0, PreviewEntityCapacity, PreviewComponentCapacity, new UniqueNumberAllocator(PreviewCrawlerNumberSeed, MinimumPreviewCrawlerNumber, PreviewCrawlerNumberBits), settingsSources: settingsSources, buildsStagingWorldOnFirstRebuild: true, collectsContentFailures: true);
 
     /// <summary>The Error List's lines for a session: each mod dropped, each setting override refused, each record of the master manifest under masterDirectory that doesn't load, and each problem the build's area checks find in it.</summary>
     /// <remarks>The manifest is read again from masterDirectory -- the source tree's copy, the one the IDE edits -- through the session's own codecs, collecting every failure rather than stopping at the first; its areas are checked against the session's terrain, blueprints and tags.</remarks>

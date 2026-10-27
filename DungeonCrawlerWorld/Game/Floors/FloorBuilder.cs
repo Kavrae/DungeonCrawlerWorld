@@ -29,6 +29,15 @@ namespace Game.Floors;
 /// </summary>
 public static class FloorBuilder
 {
+    /// <summary>The floor a new game starts on.</summary>
+    public const int FirstFloorNumber = 1;
+
+    /// <summary>Mixed into the session seed for the player's spawn seed.</summary>
+    private const ulong PlayerSpawnSalt = 0x504C415945525350;
+
+    /// <summary>Mixed into the session seed for the test dummy's spawn seed.</summary>
+    private const ulong TestDummySpawnSalt = 0x44554D4D59535057;
+
     /// <summary>Neighborhoods per side of the default map: the fixed 3x3.</summary>
     private const int DefaultNeighborhoodsPerSide = 3;
 
@@ -77,10 +86,9 @@ public static class FloorBuilder
         return cells;
     }
 
-    /// <summary>The record and first population seed each starting-window neighborhood gets in a session seeded with randomSeed, exactly as the session assigns them.</summary>
-    /// <remarks>A session draws its records from its own sequence before anything else draws from it (WorldSessionBootstrapper), so these are the game's own -- what a tool previews a seeded world's neighborhood from.</remarks>
-    public static IReadOnlyList<(NeighborhoodRecord Record, int PopulationSeed)> StartingNeighborhoodRecords(int randomSeed) =>
-        TestMapBuilder.AssignRecords(StartingWindowNeighborhoods(), new NeighborhoodRecords(new MathUtility(new SeededRandom((ulong)(uint)randomSeed))));
+    /// <summary>The record and first population seed each starting-window neighborhood gets in a session seeded with randomSeed on floorNumber, exactly as the session assigns them -- what a tool previews a seeded world's neighborhood from.</summary>
+    public static IReadOnlyList<(NeighborhoodRecord Record, int PopulationSeed)> StartingNeighborhoodRecords(int randomSeed, int floorNumber) =>
+        TestMapBuilder.AssignRecords(StartingWindowNeighborhoods(), new NeighborhoodRecords(randomSeed, floorNumber));
 
     /// <summary>Fills the floor's loaded neighborhoods: terrain, walls and everything spawned on them.</summary>
     /// <remarks>The tier resolver the factory was built with must already have its reference position set to <see cref="PlayerSpawnOrigin"/>, so every entity is born with its processing tier as its first component instead of being tiered and then migrated.</remarks>
@@ -166,12 +174,13 @@ public static class FloorBuilder
     /// <param name="spawnOrigin">Where the player is aimed at spawning -- see PlayerSpawnOrigin.</param>
     /// <param name="tierResolver">When supplied, the player is pinned Local before its blueprint is built, so every tiered pool it joins sees Local from the start and the player is never recomputed afterwards -- including while off the map. Optional for the same reason as PopulateFloor's: ProcessingTierSystem pins the player on its first update if nothing did here.</param>
     /// <param name="factory">The one spawn path (see EntityFactory) -- the player is a blueprint and a seed like every other entity, so it too carries a spawn record.</param>
-    public static void CreatePlayer(Game.World.World world, EcsContext ecsContext, MathUtility mathUtility, EntityFactory factory, BlueprintRegistry definitions, int entityId, Vector3Int spawnOrigin, ProcessingTierResolver? tierResolver = null)
+    /// <param name="sessionSeed">The session seed the player's and the test dummy's spawn seeds are derived from.</param>
+    public static void CreatePlayer(Game.World.World world, EcsContext ecsContext, int sessionSeed, EntityFactory factory, BlueprintRegistry definitions, int entityId, Vector3Int spawnOrigin, ProcessingTierResolver? tierResolver = null)
     {
         tierResolver?.PinLocalAndNotify(entityId);
 
         var spawnPosition = FindFreeGroundCellNear(world, spawnOrigin);
-        factory.Spawn(SpawnRequest.At(definitions.GetId(Player.Id), spawnPosition) with { Seed = mathUtility.NextSeed(), Crawler = true, ReservedEntityId = entityId });
+        factory.Spawn(SpawnRequest.At(definitions.GetId(Player.Id), spawnPosition) with { Seed = SpawnSeed(sessionSeed, PlayerSpawnSalt), Crawler = true, ReservedEntityId = entityId });
 
         for (var i = 0; i < TestPoisonStackCount; i++)
         {
@@ -197,19 +206,21 @@ public static class FloorBuilder
         var size = ecsContext.ComponentManager.GetDirectPool<TransformComponent>().GetReadonly(entityId).Size;
         ecsContext.EventBus.Publish(new EntityMovedEvent(entityId, spawnPosition, spawnPosition, size));
 
-        SpawnTestDummy(world, factory, mathUtility, definitions, spawnPosition);
+        SpawnTestDummy(world, factory, sessionSeed, definitions, spawnPosition);
     }
 
     /// <summary>TEMPORARY test seeding, alongside the Poison/ability-score seeding above -- a dedicated Dodge-practice target a few tiles from the player's own spawn. See TestDummyBlueprint/TestDummyAttackSystem.</summary>
     private const int TestDummySpawnOffsetColumns = 3;
 
-    private static void SpawnTestDummy(Game.World.World world, EntityFactory factory, MathUtility mathUtility, BlueprintRegistry definitions, Vector3Int playerSpawnPosition)
+    private static void SpawnTestDummy(Game.World.World world, EntityFactory factory, int sessionSeed, BlueprintRegistry definitions, Vector3Int playerSpawnPosition)
     {
         var origin = new Vector3Int(playerSpawnPosition.X + TestDummySpawnOffsetColumns, playerSpawnPosition.Y, playerSpawnPosition.Z);
         var blueprintId = definitions.GetId(TestDummyBlueprint.Id);
 
-        factory.Spawn(SpawnRequest.At(blueprintId, FindFreeGroundCellNear(world, origin)) with { Seed = mathUtility.NextSeed() });
+        factory.Spawn(SpawnRequest.At(blueprintId, FindFreeGroundCellNear(world, origin)) with { Seed = SpawnSeed(sessionSeed, TestDummySpawnSalt) });
     }
+
+    private static uint SpawnSeed(int sessionSeed, ulong salt) => (uint)SeedMix.Mix(SeedMix.Of(sessionSeed), salt);
 
     /// <summary>Scans outward from origin in expanding square rings for the first on-map, unoccupied, unblocked Ground cell, falling back to origin itself if the whole map is full.</summary>
     public static Vector3Int FindFreeGroundCellNear(Game.World.World world, Vector3Int origin)

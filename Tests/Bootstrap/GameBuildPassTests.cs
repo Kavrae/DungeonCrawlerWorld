@@ -26,7 +26,7 @@ public sealed class GameBuildPassTests
     }
 
     private static GameBuildPassResult Run(params ModuleFactory<GameModuleContext>[] mods) =>
-        GameBuildPass.Run(GameBootstrapper.BuiltInModules(), mods, new Map(new Vector3Int(5, 5, 1)), new MathUtility(), [], initialEntityCapacity: 10, initialComponentCapacity: 10);
+        GameBuildPass.Run(GameBootstrapper.BuiltInModules(), mods, new Map(new Vector3Int(5, 5, 1)), sessionSeed: 0, [], initialEntityCapacity: 10, initialComponentCapacity: 10);
 
     [TestMethod]
     public void TwoPasses_ShareNoModuleInstance()
@@ -81,7 +81,7 @@ public sealed class GameBuildPassTests
         IReadOnlyList<ModuleFactory<GameModuleContext>> modules = [ModuleFactory<GameModuleContext>.For<Game.Modules.Core.CoreModule>(), ModuleFactory<GameModuleContext>.For<Game.Blueprints.BlueprintsModule>()];
 
         var exception = Assert.ThrowsExactly<InvalidOperationException>(() =>
-            GameBuildPass.BuildModules(modules, [], new Map(new Vector3Int(5, 5, 1)), new MathUtility(), [], initialEntityCapacity: 10, initialComponentCapacity: 10));
+            GameBuildPass.BuildModules(modules, [], new Map(new Vector3Int(5, 5, 1)), sessionSeed: 0, [], initialEntityCapacity: 10, initialComponentCapacity: 10));
 
         Assert.Contains(Game.Modules.ProcessingTier.ProcessingTierModule.ModuleId.ToString(), exception.Message);
     }
@@ -89,8 +89,8 @@ public sealed class GameBuildPassTests
     [TestMethod]
     public void TwoSessionBuilds_ShareNoWorldEventBusOrDefinitions()
     {
-        var first = GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(5, 5, 1)), new MathUtility(), initialEntityCapacity: 10, initialComponentCapacity: 10);
-        var second = GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(5, 5, 1)), new MathUtility(), initialEntityCapacity: 10, initialComponentCapacity: 10);
+        var first = GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(5, 5, 1)), sessionSeed: 0, initialEntityCapacity: 10, initialComponentCapacity: 10);
+        var second = GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(5, 5, 1)), sessionSeed: 0, initialEntityCapacity: 10, initialComponentCapacity: 10);
 
         Assert.AreNotSame(first.World, second.World);
         Assert.AreNotSame(first.EcsContext.EventBus, second.EcsContext.EventBus);

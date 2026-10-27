@@ -31,23 +31,21 @@ public static class GameBuildPass
     public static Map CreatePlaceholderMap() => new(new Vector3Int(1, 1, Enum.GetValues<MapLayer>().Length));
 
     /// <summary>Builds builtInModules with mods combined into them (a mod replaces the built-in sharing its Id), over map, with everything a game session reads.</summary>
-    /// <param name="mathUtility">The random sequence this build's modules draw from; a build other than the real session passes its own.</param>
+    /// <param name="sessionSeed">The seed every random stream of the build is derived from (GameModuleContext.RandomStreams); a build that is never played passes 0.</param>
     /// <param name="crawlerNumbers">The numbers a crawler draws when first built; null for a build that never builds one.</param>
-    /// <param name="runtimeSpawnSeed">Seeds the factory's own sequence for spawns that name no seed.</param>
     /// <param name="collectsContentFailures">A tool's build: content that fails is left out and reported in GameModuleContext.ContentFailures instead of stopping the build.</param>
     public static GameBuildPassResult Run(
         IReadOnlyList<ModuleFactory<GameModuleContext>> builtInModules,
         IReadOnlyList<ModuleFactory<GameModuleContext>> mods,
         Map map,
-        MathUtility mathUtility,
+        int sessionSeed,
         IReadOnlyList<ISettingsSource> settingsSources,
         int initialEntityCapacity,
         int initialComponentCapacity,
         UniqueNumberAllocator? crawlerNumbers = null,
-        ulong runtimeSpawnSeed = 0,
         bool collectsContentFailures = false)
     {
-        var build = BuildModules(builtInModules, mods, map, mathUtility, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, runtimeSpawnSeed, collectsContentFailures: collectsContentFailures);
+        var build = BuildModules(builtInModules, mods, map, sessionSeed, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, collectsContentFailures: collectsContentFailures);
         var ecsContext = build.EcsContext;
         var context = build.Context;
         var componentManager = ecsContext.ComponentManager;
@@ -72,12 +70,11 @@ public static class GameBuildPass
         IReadOnlyList<ModuleFactory<GameModuleContext>> modules,
         IReadOnlyList<ModuleFactory<GameModuleContext>> mods,
         Map map,
-        MathUtility mathUtility,
+        int sessionSeed,
         IReadOnlyList<ISettingsSource> settingsSources,
         int initialEntityCapacity,
         int initialComponentCapacity,
         UniqueNumberAllocator? crawlerNumbers = null,
-        ulong runtimeSpawnSeed = 0,
         EcsBuildPurpose purpose = EcsBuildPurpose.Session,
         bool collectsContentFailures = false)
     {
@@ -97,7 +94,7 @@ public static class GameBuildPass
             CreateContext = services =>
             {
                 world = CreateWorld(services, map);
-                return new GameModuleContext(services, world, mathUtility, crawlerNumbers, runtimeSpawnSeed, collectsContentFailures);
+                return new GameModuleContext(services, world, sessionSeed, crawlerNumbers, collectsContentFailures);
             },
             AfterConfigure = CheckConfiguredContent,
             AfterBehavior = (context, ecsContext) => WireBuild(context, ecsContext, world!),

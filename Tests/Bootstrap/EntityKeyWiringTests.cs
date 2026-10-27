@@ -17,7 +17,7 @@ public sealed class EntityKeyWiringTests
     public void AnActionsDamageSource_HoldsTheKeyTheEntityManagerIssuedItsCaster()
     {
         var map = new Map(new Vector3Int(40, 40, 3));
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 50);
         var world = result.World;
         var ecs = result.EcsContext;
         result.Internals.ProcessingTierResolver.SetReferencePosition(new Vector3Int(10, 10, (int)MapLayer.Ground));

@@ -790,7 +790,7 @@ that measured 29.6 GB, 47.7 s startup and 12 ms/frame.
   `TimerCatchUp` over each module's `ICatchUpTimers`. Periodic first deadlines are staggered by entity
   id (`FrameDeadline.AfterStaggered`) so timers created together don't fire together.
 - **Streaming:** `Map.Unbounded` + `NeighborhoodStreamer` (first system in the frame, 256 units per
-  frame). `NeighborhoodRecords` keeps a seed per coordinate; `TestMapBuilder.GenerateNeighborhood` is
+  frame). `NeighborhoodRecords` keeps a record per coordinate, its seed derived from the session seed, floor and coordinate (see "Deterministic world generation"); `TestMapBuilder.GenerateNeighborhood` is
   the stand-in generator. Stable `EntityKey`s and `EntityIdentities` let references outlive an unload.
 - **Startup reservation:** `WorldSessionBootstrapper` reserves (9 + 3) / 9 of the startup population
   plus 10% before the first frame (136 ms spikes without it, when dense pools still grew linearly).
@@ -1678,9 +1678,9 @@ The seeded world changed once (shorter arms, an empty box, fixtures' new seeds).
   transparent cells, markers, hover). Reroll changes only the preview instance's seed. An entity's own aura (a
   shrine's glow) isn't shown: nothing is simulated.
 - **Neighborhood preview**, in a placement's preview: a world seed, the starting window as a 3x3 grid of cells and
-  8 arrows around the map. `FloorBuilder.StartingNeighborhoodRecords(seed)` gives the records a session seeded the
-  same way assigns -- the game's startup uses the same assignment, and the build draws nothing from the sequence first
-  -- so only the 9 starting-window cells are exact. Built on a worker with a spinner (builds share nothing, so they
+  8 arrows around the map. `FloorBuilder.StartingNeighborhoodRecords(seed, floorNumber)` gives the records a session seeded the
+  same way assigns. Seeds are derived per coordinate (see "Deterministic world generation"), so any cell could be
+  previewed exactly; the preview still offers only the 9 starting-window cells. Built on a worker with a spinner (builds share nothing, so they
   may run beside the UI); the two most recent are kept. Placement Details shows the spawn count.
 - The map is as tall as the window's maximum height allows: a WrapContent window ignores its maximum size, so the
   preview builds, measures, and rebuilds with the map shrunk by its overflow.
@@ -1693,6 +1693,48 @@ size on resize; `NumericField.CommitTypedText` for an owner that reads Value on 
 **Baseline** (2026-10-22, Release, seed 1, frames 600-3600, map 3072): headless A/B against `pre-build-pipeline`
 -4.8% `EcsContext.Update` (5.84 -> 5.56 ms/frame), no regressions, a different world by design; pools +0.2 MB, live
 heap -0.3 MB. Saved as `baseline-build-{release,debug}` and `...-map-areas`.
+
+### Deterministic world generation
+
+(`PLAN-deterministic-world-generation.md`, landed 2026-10-27.) A seeded session generates the same world whatever the
+player does. Before, a neighborhood's seed was the next value of the session's one `MathUtility` when its coordinate
+was first needed, and combat, NPC behaviour, burning, poison and body-part picks drew from the same sequence -- so
+fighting one extra goblin changed every neighborhood reached afterwards.
+- **Derive, don't draw.** `Engine.Math.SeedMix` (SplitMix64's finalizer, FNV-1a for names, a Guid fold, `Pack` for a
+  pair) is the one mixer; `AreaSeeds` delegates to it. A layout seed is `NeighborhoodSeeds.ForLayout(session seed,
+  floor, cell X, cell Y)`; a population seed `ForPopulation(layout seed, visit index)`. The player's and the test
+  dummy's spawn seeds are mixed from the session seed with a salt each. `EntityBuilder.Apply` mixes the applied
+  blueprint's Guid with `SeedMix.Of(Guid)`, not `GetHashCode`.
+- **One stream per purpose.** `Engine.Math.RandomStreams` (`GameModuleContext.RandomStreams`) hands out a `MathUtility`
+  per `RandomStreamKey(owner module Id, name)`, seeded from the session seed and the key. Keys live beside what they
+  seed: `EffectServices.RandomStream` (Core: every effect entry, body-part picks included), `BurningModule` and
+  `PoisonModule.TickRandomStream`, `NpcBehaviorModule.BehaviorRandomStream`, and for sequences kept elsewhere
+  `EntityFactory.RuntimeSeedStream`/`CrawlerNumberStream` and `LootboxOpener.RandomStream`. Builds take an
+  `int sessionSeed` (0 for the trial, staging, Workshop and exporter builds); nothing holds a shared sequence.
+- **Guards.** `WorldGenerationIndependenceTests` plans a strip of three neighborhoods in two sessions on one seed,
+  one after thousands of rolls on every gameplay stream and runtime spawns, in reverse order, and compares layouts,
+  spawn lists and area instances; and the same coordinate on another floor differs.
+  `WorldGenerationRandomnessArchitectureTests` keeps `RandomStreams`, `MathUtility`, `Random` and `GameModuleContext`
+  out of `NeighborhoodRecords`, `NeighborhoodRecord`, `TestMapBuilder` and `AreaStamp`.
+
+Decisions (don't re-litigate):
+1. Population keeps the visit index: a return brings new creatures, and two runs that populate a coordinate as many
+   times get the same ones. A reload from the streamer's cache isn't a visit.
+2. Streams are keyed by owner Guid + name (a mod's never shift a built-in's; a replacement takes over its stream),
+   not a fixed enum of purposes.
+3. One Effects stream for every effect entry, not one per entry type.
+4. `CellSeeds` keeps its own 32-bit mixer: the terrain image's per-cell hot path, already pure.
+5. `MathUtility` keeps both its static clamps and the instance roll wrapper.
+6. Real map generation: a neighborhood's choices may read its neighbours' derived values, never which neighbour was
+   decided first (TODO "Real map generation").
+
+Seeded worlds changed once (Phase 1: layouts and populations; Phase 2: crawler numbers, loot box rolls, every
+gameplay roll), and so did the headless fingerprint.
+
+**Baseline** (2026-10-27, Release, headless, seed 1, frames 600-3600, map 3072): `EcsContext.Update` 1.56 ms/frame
+(5 runs, one world, fingerprint `AE2E5D7BDDC0CE36`), worst frame 8.8-16.4 ms. Saved as
+`baseline-build-release-deterministic-generation` and `Log/phase-benchmarks/20261027-233439.json`. Runs on earlier
+builds play a different world and aren't comparable row for row.
 
 ## Presentation
 

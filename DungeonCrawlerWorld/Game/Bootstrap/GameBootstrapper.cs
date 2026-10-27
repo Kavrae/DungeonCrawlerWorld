@@ -44,7 +44,7 @@ namespace Game.Bootstrap;
 /// ModValidation): the session's own build over its map, and the Staging build SpawnRecordRebuilder
 /// rebuilds creatures in, each a separate GameBuildPass. This is the actual composition point for
 /// "which modules exist" -- GameLoop calls this and supplies only the runtime pieces it uniquely owns
-/// (the map, MathUtility, the validated mods), never naming a module by type.
+/// (the map, the session seed, the validated mods), never naming a module by type.
 /// </summary>
 public static class GameBootstrapper
 {
@@ -85,16 +85,16 @@ public static class GameBootstrapper
     ];
 
     /// <summary>Builds the built-in modules with validatedMods' mods over map into a session, with the staging world its SpawnRecordRebuilder rebuilds creatures in.</summary>
+    /// <param name="sessionSeed">The seed every random stream of the session is derived from (GameModuleContext.RandomStreams).</param>
     /// <param name="collectsContentFailures">A tool's build (the IDE): content that fails is left out and reported in GameSession.ContentFailures instead of stopping the build.</param>
     /// <param name="buildsStagingWorldOnFirstRebuild">True for a host that may never rebuild a record (the IDE): the staging world waits for the first rebuild instead of being built now.</param>
     public static GameSession Build(
         ValidatedMods validatedMods,
         Map map,
-        MathUtility mathUtility,
+        int sessionSeed,
         int initialEntityCapacity,
         int initialComponentCapacity,
         UniqueNumberAllocator? crawlerNumbers = null,
-        ulong runtimeSpawnSeed = 0,
         IReadOnlyList<ISettingsSource>? settingsSources = null,
         bool buildsStagingWorldOnFirstRebuild = false,
         bool collectsContentFailures = false)
@@ -102,7 +102,7 @@ public static class GameBootstrapper
         settingsSources ??= [];
         var builtInModules = BuiltInModules();
 
-        var session = GameBuildPass.Run(builtInModules, validatedMods.Mods, map, mathUtility, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, runtimeSpawnSeed, collectsContentFailures);
+        var session = GameBuildPass.Run(builtInModules, validatedMods.Mods, map, sessionSeed, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, collectsContentFailures);
         var context = session.Context;
         var spawnRecordRebuilder = new SpawnRecordRebuilder(
             () => BuildSpawnRecordRebuilderStaging(builtInModules, validatedMods.Mods, settingsSources, collectsContentFailures),
@@ -126,7 +126,7 @@ public static class GameBootstrapper
 
     /// <summary>A separate build of every module, as the staging world SpawnRecordRebuilder rebuilds creatures in.</summary>
     /// <remarks>
-    /// Its own Staging build over a placeholder map, with its own random sequence so staging never draws
+    /// Its own Staging build over a placeholder map, with streams of its own (session seed 0) so staging never draws
     /// from the session's, and none of what only a session reads. Its builds read the session's own
     /// BlueprintRegistry, so a spawn record means the same blueprint in both worlds, including one registered
     /// after this runs.
@@ -134,6 +134,6 @@ public static class GameBootstrapper
     private static EcsContext BuildSpawnRecordRebuilderStaging(IReadOnlyList<ModuleFactory<GameModuleContext>> builtInModules, IReadOnlyList<ModuleFactory<GameModuleContext>> mods, IReadOnlyList<ISettingsSource> settingsSources, bool collectsContentFailures)
     {
         using var stagingScope = EngineHooks.DiagnosticScope("BuildSpawnRecordRebuilderStaging");
-        return GameBuildPass.BuildModules(builtInModules, mods, GameBuildPass.CreatePlaceholderMap(), new MathUtility(new SeededRandom()), settingsSources, initialEntityCapacity: 16, initialComponentCapacity: 16, purpose: EcsBuildPurpose.Staging, collectsContentFailures: collectsContentFailures).EcsContext;
+        return GameBuildPass.BuildModules(builtInModules, mods, GameBuildPass.CreatePlaceholderMap(), sessionSeed: 0, settingsSources, initialEntityCapacity: 16, initialComponentCapacity: 16, purpose: EcsBuildPurpose.Staging, collectsContentFailures: collectsContentFailures).EcsContext;
     }
 }

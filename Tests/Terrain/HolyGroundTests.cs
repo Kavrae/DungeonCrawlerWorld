@@ -44,7 +44,7 @@ public sealed class HolyGroundTests
         public void Damage(int entityId, ushort amount) =>
             HealthDamage.Apply(
                 Components.GetPackedPool<SimpleHealthComponent>(), Build.EcsContext.EventBus, entityId, amount, ActionSource.Admin, Build.World, "Test", Now,
-                Components.GetMultiPool<StatModifierComponent>(), EntityBodyParts.For(Components, Build.Context.Definitions), Build.Context.MathUtility,
+                Components.GetMultiPool<StatModifierComponent>(), EntityBodyParts.For(Components, Build.Context.Definitions), Build.Context.RandomStreams.Get(Game.Effects.EffectServices.RandomStream),
                 Components.GetPackedPool<DeadComponent>(), Build.Context.EffectServices.DamageLedger, Build.Context.FloatingTextFeed, ResourceLossCategory.Direct);
 
         /// <summary>Every modifier Holy Ground has given entityId.</summary>
@@ -77,7 +77,7 @@ public sealed class HolyGroundTests
 
     private static Session BuildSession()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), sessionSeed: 1, initialEntityCapacity: 200, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(HolyGroundPosition);
         var holyGroundTypeId = build.Context.Terrain.GetId(BuiltInTerrain.HolyGroundKey);
         build.World.PopulateTerrain(HolyGroundPosition.X, HolyGroundPosition.Y, TerrainLayer.Ground, new TerrainCell(holyGroundTypeId));

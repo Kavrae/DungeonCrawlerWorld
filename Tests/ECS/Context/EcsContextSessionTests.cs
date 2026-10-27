@@ -129,7 +129,7 @@ public sealed class EcsContextSessionTests
         var recorder = new SessionRecorder();
         using var sessionSubscription = EngineHooks.Sessions.Subscribe(recorder);
 
-        using var ecsContext = GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(40, 40, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 50).EcsContext;
+        using var ecsContext = GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(40, 40, 3)), sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 50).EcsContext;
 
         Assert.IsEmpty(recorder.Calls);
     }

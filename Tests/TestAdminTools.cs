@@ -13,8 +13,7 @@ internal static class TestAdminTools
 {
     public static AdminTools Create(GameSession? gameSession = null)
     {
-        var mathUtility = new MathUtility(new SeededRandom((ulong)1));
-        gameSession ??= GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), mathUtility, initialEntityCapacity: 100, initialComponentCapacity: 50);
+        gameSession ??= GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 50);
 
         var ecsContext = gameSession.EcsContext;
         var internals = gameSession.Internals;
@@ -24,7 +23,7 @@ internal static class TestAdminTools
             ecsContext.ComponentManager.GetDirectPool<TransformComponent>(),
             ecsContext.EventBus,
             internals.ProcessingTierResolver,
-            new NeighborhoodRecords(mathUtility),
+            new NeighborhoodRecords(worldSeed: 1, floorNumber: FloorBuilder.FirstFloorNumber),
             new TestMapBuilder(ecsContext.EntityManager, internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Auras, gameSession.Catalogs.Definitions, gameSession.Catalogs.Areas, internals.UniqueEntities),
             internals.Skeletons);
 

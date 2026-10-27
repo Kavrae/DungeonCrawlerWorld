@@ -76,7 +76,7 @@ public sealed class TargetingModeActivationTests
 
     private static Session BuildSession()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), sessionSeed: 1, initialEntityCapacity: 200, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(CasterPosition);
         var session = new Session(build, CasterId: -1);
         var casterId = session.Spawn(Goblin.Id, CasterPosition);
@@ -161,7 +161,7 @@ public sealed class TargetingModeActivationTests
     [TestMethod]
     public void Player_HasFireballBoundToSlotEight()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(20, 20, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(20, 20, 3)), sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(new Vector3Int(5, 5, Ground));
         var playerId = build.Factory.Spawn(SpawnRequest.At(build.Context.Definitions.GetId(Player.Id), new Vector3Int(5, 5, Ground)) with { Seed = 1 });
         var components = build.EcsContext.ComponentManager;

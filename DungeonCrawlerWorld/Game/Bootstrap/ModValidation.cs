@@ -39,7 +39,7 @@ public static class ModValidation
                 using var trialScope = EngineHooks.DiagnosticScope("Trial", mod.ModuleType.Name);
                 try
                 {
-                    GameBuildPass.BuildModules(builtInModules, [mod], GameBuildPass.CreatePlaceholderMap(), new MathUtility(new SeededRandom()), settingsSources, initialEntityCapacity: 10, initialComponentCapacity: 10, purpose: EcsBuildPurpose.Trial);
+                    GameBuildPass.BuildModules(builtInModules, [mod], GameBuildPass.CreatePlaceholderMap(), sessionSeed: 0, settingsSources, initialEntityCapacity: 10, initialComponentCapacity: 10, purpose: EcsBuildPurpose.Trial);
                     survivors.Add(mod);
                 }
                 catch (Exception exception)

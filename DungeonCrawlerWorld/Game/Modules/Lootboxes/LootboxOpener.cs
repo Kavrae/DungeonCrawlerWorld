@@ -32,6 +32,9 @@ public sealed record OpenedLootboxGroup(LootboxKind Kind, int Count, IReadOnlyLi
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class LootboxOpener(ComponentManager componentManager, LootboxCatalog lootboxCatalog, ItemCatalog itemCatalog, ulong seed)
 {
+    /// <summary>The stream the opener's sequence is seeded from.</summary>
+    public static readonly RandomStreamKey RandomStream = new(LootboxModule.ModuleId, "Rolls");
+
     private readonly SeededRandom _rolls = new(seed);
 
     /// <summary>Opens every loot box entityId holds and consumes them.</summary>

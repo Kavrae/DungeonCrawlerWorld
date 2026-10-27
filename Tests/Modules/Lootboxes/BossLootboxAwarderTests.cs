@@ -42,7 +42,7 @@ public sealed class BossLootboxAwarderTests
     private static Setup Build()
     {
         var map = new Map(new Vector3Int(20, 20, 3));
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24), runtimeSpawnSeed: 7);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24));
         var playerEntityId = result.Internals.Factory.Spawn(TestDummyBlueprint.Id, 1, 1);
         result.World.PlayerEntityId = playerEntityId;
         return new Setup(result, playerEntityId);

@@ -286,8 +286,8 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     /// <summary>TEMPORARY, with the rest of this system: an entity granted Magic Missile casts it at the player when the player is in range and not adjacent, aiming in Target or Ground mode at random for each cast.</summary>
     /// <remarks>
     /// Only at the player: ranged attacks at any hostile wait on TODO "Spatial queries for NPC
-    /// decisions". The mode is drawn from MathUtility, the session's seeded sequence this system
-    /// already rolls from, so a seeded run repeats it. Never cast without the mana for it -- the same
+    /// decisions". The mode is drawn from the behavior stream this system
+    /// already rolls from (NpcBehaviorModule.BehaviorRandomStream), so a seeded run repeats it. Never cast without the mana for it -- the same
     /// blocker check the melee branch makes. Adjacent counts across layers, so a Flying Fairy over the
     /// player doesn't cast at point-blank range.
     /// </remarks>

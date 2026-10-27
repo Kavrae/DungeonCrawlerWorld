@@ -20,10 +20,7 @@ namespace DungeonCrawlerWorld;
 /// </summary>
 public static class WorldSessionBootstrapper
 {
-    /// <summary>Mixed into the session seed for the crawler-number permutation, so it never coincides with another sequence seeded from the same session seed.</summary>
-    private const uint CrawlerNumberSalt = 0xC4A71E55;
-
-    /// <param name="randomSeed">Seed for the shared MathUtility this session's entire simulation draws from -- see RandomSeed and the body's own note on what it does and does not cover.</param>
+    /// <param name="randomSeed">The session seed: neighborhood seeds are derived from it (NeighborhoodSeeds) and every gameplay roll draws from a stream derived from it (GameModuleContext.RandomStreams) -- see RandomSeed.</param>
     /// <param name="settingsSources">Where setting overrides come from, in order.</param>
     /// <param name="mapSizeOverride">Square map width and height from "--map-size=", or null for FloorBuilder's default -- see MapSizeArgument.</param>
     public static WorldSessionContext Build(
@@ -38,12 +35,8 @@ public static class WorldSessionBootstrapper
         IReadOnlyList<ISettingsSource> settingsSources,
         int? mapSizeOverride = null)
     {
-        var mathUtility = new MathUtility(new SeededRandom((ulong)(uint)randomSeed));
-        // Its own permutation, not the session's sequence: numbers are drawn whenever a crawler is first
-        // simulated, and drawing from the shared sequence would shift everything else that uses it
-        // (per-visit neighborhood seeds among them) by when the player happened to walk where.
-        var crawlerNumberAllocator = new UniqueNumberAllocator(((ulong)(uint)randomSeed << 32) | CrawlerNumberSalt, minCrawlerNumber, crawlerNumberBits);
-        var neighborhoodRecords = new NeighborhoodRecords(mathUtility);
+        var crawlerNumberAllocator = new UniqueNumberAllocator(RandomStreams.SeedFor(randomSeed, Game.Spawning.EntityFactory.CrawlerNumberStream), minCrawlerNumber, crawlerNumberBits);
+        var neighborhoodRecords = new NeighborhoodRecords(randomSeed, floorNumber);
 
         ValidatedMods validatedMods;
         using (EngineHooks.DiagnosticScope("Mod Validation"))
@@ -60,7 +53,7 @@ public static class WorldSessionBootstrapper
         GameSession gameSession;
         using (EngineHooks.DiagnosticScope("Module Load"))
         {
-            gameSession = GameBootstrapper.Build(validatedMods, map, mathUtility, initialEntityCapacity, initialComponentCapacity, crawlerNumberAllocator, runtimeSpawnSeed: (uint)randomSeed, settingsSources: settingsSources);
+            gameSession = GameBootstrapper.Build(validatedMods, map, randomSeed, initialEntityCapacity, initialComponentCapacity, crawlerNumberAllocator, settingsSources: settingsSources);
         }
 
         var ecsContext = gameSession.EcsContext;
@@ -109,7 +102,7 @@ public static class WorldSessionBootstrapper
 
         using (EngineHooks.DiagnosticScope("Player Spawn"))
         {
-            FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, gameSession.Internals.Factory, gameSession.Catalogs.Definitions, playerEntityId, playerSpawnOrigin, tierResolver);
+            FloorBuilder.CreatePlayer(world, ecsContext, randomSeed, gameSession.Internals.Factory, gameSession.Catalogs.Definitions, playerEntityId, playerSpawnOrigin, tierResolver);
             world.PlayerEntityId = playerEntityId;
 
             ecsContext.EventBus.Publish(new EnteredDungeonEvent());

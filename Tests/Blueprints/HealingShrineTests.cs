@@ -44,7 +44,7 @@ public sealed class HealingShrineTests
         public void Damage(int entityId, ushort amount, bool fire = false, BodyPartTargetRule? targetRule = null) =>
             HealthDamage.Apply(
                 Components.GetPackedPool<SimpleHealthComponent>(), Build.EcsContext.EventBus, entityId, amount, ActionSource.Admin, Build.World, "Test", Build.Context.SimulationClock.CurrentFrame,
-                Components.GetMultiPool<StatModifierComponent>(), EntityBodyParts.For(Components, Build.Context.Definitions), Build.Context.MathUtility,
+                Components.GetMultiPool<StatModifierComponent>(), EntityBodyParts.For(Components, Build.Context.Definitions), Build.Context.RandomStreams.Get(Game.Effects.EffectServices.RandomStream),
                 Components.GetPackedPool<DeadComponent>(), Build.Context.EffectServices.DamageLedger, Build.Context.FloatingTextFeed, ResourceLossCategory.Direct, targetRule, damageTags: fire ? [GameTags.DamageFire] : default);
 
         public void RunFrames(int count)
@@ -70,7 +70,7 @@ public sealed class HealingShrineTests
 
     private static Session BuildSession()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 200, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), sessionSeed: 1, initialEntityCapacity: 200, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(ShrinePosition);
         return new Session(build);
     }

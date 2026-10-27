@@ -29,7 +29,7 @@ public sealed class SpawnRecordRebuilderTests
     private sealed record Creature(List<string> Components, List<string> Stacks, List<string> Modifiers);
 
     private static GameSession Bootstrap(Map map, UniqueNumberAllocator? crawlerNumbers = null) =>
-        GameBootstrapper.Build(ValidatedMods.None, map, new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
+        GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
 
     private static Creature Read(ComponentManager componentManager, int entityId, params Type[] excluded)
     {
@@ -84,7 +84,7 @@ public sealed class SpawnRecordRebuilderTests
     [TestMethod]
     public void ASessionThatDefersItsStagingWorld_BuildsItOnTheFirstRebuild_AndRebuildsTheSame()
     {
-        var deferred = GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 1_000, initialComponentCapacity: 100, buildsStagingWorldOnFirstRebuild: true);
+        var deferred = GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, buildsStagingWorldOnFirstRebuild: true);
         Assert.IsFalse(deferred.Internals.SpawnRecordRebuilder.IsStagingWorldBuilt);
         var ecs = deferred.EcsContext;
         var blueprintId = Blueprint(deferred, Goblin.Id);
@@ -217,7 +217,7 @@ public sealed class SpawnRecordRebuilderTests
         var result = Bootstrap(new Map(new Vector3Int(60, 60, 3)), new UniqueNumberAllocator(1, 1, 24));
         var world = result.World;
         var ecs = result.EcsContext;
-        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(mathUtility), result.Internals.Factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);
+        FloorBuilder.PopulateFloor(world, ecs, new NeighborhoodRecords(worldSeed: 3, floorNumber: FloorBuilder.FirstFloorNumber), result.Internals.Factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);
 
         var spawnRecords = ecs.ComponentManager.GetDirectPool<SpawnRecordComponent>();
         var checkedCount = 0;

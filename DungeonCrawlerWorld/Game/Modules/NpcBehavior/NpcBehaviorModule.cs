@@ -1,3 +1,4 @@
+using Engine.Math;
 using Engine.Modules;
 using Game.Blueprints;
 using Game.Effects;
@@ -40,6 +41,9 @@ public sealed class NpcBehaviorModule : IGameModule
 {
     public static readonly Guid ModuleId = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000018");
 
+    /// <summary>The stream every NPC decision rolls from: which attack, which mode, whether and where to wander.</summary>
+    public static readonly RandomStreamKey BehaviorRandomStream = new(ModuleId, "Behavior");
+
     public Guid Id => ModuleId;
 
     public IReadOnlyList<Guid> Requires { get; } = [CoreModule.ModuleId, HealthModule.ModuleId, InventoryModule.ModuleId, ActionsModule.ModuleId, BodyPartEffectsModule.ModuleId, ManaModule.ModuleId, DeathModule.ModuleId, CurrencyModule.ModuleId, MovementModule.ModuleId, ProcessingTierModule.ModuleId, RaceModule.ModuleId, BlueprintsModule.ModuleId, StatModifiersModule.ModuleId, CoreActionsModule.ModuleId, CoreItemsModule.ModuleId, .. EffectServices.RequiredModuleIds];
@@ -74,7 +78,7 @@ public sealed class NpcBehaviorModule : IGameModule
             componentManager.GetPackedPool<PendingActionActivationComponent>(),
             componentManager.GetPackedPool<PendingItemActivationComponent>(),
             context.MapQuery,
-            context.MathUtility,
+            context.RandomStreams.Get(BehaviorRandomStream),
             componentManager.GetDirectPool<ProcessingTierComponent>(),
             context.ProcessingTierEvents,
             deadEntities,

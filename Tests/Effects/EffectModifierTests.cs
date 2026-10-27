@@ -60,7 +60,7 @@ public sealed class EffectModifierTests
 
     private static Session BuildSession()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(20, 20, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(20, 20, 3)), sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(new Vector3Int(5, 5, Ground));
         int Spawn(Vector3Int position)
         {

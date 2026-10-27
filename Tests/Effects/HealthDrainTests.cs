@@ -91,7 +91,7 @@ public sealed class HealthDrainTests
     [TestMethod]
     public void ABodyPlan_PaysAnEvenShareFromEveryPart_AndIsRefusedWhenAVitalPartsShareWouldKill()
     {
-        var build = BuiltInTestModules.Build(new Map(new Vector3Int(20, 20, 3)), new MathUtility(new SeededRandom((ulong)1)), initialEntityCapacity: 100, initialComponentCapacity: 100);
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(20, 20, 3)), sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(new Vector3Int(5, 5, Ground));
         var goblinId = build.Factory.Spawn(SpawnRequest.At(build.Context.Definitions.GetId(Goblin.Id), new Vector3Int(5, 5, Ground)) with { Seed = 1 });
         var bodyParts = build.Context.EffectServices.BodyParts;

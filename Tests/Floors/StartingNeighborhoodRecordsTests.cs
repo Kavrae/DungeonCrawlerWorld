@@ -1,7 +1,6 @@
-using Engine.Math;
 using Game;
-using Game.Bootstrap;
 using Game.Floors;
+using Game.World;
 
 namespace Tests.Floors;
 
@@ -17,27 +16,25 @@ public sealed class StartingNeighborhoodRecordsTests
         CollectionAssert.AreEqual(TestMapBuilder.LoadedNeighborhoods(map).ToList(), FloorBuilder.StartingWindowNeighborhoods().ToList());
     }
 
-    /// <summary>A session draws its neighborhood records from the sequence it builds its modules with, after the build: the build itself must draw nothing from it, or the records would depend on the modules.</summary>
-    [TestMethod]
-    public void BuildingTheGame_DrawsNothingFromTheSessionsSequence()
-    {
-        const int seed = 42;
-        var sessionSequence = new MathUtility(new SeededRandom((ulong)(uint)seed));
-
-        GameBootstrapper.Build(ValidatedMods.None, GameBuildPass.CreatePlaceholderMap(), sessionSequence, initialEntityCapacity: 100, initialComponentCapacity: 50, buildsStagingWorldOnFirstRebuild: true);
-
-        Assert.AreEqual(new MathUtility(new SeededRandom((ulong)(uint)seed)).Next(int.MinValue, int.MaxValue), sessionSequence.Next(int.MinValue, int.MaxValue));
-    }
-
     [TestMethod]
     public void EachSeed_GivesItsOwnRecords_AndTheSameSeedTheSameOnes()
     {
-        var first = FloorBuilder.StartingNeighborhoodRecords(7).Select(entry => (entry.Record.CellX, entry.Record.CellY, entry.Record.Seed, entry.PopulationSeed)).ToList();
-        var again = FloorBuilder.StartingNeighborhoodRecords(7).Select(entry => (entry.Record.CellX, entry.Record.CellY, entry.Record.Seed, entry.PopulationSeed)).ToList();
-        var other = FloorBuilder.StartingNeighborhoodRecords(8).Select(entry => (entry.Record.CellX, entry.Record.CellY, entry.Record.Seed, entry.PopulationSeed)).ToList();
+        var first = FloorBuilder.StartingNeighborhoodRecords(7, FloorBuilder.FirstFloorNumber).Select(entry => (entry.Record.CellX, entry.Record.CellY, entry.Record.Seed, entry.PopulationSeed)).ToList();
+        var again = FloorBuilder.StartingNeighborhoodRecords(7, FloorBuilder.FirstFloorNumber).Select(entry => (entry.Record.CellX, entry.Record.CellY, entry.Record.Seed, entry.PopulationSeed)).ToList();
+        var other = FloorBuilder.StartingNeighborhoodRecords(8, FloorBuilder.FirstFloorNumber).Select(entry => (entry.Record.CellX, entry.Record.CellY, entry.Record.Seed, entry.PopulationSeed)).ToList();
 
         CollectionAssert.AreEqual(first, again);
         CollectionAssert.AreNotEqual(first, other);
         Assert.HasCount(9, first);
+    }
+
+    [TestMethod]
+    public void EachRecord_HasItsDerivedLayoutSeed_AndItsFirstPopulationSeed()
+    {
+        foreach (var (record, populationSeed) in FloorBuilder.StartingNeighborhoodRecords(7, FloorBuilder.FirstFloorNumber))
+        {
+            Assert.AreEqual(NeighborhoodSeeds.ForLayout(7, FloorBuilder.FirstFloorNumber, record.CellX, record.CellY), record.Seed);
+            Assert.AreEqual(NeighborhoodSeeds.ForPopulation(record.Seed, 1), populationSeed);
+        }
     }
 }

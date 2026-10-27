@@ -26,7 +26,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     // backtracking. There's no advance trigger yet (that needs a win-condition system that
     // doesn't exist), so this stays a constant rather than tracked state until something
     // actually needs to change it.
-    internal const int FloorNumber = 1;
+    internal const int FloorNumber = Game.Floors.FloorBuilder.FirstFloorNumber;
 
     // Range for CrawlerComponent.CrawlerNumber: 1 to 2^24 (16,777,216), rounded up from the source
     // material's 13,000,000 so the allocator's permutation covers the range exactly.
@@ -42,7 +42,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     private int _frameCount;
 
     /// <summary>The seed this session's simulation was generated from.</summary>
-    /// <remarks>Used for map layout, blueprint rolls, damage variance, crits, everything drawing on the shared MathUtility.</remarks>
+    /// <remarks>Every seed of the session derives from it: neighborhood layouts and populations, blueprint rolls, and each gameplay random stream (damage variance, crits, NPC decisions).</remarks>
     private readonly int _randomSeed;
 
     private readonly int? _mapSizeOverride;
@@ -57,7 +57,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
     /// <param name="settingsSources">Where setting overrides come from, in order -- Program.cs passes the command line.</param>
     /// <param name="diagnosticsFeatures">Which Diagnostics engine features to enable -- opt-in, defaults to None. See DiagnosticsFeaturesParser (Program.cs passes --diagnostics= here).</param>
-    /// <param name="randomSeed">Seed for the shared MathUtility every system and blueprint draws from -- see RandomSeed. Defaults to a generated one so a caller that doesn't care (tests constructing a GameLoop directly) still gets a reproducible, reportable session rather than an unseeded one.</param>
+    /// <param name="randomSeed">The session seed every other seed and random stream is derived from -- see RandomSeed. Defaults to a generated one so a caller that doesn't care (tests constructing a GameLoop directly) still gets a reproducible, reportable session rather than an unseeded one.</param>
     /// <param name="benchmarkFrameRange">Simulation frames to benchmark, or null -- see FrameRangeBenchmark (Program.cs passes --benchmark-frames= here).</param>
     /// <param name="mapSizeOverride">Square map width and height, or null for the default -- see MapSizeArgument (Program.cs passes --map-size= here).</param>
     /// <param name="diagnosticsLink">Where an IDE listens for this run's diagnostics, or null -- see DiagnosticsLinkArgument (Program.cs passes --diagnostics-link= here).</param>

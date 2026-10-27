@@ -44,7 +44,7 @@ public sealed class AreaStampTests
     ];
 
     private static GameBuildPassResult Build(MapBounds bounds) =>
-        BuiltInTestModules.Build(new Map(bounds), new MathUtility(new Random(1)), initialEntityCapacity: 5000, initialComponentCapacity: 5000, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24));
+        BuiltInTestModules.Build(new Map(bounds), sessionSeed: 1, initialEntityCapacity: 5000, initialComponentCapacity: 5000, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24));
 
     private static TestMapBuilder BuilderFor(GameBuildPassResult pass)
     {

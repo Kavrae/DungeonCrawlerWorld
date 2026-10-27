@@ -29,6 +29,12 @@ public sealed class EntityFactory
     /// <summary>What Spawn returns when the entity could not be placed and was destroyed again.</summary>
     public const int NoEntity = -1;
 
+    /// <summary>The stream a spawn that names no seed draws its seed from.</summary>
+    public static readonly RandomStreamKey RuntimeSeedStream = new(BlueprintsModule.ModuleId, "RuntimeSpawnSeeds");
+
+    /// <summary>The stream the session's crawler-number permutation is seeded from.</summary>
+    public static readonly RandomStreamKey CrawlerNumberStream = new(BlueprintsModule.ModuleId, "CrawlerNumbers");
+
     /// <summary>The component types that make up an entity's skeleton: what it holds from creation, built or not, and all an unbuilt creature holds.</summary>
     /// <remarks>
     /// A type belongs here only if its value is declared on the entity's definitions or set by the spawn
