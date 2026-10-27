@@ -115,7 +115,7 @@ public sealed class EntityBuilder
             _definitions.TryResolve(record.BlueprintId, out own);
         }
 
-        _random.Reseed(seed ^ ((ulong)(uint)blueprint.Definition.Id.GetHashCode() << 32));
+        _random.Reseed(SeedMix.Mix(seed, SeedMix.Of(blueprint.Definition.Id)));
         var context = new BlueprintContext(componentManager, entityId, _rolls, _entityKeys, seed, _definitions, _actions, _items);
 
         foreach (var partId in blueprint.BuildOrder)

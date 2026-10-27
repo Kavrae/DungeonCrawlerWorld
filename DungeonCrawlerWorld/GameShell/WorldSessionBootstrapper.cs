@@ -41,9 +41,9 @@ public static class WorldSessionBootstrapper
         var mathUtility = new MathUtility(new SeededRandom((ulong)(uint)randomSeed));
         // Its own permutation, not the session's sequence: numbers are drawn whenever a crawler is first
         // simulated, and drawing from the shared sequence would shift everything else that uses it
-        // (per-visit neighborhood seeds among them) by when the player happened to walk where.
+        // by when the player happened to walk where.
         var crawlerNumberAllocator = new UniqueNumberAllocator(((ulong)(uint)randomSeed << 32) | CrawlerNumberSalt, minCrawlerNumber, crawlerNumberBits);
-        var neighborhoodRecords = new NeighborhoodRecords(mathUtility);
+        var neighborhoodRecords = new NeighborhoodRecords(randomSeed, floorNumber);
 
         ValidatedMods validatedMods;
         using (EngineHooks.DiagnosticScope("Mod Validation"))
@@ -109,7 +109,7 @@ public static class WorldSessionBootstrapper
 
         using (EngineHooks.DiagnosticScope("Player Spawn"))
         {
-            FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, gameSession.Internals.Factory, gameSession.Catalogs.Definitions, playerEntityId, playerSpawnOrigin, tierResolver);
+            FloorBuilder.CreatePlayer(world, ecsContext, randomSeed, gameSession.Internals.Factory, gameSession.Catalogs.Definitions, playerEntityId, playerSpawnOrigin, tierResolver);
             world.PlayerEntityId = playerEntityId;
 
             ecsContext.EventBus.Publish(new EnteredDungeonEvent());

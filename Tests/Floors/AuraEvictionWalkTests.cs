@@ -43,11 +43,11 @@ public sealed class AuraEvictionWalkTests
         resolver.SetReferencePosition(FloorBuilder.PlayerSpawnOrigin(result.Catalogs.Areas));
         resolver.SetWindowCenter(0, 0);
 
-        var records = new NeighborhoodRecords(mathUtility);
+        var records = new NeighborhoodRecords(worldSeed: 1, floorNumber: FloorBuilder.FirstFloorNumber);
         var factory = result.Internals.Factory;
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecs);
         FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);
-        FloorBuilder.CreatePlayer(world, ecs, mathUtility, factory, result.Catalogs.Definitions, playerEntityId, FloorBuilder.PlayerSpawnOrigin(result.Catalogs.Areas), resolver);
+        FloorBuilder.CreatePlayer(world, ecs, sessionSeed: 1, factory, result.Catalogs.Definitions, playerEntityId, FloorBuilder.PlayerSpawnOrigin(result.Catalogs.Areas), resolver);
         world.PlayerEntityId = playerEntityId;
 
         var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);

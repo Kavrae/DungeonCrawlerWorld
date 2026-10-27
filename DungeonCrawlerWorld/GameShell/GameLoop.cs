@@ -26,7 +26,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     // backtracking. There's no advance trigger yet (that needs a win-condition system that
     // doesn't exist), so this stays a constant rather than tracked state until something
     // actually needs to change it.
-    internal const int FloorNumber = 1;
+    internal const int FloorNumber = Game.Floors.FloorBuilder.FirstFloorNumber;
 
     // Range for CrawlerComponent.CrawlerNumber: 1 to 2^24 (16,777,216), rounded up from the source
     // material's 13,000,000 so the allocator's permutation covers the range exactly.

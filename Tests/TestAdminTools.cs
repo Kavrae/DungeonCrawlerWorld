@@ -24,7 +24,7 @@ internal static class TestAdminTools
             ecsContext.ComponentManager.GetDirectPool<TransformComponent>(),
             ecsContext.EventBus,
             internals.ProcessingTierResolver,
-            new NeighborhoodRecords(mathUtility),
+            new NeighborhoodRecords(worldSeed: 1, floorNumber: FloorBuilder.FirstFloorNumber),
             new TestMapBuilder(ecsContext.EntityManager, internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Auras, gameSession.Catalogs.Definitions, gameSession.Catalogs.Areas, internals.UniqueEntities),
             internals.Skeletons);
 

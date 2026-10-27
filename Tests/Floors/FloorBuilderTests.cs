@@ -44,8 +44,8 @@ public sealed class FloorBuilderTests
 
         var playerEntityId = FloorBuilder.ReservePlayerEntity(ecsContext);
         var factory = pass.Factory;
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Auras, context.Definitions, context.Areas, context.UniqueEntities);
-        FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId, FloorBuilder.PlayerSpawnOrigin(context.Areas));
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(worldSeed: 1, floorNumber: FloorBuilder.FirstFloorNumber), factory, context.Terrain, context.Auras, context.Definitions, context.Areas, context.UniqueEntities);
+        FloorBuilder.CreatePlayer(world, ecsContext, sessionSeed: 1, factory, context.Definitions, playerEntityId, FloorBuilder.PlayerSpawnOrigin(context.Areas));
         world.PlayerEntityId = playerEntityId;
 
         Assert.IsTrue(ecsContext.EntityManager.EntityExists(world.PlayerEntityId));
@@ -79,7 +79,7 @@ public sealed class FloorBuilderTests
         var ecsContext = pass.EcsContext;
         var context = pass.Context;
 
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), pass.Factory, context.Terrain, context.Auras, context.Definitions, context.Areas, context.UniqueEntities);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(worldSeed: 1, floorNumber: FloorBuilder.FirstFloorNumber), pass.Factory, context.Terrain, context.Auras, context.Definitions, context.Areas, context.UniqueEntities);
 
         var transforms = ecsContext.ComponentManager.GetDirectPool<TransformComponent>();
         var creatures = 0;
@@ -105,7 +105,7 @@ public sealed class FloorBuilderTests
         var ecsContext = pass.EcsContext;
         var context = pass.Context;
 
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), pass.Factory, context.Terrain, context.Auras, context.Definitions, context.Areas, context.UniqueEntities);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(worldSeed: 1, floorNumber: FloorBuilder.FirstFloorNumber), pass.Factory, context.Terrain, context.Auras, context.Definitions, context.Areas, context.UniqueEntities);
 
         var wallId = context.Terrain.GetId(BuiltInTerrain.StoneWallKey);
         Assert.AreEqual(wallId, world.GetStructureAt(new Vector3Int(10, 2, (int)MapLayer.Ground)).TypeId);
@@ -187,8 +187,8 @@ public sealed class FloorBuilderTests
         context.ProcessingTierEvents.TierChanged += (entityId, _) => raisedDuringPopulation.Add(entityId);
 
         var factory = pass.Factory;
-        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(mathUtility), factory, context.Terrain, context.Auras, context.Definitions, context.Areas, context.UniqueEntities);
-        FloorBuilder.CreatePlayer(world, ecsContext, mathUtility, factory, context.Definitions, playerEntityId, FloorBuilder.PlayerSpawnOrigin(context.Areas), resolver);
+        FloorBuilder.PopulateFloor(world, ecsContext, new NeighborhoodRecords(worldSeed: 1, floorNumber: FloorBuilder.FirstFloorNumber), factory, context.Terrain, context.Auras, context.Definitions, context.Areas, context.UniqueEntities);
+        FloorBuilder.CreatePlayer(world, ecsContext, sessionSeed: 1, factory, context.Definitions, playerEntityId, FloorBuilder.PlayerSpawnOrigin(context.Areas), resolver);
         world.PlayerEntityId = playerEntityId;
 
         var transforms = ecsContext.ComponentManager.GetDirectPool<TransformComponent>();
@@ -341,7 +341,7 @@ public sealed class FloorBuilderTests
     {
         var (world, ecsContext, builder, _, _, _) = BuildForGeneration(TwoNeighborhoodSlice);
         var mathUtility = new MathUtility(new Random(1));
-        var records = new NeighborhoodRecords(mathUtility);
+        var records = new NeighborhoodRecords(worldSeed: 1, floorNumber: FloorBuilder.FirstFloorNumber);
 
         builder.Populate(world, records);
 

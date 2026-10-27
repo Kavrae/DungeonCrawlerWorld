@@ -1,4 +1,3 @@
-using Engine.Math;
 using Game.World;
 
 namespace Tests.World;
@@ -9,7 +8,7 @@ public sealed class NeighborhoodRecordsTests
     [TestMethod]
     public void GetOrCreate_SameCoordinate_ReturnsTheSameRecord()
     {
-        var records = new NeighborhoodRecords(new MathUtility(new SeededRandom((ulong)1)));
+        var records = new NeighborhoodRecords(worldSeed: 1, floorNumber: 1);
 
         var first = records.GetOrCreate(-1, 2);
 
@@ -18,14 +17,39 @@ public sealed class NeighborhoodRecordsTests
     }
 
     [TestMethod]
-    public void GetOrCreate_SameSessionSeedAndOrder_AssignsTheSameSeeds()
+    public void GetOrCreate_GivesACoordinateTheSameSeed_WhateverOrderCoordinatesAreAskedFor()
     {
-        var a = new NeighborhoodRecords(new MathUtility(new SeededRandom((ulong)5)));
-        var b = new NeighborhoodRecords(new MathUtility(new SeededRandom((ulong)5)));
+        var forwards = new NeighborhoodRecords(worldSeed: 5, floorNumber: 1);
+        var backwards = new NeighborhoodRecords(worldSeed: 5, floorNumber: 1);
+        (int CellX, int CellY)[] cells = [(0, 0), (1, 0), (-3, 7), (2, -2)];
 
-        Assert.AreEqual(a.GetOrCreate(0, 0).Seed, b.GetOrCreate(0, 0).Seed);
-        Assert.AreEqual(a.GetOrCreate(1, 0).Seed, b.GetOrCreate(1, 0).Seed);
-        Assert.AreNotEqual(a.GetOrCreate(0, 0).Seed, a.GetOrCreate(1, 0).Seed);
+        var forwardSeeds = cells.Select(cell => forwards.GetOrCreate(cell.CellX, cell.CellY).Seed).ToList();
+        foreach (var (cellX, cellY) in cells.Reverse())
+        {
+            backwards.GetOrCreate(cellX, cellY);
+        }
+
+        CollectionAssert.AreEqual(forwardSeeds, cells.Select(cell => backwards.GetOrCreate(cell.CellX, cell.CellY).Seed).ToList());
+    }
+
+    [TestMethod]
+    public void GetOrCreate_IsTheDerivedLayoutSeed()
+    {
+        var records = new NeighborhoodRecords(worldSeed: 5, floorNumber: 2);
+
+        Assert.AreEqual(NeighborhoodSeeds.ForLayout(5, 2, -3, 7), records.GetOrCreate(-3, 7).Seed);
+    }
+
+    [TestMethod]
+    public void LayoutSeeds_DifferBetweenCells_Floors_AndSessionSeeds()
+    {
+        var seed = NeighborhoodSeeds.ForLayout(5, 1, 0, 0);
+
+        Assert.AreNotEqual(seed, NeighborhoodSeeds.ForLayout(5, 1, 1, 0));
+        Assert.AreNotEqual(seed, NeighborhoodSeeds.ForLayout(5, 1, 0, 1));
+        Assert.AreNotEqual(NeighborhoodSeeds.ForLayout(5, 1, 1, 0), NeighborhoodSeeds.ForLayout(5, 1, 0, 1));
+        Assert.AreNotEqual(seed, NeighborhoodSeeds.ForLayout(5, 2, 0, 0));
+        Assert.AreNotEqual(seed, NeighborhoodSeeds.ForLayout(6, 1, 0, 0));
     }
 
     [TestMethod]
@@ -34,9 +58,11 @@ public sealed class NeighborhoodRecordsTests
         var record = new NeighborhoodRecord(0, 0, seed: 42);
         var twin = new NeighborhoodRecord(3, 3, seed: 42);
 
+        var pending = record.PendingPopulationSeed;
         var first = record.NextPopulationSeed();
         var second = record.NextPopulationSeed();
 
+        Assert.AreEqual(pending, first);
         Assert.AreNotEqual(first, second);
         Assert.AreNotEqual(42, first);
         Assert.AreEqual(first, twin.NextPopulationSeed());

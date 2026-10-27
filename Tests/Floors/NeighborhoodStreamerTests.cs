@@ -36,7 +36,7 @@ public sealed class NeighborhoodStreamerTests
         var ecs = result.EcsContext;
         result.Internals.ProcessingTierResolver.SetReferencePosition(Reference);
 
-        var records = new NeighborhoodRecords(mathUtility);
+        var records = new NeighborhoodRecords(worldSeed: 1, floorNumber: FloorBuilder.FirstFloorNumber);
         var factory = result.Internals.Factory;
         FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);
         result.Internals.MovedEntities.ClearFrame();
@@ -288,7 +288,7 @@ public sealed class NeighborhoodStreamerTests
         result.Internals.ProcessingTierResolver.SetReferencePosition(Reference);
         result.Internals.ProcessingTierResolver.SetWindowCenter(0, 0);
 
-        var records = new NeighborhoodRecords(mathUtility);
+        var records = new NeighborhoodRecords(worldSeed: 1, floorNumber: FloorBuilder.FirstFloorNumber);
         var skeletons = result.Internals.Skeletons;
         var factory = result.Internals.Factory;
         FloorBuilder.PopulateFloor(world, ecs, records, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);
