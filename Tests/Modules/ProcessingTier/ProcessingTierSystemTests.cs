@@ -654,9 +654,8 @@ public sealed class ProcessingTierSystemTests
     [TestMethod]
     public void PresetReference_Crossing_WhilePromotionsHeld_ThawsNothingUntilReleased()
     {
-        var held = true;
         var fixture = new Fixture(new TestPlayerQuery(0), transitionsPerFrame: 1);
-        fixture.Resolver.PromotionsHeld = () => held;
+        fixture.Resolver.PromotionsHeld = true;
         fixture.Resolver.SetReferencePosition(new Vector3Int(1019, 500, 0));
         var playerEntityId = fixture.Spawn(new Vector3Int(1019, 500, 0));
         var freezing = fixture.Spawn(new Vector3Int(500, 500, 0));
@@ -673,7 +672,7 @@ public sealed class ProcessingTierSystemTests
         Assert.AreNotEqual(ProcessingTierLevel.Neighborhood, fixture.TierOf(thawing));
         Assert.IsTrue(fixture.Resolver.Transitions.HasPending);
 
-        held = false;
+        fixture.Resolver.PromotionsHeld = false;
         for (var i = 0; i < 200 && fixture.Resolver.Transitions.HasPending; i++)
         {
             fixture.Frame();

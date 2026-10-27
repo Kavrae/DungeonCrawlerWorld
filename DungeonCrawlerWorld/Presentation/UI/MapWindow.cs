@@ -9,6 +9,7 @@ using Microsoft.Xna.Framework.Input;
 using Presentation.MapRendering;
 using Presentation.UI.FloatingText;
 using UIEngine.Fonts;
+using UIEngine.Input;
 using UIEngine.Rendering;
 using UIEngine.UI;
 
@@ -36,6 +37,7 @@ public sealed class MapWindow : Window
     private readonly PlayerMovementController _playerMovement;
     private readonly ContextMenuController _contextMenuController;
     private readonly AdminContextMenuOptions _adminContextMenuOptions;
+    private readonly PointerState _pointerState;
     private readonly FloatingTextController _floatingTextController;
     private readonly FloatingTextRenderer _floatingTextRenderer;
     private readonly MapRenderer _renderer;
@@ -105,7 +107,8 @@ public sealed class MapWindow : Window
         ContextMenuController contextMenuController,
         FloatingTextController floatingTextController,
         FloatingTextRenderer floatingTextRenderer,
-        AdminContextMenuOptions adminContextMenuOptions) : base(fontService, elementPoolService, renderService)
+        AdminContextMenuOptions adminContextMenuOptions,
+        PointerState pointerState) : base(fontService, elementPoolService, renderService)
     {
         _mapView = mapView;
         _playerActionGate = playerActionGate;
@@ -118,6 +121,7 @@ public sealed class MapWindow : Window
         _playerMovement = playerMovement;
         _contextMenuController = contextMenuController;
         _adminContextMenuOptions = adminContextMenuOptions;
+        _pointerState = pointerState;
         _floatingTextController = floatingTextController;
         _floatingTextRenderer = floatingTextRenderer;
 
@@ -182,8 +186,9 @@ public sealed class MapWindow : Window
             }
         }
 
+        // Over another window (the hotbar, a menu), the tile beneath it isn't hovered: the cursor isn't on the map.
         var mouseState = Mouse.GetState();
-        UpdateHoveredTile(new Point(mouseState.X, mouseState.Y));
+        _actionTargeting.UpdateHoveredTile(_pointerState.IsOver(this) ? new Point(mouseState.X, mouseState.Y) : null, ContentAbsolutePosition);
 
         // Last, after the camera-follow above, so a frame that re-centres rebuilds the renderer's
         // images against the new scroll position.
@@ -195,7 +200,7 @@ public sealed class MapWindow : Window
     /// (internal, not private) since MapWindowTests exercises it directly the same way it does
     /// Window.HandleHotkeys, simulating a mouse position without a real OS cursor.
     /// </summary>
-    internal void UpdateHoveredTile(Point mousePosition) => _actionTargeting.UpdateHoveredTile(mousePosition, ContentAbsolutePosition);
+    internal void UpdateHoveredTile(Point? mousePosition) => _actionTargeting.UpdateHoveredTile(mousePosition, ContentAbsolutePosition);
 
     /// <summary>Read-only view of the armed ability's current hit-footprint -- see ActionTargetingController.HoveredFootprint.</summary>
     internal IReadOnlyList<Vector3Int> HoveredFootprint => _actionTargeting.HoveredFootprint;
@@ -297,11 +302,11 @@ public sealed class MapWindow : Window
         SelectMapNodes(mousePosition);
     }
 
-    /// <summary>A player can only loot a corpse they're standing on or next to -- 8-directional (Chebyshev) distance of at most 1 from the corpse's own origin tile, the same adjacency shape TargetShape.Adjacent's ring uses elsewhere, just inclusive of the caster's own tile too (unlike melee's ring, which excludes it -- standing on a corpse to loot it is expected, unlike punching yourself).</summary>
+    /// <summary>A player can only loot a corpse they're standing on or next to -- 8-directional (Chebyshev) distance of at most 1 between any tile of the player's footprint and any tile of the corpse's, the same adjacency shape TargetShape.Adjacent's ring uses elsewhere, just inclusive of the caster's own tile too (unlike melee's ring, which excludes it -- standing on a corpse to loot it is expected, unlike punching yourself).</summary>
     private bool IsAdjacentToPlayer(int entityId) =>
         _mapView.TryGetOccupant(entityId, out var target) &&
-        TryGetPlayerPosition(out var playerPosition) &&
-        GridDistance.ChebyshevDistance(target.Position, playerPosition) <= 1;
+        _mapView.TryGetOccupant(_mapView.PlayerEntityId, out var player) &&
+        GridDistance.ChebyshevDistance(target.Position, target.Size, player.Position, player.Size) <= 1;
 
     /// <summary>
     /// A right-click-tap first tries to cancel an armed/pending action (see

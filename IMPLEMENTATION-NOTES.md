@@ -129,6 +129,21 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
   `Tag.Self` special case the single-press re-confirm path (`HandleActionSlotPress`) already has: a
   `Tag.Self` action (Heal, Dodge) always auto-targets the caster's own tile directly, bypassing the
   occupied-tile hunt entirely rather than needing an occupant to exist.
+- The double-tap window is gone (2026-10-27): with Ground and Target modes there is no reason for a
+  quick re-press to differ from a slow one. Re-pressing an armed hotbar slot always activates. Every
+  activation -- key re-press, hotbar-slot click, map click, Dodge's WASD -- and the hover preview go
+  through one selection, `ActionTargetingController.TrySelectActivationTarget`, one rule for actions
+  and items: an Adjacent/Self shape lands around the caster, whatever the mode; a
+  `GameTags.TargetingSelf` action or item used from the hotbar lands on the player (a potion is drunk,
+  Dodge dodges in place), while a map click with one follows the mode; Ground mode (the player's, or a
+  GroundOnly activator's) lands on the cursor tile in range -- a potion splashes; Target mode marks the
+  target on the cursor tile in range, else (a TargetingSelf map click) the player, else the target in
+  range nearest the cursor, or nearest the player with the cursor off the map -- searched only
+  `MapViewState.TargetSearchDistanceTiles` (default 2, Manhattan) around that point. Nothing to land on, or a
+  refused confirm, leaves it armed with nothing paid. "Off the map" includes over another window: the
+  map reads a hovered tile only while `PointerState.IsOver` it (`PointerState.HoveredElement`, the
+  element the input handlers were handed that frame), so a hotbar click isn't aimed at the tile under
+  the hotbar.
 - `MapWindow` telegraphs every entity's (not just the player's) in-flight `PendingDelayedActionComponent`
   every frame (`ActionTargetingController.AllPendingDelayedActionTargets`, a small `PackedComponentPool`
   -- dense iteration, no spatial index needed): dark green for the player's own, red/yellow for an

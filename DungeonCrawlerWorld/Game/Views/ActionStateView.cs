@@ -37,6 +37,10 @@ public sealed class ActionStateView(ComponentManager componentManager, EntityAct
 
     public bool TryGetPotionCooldown(int entityId, out PotionCooldownComponent potionCooldown) => _potionCooldowns.TryGetReadonly(entityId, out potionCooldown);
 
+    /// <inheritdoc cref="EntityActions.TryGetEffectiveAction"/>
+    /// <remarks>False for an action the entity doesn't have, whatever the catalog holds.</remarks>
+    public bool TryGetEffectiveAction(int entityId, Guid actionId, out ActionDefinition action) => entityActions.TryGetEffectiveAction(entityId, actionId, out action);
+
     /// <inheritdoc cref="ActivationQueries.GetBlocker"/>
     /// <remarks>Reads the entity's effective action. An action the entity doesn't have is None: a binding problem, not a reason to show.</remarks>
     public ActivationBlocker GetActionBlocker(int entityId, Guid actionId) =>

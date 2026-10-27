@@ -67,7 +67,6 @@ public sealed class ActionTargetingControllerDodgeTests
             mapViewState,
             camera,
             new UiLayerStack(),
-            actionCatalog,
             itemCatalog,
             new TransformView(componentManager),
             new HotkeyBindingView(componentManager),
@@ -174,17 +173,16 @@ public sealed class ActionTargetingControllerDodgeTests
     }
 
     /// <summary>
-    /// Regression coverage for a real, confirmed bug: double-tapping Dodge's hotkey read as
-    /// silently cancelling instead of activating. TryActivateWithAutoTarget's double-tap path
+    /// Regression coverage for a real, confirmed bug: re-pressing Dodge's hotkey read as
+    /// silently cancelling instead of activating. The old double-tap auto-target path
     /// filters the reachable set down to *occupied* tiles for ClosestPointSelector to pick from --
     /// exactly what QuickAttack/PowerAttack/ToxicStrike/MagicMissile want (auto-attack the nearest
     /// enemy), but Dodge's own reachable 3x3 block is normally all-empty, so that filter found no
     /// candidate, did nothing, and the caller's own "now that it fired, disarm" cleanup then made
-    /// the double-tap look like a cancel. A GameTags.TargetingSelf action must always auto-target the caster's own
-    /// tile instead, the same rule the single-press re-confirm path already gives it.
+    /// the re-press look like a cancel. A GameTags.TargetingSelf action always lands on the caster.
     /// </summary>
     [TestMethod]
-    public void DoubleTappingDodgeHotkey_ActivatesOnSelf_InsteadOfSilentlyDoingNothing()
+    public void RePressingDodgeHotkey_ActivatesOnSelf_InsteadOfSilentlyDoingNothing()
     {
         var (actionTargeting, mapViewState, componentManager, _, _, _) = Build();
 
@@ -194,7 +192,7 @@ public sealed class ActionTargetingControllerDodgeTests
         var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
         Assert.AreEqual(BuiltInActionIds.Dodge, pending.ActionId);
         Assert.AreEqual(PlayerPosition, pending.Selection.AimedTile,
-            "A double-tapped Dodge must activate on the caster's own tile, not silently fail to queue anything at all.");
+            "A re-pressed Dodge must activate on the caster's own tile, not silently fail to queue anything at all.");
         Assert.IsNull(mapViewState.ArmedActionId,
             "The pair's first press armed the slot; now that the second press has fired it, it should disarm -- but only after actually activating, not instead of activating.");
     }

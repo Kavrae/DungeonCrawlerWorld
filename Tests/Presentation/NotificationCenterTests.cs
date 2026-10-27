@@ -304,6 +304,61 @@ public sealed class NotificationCenterTests
         Assert.IsFalse(notificationCenter.HasBlockingNotification);
     }
 
+    [TestMethod]
+    public void AchievementNotification_OpensAsAMenuWindow()
+    {
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), layers);
+        Window? popup = null;
+        notificationCenter.ActiveNotificationOpened += window => popup = window;
+
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "First blood", showImmediately: true, achievement: AchievementDetails());
+
+        Assert.IsNotNull(popup);
+        Assert.IsTrue(layers.IsMenuWindow(popup));
+        Assert.IsTrue(layers.IsMenuModeActive);
+    }
+
+    [TestMethod]
+    public void AchievementNotificationOpenedBeforeAnotherMenuWindow_StaysAMenuWindow()
+    {
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), layers);
+        Window? popup = null;
+        notificationCenter.ActiveNotificationOpened += window => popup = window;
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "First blood", showImmediately: true, achievement: AchievementDetails());
+        var menuWindow = TestElementPoolServiceFactory.Create(TestFonts.Shared).CreateElement<Window>(null, new ElementOptions());
+        layers.Add(UiLayer.DynamicHud, menuWindow);
+
+        layers.OpenMenuWindow(menuWindow);
+
+        Assert.IsNotNull(popup);
+        Assert.IsTrue(layers.IsMenuWindow(popup));
+    }
+
+    [TestMethod]
+    public void ClosingTheLastAchievementNotification_EndsMenuMode()
+    {
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(CreateWindowService(), layers);
+        var notificationId = notificationCenter.AddNotification(NotificationCategory.Achievement, "First blood", showImmediately: true, achievement: AchievementDetails());
+
+        notificationCenter.CloseNotification(notificationId);
+
+        Assert.IsFalse(layers.IsMenuModeActive);
+    }
+
+    [TestMethod]
+    public void NotificationFolder_IsMenuModeExempt()
+    {
+        var layers = new UiLayerStack();
+        CreateNotificationCenter(CreateWindowService(), layers);
+
+        var folder = layers[UiLayer.DynamicHud].OfType<Folder>().Single();
+
+        Assert.IsTrue(layers.IsMenuModeExempt(folder));
+        Assert.IsFalse(layers.IsMenuWindow(folder));
+    }
     /// <summary>
     /// Regression test: click routing used to check _activeNotifications oldest-first, but
     /// ShowActive stacks each new popup ActiveNotificationStackOffset (10px) further

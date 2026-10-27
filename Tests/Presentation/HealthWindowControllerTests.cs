@@ -50,7 +50,9 @@ public sealed class HealthWindowControllerTests
         ComponentManager ComponentManager,
         UiInputController Input,
         TerrainRegistry Terrain,
-        AuraCatalog Auras);
+        AuraCatalog Auras,
+        ElementPoolService Pool,
+        ContextMenuController ContextMenus);
 
     private static (HealthWindowController Health, UiLayerStack Layers) Build()
     {
@@ -90,12 +92,13 @@ public sealed class HealthWindowControllerTests
         pool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, pool, new UiRenderService()));
         pool.RegisterFactory<FractionBarElement>(() => new FractionBarElement(fontService, pool, new UiRenderService()));
 
-        var health = new HealthWindowController(pool, world);
+        var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(pool, layers);
+        var health = new HealthWindowController(pool, world, contextMenuController);
         health.Initialize(layers);
 
-        var input = TestUiInputController.Create(layers, new Vector2(2000, 2000), componentManager, world, new EventBus(), itemCatalog, pointerState: pointerState);
+        var input = TestUiInputController.Create(layers, new Vector2(2000, 2000), componentManager, world, new EventBus(), itemCatalog, pointerState: pointerState, contextMenuController: contextMenuController);
 
-        return new Harness(health, layers, componentManager, input, terrain, auras);
+        return new Harness(health, layers, componentManager, input, terrain, auras, pool, contextMenuController);
     }
 
     private static MouseState MouseAt(Point position) =>
@@ -184,6 +187,64 @@ public sealed class HealthWindowControllerTests
         button.HandleClick(button.Rectangle.Center);
 
         Assert.IsFalse(tooltip.IsVisible);
+    }
+
+    private static Window OpenOtherDynamicHudWindow(Harness harness)
+    {
+        var otherWindow = harness.Pool.CreateElement<Window>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(1500, 1500), Size = new Vector2(100, 100), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { CanUserClose = true },
+        });
+        otherWindow.Initialize();
+        otherWindow.Closed += _ => harness.Layers.Remove(UiLayer.DynamicHud, otherWindow);
+        harness.Layers.Add(UiLayer.DynamicHud, otherWindow);
+        return otherWindow;
+    }
+
+    private static void ClickRight(Harness harness, Point position)
+    {
+        harness.Input.Update(default, new MouseState(position.X, position.Y, 0, ButtonState.Released, ButtonState.Released, ButtonState.Pressed, ButtonState.Released, ButtonState.Released));
+        harness.Input.Update(default, MouseAt(position));
+    }
+
+    private static void ClickLeft(Harness harness, Point position)
+    {
+        harness.Input.Update(default, new MouseState(position.X, position.Y, 0, ButtonState.Pressed, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released));
+        harness.Input.Update(default, MouseAt(position));
+    }
+
+    private static Button MenuRow(Harness harness, string label) =>
+        harness.ContextMenus.Dropdowns.Menu.ChildElements.OfType<Button>().Single(row => row.LeftText == label);
+
+    [TestMethod]
+    public void RightClickingTheWindow_Close_ClosesOnlyTheHealthWindow()
+    {
+        var harness = BuildHarness();
+        var otherWindow = OpenOtherDynamicHudWindow(harness);
+        var window = OpenWindow(harness);
+
+        ClickRight(harness, window.Rectangle.Center);
+        Assert.IsTrue(harness.ContextMenus.Dropdowns.IsOpen, "Right-clicking the Health window must open its Close/Close All menu.");
+        ClickLeft(harness, MenuRow(harness, "Close").Rectangle.Center);
+
+        Assert.IsNull(FindWindow(harness.Layers));
+        CollectionAssert.Contains(harness.Layers[UiLayer.DynamicHud].ToList(), otherWindow, "Close must leave the other DynamicHud windows open.");
+    }
+
+    [TestMethod]
+    public void RightClickingTheWindow_CloseAll_ClosesEveryDynamicHudWindow()
+    {
+        var harness = BuildHarness();
+        var otherWindow = OpenOtherDynamicHudWindow(harness);
+        var window = OpenWindow(harness);
+
+        ClickRight(harness, window.Rectangle.Center);
+        ClickLeft(harness, MenuRow(harness, "Close All").Rectangle.Center);
+
+        Assert.IsNull(FindWindow(harness.Layers));
+        CollectionAssert.DoesNotContain(harness.Layers[UiLayer.DynamicHud].ToList(), otherWindow);
+        Assert.IsNotNull(FindButton(harness.Layers), "Close All closes windows, never the HUD buttons that open them.");
     }
 
     private static Button FindButton(UiLayerStack layers) => layers[UiLayer.DynamicHud].OfType<Button>().Single();

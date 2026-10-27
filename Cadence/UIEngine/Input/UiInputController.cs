@@ -422,6 +422,7 @@ public sealed class UiInputController
 
         _pointerState.CursorPosition = CurrentMousePosition;
         _pointerState.ContentDrag = new ContentDragState(ContentDragGhostVisible, _contentDrag?.Payload, _contentDragSourceSize, CurrentMousePosition);
+        _pointerState.HoveredElement = _hoveredInteraction.Element;
     }
 
     /// <summary>Up, Down and Enter pressed this frame go to an open dropdown before the focused element sees them -- a TextBox under a DropdownField's list must not also move its caret. Returns whether one did.</summary>

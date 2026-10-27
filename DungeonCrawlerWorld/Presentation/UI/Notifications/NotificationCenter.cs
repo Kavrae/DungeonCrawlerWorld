@@ -194,9 +194,8 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     {
         var offset = _activeNotifications.Count * NotificationChrome.ActiveNotificationStackOffset;
         // System notifications are uncloseable-except-by-resolution (closing IS the
-        // resolution), open as a menu window (see below), and pause the game as a result (see
-        // GameLoop, which checks UiLayerStack.IsMenuModeActive); Quest notifications can be
-        // dismissed (see NotificationMinimizeBehavior) freely.
+        // resolution); Quest and Achievement notifications can be dismissed (see
+        // NotificationMinimizeBehavior) freely.
         var canMinimize = notification.Category != NotificationCategory.System;
 
         var notificationWindow = elementPoolService.CreateElement<TextWindow>(null, new ElementOptions
@@ -231,15 +230,11 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
             notificationWindow.CanUserScrollVertical = false;
         }
 
+        // Every popup is a menu window from the moment it opens, so the game pauses while it is
+        // read (see GameLoop's pause check) and it is never left behind the dim when another
+        // menu window opens later.
         layers.Add(UiLayer.DynamicHud, notificationWindow);
-
-        // A System notification is the menu-window case -- see
-        // UiLayerStack.OpenMenuWindow/GameLoop's pause check. Quest/Achievement notifications
-        // stay ordinary DynamicHud popups.
-        if (notification.Category == NotificationCategory.System)
-        {
-            layers.OpenMenuWindow(notificationWindow);
-        }
+        layers.OpenMenuWindow(notificationWindow);
 
         ActiveNotificationOpened?.Invoke(notificationWindow);
 
@@ -319,7 +314,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         }
 
         layers.Remove(UiLayer.DynamicHud, closedWindow);
-        layers.CloseMenuWindow(closedWindow); // No-op for a non-System notification, which was never opened as a menu window.
+        layers.CloseMenuWindow(closedWindow);
 
         // Minimizing closes the popup too, but puts the notification back in its unread queue first.
         if (closedNotification?.Achievement is { } achievement && !UnreadListFor(closedNotification.Category).Contains(closedNotification))

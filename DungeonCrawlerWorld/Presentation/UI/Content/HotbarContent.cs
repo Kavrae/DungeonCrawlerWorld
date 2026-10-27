@@ -52,7 +52,6 @@ public sealed class HotbarContent(
     InventoryView inventoryView,
     ActionStateView actionStateView,
     HotkeyBindingCommands hotkeyBindingCommands,
-    ActionCatalog actionCatalog,
     ItemCatalog itemCatalog,
     FontService fontService,
     SpriteSheetService spriteSheetService,
@@ -212,7 +211,7 @@ public sealed class HotbarContent(
 
     private bool TryGetSlotBlocker(int playerEntityId, HotkeySlot slot, out ActivationBlocker blocker)
     {
-        if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out _))
+        if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionStateView.TryGetEffectiveAction(playerEntityId, actionId, out _))
         {
             blocker = actionStateView.GetActionBlocker(playerEntityId, actionId);
             return true;
@@ -385,7 +384,7 @@ public sealed class HotbarContent(
         var playerEntityId = world.PlayerEntityId;
 
         if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) &&
-            actionCatalog.TryGet(actionId, out var action))
+            actionStateView.TryGetEffectiveAction(playerEntityId, actionId, out var action))
         {
             title = action.Name;
             summary = WithStateAndCostLines(action.Summary, action, actionStateView.IsActionToggledOn(playerEntityId, actionId));
@@ -563,7 +562,7 @@ public sealed class HotbarContent(
         var isActive = IsSlotActive(slot);
         var alpha = AlphaFor(isActive);
 
-        if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionCatalog.TryGet(actionId, out var action))
+        if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionStateView.TryGetEffectiveAction(playerEntityId, actionId, out var action))
         {
             DrawSlotVisual(spriteBatch, unitRectangle, slot, bounds, contentBounds, BuildActionVisual(playerEntityId, action, isActive), alpha);
 

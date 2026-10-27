@@ -95,7 +95,6 @@ public sealed class ToggleItemPresentationTests
             mapViewState,
             TestMapCameras.Over(world),
             new UiLayerStack(),
-            session.Catalogs.ActionCatalog,
             session.Catalogs.ItemCatalog,
             new TransformView(components),
             new HotkeyBindingView(components),

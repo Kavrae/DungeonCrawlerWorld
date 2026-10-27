@@ -98,7 +98,6 @@ public sealed class DodgeDuringActionLockTests
             new MapViewState(),
             TestMapCameras.Over(world),
             new UiLayerStack(),
-            result.Catalogs.ActionCatalog,
             result.Catalogs.ItemCatalog,
             new TransformView(components),
             new HotkeyBindingView(components),

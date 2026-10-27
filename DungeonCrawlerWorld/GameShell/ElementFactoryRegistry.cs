@@ -75,7 +75,8 @@ public static class ElementFactoryRegistry
             contextMenuController,
             floatingTextController,
             floatingTextRenderer,
-            new AdminContextMenuOptions(adminTools)));
+            new AdminContextMenuOptions(adminTools),
+            shellServices.PointerState));
 
 
         elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(

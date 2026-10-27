@@ -3,7 +3,7 @@ using Game.Modules.Actions;
 namespace Game.Modules.Inventory.Components;
 
 /// <summary>
-/// Written by Presentation when the player confirms a targeted (or double-tap self) item
+/// Written by Presentation when the player confirms a targeted (or hotkey self) item
 /// activation -- mirrors PendingActionActivationComponent exactly: Presentation only ever queues
 /// this request, ItemActivationSystem is the only thing that actually applies gameplay
 /// effects. Consumed (removed) the same frame ItemActivationSystem processes it, whether or

@@ -15,19 +15,22 @@ namespace Presentation.UI;
 /// </summary>
 public sealed class HealthWindowController(
     ElementPoolService elementPoolService,
-    World world)
+    World world,
+    ContextMenuController contextMenuController)
 {
     /// <summary>♥ (U+2665, "black heart suit") -- renders via the default DroidSans font with no Symbola-Emoji fallback needed, unlike Burning/Poison/Paralysis's own emoji glyphs (see FontService).</summary>
     private const string HeartGlyph = "♥";
 
     private Button _button = null!;
     private WindowLifecycle<HealthWindow> _slot = null!;
+    private UiLayerStack _layers = null!;
 
     /// <summary>Lets a global keyboard hotkey (U -- a KeyPressInputHandler registered in ShellBootstrapper) reuse the same open/close behavior the button's own Clicked handler already has, without exposing _windowLifecycle itself.</summary>
     public void ToggleHealthWindow() => _slot.Toggle();
 
     public void Initialize(UiLayerStack layers)
     {
+        _layers = layers;
         _slot = new WindowLifecycle<HealthWindow>(CreateHealthWindow, () => false, layers, () => { });
 
         _button = elementPoolService.CreateElement<Button>(null, new ElementOptions
@@ -72,6 +75,7 @@ public sealed class HealthWindowController(
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
         window.Configure(world.PlayerEntityId);
+        DynamicHudContextMenus.WireCloseContextMenu(window, contextMenuController, _layers);
         return window;
     }
 }

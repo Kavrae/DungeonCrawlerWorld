@@ -506,9 +506,9 @@ public sealed class MapWindowTests
         Assert.AreEqual(HotkeySlot.Slot4, mapViewState.ArmedSlot);
     }
 
-    /// <summary>A non-double-tap re-press confirms against wherever the cursor currently is -- same as a click -- rather than cancelling (see HandleActionSlotPress's own doc comment; right-click/Escape is the cancel path now).</summary>
+    /// <summary>An Adjacent shape needs no aim: a re-press lands around the caster wherever the cursor is, and disarms.</summary>
     [TestMethod]
-    public void HandleHotkeys_PressingArmedSlotAgainAfterDoubleTapWindowElapses_ConfirmsAgainstHoveredTile()
+    public void HandleHotkeys_PressingArmedAdjacentSlotAgain_ActivatesAroundTheCaster_AndDisarms()
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
@@ -518,53 +518,16 @@ public sealed class MapWindowTests
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
         Assert.IsNotNull(mapViewState.ArmedActionId);
 
-        // Advance well past the ~18-frame double-tap window so the next press reads as an
-        // independent press, not a double-tap.
-        for (var i = 0; i < 20; i++)
-        {
-            mapWindow.Update(new GameTime());
-        }
-
-        // One of the caster's 8 neighbors -- part of Adjacent's fixed footprint (the caster's own tile no longer is).
         mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 100, 0)));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         var pendingActivations = componentManager.GetPackedPool<PendingActionActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
-        Assert.AreEqual(TestActionId, pendingActivations.GetReadonly(PlayerEntityId).ActionId);
+        var pending = pendingActivations.GetReadonly(PlayerEntityId);
+        Assert.AreEqual(TestActionId, pending.ActionId);
+        Assert.AreEqual(new Vector3Int(100, 100, 0), pending.Selection.AimedTile, "Adjacent needs no aim: the caster's own tile, around which Game resolves the ring.");
         Assert.IsNull(mapViewState.ArmedActionId);
         Assert.IsNull(mapViewState.ArmedSlot);
-    }
-
-    /// <summary>With no hovered tile at all (cursor never over the map), a re-press has nothing to confirm against -- a miss, same as HandleClick_ArmedAction_ClickOutsideTargetableTiles_DoesNothingAndStaysArmed -- so it stays armed rather than silently cancelling.</summary>
-    [TestMethod]
-    public void HandleHotkeys_PressingArmedSlotAgainWithNoHoveredTile_DoesNothingAndStaysArmed()
-    {
-        var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
-        RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
-        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
-
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
-        Assert.IsNotNull(mapViewState.ArmedActionId);
-
-        for (var i = 0; i < 20; i++)
-        {
-            mapWindow.Update(new GameTime());
-        }
-
-        // MapWindow.Update reads the real OS mouse cursor (Mouse.GetState()) to drive
-        // UpdateHoveredTile every call -- without resetting it back to "no hover" here, this test
-        // would be at the mercy of wherever the cursor physically sits on the machine running it
-        // (see HandleHotkeys_PressingArmedItemSlotAgainWithNoHoveredTile_DoesNothingAndStaysArmed's
-        // own doc comment for a confirmed real repro of exactly that). An off-map point
-        // deterministically clears it regardless of the real cursor's position.
-        mapWindow.UpdateHoveredTile(new Point(-1, -1));
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
-
-        Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId));
-        Assert.IsNotNull(mapViewState.ArmedActionId);
-        Assert.AreEqual(HotkeySlot.Slot4, mapViewState.ArmedSlot);
     }
 
     [TestMethod]
@@ -578,81 +541,252 @@ public sealed class MapWindowTests
         Assert.IsNull(mapViewState.ArmedSlot);
     }
 
-    /// <summary>
-    /// Two presses with no Update call in between leave the frame counter unchanged, so the
-    /// second press reads as a double-tap (see HandleHotkeySlotPress) -- this activates
-    /// immediately against Adjacent's fixed footprint (the caster's 8 surrounding neighbors,
-    /// excluding the caster's own tile) rather than merely arming, and the queued
-    /// PendingActionActivationComponent is the observable proof (actual damage application is
-    /// ActionActivationSystem's own responsibility, covered by ActionActivationSystemTests, not
-    /// exercised by this ComponentManager-only test harness).
-    /// </summary>
+    private static Guid RegisterTestRangedAction(ActionCatalog actionCatalog, ComponentManager componentManager, HotkeySlot slot)
+    {
+        var rangedActionId = Guid.NewGuid();
+        actionCatalog.Register(new ActionDefinition(
+            rangedActionId, "Test Ranged", null, "*", default, [],
+            Effects: [Effect.None],
+            Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(slot, rangedActionId));
+        return rangedActionId;
+    }
+
+    private static void PlaceTestTarget(Game.World.World world, ComponentManager componentManager, int entityId, Vector3Int position)
+    {
+        var transform = new TransformComponent(position, new Vector2Byte(1, 1));
+        componentManager.Merge(entityId, transform);
+        world.PlaceEntityOnMap(entityId, position, ref transform);
+        componentManager.Merge(entityId, new SimpleHealthComponent(100, 100));
+    }
+
+    /// <summary>In Target mode with the cursor on the map but no target under it, a re-press picks the target nearest the cursor.</summary>
     [TestMethod]
-    public void HandleHotkeys_DoubleTapAdjacentAction_QueuesActivationAgainstTheFixedFootprint_AndClearsAnyArming()
+    public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_WithNoHoveredTarget_PicksTheTargetNearestTheCursor()
+    {
+        var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        var rangedActionId = RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
+        PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(97, 100, 0));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(104, 101, 0)));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+
+        var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
+        Assert.AreEqual(rangedActionId, pending.ActionId);
+        Assert.AreEqual(new Vector3Int(105, 100, 0), pending.Selection.AimedTile, "Nearest the cursor, not the player.");
+        Assert.AreEqual(world.EntityKeys.GetKey(2), pending.Selection.MarkedEntity);
+        Assert.IsNull(mapViewState.ArmedActionId);
+    }
+
+    /// <summary>In Target mode with the cursor off the map (or over another window, such as the hotbar), a re-press picks the target nearest the player.</summary>
+    [TestMethod]
+    public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_WithTheCursorOffTheMap_PicksTheTargetNearestThePlayer()
+    {
+        var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
+        PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(98, 100, 0));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        mapWindow.UpdateHoveredTile(null);
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+
+        var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
+        Assert.AreEqual(new Vector3Int(98, 100, 0), pending.Selection.AimedTile, "Nearest the player.");
+        Assert.AreEqual(world.EntityKeys.GetKey(3), pending.Selection.MarkedEntity);
+    }
+
+    /// <summary>The search for a target near the cursor reaches only TargetSearchDistanceTiles (2) from it, even with a target in range of the action.</summary>
+    [TestMethod]
+    public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_WithTheOnlyTargetBeyondTheSearchDistanceOfTheCursor_StaysArmed()
+    {
+        var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0)));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+
+        Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId), "3 tiles from the cursor is past the default 2.");
+        Assert.AreEqual(HotkeySlot.Slot5, mapViewState.ArmedSlot);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_WithTheCursorOffTheMap_SearchesOnlyTheDistanceAroundThePlayer()
+    {
+        var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        mapWindow.UpdateHoveredTile(null);
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId), "5 tiles from the player is past the default 2.");
+
+        mapViewState.TargetSearchDistanceTiles = 5;
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+
+        var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
+        Assert.AreEqual(world.EntityKeys.GetKey(2), pending.Selection.MarkedEntity, "A larger search distance reaches it.");
+    }
+
+    /// <summary>The map window is under the hotbar, but a hotbar click isn't on the map: Update reads no hovered tile while another element is under the pointer.</summary>
+    [TestMethod]
+    public void Update_WithThePointerOverAnotherElement_LeavesNoHoveredTile()
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
-        RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
-        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
+        RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(104, 102, 0)));
+        Assert.IsNotNull(mapViewState.HoveredTile);
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        mapWindow.Update(new GameTime());
 
-        var pendingActivations = componentManager.GetPackedPool<PendingActionActivationComponent>();
-        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
-        var pending = pendingActivations.GetReadonly(PlayerEntityId);
-        Assert.AreEqual(TestActionId, pending.ActionId);
-        Assert.AreEqual(new Vector3Int(100, 100, 0), pending.Selection.AimedTile, "Adjacent needs no aim: the caster's own tile, around which Game resolves the ring.");
-
-        Assert.IsNull(mapViewState.ArmedActionId, "The first press of the pair armed this slot -- once the double-tap fires, it shouldn't be left stale-armed.");
+        Assert.IsNull(mapViewState.HoveredTile, "The test's PointerState hovers nothing, so the map isn't under the pointer.");
     }
 
-    /// <summary>SingleTarget abilities have no fixed footprint -- double-tap must pick an actual occupied tile within range via ClosestPointSelector, not just fire at the caster's own position.</summary>
+    /// <summary>A potion clicked on an ally in range in Target mode reaches the ally alone -- mode wins on a map click, while a hotkey re-press drinks it.</summary>
     [TestMethod]
-    public void HandleHotkeys_DoubleTapSingleTargetAction_AutoTargetsTheOccupiedTileInRange()
+    public void HandleClick_ArmedSelfPotionInTargetMode_ClickOnAnAllyInRange_MarksTheAlly()
     {
-        const int TargetEntityId = 2;
-        var (world, _, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
-        var rangedActionId = Guid.NewGuid();
-        actionCatalog.Register(new ActionDefinition(
-            rangedActionId, "Test Ranged", null, "*", default, [],
-            Effects: [Effect.None],
-            Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
-        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
+        var (world, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestPotion(itemCatalog);
+        var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(102, 100, 0));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
-        var targetPosition = new Vector3Int(105, 100, 0);
-        var targetTransform = new TransformComponent(targetPosition, new Vector2Byte(1, 1));
-        componentManager.Merge(TargetEntityId, targetTransform);
-        world.PlaceEntityOnMap(TargetEntityId, targetPosition, ref targetTransform);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
+        mapWindow.HandleClick(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0)));
 
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        var pending = componentManager.GetPackedPool<PendingItemActivationComponent>().GetReadonly(PlayerEntityId);
+        Assert.AreEqual(TargetingMode.Target, pending.Selection.Mode);
+        Assert.AreEqual(world.EntityKeys.GetKey(2), pending.Selection.MarkedEntity);
+    }
 
-        var pendingActivations = componentManager.GetPackedPool<PendingActionActivationComponent>();
-        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
-        var pending = pendingActivations.GetReadonly(PlayerEntityId);
-        Assert.AreEqual(rangedActionId, pending.ActionId);
-        Assert.AreEqual(targetPosition, pending.Selection.AimedTile);
+    /// <summary>A potion clicked on an empty tile in Target mode is drunk, never thrown at the nearest target.</summary>
+    [TestMethod]
+    public void HandleClick_ArmedSelfPotionInTargetMode_ClickOnAnEmptyTile_DrinksIt()
+    {
+        var (world, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestPotion(itemCatalog);
+        var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(102, 100, 0));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+
+        mapWindow.HandleClick(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(101, 101, 0)));
+
+        var pending = componentManager.GetPackedPool<PendingItemActivationComponent>().GetReadonly(PlayerEntityId);
+        Assert.AreEqual(world.EntityKeys.GetKey(PlayerEntityId), pending.Selection.MarkedEntity);
+    }
+
+    /// <summary>In Ground mode a potion clicked on a tile splashes there: a Ground selection, no one marked.</summary>
+    [TestMethod]
+    public void HandleClick_ArmedSelfPotionInGroundMode_SplashesAtTheClickedTile()
+    {
+        var (world, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestPotion(itemCatalog);
+        var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(102, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Ground;
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+
+        mapWindow.HandleClick(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0)));
+
+        var pending = componentManager.GetPackedPool<PendingItemActivationComponent>().GetReadonly(PlayerEntityId);
+        Assert.AreEqual(TargetingMode.Ground, pending.Selection.Mode);
+        Assert.AreEqual(new Vector3Int(102, 100, 0), pending.Selection.AimedTile);
+        Assert.IsFalse(pending.Selection.HasMarkedEntity);
+    }
+
+    /// <summary>A potion's hotkey re-press drinks it in Ground mode too: the Self rule skips the mode on the hotbar.</summary>
+    [TestMethod]
+    public void HandleHotkeys_PressingArmedSelfPotionSlotAgainInGroundMode_DrinksIt()
+    {
+        var (world, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestPotion(itemCatalog);
+        var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
+        mapViewState.TargetingMode = TargetingMode.Ground;
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0)));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+
+        var pending = componentManager.GetPackedPool<PendingItemActivationComponent>().GetReadonly(PlayerEntityId);
+        Assert.AreEqual(world.EntityKeys.GetKey(PlayerEntityId), pending.Selection.MarkedEntity);
     }
 
     [TestMethod]
-    public void HandleHotkeys_DoubleTapWithNoOccupiedTileInRange_QueuesNoActivation()
+    public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_PrefersTheHoveredTarget()
     {
-        var (_, _, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
-        var rangedActionId = Guid.NewGuid();
-        actionCatalog.Register(new ActionDefinition(
-            rangedActionId, "Test Ranged", null, "*", default, [],
-            Effects: [Effect.None],
-            Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
-        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
+        var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
+        PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(102, 100, 0));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0)));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+
+        var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
+        Assert.AreEqual(new Vector3Int(105, 100, 0), pending.Selection.AimedTile);
+        Assert.AreEqual(world.EntityKeys.GetKey(2), pending.Selection.MarkedEntity);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_WithNoTargetInRange_QueuesNothingAndStaysArmed()
+    {
+        var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(103, 100, 0)));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId));
+        Assert.AreEqual(HotkeySlot.Slot5, mapViewState.ArmedSlot);
+    }
+
+    /// <summary>Ground mode lands on the hovered tile, even an empty one with a target nearby.</summary>
+    [TestMethod]
+    public void HandleHotkeys_PressingArmedSlotAgainInGroundMode_ActivatesOnTheHoveredTile()
+    {
+        var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(102, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Ground;
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(104, 101, 0)));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+
+        var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
+        Assert.AreEqual(TargetingMode.Ground, pending.Selection.Mode);
+        Assert.AreEqual(new Vector3Int(104, 101, 0), pending.Selection.AimedTile);
+        Assert.IsNull(mapViewState.ArmedActionId);
+    }
+
+    /// <summary>Ground mode has no auto-pick: with the cursor off the map there is no tile to land on, so the action stays armed.</summary>
+    [TestMethod]
+    public void HandleHotkeys_PressingArmedSlotAgainInGroundMode_WithNoHoveredTile_QueuesNothingAndStaysArmed()
+    {
+        var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(102, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Ground;
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        mapWindow.UpdateHoveredTile(null);
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+
+        Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId));
+        Assert.AreEqual(HotkeySlot.Slot5, mapViewState.ArmedSlot);
     }
 
     /// <summary>
@@ -796,9 +930,10 @@ public sealed class MapWindowTests
     }
 
     [TestMethod]
-    public void UpdateHoveredTile_ArmedSingleTargetAction_HoveringWithinRange_SetsHoveredTileAndFootprint()
+    public void UpdateHoveredTile_ArmedSingleTargetActionInGroundMode_HoveringWithinRange_SetsHoveredTileAndFootprint()
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Ground;
         var rangedActionId = Guid.NewGuid();
         actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
@@ -844,7 +979,7 @@ public sealed class MapWindowTests
     }
 
     [TestMethod]
-    public void HandleClick_ArmedAdjacentAction_ClickWithinFootprint_QueuesActivationAndDisarms()
+    public void HandleClick_ArmedAdjacentAction_QueuesActivationAroundTheCaster_AndDisarms()
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestAdjacentAction(actionCatalog);
@@ -860,21 +995,24 @@ public sealed class MapWindowTests
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
         var pending = pendingActivations.GetReadonly(PlayerEntityId);
         Assert.AreEqual(TestActionId, pending.ActionId);
-        Assert.AreEqual(new Vector3Int(101, 100, 0), pending.Selection.AimedTile);
+        Assert.AreEqual(new Vector3Int(100, 100, 0), pending.Selection.AimedTile, "Adjacent skips the aim: the caster's own tile, around which Game resolves the ring.");
+        Assert.AreEqual(TargetingMode.Ground, pending.Selection.Mode);
         Assert.IsNull(mapViewState.ArmedActionId, "Confirming a target must disarm.");
         Assert.IsNull(mapViewState.TargetableTiles);
     }
 
     [TestMethod]
-    public void HandleClick_ArmedAction_ClickOutsideTargetableTiles_DoesNothingAndStaysArmed()
+    public void HandleClick_ArmedActionInGroundMode_ClickOutsideTargetableTiles_DoesNothingAndStaysArmed()
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
-        RegisterTestAdjacentAction(actionCatalog);
-        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(TestActionId, overrideDefinition: null));
-        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, TestActionId));
+        var burstActionId = Guid.NewGuid();
+        actionCatalog.Register(new ActionDefinition(burstActionId, "Test Burst", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(burstActionId, overrideDefinition: null));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, burstActionId));
+        mapViewState.TargetingMode = TargetingMode.Ground;
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
-        // Outside Adjacent's 9-tile footprint around (100,100), but still comfortably within the visible viewport.
+        // Outside Range 3 of (100,100), but still comfortably within the visible viewport.
         var farClickPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0));
         mapWindow.HandleClick(farClickPosition);
 
@@ -890,6 +1028,7 @@ public sealed class MapWindowTests
         actionCatalog.Register(new ActionDefinition(lineActionId, "Test Line", null, "#", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Line, Range: 2), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(lineActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, lineActionId));
+        mapViewState.TargetingMode = TargetingMode.Ground;
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
 
         // Two tiles east -- within the range-2 candidate diamond ComputeTargetableTiles builds around the caster.
@@ -911,6 +1050,7 @@ public sealed class MapWindowTests
         actionCatalog.Register(new ActionDefinition(burstActionId, "Test Burst", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Burst, Range: 10, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(burstActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, burstActionId));
+        mapViewState.TargetingMode = TargetingMode.Ground;
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
 
         var clickedTile = new Vector3Int(105, 100, 0);
@@ -923,6 +1063,38 @@ public sealed class MapWindowTests
         Assert.AreEqual(burstActionId, pending.ActionId);
         Assert.AreEqual(clickedTile, pending.Selection.AimedTile, "Centred on the clicked tile, not the caster.");
         Assert.AreEqual(1, pending.Selection.AreaSize);
+    }
+
+    /// <summary>In Target mode, clicking an empty tile in range marks the target nearest the clicked tile, even with another nearer the player.</summary>
+    [TestMethod]
+    public void HandleClick_ArmedActionInTargetMode_ClickEmptyTile_MarksTheTargetNearestTheClick()
+    {
+        var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        var rangedActionId = RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(106, 100, 0));
+        PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(100, 103, 0));
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+
+        mapWindow.HandleClick(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0)));
+
+        var pending = componentManager.GetPackedPool<PendingActionActivationComponent>().GetReadonly(PlayerEntityId);
+        Assert.AreEqual(rangedActionId, pending.ActionId);
+        Assert.AreEqual(new Vector3Int(106, 100, 0), pending.Selection.AimedTile, "Nearest the clicked tile, not the player.");
+        Assert.AreEqual(world.EntityKeys.GetKey(2), pending.Selection.MarkedEntity);
+        Assert.IsNull(mapViewState.ArmedActionId);
+    }
+
+    [TestMethod]
+    public void HandleClick_ArmedActionInTargetMode_ClickEmptyTileWithNoTargetInRange_QueuesNothingAndStaysArmed()
+    {
+        var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+
+        mapWindow.HandleClick(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0)));
+
+        Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId));
+        Assert.AreEqual(HotkeySlot.Slot5, mapViewState.ArmedSlot);
     }
 
     [TestMethod]
@@ -996,9 +1168,9 @@ public sealed class MapWindowTests
 
     private const int CorpseEntityId = 2;
 
-    private static void PlaceCorpse(Game.World.World world, ComponentManager componentManager, Vector3Int position)
+    private static void PlaceCorpse(Game.World.World world, ComponentManager componentManager, Vector3Int position, byte size = 1)
     {
-        var transform = new TransformComponent(position, new Vector2Byte(1, 1));
+        var transform = new TransformComponent(position, new Vector2Byte(size, size));
         componentManager.Merge(CorpseEntityId, transform);
         world.PlaceEntityOnMap(CorpseEntityId, position, ref transform);
         componentManager.Merge(CorpseEntityId, new DeadComponent(KilledBy: Game.World.ActionSource.Admin, DiedAtFrame: 0));
@@ -1023,6 +1195,21 @@ public sealed class MapWindowTests
         // Blocking corpse.
         Assert.HasCount(3, rows);
         var lootButton = (Button)rows[1];
+        Assert.AreEqual("Loot", lootButton.LeftText);
+        Assert.IsTrue(lootButton.Enabled);
+    }
+
+    [TestMethod]
+    public void TryOpenEntityContextMenuAt_PlayerAdjacentToFarFootprintTileOfLargeCorpse_LootEnabled()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapWindow.OnCorpseClicked = _ => { };
+        var corpseOrigin = new Vector3Int(97, 101, 0);
+        PlaceCorpse(world, componentManager, corpseOrigin, size: 3);
+
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(99, 101, 0)));
+
+        var lootButton = (Button)mapWindow.ContextMenuController.Menu.ChildElements[1];
         Assert.AreEqual("Loot", lootButton.LeftText);
         Assert.IsTrue(lootButton.Enabled);
     }
@@ -1293,7 +1480,7 @@ public sealed class MapWindowTests
             Effects: [new Effect([new DirectHeal(0.5f)])],
             Activator: new PotionActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1, TargetModeAffects: TargetModeAffects.MarkedOnly), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
-    /// <summary>Same PotionActivator/Burst shape as RegisterTestPotion, but deliberately untagged Self -- covers the double-tap shortcut now being keyed off GameTags.TargetingSelf rather than any particular IActionActivator kind.</summary>
+    /// <summary>Same PotionActivator/Burst shape as RegisterTestPotion, but deliberately untagged Self -- covers using an item on the player being keyed off GameTags.TargetingSelf rather than any particular IActionActivator kind.</summary>
     private static void RegisterTestNonSelfPotion(ItemCatalog itemCatalog) =>
         itemCatalog.Register(new ItemDefinition(
             TestNonSelfPotionId, "Test Non-Self Potion", null, "p", Color.Green, Tags: [],
@@ -1318,63 +1505,65 @@ public sealed class MapWindowTests
         Assert.IsNull(mapViewState.ArmedActionId);
     }
 
-    /// <summary>Same re-press-confirms rhythm as HandleHotkeys_PressingArmedSlotAgainAfterDoubleTapWindowElapses_ConfirmsAgainstHoveredTile, for an item slot.</summary>
+    /// <summary>A GameTags.TargetingSelf item is used on the player when its armed slot is pressed again, wherever the cursor is: a potion is drunk, not splashed.</summary>
     [TestMethod]
-    public void HandleHotkeys_PressingArmedItemSlotAgainAfterDoubleTapWindowElapses_ConfirmsAgainstHoveredTile()
+    public void HandleHotkeys_PressingArmedSelfPotionSlotAgain_DrinksIt_AndDisarms()
     {
-        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        var (world, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
         RegisterTestPotion(itemCatalog);
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(102, 100, 0));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
-        Assert.IsNotNull(mapViewState.ArmedItemStackInstanceId);
-
-        for (var i = 0; i < 20; i++)
-        {
-            mapWindow.Update(new GameTime());
-        }
-
-        // The caster's own tile -- within the Potion's Burst/3/1 footprint.
-        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(100, 100, 0)));
+        mapWindow.UpdateHoveredTile(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(102, 100, 0)));
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         var pendingActivations = componentManager.GetPackedPool<PendingItemActivationComponent>();
         Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
-        Assert.AreEqual(stackInstanceId, pendingActivations.GetReadonly(PlayerEntityId).StackInstanceId);
+        var pending = pendingActivations.GetReadonly(PlayerEntityId);
+        Assert.AreEqual(stackInstanceId, pending.StackInstanceId);
+        Assert.AreEqual(TargetingMode.Target, pending.Selection.Mode, "A potion is drunk: Target mode on the player.");
+        Assert.AreEqual(world.EntityKeys.GetKey(PlayerEntityId), pending.Selection.MarkedEntity);
         Assert.IsNull(mapViewState.ArmedItemStackInstanceId);
         Assert.IsNull(mapViewState.ArmedSlot);
     }
 
-    /// <summary>Item counterpart to HandleHotkeys_PressingArmedSlotAgainWithNoHoveredTile_DoesNothingAndStaysArmed.</summary>
+    /// <summary>A non-self item follows the same rule as an action: in Target mode with no target under the cursor, the nearest target.</summary>
     [TestMethod]
-    public void HandleHotkeys_PressingArmedItemSlotAgainWithNoHoveredTile_DoesNothingAndStaysArmed()
+    public void HandleHotkeys_PressingArmedNonSelfItemSlotAgainInTargetMode_PicksTheNearestTarget()
+    {
+        var (world, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        RegisterTestNonSelfPotion(itemCatalog);
+        var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestNonSelfPotionId, quantity: 1);
+        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
+        PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(100, 102, 0));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+        mapWindow.UpdateHoveredTile(null);
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
+
+        var pending = componentManager.GetPackedPool<PendingItemActivationComponent>().GetReadonly(PlayerEntityId);
+        Assert.AreEqual(stackInstanceId, pending.StackInstanceId);
+        Assert.AreEqual(new Vector3Int(100, 102, 0), pending.Selection.AimedTile);
+        Assert.AreEqual(world.EntityKeys.GetKey(2), pending.Selection.MarkedEntity);
+        Assert.IsNull(mapViewState.ArmedItemStackInstanceId);
+    }
+
+    [TestMethod]
+    public void HandleHotkeys_PressingArmedNonSelfItemSlotAgainWithNoTarget_QueuesNothingAndStaysArmed()
     {
         var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
-        RegisterTestPotion(itemCatalog);
-        var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
+        RegisterTestNonSelfPotion(itemCatalog);
+        var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestNonSelfPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
-        Assert.IsNotNull(mapViewState.ArmedItemStackInstanceId);
-
-        for (var i = 0; i < 20; i++)
-        {
-            mapWindow.Update(new GameTime());
-        }
-
-        // MapWindow.Update reads the real OS mouse cursor (Mouse.GetState()) to drive
-        // UpdateHoveredTile every call -- without resetting it back to "no hover" here, this test
-        // was flaky depending on wherever the cursor physically sat on the machine running it
-        // (confirmed: it failed with a real HoveredTile of {101,101,0}, one tile from the player,
-        // inside the Potion's own Burst/Range-3 footprint). An off-map point deterministically
-        // clears it, the same way HandleHotkeys_PressingArmedItemSlotAgainAfterDoubleTapWindowElapses_ConfirmsAgainstHoveredTile
-        // deterministically sets a real one.
-        mapWindow.UpdateHoveredTile(new Point(-1, -1));
+        mapWindow.UpdateHoveredTile(null);
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         Assert.IsFalse(componentManager.GetPackedPool<PendingItemActivationComponent>().Has(PlayerEntityId));
-        Assert.IsNotNull(mapViewState.ArmedItemStackInstanceId);
+        Assert.AreEqual(stackInstanceId, mapViewState.ArmedItemStackInstanceId);
         Assert.AreEqual(HotkeySlot.Slot1, mapViewState.ArmedSlot);
     }
 
@@ -1408,44 +1597,6 @@ public sealed class MapWindowTests
         Assert.IsNull(mapViewState.ArmedSlot);
     }
 
-    /// <summary>Two presses with no Update call in between read as a double-tap -- for a Potion, this always activates against the caster's own tile, never the arm/target flow.</summary>
-    [TestMethod]
-    public void HandleHotkeys_DoubleTapPotionSlot_QueuesSelfActivation_AndClearsAnyArming()
-    {
-        var (world, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
-        RegisterTestPotion(itemCatalog);
-        var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
-        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
-
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
-
-        var pendingActivations = componentManager.GetPackedPool<PendingItemActivationComponent>();
-        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
-        var pending = pendingActivations.GetReadonly(PlayerEntityId);
-        Assert.AreEqual(stackInstanceId, pending.StackInstanceId);
-        Assert.AreEqual(TargetingMode.Target, pending.Selection.Mode, "Double-tapped, a potion is drunk: Target mode on the player.");
-        Assert.AreEqual(world.EntityKeys.GetKey(PlayerEntityId), pending.Selection.MarkedEntity);
-
-        Assert.IsNull(mapViewState.ArmedItemStackInstanceId, "The first press of the pair armed this slot -- once the double-tap fires, it shouldn't be left stale-armed.");
-    }
-
-    /// <summary>The double-tap self-cast shortcut is keyed off GameTags.TargetingSelf, not any particular IActionActivator kind -- a Potion item that isn't tagged Self (e.g. today's Health/Mana Potion before this fix) no longer gets it, and instead just arms normally like any other slot.</summary>
-    [TestMethod]
-    public void HandleHotkeys_DoubleTapNonSelfPotionSlot_ArmsInsteadOfSelfActivating()
-    {
-        var (_, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
-        RegisterTestNonSelfPotion(itemCatalog);
-        var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestNonSelfPotionId, quantity: 1);
-        componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
-
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
-        mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
-
-        Assert.IsFalse(componentManager.GetPackedPool<PendingItemActivationComponent>().Has(PlayerEntityId), "No self-cast shortcut without GameTags.TargetingSelf -- a second rapid press just confirms against the cursor, which has no hovered tile here, so nothing should queue.");
-        Assert.AreEqual(stackInstanceId, mapViewState.ArmedItemStackInstanceId, "Still armed -- the second press had nothing to confirm against.");
-    }
-
     [TestMethod]
     public void HandleClick_ArmedItem_ClickWithinFootprint_QueuesItemActivationAndDisarms()
     {
@@ -1453,6 +1604,7 @@ public sealed class MapWindowTests
         RegisterTestPotion(itemCatalog);
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
+        mapViewState.TargetingMode = TargetingMode.Ground;
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D1), new KeyboardState());
 
         // Within the Potion's Range 3, so within TargetableTiles.
@@ -1468,10 +1620,9 @@ public sealed class MapWindowTests
 
     /// <summary>
     /// Clicking your own tile with a Potion armed must produce the exact same single-tile,
-    /// no-splash result double-tap already does (see HandleHotkeys_DoubleTapPotionSlot_QueuesSelfActivation_AndClearsAnyArming)
+    /// no-splash result a hotkey re-press does (see HandleHotkeys_PressingArmedSelfPotionSlotAgain_DrinksIt_AndDisarms)
     /// -- not the real Burst/AreaSize splash the shape would otherwise resolve to when centered
-    /// on yourself, which is what made "drink by double-tap" and "drink by clicking your own
-    /// tile" behave differently before this fix.
+    /// on yourself.
     /// </summary>
     [TestMethod]
     public void HandleClick_ArmedPotion_ClickOwnTileInTargetMode_MarksThePlayer()

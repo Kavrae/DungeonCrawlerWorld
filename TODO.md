@@ -722,30 +722,6 @@ action can be built to suit what it is:
 
 Replaces the former "AOE vs targeted melee attacks (experimental)" entry, which kept melee Ground only.
 
-#### ProcessingTierResolver.PromotionsHeld set after the session is assembled
-
-`ProcessingTierResolver.PromotionsHeld` is a settable `Func<bool>?`. `WorldSessionBootstrapper` sets
-it to `() => neighborhoodStreamer.IsEvictingBuiltCreatures` once the streamer exists, and
-`ProcessingTierSystem` invokes it every frame. Null means "never held", a silent fallback: a session
-assembled without it lets promotions build creatures while evictions are still freeing storage,
-which is the pool growth the hold exists to prevent (IMPLEMENTATION-NOTES "Evictions before
-promotions").
-
-Cause: the streamer is built in the exe after population, and it needs the resolver, so the resolver
-can't take the streamer in its constructor.
-
-Direction:
-- Build `NeighborhoodStreamer` inside the build pass, not the exe. After register-first, everything
-  it needs (World, pools, EventBus, resolver, factory, terrain, definitions, a neighborhood-record
-  source) exists by `RegisterBehavior`. It stays first in the frame, and
-  `BuiltInSystems_RunInThePinnedOrder` pins it.
-- Break the cycle with state that has one owner. Either the streamer pushes "evicting built
-  creatures" into a small non-null gate created with the context and read by
-  `ProcessingTierSystem`, or `ProcessingTierSystem` takes the streamer directly. No settable
-  delegate, and no null default.
-- Keep new-game and load separate: whatever the streamer needs per session (records, seed,
-  window centre) arrives as session input, not by setting properties afterwards.
-
 #### Paralysis V2 -- body-part-scoped status effects
 
 Paralysis can be applied to an entire entity or to individual body parts. A paralyzed body part
@@ -1563,6 +1539,8 @@ modalities (see Pause modality, `IMPLEMENTATION-NOTES.md`) cover pausing within 
   need this split.
 - **Transitions:** tearing down a session and building the next one is one operation with a loading
   state in between, also used by "Reload mods without restarting" (Engine) and a future "load game".
+- **Requires** "NeighborhoodStreamer and neighborhood records built with the session" (Game): a floor
+  transition or a load builds a session through a path other than `WorldSessionBootstrapper`'s.
 
 **Unreal Engine reference:** Unreal's gameplay framework separates these roles:
 - `UGameInstance` lives for the whole process and survives map changes -- the run-level object.
@@ -1586,6 +1564,33 @@ an entity despawns it when the state is left, which is a tidy rule for UI and pe
 game-over screen, a floor's contents on a floor transition). Bevy has no run-level object like
 `UGameInstance`; resources simply persist across states unless removed. Pairs with "Named schedules,
 system sets and run conditions" (Engine), where "in state X" is a run condition.
+
+#### NeighborhoodStreamer and neighborhood records built with the session
+
+`WorldSessionBootstrapper` (the exe) creates `NeighborhoodRecords`, hands it to `FloorBuilder.PopulateFloor`,
+then builds `NeighborhoodStreamer`, registers it at `GameFrameStartOrder.NeighborhoodStreaming` and
+registers its gauges. Any second way to build a session -- loading a save, entering the next floor --
+would have to repeat all of it or silently lose streaming, and the records (what decides every
+neighborhood's layout and population per visit) are exe-held state a save or a floor transition has to
+reassemble by hand.
+
+**Required by** "Game flow -- start menu, session states, floor transitions" (Game), "EndOfLevelStairs"
+(Game) and "Save and load Beyond neighborhoods" (Global): whichever of them lands first does this as part
+of it.
+
+Direction:
+- `GameBuildPass.Run` builds the streamer (never `BuildModules`: trial, staging and Workshop builds have
+  none, and the streamer subscribes to `WindowShifted` in its constructor), registers it first in the
+  frame so `BuiltInSystems_RunInThePinnedOrder` pins it, and registers its gauges beside the game's
+  others. `AdminTools` takes it from `GameSessionInternals`.
+- The records and seed arrive as session input (new game: fresh records from the session's
+  `MathUtility`; load: the saved records and each random sequence's position; next floor: that floor's
+  records), and the session exposes them so population and the streamer share one instance -- or the
+  session takes population over too. Never set them as properties after the build.
+- Budget and start delay become build inputs or module settings, so `NeighborhoodStreamerTests`,
+  `AuraEvictionWalkTests` and `TestAdminTools` use the session's streamer instead of building a second
+  one on the same resolver (two would both answer every window shift).
+- `ProcessingTierResolver.PromotionsHeld` stays the streamer's to write.
 
 #### Composite buildings
 
@@ -1948,7 +1953,8 @@ entities are unplaced (`TransformComponent.UnplacedOn`), everything else is dest
 First real consumer of `FloorEnteredEvent`. Open: modules capture `IMapQuery` at `Configure`, so either
 `World` swaps its `Map` in place or modules are reconfigured per floor; and which MapLayer the stairs sit
 on (likely Ground, so flyers land and diggers surface to use them). See the matching Presentation item
-for visuals.
+for visuals. **Requires** "NeighborhoodStreamer and neighborhood records built with the session" (Game):
+the next floor needs its own records and a streamer without the exe building them.
 
 #### NPCs avoid EndOfLevelStairs, and are destroyed entering one
 
@@ -2463,13 +2469,6 @@ To settle when designing it:
 
 ### High Priority
 
-#### Health window: right-click Close / Close All menu
-
-Right-clicking the Health window opens nothing, unlike every other DynamicHud window. Inventory, Ability Scores,
-Item Details, loot box results and the targeted windows each call `DynamicHudContextMenus.WireCloseContextMenu`
-from their controller; `HealthWindowController` doesn't. Wire it the same way, and check that Close All from the
-Health window also closes the others, and that Close leaves the rest open.
-
 #### Replace the text outline with SDF glyphs and an outline shader
 
 Epic child 7, after 7.3 (`PLAN-shader-follow-ups.md` Decision 8 left it out). Every outlined string in the UI -- map glyphs, hotbar and HUD numbers, floating text, the targeting overlay,
@@ -2529,21 +2528,6 @@ controller end to end (`UiInputControllerTests`, `ScrollbarInputTests`, `TextBox
 "split these N, leave the rest"; the point is a controller small enough that a new input feature has one obvious
 home -- the engine IDE (epic child 5) will add its own.
 
-#### Read the player's effective actions, not the bare catalog
-
-`HotbarContent` (slot drawing, `TryGetSlotSummary`) and `ActionTargetingController` (the toggle check,
-the Self-targeting check, arming, the targeting preview) look the player's actions up with
-`actionCatalog.TryGet(actionId, ...)` -- the catalog entry, not the action the player actually has. An
-override (`ActionInstanceComponent.Override`, read through `EntityActions.TryGetEffectiveAction`) can
-change targeting, timing, glyph, tags or effects, so these can disagree with what Game does: the player's
-Magic Missile already has one (damage only, so nothing shows yet), and Fairy's changes timing and range.
-- Add a view method returning the player's effective `ActionDefinition` (on `ActionStateView` or
-  `HotkeyBindingView`; Presentation can't touch the store) and use it at every one of those sites.
-- The same drift was fixed for windups by `ActivatableLookup` (`MapViewQuery`'s charging badge read the
-  catalog action; the windup telegraph read the catalog action's tags) -- see CLAUDE.md's
-  `ActivatableReference` bullet.
-- A UI change: check it in game.
-
 #### Item Details for toggle items: show what the toggle holds
 
 Item Details (`ItemDetailsWindow`) describes a toggle item (`ToggleItemActivator`, e.g. Toxic Idol)
@@ -2558,32 +2542,45 @@ as if it were a self-targeted activation. Fix:
   Summary's "(range 4)" lose them. The Item Details comparison already keys them separately
   (`ItemComparisonStatExtraction`, `effect:aura:{id}:size` and `:power`).
 
-#### Hotbar re-press always activates, even past the double-tap window
+#### Player setting for the target search distance
 
-Pressing the key of an already-armed hotbar slot should activate the item/action whether or not the
-second press lands inside the double-tap window (`ActionTargetingController.DoubleTapWindowFrames`).
-Today the two cases differ (`HandleActionSlotPress`/`HandleItemSlotPress`):
-- **Within the window**: an action fires at an auto-picked target (`TryActivateWithAutoTarget`); a
-  `GameTags.TargetingSelf` item fires on the player (`TryActivateItemOnSelf`).
-- **Past the window**: the press only confirms against `MapViewState.HoveredTile`
-  (`TryConfirmActivationAtTile`), so it does nothing when the cursor is off the map or over a tile
-  that isn't targetable. Only a `TargetingSelf` action is exempt; a `TargetingSelf` item is not.
+Target mode with no target under the cursor marks the nearest target within
+`MapViewState.TargetSearchDistanceTiles` (default 2, Manhattan) of the cursor, or of the player with the
+cursor off the map. It is a session field today; make it a player setting (saved, with a control in an
+options window) once there is somewhere for player settings to live.
 
-Make the slow re-press activate too: confirm at the cursor when it is over a valid target, otherwise
-fall back to what the double-tap does (auto-target for an action, self for a `TargetingSelf` item).
-Decide what a slow re-press of a non-self item does with no valid cursor target, since the double-tap
-has no auto-target path for items either. Keep one rule for actions and items, and keep cancel on
-right-click/Escape only.
+#### Non-targetable tiles in Ground mode
 
-#### Bug: open achievement popups fall behind the pause mask when a menu window opens
+A hotbar re-press in Ground mode lands on the hovered tile (`ActionTargetingController.PickHotkeyTargetTile`),
+and a click confirms on whatever tile was clicked, as long as it is in `TargetableTiles` -- which is only
+range today, so a wall is a valid Ground target. A tile that can't be targeted (e.g. a wall) should fall
+back to the nearest targetable ground tile instead, for the re-press and the click alike. Investigate
+which other tiles should not be targetable, for example: off-map and unloaded cells, structures other
+than walls, tiles with no line of sight from the caster (behind a wall), tiles a Dodge step or a placed
+anchor can't occupy, and the cursor off the map or past the range (where a re-press does nothing today
+-- the same nearest-tile fallback may suit it). Decide whether "targetable" is Game's
+(`TargetResolution`) so NPCs and the preview share it.
 
-Whenever a menu window opens, achievement popups that were already open stop being active and are
-drawn behind the pause window mask, so they can't be read, closed or minimized until menu mode ends.
-Popups opened after the menu window is already open work correctly: `UiLayerStack.Add` promotes
-anything added during menu mode into the open menu-window set, but nothing does the same for popups
-that were already open when `OpenMenuWindow` ran. Decide whether already-open notification popups join
-menu mode (the way later ones do) or stay usable above the mask as menu-mode-exempt, and fix it in
-`UiLayerStack`/`NotificationCenter` rather than per menu window.
+#### Target Mode Clarity
+
+The player's targeting mode (`MapViewState.TargetingMode`) shows only as cursor text for a moment after Left Alt
+switches it (`TargetingModeSwitch`), and the map highlights look the same in both modes. Make the mode readable at a
+glance:
+- **A mode icon next to the cursor**, beside the arrow rather than replacing it: a circular crosshair for Target, a
+  square for Ground. Drawn at the cursor from `PointerState` (as `CursorTextContent` is), over the map. Decide when it
+  shows -- always over the map, or only while an action or item is armed -- and what a Ground-only activation (melee,
+  Dodge: `TargetingModes.GroundOnly`) shows, since its mode can't change (the effective mode
+  `ActionTargetingController` resolves, not the player's setting).
+- **Hover and click highlights follow the mode.** Target: the entity is highlighted -- a more transparent colour on
+  hover, a less transparent one when selected. Ground: the same rule for the tile -- more transparent on hover, less
+  on selection. Today the hover footprint (`MapGameOverlay.AddTargetingHighlights`, `HoveredFootprint`) and the
+  selection ring (`AddSelectedTileHighlight`/`AddSelectedTileGlow`) are tile washes and rings whatever the mode.
+  Target's highlight marks the entity Target mode would mark (`TargetingView.Select(...).HasMarkedEntity`: Blocking,
+  else Tiny, else Phasing), across its whole footprint for a large entity, and nothing when the tile has no entity
+  (it resolves as Ground). Decide whether the entity highlight is a footprint wash or the sprite itself (see
+  "Highlighted-tile visual redesign" and "Circle selection under the entity", Low) -- a tall sprite overhangs its
+  tile.
+- Supersedes the Low item "Change the cursor to a targeting mode indicator while armed" (removed).
 
 #### Global hard minimum/maximum element sizes, and horizontally scrolling title text
 
@@ -2851,7 +2848,7 @@ and activations.
   focused element or controller pushes its context instead of scanning the keyboard.
 - **Triggers:** when an action fires -- pressed, released, held for N frames, tapped (released within
   N frames), double-tapped, a chord (Shift+click) -- declared on the binding, not reimplemented per
-  handler. Today's double-tap auto-target and re-press-confirms rules become triggers.
+  handler. Today's re-press-activates rule becomes a trigger.
 - **Buffering:** `PlayerCommands`'s newest-wins 0.25 s window becomes a property of an action,
   applying to any action that opts in, not just movement and activations.
 - **Rebinding:** bindings are data (defaults in `Content/`, user overrides persisted through "Data
@@ -3482,24 +3479,6 @@ overflow the same way.
   zoomed out.
 - Separately or as well: skip drawing the floor of a tile with a structure on it, which is hidden anyway.
 
-#### Change the cursor to a targeting mode indicator while armed
-
-While an action or item is armed, the cursor over the map should show the player's targeting mode
-(`MapViewState.TargetingMode`) instead of the plain arrow, so the mode is visible before confirming
-rather than only for the second after Left Alt switches it (`TargetingModeSwitch`). The cursor is
-already chosen in one place each frame (`UiInputController`, `CurrentCursor`, set through
-`MouseCursorEXT.SetCursor`); the armed-confirm-refused case already uses `MouseCursor.No` there.
-- **Candidates from the system set** (FNA's `MouseCursor`): `Crosshair` for Target (aiming at
-  someone), `Hand` or `SizeAll` for Ground (placing on a spot). No asset needed, but the set is small
-  and looks like an OS cursor.
-- **Custom cursors** (`MouseCursor.FromTexture2D`): a reticle for Target and a ground marker (a
-  ring or an X on the floor) for Ground, drawn in the game's sprite style. Possibly also a
-  difference between single-target and area effects -- a small reticle for SingleTarget, a wider
-  ring for Burst/Cone -- and Ground-only activations (melee, Dodge) keeping the plain arrow, since
-  their mode can't change.
-- Decide whether the hover footprint already says enough about single target vs area, so the cursor
-  only needs to carry the mode.
-
 #### Boss and crawler kill icons
 
 Show an icon for each boss and each crawler an entity has killed, in two places: the Inspection window
@@ -3882,6 +3861,9 @@ since generation), so a revisited neighborhood holds the same creatures, corpses
 
 - **Depends on** "Data storage" above (the serialize-to-disk mechanism) and "Entity storage" below
   (snapshot and rehydrate an entity's exact component set).
+- **Requires** "NeighborhoodStreamer and neighborhood records built with the session" (Game): the
+  records are what a save holds, so they must be session state, and a loaded session gets its streamer
+  from the build rather than the exe.
 - **References:** entities come back with new ids; anything that points at another entity already
   holds its `EntityKey`, which is saved with it (plan decision 17). Crawler numbers are kept, never
   re-minted.
@@ -4214,9 +4196,8 @@ Mouse, default 500ms) -- unlike WinForms/WPF apps, which read this via
 would force retargeting to `net10.0-windows`) via a direct `user32.dll` P/Invoke of
 `GetDoubleClickTime()`, callable at startup since it's a system-wide query with no window-handle
 dependency. Windows-only -- FNA itself is cross-platform, so this needs an `OperatingSystem.IsWindows()`
-guard with today's hardcoded value as the non-Windows fallback. Scoped to the mouse double-click only;
-`ActionTargetingController`'s separate keyboard hotbar double-tap window is a different gesture and
-wouldn't read from this. Open question if picked up: does the current +25% buffer on top of the base
+guard with today's hardcoded value as the non-Windows fallback. Scoped to the mouse double-click only
+(the keyboard hotbar has no double-tap window any more). Open question if picked up: does the current +25% buffer on top of the base
 value still make sense once the base is the user's own real OS setting rather than a fixed guess.
 
 ### MEDIUM PRIORITY : Unsimulated-tier time -- research alternatives to freezing

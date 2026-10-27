@@ -65,7 +65,6 @@ public static class ShellBootstrapper
             mapViewState,
             shellServices.Camera,
             uiLayers,
-            catalogs.ActionCatalog,
             catalogs.ItemCatalog,
             views.TransformView,
             views.HotkeyBindingView,
@@ -278,7 +277,7 @@ public static class ShellBootstrapper
         // player's currently-unlocked Expansion slot count, so it's constructed first and its own
         // Size read to size/position this window -- see HotbarContent.RefreshLayoutIfChanged for
         // how it keeps itself bottom-anchored/horizontally-centered as that Size changes later.
-        var hotbarContent = new HotbarContent(world, mapViewState, gameSession.Views.HotkeyBindingView, gameSession.Views.InventoryView, gameSession.Views.ActionStateView, gameSession.Commands.HotkeyBindingCommands, catalogs.ActionCatalog, catalogs.ItemCatalog, uiEngine.FontService, uiEngine.SpriteSheetService, screenSize, simulationClock, gameSession.Views.EntityActions, catalogs.GameplayTags);
+        var hotbarContent = new HotbarContent(world, mapViewState, gameSession.Views.HotkeyBindingView, gameSession.Views.InventoryView, gameSession.Views.ActionStateView, gameSession.Commands.HotkeyBindingCommands, catalogs.ItemCatalog, uiEngine.FontService, uiEngine.SpriteSheetService, screenSize, simulationClock, gameSession.Views.EntityActions, catalogs.GameplayTags);
         var hotbarSize = hotbarContent.Size;
         var hotbarWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
@@ -322,7 +321,7 @@ public static class ShellBootstrapper
         var notificationCenter = new NotificationCenter(uiEngine.ElementPoolService, eventBus, layers, contextMenuController);
         notificationCenter.Initialize();
 
-        var health = new HealthWindowController(uiEngine.ElementPoolService, world);
+        var health = new HealthWindowController(uiEngine.ElementPoolService, world, contextMenuController);
         health.Initialize(layers);
 
         return (notificationCenter, health);

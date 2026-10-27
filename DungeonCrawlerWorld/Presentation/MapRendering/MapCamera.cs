@@ -212,7 +212,7 @@ public sealed class MapCamera
     public bool TryGetHoveredMapPosition(Point mousePosition, Vector2 contentAbsolutePosition, out Point mapPosition)
     {
         var relativeMapDisplayMousePosition = new Vector2(mousePosition.X - contentAbsolutePosition.X, mousePosition.Y - contentAbsolutePosition.Y) + _renderPixelOffset;
-        var x = (int)(relativeMapDisplayMousePosition.X / _currentTileSize.X);
+        var x = (int)MathF.Floor(relativeMapDisplayMousePosition.X / _currentTileSize.X);
 
         if (x < 0 || x >= _tileColumns)
         {
@@ -220,7 +220,7 @@ public sealed class MapCamera
             return false;
         }
 
-        var y = (int)(relativeMapDisplayMousePosition.Y / _currentTileSize.Y);
+        var y = (int)MathF.Floor(relativeMapDisplayMousePosition.Y / _currentTileSize.Y);
         if (y < 0 || y >= _tileRows)
         {
             mapPosition = default;

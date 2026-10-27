@@ -125,7 +125,7 @@ public static class WorldSessionBootstrapper
         // now, with 10% to spare, moves every pool's growth from the first walks across the map to
         // before the first frame. What only built creatures hold starts at the one simulated
         // neighborhood and settles at about three: a creature stays built until its neighborhood
-        // unloads, and promotions wait for evictions' built creatures (PromotionsHeld, below), so a walk keeps the
+        // unloads, and promotions wait for evictions' built creatures (ProcessingTierResolver.PromotionsHeld), so a walk keeps the
         // last two centres built plus the one being promoted. Without that reserve, each of the
         // first shifts resized the largest pools mid-drain -- one 30-60 ms frame per shift.
         if (!world.Map.IsBounded)
@@ -148,10 +148,6 @@ public static class WorldSessionBootstrapper
             new Game.TestMapBuilder(ecsContext.EntityManager, gameSession.Internals.Factory, gameSession.Catalogs.Terrain, gameSession.Catalogs.Auras, gameSession.Catalogs.Definitions, gameSession.Catalogs.Areas, gameSession.Internals.UniqueEntities), gameSession.Internals.Skeletons);
         ecsContext.SystemManager.RegisterAtFrameStart(neighborhoodStreamer, GameFrameStartOrder.NeighborhoodStreaming);
         RegisterStreamerGauges(ecsContext.Gauges, neighborhoodStreamer);
-
-        // A window shift promotes the new centre's creature skeletons only once the neighborhoods it
-        // evicted have lost their built creatures, so the builds reuse the storage those free.
-        tierResolver.PromotionsHeld = () => neighborhoodStreamer.IsEvictingBuiltCreatures;
 
         using (EngineHooks.DiagnosticScope("Heap Compaction"))
         {

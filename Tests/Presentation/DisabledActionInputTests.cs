@@ -67,14 +67,6 @@ public sealed class DisabledActionInputTests
             HotbarController.OnSlotTapped(slot);
         }
 
-        public void WaitOutTheDoubleTapWindow()
-        {
-            for (var frame = 0; frame <= UiInputController.DoubleClickWindowFrames; frame++)
-            {
-                ActionTargeting.Tick();
-            }
-        }
-
         public void DisableMelee() => ComponentManager.Merge(PlayerEntityId, new MeleeDisabledComponent());
 
         public void SetMana(float currentMana) =>
@@ -134,7 +126,6 @@ public sealed class DisabledActionInputTests
             mapViewState,
             TestMapCameras.Over(world),
             new UiLayerStack(),
-            actionCatalog,
             itemCatalog,
             new TransformView(componentManager),
             new HotkeyBindingView(componentManager),
@@ -144,7 +135,7 @@ public sealed class DisabledActionInputTests
             playerCommands,
             simulationClock: clock);
 
-        var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), actionStateView, new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), actionCatalog, itemCatalog, TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: clock);
+        var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), actionStateView, new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog, TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: clock);
         var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting, new TooltipController());
 
         return new Harness
@@ -161,7 +152,7 @@ public sealed class DisabledActionInputTests
     }
 
     [TestMethod]
-    public void MeleeDisabled_KeyPressClickAndDoubleTap_NeitherArmNorQueue()
+    public void MeleeDisabled_KeyPressClickAndRePress_NeitherArmNorQueue()
     {
         var harness = Build();
         harness.DisableMelee();
@@ -169,11 +160,9 @@ public sealed class DisabledActionInputTests
         harness.PressKey(HotkeySlot.Slot1);
         Assert.IsNull(harness.MapViewState.ArmedSlot);
 
-        harness.WaitOutTheDoubleTapWindow();
         harness.Click(HotkeySlot.Slot1);
         Assert.IsNull(harness.MapViewState.ArmedSlot);
 
-        harness.WaitOutTheDoubleTapWindow();
         harness.PressKey(HotkeySlot.Slot1);
         harness.PressKey(HotkeySlot.Slot1);
         Assert.IsNull(harness.MapViewState.ArmedSlot);
@@ -221,7 +210,6 @@ public sealed class DisabledActionInputTests
 
         harness.SetMana(SpellManaCost);
         harness.HotbarContent.Update(new GameTime());
-        harness.WaitOutTheDoubleTapWindow();
         harness.PressKey(HotkeySlot.Slot2);
 
         Assert.AreEqual(HotkeySlot.Slot2, harness.MapViewState.ArmedSlot);
@@ -237,14 +225,12 @@ public sealed class DisabledActionInputTests
         harness.PressKey(HotkeySlot.Slot2);
         Assert.AreEqual(HotkeySlot.Slot2, harness.MapViewState.ArmedSlot, "A slot on cooldown still arms -- cooldown isn't a blocker.");
 
-        harness.WaitOutTheDoubleTapWindow();
         harness.PressKey(HotkeySlot.Slot2);
         Assert.AreEqual(HotkeySlot.Slot2, harness.MapViewState.ArmedSlot, "A refused confirm leaves the action armed.");
         Assert.IsFalse(harness.HasPendingAction);
 
         var readyAtFrame = StartFrame + SpellCooldownFrames;
         harness.Clock.Advance(readyAtFrame - PlayerCommands.ExpiryFrames + 1);
-        harness.WaitOutTheDoubleTapWindow();
         harness.PressKey(HotkeySlot.Slot2);
         Assert.IsNull(harness.MapViewState.ArmedSlot, "An accepted confirm disarms.");
         Assert.IsFalse(harness.HasPendingAction, "Buffered until the cooldown ends.");
@@ -252,18 +238,5 @@ public sealed class DisabledActionInputTests
         harness.Clock.Advance(readyAtFrame);
         harness.PlayerCommands.Flush(new Vector3Int());
         Assert.IsTrue(harness.HasPendingAction);
-    }
-
-    [TestMethod]
-    public void DoubleTapDuringALongCooldown_FiresNothing_AndLeavesTheSlotArmed()
-    {
-        var harness = Build();
-        harness.Actions.SetCooldown(PlayerEntityId, SpellId, SpellCooldownFrames, StartFrame);
-
-        harness.PressKey(HotkeySlot.Slot2);
-        harness.PressKey(HotkeySlot.Slot2);
-
-        Assert.AreEqual(HotkeySlot.Slot2, harness.MapViewState.ArmedSlot);
-        Assert.IsFalse(harness.HasPendingAction);
     }
 }

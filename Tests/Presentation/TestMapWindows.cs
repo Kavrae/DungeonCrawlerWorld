@@ -19,6 +19,7 @@ using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.FloatingText;
 using Tests.UIEngine;
+using UIEngine.Input;
 using UIEngine.Rendering;
 using UIEngine.UI;
 
@@ -82,7 +83,6 @@ internal static class TestMapWindows
             mapViewState,
             camera,
             new UiLayerStack(),
-            resolvedActionCatalog,
             resolvedItemCatalog,
             new TransformView(componentManager),
             new HotkeyBindingView(componentManager),
@@ -107,7 +107,7 @@ internal static class TestMapWindows
 
         windowService.RegisterFactory<MapWindow>(() => new MapWindow(
             fontService, windowService, mapView, playerActionGate, mapViewState, eventBus, renderService,
-            camera, mapRenderer, mapGameOverlay, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer, new AdminContextMenuOptions(TestAdminTools.Create())));
+            camera, mapRenderer, mapGameOverlay, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer, new AdminContextMenuOptions(TestAdminTools.Create()), new PointerState()));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions
         {

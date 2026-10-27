@@ -146,7 +146,7 @@ public sealed class ProcessingTierSystem : ISystem
     /// <summary>Recomputes up to the per-frame budget of queued transitions, thaw band first unless the resolver holds promotions. An entry whose TransformComponent is gone (destroyed, never removed from the index) is dropped from the membership index instead; see NeighborhoodMembershipIndex's remarks for why it tolerates stale entries.</summary>
     private void DrainTransitions()
     {
-        var promotionsHeld = _resolver.PromotionsHeld?.Invoke() == true;
+        var promotionsHeld = _resolver.PromotionsHeld;
         for (var drained = 0; drained < _transitionsPerFrame && _resolver.Transitions.TryDequeue(_resolver.Membership, out var entityId, promotionsHeld); drained++)
         {
             if (_transforms.Has(entityId))

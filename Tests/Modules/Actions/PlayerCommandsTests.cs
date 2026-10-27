@@ -120,7 +120,6 @@ public sealed class PlayerCommandsTests
             mapViewState,
             TestMapCameras.Over(world),
             new UiLayerStack(),
-            actionCatalog,
             new ItemCatalog(),
             new TransformView(componentManager),
             new HotkeyBindingView(componentManager),

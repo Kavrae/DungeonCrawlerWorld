@@ -2213,7 +2213,7 @@ public sealed class UiInputControllerTests
         cell.Initialize();
 
         var hotbar = new HotbarContent(
-            world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, itemCatalog: itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), new ActionCatalog(), itemCatalog,
+            world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, itemCatalog: itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog,
             fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -2254,7 +2254,7 @@ public sealed class UiInputControllerTests
         cell.Initialize();
 
         var hotbar = new HotbarContent(
-            world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, itemCatalog: itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), new ActionCatalog(), itemCatalog,
+            world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, itemCatalog: itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog,
             fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -3466,7 +3466,7 @@ public sealed class UiInputControllerTests
         var windowService = TestElementPoolServiceFactory.Create(fontService);
 
         var hotbar = new HotbarContent(
-            world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, new ItemCatalog()), TestActionStateViews.Over(componentManager, actionCatalog), new HotkeyBindingCommands(componentManager, new ItemCatalog(), new EventBus()), actionCatalog, new ItemCatalog(),
+            world, new MapViewState(), new HotkeyBindingView(componentManager), new InventoryView(componentManager, new ItemCatalog()), TestActionStateViews.Over(componentManager, actionCatalog), new HotkeyBindingCommands(componentManager, new ItemCatalog(), new EventBus()), new ItemCatalog(),
             fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

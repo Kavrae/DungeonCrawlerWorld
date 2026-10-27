@@ -197,7 +197,7 @@ public sealed class NeighborhoodStreamer : ISystem
     }
 
     /// <summary>Whether a neighborhood evicted from the window's cache still has built creatures (anything not a creature skeleton) waiting to be destroyed.</summary>
-    /// <remarks>What a promotion should wait for: those are the creatures whose storage a promotion's builds reuse. The rest of an eviction -- its skeletons, its terrain -- frees nothing a build needs, so it doesn't hold anything up, and the streamer runs every eviction's built creatures ahead of its other work.</remarks>
+    /// <remarks>What a promotion should wait for: those are the creatures whose storage a promotion's builds reuse. The rest of an eviction -- its skeletons, its terrain -- frees nothing a build needs, so it doesn't hold anything up, and the streamer runs every eviction's built creatures ahead of its other work. Copied into ProcessingTierResolver.PromotionsHeld after every update and window shift.</remarks>
     public bool IsEvictingBuiltCreatures => NextEvictionOfBuiltCreatures() >= 0;
 
     private int NextEvictionOfBuiltCreatures()
@@ -299,6 +299,8 @@ public sealed class NeighborhoodStreamer : ISystem
             job.Work.Dispose();
             _jobs.RemoveAt(index);
         }
+
+        _resolver.PromotionsHeld = IsEvictingBuiltCreatures;
     }
 
     /// <summary>Loads the neighborhoods entering the window, caches the ones leaving it, and unloads whatever the cache no longer has room for.</summary>
@@ -367,6 +369,7 @@ public sealed class NeighborhoodStreamer : ISystem
         }
 
         _toLoad.Clear();
+        _resolver.PromotionsHeld = IsEvictingBuiltCreatures;
     }
 
     private static IEnumerable<(int CellX, int CellY)> WindowAround((int CellX, int CellY) center)

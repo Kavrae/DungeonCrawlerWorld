@@ -25,6 +25,19 @@ public sealed class GridDistanceTests
     }
 
     [TestMethod]
+    public void ChebyshevDistance_Footprints_MeasuresBetweenNearestTiles()
+    {
+        var largeOrigin = new Vector3Int(10, 10, 0);
+        var largeSize = new Vector2Byte(3, 3);
+        var single = new Vector2Byte(1, 1);
+
+        Assert.AreEqual(1, GridDistance.ChebyshevDistance(largeOrigin, largeSize, new Vector3Int(13, 12, 0), single));
+        Assert.AreEqual(1, GridDistance.ChebyshevDistance(new Vector3Int(9, 13, 0), single, largeOrigin, largeSize));
+        Assert.AreEqual(0, GridDistance.ChebyshevDistance(largeOrigin, largeSize, new Vector3Int(12, 11, 0), single));
+        Assert.AreEqual(2, GridDistance.ChebyshevDistance(largeOrigin, largeSize, new Vector3Int(14, 12, 0), single));
+    }
+
+    [TestMethod]
     public void ManhattanDistance_DiagonalCostsTwoTiles()
     {
         var a = new Vector3Int(5, 5, 0);

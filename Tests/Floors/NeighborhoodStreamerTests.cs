@@ -407,6 +407,7 @@ public sealed class NeighborhoodStreamerTests
 
         ShiftTo(session, 4);
         Assert.IsTrue(session.Streamer.IsEvictingBuiltCreatures, "Neighborhood -1 is the oldest cached, evicted by this shift.");
+        Assert.IsTrue(session.Resolver.PromotionsHeld, "The shift holds promotions the moment it queues the eviction.");
 
         for (var frame = 0; frame < 1_000 && session.Streamer.IsEvictingBuiltCreatures; frame++)
         {
@@ -416,6 +417,7 @@ public sealed class NeighborhoodStreamerTests
 
         var remaining = EntitiesIn(session, -1, 0).Where(session.Ecs.EntityManager.EntityExists).ToList();
         Assert.IsFalse(session.Streamer.IsEvictingBuiltCreatures);
+        Assert.IsFalse(session.Resolver.PromotionsHeld);
         Assert.IsNotEmpty(remaining, "Only the built creatures are gone yet.");
         Assert.IsTrue(remaining.All(skeletons.IsSkeleton));
         Assert.IsTrue(session.Streamer.IsBusy);

@@ -28,7 +28,6 @@ public sealed class ActionTargetingController(
     MapViewState mapViewState,
     MapCamera camera,
     UiLayerStack uiLayers,
-    ActionCatalog actionCatalog,
     ItemCatalog itemCatalog,
     TransformView transformView,
     HotkeyBindingView hotkeyBindingView,
@@ -39,17 +38,10 @@ public sealed class ActionTargetingController(
     SimulationClock simulationClock)
 {
 
-    /// <summary>A second press of the same slot within this many frames of the first is a double-tap (auto-target the closest candidate, see HandleHotkeySlotPress), as opposed to a slower second press (confirm against the cursor, same as a click). Reads UiInputController's own shared click/double-click window rather than an independently tuned value, so mouse double-click and keyboard double-tap always agree.</summary>
-    private static readonly int DoubleTapWindowFrames = UiInputController.DoubleClickWindowFrames;
-
-    private int _frameCounter;
-
-    private readonly Dictionary<HotkeySlot, int> _lastHotkeyPressFrameBySlot = [];
-
     // Reused across calls (see TargetShapeResolver's own doc comment on why Resolve writes into
     // a caller-owned buffer instead of allocating).
     private readonly List<Vector3Int> _candidateTilesBuffer = [];
-    private readonly List<Vector3Int> _occupiedCandidateTilesBuffer = [];
+    private readonly List<Vector3Int> _targetCandidateTilesBuffer = [];
 
     /// <summary>
     /// Backs MapViewState.TargetableTiles -- populated by RefreshTargetableTiles (Clear +
@@ -108,11 +100,7 @@ public sealed class ActionTargetingController(
     /// now and whether that action is Dodgeable -- so MapWindow can telegraph an enemy's incoming attack
     /// (red/yellow, see CombatTargetPalette) as well as the player's own (dark green), following a Target-mode target.
     /// </summary>
-    /// <remarks>
-    /// Which windups count as Local is ActionStateView.CopyLocalPendingWindups'. Reads the catalog definition's Tags
-    /// directly rather than resolving a per-instance Override: ActionOverrideEffects.OverrideFlatDamage (the only
-    /// Override producer today) never touches Tags, so the catalog's own Tags are always correct here.
-    /// </remarks>
+    /// <remarks>Which windups count as Local is ActionStateView.CopyLocalPendingWindups'.</remarks>
     public IReadOnlyList<(int EntityId, IReadOnlyList<Vector3Int> TargetTiles, bool IsDodgeable)> AllPendingWindupTargets()
     {
         actionStateView.CopyLocalPendingWindups(world.PlayerEntityId, _localPendingWindupsScratch);
@@ -138,12 +126,10 @@ public sealed class ActionTargetingController(
         return _pendingWindupTargetsBuffer;
     }
 
-    /// <summary>Advances the double-tap frame clock, and disarms whatever is armed once the player can no longer use it -- called once per MapWindow.Update, before anything else this class does that frame.</summary>
+    /// <summary>Disarms whatever is armed once the player can no longer use it -- called once per MapWindow.Update, before anything else this class does that frame.</summary>
     /// <remarks>An armed action whose arms are destroyed mid-aim, or whose mana a hit drains, would otherwise stay armed with nothing a confirm could do.</remarks>
     public void Tick()
     {
-        _frameCounter++;
-
         if (IsArmedBlocked())
         {
             Disarm();
@@ -189,30 +175,30 @@ public sealed class ActionTargetingController(
     /// <summary>
     /// While an action or item is armed, tracks which map tile the mouse is currently over (on
     /// the player's own Z layer, not necessarily whatever layer the camera happens to be showing)
-    /// and, if so, recomputes the armed thing's actual hit-footprint from that hover position via
-    /// TargetShapeResolver -- this is what lets Burst/Cone/Line's highlighted tiles move with the
-    /// cursor instead of staying fixed at arm time. Also refreshes TargetableTiles (see
+    /// and, if so, recomputes the armed thing's actual hit-footprint for a click there -- the same
+    /// selection a click makes (TrySelectActivationTarget), so the highlight is what lands, moving
+    /// with the cursor or onto the target Target mode would pick. Also refreshes TargetableTiles (see
     /// RefreshTargetableTiles) every call, independent of whether the mouse currently resolves
     /// to a map tile at all, so the reachable-area highlight keeps following the caster if it
-    /// moves while armed even with the cursor off the map. Takes the mouse position and the host
-    /// window's content-area origin explicitly rather than reading either itself, the same way
-    /// MapWindow.Update reads Mouse.GetState() once and passes it in, so tests can simulate a
-    /// mouse position without a real OS cursor or a real Window subclass.
+    /// moves while armed even with the cursor off the map. mousePosition is null when the cursor
+    /// isn't over the map window (it is over another window, such as the hotbar). Takes the mouse
+    /// position and the host window's content-area origin explicitly rather than reading either
+    /// itself, so tests can simulate a mouse position without a real OS cursor or a real Window subclass.
     /// </summary>
-    public void UpdateHoveredTile(Point mousePosition, Vector2 contentAbsolutePosition)
+    public void UpdateHoveredTile(Point? mousePosition, Vector2 contentAbsolutePosition)
     {
         _hoveredFootprintBuffer.Clear();
         _hoveredFootprintSet.Clear();
 
-        if (!TryGetArmedTargeting(out var targeting) || !transformView.TryGetTransform(world.PlayerEntityId, out var playerTransform))
+        if (!TryGetArmedActivator(out var activator) || !transformView.TryGetTransform(world.PlayerEntityId, out var playerTransform))
         {
             mapViewState.HoveredTile = null;
             return;
         }
 
-        RefreshTargetableTiles(targeting, playerTransform.Position, playerTransform.Size);
+        RefreshTargetableTiles(targetingView.EffectiveSpec(world.PlayerEntityId, activator), playerTransform.Position, playerTransform.Size);
 
-        if (!camera.TryGetHoveredMapPosition(mousePosition, contentAbsolutePosition, out var hoveredColumnRow))
+        if (mousePosition is not { } mouse || !camera.TryGetHoveredMapPosition(mouse, contentAbsolutePosition, out var hoveredColumnRow))
         {
             mapViewState.HoveredTile = null;
             return;
@@ -221,9 +207,8 @@ public sealed class ActionTargetingController(
         var hoveredTile = new Vector3Int(hoveredColumnRow.X, hoveredColumnRow.Y, playerTransform.Position.Z);
         mapViewState.HoveredTile = hoveredTile;
 
-        if (TryGetArmedActivator(out var activator))
+        if (TrySelectActivationTarget(activator, hoveredTile, isMapClick: true, out _, out var selection))
         {
-            var selection = targetingView.Select(world.PlayerEntityId, activator, mapViewState.TargetingMode, hoveredTile, simulationClock.CurrentFrame);
             targetingView.Resolve(world.PlayerEntityId, activator, selection, _hoveredFootprintBuffer);
         }
 
@@ -234,9 +219,9 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// A left-click confirms the armed action or item's activation against whichever tile was
-    /// clicked -- see TryConfirmActivationAtTile, the shared implementation this and a same-slot
-    /// hotkey re-press (see HandleActionSlotPress/HandleItemSlotPress) both funnel into.
+    /// A left-click activates the armed action or item against whichever tile was clicked -- see
+    /// TryConfirmActivationAtTile, the shared implementation this and Dodge's WASD confirm (see
+    /// TryClaimDodgeDirectionalKey) both funnel into.
     /// </summary>
     public void TryConfirmActivation(Point mousePosition, Vector2 contentAbsolutePosition)
     {
@@ -250,37 +235,8 @@ public sealed class ActionTargetingController(
         TryConfirmActivationAtTile(clickedTile);
     }
 
-    /// <summary>
-    /// Confirms the armed action or item's activation against targetTile, provided it's actually
-    /// within TargetableTiles (a miss is a no-op -- whatever's armed stays armed, exactly like
-    /// clicking empty space doesn't clear an inspector selection either). Queues the selection
-    /// TargetingView builds for the player's targeting mode: in Target mode it marks whoever stands
-    /// on targetTile, and Game resolves it into tiles -- now for Immediate and FreeCast, when the
-    /// windup ends for Delayed. Reads which of {action, item} is armed from MapViewState itself
-    /// rather than taking either id as a parameter -- mirrors CancelArmedOrPendingAction, which
-    /// already does the same.
-    /// </summary>
-    private void TryConfirmActivationAtTile(Vector3Int targetTile)
-    {
-        if (!TryGetArmedActivator(out var activator))
-        {
-            return;
-        }
-
-        if (mapViewState.TargetableTiles is not { } targetableTiles || !targetableTiles.Contains(targetTile))
-        {
-            return;
-        }
-
-        if (!CanConfirmArmed())
-        {
-            return;
-        }
-
-        var selection = targetingView.Select(world.PlayerEntityId, activator, mapViewState.TargetingMode, targetTile, simulationClock.CurrentFrame);
-        QueueArmedActivation(world.PlayerEntityId, targetTile, selection);
-        Disarm();
-    }
+    /// <summary>Activates the armed action or item as a map click on targetTile (see TrySelectActivationTarget); with nothing to land on it stays armed, exactly like clicking empty space doesn't clear an inspector selection either.</summary>
+    private void TryConfirmActivationAtTile(Vector3Int targetTile) => TryActivateArmed(targetTile, isMapClick: true);
 
     /// <summary>
     /// Cancels an armed action/item (right-click tap or Escape), or, if nothing is armed, drops
@@ -374,10 +330,7 @@ public sealed class ActionTargetingController(
     /// own doc comment), so checking action first and falling through to item is safe. Internal
     /// (not private): HandleHotbarHotkeys below is the keyboard entry point, but
     /// HotbarController.OnSlotTapped calls this exact same method for a mouse click on a hotbar
-    /// slot, so a click behaves identically to pressing that slot's key -- including sharing this
-    /// method's own double-tap-window tracking (_lastHotkeyPressFrameBySlot is keyed by slot and
-    /// frame only, never by input source), so a click closely following a key press (or another
-    /// click) on the same slot counts as a double-tap exactly the way two key presses would.
+    /// slot, so a click behaves identically to pressing that slot's key.
     /// </summary>
     internal void HandleHotkeySlotPress(HotkeySlot slot)
     {
@@ -386,19 +339,15 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        var isDoubleTap = _lastHotkeyPressFrameBySlot.TryGetValue(slot, out var lastPressFrame) &&
-            _frameCounter - lastPressFrame <= DoubleTapWindowFrames;
-        _lastHotkeyPressFrameBySlot[slot] = _frameCounter;
-
         if (hotkeyBindingView.TryGetBoundAction(world.PlayerEntityId, slot, out var actionId))
         {
-            HandleActionSlotPress(slot, actionId, isDoubleTap);
+            HandleActionSlotPress(slot, actionId);
             return;
         }
 
         if (hotkeyBindingView.TryGetBoundItem(world.PlayerEntityId, slot, out var stackInstanceId))
         {
-            HandleItemSlotPress(slot, stackInstanceId, isDoubleTap);
+            HandleItemSlotPress(slot, stackInstanceId);
         }
     }
 
@@ -406,8 +355,7 @@ public sealed class ActionTargetingController(
     /// Mirrors HotbarContent's own lock check (HotkeySlotLayout.IsLocked) -- a locked slot must
     /// refuse to activate even if something bound it anyway (e.g. a blueprint grant that writes
     /// an ItemHotkeyBindingComponent directly, bypassing HotbarContent.BindItem's own lock
-    /// refusal), not just render dim. Checked first, before any double-tap bookkeeping, so a
-    /// press on a locked slot leaves no trace for once it becomes unlocked later.
+    /// refusal), not just render dim.
     /// </summary>
     private bool IsSlotLocked(HotkeySlot slot)
     {
@@ -416,26 +364,16 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// Arms the pressed slot's action, or -- if it's already armed -- confirms it instead: a
-    /// double-tap within DoubleTapWindowFrames skips arming entirely and immediately activates
-    /// against an auto-picked target (see TryActivateWithAutoTarget); a slower re-press confirms
-    /// against wherever the cursor currently is (see TryConfirmActivationAtTile), the same as a
-    /// click would -- except a GameTags.TargetingSelf action (Heal, Dodge) always confirms on the caster's own
-    /// tile via the same key instead, regardless of where the cursor happens to be hovering (the
-    /// same "same key always means self" shortcut HandleItemSlotPress already gives a GameTags.TargetingSelf
-    /// item's double-tap; a plain re-press of a Self-shaped action's own TargetableTiles would
-    /// otherwise only ever contain its own tile, so a re-press only ever confirmed by coincidence
-    /// of the cursor already hovering exactly there). Cancelling an armed slot is right-click/
-    /// Escape's job now (see CancelArmedOrPendingAction) -- re-pressing the same key always means
-    /// "go," not "nevermind."
+    /// Arms the pressed slot's action, or -- if it's already armed -- activates it (see
+    /// TryActivateArmedFromHotkey), however quickly the press follows the one that armed it.
+    /// Cancelling an armed slot is right-click/Escape's job (see CancelArmedOrPendingAction) --
+    /// re-pressing the same key always means "go," not "nevermind."
     /// An action the player can't use right now (ActionStateView.GetActionBlocker -- not enough
     /// mana, melee disabled) is inert, the same no-op an unbound slot already is -- HotbarContent
     /// greys it out through the same query, so "can't be armed" and "looks unusable" stay in sync,
-    /// mirroring HandleItemSlotPress's identical treatment of an unusable item slot. A double-tap
-    /// that PlayerCommands wouldn't queue (not ready before the input buffer expires) fires nothing
-    /// and leaves the slot armed from its first press.
+    /// mirroring HandleItemSlotPress's identical treatment of an unusable item slot.
     /// </summary>
-    private void HandleActionSlotPress(HotkeySlot slot, Guid actionId, bool isDoubleTap)
+    private void HandleActionSlotPress(HotkeySlot slot, Guid actionId)
     {
         if (actionStateView.GetActionBlocker(world.PlayerEntityId, actionId) != ActivationBlocker.None)
         {
@@ -444,7 +382,7 @@ public sealed class ActionTargetingController(
 
         // A toggle action is never armed: it applies to the player, so every press queues it at
         // once on the player's own tile, in the player's mode (Ground anchors what it places there), and no window closes.
-        if (actionCatalog.TryGet(actionId, out var pressedAction) && pressedAction.Toggle is not null)
+        if (actionStateView.TryGetEffectiveAction(world.PlayerEntityId, actionId, out var pressedAction) && pressedAction.Toggle is not null)
         {
             if (transformView.TryGetTransform(world.PlayerEntityId, out var playerTransform))
             {
@@ -454,40 +392,9 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        if (isDoubleTap)
-        {
-            if (!playerCommands.CanQueueAction(actionId))
-            {
-                return;
-            }
-
-            TryActivateWithAutoTarget(world.PlayerEntityId, actionId);
-
-            // The pair's first press (a moment ago, within the double-tap window) armed this
-            // same slot -- now that it's fired, leaving it visually armed would be stale/
-            // misleading, so clear it rather than requiring a third press to tidy up.
-            if (mapViewState.ArmedSlot == slot)
-            {
-                Disarm();
-            }
-
-            return;
-        }
-
         if (mapViewState.ArmedSlot == slot)
         {
-            if (actionCatalog.TryGet(actionId, out var armedAction) && armedAction.Tags.Has(GameTags.TargetingSelf) &&
-                transformView.TryGetTransform(world.PlayerEntityId, out var selfTransform))
-            {
-                TryConfirmActivationAtTile(selfTransform.Position);
-                return;
-            }
-
-            if (mapViewState.HoveredTile is { } hoveredTile)
-            {
-                TryConfirmActivationAtTile(hoveredTile);
-            }
-
+            TryActivateArmedFromHotkey();
             return;
         }
 
@@ -500,17 +407,11 @@ public sealed class ActionTargetingController(
     /// InventoryItemStackComponent's "no instance means empty" convention, the same one
     /// InventoryActions.RemoveOneUnit relies on), is inert, the same no-op an unbound slot already
     /// is -- HotbarContent greys it out the same way, so "can't be armed" and "looks unusable"
-    /// stay in sync. Any item tagged GameTags.TargetingSelf (Health/Mana/Hotkey Expansion Potion today) has its
-    /// double-tap always activate on the caster's own tile (TryActivateItemOnSelf), skipping
-    /// arm/target entirely -- "double-tap always uses it on the user," regardless of what's
-    /// currently armed. Keyed off the tag rather than any particular IActionActivator kind, so a
-    /// future non-Potion self-only item (e.g. a bandage) gets the same shortcut just by carrying
-    /// GameTags.TargetingSelf. A non-double-tap re-press of an already-armed slot confirms against the cursor
-    /// instead (see TryConfirmActivationAtTile) -- same rhythm as HandleActionSlotPress,
-    /// cancelling is right-click/Escape's job now. A toggle item is never armed: every press queues
-    /// it at once (see QueueToggleItem).
+    /// stay in sync. Otherwise the same rhythm as HandleActionSlotPress: the first press arms, a
+    /// re-press of the armed slot activates (see TryActivateArmedFromHotkey). A toggle item is
+    /// never armed: every press queues it at once (see QueueToggleItem).
     /// </summary>
-    private void HandleItemSlotPress(HotkeySlot slot, uint stackInstanceId, bool isDoubleTap)
+    private void HandleItemSlotPress(HotkeySlot slot, uint stackInstanceId)
     {
         if (!inventoryView.TryGetStack(world.PlayerEntityId, stackInstanceId, out var stack) ||
             !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
@@ -525,30 +426,9 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        if (isDoubleTap && item.Tags.Has(GameTags.TargetingSelf))
-        {
-            if (!playerCommands.CanQueueItemActivation(stackInstanceId))
-            {
-                return;
-            }
-
-            TryActivateItemOnSelf(world.PlayerEntityId, stackInstanceId, slot);
-
-            if (mapViewState.ArmedSlot == slot)
-            {
-                Disarm();
-            }
-
-            return;
-        }
-
         if (mapViewState.ArmedSlot == slot)
         {
-            if (mapViewState.HoveredTile is { } hoveredTile)
-            {
-                TryConfirmActivationAtTile(hoveredTile);
-            }
-
+            TryActivateArmedFromHotkey();
             return;
         }
 
@@ -565,7 +445,7 @@ public sealed class ActionTargetingController(
         mapViewState.ArmedSlot = slot;
         _targetableTilesOrigin = null; // Forces RefreshTargetableTiles below to (re)compute regardless of any stale origin left over from a previous arm.
 
-        if (actionCatalog.TryGet(actionId, out var action) && transformView.TryGetTransform(world.PlayerEntityId, out var transform))
+        if (actionStateView.TryGetEffectiveAction(world.PlayerEntityId, actionId, out var action) && transformView.TryGetTransform(world.PlayerEntityId, out var transform))
         {
             RefreshTargetableTiles(action.Activator.Targeting, transform.Position, transform.Size);
         }
@@ -592,12 +472,9 @@ public sealed class ActionTargetingController(
     /// for InventoryGridContent's "Activate" context-menu option and double-click gesture (see their
     /// own doc comments). Reuses the exact eligibility guard HandleItemSlotPress applies before
     /// arming from a hotbar press, and ArmItem's own targeting-refresh logic unchanged -- no separate
-    /// activation path. Deliberately skips HandleItemSlotPress's double-tap/self-cast shortcut: a
-    /// menu click or double-click has no natural "double-tap" gesture of its own, and a plain single
-    /// press of an unarmed hotbar slot always arms too (the self-cast shortcut is an addition on top
-    /// of that base behavior, not a replacement for it) -- so arming here matches an ordinary,
-    /// non-double-tap hotbar press exactly. That includes a toggle item, which a hotbar press queues at
-    /// once rather than arming (see QueueToggleItem).
+    /// activation path -- arming here matches the first press of an unarmed hotbar slot exactly.
+    /// That includes a toggle item, which a hotbar press queues at once rather than arming (see
+    /// QueueToggleItem). With no slot, the armed item is confirmed only by a map-tile click.
     /// </summary>
     public void ArmItemFromStack(uint stackInstanceId)
     {
@@ -646,7 +523,7 @@ public sealed class ActionTargetingController(
     /// </summary>
     private bool TryGetArmedActivator(out IActionActivator activator)
     {
-        if (mapViewState.ArmedActionId is { } actionId && actionCatalog.TryGet(actionId, out var action))
+        if (mapViewState.ArmedActionId is { } actionId && actionStateView.TryGetEffectiveAction(world.PlayerEntityId, actionId, out var action))
         {
             activator = action.Activator;
             return true;
@@ -722,12 +599,8 @@ public sealed class ActionTargetingController(
     /// footprint around the attacker (see TargetShapeResolver's own doc comment), or every tile
     /// within Range for every cursor-directed shape (SingleTarget/Burst/Line/Cone) via a
     /// Burst-shaped scatter, not the real Shape -- there's no single "aim direction" yet at arm
-    /// time, only a reachable area. Shared by Arm (for highlighting) and TryActivateWithAutoTarget
-    /// (for double-tap's candidate pool), so the two never drift out of sync with each other. Also
-    /// what makes a manual click on the caster's own tile resolve at all for an Adjacent | Self item
-    /// (e.g. Scroll of Healing) -- TargetableTiles has to actually contain that tile before
-    /// TryConfirmActivationAtTile's GameTags.TargetingSelf special case (or the general resolve path) is ever
-    /// reached.
+    /// time, only a reachable area. Through RefreshTargetableTiles, both the highlight and
+    /// NearestTargetTile's candidate pool, so the two never drift out of sync with each other.
     /// </summary>
     private void ComputeTargetableTiles(Vector3Int attackerPosition, Vector2Byte attackerSize, TargetingSpec targeting, List<Vector3Int> buffer)
     {
@@ -752,83 +625,154 @@ public sealed class ActionTargetingController(
         TargetShapeResolver.Resolve(TargetShape.Burst, attackerPosition, attackerSize, attackerPosition, range: 0, targeting.Range, world.Map.Bounds, buffer);
     }
 
-    /// <summary>
-    /// Resolves and queues a full action activation with no manual click-confirm at all -- the
-    /// double-tap path. A GameTags.TargetingSelf action (Heal, Dodge) always confirms on the caster's own tile,
-    /// full stop -- same rule HandleActionSlotPress's single-press re-confirm already gives them,
-    /// applied here too. This matters for an action like Dodge whose Shape is SingleTarget (not
-    /// cursor-independent): without this check it fell through to the occupied-tile hunt below,
-    /// which QuickAttack/PowerAttack/ToxicStrike/MagicMissile actually want (double-tap = auto-
-    /// attack the nearest enemy) but Dodge never does -- Dodge's own reachable block is normally
-    /// all-empty (nothing to occupy an adjacent tile), so the hunt found no candidate, silently did
-    /// nothing, and the caller's own "now that it fired, disarm" cleanup then made a double-tap of
-    /// the Dodge key read as if it had just cancelled instead of activated (confirmed live). A
-    /// cursor-independent shape's footprint never depends on a target choice either (Adjacent is
-    /// always the caster's own tile's 8 surrounding neighbors; Self is always the caster's own
-    /// footprint; either combination resolves the same way regardless of cursor), so it's queued
-    /// immediately too. Every other shape needs a target tile chosen first: ComputeTargetableTiles'
-    /// reachable-area candidates are filtered down to occupied tiles and handed to
-    /// ClosestPointSelector.SelectClosest (cursor as the primary point, attacker as the tiebreaker),
-    /// using MapViewState.HoveredTile as the cursor bias when one is already tracked (armed-and-then-
-    /// double-tapped in one motion means Update hasn't run with the arm in effect yet, so
-    /// HoveredTile can still be stale/null on the very first pair -- attackerPosition is the
-    /// fallback for exactly that case, which is also what makes "closest to cursor" degenerate
-    /// harmlessly into "closest to the caster" rather than picking an arbitrary target).
-    /// </summary>
-    private void TryActivateWithAutoTarget(int entityId, Guid actionId)
+    /// <summary>Activates whatever is armed without a map click -- a re-press of its hotbar slot, by key or by clicking the slot -- against the hovered tile, if the cursor is on the map.</summary>
+    private void TryActivateArmedFromHotkey() => TryActivateArmed(mapViewState.HoveredTile, isMapClick: false);
+
+    /// <summary>Queues and disarms whatever is armed, aimed by TrySelectActivationTarget; nothing to land on, or a confirm that would be refused, leaves it armed with nothing paid.</summary>
+    private void TryActivateArmed(Vector3Int? cursorTile, bool isMapClick)
     {
-        if (!actionCatalog.TryGet(actionId, out var action) || !transformView.TryGetTransform(entityId, out var transform))
+        if (!TryGetArmedActivator(out var activator) || !CanConfirmArmed())
         {
             return;
         }
 
-        var attackerPosition = transform.Position;
-        var attackerSize = transform.Size;
-        var activator = action.Activator;
-        var targeting = targetingView.EffectiveSpec(entityId, activator);
+        if (!TrySelectActivationTarget(activator, cursorTile, isMapClick, out var aimedTile, out var selection))
+        {
+            return;
+        }
+
+        QueueArmedActivation(world.PlayerEntityId, aimedTile, selection);
+        Disarm();
+    }
+
+    /// <summary>Where an activation of the armed activator lands, with the cursor on cursorTile (null when it isn't on the map) -- one rule for every way to activate, and for the hover preview.</summary>
+    /// <remarks>
+    /// In order: an Adjacent/Self shape lands around the caster, whatever the mode. A GameTags.TargetingSelf
+    /// action or item used from the hotbar lands on the player (a potion is drunk, Dodge dodges in
+    /// place); a map click follows the mode instead. Ground mode (the player's, or an activator that
+    /// offers no other) lands on cursorTile when it is in reach -- a potion splashes there. Target mode
+    /// marks the target on cursorTile when it is in reach; else, for a TargetingSelf map click, the
+    /// player; else the target in reach nearest cursorTile, or nearest the player with the cursor off
+    /// the map, within MapViewState.TargetSearchDistanceTiles of it. False when there is nothing to land on.
+    /// </remarks>
+    /// <param name="aimedTile">The tile aimed at -- for Dodge, the tile it steps to.</param>
+    private bool TrySelectActivationTarget(IActionActivator activator, Vector3Int? cursorTile, bool isMapClick, out Vector3Int aimedTile, out TargetSelection selection)
+    {
+        aimedTile = default;
+        selection = default;
+
+        var playerEntityId = world.PlayerEntityId;
+        if (!transformView.TryGetTransform(playerEntityId, out var playerTransform))
+        {
+            return false;
+        }
+
+        var playerPosition = playerTransform.Position;
         var now = simulationClock.CurrentFrame;
+        var targeting = targetingView.EffectiveSpec(playerEntityId, activator);
 
-        if (action.Tags.Has(GameTags.TargetingSelf) || IsCursorIndependent(targeting.Shape))
+        if (IsCursorIndependent(targeting.Shape))
         {
-            QueueActionActivation(entityId, actionId, attackerPosition, targetingView.Select(entityId, activator, mapViewState.TargetingMode, attackerPosition, now));
-            return;
+            aimedTile = playerPosition;
+            selection = targetingView.Select(playerEntityId, activator, TargetingMode.Ground, playerPosition, now);
+            return true;
         }
 
-        ComputeTargetableTiles(attackerPosition, attackerSize, targeting, _candidateTilesBuffer);
+        var isSelfTargeting = IsArmedSelfTargeting();
+        if (isSelfTargeting && !isMapClick)
+        {
+            aimedTile = playerPosition;
+            selection = targetingView.SelectEntity(playerEntityId, activator, playerEntityId);
+            return true;
+        }
 
-        _occupiedCandidateTilesBuffer.Clear();
+        RefreshTargetableTiles(targeting, playerPosition, playerTransform.Size);
+        var cursorTileInReach = cursorTile is { } tile && _targetableTilesSet.Contains(tile) ? cursorTile : null;
+        var mode = targeting.Modes == TargetingModes.GroundOnly ? TargetingMode.Ground : mapViewState.TargetingMode;
+
+        if (mode == TargetingMode.Ground)
+        {
+            if (cursorTileInReach is not { } groundTile)
+            {
+                return false;
+            }
+
+            aimedTile = groundTile;
+            selection = targetingView.Select(playerEntityId, activator, mode, groundTile, now);
+            return true;
+        }
+
+        if (cursorTileInReach is { } hoveredTile && IsTargetAt(activator, hoveredTile, now))
+        {
+            aimedTile = hoveredTile;
+            selection = targetingView.Select(playerEntityId, activator, mode, hoveredTile, now);
+            return true;
+        }
+
+        if (isSelfTargeting)
+        {
+            aimedTile = playerPosition;
+            selection = targetingView.SelectEntity(playerEntityId, activator, playerEntityId);
+            return true;
+        }
+
+        if (NearestTargetTile(activator, nearestTo: cursorTile ?? playerPosition, tiebreakTile: playerPosition, now) is not { } nearestTargetTile)
+        {
+            return false;
+        }
+
+        aimedTile = nearestTargetTile;
+        selection = targetingView.Select(playerEntityId, activator, mode, nearestTargetTile, now);
+        return true;
+    }
+
+    /// <summary>The tile in TargetableTiles holding a target nearest nearestTo, no further from it than MapViewState.TargetSearchDistanceTiles, ties going to the one nearer tiebreakTile; null when there is none.</summary>
+    /// <remarks>Reads _candidateTilesBuffer, which RefreshTargetableTiles has just brought up to date.</remarks>
+    private Vector3Int? NearestTargetTile(IActionActivator activator, Vector3Int nearestTo, Vector3Int tiebreakTile, long now)
+    {
+        _targetCandidateTilesBuffer.Clear();
         foreach (var tile in _candidateTilesBuffer)
         {
-            var occupantEntityId = world.GetEntityIdAt(tile);
-            if (occupantEntityId != -1 && occupantEntityId != entityId)
+            if (GridDistance.ManhattanDistance(nearestTo, tile) <= mapViewState.TargetSearchDistanceTiles && IsTargetAt(activator, tile, now))
             {
-                _occupiedCandidateTilesBuffer.Add(tile);
+                _targetCandidateTilesBuffer.Add(tile);
             }
         }
 
-        var cursorTile = mapViewState.HoveredTile ?? attackerPosition;
-        if (ClosestPointSelector.SelectClosest(cursorTile, attackerPosition, _occupiedCandidateTilesBuffer) is not { } chosenTile)
-        {
-            return;
-        }
-
-        QueueActionActivation(entityId, actionId, chosenTile, targetingView.Select(entityId, activator, mapViewState.TargetingMode, chosenTile, now));
+        return ClosestPointSelector.SelectClosest(nearestTo, tiebreakTile, _targetCandidateTilesBuffer);
     }
 
-    /// <summary>The double-tap path for a self-targeting item -- Target mode on the caster itself, whatever the player's mode, with no candidate search at all (contrast TryActivateWithAutoTarget's action equivalent): a potion double-tapped is drunk, not splashed.</summary>
-    private void TryActivateItemOnSelf(int entityId, uint stackInstanceId, HotkeySlot? activatedFromSlot)
+    /// <summary>Whether something other than the player stands on tile to be targeted: its blocking occupant, else an entity Target mode would mark there.</summary>
+    private bool IsTargetAt(IActionActivator activator, Vector3Int tile, long now)
     {
-        if (!inventoryView.TryGetStack(entityId, stackInstanceId, out var stack) ||
-            !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
-            item.Activator is not { } activator)
+        var occupantEntityId = world.GetEntityIdAt(tile);
+        if (occupantEntityId != -1)
         {
-            return;
+            return occupantEntityId != world.PlayerEntityId;
         }
 
-        QueueItemActivation(stackInstanceId, targetingView.SelectEntity(entityId, activator, entityId), activatedFromSlot);
+        if (world.GetOccupantEntityIdSpanAt(tile).IsEmpty)
+        {
+            return false;
+        }
+
+        return targetingView.Select(world.PlayerEntityId, activator, TargetingMode.Target, tile, now).HasMarkedEntity;
     }
 
-    /// <summary>Presentation only ever queues an activation request -- ActionActivationSystem is the only thing that applies gameplay effects. Mirrors PlayerCommands's own queue-and-let-a-system-consume pattern for movement. Closes every closable window here too (not just in ArmAction) -- this is also reachable straight from a double-tap auto-target (TryActivateWithAutoTarget), which skips arming entirely, so it's the only chokepoint that catches that path.</summary>
+    private bool IsArmedSelfTargeting()
+    {
+        if (mapViewState.ArmedActionId is { } actionId)
+        {
+            return actionStateView.TryGetEffectiveAction(world.PlayerEntityId, actionId, out var action) && action.Tags.Has(GameTags.TargetingSelf);
+        }
+
+        return mapViewState.ArmedItemStackInstanceId is { } stackInstanceId &&
+            inventoryView.TryGetStack(world.PlayerEntityId, stackInstanceId, out var stack) &&
+            InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) &&
+            item.Tags.Has(GameTags.TargetingSelf);
+    }
+
+    /// <summary>Presentation only ever queues an activation request -- ActionActivationSystem is the only thing that applies gameplay effects. Mirrors PlayerCommands's own queue-and-let-a-system-consume pattern for movement. Closes every closable window here too (not just in ArmAction), so every path to an activation closes them.</summary>
     /// <param name="aimedTile">The tile confirmed -- for Dodge, the tile it steps to.</param>
     private void QueueActionActivation(int entityId, Guid actionId, Vector3Int aimedTile, TargetSelection selection)
     {
@@ -863,7 +807,7 @@ public sealed class ActionTargetingController(
     private static Vector3Int? DodgeStep(Vector3Int aimedTile, Vector3Int casterPosition) =>
         aimedTile != casterPosition ? aimedTile : null;
 
-    /// <summary>Item counterpart to QueueActionActivation -- ItemActivationSystem is the only thing that applies its gameplay effects. See QueueActionActivation's own doc comment for why it also closes every closable window here (catches TryActivateItemOnSelf's double-tap self-cast, which skips arming).</summary>
+    /// <summary>Item counterpart to QueueActionActivation -- ItemActivationSystem is the only thing that applies its gameplay effects. See QueueActionActivation's own doc comment for why it also closes every closable window here.</summary>
     private void QueueItemActivation(uint stackInstanceId, TargetSelection selection, HotkeySlot? activatedFromSlot)
     {
         uiLayers.CloseAllClosableWindows();
@@ -871,7 +815,7 @@ public sealed class ActionTargetingController(
         playerCommands.QueueItemActivation(stackInstanceId, selection, activatedFromSlot);
     }
 
-    /// <summary>Dispatches a confirmed click activation to whichever of {action, item} MapViewState currently has armed -- see TryConfirmActivation, the only caller.</summary>
+    /// <summary>Dispatches a confirmed activation to whichever of {action, item} MapViewState currently has armed -- a click (TryConfirmActivationAtTile) or a hotkey re-press (TryActivateArmedFromHotkey).</summary>
     private void QueueArmedActivation(int entityId, Vector3Int aimedTile, TargetSelection selection)
     {
         if (mapViewState.ArmedActionId is { } actionId)
