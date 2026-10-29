@@ -749,10 +749,10 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
             new Rectangle(detailsLeft, columnsTop, System.Math.Max(100, bounds.Right - detailsLeft), columnsHeight));
     }
 
-    /// <summary>Selects the report row under position and opens its menu there; nothing off the rows or while the section is hidden.</summary>
-    private void OpenRowMenuAt(Point position)
+    /// <summary>Selects the report row under position and opens its menu there; nothing unless the list is what was pressed, or off its rows.</summary>
+    private void OpenRowMenuAt(Element? pressedElement, Point position)
     {
-        if (!_browser.IsVisible || _list.RowAt(position) is not { Tag: DiagnosticsReportEntry entry } row)
+        if (!ReferenceEquals(pressedElement, _list) || _list.RowAt(position) is not { Tag: DiagnosticsReportEntry entry } row)
         {
             return;
         }
@@ -764,6 +764,6 @@ public sealed class DebugReportsSection(DebugTabServices services, WorkshopDebug
     /// <summary>A right-click on a report's row selects it and opens its menu.</summary>
     private sealed class ReportRowMenuInputHandler(DebugReportsSection section) : IUiInputHandler
     {
-        public void OnRightPress(Point position) => section.OpenRowMenuAt(position);
+        public void OnRightPress(Element? pressedElement, Point position) => section.OpenRowMenuAt(pressedElement, position);
     }
 }

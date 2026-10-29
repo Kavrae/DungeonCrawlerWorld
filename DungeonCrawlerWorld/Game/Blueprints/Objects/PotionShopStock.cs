@@ -1,5 +1,6 @@
 using Engine.Tags;
 using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
 using Game.Modules.Shops.Components;
 using Game.Tags;
 
@@ -45,6 +46,7 @@ public static class PotionShopStock
         var entityId = context.EntityId;
 
         componentManager.Merge(entityId, new ShopComponent(AcceptedItems, BuyMultiplier, SellMultiplier));
+        componentManager.Merge(entityId, new UnlimitedStackCountComponent());
         ShopStock.GrantRandomStock(componentManager, entityId, context.Rolls, Stock);
     }
 }

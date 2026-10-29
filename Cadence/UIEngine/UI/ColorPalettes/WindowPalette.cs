@@ -14,16 +14,8 @@ public static class WindowPalette
     /// <summary>Window title bar text.</summary>
     public static Color TitleTextColor = Color.White;
 
-    /// <summary>
-    /// Universal window content-area background -- every Element/Window defaults to this now
-    /// (see Element.Build's ContentColor fallback), not just an opt-in for the management-style
-    /// windows that used it originally. A 50%-alpha version of this (Color * 0.5f) was tried as
-    /// an Inspection V2 transparency experiment and reverted -- it hurt visibility too much once
-    /// InspectionWindow sat over the map -- so don't re-propose halving this again without a
-    /// different approach (e.g. per-window opt-in rather than shared-palette-wide); the 85%-alpha
-    /// value here is deliberately more opaque than that reverted experiment.
-    /// </summary>
-    public static Color PanelBackgroundColor = new Color(45, 45, 45) * 0.85f;
+    /// <summary>Universal window content-area background, fully opaque -- every Element/Window defaults to this (see Element.Build's ContentColor fallback).</summary>
+    public static Color PanelBackgroundColor = new(45, 45, 45);
 
     /// <summary>Light content areas set against PanelBackgroundColor's dark chrome -- a folder's tiles use this, so a management-style panel's inner content reads consistently wherever it appears.</summary>
     public static Color PanelContentColor = Color.LightGray;
@@ -38,7 +30,7 @@ public static class WindowPalette
     public static Color HighlightColor = Color.Gold * 0.5f;
 
     /// <summary>Universal window title-bar/header background -- fixed regardless of focus; a focused window is shown via FocusAccentColor on its border instead of a header-color swap.</summary>
-    public static Color HeaderBackground = new Color(22, 22, 22) * 0.85f;
+    public static Color HeaderBackground = new(22, 22, 22);
 
     /// <summary>Border accent shown on the currently-focused window.</summary>
     public static Color FocusAccentColor = Color.Gold;

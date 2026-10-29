@@ -16,8 +16,8 @@ namespace Presentation.UI.AbilityScores;
 /// percentages line up regardless of source-name length. A plain Element (not Window), same
 /// draw-only style as InventoryItemStackCell/AbilityScoreColumnHeader. Source/ModifierText/
 /// RemainingDurationFrames (null for the non-modifier "Base : N" line) are what
-/// AbilityScoreWindow's hover popup reads. IsHovered mirrors AbilityScoreColumnHeader's own
-/// immediate highlight-on-hover.
+/// AbilityScoreWindow's hover popup reads. A modifier row highlights while
+/// IsPointerOver, as AbilityScoreColumnHeader does; the Base line never does.
 /// </summary>
 public sealed class AbilityScoreModifierRow(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
     : Element(fontService, elementPoolService, renderService)
@@ -37,8 +37,6 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
 
     public int? RemainingDurationFrames { get; private set; }
 
-    public bool IsHovered { get; set; }
-
     public void Configure(ModifierDisplayLine line, float rowHeight)
     {
         _text = line.Text;
@@ -53,7 +51,7 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
         var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
-        if (IsHovered)
+        if (IsPointerOver && Source is not null)
         {
             spriteBatch.Draw(unitRectangle, LocalContentRectangle, WindowPalette.HighlightColor);
         }

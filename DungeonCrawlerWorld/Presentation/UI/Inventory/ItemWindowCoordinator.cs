@@ -70,16 +70,10 @@ public sealed class ItemWindowCoordinator
 
         ItemDetails = new ItemDetailsWindowController(elementPoolService, inventoryView, itemCatalog, Inventory, contextMenuController, _mapViewState, mapWindow);
         ItemDetails.Initialize(layers);
-        ItemDetails.GetSecondaryInventoryWindowRectangle = () => _secondaryInventory.Rectangle != Rectangle.Empty ? _secondaryInventory.Rectangle : _shop.Rectangle;
-
-        // Separate from the fallback above: the trade window opens beside the shop window, not instead of it, so both
-        // count as "inside" at once. See GetTradeWindowRectangle's own doc comment.
-        ItemDetails.GetTradeWindowRectangle = () => trade.Rectangle;
 
         // Built after Item Details, whose pane is always the comparison's anchor (see ItemComparisonController.Arm).
         ItemComparison = new ItemComparisonController(elementPoolService, inventoryView, itemCatalog, Inventory, contextMenuController, mapWindow, _mapViewState, ItemDetails, shellServices.CursorTextContent);
         ItemComparison.Initialize(layers);
-        ItemDetails.GetComparisonColumnRectangles = () => ItemComparison.ColumnRectangles;
         ItemDetails.OnClosed = ItemComparison.ClearComparison;
         ItemDetails.OnCompareRequested = ItemComparison.Arm;
         Inventory.OnCompareRequested = ItemComparison.Arm;
@@ -95,7 +89,9 @@ public sealed class ItemWindowCoordinator
 
         var lootboxResults = new LootboxResultsWindowController(elementPoolService, lootboxCatalog, itemCatalog, tooltipController, contextMenuController, Inventory, mapWindow, world);
         lootboxResults.Initialize(layers);
-        ItemDetails.GetLootboxResultsWindowRectangle = () => lootboxResults.Rectangle;
+        ItemDetails.IsTiedWindow = element =>
+            element == _secondaryInventory.Window || element == _shop.Window || element == trade.Window ||
+            element == lootboxResults.Window || element is ItemDetailsWindow column && ItemComparison.Columns.Contains(column);
         Inventory.OnOpenLootboxesRequested = entityId => lootboxResults.Show(lootboxCommands.OpenAll(entityId));
         lootboxResults.OnRewardClicked = reward =>
         {

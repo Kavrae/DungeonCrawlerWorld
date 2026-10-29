@@ -25,6 +25,44 @@ internal sealed class TradeDragDropResolver(MapViewState mapViewState, ShopView 
     private bool IsTradeOfferEntity(int entityId) =>
         mapViewState.ReservedEntityIds?.TradeOfferPlayerEntityId == entityId || mapViewState.ReservedEntityIds?.TradeOfferShopEntityId == entityId;
 
+    /// <summary>Whether context drops into a trade column that may never hold it -- the player's own items and currency stage only in the player column, the open shop's only in the shop column -- or takes a shop's currency anywhere but its trade column.</summary>
+    /// <remarks>Never refuses a drop back onto the column it came from. Matches what TryResolve does nothing with, so the cursor refuses exactly what the drop would.</remarks>
+    public bool IsRefused(in DragDropContext context)
+    {
+        if (context.OriginEntityId == context.DestinationEntityId)
+        {
+            return false;
+        }
+
+        var isDestinationTradePlayer = mapViewState.ReservedEntityIds?.TradeOfferPlayerEntityId == context.DestinationEntityId;
+        var isDestinationTradeShop = mapViewState.ReservedEntityIds?.TradeOfferShopEntityId == context.DestinationEntityId;
+        if (context.CurrencyType is not null && shopView.IsShop(context.OriginEntityId))
+        {
+            return !isDestinationTradeShop;
+        }
+
+        if (!isDestinationTradePlayer && !isDestinationTradeShop)
+        {
+            return false;
+        }
+
+        if (context.MergedItemDefinitionId is not null)
+        {
+            return true;
+        }
+
+        if (context.CurrencyType is not null)
+        {
+            var owningEntityId = isDestinationTradePlayer ? playerQuery.PlayerEntityId : mapViewState.OpenShopEntityId;
+            return context.OriginEntityId != owningEntityId;
+        }
+
+        var originIsShop = shopView.IsShop(context.OriginEntityId);
+        return isDestinationTradePlayer
+            ? originIsShop || IsTradeOfferEntity(context.OriginEntityId)
+            : !originIsShop;
+    }
+
     public bool TryResolve(in DragDropContext context)
     {
         var originIsTrade = IsTradeOfferEntity(context.OriginEntityId);

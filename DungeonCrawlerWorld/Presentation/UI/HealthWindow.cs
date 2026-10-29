@@ -51,7 +51,6 @@ namespace Presentation.UI;
 /// included) shows where it came from, in the popup AbilityScoreWindow shows for a modifier.
 /// </summary>
 /// <param name="simulationClock">"CurrentFrame" for every remaining-duration line -- timers store absolute deadlines.</param>
-/// <param name="pointerState">Where the cursor is, for the hover popup.</param>
 public sealed class HealthWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
@@ -65,8 +64,7 @@ public sealed class HealthWindow(
     GameplayTagRegistry gameplayTags,
     SimulationClock simulationClock,
     ActionSourceNaming actionSourceNaming,
-    TooltipController tooltipController,
-    PointerState pointerState)
+    TooltipController tooltipController)
     : Window(fontService, elementPoolService, renderService)
 {
     private static readonly Color BodyTextColor = Color.White;
@@ -337,10 +335,10 @@ public sealed class HealthWindow(
     }
 
     /// <summary>Shows the source popup for the row under the cursor once it has been hovered for HudChrome.HoverTooltipDelayFrames, and hides it as soon as the cursor leaves or the row's effect is gone.</summary>
-    /// <remarks>The cursor comes from PointerState, which UiInputController publishes each update. The source, the effect and its duration are read here each frame the popup is up, never kept on the row.</remarks>
+    /// <remarks>The row is the one UiInputController finds under the pointer (Element.IsPointerOver). The source, the effect and its duration are read here each frame the popup is up, never kept on the row.</remarks>
     private void UpdateHover()
     {
-        var hoveredRow = FindHoveredRow(pointerState.CursorPosition, out var rowWindow);
+        var hoveredRow = FindHoveredRow(out var rowWindow);
         var rowRectangle = rowWindow?.Rectangle ?? default;
 
         // The highlight is immediate; only the popup waits for the delay.
@@ -373,40 +371,40 @@ public sealed class HealthWindow(
         tooltipController.Show(this, rowRectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, PopupChrome.HoverPopupMaximumSize, body, title);
     }
 
-    /// <summary>The status-effect, buff or debuff row the position falls inside, if any -- only within its own column's visible area, so a row scrolled out of view is never hit.</summary>
-    private HoveredRow? FindHoveredRow(Point position, out TextWindow? rowWindow)
+    /// <summary>The status-effect, buff or debuff row the pointer is over, if any -- never one scrolled out of view or under another window.</summary>
+    private HoveredRow? FindHoveredRow(out TextWindow? rowWindow)
     {
-        if (_leftColumn.Rectangle.Contains(position))
+        if (_leftColumn.IsPointerOver)
         {
-            if (FindRowAt(_statusEffectRowWindows, position, out rowWindow) is { } statusEffectIndex)
+            if (FindRowAt(_statusEffectRowWindows, out rowWindow) is { } statusEffectIndex)
             {
                 return new HoveredRow(HoveredRowKind.StatusEffect, statusEffectIndex);
             }
 
-            if (_potionCooldownRowWindow is { } potionCooldownRow && potionCooldownRow.Rectangle.Contains(position))
+            if (_potionCooldownRowWindow is { } potionCooldownRow && potionCooldownRow.IsPointerOver)
             {
                 rowWindow = potionCooldownRow;
                 return new HoveredRow(HoveredRowKind.PotionCooldown, 0);
             }
 
-            if (FindRowAt(_bodyPartStatusEffectRowWindows, position, out rowWindow) is { } bodyPartIndex)
+            if (FindRowAt(_bodyPartStatusEffectRowWindows, out rowWindow) is { } bodyPartIndex)
             {
                 return new HoveredRow(HoveredRowKind.BodyPartBurning, bodyPartIndex);
             }
         }
-        else if (_rightColumn.Rectangle.Contains(position))
+        else if (_rightColumn.IsPointerOver)
         {
-            if (FindRowAt(_buffRowWindows, position, out rowWindow) is { } buffIndex)
+            if (FindRowAt(_buffRowWindows, out rowWindow) is { } buffIndex)
             {
                 return new HoveredRow(HoveredRowKind.Buff, buffIndex);
             }
 
-            if (FindRowAt(_immunityRowWindows, position, out rowWindow) is { } immunityIndex)
+            if (FindRowAt(_immunityRowWindows, out rowWindow) is { } immunityIndex)
             {
                 return new HoveredRow(HoveredRowKind.Immunity, immunityIndex);
             }
 
-            if (FindRowAt(_debuffRowWindows, position, out rowWindow) is { } debuffIndex)
+            if (FindRowAt(_debuffRowWindows, out rowWindow) is { } debuffIndex)
             {
                 return new HoveredRow(HoveredRowKind.Debuff, debuffIndex);
             }
@@ -416,12 +414,12 @@ public sealed class HealthWindow(
         return null;
     }
 
-    private static int? FindRowAt<TRow>(List<TRow> rowWindows, Point position, out TextWindow? rowWindow)
+    private static int? FindRowAt<TRow>(List<TRow> rowWindows, out TextWindow? rowWindow)
         where TRow : TextWindow?
     {
         for (var index = 0; index < rowWindows.Count; index++)
         {
-            if (rowWindows[index] is { } candidate && candidate.Rectangle.Contains(position))
+            if (rowWindows[index] is { } candidate && candidate.IsPointerOver)
             {
                 rowWindow = candidate;
                 return index;

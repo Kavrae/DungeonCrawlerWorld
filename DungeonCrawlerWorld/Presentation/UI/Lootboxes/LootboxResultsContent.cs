@@ -52,7 +52,7 @@ public sealed class LootboxResultsContent(
         Rebuild();
     }
 
-    public void Update(GameTime gameTime) => UpdateHover(Mouse.GetState());
+    public void Update(GameTime gameTime) => UpdateHover();
 
     public void DrawContent(GameTime gameTime)
     {
@@ -156,19 +156,17 @@ public sealed class LootboxResultsContent(
     }
 
     /// <summary>Same delay-to-show, hide-at-once rule as InventoryGridContent's own hover.</summary>
-    private void UpdateHover(MouseState mouseState)
+    private void UpdateHover()
     {
-        var mousePosition = new Point(mouseState.X, mouseState.Y);
         InventoryItemStackCell? candidate = null;
         GrantedItem candidateReward = default;
         foreach (var (cell, reward) in _rewardCells)
         {
-            var isHovered = candidate is null && cell.Rectangle.Contains(mousePosition) && _hostWindow.Rectangle.Contains(mousePosition);
-            cell.IsHovered = isHovered;
-            if (isHovered)
+            if (cell.IsPointerOver)
             {
                 candidate = cell;
                 candidateReward = reward;
+                break;
             }
         }
 

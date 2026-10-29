@@ -72,12 +72,11 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
     }
 
     /// <summary>Flips state and notifies onToggled -- fires from OnContentClickAction (before the base Clicked event, see Element's own doc comment on that ordering), the same "subclass owns its own click behavior" mechanism TextWindow already uses rather than this element self-subscribing to its own public event.</summary>
-    protected override void OnContentClickAction(Point mousePosition)
+    protected override bool OnContentClickAction(Point mousePosition)
     {
-        base.OnContentClickAction(mousePosition);
-
         IsOn = !IsOn;
         _onToggled?.Invoke(IsOn);
+        return true;
     }
 
     public override void DrawContent(GameTime gameTime)

@@ -1,6 +1,7 @@
 using Engine.Events;
 using Engine.Math;
 using Engine.Tiles;
+using Game.Modules.Core.Components;
 using Presentation.Input;
 using Game.Views;
 using Game.World;
@@ -27,7 +28,7 @@ namespace Presentation.UI;
 /// component pool. MapWindowArchitectureTests enforces that.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class MapWindow : Window
+public sealed class MapWindow : Window, IContentDropTarget
 {
     private readonly IMapViewQuery _mapView;
     private readonly PlayerActionGate _playerActionGate;
@@ -186,9 +187,9 @@ public sealed class MapWindow : Window
             }
         }
 
-        // Over another window (the hotbar, a menu), the tile beneath it isn't hovered: the cursor isn't on the map.
-        var mouseState = Mouse.GetState();
-        _actionTargeting.UpdateHoveredTile(_pointerState.IsOver(this) ? new Point(mouseState.X, mouseState.Y) : null, ContentAbsolutePosition);
+        // Over another window (the hotbar, a menu), the tile beneath it isn't hovered: the cursor isn't on the map. Nor is
+        // one while something is dragged: a drop never confirms an armed action, so no preview invites one.
+        _actionTargeting.UpdateHoveredTile(IsPointerOver && !_pointerState.ContentDrag.Visible ? _pointerState.CursorPosition : null, ContentAbsolutePosition);
 
         // Last, after the camera-follow above, so a frame that re-centres rebuilds the renderer's
         // images against the new scroll position.
@@ -276,9 +277,9 @@ public sealed class MapWindow : Window
     /// <param name="mousePosition">The raw mouse position (e.g. from Mouse.GetState()), not pre-translated to this window's content area -- resolved against ContentAbsolutePosition internally, the same as UpdateHoveredTile/TryConfirmActivation.</param>
     public void SelectMapNodes(Point mousePosition)
     {
-        if (_camera.TryGetHoveredMapPosition(mousePosition, ContentAbsolutePosition, out var mapPosition))
+        if (TryGetPointerHit(mousePosition, out var hit))
         {
-            _mapViewState.SelectedMapNodePosition = mapPosition;
+            _mapViewState.SelectedMapNodePosition = new Point(hit.Tile.X, hit.Tile.Y);
             _mapViewState.InspectionMode = InspectionMode.Basic;
             _mapViewState.InspectedEntityId = -1;
             OnInspectionOpened?.Invoke();
@@ -291,22 +292,96 @@ public sealed class MapWindow : Window
     /// selection takes over the click entirely while it's active, matching how the outline
     /// describes left-click as the universal "activate" gesture once something is armed.
     /// </summary>
-    protected override void OnContentClickAction(Point mousePosition)
+    protected override bool OnContentClickAction(Point mousePosition)
     {
         if (_mapViewState.ArmedActionId is not null || _mapViewState.ArmedItemStackInstanceId is not null)
         {
             _actionTargeting.TryConfirmActivation(mousePosition, ContentAbsolutePosition);
-            return;
+            return true;
         }
 
         SelectMapNodes(mousePosition);
+        return true;
     }
 
     /// <summary>A player can only loot a corpse they're standing on or next to -- 8-directional (Chebyshev) distance of at most 1 between any tile of the player's footprint and any tile of the corpse's, the same adjacency shape TargetShape.Adjacent's ring uses elsewhere, just inclusive of the caster's own tile too (unlike melee's ring, which excludes it -- standing on a corpse to loot it is expected, unlike punching yourself).</summary>
-    private bool IsAdjacentToPlayer(int entityId) =>
-        _mapView.TryGetOccupant(entityId, out var target) &&
-        _mapView.TryGetOccupant(_mapView.PlayerEntityId, out var player) &&
+    internal static bool IsAdjacentToPlayer(IMapViewQuery mapView, int entityId) =>
+        mapView.TryGetOccupant(entityId, out var target) &&
+        mapView.TryGetOccupant(mapView.PlayerEntityId, out var player) &&
         GridDistance.ChebyshevDistance(target.Position, target.Size, player.Position, player.Size) <= 1;
+
+    private bool IsAdjacentToPlayer(int entityId) => IsAdjacentToPlayer(_mapView, entityId);
+
+    /// <summary>The tile under screenPosition on the layer shown, and its occupants topmost first -- false off the map.</summary>
+    /// <remarks>Asked every frame a drag is held over the map, so an unchanged tile with unchanged occupants hands back the hit it made last time.</remarks>
+    internal bool TryGetPointerHit(Point screenPosition, out MapPointerHit hit)
+    {
+        if (!_camera.TryGetHoveredMapPosition(screenPosition, ContentAbsolutePosition, out var mapPosition))
+        {
+            hit = null!;
+            return false;
+        }
+
+        var tile = new Vector3Int(mapPosition.X, mapPosition.Y, _mapViewState.CurrentMapLayer);
+        var occupants = _mapView.GetOccupants(tile);
+        if (_lastPointerHit is { } lastHit && lastHit.Tile == tile && occupants.SequenceEqual(_lastPointerHitOccupants))
+        {
+            hit = lastHit;
+            return true;
+        }
+
+        _lastPointerHitOccupants = occupants.ToArray();
+        hit = new MapPointerHit(tile, OrderTopmostFirst(tile, occupants));
+        _lastPointerHit = hit;
+        return true;
+    }
+
+    private MapPointerHit? _lastPointerHit;
+
+    /// <summary>The occupants _lastPointerHit was made from, in the map's own order, to tell when they changed.</summary>
+    private int[] _lastPointerHitOccupants = [];
+
+    private int[] OrderTopmostFirst(Vector3Int tile, ReadOnlySpan<int> occupants)
+    {
+        var ordered = occupants.ToArray();
+        var ranks = new int[ordered.Length];
+        for (var index = 0; index < ordered.Length; index++)
+        {
+            ranks[index] = DrawnRankFromTop(tile, ordered[index]) * ordered.Length + index;
+        }
+
+        Array.Sort(ranks, ordered);
+        return ordered;
+    }
+
+    /// <summary>0 for what the map draws on top of a tile -- a Phasing occupant, then the Blocking one, then Tiny ones, then corpses -- and 4 for anything it doesn't draw.</summary>
+    private int DrawnRankFromTop(Vector3Int tile, int entityId)
+    {
+        if (!_mapView.TryGetOccupant(entityId, out var occupant))
+        {
+            return 4;
+        }
+
+        if (occupant.IsDead)
+        {
+            return 3;
+        }
+
+        if ((occupant.Kind & NonBlockingKind.Phasing) != 0)
+        {
+            return 0;
+        }
+
+        if (_mapView.GetBlockingEntityId(tile) == entityId)
+        {
+            return 1;
+        }
+
+        return (occupant.Kind & NonBlockingKind.Tiny) != 0 ? 2 : 4;
+    }
+
+    /// <summary>A drop on the map lands on the tile under it and what stands there (MapPointerHit); off the map, nowhere.</summary>
+    public object? DropTargetFor(object payload, Point position) => TryGetPointerHit(position, out var hit) ? hit : null;
 
     /// <summary>
     /// A right-click-tap first tries to cancel an armed/pending action (see
@@ -315,14 +390,14 @@ public sealed class MapWindow : Window
     /// if there's anything to cancel" precedence a left-click's own OnContentClickAction already
     /// gives TryConfirmActivation over SelectMapNodes.
     /// </summary>
-    protected override void OnRightClickTapAction(Point mousePosition)
+    protected override bool OnRightClickTapAction(Point mousePosition)
     {
-        if (_actionTargeting.CancelArmedOrPendingAction())
+        if (!_actionTargeting.CancelArmedOrPendingAction())
         {
-            return;
+            TryOpenEntityContextMenuAt(mousePosition);
         }
 
-        TryOpenEntityContextMenuAt(mousePosition);
+        return true;
     }
 
     /// <summary>
@@ -344,16 +419,17 @@ public sealed class MapWindow : Window
     /// </summary>
     internal void TryOpenEntityContextMenuAt(Point mousePosition)
     {
-        if (!_camera.TryGetHoveredMapPosition(mousePosition, ContentAbsolutePosition, out var mapPosition))
+        if (!TryGetPointerHit(mousePosition, out var hit))
         {
             return;
         }
 
-        var tilePosition = new Vector3Int(mapPosition.X, mapPosition.Y, _mapViewState.CurrentMapLayer);
+        var tilePosition = hit.Tile;
+        var mapPosition = new Point(tilePosition.X, tilePosition.Y);
 
         List<DropdownOption> options = [];
 
-        foreach (var entityId in _mapView.GetOccupants(tilePosition))
+        foreach (var entityId in hit.OccupantEntityIds)
         {
             AddEntityGroup(options, entityId);
         }

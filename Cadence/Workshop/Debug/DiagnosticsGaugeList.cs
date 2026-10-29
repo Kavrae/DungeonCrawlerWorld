@@ -118,14 +118,12 @@ public sealed class DiagnosticsGaugeList(FontService fontService, ElementPoolSer
         UpdateScrollBounds();
     }
 
-    protected override void OnContentClickAction(Point mousePosition)
+    protected override bool OnContentClickAction(Point mousePosition)
     {
-        base.OnContentClickAction(mousePosition);
-
         var localY = mousePosition.Y - ContentAbsolutePosition.Y;
         if (localY < DebugTabChrome.GaugeListRowHeight)
         {
-            return;
+            return true;
         }
 
         var rowIndex = (int)((localY + ScrollOffset.Y) / DebugTabChrome.GaugeListRowHeight) - 1;
@@ -133,6 +131,8 @@ public sealed class DiagnosticsGaugeList(FontService fontService, ElementPoolSer
         {
             ToggleSelection(_rows[rowIndex].GaugeIndex);
         }
+
+        return true;
     }
 
     public override void DrawContent(GameTime gameTime)

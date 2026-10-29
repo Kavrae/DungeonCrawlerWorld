@@ -52,6 +52,9 @@ public sealed class InventoryModule : IGameModule
         // Player-only in practice (see MaxStackSizeComponent's own doc comment) -- Packed for the same reason InventoryDisabledComponent above is.
         componentManager.RegisterPackedPool<MaxStackSizeComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 2);
 
+        // Shops only, a few per neighborhood.
+        componentManager.RegisterPackedPool<UnlimitedStackCountComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 8);
+
         // Player-only, 24 hotkey slots total -- dense capacity matches the slot count.
         componentManager.RegisterMultiPool<ItemHotkeyBindingComponent>(initialCapacity: 24);
 

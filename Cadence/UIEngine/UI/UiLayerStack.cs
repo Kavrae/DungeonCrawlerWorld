@@ -35,6 +35,9 @@ public sealed class UiLayerStack
     /// </summary>
     private readonly HashSet<Element> _menuModeExemptElements = [];
 
+    /// <summary>Open light-dismissables in the order they were opened, the last the topmost.</summary>
+    private readonly List<ILightDismissable> _openLightDismissables = [];
+
     private static readonly UiLayer[] AscendingLayers = Enum.GetValues<UiLayer>();
 
     private static readonly UiLayer[] DescendingLayers = [.. Enumerable.Reverse(AscendingLayers)];
@@ -67,6 +70,35 @@ public sealed class UiLayerStack
         {
             _menuWindows.Add(window);
             Version++;
+        }
+    }
+
+    /// <summary>Makes lightDismissable the topmost open one, the one an outside press dismisses -- moving it there if it was already open.</summary>
+    public void OpenLightDismiss(ILightDismissable lightDismissable)
+    {
+        _openLightDismissables.Remove(lightDismissable);
+        _openLightDismissables.Add(lightDismissable);
+    }
+
+    /// <summary>Removes lightDismissable from the open ones. Safe/no-op if it was never opened.</summary>
+    public void CloseLightDismiss(ILightDismissable lightDismissable) => _openLightDismissables.Remove(lightDismissable);
+
+    /// <summary>The most recently opened light-dismissable that is still open, or null -- one that closed without saying so is dropped here.</summary>
+    public ILightDismissable? TopmostLightDismiss
+    {
+        get
+        {
+            for (var index = _openLightDismissables.Count - 1; index >= 0; index--)
+            {
+                if (_openLightDismissables[index].IsOpen)
+                {
+                    return _openLightDismissables[index];
+                }
+
+                _openLightDismissables.RemoveAt(index);
+            }
+
+            return null;
         }
     }
 

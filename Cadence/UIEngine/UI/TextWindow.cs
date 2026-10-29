@@ -155,6 +155,9 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
     /// <summary>Protected, not private -- TextBox uses this same formula (with an enforced minimum line count) to auto-size its own height to content. See TextBox.AutoSizeToContent.</summary>
     protected float TextContentHeight() => ContentFont.LineHeight * DisplayText.LineCount + LinePadding * 2;
 
+    /// <summary>The height a TextWindow needs to show one line in font, its padding included -- what a fixed-size one-line TextWindow is given.</summary>
+    public static float SingleLineHeight(SpriteFontBase font) => font.LineHeight + LinePadding * 2;
+
     /// <summary>
     /// Virtual so TextBox can override it: StringUtility.WordWrapWithHyphenation treats a
     /// pre-existing '\n' (a multi-line dump, say) as a forced break, but
@@ -213,9 +216,5 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
         Arrange();
 
         SettleScrollbarsOutsideMeasure();
-    }
-
-    protected override void OnContentClickAction(Point mousePosition)
-    {
     }
 }

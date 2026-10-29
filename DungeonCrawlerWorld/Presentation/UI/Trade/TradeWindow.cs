@@ -8,10 +8,12 @@ using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Presentation.Input.DragDrop;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
 using UIEngine;
 using UIEngine.Fonts;
+using UIEngine.Input;
 using UIEngine.Rendering;
 using UIEngine.UI;
 using UIEngine.UI.Chrome;
@@ -43,7 +45,7 @@ public sealed class TradeWindow(
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
     Engine.ECS.Systems.SimulationClock simulationClock)
-    : Window(fontService, elementPoolService, renderService), IWholeWindowDropTarget
+    : Window(fontService, elementPoolService, renderService), IContentDropTarget
 {
     private readonly ItemCatalog _itemCatalog = inventoryServices.ItemCatalog;
     private readonly InventoryView _inventoryView = inventoryServices.InventoryView;
@@ -83,6 +85,8 @@ public sealed class TradeWindow(
 
     private int _playerSideEntityId;
     private int _shopSideEntityId;
+    private InventoryDropTarget? _playerSideDropTarget;
+    private InventoryDropTarget? _shopSideDropTarget;
     private Action<int, uint> _onItemSelected = static (_, _) => { };
     private Action<int, uint> _onCompareRequested = static (_, _) => { };
 
@@ -146,6 +150,8 @@ public sealed class TradeWindow(
     {
         _playerSideEntityId = playerSideEntityId;
         _shopSideEntityId = shopSideEntityId;
+        _playerSideDropTarget = new InventoryDropTarget(playerSideEntityId);
+        _shopSideDropTarget = new InventoryDropTarget(shopSideEntityId);
         _shopEntityId = shopEntityId;
         _tooltipController = tooltipController;
         _onItemSelected = onItemSelected;
@@ -153,7 +159,7 @@ public sealed class TradeWindow(
     }
 
     /// <summary>
-    /// IWholeWindowDropTarget -- unlike ShopWindow/InventoryManagementWindow (exactly one entity
+    /// Unlike ShopWindow/InventoryManagementWindow (exactly one entity
     /// per whole window), this window hosts two, so a whole-window drop (one that missed both
     /// columns' own specific grid/currency child, e.g. landing on the header or a section gap)
     /// picks between them by which half of this window's own width dropPosition falls in: left of
@@ -162,10 +168,7 @@ public sealed class TradeWindow(
     /// split) exactly. Item and currency resolve identically, since each column's own currency
     /// footer represents the same trade-offer entity as its own item grid.
     /// </summary>
-    public int ResolveItemDropEntityId(Point dropPosition) => IsInPlayerHalf(dropPosition) ? _playerSideEntityId : _shopSideEntityId;
-
-    /// <summary>See ResolveItemDropEntityId.</summary>
-    public int ResolveCurrencyDropEntityId(Point dropPosition) => IsInPlayerHalf(dropPosition) ? _playerSideEntityId : _shopSideEntityId;
+    public object? DropTargetFor(object payload, Point position) => IsInPlayerHalf(position) ? _playerSideDropTarget : _shopSideDropTarget;
 
     private bool IsInPlayerHalf(Point dropPosition) => dropPosition.X < ContentAbsolutePosition.X + ContentSize.X / 2f;
 
@@ -469,7 +472,7 @@ public sealed class TradeWindow(
         // showLabels: false -- "10 [sprite]", not "Gold : 10 [sprite]"; this column is too narrow
         // to spare the label (per the ask). textColor: white -- confirmed live look, matching the
         // trade grid's own transparent background just above.
-        footerWindow.SetContent(new CurrencyRowContent(entityId, inventoryServices, world, contextMenuController, ElementPoolService, static () => null, showLabels: false, textColor: Color.White));
+        footerWindow.SetContent(new CurrencyRowContent(entityId, inventoryServices, world, contextMenuController, ElementPoolService, static () => null, showLabels: false));
         AddChild(footerWindow);
     }
 

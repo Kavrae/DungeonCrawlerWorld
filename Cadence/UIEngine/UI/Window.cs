@@ -142,7 +142,7 @@ public class Window : Element
         CanUserClose = chrome?.CanUserClose ?? false;
         CanUserMinimize = chrome?.CanUserMinimize ?? false;
 
-        _headerState.OriginalSize = new Vector2(_geometry.OriginalSize.X, TitleFont.MeasureString(" ").Y + TitlePadding.Y * 3);
+        _headerState.OriginalSize = new Vector2(_geometry.OriginalSize.X, TitleFont.LineHeight + TitlePadding.Y * 2);
         _headerState.Size = _headerState.OriginalSize;
     }
 

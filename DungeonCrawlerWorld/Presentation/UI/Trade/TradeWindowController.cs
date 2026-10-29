@@ -74,8 +74,8 @@ public sealed class TradeWindowController(
     private InventoryManagementWindow? _subscribedInventoryWindow;
     private CloseReason _pendingCloseReason = CloseReason.Direct;
 
-    /// <summary>The currently-open trade window's own bounds, Rectangle.Empty when none is open -- lets ItemDetailsWindowController.IsOutsideClick recognize a click landing inside the trade window as "still inside" (see ItemWindowCoordinator's own GetSecondaryInventoryWindowRectangle wiring), the same role ShopWindowController.Rectangle already plays for the shop window.</summary>
-    public Rectangle Rectangle => _window?.Rectangle ?? Rectangle.Empty;
+    /// <summary>The open trade window, if any.</summary>
+    public TradeWindow? Window => _window;
 
     /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in either trade column" -- see ShopWindowController.OnItemSelected's own doc comment.</summary>
     public Action<int, uint>? OnItemSelected { get; set; }
@@ -136,7 +136,7 @@ public sealed class TradeWindowController(
         var leftPosition = new Vector2(centeredPosition.X - WindowCascadePlacement.Gap - inventoryWindow.CurrentSize.X, centeredPosition.Y);
         inventoryWindow.SetRelativePosition(RectangleClamp.ClampInside(leftPosition, inventoryWindow.CurrentSize, screenSize));
 
-        var shopSize = new Vector2(shopWindowController.Rectangle.Width, shopWindowController.Rectangle.Height);
+        var shopSize = shopWindowController.Window?.CurrentSize ?? Vector2.Zero;
         var rightPosition = new Vector2(centeredPosition.X + window.CurrentSize.X + WindowCascadePlacement.Gap, centeredPosition.Y);
         shopWindowController.SetPosition(RectangleClamp.ClampInside(rightPosition, shopSize, screenSize));
 

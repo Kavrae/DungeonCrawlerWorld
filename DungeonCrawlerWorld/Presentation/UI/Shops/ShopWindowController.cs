@@ -26,7 +26,8 @@ public sealed class ShopWindowController(
     /// <summary>The currently-open shop window's own target entity id, if any -- lets InventoryWindowController.GetSecondaryTargetEntityId answer "is a secondary window open, and for whom" for the player's own inventory grid's Give/Take menu, the same role SecondaryInventoryWindowController.OpenTargetEntityId already plays for corpses/containers.</summary>
     public int? OpenTargetEntityId => _slot.OpenTargetEntityId;
 
-    public Rectangle Rectangle => _slot.Rectangle;
+    /// <summary>The open shop window, if any.</summary>
+    public ShopWindow? Window => _slot.Window;
 
     /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in this shop's own grid" -- see SecondaryInventoryWindowController.OnItemSelected's own doc comment.</summary>
     public Action<int, uint>? OnItemSelected { get; set; }
@@ -84,7 +85,7 @@ public sealed class ShopWindowController(
                 ShowBorder = true,
                 CanUserClose = true,
                 CanUserMove = true,
-                CanUserResize = true,
+                CanUserResize = false,
                 CanUserFocus = true,
             },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },

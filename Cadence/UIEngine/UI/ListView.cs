@@ -333,22 +333,20 @@ public sealed class ListView(FontService fontService, ElementPoolService element
         }
     }
 
-    protected override void OnContentClickAction(Point mousePosition)
+    protected override bool OnContentClickAction(Point mousePosition)
     {
-        base.OnContentClickAction(mousePosition);
-
         var localX = mousePosition.X - ContentAbsolutePosition.X;
         var localY = mousePosition.Y - ContentAbsolutePosition.Y;
         if (localY < HeaderHeight)
         {
             ClickHeader(localX);
-            return;
+            return true;
         }
 
         var displayIndex = (int)((localY - HeaderHeight + ScrollOffset.Y) / RowHeight);
         if (displayIndex < 0 || displayIndex >= _order.Length)
         {
-            return;
+            return true;
         }
 
         var row = _rows[_order[displayIndex]];
@@ -360,11 +358,12 @@ public sealed class ListView(FontService fontService, ElementPoolService element
             _lastClickedRow = null;
             _framesSinceLastRowClick = int.MaxValue;
             RowActivated?.Invoke(row);
-            return;
+            return true;
         }
 
         _lastClickedRow = row;
         _framesSinceLastRowClick = 0;
+        return true;
     }
 
     private void ClickHeader(float localX)

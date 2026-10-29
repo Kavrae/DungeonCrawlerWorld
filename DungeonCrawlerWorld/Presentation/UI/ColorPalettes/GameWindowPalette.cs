@@ -29,6 +29,10 @@ internal static class GameWindowPalette
     /// <summary>Glyph color drawn on a bound hotbar slot's own icon fill.</summary>
     public static Color SlotGlyphColor = Color.Black;
 
+    /// <summary>A container on the map that a held item is over: green when it would take the drop, red when it wouldn't (MapViewState.ContainerDropHighlight).</summary>
+    public static Color ContainerDropAccepted = Color.LimeGreen;
+    public static Color ContainerDropRefused = Color.Red;
+
     /// <summary>Diagnostics window: row text, group headings, the paused/warning/leak text, and its graphs' background, level line, per-frame bars and frame-budget line.</summary>
     public static Color DiagnosticsText = Color.LightGray;
     public static Color DiagnosticsGroupHeading = Color.Lerp(Color.White, Color.LightBlue, 0.5f);

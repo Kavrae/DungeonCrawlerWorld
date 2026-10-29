@@ -83,15 +83,16 @@ public static class ElementFactoryRegistry
             uiEngineContext.FontService, elementPool, uiEngineContext.RenderService,
             inventoryServices, world, contextMenuController, mapViewState, simulationClock: gameSession.SimulationClock));
         Register<InventoryItemStackCell>((font, elements, render) => new InventoryItemStackCell(font, elements, render, uiEngineContext.SpriteSheetService));
+        Register<HotbarSlotElement>((font, elements, render) => new HotbarSlotElement(font, elements, render));
         Register<ShopItemStackCell>((font, elements, render) => new ShopItemStackCell(font, elements, render, uiEngineContext.SpriteSheetService));
         Register<TradeItemStackCell>((font, elements, render) => new TradeItemStackCell(font, elements, render, uiEngineContext.SpriteSheetService));
         Register<EmptyTradeSlotCell>((font, elements, render) => new EmptyTradeSlotCell(font, elements, render));
 
         elementPool.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
-            uiEngineContext.FontService, elementPool, uiEngineContext.RenderService, views.AbilityScoreView, views.StatModifierView, views.ActionSourceNaming, gameSession.SimulationClock, shellServices.PointerState));
+            uiEngineContext.FontService, elementPool, uiEngineContext.RenderService, views.AbilityScoreView, views.StatModifierView, views.ActionSourceNaming, gameSession.SimulationClock));
         elementPool.RegisterFactory<HealthWindow>(() => new HealthWindow(
             uiEngineContext.FontService, elementPool, uiEngineContext.RenderService, views.HealthView, views.StatModifierView, views.ActionStateView, views.EntityBodyParts, statusEffectDisplays, itemCatalog, catalogs.GameplayTags, gameSession.SimulationClock,
-            views.ActionSourceNaming, shellServices.TooltipController, shellServices.PointerState));
+            views.ActionSourceNaming, shellServices.TooltipController));
         Register<AbilityScoreColumnHeader>((font, elements, render) => new AbilityScoreColumnHeader(font, elements, render));
         Register<AbilityScoreModifierRow>((font, elements, render) => new AbilityScoreModifierRow(font, elements, render));
 

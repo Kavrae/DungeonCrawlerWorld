@@ -29,9 +29,6 @@ public sealed class TargetedWindowLifecycle<TWindow>(
     /// <summary>The currently-open window's own target entity id, if any -- null once nothing is open.</summary>
     public int? OpenTargetEntityId => _window is null ? null : _currentTargetEntityId;
 
-    /// <summary>The open window's own bounds -- Rectangle.Empty (never contains a click) when nothing is open.</summary>
-    public Rectangle Rectangle => _window?.Rectangle ?? Rectangle.Empty;
-
     public void CloseIfOpen() => _window?.Close();
 
     public void SetPosition(Vector2 position) => _window?.SetRelativePosition(position);

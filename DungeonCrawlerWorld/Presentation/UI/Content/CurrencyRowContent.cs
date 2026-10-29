@@ -3,8 +3,9 @@ using Game.Modules.Shops;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Input;
+using Presentation.Input.DragDrop;
 using Presentation.UI.Inventory;
+using UIEngine.Input;
 using UIEngine.UI;
 
 namespace Presentation.UI.Content;
@@ -14,9 +15,8 @@ namespace Presentation.UI.Content;
 /// CurrencyElement children (Gold, Credits) sharing one fixed-height row, instead of a single
 /// read-only TextWindow. Hosted via Window.SetFooterContent (see its own doc comment) rather than
 /// built by hand -- Initialize mirrors InventoryGridContent.Initialize's own shape exactly,
-/// including setting hostWindow.Tag = this so IInventoryDropTarget resolution
-/// (InventoryTransferDropHandler.FindDropTargetEntityId) finds this row regardless of whether the drop
-/// landed on a grid cell or a currency element.
+/// including naming itself as hostWindow.DropTarget, so a drop on the row or either element lands
+/// in entityId's inventory.
 /// </summary>
 public sealed class CurrencyRowContent(
     int entityId,
@@ -27,11 +27,7 @@ public sealed class CurrencyRowContent(
     Func<int?> getSecondaryTargetEntityId,
     // False for the trade window's own two currency footers -- "10 [sprite]"
     // instead of "Gold : 10 [sprite]", the column being too narrow to spare the label.
-    bool showLabels = true,
-    // Null (every non-trade caller) -- CurrencyElement.Configure's own default (WindowPalette.
-    // BodyTextColor). White for the trade window's own two currency footers, whose trade grid sits
-    // on a transparent background too dark for the shared BodyTextColor to read against.
-    Color? textColor = null) : IElementContent, IInventoryDropTarget
+    bool showLabels = true) : IElementContent, IContentDropTarget
 {
     private readonly CurrencyView _currencyView = inventoryServices.CurrencyView;
     private readonly ShopView _shopView = inventoryServices.ShopView;
@@ -46,10 +42,15 @@ public sealed class CurrencyRowContent(
 
     public int EntityId => entityId;
 
+    private readonly InventoryDropTarget _dropTarget = new(entityId);
+
+    /// <summary>A drop anywhere on this row lands in its entity's inventory -- an item as well as currency.</summary>
+    public object? DropTargetFor(object payload, Point position) => _dropTarget;
+
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
-        hostWindow.Tag = this;
+        hostWindow.DropTarget = this;
 
         Reposition(hostWindow.ContentSize.X);
         hostWindow.Resized += (_) => Reposition(hostWindow.ContentSize.X);
@@ -83,7 +84,7 @@ public sealed class CurrencyRowContent(
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
-        element.Configure(entityId, type, size, showLabels, textColor);
+        element.Configure(entityId, type, size, showLabels);
         _hostWindow.AddChild(element);
         element.OnRightClicked = clickPosition =>
         {
@@ -99,18 +100,9 @@ public sealed class CurrencyRowContent(
     public void Update(GameTime gameTime)
     {
         RefreshAmounts();
-        UpdateHover(Mouse.GetState());
     }
 
     public void DrawContent(GameTime gameTime) { }
-
-    /// <summary>Rectangle hit-test against the live mouse position, the same shape InventoryGridContent.UpdateHover/FindHoverCandidate uses. Elements are always non-null by the time Update runs Initialize builds them first.</summary>
-    private void UpdateHover(MouseState mouseState)
-    {
-        var mousePosition = new Point(mouseState.X, mouseState.Y);
-        _goldElement!.IsHovered = _goldElement.Rectangle.Contains(mousePosition);
-        _creditsElement!.IsHovered = _creditsElement.Rectangle.Contains(mousePosition);
-    }
 
     /// <summary>Re-reads the current CurrencyComponent and pushes it into both elements -- no version watcher (Currency has none), the same unconditional-refresh cost the old CurrencyRow.Format paid every Update.</summary>
     private void RefreshAmounts()

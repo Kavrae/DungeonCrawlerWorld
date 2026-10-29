@@ -109,6 +109,7 @@ public sealed class InventoryWindowController(
             Chrome = new ElementChromeOptions
             {
                 ShowTitle = true,
+                TitleText = "Inventory",
                 ShowBorder = true,
                 CanUserClose = true,
                 CanUserMinimize = false,

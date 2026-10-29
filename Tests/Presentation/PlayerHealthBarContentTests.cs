@@ -15,14 +15,15 @@ using Presentation.UI.Chrome;
 using Presentation.UI.Content;
 using System.Linq;
 using Tests.UIEngine;
+using UIEngine.Input;
 using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Tests.Presentation;
 
 /// <summary>
-/// Drives the real Update/hover pipeline (PlayerHealthBarContent's internal MouseState/
-/// screenBounds-seamed Update overload -- see its own doc comment) rather than calling a private
+/// Drives the real Update/hover pipeline (a UiInputController hit-tests the cursor, then PlayerHealthBarContent's internal
+/// screenBounds-seamed Update overload reads it -- see its own doc comment) rather than calling a private
 /// hover method directly, per this repo's own "live testing catches what code review misses"
 /// lesson for hit-test/popup work. screenBounds is passed in as a synthetic Rectangle instead of
 /// read from a real GraphicsDevice, which -- like HotbarContent's own Draw/Update and Folder's
@@ -36,7 +37,7 @@ public sealed class PlayerHealthBarContentTests
     private const int PlayerEntityId = 1;
     private static readonly Rectangle ScreenBounds = new(0, 0, 1920, 1080);
 
-    private static (PlayerHealthBarContent Content, Window HostWindow) Build(bool complexHealth, bool hasHealth = true)
+    private static (PlayerHealthBarContent Content, Window HostWindow, UiInputController Input) Build(bool complexHealth, bool hasHealth = true)
     {
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
         var fontService = TestFonts.Shared;
@@ -69,11 +70,20 @@ public sealed class PlayerHealthBarContentTests
         });
         hostWindow.SetContent(content);
         hostWindow.Initialize();
+        layers.Add(UiLayer.StaticHud, hostWindow);
 
-        return (content, hostWindow);
+        var input = new UiInputController(layers, new Vector2(ScreenBounds.Width, ScreenBounds.Height), new PointerState(), [], []);
+        return (content, hostWindow, input);
     }
 
     private static MouseState MouseAt(Point position) => new(position.X, position.Y, 0, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
+
+    /// <summary>One frame with the cursor at position: the input controller hit-tests it, then the bar reads what it found.</summary>
+    private static void Frame(UiInputController input, PlayerHealthBarContent content, Point position)
+    {
+        input.Update(new KeyboardState(), MouseAt(position));
+        content.Update(ScreenBounds);
+    }
 
     private static Point InsideBar(Window hostWindow)
     {
@@ -87,9 +97,9 @@ public sealed class PlayerHealthBarContentTests
     [TestMethod]
     public void Update_SimpleHealth_ValueTextShowsCurrentOverMaximum()
     {
-        var (content, _) = Build(complexHealth: false);
+        var (content, _, _) = Build(complexHealth: false);
 
-        content.Update(MouseAt(OutsideBar), ScreenBounds);
+        content.Update(ScreenBounds);
 
         Assert.AreEqual("50 / 100", content.ValueText);
     }
@@ -97,9 +107,9 @@ public sealed class PlayerHealthBarContentTests
     [TestMethod]
     public void Update_ComplexHealth_ValueTextShowsBodyPartTotals()
     {
-        var (content, _) = Build(complexHealth: true);
+        var (content, _, _) = Build(complexHealth: true);
 
-        content.Update(MouseAt(OutsideBar), ScreenBounds);
+        content.Update(ScreenBounds);
 
         Assert.AreEqual("54 / 64", content.ValueText);
     }
@@ -107,9 +117,9 @@ public sealed class PlayerHealthBarContentTests
     [TestMethod]
     public void Update_NoHealth_NoValueText()
     {
-        var (content, _) = Build(complexHealth: false, hasHealth: false);
+        var (content, _, _) = Build(complexHealth: false, hasHealth: false);
 
-        content.Update(MouseAt(OutsideBar), ScreenBounds);
+        content.Update(ScreenBounds);
 
         Assert.IsNull(content.ValueText);
     }
@@ -117,12 +127,12 @@ public sealed class PlayerHealthBarContentTests
     [TestMethod]
     public void Update_HoveringBelowDelayThreshold_PopupStaysHidden()
     {
-        var (content, hostWindow) = Build(complexHealth: true);
+        var (content, hostWindow, input) = Build(complexHealth: true);
         var insidePoint = InsideBar(hostWindow);
 
         for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames - 1; frame++)
         {
-            content.Update(MouseAt(insidePoint), ScreenBounds);
+            Frame(input, content, insidePoint);
             Assert.IsFalse(content.HoverPopup.IsVisible, $"Popup must stay hidden before the delay threshold (frame {frame}).");
         }
     }
@@ -130,12 +140,12 @@ public sealed class PlayerHealthBarContentTests
     [TestMethod]
     public void Update_HoveringAtDelayThreshold_PopupBecomesVisible()
     {
-        var (content, hostWindow) = Build(complexHealth: true);
+        var (content, hostWindow, input) = Build(complexHealth: true);
         var insidePoint = InsideBar(hostWindow);
 
         for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames; frame++)
         {
-            content.Update(MouseAt(insidePoint), ScreenBounds);
+            Frame(input, content, insidePoint);
         }
 
         Assert.IsTrue(content.HoverPopup.IsVisible, "Popup must be visible once the hover delay threshold is reached.");
@@ -144,16 +154,16 @@ public sealed class PlayerHealthBarContentTests
     [TestMethod]
     public void Update_HoverLostAfterShown_PopupHidesImmediately()
     {
-        var (content, hostWindow) = Build(complexHealth: true);
+        var (content, hostWindow, input) = Build(complexHealth: true);
         var insidePoint = InsideBar(hostWindow);
 
         for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames; frame++)
         {
-            content.Update(MouseAt(insidePoint), ScreenBounds);
+            Frame(input, content, insidePoint);
         }
         Assert.IsTrue(content.HoverPopup.IsVisible, "Sanity check: the popup must have shown first.");
 
-        content.Update(MouseAt(OutsideBar), ScreenBounds);
+        Frame(input, content, OutsideBar);
 
         Assert.IsFalse(content.HoverPopup.IsVisible, "Losing hover must hide the popup on the very next frame, with no delay.");
     }
@@ -161,12 +171,12 @@ public sealed class PlayerHealthBarContentTests
     [TestMethod]
     public void Update_HoveringPastDelay_PopupPositionedBelowBarWithinScreenBounds()
     {
-        var (content, hostWindow) = Build(complexHealth: true);
+        var (content, hostWindow, input) = Build(complexHealth: true);
         var insidePoint = InsideBar(hostWindow);
 
         for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames; frame++)
         {
-            content.Update(MouseAt(insidePoint), ScreenBounds);
+            Frame(input, content, insidePoint);
         }
 
         var barRectangle = hostWindow.ContentRectangle;
@@ -178,7 +188,7 @@ public sealed class PlayerHealthBarContentTests
     [TestMethod]
     public void BuildRows_ComplexHealthFixture_OneRowPerBodyPart_NoTotalRow()
     {
-        var (content, _) = Build(complexHealth: true);
+        var (content, _, _) = Build(complexHealth: true);
         var hoverContent = (PlayerHealthHoverContent)content.HoverPopup.Content!;
 
         var rows = new List<PlayerHealthHoverContent.RowData>();
@@ -197,7 +207,7 @@ public sealed class PlayerHealthBarContentTests
     [TestMethod]
     public void BuildRows_ComplexHealthFixture_EachRowFractionMatchesItsOwnPart()
     {
-        var (content, _) = Build(complexHealth: true);
+        var (content, _, _) = Build(complexHealth: true);
         var hoverContent = (PlayerHealthHoverContent)content.HoverPopup.Content!;
 
         var rows = new List<PlayerHealthHoverContent.RowData>();
@@ -232,7 +242,7 @@ public sealed class PlayerHealthBarContentTests
     [TestMethod]
     public void BuildRows_SimpleHealthFixture_NoRows()
     {
-        var (content, _) = Build(complexHealth: false);
+        var (content, _, _) = Build(complexHealth: false);
         var hoverContent = (PlayerHealthHoverContent)content.HoverPopup.Content!;
 
         var rows = new List<PlayerHealthHoverContent.RowData>();

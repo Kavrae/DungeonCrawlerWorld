@@ -90,11 +90,10 @@ public sealed class DropdownField(FontService fontService, ElementPoolService el
         SelectionChanged?.Invoke(optionIndex);
     }
 
-    protected override void OnContentClickAction(Point mousePosition)
+    protected override bool OnContentClickAction(Point mousePosition)
     {
-        base.OnContentClickAction(mousePosition);
-
         ToggleList();
+        return true;
     }
 
     protected override void OnKeyPressAction(Keys key)

@@ -41,16 +41,13 @@ public readonly record struct TooltipRow(string LeftText, string RightText, Colo
 public sealed class Tooltip(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
     : TextWindow(fontService, elementPoolService, renderService)
 {
-    /// <summary>Same dark fill as WindowPalette.PanelBackgroundColor (45,45,45), but a touch more opaque -- 90% instead of the shared 85% -- dividers, columns and row glows read more clearly against it. Applied only here, not by raising WindowPalette.PanelBackgroundColor, which every other window uses.</summary>
-    private static readonly Color BackgroundColor = new Color(45, 45, 45) * 0.90f;
-
-    /// <summary>TextWindow's own default (WindowPalette.BodyTextColor, Black) reads fine against a light content background -- every Tooltip popup instead sits on this class's own BackgroundColor dark fill, where black text is illegible. No caller currently opts out with its own explicit TextOptions.TextColor, but this still only overrides the fallback, not an explicit choice.</summary>
+    /// <summary>TextWindow's own default (WindowPalette.BodyTextColor, Black) reads fine against a light content background -- every Tooltip popup instead sits on WindowPalette.PanelBackgroundColor's dark fill, where black text is illegible. No caller currently opts out with its own explicit TextOptions.TextColor, but this still only overrides the fallback, not an explicit choice.</summary>
     public override void Build(Element? parent, ElementOptions options)
     {
         base.Build(parent, options);
 
         TextColor = options.Text?.TextColor ?? WindowPalette.TitleTextColor;
-        SetContentColor(options.Content?.ContentColor ?? BackgroundColor);
+        SetContentColor(options.Content?.ContentColor ?? WindowPalette.PanelBackgroundColor);
 
         // Forces RequiresContentViewport for every Tooltip, whatever chrome the caller passed: the
         // body text and rows are then clipped to the viewport, the path multi-line TextWindows

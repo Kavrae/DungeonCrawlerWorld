@@ -8,6 +8,20 @@ namespace Tests.UIEngine.Rendering;
 [TestClass]
 public sealed class SpriteEffectQuadsTests
 {
+    [TestMethod]
+    public void OnWholeScreenPixel_LandsTextsStartOnAWholePixel_OnceAHalfPixelDrawOffsetIsAdded()
+    {
+        var drawOffset = new Vector2(612.5f, 195.5f);
+
+        var position = SpriteEffectQuads.OnWholeScreenPixel(new Vector2(3f, 7f), drawOffset);
+        var onScreen = position + drawOffset;
+
+        Assert.AreEqual(MathF.Round(onScreen.X), onScreen.X);
+        Assert.AreEqual(MathF.Round(onScreen.Y), onScreen.Y);
+        Assert.IsLessThanOrEqualTo(0.5f, MathF.Abs(onScreen.X - 615.5f));
+        Assert.IsLessThanOrEqualTo(0.5f, MathF.Abs(onScreen.Y - 202.5f));
+    }
+
     private const float Tolerance = 0.001f;
     private static readonly Rectangle Destination = new(10, 20, 32, 32);
     private static readonly Rectangle WholeCell = new(0, 0, 16, 16);

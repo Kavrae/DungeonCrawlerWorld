@@ -732,7 +732,7 @@ public sealed class DebugLiveSection(DebugTabServices services, string title = "
             }
         }
 
-        public void OnRelease(Element? releasedElement, Point position)
+        public void OnRelease(Element? releasedElement, Point position, bool isTap)
         {
             if (!_isSelecting)
             {
@@ -744,9 +744,9 @@ public sealed class DebugLiveSection(DebugTabServices services, string title = "
             _isSelecting = false;
         }
 
-        public void OnRightPress(Point position)
+        public void OnRightPress(Element? pressedElement, Point position)
         {
-            if (timeline.IsVisible && timeline.Rectangle.Contains(position))
+            if (ReferenceEquals(pressedElement, timeline))
             {
                 timeline.ClearSelection();
             }

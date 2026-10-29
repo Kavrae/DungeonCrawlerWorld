@@ -142,7 +142,30 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     public Rectangle Rectangle => _geometry.Rectangle;
 
     protected bool _isVisible = true;
-    public bool IsVisible { get => _isVisible; set => _isVisible = value; }
+
+    public bool IsVisible
+    {
+        get => _isVisible;
+        set
+        {
+            if (_isVisible != value)
+            {
+                _isVisible = value;
+                MarkTreeChanged();
+            }
+        }
+    }
+
+    /// <summary>Whether the pointer is over this element or one of its descendants, as UiInputController's hit test last found it -- topmost only, so an element under another window, outside its scrolled viewport or behind menu mode is never over.</summary>
+    /// <remarks>Set by UiInputController for the hovered element and every ancestor; not refreshed during a window move, resize or scrollbar drag. Cleared when the element is built from its pool.</remarks>
+    public bool IsPointerOver { get; internal set; }
+
+    private static int _treeVersion;
+
+    /// <summary>Changes whenever any element gains or loses a child or changes visibility -- UiInputController hit-tests again when it does, so content rebuilt under a still mouse is hovered the same frame it would be after a move.</summary>
+    internal static int TreeVersion => Volatile.Read(ref _treeVersion);
+
+    private static void MarkTreeChanged() => Interlocked.Increment(ref _treeVersion);
 
     /// <summary>Whether this element can be found by hit-testing (FindTopmostHit/TryHitTestInteraction) at all -- defaults to just IsVisible; Button overrides this to also require Enabled, so a disabled button is never hovered, pressed, or clicked, rather than every caller having to remember to check Enabled itself.</summary>
     protected virtual bool IsHitTestable => _isVisible;
@@ -156,6 +179,9 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// inherits a stale reference from whatever it was last used for.
     /// </summary>
     public object? Tag { get; set; }
+
+    /// <summary>What a content drop on this element lands on, for an element that isn't an IContentDropTarget itself -- a window whose content is driven manually. Reset on Build.</summary>
+    public IContentDropTarget? DropTarget { get; set; }
 
     protected bool _isTransparent;
     public bool IsTransparent => _isTransparent;
@@ -412,6 +438,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         // Pooled elements must not inherit a stale Tag reference from whatever they were last
         // used for -- see Tag's own doc comment.
         Tag = null;
+        DropTarget = null;
 
         /*========Display========*/
         _geometry.DisplayMode = layout?.DisplayMode ?? ElementDisplayMode.Fixed;
@@ -427,6 +454,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         _geometry.SpacingAfter = layout?.SpacingAfter ?? 0f;
 
         _isVisible = layout?.IsVisible ?? true;
+        IsPointerOver = false;
         _isTransparent = layout?.IsTransparent ?? false;
 
         // Pooled windows must not inherit a stale glow from whatever they were last used for --
@@ -910,10 +938,11 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// Fires instead of HandleRightDragEnd when a right-button press/release never moved the
     /// mouse past UiInputController's small tap-vs-drag pixel threshold -- a right-click
     /// "tap," distinct from the drag-to-pan gesture the same button also drives. No-op by
-    /// default; TextBox opens its Cut/Copy/Paste/Select All menu here. Overrides take position rather than self-polling Mouse.GetState(), since UiInputController already
-    /// has the authoritative release position that decided this was a tap in the first place.
+    /// default; TextBox opens its Cut/Copy/Paste/Select All menu here. Returns whether this element
+    /// handled it -- UiInputController offers the tap to the element under the cursor, then to each
+    /// ancestor until one does.
     /// </summary>
-    internal void HandleRightClickTap(Point position) => OnRightClickTapAction(position);
+    internal bool HandleRightClickTap(Point position) => OnRightClickTapAction(position);
 
     /// <summary>
     /// Settable per-instance right-click handler -- lets any Element opt into a right-click
@@ -925,7 +954,17 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// </summary>
     public Action<Point>? OnRightClicked { get; set; }
 
-    protected virtual void OnRightClickTapAction(Point position) => OnRightClicked?.Invoke(position);
+    /// <summary>Invokes OnRightClicked; handled exactly when there is one. An override that does something returns true.</summary>
+    protected virtual bool OnRightClickTapAction(Point position)
+    {
+        if (OnRightClicked is not { } onRightClicked)
+        {
+            return false;
+        }
+
+        onRightClicked(position);
+        return true;
+    }
 
     /// <summary>
     /// Fires on every root/HUD window when Escape is pressed -- see
@@ -1008,7 +1047,13 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         return null;
     }
 
-    public void HandleClick(Point mousePosition)
+    /// <summary>A click at mousePosition on this element itself -- its header, or its content; returns whether this element handled it.</summary>
+    /// <remarks>
+    /// The header always handles its own clicks. A content click is handled when OnContentClickAction says so or anything
+    /// listens to Clicked; otherwise UiInputController offers it to the parent, so a label inside a clickable row clicks
+    /// the row. A click outside both is never handled.
+    /// </remarks>
+    public bool HandleClick(Point mousePosition)
     {
         // _header.Rectangle is sized/positioned from _header.Size/_header.AbsolutePosition
         // unconditionally (RecalculateRectangles doesn't know about _header.ShowHeader), so
@@ -1018,15 +1063,14 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         if (_headerState.ShowHeader && _headerState.Rectangle.Contains(mousePosition))
         {
             HandleHeaderClick(mousePosition);
+            return true;
         }
-        else if (_contentState.BackgroundRectangle.Contains(mousePosition))
-        {
-            // BackgroundRectangle, not Rectangle -- a click inside the padding band (visually part
-            // of this element's own painted content, see BackgroundRectangle's own doc comment)
-            // must still count as a content click, not fall through to a dead zone just because it
-            // missed the smaller, children-only Rectangle.
-            HandleContentClick(mousePosition);
-        }
+
+        // BackgroundRectangle, not Rectangle -- a click inside the padding band (visually part
+        // of this element's own painted content, see BackgroundRectangle's own doc comment)
+        // must still count as a content click, not fall through to a dead zone just because it
+        // missed the smaller, children-only Rectangle.
+        return _contentState.BackgroundRectangle.Contains(mousePosition) && HandleContentClick(mousePosition);
     }
 
     private void HandleHeaderClick(Point mousePosition) => OnHeaderClickAction(mousePosition);
@@ -1043,11 +1087,8 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
     /// <summary>
     /// Topmost (last-added first) hit-testable member of container whose Rectangle contains
-    /// position, or null. The one hit-test algorithm shared by both the header zone (Window's
-    /// FindHeaderButtonAt, scoped to _titleButtons) and the content zone (OnContentClickAction's
-    /// own default below, scoped to _children) -- those two zones are a real, load-bearing split
-    /// (header always wins a click over starting a drag, see TryHitTestInteraction), but there's
-    /// no reason the code that walks either one should be written twice.
+    /// position, or null -- the title-button lookup shared by Window's FindHeaderButtonAt (the
+    /// hit test) and OnHeaderClickAction (the click), so the two never disagree.
     /// </summary>
     private protected static Element? FindTopmostHit(IReadOnlyList<Element> container, Point position)
     {
@@ -1233,20 +1274,20 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         siblings.Add(this);
     }
 
-    private void HandleContentClick(Point mousePosition)
+    private bool HandleContentClick(Point mousePosition)
     {
-        OnContentClickAction(mousePosition);
-        Clicked?.Invoke(this);
+        var handled = OnContentClickAction(mousePosition);
+        if (Clicked is not { } clicked)
+        {
+            return handled;
+        }
+
+        clicked(this);
+        return true;
     }
 
-    /// <summary>
-    /// Routes a content click to the topmost child whose Rectangle contains it, then stops --
-    /// the same topmost-first, single-target philosophy TryHitTestInteraction already uses for
-    /// drags, now applied to plain clicks too (and, like TryHitTestInteraction, skipping
-    /// non-hit-testable children -- see FindTopmostHit). When children overlap (Floating mode),
-    /// only the one drawn on top receives the click.
-    /// </summary>
-    protected virtual void OnContentClickAction(Point mousePosition) => FindTopmostHit(_children, mousePosition)?.HandleClick(mousePosition);
+    /// <summary>What a content click on this element itself does; returns whether it did anything. Nothing by default -- a click on a child goes to the child first, never down from here.</summary>
+    protected virtual bool OnContentClickAction(Point mousePosition) => false;
 
     /// <summary>
     /// Attaches newChild to this element and initializes it -- callers must NOT also call
@@ -1266,6 +1307,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         var clampedInsertIndex = System.Math.Clamp(insertIndex ?? maximumIndex, 0, maximumIndex);
 
         _children.Insert(clampedInsertIndex, newChild);
+        MarkTreeChanged();
 
         newChild.Initialize();
 
@@ -1311,6 +1353,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
         var removedChild = _children[childElementIndex];
         _children.RemoveAt(childElementIndex);
+        MarkTreeChanged();
 
         // Repositions every remaining Horizontal/Vertical-tiled child to close the gap -- see
         // RetileChildren's own doc comment. Never touches Initialize -- every remaining sibling
@@ -1966,7 +2009,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
     public void SetIsVisible(bool isVisible)
     {
-        _isVisible = isVisible;
+        IsVisible = isVisible;
         _parent?.MeasureAndArrange();
     }
 

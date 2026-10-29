@@ -196,6 +196,165 @@ public sealed class ItemWindowCoordinatorTests
         Assert.AreEqual(stackInstanceId, harness.Coordinator.ItemDetails.CurrentStackInstanceId);
     }
 
+    private static void Press(UiInputController controller, Point position)
+    {
+        controller.Update(new KeyboardState(), new MouseState(position.X, position.Y, 0, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released));
+        controller.Update(new KeyboardState(), new MouseState(position.X, position.Y, 0, ButtonState.Pressed, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released));
+    }
+
+    private static UiInputController Controller(Harness harness) =>
+        TestUiInputController.Create(harness.Layers, new Vector2(2000, 2000), harness.ComponentManager, TestPlayerQuery.NoPlayer, new EventBus(), harness.ItemCatalog, contextMenuController: harness.ContextMenuController, mapViewState: harness.MapViewState);
+
+    private static Harness BuildWithItemDetailsOpenOverACorpse()
+    {
+        var harness = Build();
+        harness.Coordinator.Inventory.OpenInventoryWindow();
+        harness.MapWindow.OnCorpseClicked!(CorpseEntityId);
+        var stackInstanceId = InventoryActions.AddItem(harness.ComponentManager, CorpseEntityId, PotionItemId, quantity: 1);
+        harness.Coordinator.Inventory.OnItemSelected!(CorpseEntityId, stackInstanceId);
+        Assert.IsTrue(harness.Coordinator.ItemDetails.IsOpen, "Sanity check: Item Details opened on the corpse's potion.");
+        return harness;
+    }
+
+    private static (SecondaryInventoryWindow Window, Window Grid) OpenCorpseLoot(Harness harness)
+    {
+        harness.Coordinator.Inventory.OpenInventoryWindow();
+        harness.MapWindow.OnCorpseClicked!(CorpseEntityId);
+        var window = harness.Layers[UiLayer.DynamicHud].OfType<SecondaryInventoryWindow>().Single();
+        var grid = window.ChildElements.OfType<Window>().Single(child => child.Content is InventoryGridContent);
+        return (window, grid);
+    }
+
+    /// <summary>Gives the corpse count new items, each its own definition, so each is a cell of its own.</summary>
+    private static List<uint> AddDifferentItems(Harness harness, int count, int entityId = CorpseEntityId)
+    {
+        var stackInstanceIds = new List<uint>();
+        for (var index = 0; index < count; index++)
+        {
+            var itemId = Guid.NewGuid();
+            harness.ItemCatalog.Register(new ItemDefinition(itemId, $"Trinket {itemId}", null, "t", Color.White, Tags: [], Effects: []));
+            stackInstanceIds.Add(InventoryActions.AddItem(harness.ComponentManager, entityId, itemId, quantity: 1));
+        }
+
+        return stackInstanceIds;
+    }
+
+    private static void TakeFromCorpse(Harness harness, uint stackInstanceId) =>
+        InventoryActions.TryTransferStack(harness.ComponentManager, harness.ItemCatalog, CorpseEntityId, PlayerEntityId, stackInstanceId, TestPlayerQuery.NoPlayer);
+
+    private static string HeaderText(SecondaryInventoryWindow window) =>
+        window.ChildElements.OfType<TextWindow>().Single(line => line.OriginalText.Contains('/')).OriginalText;
+
+    private static int RowsShown(Window grid) =>
+        (int)System.Math.Round(grid.CurrentSize.Y / (InventoryGridContent.CellSize.Y + InventoryGridContent.CellGap));
+
+    [TestMethod]
+    public void ALootWindow_IsAsWideAsFiveColumns_AndCantBeResized()
+    {
+        var harness = Build();
+        var (window, grid) = OpenCorpseLoot(harness);
+
+        var fiveColumns = 5 * InventoryGridContent.CellSize.X + 4 * InventoryGridContent.CellGap;
+        Assert.AreEqual(fiveColumns, grid.CurrentSize.X);
+        Assert.AreEqual(fiveColumns, window.ContentSize.X);
+        Assert.IsFalse(window.CanUserResize);
+    }
+
+    [TestMethod]
+    public void ALootWindow_GainsARowWhenItsLastRowFills_AndLosesItOnceARowAndOneMoreEmpty()
+    {
+        var harness = Build();
+        var (window, grid) = OpenCorpseLoot(harness);
+        Assert.AreEqual(2, RowsShown(grid), "Sanity check: an empty corpse shows the two-row minimum.");
+
+        var stackInstanceIds = AddDifferentItems(harness, 9);
+        window.Update(new GameTime());
+        Assert.AreEqual(2, RowsShown(grid), "Nine cells leave the second row a slot to drop into.");
+
+        stackInstanceIds.AddRange(AddDifferentItems(harness, 1));
+        window.Update(new GameTime());
+        Assert.AreEqual(3, RowsShown(grid), "The tenth fills both rows, so a third opens.");
+
+        TakeFromCorpse(harness, stackInstanceIds[^1]);
+        window.Update(new GameTime());
+        Assert.AreEqual(2, RowsShown(grid), "Back to nine, the third row and one more cell are empty.");
+    }
+
+    [TestMethod]
+    public void ALootWindow_StopsAtFourRows_AndCountsItsStacksOutOfTwenty()
+    {
+        var harness = Build();
+        var (window, grid) = OpenCorpseLoot(harness);
+
+        AddDifferentItems(harness, 20);
+        window.Update(new GameTime());
+
+        Assert.AreEqual(4, RowsShown(grid));
+        Assert.AreEqual("20/20", HeaderText(window));
+    }
+
+    private static (ShopWindow Window, Window Grid) OpenShop(Harness harness)
+    {
+        harness.Coordinator.Inventory.OpenInventoryWindow();
+        harness.MapWindow.OnShopClicked!(ShopEntityId);
+        var window = harness.Layers[UiLayer.DynamicHud].OfType<ShopWindow>().Single();
+        var grid = window.ChildElements.OfType<Window>().Single(child => child.Content is InventoryGridContent);
+        return (window, grid);
+    }
+
+    [TestMethod]
+    public void AShopWindow_IsAsWideAsTwoShopCells_CountsItsStacksOutOfInfinity_AndCantBeResized()
+    {
+        var harness = Build();
+        AddDifferentItems(harness, 3, ShopEntityId);
+        var (window, grid) = OpenShop(harness);
+
+        var twoShopCells = 2 * InventoryGridContent.CellSize.X * InventoryGridContent.ShopCellWidthMultiplier + InventoryGridContent.CellGap;
+        Assert.AreEqual(twoShopCells, grid.CurrentSize.X);
+        Assert.AreEqual(5, RowsShown(grid));
+        Assert.IsTrue(window.ChildElements.OfType<TextWindow>().Any(line => line.OriginalText == "3/∞"));
+        Assert.IsFalse(window.CanUserResize);
+    }
+
+    [TestMethod]
+    public void AShopWindow_PastTwelveRowsScrolls_AndWidensForTheScrollbar()
+    {
+        var harness = Build();
+        var (window, grid) = OpenShop(harness);
+
+        AddDifferentItems(harness, 30, ShopEntityId);
+        window.Update(new GameTime());
+
+        Assert.AreEqual(12, RowsShown(grid));
+        var twoShopCells = 2 * InventoryGridContent.CellSize.X * InventoryGridContent.ShopCellWidthMultiplier + InventoryGridContent.CellGap;
+        Assert.AreEqual(twoShopCells + global::UIEngine.UI.Chrome.WindowChrome.ScrollbarThickness, grid.CurrentSize.X);
+    }
+
+    [TestMethod]
+    public void APressOnTheInventoryOrTheCorpseWindow_LeavesItemDetailsOpen()
+    {
+        var harness = BuildWithItemDetailsOpenOverACorpse();
+        var controller = Controller(harness);
+        var corpseWindow = harness.Layers[UiLayer.DynamicHud].OfType<SecondaryInventoryWindow>().Single();
+
+        Press(controller, harness.Coordinator.Inventory.PlayerInventoryWindow!.Rectangle.Location + new Point(2, 2));
+        Press(controller, corpseWindow.Rectangle.Location + new Point(2, 2));
+
+        Assert.IsTrue(harness.Coordinator.ItemDetails.IsOpen);
+    }
+
+    [TestMethod]
+    public void APressAwayFromEveryTiedWindow_ClosesItemDetails_AndOnlyIt()
+    {
+        var harness = BuildWithItemDetailsOpenOverACorpse();
+
+        Press(Controller(harness), new Point(1990, 1990));
+
+        Assert.IsFalse(harness.Coordinator.ItemDetails.IsOpen);
+        Assert.IsNotNull(harness.Coordinator.Inventory.PlayerInventoryWindow);
+        Assert.AreEqual(CorpseEntityId, OpenSecondaryTarget(harness));
+    }
+
     [TestMethod]
     public void ClickingAnItem_WithComparisonArmed_AddsItAsAColumnAndKeepsTheAnchor()
     {
@@ -210,7 +369,7 @@ public sealed class ItemWindowCoordinatorTests
         harness.Coordinator.Inventory.OnItemSelected!(PlayerEntityId, comparedStack.StackInstanceId);
 
         Assert.AreEqual(anchorStackId, harness.Coordinator.ItemDetails.CurrentStackInstanceId);
-        Assert.HasCount(1, harness.Coordinator.ItemComparison.ColumnRectangles);
+        Assert.HasCount(1, harness.Coordinator.ItemComparison.Columns);
     }
 
     [TestMethod]
@@ -230,7 +389,7 @@ public sealed class ItemWindowCoordinatorTests
         harness.Coordinator.Inventory.OnItemSelected!(PlayerEntityId, firstComparedStack.StackInstanceId);
         harness.Coordinator.Inventory.OnItemSelected!(PlayerEntityId, secondComparedStack.StackInstanceId);
         harness.Coordinator.Inventory.OnItemSelected!(PlayerEntityId, thirdComparedStack.StackInstanceId);
-        Assert.HasCount(3, harness.Coordinator.ItemComparison.ColumnRectangles, "Sanity check: three comparison columns beside the anchor.");
+        Assert.HasCount(3, harness.Coordinator.ItemComparison.Columns, "Sanity check: three comparison columns beside the anchor.");
 
         var controller = TestUiInputController.Create(
             harness.Layers,
@@ -240,7 +399,6 @@ public sealed class ItemWindowCoordinatorTests
             new EventBus(),
             harness.ItemCatalog,
             contextMenuController: harness.ContextMenuController,
-            itemDetailsWindowController: harness.Coordinator.ItemDetails,
             itemComparisonController: harness.Coordinator.ItemComparison,
             mapViewState: harness.MapViewState,
             inventoryWindowController: harness.Coordinator.Inventory);
@@ -254,7 +412,7 @@ public sealed class ItemWindowCoordinatorTests
 
         Assert.IsNull(harness.Coordinator.Inventory.PlayerInventoryWindow);
         Assert.IsFalse(harness.Coordinator.ItemDetails.IsOpen);
-        Assert.IsEmpty(harness.Coordinator.ItemComparison.ColumnRectangles);
+        Assert.IsEmpty(harness.Coordinator.ItemComparison.Columns);
         Assert.IsFalse(harness.Layers[UiLayer.DynamicHud].OfType<ItemDetailsWindow>().Any(), "No Item Details window may be left in the DynamicHud layer.");
         Assert.IsNull(harness.Layers.BottommostMenuWindow, "No menu window may be left in a layer to draw the dim under.");
         Assert.IsFalse(harness.Layers.IsMenuModeActive, "Menu mode, and the game's pause with it, must end once every menu window has closed.");

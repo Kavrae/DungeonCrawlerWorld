@@ -27,12 +27,11 @@ namespace Presentation.UI.AbilityScores;
 /// children directly via AddChild -- no
 /// IElementContent/TabbedContent needed, since there's nothing to tab between. Created fresh by
 /// AbilityScoreWindowController each time it's opened and returned to ElementPoolService's pool
-/// on close, same lifecycle as InventoryManagementWindow. Also reads the cursor from PointerState
-/// every Update (see UpdateHover), which UiInputController publishes each update, to drive a
-/// header/modifier-row hover popup shown/hidden through the shared TooltipController (see its own
-/// doc comment).
+/// on close, same lifecycle as InventoryManagementWindow. Its header/modifier-row hover popup
+/// follows the element UiInputController finds under the pointer (Element.IsPointerOver), shown/
+/// hidden through the shared TooltipController (see its own doc comment).
 /// </summary>
-public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, AbilityScoreView abilityScoreView, StatModifierView statModifierView, ActionSourceNaming actionSourceNaming, SimulationClock simulationClock, PointerState pointerState)
+public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, AbilityScoreView abilityScoreView, StatModifierView statModifierView, ActionSourceNaming actionSourceNaming, SimulationClock simulationClock)
     : Window(fontService, elementPoolService, renderService)
 {
     private const float HeaderHeight = 50f;
@@ -118,7 +117,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     {
         base.Update(gameTime);
 
-        UpdateHover(pointerState.CursorPosition);
+        UpdateHover();
 
         if (AdminMode.IsOn != _lastAdminModeOn)
         {
@@ -147,29 +146,10 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     /// the same way HotbarController.UpdateHover gates its own Armed Hotkey Summary popup,
     /// against the same shared HudChrome.HoverTooltipDelayFrames -- but hides immediately on candidate change/
     /// loss (no delay on hiding, only on showing, same convention MapViewState.HoverSlot uses).
-    /// Known, accepted gap: unlike HotbarInputHandler.OnPointerUpdate, this doesn't suppress itself during an
-    /// active drag of this window's own title bar -- not worth the extra plumbing unless it
-    /// turns out to actually be noticeable.
     /// </summary>
-    private void UpdateHover(Point mousePosition)
+    private void UpdateHover()
     {
-        var candidate = FindHoverCandidate(mousePosition);
-
-        foreach (var header in _columnHeaders)
-        {
-            header.IsHovered = ReferenceEquals(header, candidate);
-        }
-
-        foreach (var listWindow in _columnListWindows)
-        {
-            foreach (var child in listWindow.ChildElements)
-            {
-                if (child is AbilityScoreModifierRow row)
-                {
-                    row.IsHovered = ReferenceEquals(row, candidate);
-                }
-            }
-        }
+        var candidate = FindHoverCandidate();
 
         if (candidate == _hoveredCandidate)
         {
@@ -201,12 +181,12 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         }
     }
 
-    /// <summary>Headers first, then modifier rows (Base rows excluded -- Source is null, nothing to pop up) across every column's list-window. Whichever the mouse point falls inside wins; null if it's over neither.</summary>
-    private Element? FindHoverCandidate(Point mousePosition)
+    /// <summary>Headers first, then modifier rows (Base rows excluded -- Source is null, nothing to pop up) across every column's list-window. Whichever the pointer is over; null if it's over neither.</summary>
+    private Element? FindHoverCandidate()
     {
         foreach (var header in _columnHeaders)
         {
-            if (header.Rectangle.Contains(mousePosition))
+            if (header.IsPointerOver)
             {
                 return header;
             }
@@ -216,7 +196,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         {
             foreach (var child in listWindow.ChildElements)
             {
-                if (child is AbilityScoreModifierRow { Source: not null } row && row.Rectangle.Contains(mousePosition))
+                if (child is AbilityScoreModifierRow { Source: not null } row && row.IsPointerOver)
                 {
                     return row;
                 }

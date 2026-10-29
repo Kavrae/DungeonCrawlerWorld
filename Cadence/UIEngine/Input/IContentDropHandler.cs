@@ -1,5 +1,4 @@
 using Microsoft.Xna.Framework;
-using UIEngine.UI;
 
 namespace UIEngine.Input;
 
@@ -21,9 +20,12 @@ public interface IContentDropHandler
     /// <summary>The drag has ended, dropped or not.</summary>
     void OnDragEnded(object payload) { }
 
-    /// <summary>Whether the cursor at position, over hoveredElement (the controller's own hit test, resolved once a frame), shows that payload can't be dropped there.</summary>
-    bool IsDropRefusedAt(object payload, Element? hoveredElement, Point position) => false;
+    /// <summary>Every frame its ghost shows, the drag is held over dropTarget (what the nearest IContentDropTarget under the cursor named, null when none did) -- a target may show whether it would take the drop.</summary>
+    void OnDragOver(object payload, object? dropTarget, Point position) { }
 
-    /// <summary>Whether this handler claims a drop of payload at position on dropTarget (the element hit there, if any) -- claiming, whether or not anything changed, stops the handlers after it.</summary>
-    bool TryDrop(object payload, Element? dropTarget, Point position);
+    /// <summary>Whether payload can't be dropped on dropTarget at position (what the nearest IContentDropTarget under the cursor named, null when none did) -- the refusal cursor while held; on release, a drop any handler refuses is offered to none.</summary>
+    bool IsDropRefusedAt(object payload, object? dropTarget, Point position) => false;
+
+    /// <summary>Whether this handler claims a drop of payload at position on dropTarget (what the nearest IContentDropTarget there named, null when none did) -- claiming, whether or not anything changed, stops the handlers after it.</summary>
+    bool TryDrop(object payload, object? dropTarget, Point position);
 }

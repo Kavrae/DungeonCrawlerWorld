@@ -71,6 +71,9 @@ public sealed class MapViewState
     /// <summary>The currently-open shop's own entity id, if any -- set/cleared by ShopWindowController.OpenShop/its own Closed handler, the same shared cross-window flag CompareRequiredActivatorType above already is. Not yet read by anything (a future pass switches both the shop's own grid and the player's own inventory grid to the wider, price-showing ShopItemStackCell layout while this is set).</summary>
     public int? OpenShopEntityId;
 
+    /// <summary>The container or corpse on the map a held item is over, and whether it would take the drop -- drawn green when it would, red when it wouldn't (MapGameOverlay). Null when no drag is over one.</summary>
+    public (int EntityId, bool Accepts)? ContainerDropHighlight;
+
     /// <summary>
     /// Every entity id FloorBuilder reserves up front for a session (currently just the two
     /// trade-offer placeholders -- see FloorBuilder.ReserveTradeOfferEntities) -- set once by

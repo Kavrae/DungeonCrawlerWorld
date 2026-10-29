@@ -34,8 +34,8 @@ public sealed class SecondaryInventoryWindowController(
     /// <summary>The currently-open secondary/corpse window's own target entity id, if any -- lets InventoryWindowController's own GetSecondaryTargetEntityId (wired by ItemWindowCoordinator) answer "is a secondary window open, and for whom" for the player's own inventory grid's Give/Take menu, without that grid needing a direct reference to this controller.</summary>
     public int? OpenTargetEntityId => _slot.OpenTargetEntityId;
 
-    /// <summary>The currently-open corpse/secondary window's own bounds, if any -- Rectangle.Empty (never contains a click) when nothing is open. Lets ItemDetailsWindowController's own outside-click-close check treat this window as "still inside," the same way it already does for the player's own InventoryManagementWindow.</summary>
-    public Rectangle Rectangle => _slot.Rectangle;
+    /// <summary>The open corpse or container window, if any.</summary>
+    public SecondaryInventoryWindow? Window => _slot.Window;
 
     /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in this corpse/secondary grid" -- see InventoryWindowController.OnItemSelected, wired by ItemWindowCoordinator to the same ItemDetailsWindowController.Open. Threaded into every corpse window's own Configure call.</summary>
     public Action<int, uint>? OnItemSelected { get; set; }
@@ -87,7 +87,7 @@ public sealed class SecondaryInventoryWindowController(
                 ShowBorder = true,
                 CanUserClose = true,
                 CanUserMove = true,
-                CanUserResize = true,
+                CanUserResize = false,
                 CanUserFocus = true,
             },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },

@@ -46,7 +46,7 @@ public sealed class InventoryTabContent(ElementPoolService elementPoolService, I
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = new Vector2(hostWindow.ContentSize.X, GridControl.RowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
+            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
         _gridControl.Configure(
             SortOptionLabels,

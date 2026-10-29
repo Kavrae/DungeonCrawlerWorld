@@ -3,7 +3,6 @@ using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.UI.Content;
 using UIEngine.Input;
-using UIEngine.UI;
 
 namespace Presentation.Input.DragDrop;
 
@@ -28,38 +27,46 @@ public sealed class HotbarBindingDropHandler(HotbarContent hotbarContent, IPlaye
 
     public void OnDragEnded(object payload) => hotbarContent.IsAcceptingDrag = false;
 
-    public bool IsDropRefusedAt(object payload, Element? hoveredElement, Point position) =>
+    public bool IsDropRefusedAt(object payload, object? dropTarget, Point position) =>
         payload is DragPayload drag &&
         (!drag.CanBindToHotbar || IsFromNonPlayerInventory(drag)) &&
-        IsOverThisHotbar(hoveredElement) &&
-        hotbarContent.TryGetSlotAt(position, out _);
+        IsSlotOfThisHotbar(dropTarget, out _);
 
-    public bool TryDrop(object payload, Element? dropTarget, Point position)
+    /// <summary>Claims a drop on one of this hotbar's slots, binding it; a drag from a slot that lands anywhere else unbinds that slot and leaves the drop to the handlers after it -- an item can go on into a container.</summary>
+    public bool TryDrop(object payload, object? dropTarget, Point position)
     {
         if (payload is not DragPayload drag || !drag.CanBindToHotbar)
         {
             return false;
         }
 
-        HotkeySlot? destinationSlot = null;
-
-        if (!IsFromNonPlayerInventory(drag) && IsOverThisHotbar(dropTarget) && hotbarContent.TryGetSlotAt(position, out var dropSlot))
+        if (!IsFromNonPlayerInventory(drag) && IsSlotOfThisHotbar(dropTarget, out var destinationSlot))
         {
-            destinationSlot = dropSlot;
-        }
-
-        if (drag.OriginSlot is null && destinationSlot is null)
-        {
+            hotbarContent.ResolveDroppedBinding(drag.OriginSlot, destinationSlot, drag.ActionId, drag.ItemStackInstanceId);
             return true;
         }
 
-        hotbarContent.ResolveDroppedBinding(drag.OriginSlot, destinationSlot, drag.ActionId, drag.ItemStackInstanceId);
-        return true;
+        if (drag.OriginSlot is { } originSlot)
+        {
+            hotbarContent.ResolveDroppedBinding(originSlot, destinationSlot: null, drag.ActionId, drag.ItemStackInstanceId);
+        }
+
+        return false;
     }
 
-    /// <summary>Whether drag was picked up from some other entity's inventory -- never set for a hotbar-origin drag, which is always the player's.</summary>
+    /// <summary>Whether drag was picked up from some other entity's inventory -- never for a drag from a hotbar slot, which is always the player's.</summary>
     private bool IsFromNonPlayerInventory(DragPayload drag) =>
-        drag.OriginEntityId is { } originEntityId && originEntityId != playerQuery.PlayerEntityId;
+        drag.OriginSlot is null && drag.OriginEntityId is { } originEntityId && originEntityId != playerQuery.PlayerEntityId;
 
-    private bool IsOverThisHotbar(Element? element) => element is Window window && ReferenceEquals(window.Content, hotbarContent);
+    private bool IsSlotOfThisHotbar(object? dropTarget, out HotkeySlot slot)
+    {
+        if (dropTarget is HotbarSlotDropTarget target && ReferenceEquals(target.Hotbar, hotbarContent))
+        {
+            slot = target.Slot;
+            return true;
+        }
+
+        slot = default;
+        return false;
+    }
 }

@@ -86,7 +86,7 @@ public static class ShellBootstrapper
         mapWindow.OnInspectionOpened = () => inspectionWindow.SetDisplayMode(ElementDisplayMode.Fixed);
         var (notificationCenter, healthController) = BuildDynamicHudWindows(uiEngine, world, ecsContext.EventBus, contextMenuController, uiLayers);
         var itemWindows = new ItemWindowCoordinator(uiEngine.ElementPoolService, shellServices, world, mapWindow, actionTargetingController, views.InventoryView, catalogs.ItemCatalog, catalogs.LootboxCatalog, commands.LootCommands, commands.LootboxCommands, worldSession.ReservedEntityIds);
-        var hotbarController = BuildHotbarController(mapViewState, hotbarContent, actionTargetingController, tooltipController);
+        var hotbarController = BuildHotbarController(mapViewState, hotbarContent, actionTargetingController, tooltipController, contextMenuController);
         BuildUserWindows(uiEngine, shellServices.CursorTextContent, dragGhostContent, uiLayers);
 
         var abilityScoreController = BuildAbilityScoreWindowController(uiEngine, world, views.InventoryView, itemWindows.Inventory, mapWindow, contextMenuController, uiLayers, tooltipController);
@@ -113,15 +113,16 @@ public static class ShellBootstrapper
             new KeyPressInputHandler(Keys.O, abilityScoreController.ToggleAbilityScoreWindow),
             new KeyPressInputHandler(Keys.F3, diagnosticsController.ToggleDiagnosticsWindow),
             new KeyPressInputHandler(Keys.LeftAlt, targetingModeSwitch.Switch),
-            new ItemDetailsOutsideClickInputHandler(itemWindows.ItemDetails),
             new ItemComparisonDisarmInputHandler(itemWindows.ItemComparison),
             new HotbarInputHandler(hotbarController),
             new ActivationRefusalInputHandler(),
         ];
+        var inventoryTransferDropHandler = new InventoryTransferDropHandler(mapViewState, views.ShopView, views.InventoryView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, world);
         IContentDropHandler[] contentDropHandlers =
         [
-            new InventoryTransferDropHandler(mapViewState, views.ShopView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, world),
             new HotbarBindingDropHandler(hotbarContent, world),
+            inventoryTransferDropHandler,
+            new MapDropHandler(views.MapView, views.ShopView, mapViewState, inventoryTransferDropHandler),
         ];
         var inputController = new UiInputController(uiLayers, screenSize, pointerState, inputHandlers, contentDropHandlers, contextMenuController.Dropdowns);
         inputController.SetDefaultFocusElement(mapWindow);
@@ -281,6 +282,7 @@ public static class ShellBootstrapper
         var hotbarSize = hotbarContent.Size;
         var hotbarWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
         {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions
             {
                 RelativePosition = HotbarContent.ComputeBottomCenteredPosition(hotbarSize, screenSize),
@@ -348,8 +350,8 @@ public static class ShellBootstrapper
 
     /// <summary>Constructs HotbarController -- its Armed Hotkey Summary popup is shown/hidden through the shared TooltipController (built once at the top of Build), not a window of its own. Needs mapViewState/hotbarContent (from BuildStaticHudWindows) and actionTargetingController (constructed at the top of Build, shared with MapWindow's own factory).</summary>
     private static HotbarController BuildHotbarController(
-        MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting, TooltipController tooltipController) =>
-        new(mapViewState, hotbarContent, actionTargeting, tooltipController);
+        MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting, TooltipController tooltipController, ContextMenuController contextMenuController) =>
+        new(mapViewState, hotbarContent, actionTargeting, tooltipController, contextMenuController);
 
     /// <summary>User tier: hosts cursorTextContent/dragGhostContent, both drawn at the pointer through PointerState -- see UiLayer's own doc comment for what this tier is for.</summary>
     private static void BuildUserWindows(UiEngineContext uiEngine, CursorTextContent cursorTextContent, DragGhostContent dragGhostContent, UiLayerStack layers)

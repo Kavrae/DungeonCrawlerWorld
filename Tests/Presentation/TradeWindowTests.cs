@@ -14,6 +14,7 @@ using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Input;
+using Presentation.Input.DragDrop;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
@@ -463,30 +464,27 @@ public sealed class TradeWindowTests
         new(x, y, 0, leftButton, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
 
     [TestMethod]
-    public void ResolveItemDropEntityId_LeftHalf_ReturnsPlayerSideEntity()
+    public void DropTargetFor_LeftHalf_IsThePlayerSideInventory()
     {
         var (window, _, _) = Build();
         var leftPoint = new Point((int)window.ContentAbsolutePosition.X + 1, (int)window.ContentAbsolutePosition.Y + 1);
 
-        Assert.AreEqual(TradePlayerEntityId, window.ResolveItemDropEntityId(leftPoint));
-        Assert.AreEqual(TradePlayerEntityId, window.ResolveCurrencyDropEntityId(leftPoint));
+        Assert.AreEqual(new InventoryDropTarget(TradePlayerEntityId), window.DropTargetFor(new object(), leftPoint));
     }
 
     [TestMethod]
-    public void ResolveItemDropEntityId_RightHalf_ReturnsShopSideEntity()
+    public void DropTargetFor_RightHalf_IsTheShopSideInventory()
     {
         var (window, _, _) = Build();
         var rightPoint = new Point((int)(window.ContentAbsolutePosition.X + window.ContentSize.X) - 1, (int)window.ContentAbsolutePosition.Y + 1);
 
-        Assert.AreEqual(TradeShopEntityId, window.ResolveItemDropEntityId(rightPoint));
-        Assert.AreEqual(TradeShopEntityId, window.ResolveCurrencyDropEntityId(rightPoint));
+        Assert.AreEqual(new InventoryDropTarget(TradeShopEntityId), window.DropTargetFor(new object(), rightPoint));
     }
 
     /// <summary>
-    /// End-to-end proof that InventoryTransferDropHandler.FindDropTargetEntityId's own IWholeWindowDropTarget
-    /// fallback actually fires -- dropping an item drag on TradeWindow's own header area (y &lt;
-    /// HeaderHeight, above both columns' grids -- no grid/currency child sits there at all, so the
-    /// narrower IInventoryDropTarget check finds nothing) must still resolve to the player-side
+    /// End-to-end proof that TradeWindow.s own drop target answers when nothing under it does --
+    /// dropping an item drag on TradeWindow.s own header area (y &lt; HeaderHeight, above both
+    /// columns. grids -- no grid/currency child sits there at all) must still resolve to the player-side
     /// trade column, not silently fail, since the drop point is left of this window's own midpoint.
     /// </summary>
     [TestMethod]
@@ -550,10 +548,9 @@ public sealed class TradeWindowTests
     /// combination (see UiInputControllerTests.Drag_PlayerInventoryToTradeShopColumn_IsNotAllowed),
     /// unrelated to what this test is checking. This isn't actually special-cased routing logic --
     /// both the grid and currency-footer child windows in one TradeWindow column are built against
-    /// the exact same trade-offer entityId (see TradeWindow.BuildColumn), and
-    /// FindDropTargetEntityId's IInventoryDropTarget branch (checked before the
-    /// IWholeWindowDropTarget/isCurrencyDrag fallback ever applies) resolves through whichever
-    /// window's own Tag the drop actually lands on, regardless of payload type -- so the two
+    /// the exact same trade-offer entityId (see TradeWindow.BuildColumn), and the drop resolves
+    /// through whichever window.s DropTarget it actually lands on (before TradeWindow.s own),
+    /// regardless of payload type -- so the two
     /// windows sharing one entityId is what makes this safe by construction, confirmed here
     /// end-to-end.
     /// </summary>

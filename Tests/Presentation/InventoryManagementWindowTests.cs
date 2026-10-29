@@ -80,7 +80,7 @@ public sealed class InventoryManagementWindowTests
     /// <summary>Depth-first search for the first InventoryGridContent any descendant Window's Tag currently references -- see InventoryGridContent.Initialize's own doc comment for why Tag, not Content, is the reliable way to find it.</summary>
     private static InventoryGridContent? FindActiveGrid(Element element)
     {
-        if (element is Window { Tag: InventoryGridContent grid })
+        if (element is Window { DropTarget: InventoryGridContent grid })
         {
             return grid;
         }
@@ -99,7 +99,7 @@ public sealed class InventoryManagementWindowTests
     /// <summary>Depth-first search for the Window hosting the active tab's InventoryGridContent (the same Window FindActiveGrid finds via its Tag, but returning the Window itself so a test can walk its child cells in on-screen order).</summary>
     private static Window? FindActiveGridWindow(Element element)
     {
-        if (element is Window { Tag: InventoryGridContent } window)
+        if (element is Window { DropTarget: InventoryGridContent } window)
         {
             return window;
         }
@@ -141,7 +141,7 @@ public sealed class InventoryManagementWindowTests
     /// <summary>Depth-first search for the footer host Window (see Window.SetFooterContent) whose Tag currently references CurrencyRowContent -- same Tag-based lookup convention as FindActiveGrid.</summary>
     private static Window? FindCurrencyFooterHostWindow(Element element)
     {
-        if (element is Window { Tag: CurrencyRowContent } window)
+        if (element is Window { DropTarget: CurrencyRowContent } window)
         {
             return window;
         }

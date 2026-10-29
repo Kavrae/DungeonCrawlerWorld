@@ -35,7 +35,8 @@ internal static class TestMapWindows
         MapViewState MapViewState,
         MapWindow MapWindow,
         ComponentManager ComponentManager,
-        ActionTargetingController ActionTargetingController);
+        ActionTargetingController ActionTargetingController,
+        MapViewQuery MapView);
 
     /// <param name="playerPosition">Where a PlayerControlled player (PlayerEntityId) stands, with every hotkey slot unlocked; null for no player.</param>
     public static MapWindowHarness Create(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int? playerPosition, ActionCatalog? actionCatalog = null, ItemCatalog? itemCatalog = null)
@@ -115,6 +116,6 @@ internal static class TestMapWindows
         });
         mapWindow.Initialize();
 
-        return new MapWindowHarness(world, mapViewState, mapWindow, componentManager, actionTargeting);
+        return new MapWindowHarness(world, mapViewState, mapWindow, componentManager, actionTargeting, mapView);
     }
 }

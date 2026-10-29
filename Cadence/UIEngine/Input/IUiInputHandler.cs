@@ -22,11 +22,11 @@ public interface IUiInputHandler
     /// <summary>A left press that wasn't consumed, after the pressed element was raised and focused and any content drag captured.</summary>
     void OnPress(Element? pressedElement, Point position) { }
 
-    /// <summary>A left release at position over releasedElement, after the click and any content drop were resolved.</summary>
-    void OnRelease(Element? releasedElement, Point position) { }
+    /// <summary>A left release at position over releasedElement, after the click and any content drop were resolved -- isTap is false once the press has become a drag, even if it came back to where it started.</summary>
+    void OnRelease(Element? releasedElement, Point position, bool isTap) { }
 
-    /// <summary>A right press at position, after an open context menu was dismissed.</summary>
-    void OnRightPress(Point position) { }
+    /// <summary>A right press at position over pressedElement, after an open context menu was dismissed; not heard when the press dismissed a light-dismissable.</summary>
+    void OnRightPress(Element? pressedElement, Point position) { }
 
     /// <summary>Every frame, after the cursor is chosen -- isInteractionInProgress is a window move, resize or scrollbar drag, during which hoveredElement isn't refreshed.</summary>
     void OnPointerUpdate(Element? hoveredElement, Point position, bool isInteractionInProgress) { }

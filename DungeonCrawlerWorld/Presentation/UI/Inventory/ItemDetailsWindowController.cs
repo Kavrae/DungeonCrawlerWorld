@@ -28,7 +28,7 @@ public sealed class ItemDetailsWindowController(
     InventoryWindowController inventoryWindowController,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    MapWindow mapWindow)
+    MapWindow mapWindow) : ILightDismissable
 {
 
     private UiLayerStack _layers = null!;
@@ -39,7 +39,7 @@ public sealed class ItemDetailsWindowController(
 
     public bool IsOpen => _window is not null;
 
-    /// <summary>The open window's own bounds -- Rectangle.Empty (never contains a click) when nothing is open.</summary>
+    /// <summary>The open window's own bounds -- Rectangle.Empty when nothing is open.</summary>
     public Rectangle Rectangle => _window?.Rectangle ?? Rectangle.Empty;
 
     /// <summary>The item currently shown, if any -- Item Details Comparison's own anchor identity (ItemComparisonController.Arm/AddOrToggle read these to gate eligibility and detect "is this the anchor itself").</summary>
@@ -49,26 +49,8 @@ public sealed class ItemDetailsWindowController(
 
     public uint? CurrentStackInstanceId { get; private set; }
 
-    /// <summary>Settable late-bound query for the currently-open secondary/corpse-or-shop inventory window's own bounds, if any -- wired by ItemWindowCoordinator to SecondaryInventoryWindowController.Rectangle/ShopWindowController.Rectangle once those controllers exist (built after this one -- same construction-order reason InventoryWindowController.GetSecondaryTargetEntityId is wired the same way). A single Func is safe here because a corpse/container window and a shop window are never open together (see ItemWindowCoordinator's own mutual-exclusion comment) -- unlike the trade window below, which IS open at the same time as the shop, so it needs its own independent hook rather than sharing this one. Rectangle.Empty (never "inside"), not null, when nothing is open or this is never wired (e.g. test setups).</summary>
-    public Func<Rectangle>? GetSecondaryInventoryWindowRectangle { get; set; }
-
-    /// <summary>
-    /// Settable late-bound query for the currently-open Trade window's own bounds, if any -- wired
-    /// by ItemWindowCoordinator to TradeWindowController.Rectangle. Deliberately separate from
-    /// GetSecondaryInventoryWindowRectangle above, not folded into the same fallback chain: the
-    /// trade window and the shop window are open simultaneously (TradeWindowController.Open runs
-    /// off ShopWindowController.OnOpened), so a single "pick whichever one's open" Func would hide
-    /// the shop window's own rectangle the moment a trade session starts -- confirmed live as a
-    /// real bug (a click on the shop's own item grid, or on a comparison-armed shop item, read as
-    /// "outside" and closed/cleared the Item Details anchor instead of selecting the shop item).
-    /// </summary>
-    public Func<Rectangle>? GetTradeWindowRectangle { get; set; }
-
-    /// <summary>Settable late-bound query for the loot box results window's bounds -- wired by ItemWindowCoordinator to LootboxResultsWindowController.Rectangle. Its own hook, like GetTradeWindowRectangle, since it can be open alongside any of the others.</summary>
-    public Func<Rectangle>? GetLootboxResultsWindowRectangle { get; set; }
-
-    /// <summary>Settable late-bound query for every currently-open Item Details Comparison column's own bounds -- without this, a click on a comparison column would look "outside" this window and wrongly close it, since IsOutsideClick has no other way to know those windows exist.</summary>
-    public Func<IReadOnlyList<Rectangle>>? GetComparisonColumnRectangles { get; set; }
+    /// <summary>Settable late-bound check for the other windows a press may land on without closing this one -- an open corpse, container, shop, trade or loot box results window, or a comparison column. Wired by ItemWindowCoordinator, which builds those controllers after this one.</summary>
+    public Func<Element, bool>? IsTiedWindow { get; set; }
 
     /// <summary>Settable late-bound notification fired when this window closes -- wired by ItemWindowCoordinator to ItemComparisonController.ClearComparison, since a stale comparison against an item that's no longer even shown doesn't make sense.</summary>
     public Action? OnClosed { get; set; }
@@ -78,52 +60,11 @@ public sealed class ItemDetailsWindowController(
 
     public void Initialize(UiLayerStack layers) => _layers = layers;
 
-    /// <summary>
-    /// True when clickPosition should close this window -- outside both this window's own bounds
-    /// and every inventory window it's tied to (the player's own InventoryManagementWindow, and
-    /// an open secondary/corpse window, if any) -- see UiInputController.HandleMousePress, which
-    /// calls this only while IsOpen, mirroring ContextMenuController's own outside-click check.
-    /// </summary>
-    public bool IsOutsideClick(Point clickPosition)
-    {
-        if (Rectangle.Contains(clickPosition))
-        {
-            return false;
-        }
+    /// <summary>This window, the player's Inventory window and every tied window (IsTiedWindow) are inside -- a press anywhere else closes it and goes no further.</summary>
+    public bool CountsAsInside(Element element) =>
+        element == _window || element == inventoryWindowController.PlayerInventoryWindow || IsTiedWindow?.Invoke(element) == true;
 
-        if (inventoryWindowController.PlayerInventoryWindow is { } playerWindow && playerWindow.Rectangle.Contains(clickPosition))
-        {
-            return false;
-        }
-
-        if (GetSecondaryInventoryWindowRectangle?.Invoke().Contains(clickPosition) == true)
-        {
-            return false;
-        }
-
-        if (GetTradeWindowRectangle?.Invoke().Contains(clickPosition) == true)
-        {
-            return false;
-        }
-
-        if (GetLootboxResultsWindowRectangle?.Invoke().Contains(clickPosition) == true)
-        {
-            return false;
-        }
-
-        if (GetComparisonColumnRectangles is { } getColumnRectangles)
-        {
-            foreach (var columnRectangle in getColumnRectangles())
-            {
-                if (columnRectangle.Contains(clickPosition))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
+    public void Dismiss() => Close();
 
     /// <summary>
     /// Resolves stackInstanceId's live stack/effective item and shows it -- creates the window
@@ -225,6 +166,7 @@ public sealed class ItemDetailsWindowController(
         window.Initialize();
         _layers.Add(UiLayer.DynamicHud, window);
         _layers.OpenMenuWindow(window); // Menu Mode, same as the player's own Inventory window and a corpse window.
+        _layers.OpenLightDismiss(this);
 
         _window = window;
         mapViewState.SelectedItemStackInstanceId = selectedStackInstanceId;
@@ -248,6 +190,7 @@ public sealed class ItemDetailsWindowController(
     {
         _layers.Remove(UiLayer.DynamicHud, closedWindow);
         _layers.CloseMenuWindow(closedWindow);
+        _layers.CloseLightDismiss(this);
         _window = null;
         _anchorWindow = null;
         mapViewState.SelectedItemStackInstanceId = null;

@@ -19,18 +19,4 @@ public sealed class PointerState
 
     /// <summary>The topmost element under the cursor, null over nothing -- what the input handlers were handed this frame.</summary>
     public Element? HoveredElement { get; internal set; }
-
-    /// <summary>Whether the topmost element under the cursor is element or one of its descendants.</summary>
-    public bool IsOver(Element element)
-    {
-        for (var candidate = HoveredElement; candidate is not null; candidate = candidate.ParentElement)
-        {
-            if (ReferenceEquals(candidate, element))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }

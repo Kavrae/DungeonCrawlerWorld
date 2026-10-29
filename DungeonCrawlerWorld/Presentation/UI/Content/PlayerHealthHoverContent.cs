@@ -31,17 +31,14 @@ public sealed class PlayerHealthHoverContent(
     FontService fontService,
     StatModifierView statModifierView) : IElementContent
 {
-    /// <summary>Up to 6 body parts -- the player is always the Human race today (see PlayerHealthBarContent's own doc comment), so this doesn't need to grow/shrink with the entity's actual part count.</summary>
-    public const int MaxRowCount = 6;
-
     private const float RowHeight = 16f;
     private const float RowContentWidth = 170f;
     private const float BarWidth = 60f;
     private const float BarHeight = 8f;
     private const float NameBarGap = 6f;
 
-    /// <summary>The popup's own desired content-area size -- PlayerHealthBarContent adds its host window's border inset on top of this when sizing the popup window itself.</summary>
-    public static readonly Vector2 ContentSize = new(RowContentWidth, RowHeight * MaxRowCount);
+    /// <summary>The popup's content-area size for rowCount rows -- PlayerHealthBarContent adds its host window's border inset on top of this when sizing the popup window itself.</summary>
+    public static Vector2 ContentSizeFor(int rowCount) => new(RowContentWidth, RowHeight * rowCount);
 
     private readonly List<RowData> _scratchRows = [];
 
@@ -68,12 +65,11 @@ public sealed class PlayerHealthHoverContent(
         var unitRectangle = _hostWindow.Render.UnitRectangle;
         var origin = Vector2.Zero;
         var contentSize = _hostWindow.ContentSize;
-        var rowHeight = contentSize.Y / MaxRowCount;
 
         for (var rowIndex = 0; rowIndex < _scratchRows.Count; rowIndex++)
         {
             var row = _scratchRows[rowIndex];
-            DrawRow(spriteBatch, unitRectangle, origin, contentSize.X, rowHeight, rowIndex, row.Name, row.Fraction, row.HasResource);
+            DrawRow(spriteBatch, unitRectangle, origin, contentSize.X, RowHeight, rowIndex, row.Name, row.Fraction, row.HasResource);
         }
     }
 
@@ -104,7 +100,7 @@ public sealed class PlayerHealthHoverContent(
         var barX = origin.X + contentWidth - BarWidth;
         var nameWidth = System.Math.Max(0f, barX - origin.X - NameBarGap);
 
-        LabelRenderer.DrawLeftAligned(spriteBatch, _font, name, new Vector2(origin.X, rowTop), new Vector2(nameWidth, rowHeight), Color.Black);
+        LabelRenderer.DrawLeftAligned(spriteBatch, _font, name, new Vector2(origin.X, rowTop), new Vector2(nameWidth, rowHeight), Color.White);
 
         var barY = rowTop + (rowHeight - BarHeight) / 2f;
         var barRectangle = new Rectangle((int)barX, (int)barY, (int)BarWidth, (int)BarHeight);

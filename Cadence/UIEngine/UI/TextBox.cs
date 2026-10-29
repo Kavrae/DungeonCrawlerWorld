@@ -441,9 +441,10 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
     }
 
     /// <summary>Opens a Cut/Copy/Paste/Select All context menu at mousePosition -- see BuildContextMenuOptions for the actual option list. No-op if no ContextMenuController was wired (test setups that don't build one, matching cursorTextContent's own optional-dependency convention above).</summary>
-    protected override void OnRightClickTapAction(Point mousePosition)
+    protected override bool OnRightClickTapAction(Point mousePosition)
     {
         contextMenuController?.Open(new Vector2(mousePosition.X, mousePosition.Y), BuildContextMenuOptions());
+        return true;
     }
 
     /// <summary>
@@ -521,7 +522,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
     /// counts toward the double/triple-click sequence -- matches standard OS behavior, where
     /// shift-click is always a plain extend regardless of how many plain clicks preceded it.
     /// </summary>
-    protected override void OnContentClickAction(Point mousePosition)
+    protected override bool OnContentClickAction(Point mousePosition)
     {
         var clickedIndex = HitTestCaretIndex(mousePosition, roundToNearest: true);
         var clickedCharacterIndex = HitTestCaretIndex(mousePosition, roundToNearest: false);
@@ -534,7 +535,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
             var anchor = _selectionAnchor ?? _caretIndex;
             MoveCaretTo(clickedIndex);
             _selectionAnchor = anchor;
-            return;
+            return true;
         }
 
         switch (RegisterClickForMultiClick(clickedCharacterIndex))
@@ -549,6 +550,8 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
                 MoveCaretTo(clickedIndex);
                 break;
         }
+
+        return true;
     }
 
     /// <summary>

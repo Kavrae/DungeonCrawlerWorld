@@ -32,7 +32,6 @@ internal static class TestUiInputController
         ItemCatalog itemCatalog,
         HotbarController? hotbarController = null,
         ContextMenuController? contextMenuController = null,
-        ItemDetailsWindowController? itemDetailsWindowController = null,
         ItemComparisonController? itemComparisonController = null,
         MapViewState? mapViewState = null,
         HealthWindowController? healthWindowController = null,
@@ -49,11 +48,6 @@ internal static class TestUiInputController
         AddKeyPress(inputHandlers, Keys.F3, diagnosticsWindowController is null ? null : diagnosticsWindowController.ToggleDiagnosticsWindow);
         AddKeyPress(inputHandlers, Keys.LeftAlt, targetingModeSwitch is null ? null : targetingModeSwitch.Switch);
 
-        if (itemDetailsWindowController is not null)
-        {
-            inputHandlers.Add(new ItemDetailsOutsideClickInputHandler(itemDetailsWindowController));
-        }
-
         if (itemComparisonController is not null)
         {
             inputHandlers.Add(new ItemComparisonDisarmInputHandler(itemComparisonController));
@@ -68,12 +62,12 @@ internal static class TestUiInputController
 
         List<IContentDropHandler> contentDropHandlers =
         [
-            new InventoryTransferDropHandler(mapViewState ?? new MapViewState(), new ShopView(componentManager), new InventoryCommands(componentManager, itemCatalog, playerQuery), new ShopCommands(componentManager, itemCatalog, eventBus, playerQuery), new CurrencyCommands(componentManager), playerQuery),
+            new InventoryTransferDropHandler(mapViewState ?? new MapViewState(), new ShopView(componentManager), new InventoryView(componentManager, itemCatalog), new InventoryCommands(componentManager, itemCatalog, playerQuery), new ShopCommands(componentManager, itemCatalog, eventBus, playerQuery), new CurrencyCommands(componentManager), playerQuery),
         ];
 
         if (layers[UiLayer.StaticHud].OfType<Window>().Select(window => window.Content).OfType<HotbarContent>().FirstOrDefault() is { } hotbarContent)
         {
-            contentDropHandlers.Add(new HotbarBindingDropHandler(hotbarContent, playerQuery));
+            contentDropHandlers.Insert(0, new HotbarBindingDropHandler(hotbarContent, playerQuery));
         }
 
         return new(layers, screenSize, pointerState ?? new PointerState(), inputHandlers, contentDropHandlers, contextMenuController?.Dropdowns);

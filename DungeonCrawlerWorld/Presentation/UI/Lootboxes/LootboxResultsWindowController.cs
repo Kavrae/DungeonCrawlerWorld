@@ -33,9 +33,6 @@ public sealed class LootboxResultsWindowController(
     /// <summary>The open window, if any -- what Item Details docks beside when a reward is clicked.</summary>
     public Window? Window { get; private set; }
 
-    /// <summary>The open window's bounds; Rectangle.Empty when nothing is open.</summary>
-    public Rectangle Rectangle => Window?.Rectangle ?? Rectangle.Empty;
-
     /// <summary>What the open window currently shows, if anything.</summary>
     public LootboxResultsContent? Content { get; private set; }
 

@@ -115,10 +115,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     /// <summary>False for a cell that only displays an item and never starts a drag, such as a loot box reward; reset to true by every Configure.</summary>
     public bool IsDragSource { get; set; }
 
-    /// <summary>Drives a translucent highlight overlay -- see InventoryGridContent's own hover polling. Mirrors AbilityScoreColumnHeader.IsHovered.</summary>
-    public bool IsHovered { get; set; }
-
-    /// <summary>Drives GridSquareRenderer's own gold inner+outer selected glow (see DrawStateOverlay, the same treatment HotbarContent's own ArmedSlot glow uses) -- true when this cell's StackInstanceId matches MapViewState.SelectedItemStackInstanceId, the item currently shown in the Item Details window. Set every frame alongside IsHovered -- see InventoryGridContent's own per-frame sync, not a rebuild-driven Configure parameter, since selection changes independently of any grid rebuild.</summary>
+    /// <summary>Drives GridSquareRenderer's own gold inner+outer selected glow (see DrawStateOverlay, the same treatment HotbarContent's own ArmedSlot glow uses) -- true when this cell's StackInstanceId matches MapViewState.SelectedItemStackInstanceId, the item currently shown in the Item Details window. Set every frame by InventoryGridContent, not a rebuild-driven Configure parameter, since selection changes independently of any grid rebuild.</summary>
     public bool IsSelected { get; set; }
 
     /// <summary>Item Details Comparison's own per-frame state, set alongside IsSelected, independent of shop mode -- Eligible glows green (this item shares the anchor's Activator type, so clicking it would add it), Ineligible grey-tints the icon the same way IsDisabled already does, None (comparison not armed) draws neither. Comparison and shop-trade eligibility (ShopTradeEligible below) are computed and rendered independently -- a shop-ineligible item that's still comparison-eligible shows both cues at once (greyed icon, green comparison glow).</summary>
@@ -246,7 +243,7 @@ public class InventoryItemStackCell(FontService fontService, ElementPoolService 
     protected bool DrawBaseAndIcon(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Vector2 iconSize)
     {
         GridSquareRenderer.DrawBase(spriteBatch, unitRectangle, bounds);
-        GridSquareRenderer.DrawStateOverlay(spriteBatch, unitRectangle, bounds, IsSelected ? GridSquareState.Selected : IsHovered ? GridSquareState.Hovered : GridSquareState.Normal);
+        GridSquareRenderer.DrawStateOverlay(spriteBatch, unitRectangle, bounds, IsSelected ? GridSquareState.Selected : IsPointerOver ? GridSquareState.Hovered : GridSquareState.Normal);
 
         if (CompareState == CellCompareState.Eligible)
         {

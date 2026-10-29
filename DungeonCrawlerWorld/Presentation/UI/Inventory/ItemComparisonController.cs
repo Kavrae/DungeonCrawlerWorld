@@ -44,20 +44,8 @@ public sealed class ItemComparisonController(
     /// <summary>True while future inventory clicks should add to (or toggle out of) this comparison -- see Arm/Disarm. Independent of whether any columns are currently open: closing every column (one at a time, via each one's own Close button) does not itself disarm, and disarming (right-click) does not itself close already-open columns.</summary>
     public bool IsArmed { get; private set; }
 
-    /// <summary>Every currently-open comparison column's own bounds -- ItemDetailsWindowController's own IsOutsideClick reads this so a click on a comparison column never wrongly closes the anchor.</summary>
-    public IReadOnlyList<Rectangle> ColumnRectangles
-    {
-        get
-        {
-            var rectangles = new List<Rectangle>(_columns.Count);
-            foreach (var column in _columns)
-            {
-                rectangles.Add(column.Rectangle);
-            }
-
-            return rectangles;
-        }
-    }
+    /// <summary>Every open comparison column, beside the Item Details anchor.</summary>
+    public IReadOnlyList<ItemDetailsWindow> Columns => _columns;
 
     public void Initialize(UiLayerStack layers) => _layers = layers;
 

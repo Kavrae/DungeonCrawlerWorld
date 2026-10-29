@@ -505,6 +505,24 @@ public sealed class InventoryActionsTests
     }
 
     [TestMethod]
+    public void TryTransferStack_DestinationWithUnlimitedStackCount_TakesAStackPastTheCap()
+    {
+        var manager = CreateRegisteredManager();
+        manager.Merge(1, new UnlimitedStackCountComponent());
+        for (var i = 0; i < InventoryCapacity.MaxNonPlayerStackCount; i++)
+        {
+            InventoryActions.AddItem(manager, entityId: 1, Guid.NewGuid(), quantity: 1);
+        }
+
+        var stackInstanceId = InventoryActions.AddItem(manager, entityId: 0, Guid.NewGuid(), quantity: 1);
+
+        var result = InventoryActions.TryTransferStack(manager, new ItemCatalog(), sourceEntityId: 0, destinationEntityId: 1, stackInstanceId, TestPlayerQuery.NoPlayer);
+
+        Assert.IsTrue(result);
+        Assert.AreEqual(InventoryCapacity.MaxNonPlayerStackCount + 1, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(1));
+    }
+
+    [TestMethod]
     public void TryTransferAllStacksOfItem_SameSourceAndDestination_ReturnsFalseAndDoesNotModify()
     {
         var manager = CreateRegisteredManager();

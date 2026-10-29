@@ -2,9 +2,11 @@ using Engine.Tags;
 using Game.World;
 using Microsoft.Xna.Framework;
 
+using Presentation.Input.DragDrop;
 using Presentation.UI.Content;
 using UIEngine;
 using UIEngine.Fonts;
+using UIEngine.Input;
 using UIEngine.Rendering;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
@@ -45,12 +47,13 @@ public sealed class InventoryManagementWindow(
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    Engine.ECS.Systems.SimulationClock simulationClock) : Window(fontService, elementPoolService, renderService), IWholeWindowDropTarget
+    Engine.ECS.Systems.SimulationClock simulationClock) : Window(fontService, elementPoolService, renderService), IContentDropTarget
 {
     private TabbedContent _tabbedContent = null!;
     private CurrencyRowContent _currencyRowContent = null!;
 
     private int _entityId;
+    private InventoryDropTarget? _dropTarget;
     private TooltipController _tooltipController = null!;
     private Func<int?> _getSecondaryTargetEntityId = static () => null;
     private Action<int, uint> _onItemSelected = static (_, _) => { };
@@ -64,6 +67,7 @@ public sealed class InventoryManagementWindow(
     public void Configure(int entityId, TooltipController tooltipController, Func<int?> getSecondaryTargetEntityId, Action<int, uint> onItemSelected, Action<int, uint> onCompareRequested, Action<int, uint> onActivateRequested, Action<int> onOpenLootboxesRequested)
     {
         _entityId = entityId;
+        _dropTarget = new InventoryDropTarget(entityId);
         _tooltipController = tooltipController;
         _getSecondaryTargetEntityId = getSecondaryTargetEntityId;
         _onItemSelected = onItemSelected;
@@ -81,11 +85,8 @@ public sealed class InventoryManagementWindow(
         _tagVersionWatcher.HasChanged(CurrentInventoryVersion()); // Primes the baseline so the next Update doesn't immediately rebuild against the list just built above.
     }
 
-    /// <summary>IWholeWindowDropTarget -- a whole-window drop always means this same entity, regardless of which of its tabs happens to be active or where exactly within the window the drop landed.</summary>
-    public int ResolveItemDropEntityId(Point dropPosition) => _entityId;
-
-    /// <summary>See ResolveItemDropEntityId -- identical, since this entity's own inventory and currency balance are the same one.</summary>
-    public int ResolveCurrencyDropEntityId(Point dropPosition) => _entityId;
+    /// <summary>A drop anywhere in this window that its grid and currency row leave unanswered -- its tabs, its border -- lands in this same entity's inventory, item or currency alike.</summary>
+    public object? DropTargetFor(object payload, Point position) => _dropTarget;
 
     public override void Update(GameTime gameTime)
     {

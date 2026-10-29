@@ -55,11 +55,11 @@ public sealed class CurrencyRowContentTests
     }
 
     [TestMethod]
-    public void Initialize_SetsHostWindowTagToItself()
+    public void Initialize_NamesItselfAsTheHostWindowsDropTarget()
     {
         var (content, hostWindow) = Build();
 
-        Assert.AreSame(content, hostWindow.Tag, "FindDropTargetEntityId resolves a drop via Window.Tag -- see IInventoryDropTarget's own doc comment.");
+        Assert.AreSame(content, hostWindow.DropTarget, "A drop anywhere on the row lands through its host window's DropTarget.");
     }
 
     [TestMethod]
@@ -169,7 +169,7 @@ public sealed class CurrencyRowContentTests
 
         goldElement.OnRightClicked!.Invoke(Point.Zero);
         var giveAllButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Give All");
-        contextMenuController.Menu.HandleClick(giveAllButton.Rectangle.Center);
+        giveAllButton.HandleClick(giveAllButton.Rectangle.Center);
 
         Assert.IsNotNull(published);
         Assert.AreEqual(PlayerEntityId, published!.Value.PlayerEntityId);
@@ -191,7 +191,7 @@ public sealed class CurrencyRowContentTests
 
         goldElement.OnRightClicked!.Invoke(Point.Zero);
         var giveButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Give");
-        contextMenuController.Menu.HandleClick(giveButton.Rectangle.Center);
+        giveButton.HandleClick(giveButton.Rectangle.Center);
 
         Assert.AreEqual(0, publishedCount);
         Assert.AreEqual(0, componentManager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold, "Give itself must still have happened -- only the shop-specific event is what's suppressed for a non-shop target.");

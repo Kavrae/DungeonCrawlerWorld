@@ -102,10 +102,11 @@ public sealed class UiInputControllerTests
         protected override void OnRightDragStartAction() => DragStartCallCount++;
         protected override void OnRightDragAction(Vector2 totalPixelDeltaSinceStart) => DragDeltas.Add(totalPixelDeltaSinceStart);
         protected override void OnRightDragEndAction() => DragEndCallCount++;
-        protected override void OnRightClickTapAction(Point position)
+        protected override bool OnRightClickTapAction(Point position)
         {
             RightClickTapCallCount++;
             LastRightClickTapPosition = position;
+            return true;
         }
     }
 
@@ -741,6 +742,100 @@ public sealed class UiInputControllerTests
         controller.Update(NoKeys, MouseAt(pressPoint.X + 1000, pressPoint.Y + 1000, ButtonState.Pressed));
 
         Assert.AreEqual(parent.ContentSize - child.CurrentSize, child.RelativePosition);
+    }
+
+    private static (Window Parent, Window Child) CreateParentWithChild(ElementPoolService windowService, Vector2 parentPosition)
+    {
+        var parent = windowService.CreateElement<Window>(null, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Floating },
+            Layout = new ElementLayoutOptions { RelativePosition = parentPosition, Size = new Vector2(300, 200), DisplayMode = ElementDisplayMode.Fixed },
+        });
+        parent.Initialize();
+        var child = windowService.CreateElement<Window>(parent, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(10, 10), Size = new Vector2(50, 50), DisplayMode = ElementDisplayMode.Fixed },
+        });
+        parent.AddChild(child);
+        return (parent, child);
+    }
+
+    [TestMethod]
+    public void PointerOverAChild_MarksItAndItsAncestors_AndMovingOffClearsBoth()
+    {
+        var windowService = CreateWindowService();
+        var (parent, child) = CreateParentWithChild(windowService, Vector2.Zero);
+        var controller = CreateController([parent], [], [], [], LargeScreenSize);
+
+        var overChild = child.Rectangle.Center;
+        controller.Update(NoKeys, MouseAt(overChild.X, overChild.Y, ButtonState.Released));
+        Assert.IsTrue(child.IsPointerOver);
+        Assert.IsTrue(parent.IsPointerOver);
+
+        controller.Update(NoKeys, MouseAt(250, 150, ButtonState.Released));
+        Assert.IsFalse(child.IsPointerOver);
+        Assert.IsTrue(parent.IsPointerOver);
+
+        controller.Update(NoKeys, MouseAt(1500, 1500, ButtonState.Released));
+        Assert.IsFalse(parent.IsPointerOver);
+    }
+
+    [TestMethod]
+    public void PointerOverAnElementUnderAnotherWindow_IsNotOverIt()
+    {
+        var windowService = CreateWindowService();
+        var (parent, child) = CreateParentWithChild(windowService, Vector2.Zero);
+        var coveringWindow = CreateMovableWindow(windowService, Vector2.Zero);
+        var controller = CreateController([], [], [parent, coveringWindow], [], LargeScreenSize);
+
+        var overChild = child.Rectangle.Center;
+        controller.Update(NoKeys, MouseAt(overChild.X, overChild.Y, ButtonState.Released));
+
+        Assert.IsTrue(coveringWindow.IsPointerOver);
+        Assert.IsFalse(child.IsPointerOver);
+        Assert.IsFalse(parent.IsPointerOver);
+    }
+
+    [TestMethod]
+    public void AChildAddedUnderAStillPointer_IsOverIt_WithoutTheMouseMoving()
+    {
+        var windowService = CreateWindowService();
+        var (parent, child) = CreateParentWithChild(windowService, Vector2.Zero);
+        var controller = CreateController([parent], [], [], [], LargeScreenSize);
+        var point = new Point(150, 120);
+        controller.Update(NoKeys, MouseAt(point.X, point.Y, ButtonState.Released));
+        Assert.IsTrue(parent.IsPointerOver);
+
+        var addedChild = windowService.CreateElement<Window>(parent, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(100, 80), Size = new Vector2(100, 100), DisplayMode = ElementDisplayMode.Fixed },
+        });
+        parent.AddChild(addedChild);
+        controller.Update(NoKeys, MouseAt(point.X, point.Y, ButtonState.Released));
+
+        Assert.IsTrue(addedChild.Rectangle.Contains(point), "Sanity check: the new child sits under the pointer.");
+        Assert.IsTrue(addedChild.IsPointerOver);
+        Assert.IsFalse(child.IsPointerOver);
+    }
+
+    [TestMethod]
+    public void AnElementClosedWhileHovered_IsNotOverWhenItsPoolHandsItOutAgain()
+    {
+        var windowService = CreateWindowService();
+        var (parent, child) = CreateParentWithChild(windowService, Vector2.Zero);
+        var controller = CreateController([parent], [], [], [], LargeScreenSize);
+        var overChild = child.Rectangle.Center;
+        controller.Update(NoKeys, MouseAt(overChild.X, overChild.Y, ButtonState.Released));
+        Assert.IsTrue(child.IsPointerOver);
+
+        windowService.CloseElement(child);
+        var reused = windowService.CreateElement<Window>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(1000, 1000), Size = new Vector2(50, 50), DisplayMode = ElementDisplayMode.Fixed },
+        });
+
+        Assert.AreSame(child, reused, "Sanity check: the pool hands the closed window back.");
+        Assert.IsFalse(reused.IsPointerOver);
     }
 
     /// <summary>
@@ -2186,6 +2281,20 @@ public sealed class UiInputControllerTests
     /// is placed far from the hotbar window so a press-then-release pair between them always
     /// exceeds ContentDragTapThresholdPixels.
     /// </summary>
+    /// <summary>The hotbar slot whose element is at position, if any.</summary>
+    private static HotkeySlot? SlotAt(HotbarContent hotbar, Point position)
+    {
+        foreach (var slot in Enum.GetValues<HotkeySlot>())
+        {
+            if (hotbar.GetSlotBounds(slot).Contains(position))
+            {
+                return slot;
+            }
+        }
+
+        return null;
+    }
+
     private static (InventoryItemStackCell Cell, Window HotbarWindow, HotbarContent Hotbar, ComponentManager ComponentManager, Guid ItemId) BuildDragAndDropHarness()
     {
         const int playerEntityId = 1;
@@ -2217,6 +2326,7 @@ public sealed class UiInputControllerTests
             fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
         });
         hotbarWindow.SetContent(hotbar);
@@ -2258,6 +2368,7 @@ public sealed class UiInputControllerTests
             fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
         });
         hotbarWindow.SetContent(hotbar);
@@ -2378,8 +2489,7 @@ public sealed class UiInputControllerTests
         // Base is vertically centered against Expansion's current height, not flush at the top --
         // the window's own vertical center always falls inside Base1's row.
         var baseRowY = (int)hotbarWindow.ContentAbsolutePosition.Y + (int)(hotbar.Size.Y / 2f);
-        Assert.IsTrue(hotbar.TryGetSlotAt(new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, baseRowY), out var sourceSlot));
-        Assert.AreEqual(HotkeySlot.Base1, sourceSlot);
+        Assert.AreEqual(HotkeySlot.Base1, SlotAt(hotbar, new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, baseRowY)));
 
         var pressPoint = new Point((int)hotbarWindow.ContentAbsolutePosition.X + 1, baseRowY);
         controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
@@ -2393,7 +2503,7 @@ public sealed class UiInputControllerTests
         controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
 
         Assert.IsFalse(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, HotkeySlot.Base1, out _), "The origin slot must no longer be bound once the item has moved elsewhere.");
-        Assert.IsTrue(hotbar.TryGetSlotAt(dropPoint, out var dropSlot));
+        var dropSlot = SlotAt(hotbar, dropPoint)!.Value;
         Assert.IsTrue(ItemHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ItemHotkeyBindingComponent>(), 1, dropSlot, out var boundItemId));
         Assert.AreEqual(boundStack.StackInstanceId, boundItemId);
     }
@@ -2621,6 +2731,60 @@ public sealed class UiInputControllerTests
         Assert.AreEqual(0, selectedCount, "A genuine drag-and-drop must not also fire the origin cell's own click.");
     }
 
+    [TestMethod]
+    public void Drag_FromInventoryCellOutAndBackToWhereItStarted_NeitherClicksNorMovesTheStack()
+    {
+        var selectedCount = 0;
+        var (sourceGridWindow, _, cell, componentManager, itemId, sourceEntityId, _) = BuildInventoryToInventoryDragHarness(onItemSelected: (_, _) => selectedCount++);
+        var controller = CreateController([sourceGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: null);
+
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAt(pressPoint.X + 30, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAt(pressPoint.X + 1, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAt(pressPoint.X + 1, pressPoint.Y, ButtonState.Released));
+
+        Assert.AreEqual(0, selectedCount);
+        Assert.IsTrue(InventoryQueries.TryGetStack(componentManager.GetMultiPool<InventoryItemStackComponent>(), sourceEntityId, itemId, out _));
+    }
+
+    [TestMethod]
+    public void Drag_FromInventoryCellPastTheThresholdOnlyAtRelease_DropsWithoutClicking()
+    {
+        var selectedCount = 0;
+        var (sourceGridWindow, destinationGridWindow, cell, componentManager, itemId, sourceEntityId, destinationEntityId) = BuildInventoryToInventoryDragHarness(onItemSelected: (_, _) => selectedCount++);
+        var controller = CreateController([sourceGridWindow, destinationGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: null);
+
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+        controller.Update(NoKeys, MouseAt(pressPoint.X + 2, pressPoint.Y, ButtonState.Pressed));
+
+        var dropPoint = destinationGridWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+
+        Assert.AreEqual(0, selectedCount);
+        Assert.AreEqual(0, componentManager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(sourceEntityId));
+        Assert.IsTrue(InventoryQueries.TryGetStack(componentManager.GetMultiPool<InventoryItemStackComponent>(), destinationEntityId, itemId, out _));
+    }
+
+    [TestMethod]
+    public void HoveringAnInventoryCellUnderAnotherWindow_NeitherHighlightsItNorCountsItAsHovered()
+    {
+        var (sourceGridWindow, _, cell, componentManager, _, _, _) = BuildInventoryToInventoryDragHarness();
+        var coveringWindow = CreateMovableWindow(CreateWindowService(), Vector2.Zero);
+        coveringWindow.SetBounds(Vector2.Zero, new Vector2(300, 300));
+        var controller = CreateController([], [], [sourceGridWindow, coveringWindow], [], LargeScreenSize, componentManager: componentManager, playerQuery: null);
+
+        var point = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(point.X, point.Y, ButtonState.Released));
+        sourceGridWindow.Update(new GameTime());
+
+        Assert.IsTrue(coveringWindow.IsPointerOver);
+        Assert.IsFalse(cell.IsPointerOver);
+    }
+
     /// <summary>Sanity counterpart to the regression test above -- a plain click (press and release at the same position, well under ContentDragTapThresholdPixels) must still invoke onItemSelected exactly once.</summary>
     [TestMethod]
     public void Click_OnInventoryCellWithNoMovement_StillInvokesOnItemSelected()
@@ -2731,8 +2895,8 @@ public sealed class UiInputControllerTests
         // A fresh Update resolves this frame's eligibility (ShopTradeEligible) against the
         // just-merged ShopComponent/CurrencyComponent -- RebuildCells alone (run by Initialize)
         // never sets ShopTradeEligible, only UpdateShopEligibilityState (run from Update) does.
-        ((InventoryGridContent)playerGridWindow.Tag!).Update(new GameTime());
-        ((InventoryGridContent)shopGridWindow.Tag!).Update(new GameTime());
+        ((InventoryGridContent)playerGridWindow.DropTarget!).Update(new GameTime());
+        ((InventoryGridContent)shopGridWindow.DropTarget!).Update(new GameTime());
 
         return (playerGridWindow, shopGridWindow, componentManager, mapViewState, itemCatalog, potionItemId, toolItemId, playerEntityId, shopEntityId);
     }
@@ -2876,10 +3040,10 @@ public sealed class UiInputControllerTests
         var tradePlayerGridWindow = BuildGridWindow(tradePlayerEntityId, new Vector2(1000, 0), tradeGridIsShopSide: false);
         var tradeShopGridWindow = BuildGridWindow(tradeShopEntityId, new Vector2(1500, 0), tradeGridIsShopSide: true);
 
-        ((InventoryGridContent)playerGridWindow.Tag!).Update(new GameTime());
-        ((InventoryGridContent)shopGridWindow.Tag!).Update(new GameTime());
-        ((InventoryGridContent)tradePlayerGridWindow.Tag!).Update(new GameTime());
-        ((InventoryGridContent)tradeShopGridWindow.Tag!).Update(new GameTime());
+        ((InventoryGridContent)playerGridWindow.DropTarget!).Update(new GameTime());
+        ((InventoryGridContent)shopGridWindow.DropTarget!).Update(new GameTime());
+        ((InventoryGridContent)tradePlayerGridWindow.DropTarget!).Update(new GameTime());
+        ((InventoryGridContent)tradeShopGridWindow.DropTarget!).Update(new GameTime());
 
         return (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId);
     }
@@ -2888,7 +3052,7 @@ public sealed class UiInputControllerTests
     private static void SeedPotion(Window gridWindow, ComponentManager componentManager, int entityId, Guid potionItemId)
     {
         InventoryActions.AddItem(componentManager, entityId, potionItemId, quantity: 1);
-        ((InventoryGridContent)gridWindow.Tag!).Update(new GameTime());
+        ((InventoryGridContent)gridWindow.DropTarget!).Update(new GameTime());
     }
 
     /// <summary>Drags whatever single potionItemId cell exists in fromWindow onto toWindow's own content area, mirroring the press/drag/release sequence every other content-drag test in this file already uses.</summary>
@@ -2901,6 +3065,64 @@ public sealed class UiInputControllerTests
 
         var dropPoint = toWindow.ContentRectangle.Center;
         controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
+    }
+
+    private static void HoldPotionCellOver(UiInputController controller, Window fromWindow, Window overWindow)
+    {
+        var cell = fromWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+        var pressPoint = cell.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Released));
+        controller.Update(NoKeys, MouseAt(pressPoint.X, pressPoint.Y, ButtonState.Pressed));
+
+        var hoverPoint = overWindow.ContentRectangle.Center;
+        controller.Update(NoKeys, MouseAt(hoverPoint.X, hoverPoint.Y, ButtonState.Pressed));
+    }
+
+    [TestMethod]
+    public void HoldingAPlayerItemOverTheShopsTradeColumn_ShowsTheRefusalCursor()
+    {
+        var (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, playerEntityId, _, _, _) = BuildTradeDragHarness();
+        SeedPotion(playerGridWindow, componentManager, playerEntityId, potionItemId);
+        var controller = CreateController([playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        HoldPotionCellOver(controller, playerGridWindow, tradeShopGridWindow);
+
+        Assert.AreEqual(MouseCursor.No, controller.CurrentCursor);
+    }
+
+    [TestMethod]
+    public void HoldingAShopItemOverThePlayersTradeColumn_ShowsTheRefusalCursor()
+    {
+        var (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, _, shopEntityId, _, _) = BuildTradeDragHarness();
+        SeedPotion(shopGridWindow, componentManager, shopEntityId, potionItemId);
+        var controller = CreateController([playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        HoldPotionCellOver(controller, shopGridWindow, tradePlayerGridWindow);
+
+        Assert.AreEqual(MouseCursor.No, controller.CurrentCursor);
+    }
+
+    [TestMethod]
+    public void HoldingOneTradeColumnsItemOverTheOther_ShowsTheRefusalCursor()
+    {
+        var (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, _, _, _, _, _) = BuildTradeDragHarness();
+        var controller = CreateController([playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        HoldPotionCellOver(controller, tradePlayerGridWindow, tradeShopGridWindow);
+
+        Assert.AreEqual(MouseCursor.No, controller.CurrentCursor);
+    }
+
+    [TestMethod]
+    public void HoldingAPlayerItemOverThePlayersTradeColumn_DoesNotRefuse()
+    {
+        var (playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow, componentManager, mapViewState, itemCatalog, world, potionItemId, playerEntityId, _, _, _) = BuildTradeDragHarness();
+        SeedPotion(playerGridWindow, componentManager, playerEntityId, potionItemId);
+        var controller = CreateController([playerGridWindow, shopGridWindow, tradePlayerGridWindow, tradeShopGridWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, itemCatalog: itemCatalog, mapViewState: mapViewState);
+
+        HoldPotionCellOver(controller, playerGridWindow, tradePlayerGridWindow);
+
+        Assert.AreNotEqual(MouseCursor.No, controller.CurrentCursor);
     }
 
     [TestMethod]
@@ -3063,7 +3285,7 @@ public sealed class UiInputControllerTests
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         var denseIndex = stacks.GetFirstDenseIndex(tradeShopEntityId);
         stacks.UpdateByDenseIndex(denseIndex, (ushort)5, static (ref InventoryItemStackComponent stack, ushort qty) => stack.Quantity = qty);
-        ((InventoryGridContent)tradeShopGridWindow.Tag!).Update(new GameTime());
+        ((InventoryGridContent)tradeShopGridWindow.DropTarget!).Update(new GameTime());
 
         var cell = (TradeItemStackCell)tradeShopGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
 
@@ -3428,7 +3650,7 @@ public sealed class UiInputControllerTests
         controller.Update(NoKeys, MouseAt(dropPoint.X, dropPoint.Y, ButtonState.Released));
 
         Assert.IsFalse(ActionHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ActionHotkeyBindingComponent>(), 1, HotkeySlot.Base1, out _), "The origin slot must no longer be bound once the action has moved elsewhere.");
-        Assert.IsTrue(hotbar.TryGetSlotAt(dropPoint, out var dropSlot));
+        var dropSlot = SlotAt(hotbar, dropPoint)!.Value;
         Assert.IsTrue(ActionHotkeyBindingQueries.TryGet(componentManager.GetMultiPool<ActionHotkeyBindingComponent>(), 1, dropSlot, out var boundActionId));
         Assert.AreEqual(actionId, boundActionId);
     }
@@ -3470,6 +3692,7 @@ public sealed class UiInputControllerTests
             fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var hotbarWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
         });
         hotbarWindow.SetContent(hotbar);

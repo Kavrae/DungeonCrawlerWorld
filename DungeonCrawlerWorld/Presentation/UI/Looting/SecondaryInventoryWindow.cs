@@ -1,42 +1,20 @@
-using Engine.Tags;
+using Game.Modules.Inventory;
 using Game.Spawning;
 using Game.Views;
 using Game.World;
-using Microsoft.Xna.Framework;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
 using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI;
-using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Looting;
 
-/// <summary>
-/// The non-player side of looting: a fixed summary (icon, name, killer, death tick) above a plain
-/// item grid, capped at InventoryCapacity.MaxNonPlayerStackCount items -- no tabs/sort/filter,
-/// see TODO.md's Corpse looting entry. Hosts any other entity's inventory by id -- a corpse today,
-/// a treasure chest (lootable even while alive) too, and eventually a shop -- see
-/// SecondaryInventoryWindowController's own doc comment. Every position/size below is explicit and
-/// deterministic (fixed pixel offsets, a fixed grid column count) rather than derived from ambient
-/// ContentSize propagation or ChildElementTileMode auto-tiling -- an earlier version relying on
-/// those produced an inconsistent, jumbled layout (confirmed by live testing) once nested inside
-/// this window's own OnChildrenInitialized-built structure, a combination (Window-hosted
-/// InventoryGridContent nested inside a manually-built custom Window) this codebase hadn't
-/// exercised before.
-///
-/// Sizes itself exactly once, from the target entity's own raw stack count, before building any
-/// children at all (see OnChildrenInitialized) -- deliberately not a build-then-shrink-to-fit
-/// pass: resizing gridWindow (or this window) *after* InventoryGridContent has already built real
-/// cells re-fires its own Resized-driven rebuild reentrantly, mid-Measure, which is what actually
-/// broke dragging out of a corpse's grid (confirmed by live testing -- cells rebuilt during that
-/// reentrant call never got correctly hit-tested afterward). Also pins MinimumSize to this same
-/// starting size (see Element.SetMinimumSize) so the window can never be user-resized smaller
-/// than what it opened at. A fixed-height Currency row (see CurrencyRowContent) sits below the
-/// grid, showing the target entity's own Gold/Credits, each independently hoverable/draggable/
-/// right-clickable. Like the summary/grid above, it's positioned once at open time and never
-/// repositioned on resize -- consistent with those two never adjusting either.
-/// </summary>
+/// <summary>The non-player side of looting -- a corpse, or a container such as a treasure chest (lootable while alive) -- with its name, killer and death tick above a five-column grid.</summary>
+/// <remarks>
+/// No tabs, sort or filter (TODO.md "Corpse looting"). Holds at most InventoryCapacity.MaxNonPlayerStackCount stacks,
+/// which the header counts against and the grid's four rows fit (ContainerInventoryWindow has the shared layout rules).
+/// </remarks>
 public sealed class SecondaryInventoryWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
@@ -48,171 +26,27 @@ public sealed class SecondaryInventoryWindow(
     Engine.ECS.Systems.SimulationClock simulationClock,
     EntityNaming entityNaming,
     HealthView healthView)
-    : Window(fontService, elementPoolService, renderService)
+    : ContainerInventoryWindow(fontService, elementPoolService, renderService, inventoryServices, world, contextMenuController, mapViewState, simulationClock)
 {
-    private static readonly Vector2 IconSize = new(48, 48);
-    private const float Padding = 8f;
-    private const float SummaryTextWidth = 180f;
-    private const float SummaryLineHeight = 18f;
-    private const int SummaryLineCount = 3;
-    private const float SummaryHeight = SummaryLineHeight * SummaryLineCount > 48 ? SummaryLineHeight * SummaryLineCount : 48f;
+    /// <summary>Five plain cells, the "2x5" shape a ten-item corpse reads as.</summary>
+    protected override int GridColumns => 5;
 
-    /// <summary>Fixed at 5 columns (the "2x5" shape a 10-item corpse should read as) rather than derived from ambient window width -- see this class's own doc comment for why a dynamic width caused the original layout bug.</summary>
-    private const int GridColumns = 5;
+    protected override float GridCellWidth => InventoryGridContent.CellSize.X;
 
-    /// <summary>Wide enough for exactly GridColumns columns of InventoryGridContent.CellSize -- derived from CellSize/CellGap directly (rather than hand-duplicating those numbers, the landmine the 50%-cell-size bump exposed the first version of this constant to) -- comfortably mid-range of the width band that computes to exactly GridColumns, not right at its edge.</summary>
-    private static readonly float GridWidth = GridColumns * (InventoryGridContent.CellSize.X + InventoryGridContent.CellGap) + 10f;
+    protected override int MinimumGridRows => 2;
 
-    private int _entityId;
-    private TooltipController _tooltipController = null!;
-    private Action<int, uint> _onItemSelected = static (_, _) => { };
-    private Action<int, uint> _onCompareRequested = static (_, _) => { };
-    private CurrencyRowContent _currencyRowContent = null!;
+    protected override int MaximumGridRows => InventoryCapacity.MaxNonPlayerStackCount / GridColumns;
 
-    /// <summary>Must be called after CreateElement but before Initialize -- same contract InventoryManagementWindow/AbilityScoreWindow's own Configure follow. Constructs and registers the currency row here too (not OnChildrenInitialized) -- SetFooterContent only needs to record FooterHeight, which must already be set before this window's own first MeasureAndArrange for ContentSize to come out correctly shrunk (see Window.SetFooterContent's own doc comment).</summary>
-    public void Configure(int entityId, TooltipController tooltipController, Action<int, uint> onItemSelected, Action<int, uint> onCompareRequested)
-    {
-        _entityId = entityId;
-        _tooltipController = tooltipController;
-        _onItemSelected = onItemSelected;
-        _onCompareRequested = onCompareRequested;
+    protected override int? StackCapacity => InventoryCapacity.MaxNonPlayerStackCount;
 
-        // getSecondaryTargetEntityId always returns this window's own _entityId, same
-        // self-referential shape BuildGrid's own InventoryGridContent uses -- this window *is*
-        // the secondary target for as long as it exists, so its own currency row's context menu
-        // only ever needs to offer "Take"/"Take All".
-        _currencyRowContent = new CurrencyRowContent(entityId, inventoryServices, world, contextMenuController, ElementPoolService, () => _entityId);
-        SetFooterContent(_currencyRowContent, CurrencyRowContent.Height);
-    }
+    protected override int SummaryLineCount => 3;
 
-    /// <summary>See AbilityScoreWindow's own doc comment for why building children here, not in Configure -- ContentSize isn't real until after MeasureAndArrange. SetSize must run before base.OnChildrenInitialized so the footer host window (built by the base call) is created off this window's own final ContentSize, not a placeholder one.</summary>
-    protected override void OnChildrenInitialized()
-    {
-        var gridHeight = ComputeGridHeight();
-        var finalSize = ComputeOuterSize(gridHeight);
-        SetMinimumSize(finalSize);
-        SetSize(finalSize);
-
-        base.OnChildrenInitialized();
-
-        BuildSummary();
-        BuildGrid(gridHeight);
-    }
-
-    /// <summary>Always at least MinimumRows (a 2x5 grid) worth of height, regardless of how few items the target entity actually starts with -- items can be dragged in later (see InventoryActions.TryTransferStack), and this window's size is set once, up front, never revisited (see this class's own doc comment), so a target that opened with room for only 1 row would otherwise force the grid to scroll the moment a second row's worth of items arrived.</summary>
-    private const int MinimumGridRows = 2;
-
-    /// <summary>
-    /// Rows needed for the target entity's raw InventoryItemStackComponent count -- not
-    /// InventoryGridContent's own (possibly smaller) VisibleItemCount, since that depends on its
-    /// default same-item stack merging and isn't known until the grid actually builds cells,
-    /// which must happen only once, after this window's final size is already set (see this
-    /// class's own doc comment). Raw stack count is never smaller than the merged cell count, so
-    /// this is always tall enough -- worst case a little extra empty space at the bottom of the
-    /// grid on a target carrying several divergent stacks of the same item, never a cramped grid.
-    /// </summary>
-    private float ComputeGridHeight()
-    {
-        var stackCount = inventoryServices.InventoryView.CountStacks(_entityId);
-        var rows = System.Math.Max(MinimumGridRows, (int)System.Math.Ceiling(stackCount / (double)GridColumns));
-        return rows * (InventoryGridContent.CellSize.Y + InventoryGridContent.CellGap);
-    }
-
-    /// <summary>
-    /// contentWidth/contentHeight are this window's own padded content area, not its outer bounds
-    /// -- the top/left/right/bottom EDGE margin is the generic ContentPadding's job now (this
-    /// Window has children), already folded into outerInsets below (see ChildContentPadding's own
-    /// doc comment: gated on CanContainChildren alone, so this reads correctly even before any
-    /// child has actually been added yet, which is exactly when this runs -- see OnChildrenInitialized).
-    /// The one remaining INTERNAL gap (summary-to-grid) is still this method's own Padding.
-    /// FooterHeight is added explicitly, on top of outerInsets -- ContentSize already excludes it
-    /// (see RecalculateFixedSize), so relying on outerInsets alone to carry it through undersized
-    /// this window by exactly one footer's worth of height (confirmed live: the currency row
-    /// visibly overlapped/clipped the grid's own bottom row).
-    /// </summary>
-    private Vector2 ComputeOuterSize(float gridHeight)
-    {
-        var contentWidth = System.Math.Max(IconSize.X + Padding + SummaryTextWidth, GridWidth);
-        var contentHeight = SummaryHeight + Padding + gridHeight;
-
-        var outerInsets = CurrentSize - ContentSize;
-        return new Vector2(contentWidth, contentHeight) + outerInsets + new Vector2(0, FooterHeight);
-    }
-
-    private void BuildSummary()
-    {
-        var icon = ElementPoolService.CreateElement<EntityIconElement>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = IconSize, DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        icon.Configure(_entityId, IconSize);
-        AddChild(icon);
-
-        // Padding here is the icon-to-text gap, an internal gap distinct from the (now automatic)
-        // left edge margin -- see this class's own doc comment on ComputeOuterSize.
-        var textX = Padding + IconSize.X;
-        AddSummaryLine(textX, 0, ResolveName(_entityId));
-        AddSummaryLine(textX, 1, $"Slain by: {ResolveKillerName()}");
-        AddSummaryLine(textX, 2, $"Died at tick: {ResolveDiedAtFrame()}");
-    }
-
-    private void AddSummaryLine(float x, int lineIndex, string text)
-    {
-        var line = ElementPoolService.CreateElement<TextWindow>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, lineIndex * SummaryLineHeight), Size = new Vector2(SummaryTextWidth, SummaryLineHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-            Text = new TextOptions { Text = text, TextColor = Color.White },
-        });
-        AddChild(line);
-    }
-
-    /// <summary>Built at its final height from the start (see ComputeGridHeight) -- never resized afterward, so InventoryGridContent's cells are built exactly once, non-reentrantly.</summary>
-    private void BuildGrid(float gridHeight)
-    {
-        var gridWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions
-            {
-                // Padding here is the summary-to-grid gap, an internal gap distinct from the (now
-                // automatic) top/left edge margin -- see this class's own doc comment on ComputeOuterSize.
-                RelativePosition = new Vector2(0, SummaryHeight + Padding),
-                Size = new Vector2(GridWidth, gridHeight),
-                DisplayMode = ElementDisplayMode.Fixed,
-            },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
-        });
-
-        // Flush against gridWindow's own bounds, not inset a second time on top of the generic
-        // ContentPadding every CanContainChildren window gets by default (see GridControl.Build's
-        // own identical convention) -- ComputeGridHeight sizes gridHeight to exactly fit
-        // InventoryGridContent's own two rows of cells, with no padding budgeted in; leaving the
-        // default (4,4) padding here silently shrank the usable content area below that, clipping
-        // the bottom row (confirmed live).
-        gridWindow.ContentPadding = Vector2.Zero;
-
-        // getSecondaryTargetEntityId always returns this window's own _entityId -- this window
-        // *is* the currently-open secondary target for as long as it exists (see
-        // SecondaryInventoryWindowController.OpenLoot, which never has more than one open at
-        // once), so its own grid's Give/Take menu only ever needs to offer "Take," never query
-        // anything external (contrast InventoryManagementWindow's own callback, which has to ask
-        // whether a secondary window is open at all).
-        gridWindow.SetContent(new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, _entityId, filterTag: GameplayTag.None, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, static _ => { }, simulationClock: simulationClock)); // Activate is player-inventory-only (see InventoryGridContent.CanActivate) -- never reached for a corpse/container grid.
-        AddChild(gridWindow); // Initializes gridWindow, which in turn Initializes (and builds the cells of) its InventoryGridContent -- see Window.OnChildrenInitialized/AddChild's own doc comment on why Initialize is never called explicitly here.
-    }
-
-    private string ResolveName(int entityId) => entityNaming.NameOf(entityId);
+    protected override IReadOnlyList<string> BuildSummaryLines() =>
+        [entityNaming.NameOf(EntityId), $"Slain by: {ResolveKillerName()}", $"Died at tick: {ResolveDiedAtFrame()}"];
 
     private string ResolveKillerName()
     {
-        if (!healthView.TryGetDeath(_entityId, out var death) || death.KilledBy is not { Kind: ActionSourceKind.Entity } killer)
+        if (!healthView.TryGetDeath(EntityId, out var death) || death.KilledBy is not { Kind: ActionSourceKind.Entity } killer)
         {
             return "Unknown";
         }
@@ -220,5 +54,5 @@ public sealed class SecondaryInventoryWindow(
         return killer.Identity.DisplayName;
     }
 
-    private long ResolveDiedAtFrame() => healthView.TryGetDeath(_entityId, out var death) ? death.DiedAtFrame : 0;
+    private long ResolveDiedAtFrame() => healthView.TryGetDeath(EntityId, out var death) ? death.DiedAtFrame : 0;
 }

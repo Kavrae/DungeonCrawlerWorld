@@ -1585,7 +1585,7 @@ record in Achievements.
 - Click opens Item Details docked beside the results window: `ItemDetailsWindowController.Open` takes
   an optional anchor window, and a reward whose stack has since been used up opens read-only through
   `OpenDefinition` (stack id `ItemDetailsWindow.NoStackInstanceId`; Compare does nothing).
-  `GetLootboxResultsWindowRectangle` is its own outside-click hook, never folded into another window's.
+  The results window counts as inside Item Details on its own (`IsTiedWindow`), never through another window.
 
 ### Map areas, fixed placements and the Workshop Map tab (2026-10-22)
 
@@ -1840,9 +1840,8 @@ Level Up and Skill Up join later as new `FloatingTextKind` values.
   instead of one overwriting the other -- the green eligible-glow is comparison-only now, a
   shop-eligible item shows no glow, just its own price-line coloring. `TradeWindow`'s two columns are
   wired into the same comparison-aware click dispatch (`onItemSelected`) every other inventory grid
-  uses -- `ItemDetailsWindowController` gained a `GetTradeWindowRectangle` hook, checked as its own
-  independent `if` in `IsOutsideClick`, NOT folded into the pre-existing
-  `GetSecondaryInventoryWindowRectangle` fallback chain -- confirmed live as a real bug: the shop and
+  uses -- the trade window counts as inside Item Details on its own (`ItemDetailsWindowController.IsTiedWindow`),
+  never through the shop window -- confirmed live as a real bug when they shared one hook: the shop and
   trade windows are open *simultaneously* (unlike corpse-vs-shop, which really are mutually
   exclusive), so a single "pick whichever one's open" `Func<Rectangle>` made the shop window's own
   rectangle invisible the moment a trade session started, reading every click on the shop's own item
@@ -2861,8 +2860,7 @@ FontStashSharp; Presentation, the exe and Tests reference it.
   resolver chain, unchanged inside) and `HotbarBindingDropHandler`.
 - **Everything else the game does with raw input is an `IUiInputHandler`**, one small handler per concern with only
   required dependencies: a `KeyPressInputHandler` (UIEngine) per hotkey -- U/I/O/F3 and Left Alt --,
-  `AdminModeInputHandler` (F12), `ItemDetailsOutsideClickInputHandler` (a press it consumes),
-  `ItemComparisonDisarmInputHandler`, `HotbarInputHandler` (the hotbar's tap and hover) and
+  `AdminModeInputHandler` (F12), `ItemComparisonDisarmInputHandler`, `HotbarInputHandler` (the hotbar's hover summary) and
   `ActivationRefusalInputHandler` (the refusal cursor). It started as one `GameInputHandler` with every controller
   optional, which existed only so tests could leave them out; split, a test registers only the handlers it exercises
   (`TestUiInputController`) and nothing is nullable. Handlers receive an `Element`, never the internal

@@ -1,15 +1,14 @@
 using Game.Modules.Currency;
 using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
 using Game.Modules.Shops;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.UI;
-using Presentation.UI.Content;
 using Presentation.UI.Shops;
 using Presentation.UI.Trade;
 using UIEngine.Input;
-using UIEngine.UI;
 
 namespace Presentation.Input.DragDrop;
 
@@ -25,16 +24,22 @@ public sealed class InventoryTransferDropHandler : IContentDropHandler
 {
     private readonly MapViewState _mapViewState;
     private readonly ShopView _shopView;
+    private readonly InventoryView _inventoryView;
+    private readonly IPlayerQuery _playerQuery;
+    private readonly TradeDragDropResolver _tradeDragDropResolver;
     private readonly IReadOnlyList<IDragDropResolver> _dragDropResolvers;
 
-    public InventoryTransferDropHandler(MapViewState mapViewState, ShopView shopView, InventoryCommands inventoryCommands, ShopCommands shopCommands, CurrencyCommands currencyCommands, IPlayerQuery playerQuery)
+    public InventoryTransferDropHandler(MapViewState mapViewState, ShopView shopView, InventoryView inventoryView, InventoryCommands inventoryCommands, ShopCommands shopCommands, CurrencyCommands currencyCommands, IPlayerQuery playerQuery)
     {
         _mapViewState = mapViewState;
         _shopView = shopView;
+        _inventoryView = inventoryView;
+        _playerQuery = playerQuery;
 
+        _tradeDragDropResolver = new TradeDragDropResolver(mapViewState, shopView, inventoryCommands, shopCommands, currencyCommands, playerQuery);
         _dragDropResolvers =
         [
-            new TradeDragDropResolver(mapViewState, shopView, inventoryCommands, shopCommands, currencyCommands, playerQuery),
+            _tradeDragDropResolver,
             new ShopDragDropResolver(shopView, shopCommands),
             new PlainInventoryDragDropResolver(inventoryCommands, shopCommands, playerQuery),
         ];
@@ -67,15 +72,50 @@ public sealed class InventoryTransferDropHandler : IContentDropHandler
         return true;
     }
 
-    public bool TryDrop(object payload, Element? dropTarget, Point position)
+    /// <summary>Refuses an item or currency held over a trade column it may never be staged in -- the other side's column, or one from the other column -- and items held over an inventory with no room for them.</summary>
+    public bool IsDropRefusedAt(object payload, object? dropTarget, Point position) =>
+        TryBuildContext(payload, dropTarget, out var context) && (_tradeDragDropResolver.IsRefused(context) || !HasRoomFor(context));
+
+    /// <summary>Whether context's destination can hold the stacks it would gain -- one for an item stack, one per stack of a Merged Stack, none for currency.</summary>
+    /// <remarks>The player's inventory is unlimited, a drop back on its origin moves nothing, and a shop buys and sells by its own rules, so none of them is ever full here (InventoryCapacity).</remarks>
+    private bool HasRoomFor(in DragDropContext context)
     {
-        if (payload is not DragPayload { OriginEntityId: { } originEntityId } drag ||
-            FindDropTargetEntityId(dropTarget, position, isCurrencyDrag: drag.CurrencyType is not null) is not { } destinationEntityId)
+        var destinationEntityId = context.DestinationEntityId;
+        if (destinationEntityId == _playerQuery.PlayerEntityId || destinationEntityId == context.OriginEntityId || _shopView.IsShop(destinationEntityId) || _shopView.IsShop(context.OriginEntityId))
+        {
+            return true;
+        }
+
+        var newStackCount = context.ItemStackInstanceId is not null ? 1 : context.MergedItemDefinitionId is { } itemDefinitionId ? CountStacksOf(context.OriginEntityId, itemDefinitionId) : 0;
+        return newStackCount == 0 || InventoryCapacity.NonPlayerHasRoomForNewStacks(_inventoryView.CountStacks(destinationEntityId), newStackCount);
+    }
+
+    private readonly List<InventoryItemStackComponent> _originStacks = [];
+
+    private int CountStacksOf(int entityId, Guid itemDefinitionId)
+    {
+        _originStacks.Clear();
+        _inventoryView.CopyStacks(entityId, _originStacks);
+        var count = 0;
+        foreach (var stack in _originStacks)
+        {
+            if (stack.ItemDefinitionId == itemDefinitionId)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>Claims a drop of an item or currency from an inventory onto any inventory (InventoryDropTarget) -- whichever grid, currency row or whole window named it.</summary>
+    public bool TryDrop(object payload, object? dropTarget, Point position)
+    {
+        if (!TryBuildContext(payload, dropTarget, out var context))
         {
             return false;
         }
 
-        var context = new DragDropContext(originEntityId, destinationEntityId, drag.ItemStackInstanceId, drag.MergedItemDefinitionId, drag.CurrencyType);
         foreach (var resolver in _dragDropResolvers)
         {
             if (resolver.TryResolve(context))
@@ -87,44 +127,16 @@ public sealed class InventoryTransferDropHandler : IContentDropHandler
         return true;
     }
 
-    /// <summary>
-    /// Walks up from element through ParentElement looking for the nearest ancestor that can
-    /// resolve a drop target -- first the narrow, specific case (a Window hosting an
-    /// IInventoryDropTarget: InventoryGridContent for item stacks, CurrencyRowContent for
-    /// Gold/Credits), handling the drop landing on a specific cell/currency element or on empty
-    /// grid/row space alike; falling back, only once that's failed for every ancestor below it, to
-    /// the broader case (an IWholeWindowDropTarget -- InventoryManagementWindow/ShopWindow/
-    /// TradeWindow) for a drop landing anywhere else within that window's own bounds (its title
-    /// bar, border padding, the gap between a trade column's grid and footer, etc.). This whole-window
-    /// fallback exists because a player shouldn't have to land a drag exactly on a narrow currency
-    /// row or a cramped grid for a drop to count. IInventoryDropTarget is checked via Window.Tag,
-    /// not Window.Content -- InventoryGridContent isn't always assigned as its host window's
-    /// Content (see InventoryGridContent.Initialize's own doc comment: InventoryTabContent's own
-    /// hosting pattern drives it manually and never calls SetContent at all, unlike
-    /// SecondaryInventoryWindow's), so Tag is the one thing both hosting patterns reliably set
-    /// (confirmed via a live-testing repro against the real, TabbedContent-nested
-    /// InventoryManagementWindow structure -- Content-based matching silently found nothing there,
-    /// even though it worked against a simpler hand-built test harness). dropPosition is passed
-    /// straight through to IWholeWindowDropTarget -- already confirmed within that window's own
-    /// Rectangle by construction (the hit-test that produced element never returns something
-    /// outside its own containing window's bounds), it's what TradeWindow's own implementation
-    /// uses to pick which of its two columns receives the drop.
-    /// </summary>
-    private static int? FindDropTargetEntityId(Element? element, Point dropPosition, bool isCurrencyDrag)
+    /// <summary>context for a drop of payload on another inventory -- false for anything else.</summary>
+    private static bool TryBuildContext(object payload, object? dropTarget, out DragDropContext context)
     {
-        for (var candidate = element; candidate is not null; candidate = candidate.ParentElement)
+        if (payload is not DragPayload { OriginEntityId: { } originEntityId } drag || dropTarget is not InventoryDropTarget { EntityId: var destinationEntityId })
         {
-            if (candidate is Window { Tag: IInventoryDropTarget target })
-            {
-                return target.EntityId;
-            }
-
-            if (candidate is IWholeWindowDropTarget wholeWindowTarget)
-            {
-                return isCurrencyDrag ? wholeWindowTarget.ResolveCurrencyDropEntityId(dropPosition) : wholeWindowTarget.ResolveItemDropEntityId(dropPosition);
-            }
+            context = default;
+            return false;
         }
 
-        return null;
+        context = new DragDropContext(originEntityId, destinationEntityId, drag.ItemStackInstanceId, drag.MergedItemDefinitionId, drag.CurrencyType);
+        return true;
     }
 }

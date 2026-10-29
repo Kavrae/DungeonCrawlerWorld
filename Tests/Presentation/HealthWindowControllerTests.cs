@@ -88,7 +88,7 @@ public sealed class HealthWindowControllerTests
         tooltipController.Initialize(pool, layers);
 
         pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, new UiRenderService(), new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), new StatModifierView(componentManager), TestActionStateViews.Over(componentManager), BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog, TestGameplayTags.BuiltIn, simulationClock: new SimulationClock(),
-            TestActionSources.Naming(terrain, auras), tooltipController, pointerState));
+            TestActionSources.Naming(terrain, auras), tooltipController));
         pool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, pool, new UiRenderService()));
         pool.RegisterFactory<FractionBarElement>(() => new FractionBarElement(fontService, pool, new UiRenderService()));
 

@@ -91,6 +91,7 @@ public sealed class AbilityScoreWindowController(
             Chrome = new ElementChromeOptions
             {
                 ShowTitle = true,
+                TitleText = "Ability Scores",
                 ShowBorder = true,
                 CanUserClose = true,
                 CanUserMinimize = false,

@@ -74,6 +74,13 @@ internal static class SpriteEffectQuads
     }
 
     /// <summary>source (or the whole texture) as fractions of a texture of textureSize: x, y, width, height.</summary>
+    /// <summary>position moved so it lands on a whole pixel once drawOffset is added -- rounded on screen, where a local position on a whole pixel can still sit half a pixel off.</summary>
+    public static Vector2 OnWholeScreenPixel(Vector2 position, Vector2 drawOffset)
+    {
+        var screenPosition = position + drawOffset;
+        return new Vector2(MathF.Round(screenPosition.X), MathF.Round(screenPosition.Y)) - drawOffset;
+    }
+
     public static Vector4 NormalizedSource(Rectangle? source, Point textureSize) =>
         source is { } rectangle
             ? new Vector4(rectangle.X / (float)textureSize.X, rectangle.Y / (float)textureSize.Y, rectangle.Width / (float)textureSize.X, rectangle.Height / (float)textureSize.Y)

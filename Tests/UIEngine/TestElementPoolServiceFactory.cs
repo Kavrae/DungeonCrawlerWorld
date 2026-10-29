@@ -1,11 +1,12 @@
 using Microsoft.Xna.Framework;
+using Presentation.UI.Content;
 using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Tests.UIEngine;
 
-/// <summary>Builds an ElementPoolService with Window/Button/Dropdown/TextWindow/TextBox factories registered -- replaces what ElementPoolService's own constructor used to do, before that moved to ElementFactoryRegistry. Button is included here (not left for individual tests to register) since any test that creates a CanUserClose/CanUserMinimize window pulls one in via CloseBehavior/MinimizeRestoreBehavior; Dropdown likewise, since any test that constructs a DropdownController pulls one in via its own Initialize.</summary>
+/// <summary>Builds an ElementPoolService with Window/Button/Dropdown/TextWindow/TextBox factories registered -- replaces what ElementPoolService's own constructor used to do, before that moved to ElementFactoryRegistry. Button is included here (not left for individual tests to register) since any test that creates a CanUserClose/CanUserMinimize window pulls one in via CloseBehavior/MinimizeRestoreBehavior; Dropdown likewise, since any test that constructs a DropdownController pulls one in via its own Initialize; HotbarSlotElement, since any test that hosts a HotbarContent pulls its slots in.</summary>
 internal static class TestElementPoolServiceFactory
 {
     /// <summary>Stand-in screen size for anything that would otherwise need a real GraphicsDevice.Viewport.Bounds -- unavailable headlessly. Matches PlayerHealthBarContentTests' own ScreenBounds constant.</summary>
@@ -21,6 +22,7 @@ internal static class TestElementPoolServiceFactory
         pool.RegisterFactory<Dropdown>(() => new Dropdown(fontService, pool, new UiRenderService()));
         pool.RegisterFactory<TextWindow>(() => createTextWindow?.Invoke(pool) ?? new TextWindow(fontService, pool, new UiRenderService()));
         pool.RegisterFactory<TextBox>(() => createTextBox?.Invoke(pool) ?? new TextBox(fontService, pool, new UiRenderService()));
+        pool.RegisterFactory<HotbarSlotElement>(() => new HotbarSlotElement(fontService, pool, new UiRenderService()));
         return pool;
     }
 

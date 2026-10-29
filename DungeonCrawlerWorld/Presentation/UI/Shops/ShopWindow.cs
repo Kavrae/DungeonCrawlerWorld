@@ -1,29 +1,24 @@
-using Engine.Tags;
 using Game.Spawning;
 using Game.World;
 using Microsoft.Xna.Framework;
+using Presentation.Input.DragDrop;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
-using Presentation.UI.Looting;
 using UIEngine.Fonts;
+using UIEngine.Input;
 using UIEngine.Rendering;
 using UIEngine.UI;
-using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Shops;
 
-/// <summary>
-/// The shop side of trading: a fixed summary (icon, name, description) above a plain item grid --
-/// copies SecondaryInventoryWindow's own layout shape (see its own doc comment for why every
-/// position/size below is explicit rather than ambient-propagated) rather than extending it, since
-/// a shop's summary carries no killer/died-tick (it's never a corpse) and its grid must eventually
-/// grow shop-specific price display (see MapViewState.OpenShopEntityId's own doc comment) --
-/// SecondaryInventoryWindow's own summary/grid are corpse-specific enough that bending them to fit
-/// would cost more than a focused sibling. Phase 4 of the Shops plan is what actually switches this
-/// window's grid (and the player's own) to the wider, price-showing cell layout; for now it's the
-/// same InventoryGridContent every other inventory grid uses, with buy/sell already price-aware via
-/// ShopActions (see InventoryGridContent.BuildItemContextMenu and UiInputController.ResolveContentDrag).
-/// </summary>
+/// <summary>The shop side of trading: its name and description above a two-column grid of priced items.</summary>
+/// <remarks>
+/// Always in shop mode while open (MapViewState.OpenShopEntityId), so its grid builds ShopItemStackCells, each
+/// InventoryGridContent.ShopCellWidthMultiplier plain cells wide -- a scannable list, tall rather than wide. A shop holds
+/// any number of stacks (UnlimitedStackCountComponent): the header shows its count out of ∞, and past MaximumGridRows the grid scrolls
+/// (ContainerInventoryWindow has the shared layout rules). A drop anywhere its grid and currency row leave unanswered
+/// lands in the shop's inventory.
+/// </remarks>
 public sealed class ShopWindow(
     FontService fontService,
     ElementPoolService elementPoolService,
@@ -34,144 +29,26 @@ public sealed class ShopWindow(
     MapViewState mapViewState,
     Engine.ECS.Systems.SimulationClock simulationClock,
     EntityNaming entityNaming)
-    : Window(fontService, elementPoolService, renderService), IWholeWindowDropTarget
+    : ContainerInventoryWindow(fontService, elementPoolService, renderService, inventoryServices, world, contextMenuController, mapViewState, simulationClock), IContentDropTarget
 {
-    private static readonly Vector2 IconSize = new(48, 48);
-    private const float Padding = 8f;
-    private const float SummaryTextWidth = 180f;
-    private const float SummaryLineHeight = 18f;
-    private const int SummaryLineCount = 2;
-    private const float SummaryHeight = SummaryLineHeight * SummaryLineCount > 48 ? SummaryLineHeight * SummaryLineCount : 48f;
+    private InventoryDropTarget? _dropTarget;
 
-    /// <summary>Only 2, not SecondaryInventoryWindow's 5 -- this grid is always in shop mode (MapViewState.OpenShopEntityId is set for as long as this window exists), so InventoryGridContent always builds ShopItemStackCells here, 4x CellSize's own width each (see InventoryGridContent.ShopCellWidthMultiplier); 2 of those is already a wider row than 5 plain cells.</summary>
-    private const int GridColumns = 2;
+    protected override int GridColumns => 2;
 
-    /// <summary>Wide enough for exactly GridColumns columns of the shop-mode cell width -- see SecondaryInventoryWindow.GridWidth's own doc comment for why this derives from InventoryGridContent's own constants rather than hand-duplicating them.</summary>
-    private static readonly float GridWidth = GridColumns * (InventoryGridContent.CellSize.X * InventoryGridContent.ShopCellWidthMultiplier + InventoryGridContent.CellGap) + 10f;
+    protected override float GridCellWidth => InventoryGridContent.CellSize.X * InventoryGridContent.ShopCellWidthMultiplier;
 
-    private int _entityId;
-    private TooltipController _tooltipController = null!;
-    private Action<int, uint> _onItemSelected = static (_, _) => { };
-    private Action<int, uint> _onCompareRequested = static (_, _) => { };
-    private CurrencyRowContent _currencyRowContent = null!;
+    protected override int MinimumGridRows => 5;
 
-    /// <summary>Must be called after CreateElement but before Initialize -- same contract SecondaryInventoryWindow.Configure follows.</summary>
-    public void Configure(int entityId, TooltipController tooltipController, Action<int, uint> onItemSelected, Action<int, uint> onCompareRequested)
-    {
-        _entityId = entityId;
-        _tooltipController = tooltipController;
-        _onItemSelected = onItemSelected;
-        _onCompareRequested = onCompareRequested;
+    /// <summary>Twelve rows of two -- 24 items -- before the list scrolls, short enough to stay on screen beside the inventory.</summary>
+    protected override int MaximumGridRows => 12;
 
-        // getSecondaryTargetEntityId always returns this window's own _entityId -- this window
-        // *is* the currently-open shop for as long as it exists (see ShopWindowController.
-        // OpenShop, which never has more than one open at once), so its own currency row's
-        // context menu only ever offers "Take"/"Take All" -- both suppressed for a shop (see
-        // CurrencyRowContent.BuildCurrencyContextMenu's own ShopComponent check).
-        _currencyRowContent = new CurrencyRowContent(entityId, inventoryServices, world, contextMenuController, ElementPoolService, () => _entityId);
-        SetFooterContent(_currencyRowContent, CurrencyRowContent.Height);
-    }
+    protected override int? StackCapacity => null;
 
-    /// <summary>IWholeWindowDropTarget -- this window represents exactly one entity (the shop itself), so both resolvers just return _entityId unconditionally regardless of where within the window the drop landed.</summary>
-    public int ResolveItemDropEntityId(Point dropPosition) => _entityId;
+    protected override int SummaryLineCount => 2;
 
-    /// <summary>See ResolveItemDropEntityId -- identical, since this entity's own inventory and currency balance are the same one.</summary>
-    public int ResolveCurrencyDropEntityId(Point dropPosition) => _entityId;
+    protected override IReadOnlyList<string> BuildSummaryLines() => [entityNaming.NameOf(EntityId), entityNaming.DescriptionOf(EntityId)];
 
-    /// <summary>See SecondaryInventoryWindow.OnChildrenInitialized's own doc comment for why children are built here, not in Configure.</summary>
-    protected override void OnChildrenInitialized()
-    {
-        var gridHeight = ComputeGridHeight();
-        var finalSize = ComputeOuterSize(gridHeight);
-        SetMinimumSize(finalSize);
-        SetSize(finalSize);
+    protected override void OnConfigured() => _dropTarget = new InventoryDropTarget(EntityId);
 
-        base.OnChildrenInitialized();
-
-        BuildSummary();
-        BuildGrid(gridHeight);
-    }
-
-    /// <summary>
-    /// 5, not SecondaryInventoryWindow's 2 -- this window is deliberately the opposite shape from
-    /// the loot window (2 wide x 5 tall here vs. 5 wide x 2 tall there): a ShopItemStackCell holds
-    /// far more information per item (sprite, name, and price, not just an icon+quantity badge),
-    /// so a shop reads better as a scannable vertical list than a wide grid. See
-    /// SecondaryInventoryWindow.MinimumGridRows/ComputeGridHeight's own doc comments for the
-    /// shared "always at least this many rows, items can be dragged in later" reasoning.
-    /// </summary>
-    private const int MinimumGridRows = 5;
-
-    private float ComputeGridHeight()
-    {
-        var stackCount = inventoryServices.InventoryView.CountStacks(_entityId);
-        var rows = System.Math.Max(MinimumGridRows, (int)System.Math.Ceiling(stackCount / (double)GridColumns));
-        return rows * (InventoryGridContent.CellSize.Y + InventoryGridContent.CellGap);
-    }
-
-    /// <summary>FooterHeight is added explicitly, on top of outerInsets -- see SecondaryInventoryWindow.ComputeOuterSize's own doc comment for why outerInsets alone (ContentSize already excludes FooterHeight) undersizes the window by exactly one footer's worth of height.</summary>
-    private Vector2 ComputeOuterSize(float gridHeight)
-    {
-        var contentWidth = System.Math.Max(IconSize.X + Padding + SummaryTextWidth, GridWidth);
-        var contentHeight = SummaryHeight + Padding + gridHeight;
-
-        var outerInsets = CurrentSize - ContentSize;
-        return new Vector2(contentWidth, contentHeight) + outerInsets + new Vector2(0, FooterHeight);
-    }
-
-    private void BuildSummary()
-    {
-        var icon = ElementPoolService.CreateElement<EntityIconElement>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = IconSize, DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        icon.Configure(_entityId, IconSize);
-        AddChild(icon);
-
-        var textX = Padding + IconSize.X;
-        var (name, description) = ResolveDisplayText(_entityId);
-        AddSummaryLine(textX, 0, name);
-        AddSummaryLine(textX, 1, description);
-    }
-
-    private void AddSummaryLine(float x, int lineIndex, string text)
-    {
-        var line = ElementPoolService.CreateElement<TextWindow>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, lineIndex * SummaryLineHeight), Size = new Vector2(SummaryTextWidth, SummaryLineHeight), DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-            Text = new TextOptions { Text = text, TextColor = Color.White },
-        });
-        AddChild(line);
-    }
-
-    /// <summary>Built at its final height from the start -- see SecondaryInventoryWindow.BuildGrid's own doc comment.</summary>
-    private void BuildGrid(float gridHeight)
-    {
-        var gridWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions
-            {
-                RelativePosition = new Vector2(0, SummaryHeight + Padding),
-                Size = new Vector2(GridWidth, gridHeight),
-                DisplayMode = ElementDisplayMode.Fixed,
-            },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelContentColor },
-        });
-
-        // See SecondaryInventoryWindow.BuildGrid's own doc comment -- same flush-content fix for the same clipped-bottom-row bug.
-        gridWindow.ContentPadding = Vector2.Zero;
-
-        gridWindow.SetContent(new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, _entityId, filterTag: GameplayTag.None, _tooltipController, () => _entityId, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, static _ => { }, simulationClock: simulationClock)); // Activate is player-inventory-only (see InventoryGridContent.CanActivate) -- never reached for a shop's own grid.
-        AddChild(gridWindow);
-    }
-
-    private (string Name, string Description) ResolveDisplayText(int entityId) => (entityNaming.NameOf(entityId), entityNaming.DescriptionOf(entityId));
+    public object? DropTargetFor(object payload, Point position) => _dropTarget;
 }

@@ -10,6 +10,7 @@ using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Views;
 using Microsoft.Xna.Framework;
+using Presentation.Input;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.Content;
@@ -74,6 +75,7 @@ public sealed class HotbarContentTests
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
             Layout = new ElementLayoutOptions { Size = hotbar.Size, DisplayMode = ElementDisplayMode.Fixed },
         });
         hostWindow.SetContent(hotbar);
@@ -83,24 +85,39 @@ public sealed class HotbarContentTests
     }
 
     [TestMethod]
-    public void TryGetSlotAt_PointWithinTheFirstSlot_ReturnsBase1()
+    public void TheFirstSlotElement_IsBase1_AtTheLeftOfTheVerticallyCenteredBaseRow()
     {
         var (hotbar, _) = Build();
 
         // Base is vertically centered against Expansion's current (2-row) height, not flush at
         // the top -- the window's own vertical center always falls inside Base1's row.
-        var point = new Point(1, (int)(hotbar.Size.Y / 2f));
+        var bounds = hotbar.GetSlotBounds(HotkeySlot.Base1);
 
-        Assert.IsTrue(hotbar.TryGetSlotAt(point, out var slot));
-        Assert.AreEqual(HotkeySlot.Base1, slot);
+        Assert.IsTrue(bounds.Contains(new Point(1, (int)(hotbar.Size.Y / 2f))));
+        Assert.AreEqual(HotkeySlot.Base1, hotbar.FindSlotElement(HotkeySlot.Base1)!.Slot);
     }
 
     [TestMethod]
-    public void TryGetSlotAt_PointFarOutsideAnySlot_ReturnsFalse()
+    public void EverySlotElement_IsSlotSizeFromTheFirstLayout()
     {
         var (hotbar, _) = Build();
 
-        Assert.IsFalse(hotbar.TryGetSlotAt(new Point(100_000, 100_000), out _));
+        foreach (var entry in HotkeySlotLayout.Entries)
+        {
+            if (hotbar.FindSlotElement(entry.Slot) is { } slotElement)
+            {
+                Assert.AreEqual(HotbarContent.SlotSize, slotElement.CurrentSize, $"{entry.Slot}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void ASlotInAnUnrevealedPage_HasNoElement()
+    {
+        var (hotbar, _) = Build();
+
+        Assert.IsNull(hotbar.FindSlotElement(HotkeySlot.Slot20));
+        Assert.AreEqual(Rectangle.Empty, hotbar.GetSlotBounds(HotkeySlot.Slot20));
     }
 
     [TestMethod]

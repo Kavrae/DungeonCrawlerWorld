@@ -16,9 +16,11 @@ namespace UIEngine.UI;
 /// rectangle there (its top-left pinned at the point, growing down and right, the native OS convention for a context
 /// menu); below an element it is anchored to the element's bottom-left, flipping above it when there is no room below.
 /// </remarks>
-public sealed class DropdownController(ElementPoolService elementPoolService, UiRenderService renderService)
+public sealed class DropdownController(ElementPoolService elementPoolService, UiRenderService renderService) : ILightDismissable
 {
     private Dropdown _menu = null!;
+
+    private UiLayerStack _layers = null!;
 
     /// <summary>Where the open dropdown was placed, so a submenu opens the same way.</summary>
     private Rectangle _placementAnchor;
@@ -31,7 +33,7 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
 
     public bool IsOpen => _menu.IsVisible;
 
-    /// <summary>The live popup itself -- UiInputController reads its Rectangle directly to tell an outside click from one that lands on the menu.</summary>
+    /// <summary>The live popup itself.</summary>
     internal Dropdown Menu => _menu;
 
     /// <summary>The element the open dropdown was opened under, or null for one opened at a point. A press on it is not an outside press, so the element can close what it opened rather than reopening it.</summary>
@@ -47,6 +49,7 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
 
     public void Initialize(UiLayerStack layers)
     {
+        _layers = layers;
         _menu = elementPoolService.CreateElement<Dropdown>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
@@ -90,6 +93,7 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
             ? PlaceBelow(_placementAnchor, menuSize, screenBounds)
             : PopupPositioning.GetPositionWithinBounds(_placementAnchor, menuSize, PopupAnchor.SouthEast, Vector2.Zero, screenBounds);
         _menu.Show(topLeft, options, _minimumWidth, _maximumHeight, markedIndex);
+        _layers.OpenLightDismiss(this);
     }
 
     /// <summary>Left edges aligned under the anchor; above it instead when the screen has no room below and more above.</summary>
@@ -106,7 +110,13 @@ public sealed class DropdownController(ElementPoolService elementPoolService, Ui
     {
         _menu.Hide();
         Owner = null;
+        _layers.CloseLightDismiss(this);
     }
+
+    /// <summary>The menu and the element it was opened under are inside: a press on the owner closes what it opened rather than reopening it.</summary>
+    public bool CountsAsInside(Element element) => element == _menu || element == Owner;
+
+    public void Dismiss() => Close();
 
     /// <summary>Up/Down move the open dropdown's highlight and Enter chooses it. Returns whether the key was the dropdown's; nothing is when none is open.</summary>
     internal bool HandleNavigationKey(Keys key)

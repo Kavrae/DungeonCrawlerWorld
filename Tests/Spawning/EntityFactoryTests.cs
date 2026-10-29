@@ -380,6 +380,21 @@ public sealed class EntityFactoryTests
     }
 
     [TestMethod]
+    public void EveryShopStock_GivesItsShopAnUnlimitedStackCount()
+    {
+        var (result, _) = Bootstrap();
+        var unlimited = result.EcsContext.ComponentManager.GetPackedPool<Game.Modules.Inventory.Components.UnlimitedStackCountComponent>();
+
+        foreach (var (stockBlueprintId, x) in new[] { (GeneralShopStock.Id, 3), (PotionShopStock.Id, 9) })
+        {
+            var shopEntityId = SpawnGoblin(result, x, seed: 7);
+            result.Internals.Factory.Apply(shopEntityId, result.Catalogs.Definitions.GetId(stockBlueprintId));
+
+            Assert.IsTrue(unlimited.Has(shopEntityId), $"{stockBlueprintId}");
+        }
+    }
+
+    [TestMethod]
     public void Compose_ThenSpawn_BuildsEveryIncludedPart()
     {
         var (result, _) = Bootstrap();

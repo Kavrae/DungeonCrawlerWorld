@@ -14,38 +14,66 @@ namespace Presentation.UI;
 /// and handles hotbar slot interactions.
 /// </summary>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class HotbarController(MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting, TooltipController tooltipController)
+public sealed class HotbarController
 {
     /// <summary>Fixed width for the Armed Hotkey Summary popup; effectively-unbounded height cap -- passed to TooltipController.Show on every call, since the shared Tooltip has no fixed size of its own anymore (see TooltipController.Show's own doc comment on why maximumSize is required, not defaulted).</summary>
     private static readonly Vector2 SummaryMaximumSize = new(HotbarContent.SummaryWidth, 10000f);
 
-    private HotkeySlot? _pressedSlot;
+    private readonly MapViewState _mapViewState;
+    private readonly HotbarContent _hotbarContent;
+    private readonly ActionTargetingController _actionTargeting;
+    private readonly TooltipController _tooltipController;
+    private readonly ContextMenuController _contextMenuController;
+
     private HotkeySlot? _hoveredSlot;
     private int _hoveredSlotFrames;
     private HotkeySlot? _displayedSummarySlot;
     private bool _displayedSummaryIsBound;
     private ActivationBlocker _displayedSummaryBlocker;
 
-    /// <summary>Called by UiInputController.HandleMousePress when the press lands on a hotbar slot.</summary>
-    public void OnSlotPressed(HotkeySlot slot) => _pressedSlot = slot;
-
-    /// <summary>Called by UiInputController.HandleMousePress when the press lands anywhere else. Resets the pressed slot.</summary>
-    public void OnPressOutsideHotbar() => _pressedSlot = null;
-
-    /// <summary>Called by UiInputController.HandleMouseRelease when the release lands on a hotbar slot.</summary>
-    /// <remarks>Records the slot as pressed on the first tap. Calls the action targeting controller on the second tap of the same slot.</remarks>
-    /// <param name="slot"></param>
-    public void OnSlotTapped(HotkeySlot slot)
+    public HotbarController(MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting, TooltipController tooltipController, ContextMenuController contextMenuController)
     {
-        var wasPressedSlot = _pressedSlot == slot;
-        _pressedSlot = null;
+        _mapViewState = mapViewState;
+        _hotbarContent = hotbarContent;
+        _actionTargeting = actionTargeting;
+        _tooltipController = tooltipController;
+        _contextMenuController = contextMenuController;
+        hotbarContent.SlotClicked += OnSlotClicked;
+        hotbarContent.SlotRightClicked += OnSlotRightClicked;
+    }
 
-        if (!wasPressedSlot)
+    /// <summary>A click on a slot -- a press and release on it that never became a drag -- is the same as pressing its key: it arms the slot, or confirms an armed one.</summary>
+    public void OnSlotClicked(HotkeySlot slot) => _actionTargeting.HandleHotkeySlotPress(slot);
+
+    /// <summary>A bound slot's menu: Arm, or Activate/Deactivate for a toggle by its state -- each exactly what a press of the slot does -- then Unbind.</summary>
+    /// <remarks>An option the slot can't take right now (blocked, locked, already armed) is shown disabled, not left out.</remarks>
+    public void OnSlotRightClicked(HotkeySlot slot, Point position)
+    {
+        var isUsable = _hotbarContent.IsSlotActive(slot);
+        List<DropdownOption> options = [];
+
+        if (_hotbarContent.TryGetSlotToggle(slot, out var isOn))
         {
-            return;
+            options.Add(new DropdownOption(isOn ? "Deactivate" : "Activate", null, isUsable, () => _actionTargeting.HandleHotkeySlotPress(slot)));
+        }
+        else
+        {
+            options.Add(new DropdownOption("Arm", null, isUsable && _mapViewState.ArmedSlot != slot, () => _actionTargeting.HandleHotkeySlotPress(slot)));
         }
 
-        actionTargeting.HandleHotkeySlotPress(slot);
+        options.Add(new DropdownOption("Unbind", null, true, () => Unbind(slot)));
+        _contextMenuController.Open(new Vector2(position.X, position.Y), options);
+    }
+
+    /// <summary>Clears slot, and the armed slot if it was this one -- whatever was armed from it stays armed, confirmed by a map click.</summary>
+    private void Unbind(HotkeySlot slot)
+    {
+        _hotbarContent.UnbindActionSlot(slot);
+        _hotbarContent.UnbindItemSlot(slot);
+        if (_mapViewState.ArmedSlot == slot)
+        {
+            _mapViewState.ArmedSlot = null;
+        }
     }
 
     /// <summary>Called by UiInputController every frame with its own hit-test result -- null if the cursor isn't over a bound hotbar slot, or during an active drag (see UiInputController's own suppression). Also drives the summary popup (see UpdateSummary) every call, not just when candidateSlot itself changes -- MapViewState.ArmedSlot can change from elsewhere (see ActionTargetingController), and this is the only place ticked every frame that knows to check for it.</summary>
@@ -61,7 +89,7 @@ public sealed class HotbarController(MapViewState mapViewState, HotbarContent ho
             _hoveredSlotFrames = candidateSlot is null ? 0 : 1;
         }
 
-        mapViewState.HoverSlot = _hoveredSlotFrames >= HudChrome.HoverTooltipDelayFrames ? candidateSlot : null;
+        _mapViewState.HoverSlot = _hoveredSlotFrames >= HudChrome.HoverTooltipDelayFrames ? candidateSlot : null;
 
         UpdateSummary();
     }
@@ -74,9 +102,9 @@ public sealed class HotbarController(MapViewState mapViewState, HotbarContent ho
     /// </remarks>
     private void UpdateSummary()
     {
-        var slotToShow = mapViewState.HoverSlot ?? mapViewState.ArmedSlot;
+        var slotToShow = _mapViewState.HoverSlot ?? _mapViewState.ArmedSlot;
         var blocker = ActivationBlocker.None;
-        var isBound = slotToShow is { } candidateSlot && hotbarContent.TryGetSlotBlocker(candidateSlot, out blocker);
+        var isBound = slotToShow is { } candidateSlot && _hotbarContent.TryGetSlotBlocker(candidateSlot, out blocker);
 
         if (slotToShow == _displayedSummarySlot && isBound == _displayedSummaryIsBound && blocker == _displayedSummaryBlocker)
         {
@@ -87,12 +115,12 @@ public sealed class HotbarController(MapViewState mapViewState, HotbarContent ho
         _displayedSummaryIsBound = isBound;
         _displayedSummaryBlocker = blocker;
 
-        if (slotToShow is not { } slot || !hotbarContent.TryGetSlotSummary(slot, out var title, out var summary, out blocker))
+        if (slotToShow is not { } slot || !_hotbarContent.TryGetSlotSummary(slot, out var title, out var summary, out blocker))
         {
-            tooltipController.Hide(this);
+            _tooltipController.Hide(this);
             return;
         }
 
-        tooltipController.Show(this, hotbarContent.GetSlotBounds(slot), PopupAnchor.North, PopupChrome.HotbarSummaryGap, SummaryMaximumSize, summary, title, ActivationBlockerText.RowsFor(blocker), useFixedWidth: true);
+        _tooltipController.Show(this, _hotbarContent.GetSlotBounds(slot), PopupAnchor.North, PopupChrome.HotbarSummaryGap, SummaryMaximumSize, summary, title, ActivationBlockerText.RowsFor(blocker), useFixedWidth: true);
     }
 }

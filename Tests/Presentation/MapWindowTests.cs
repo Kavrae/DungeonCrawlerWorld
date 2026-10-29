@@ -1301,7 +1301,7 @@ public sealed class MapWindowTests
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
         var menu = mapWindow.ContextMenuController.Menu;
         var lootButton = (Button)menu.ChildElements[1]; // [0] is the entity's own name header.
-        menu.HandleClick(lootButton.Rectangle.Center);
+        lootButton.HandleClick(lootButton.Rectangle.Center);
 
         Assert.AreEqual(CorpseEntityId, invokedEntityId);
         Assert.IsFalse(mapWindow.ContextMenuController.IsOpen);
@@ -1347,7 +1347,7 @@ public sealed class MapWindowTests
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, shopPosition));
         var menu = mapWindow.ContextMenuController.Menu;
         var shopButton = (Button)menu.ChildElements[1];
-        menu.HandleClick(shopButton.Rectangle.Center);
+        shopButton.HandleClick(shopButton.Rectangle.Center);
 
         Assert.AreEqual(ShopEntityId, invokedEntityId);
         Assert.IsFalse(mapWindow.ContextMenuController.IsOpen);
@@ -1433,7 +1433,7 @@ public sealed class MapWindowTests
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, targetPosition));
         var menu = mapWindow.ContextMenuController.Menu;
         var inspectButton = (Button)menu.ChildElements[1]; // [0] is the entity's own name header.
-        menu.HandleClick(inspectButton.Rectangle.Center);
+        inspectButton.HandleClick(inspectButton.Rectangle.Center);
 
         Assert.AreEqual(InspectionMode.Detail, mapViewState.InspectionMode);
         Assert.AreEqual(CorpseEntityId, mapViewState.InspectedEntityId);
@@ -1459,7 +1459,7 @@ public sealed class MapWindowTests
             mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, targetPosition));
             var menu = mapWindow.ContextMenuController.Menu;
             var inspectButton = (Button)menu.ChildElements[1]; // [0] is the entity's own name header.
-            menu.HandleClick(inspectButton.Rectangle.Center);
+            inspectButton.HandleClick(inspectButton.Rectangle.Center);
 
             Assert.AreEqual(InspectionMode.Admin, mapViewState.InspectionMode);
             Assert.AreEqual(CorpseEntityId, mapViewState.InspectedEntityId);

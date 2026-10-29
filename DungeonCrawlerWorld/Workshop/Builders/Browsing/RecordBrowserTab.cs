@@ -400,7 +400,7 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         }
     }
 
-    /// <summary>A row container holding the record's icon and its name; a press on any of the three selects the record.</summary>
+    /// <summary>A row container holding the record's icon and its name; a click on any of them reaches the row, which selects the record.</summary>
     private Window CreateRecordRow(float width, TRecord record)
     {
         var elementPool = _context.UiEngine.ElementPoolService;
@@ -434,8 +434,6 @@ public abstract class RecordBrowserTab<TRecord, TPreview> : IIdeTab
         row.AddChild(name);
 
         row.Clicked += _ => Select(record);
-        icon.Clicked += _ => Select(record);
-        name.Clicked += _ => Select(record);
         return row;
     }
 

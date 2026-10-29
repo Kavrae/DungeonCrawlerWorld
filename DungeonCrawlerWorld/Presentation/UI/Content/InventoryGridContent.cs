@@ -12,9 +12,11 @@ using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using Presentation.Input.DragDrop;
 using Presentation.UI.Chrome;
 using Presentation.UI.Inventory;
 using UIEngine;
+using UIEngine.Input;
 using UIEngine.UI;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
@@ -31,10 +33,9 @@ namespace Presentation.UI.Content;
 /// driven by GridControl via InventoryTabContent, this class has no idea either of those exist.
 /// Rebuilds (destroy-all, recreate-all -- cheap, since this only fires on an actual inventory
 /// mutation or a property change, not every frame) whenever the pool's per-entity version
-/// changes, or SortOrder/NameFilter/HideDisabled actually changes. Also self-polls
-/// Mouse.GetState() every Update (see UpdateHover), the same idiom AbilityScoreWindow uses for
-/// its own hover popup -- kept self-contained here rather than routed through UiInputController
-/// since nothing else needs to know about it. Shows/hides through the shared TooltipController
+/// changes, or SortOrder/NameFilter/HideDisabled actually changes. Its hover is
+/// the cell UiInputController finds under the pointer (Element.IsPointerOver), so a cell under
+/// another window or scrolled out of view is never hovered. Shows/hides through the shared TooltipController
 /// (see its own doc comment) rather than owning a private Tooltip -- this instance itself is what
 /// TooltipController.Show/Hide's owner identity is, since a specific InventoryGridContent instance
 /// is already exactly "one independent poller" (one per tab, or per Trade column).
@@ -64,7 +65,7 @@ public sealed class InventoryGridContent(
     // (buy pricing, same direction the real shop grid uses), false for the player-side column
     // (sell pricing, same direction the real player grid uses). See IsThisGridTheShop's own use
     // below for every place this substitutes for the ordinary entity-id check.
-    bool? tradeGridIsShopSide = null) : IElementContent, IInventoryDropTarget
+    bool? tradeGridIsShopSide = null) : IElementContent, IContentDropTarget
 {
     private readonly ItemCatalog _itemCatalog = inventoryServices.ItemCatalog;
     private readonly InventoryView _inventoryView = inventoryServices.InventoryView;
@@ -83,8 +84,13 @@ public sealed class InventoryGridContent(
 
     internal const float CellGap = 1f;
 
-    /// <summary>The entity whose inventory this grid displays -- what UiInputController's content-drag path reads to identify a drop target's owning entity (see InventoryActions.TryTransferStack).</summary>
+    /// <summary>The entity whose inventory this grid displays.</summary>
     public int EntityId => entityId;
+
+    private readonly InventoryDropTarget _dropTarget = new(entityId);
+
+    /// <summary>A drop anywhere on this grid, a cell or the space between them, lands in its entity's inventory.</summary>
+    public object? DropTargetFor(object payload, Point position) => _dropTarget;
 
     /// <summary>Popup sits just to the right of whatever's hovered, vertically centered against it -- see PopupPositioning.GetPosition(East).</summary>
     private static readonly Vector2 PopupGap = new(1, 1);
@@ -245,10 +251,9 @@ public sealed class InventoryGridContent(
 
         // Never assigned via hostWindow.SetContent (see this class's other consumer,
         // InventoryTabContent, whose own doc comment explains why: this instance's own Update is
-        // driven manually, not through hostWindow.Content) -- Tag is what lets a caller (e.g.
-        // UiInputController's content-drag drop resolution) still identify "this window hosts
-        // entityId's inventory grid" regardless of which of the two hosting patterns built it.
-        hostWindow.Tag = this;
+        // driven manually, not through hostWindow.Content) -- DropTarget is what lets a drop on
+        // this window land on entityId's inventory regardless of which hosting pattern built it.
+        hostWindow.DropTarget = this;
 
         // hostWindow itself may only be an inner child (e.g. one of TradeWindow's two column grid
         // windows, or a tab body inside InventoryManagementWindow's TabbedContent) -- Window.Close()
@@ -349,12 +354,12 @@ public sealed class InventoryGridContent(
             RebuildCells();
         }
 
-        UpdateHover(Mouse.GetState());
+        UpdateHover();
         UpdateSelection();
         UpdateCompareState();
     }
 
-    /// <summary>Direct per-cell field set every frame, no rebuild -- mirrors UpdateHover's own IsHovered sync exactly, since selection (driven by the Item Details window, opened/changed/closed independently of this grid) can change without this grid ever rebuilding.</summary>
+    /// <summary>Direct per-cell field set every frame, no rebuild, since selection (driven by the Item Details window, opened/changed/closed independently of this grid) can change without this grid ever rebuilding.</summary>
     private void UpdateSelection()
     {
         foreach (var cell in _cells)
@@ -470,15 +475,9 @@ public sealed class InventoryGridContent(
     /// HotbarController use -- but hides immediately on candidate change/loss (no delay on
     /// hiding, only on showing, same convention MapViewState.HoverSlot uses).
     /// </summary>
-    private void UpdateHover(MouseState mouseState)
+    private void UpdateHover()
     {
-        var mousePosition = new Point(mouseState.X, mouseState.Y);
-        var candidate = FindHoverCandidate(mousePosition);
-
-        foreach (var cell in _cells)
-        {
-            cell.IsHovered = ReferenceEquals(cell, candidate);
-        }
+        var candidate = FindHoverCandidate();
 
         if (candidate == _hoveredCell)
         {
@@ -675,11 +674,11 @@ public sealed class InventoryGridContent(
         _ => Color.White,
     };
 
-    private InventoryItemStackCell? FindHoverCandidate(Point mousePosition)
+    private InventoryItemStackCell? FindHoverCandidate()
     {
         foreach (var cell in _cells)
         {
-            if (cell.Rectangle.Contains(mousePosition))
+            if (cell.IsPointerOver)
             {
                 return cell;
             }

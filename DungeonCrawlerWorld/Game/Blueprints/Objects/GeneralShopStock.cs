@@ -1,4 +1,5 @@
 using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
 using Game.Modules.Shops.Components;
 
 namespace Game.Blueprints.Objects;
@@ -46,6 +47,7 @@ public static class GeneralShopStock
         var entityId = context.EntityId;
 
         componentManager.Merge(entityId, new ShopComponent(acceptedItems: null, BuyMultiplier, SellMultiplier));
+        componentManager.Merge(entityId, new UnlimitedStackCountComponent());
         ShopStock.GrantRandomStock(componentManager, entityId, context.Rolls, Stock);
     }
 }

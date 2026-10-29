@@ -55,7 +55,6 @@ public sealed class UiInputController
     private MouseState _previousMouseState;
 
     private ElementInteraction _activeInteraction = ElementInteraction.NotHit;
-    private Vector2 _dragStartMousePosition;
     private Vector2 _dragStartRelativePosition;
     private Vector2 _dragStartSize;
 
@@ -76,17 +75,14 @@ public sealed class UiInputController
     /// <summary>The element whose scrollbar is currently under the cursor, if any -- see SetHoveredScrollbar.</summary>
     private Element? _hoveredScrollbarElement;
 
+    /// <summary>The left button's current press -- whether it is still a tap or has become a drag, for every left-button gesture.</summary>
+    private readonly PointerGesture _leftGesture = new();
+
+    /// <summary>The right button's current press -- a tap or a pan.</summary>
+    private readonly PointerGesture _rightGesture = new();
+
     /// <summary>The element a right-mouse-button drag started over (hit-tested on press), or null while no right-drag is in progress -- see HandleRightDragStart/HandleRightDrag.</summary>
     private Element? _rightDragElement;
-
-    /// <summary>Mouse position at the moment the current right-drag started -- HandleRightDrag reports the total delta from this anchor every frame, not a per-frame increment, so the receiving element never has to worry about drift from accumulating many small deltas.</summary>
-    private Vector2 _rightDragStartMousePosition;
-
-    /// <summary>Pixel distance past which a right-button press/release reads as a drag rather than a tap -- see HandleRightDrag/HandleRightDragEnd. Small enough to absorb ordinary click jitter, comfortably smaller than an intentional pan.</summary>
-    private const float RightClickTapThresholdPixels = 4f;
-
-    /// <summary>Set once the current right-drag's total delta has ever exceeded RightClickTapThresholdPixels -- checked (not recomputed) at release, so a drag that wandered out past the threshold and back before releasing still counts as a drag, not a tap.</summary>
-    private bool _rightDragExceededTapThreshold;
 
     /// <summary>
     /// The TextBox a left-button press landed on with Kind None, if any -- drives click-drag text
@@ -98,13 +94,8 @@ public sealed class UiInputController
     /// </summary>
     private TextBox? _textSelectionDragBox;
 
-    private Vector2 _textSelectionDragStartMousePosition;
-
-    /// <summary>Same reasoning/value as RightClickTapThresholdPixels/ContentDragTapThresholdPixels -- small enough to absorb ordinary click jitter, comfortably smaller than an intentional drag-select.</summary>
-    private const float TextSelectionDragTapThresholdPixels = 4f;
-
-    /// <summary>Set once the current text-selection drag has moved past TextSelectionDragTapThresholdPixels -- gates both when BeginSelectionDrag actually fires (so a plain click never touches selection state through this path) and, on release, whether the ordinary content-click (which would otherwise collapse the selection right back down) is skipped -- see HandleMouseRelease.</summary>
-    private bool _textSelectionDragExceededTapThreshold;
+    /// <summary>Whether the current left press on a TextBox has become a selection drag -- its release then skips the ordinary content click, which would collapse the selection back down.</summary>
+    private bool IsTextSelectionDrag => _textSelectionDragBox is not null && _leftGesture.IsDrag;
 
     /// <summary>
     /// The content drag in progress, if any: what the pressed IContentDragSource picked up (see TryStartContentDrag),
@@ -116,12 +107,6 @@ public sealed class UiInputController
 
     /// <summary>The last drag's own on-screen size at the moment it started -- the ghost is drawn at this size rather than one fixed size for every drag, so it doesn't visibly jump in scale relative to wherever it was picked up from.</summary>
     private Vector2 _contentDragSourceSize;
-
-    /// <summary>Mouse position when the current content-drag started -- ResolveContentDrag only actually resolves a drop if the release is at least ContentDragTapThresholdPixels away, so a plain click on a drag source doesn't spuriously drop it where it already is.</summary>
-    private Vector2 _contentDragStartMousePosition;
-
-    /// <summary>Same reasoning/value as RightClickTapThresholdPixels -- small enough to absorb ordinary click jitter, comfortably smaller than an intentional drag.</summary>
-    private const float ContentDragTapThresholdPixels = 4f;
 
     /// <summary>Frames since the current content-drag payload was captured (see TryStartContentDrag) -- reset there, incremented once per Update while a payload is held. Gates ContentDragGhostVisible below.</summary>
     private int _contentDragHeldFrames;
@@ -325,6 +310,12 @@ public sealed class UiInputController
     /// <summary>UiLayerStack.Version when _hoveredInteraction was hit-tested -- a window opened, closed or raised under a still mouse changes it.</summary>
     private int _hoveredInteractionLayersVersion;
 
+    /// <summary>Element.TreeVersion when _hoveredInteraction was hit-tested -- a child added, removed, shown or hidden under a still mouse changes it.</summary>
+    private int _hoveredInteractionTreeVersion;
+
+    /// <summary>The elements whose IsPointerOver this controller last set: the hovered element and its ancestors.</summary>
+    private readonly List<Element> _pointerOverChain = [];
+
     /// <summary>Whether the drag ghost should draw right now -- true once a content-drag payload has been held for ContentDragGhostDelayFrames, so a plain press-then-release on a drag source never flashes one.</summary>
     private bool ContentDragGhostVisible => _contentDrag is not null && _contentDragHeldFrames >= ContentDragGhostDelayFrames;
 
@@ -368,38 +359,42 @@ public sealed class UiInputController
             InvalidateHoveredInteraction();
         }
 
+        var leftButtonBecameDrag = mouseState.LeftButton == ButtonState.Pressed &&
+            _previousMouseState.LeftButton == ButtonState.Pressed &&
+            _leftGesture.Track(CurrentMousePosition);
+
         if (mouseState.LeftButton == ButtonState.Pressed && _previousMouseState.LeftButton == ButtonState.Released)
         {
-            HandleMousePress(mouseState);
+            HandleMousePress();
         }
         else if (mouseState.LeftButton == ButtonState.Released && _previousMouseState.LeftButton == ButtonState.Pressed)
         {
-            HandleMouseRelease(mouseState);
+            HandleMouseRelease();
         }
         else if (mouseState.LeftButton == ButtonState.Pressed && _activeInteraction.Kind != ElementDragInteractionKind.None)
         {
-            HandleMouseDrag(mouseState);
+            HandleMouseDrag();
         }
         else if (mouseState.LeftButton == ButtonState.Pressed && _textSelectionDragBox is not null)
         {
-            HandleTextSelectionDrag(mouseState);
+            HandleTextSelectionDrag(leftButtonBecameDrag);
         }
 
         if (mouseState.RightButton == ButtonState.Pressed && _previousMouseState.RightButton == ButtonState.Released)
         {
-            HandleRightDragStart(mouseState);
+            HandleRightDragStart();
         }
         else if (mouseState.RightButton == ButtonState.Released && _previousMouseState.RightButton == ButtonState.Pressed)
         {
-            HandleRightDragEnd(new Point(mouseState.X, mouseState.Y));
+            HandleRightDragEnd();
         }
         else if (mouseState.RightButton == ButtonState.Pressed && _rightDragElement is not null)
         {
-            HandleRightDrag(mouseState);
+            HandleRightDrag();
         }
 
         UpdateMouseWheelScroll(keyboardState, mouseState);
-        UpdateCursor(mouseState);
+        UpdateCursor();
         NotifyInputHandlersOfPointer();
 
         if (_contentDrag is { } contentDrag)
@@ -653,23 +648,18 @@ public sealed class UiInputController
         }
     }
 
-    private void HandleMousePress(MouseState mouseState)
+    private void HandleMousePress()
     {
-        var clickPosition = new Point(mouseState.X, mouseState.Y);
+        var clickPosition = CurrentMousePosition;
+        _leftGesture.Press(clickPosition);
 
-        // An open context menu absorbs a click that lands outside it entirely -- one input,
-        // consumed by the cancel --
-        // rather than also raising/focusing/pressing whatever happens to be underneath. A click
-        // that lands ON the menu (e.g. a row Button) falls through to the ordinary hit-test below
-        // exactly as normal, since Contains is false only for a genuinely outside click.
-        if (_dropdownController is { IsOpen: true } dropdownController && !dropdownController.Menu.Rectangle.Contains(clickPosition) && dropdownController.Owner?.Rectangle.Contains(clickPosition) != true)
+        if (TryLightDismissAt(HitTestAt(clickPosition).Element))
         {
-            dropdownController.Close();
             _activeInteraction = ElementInteraction.NotHit;
             return;
         }
 
-        // Same "one input consumed by the cancel" spirit as the context-menu check above -- an input
+        // Same "one input consumed by the cancel" spirit as the light dismiss above -- an input
         // handler that consumes the press (closing a window the click landed outside of, say) keeps
         // it from also reaching whatever's underneath.
         foreach (var handler in _inputHandlers)
@@ -681,15 +671,12 @@ public sealed class UiInputController
             }
         }
 
-        InvalidateHoveredInteraction();
-        _activeInteraction = HoveredInteractionAt(clickPosition);
+        _activeInteraction = HitTestAt(clickPosition);
         PressedButton = _activeInteraction.Button;
         PressedButton?.SetPressed(true);
         DragDelta = Vector2.Zero;
 
         _textSelectionDragBox = _activeInteraction.Kind == ElementDragInteractionKind.None ? _activeInteraction.Element as TextBox : null;
-        _textSelectionDragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);
-        _textSelectionDragExceededTapThreshold = false;
 
         if (_activeInteraction.Element is not null)
         {
@@ -711,7 +698,6 @@ public sealed class UiInputController
             }
             else
             {
-                _dragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);
                 _dragStartRelativePosition = _activeInteraction.Element.RelativePosition;
                 _dragStartSize = _activeInteraction.Element.CurrentSize;
                 _dragStartScrollOffset = _activeInteraction.Element.ScrollOffset;
@@ -769,7 +755,6 @@ public sealed class UiInputController
 
         _contentDrag = start;
         _contentDragSourceSize = start.SourceSize;
-        _contentDragStartMousePosition = new Vector2(clickPosition.X, clickPosition.Y);
     }
 
     /// <summary>Tells every input handler what the pointer is over and where, once per frame after the cursor is chosen, and whether a window move, resize or scrollbar drag is under way (the hovered element isn't refreshed during one).</summary>
@@ -790,15 +775,19 @@ public sealed class UiInputController
     /// the pressed visual is ever actually observable: firing on press meant a destructive action
     /// (Close) usually destroyed the button before a held frame could even render.
     /// </summary>
-    private void HandleMouseRelease(MouseState mouseState)
+    private void HandleMouseRelease()
     {
-        // A completed text-selection drag (see HandleTextSelectionDrag) or a completed content
-        // drag (see ExceededContentDragTapThreshold) both skip the ordinary content-click --
-        // otherwise a cell/slot dragged and dropped elsewhere would ALSO fire its own origin
-        // Clicked handler on release purely because _activeInteraction.Element still
-        // refers to the pressed cell, never updated for wherever the drag actually landed. ResolveContentDrag below makes this exact same tap-vs-drag distinction
-        // independently for its own purposes; this just applies it one step earlier, before the
-        // click fires at all, rather than after the fact.
+        var releasePosition = CurrentMousePosition;
+        if (_leftGesture.Track(releasePosition) && _textSelectionDragBox is not null)
+        {
+            HandleTextSelectionDrag(becameDrag: true);
+        }
+
+        // A text-selection drag or a content drag skips the ordinary content click -- otherwise a
+        // cell dragged and dropped elsewhere would ALSO fire its own origin Clicked handler on
+        // release, purely because _activeInteraction.Element still refers to the pressed cell.
+        // Both read the one latched gesture, so a drag that comes back to where it started is
+        // still a drag and clicks nothing.
         // A scrollbar press is chrome, not content -- releasing it never clicks the scrolled element.
         var isScrollbarInteraction = _activeInteraction.ScrollbarPart != ScrollbarPart.None;
         var isPointerDrag = _activeInteraction.Kind == ElementDragInteractionKind.PointerDrag;
@@ -807,9 +796,9 @@ public sealed class UiInputController
             _activeInteraction.Element?.EndPointerDrag();
         }
 
-        if (!isScrollbarInteraction && !isPointerDrag && !_textSelectionDragExceededTapThreshold && !ExceededContentDragTapThreshold(new Point(mouseState.X, mouseState.Y)))
+        if (!isScrollbarInteraction && !isPointerDrag && !IsTextSelectionDrag && !IsContentDragPastTapThreshold)
         {
-            DispatchClick(_activeInteraction.Element, new Point(mouseState.X, mouseState.Y));
+            DispatchClick(_activeInteraction.Element, releasePosition);
         }
 
         if (isScrollbarInteraction)
@@ -819,15 +808,14 @@ public sealed class UiInputController
 
         // Hit-tested once, after the click (which may have opened or closed something under the cursor), and shared by
         // the drop and every handler -- and by this frame's cursor, through the hover cache.
-        var releasePosition = new Point(mouseState.X, mouseState.Y);
-        InvalidateHoveredInteraction();
-        var releasedElement = HoveredInteractionAt(releasePosition).Element;
+        var releasedElement = HitTestAt(releasePosition).Element;
 
         var wasDropped = ResolveContentDrag(releasedElement, releasePosition);
 
+        var isTap = !_leftGesture.IsDrag;
         foreach (var handler in _inputHandlers)
         {
-            handler.OnRelease(releasedElement, releasePosition);
+            handler.OnRelease(releasedElement, releasePosition, isTap);
         }
 
         // A drop moves items between windows, so what's under the cursor may have changed again.
@@ -841,30 +829,30 @@ public sealed class UiInputController
         _activeInteraction = ElementInteraction.NotHit;
         DragDelta = Vector2.Zero;
         _textSelectionDragBox = null;
-        _textSelectionDragExceededTapThreshold = false;
     }
 
     /// <summary>
-    /// The one dispatch point for every content click. An element nobody has ever
-    /// subscribed DoubleClicked on (the overwhelming majority -- every plain Button, TabbedContent's
-    /// tab tiles, ...) fires Clicked immediately via the ordinary HandleClick path -- zero added latency. An element that does
-    /// want double-click detection is routed through the deferred single/double-click state machine
-    /// instead -- see HandleDoubleClickAwareClick.
+    /// The one dispatch point for every click: offered to the pressed element, then to each ancestor
+    /// until one handles it (Element.HandleClick), so a label inside a clickable row clicks the row.
+    /// An element nobody has ever subscribed DoubleClicked on (the overwhelming majority -- every
+    /// plain Button, TabbedContent's tab tiles, ...) handles it at once; one that wants double-click
+    /// detection takes it into the deferred single/double-click state machine instead -- see
+    /// HandleDoubleClickAwareClick.
     /// </summary>
     private void DispatchClick(Element? element, Point mousePosition)
     {
-        if (element is null)
+        for (var candidate = element; candidate is not null; candidate = candidate.ParentElement)
         {
-            return;
-        }
+            if (candidate.WantsDoubleClickDetection)
+            {
+                HandleDoubleClickAwareClick(candidate);
+                return;
+            }
 
-        if (element.WantsDoubleClickDetection)
-        {
-            HandleDoubleClickAwareClick(element);
-        }
-        else
-        {
-            element.HandleClick(mousePosition);
+            if (candidate.HandleClick(mousePosition))
+            {
+                return;
+            }
         }
     }
 
@@ -930,33 +918,32 @@ public sealed class UiInputController
         }
     }
 
-    /// <summary>
-    /// True while a content-drag payload is captured (see TryStartContentDrag) AND the mouse has
-    /// moved at least ContentDragTapThresholdPixels since the press that captured it -- the same
-    /// tap-vs-drag distinction ResolveContentDrag makes for its own purposes, exposed separately so
-    /// HandleMouseRelease can skip the ordinary content-click for a release this method would
-    /// itself go on to treat as a genuine drop, not a plain click.
-    /// </summary>
-    private bool ExceededContentDragTapThreshold(Point releasePosition)
+    /// <summary>Whether a content-drag payload is captured (see TryStartContentDrag) and the left press has become a drag -- a release then drops it rather than clicking the source.</summary>
+    private bool IsContentDragPastTapThreshold => _contentDrag is not null && _leftGesture.IsDrag;
+
+    /// <summary>What a drop of payload at position on element lands on: the answer of element or the nearest ancestor that is, or names, an IContentDropTarget and answers -- null when none does.</summary>
+    private static object? FindDropTarget(Element? element, object payload, Point position)
     {
-        if (_contentDrag is null)
+        for (var candidate = element; candidate is not null; candidate = candidate.ParentElement)
         {
-            return false;
+            if ((candidate as IContentDropTarget ?? candidate.DropTarget)?.DropTargetFor(payload, position) is { } dropTarget)
+            {
+                return dropTarget;
+            }
         }
 
-        var releaseVector = new Vector2(releasePosition.X, releasePosition.Y);
-        return Vector2.Distance(_contentDragStartMousePosition, releaseVector) >= ContentDragTapThresholdPixels;
+        return null;
     }
 
     /// <summary>
-    /// Resolves an in-progress content drag against the release position -- a no-op if the mouse never moved past
-    /// ContentDragTapThresholdPixels (a plain click on a source must not drop it where it already is). This method's job is
+    /// Resolves an in-progress content drag against the release position -- a no-op if the press never became a drag
+    /// (a plain click on a source must not drop it where it already is). This method's job is
     /// gesture recognition and hit-testing the drop target; what the drop means is the drop handlers', tried in order until
     /// one claims it. Always ends the drag, dropped or not, so a missed drag never leaves a drop target glowing or a stale
-    /// payload for the next press to inherit. True if a drag was resolved against dropTarget, whether or not a handler
-    /// claimed it.
+    /// payload for the next press to inherit. True if a drag was resolved against what releasedElement names, whether or
+    /// not a handler claimed it.
     /// </summary>
-    private bool ResolveContentDrag(Element? dropTarget, Point releasePosition)
+    private bool ResolveContentDrag(Element? releasedElement, Point releasePosition)
     {
         if (_contentDrag is not { } contentDrag)
         {
@@ -965,9 +952,15 @@ public sealed class UiInputController
 
         try
         {
-            if (!ExceededContentDragTapThreshold(releasePosition))
+            if (!IsContentDragPastTapThreshold)
             {
                 return false;
+            }
+
+            var dropTarget = FindDropTarget(DropElementAt(releasedElement, releasePosition), contentDrag.Payload, releasePosition);
+            if (IsDropRefused(contentDrag.Payload, dropTarget, releasePosition))
+            {
+                return true;
             }
 
             foreach (var handler in _contentDropHandlers)
@@ -992,44 +985,48 @@ public sealed class UiInputController
         }
     }
 
-    private void HandleMouseDrag(MouseState mouseState)
+    private void HandleMouseDrag()
     {
-        DragDelta = new Vector2(mouseState.X, mouseState.Y) - _dragStartMousePosition;
+        DragDelta = new Vector2(CurrentMousePosition.X, CurrentMousePosition.Y) - _leftGesture.PressPosition;
 
-        if (_activeInteraction.Kind == ElementDragInteractionKind.Move && _activeInteraction.Element is not null)
+        if (_activeInteraction.Element is not { } element)
         {
-            var element = _activeInteraction.Element;
-            var desiredPosition = _dragStartRelativePosition + DragDelta;
-            element.SetRelativePosition(ClampMoveToBounds(desiredPosition, element.CurrentSize, GetPositionBounds(element)));
+            return;
         }
-        else if (_activeInteraction.Kind == ElementDragInteractionKind.Resize && _activeInteraction.Element is not null)
+
+        switch (_activeInteraction.Kind)
         {
-            var element = _activeInteraction.Element;
-            var (relativePosition, size) = ComputeResize(element, _activeInteraction.Edges, _dragStartRelativePosition, _dragStartSize, DragDelta);
-            (relativePosition, size) = ClampResizeToBounds(relativePosition, size, GetPositionBounds(element), element.MinimumSize);
-            element.SetBounds(relativePosition, size);
-        }
-        else if (_activeInteraction.Kind == ElementDragInteractionKind.PointerDrag && _activeInteraction.Element is not null)
-        {
-            _activeInteraction.Element.DragPointer(DragDelta);
-        }
-        else if (_activeInteraction.Kind == ElementDragInteractionKind.ScrollThumb && _activeInteraction.Element is not null)
-        {
-            _activeInteraction.Element.DragScrollbarThumb(_activeInteraction.ScrollbarPart, _dragStartScrollOffset, DragDelta);
-        }
-        else if (_activeInteraction.Kind == ElementDragInteractionKind.ScrollTrack && _activeInteraction.Element is not null)
-        {
-            // Only ever in the press's own direction: a page that rounds the thumb a pixel past the
-            // cursor must stop there, not page back the other way.
-            _scrollTrackHeldFrames++;
-            var element = _activeInteraction.Element;
-            var part = _activeInteraction.ScrollbarPart;
-            if (IsScrollTrackRepeatFrame(_scrollTrackHeldFrames) &&
-                _scrollTrackPageDirection != 0 &&
-                element.GetScrollbarPageDirectionToward(part, new Point(mouseState.X, mouseState.Y)) == _scrollTrackPageDirection)
-            {
-                element.PageScrollbar(part, _scrollTrackPageDirection);
-            }
+            case ElementDragInteractionKind.Move:
+                var desiredPosition = _dragStartRelativePosition + DragDelta;
+                element.SetRelativePosition(ClampMoveToBounds(desiredPosition, element.CurrentSize, GetPositionBounds(element)));
+                break;
+
+            case ElementDragInteractionKind.Resize:
+                var (relativePosition, size) = ComputeResize(element, _activeInteraction.Edges, _dragStartRelativePosition, _dragStartSize, DragDelta);
+                (relativePosition, size) = ClampResizeToBounds(relativePosition, size, GetPositionBounds(element), element.MinimumSize);
+                element.SetBounds(relativePosition, size);
+                break;
+
+            case ElementDragInteractionKind.PointerDrag:
+                element.DragPointer(DragDelta);
+                break;
+
+            case ElementDragInteractionKind.ScrollThumb:
+                element.DragScrollbarThumb(_activeInteraction.ScrollbarPart, _dragStartScrollOffset, DragDelta);
+                break;
+
+            case ElementDragInteractionKind.ScrollTrack:
+                // Only ever in the press's own direction: a page that rounds the thumb a pixel past the
+                // cursor must stop there, not page back the other way.
+                _scrollTrackHeldFrames++;
+                var part = _activeInteraction.ScrollbarPart;
+                if (IsScrollTrackRepeatFrame(_scrollTrackHeldFrames) &&
+                    _scrollTrackPageDirection != 0 &&
+                    element.GetScrollbarPageDirectionToward(part, CurrentMousePosition) == _scrollTrackPageDirection)
+                {
+                    element.PageScrollbar(part, _scrollTrackPageDirection);
+                }
+                break;
         }
     }
 
@@ -1038,30 +1035,25 @@ public sealed class UiInputController
         (heldFrames - ScrollTrackRepeatInitialDelayFrames) % ScrollTrackRepeatIntervalFrames == 0;
 
     /// <summary>
-    /// Extends a TextBox's selection while a left-button press on it is held and dragged --
-    /// mirrors HandleRightDrag's own tap-vs-drag distinction (RightClickTapThresholdPixels), just
-    /// gating BeginSelectionDrag instead of forwarding every frame from the start: a plain click
-    /// (never exceeding the threshold) never touches selection state through this path at all,
-    /// only via the ordinary OnContentClickAction at release. BeginSelectionDrag fires exactly
-    /// once, the frame the threshold is first exceeded, anchoring the selection at the original
-    /// press position rather than wherever the drag happened to cross the threshold.
+    /// Extends a TextBox's selection while a left-button press on it is held and dragged. A plain
+    /// click (never a drag) never touches selection state through this path at all, only via the
+    /// ordinary OnContentClickAction at release. BeginSelectionDrag fires exactly once, the frame
+    /// the press becomes a drag, anchoring the selection at the press position rather than
+    /// wherever the drag happened to cross the threshold.
     /// </summary>
-    private void HandleTextSelectionDrag(MouseState mouseState)
+    private void HandleTextSelectionDrag(bool becameDrag)
     {
-        var currentPosition = new Vector2(mouseState.X, mouseState.Y);
-
-        if (!_textSelectionDragExceededTapThreshold)
+        if (!_leftGesture.IsDrag)
         {
-            if (Vector2.Distance(_textSelectionDragStartMousePosition, currentPosition) < TextSelectionDragTapThresholdPixels)
-            {
-                return;
-            }
-
-            _textSelectionDragExceededTapThreshold = true;
-            _textSelectionDragBox?.BeginSelectionDrag(new Point((int)_textSelectionDragStartMousePosition.X, (int)_textSelectionDragStartMousePosition.Y));
+            return;
         }
 
-        _textSelectionDragBox?.ExtendSelectionDrag(new Point((int)currentPosition.X, (int)currentPosition.Y));
+        if (becameDrag)
+        {
+            _textSelectionDragBox?.BeginSelectionDrag(_leftGesture.PressPoint);
+        }
+
+        _textSelectionDragBox?.ExtendSelectionDrag(CurrentMousePosition);
     }
 
     /// <summary>
@@ -1072,51 +1064,60 @@ public sealed class UiInputController
     /// simply forwards to nothing until released. Also snapshots the press position as the
     /// anchor HandleRightDrag measures every subsequent frame's total delta from.
     /// </summary>
-    private void HandleRightDragStart(MouseState mouseState)
+    /// <remarks>
+    /// An open dropdown closes on every right press and the press goes on, so a right tap elsewhere opens a fresh menu.
+    /// With no dropdown open, a press outside the topmost light-dismissable dismisses it and goes no further, as a left
+    /// press does.
+    /// </remarks>
+    private void HandleRightDragStart()
     {
-        var position = new Point(mouseState.X, mouseState.Y);
+        var position = CurrentMousePosition;
+        _rightGesture.Press(position);
+        _rightDragElement = null;
 
-        // Every right-press dismisses an already-open context menu unconditionally, whether or
-        // not this gesture goes on to open a fresh one -- an element's right-click tap (on
-        // release, if this turns out to be a tap rather than a drag) opens a fresh one if it has a menu.
+        var closedDropdown = _dropdownController is { IsOpen: true };
         _dropdownController?.Close();
 
-        // Every input handler hears every right press too, with the same unconditional precedence.
-        foreach (var handler in _inputHandlers)
+        var pressedElement = HitTestAt(position).Element;
+        if (!closedDropdown && TryLightDismissAt(pressedElement))
         {
-            handler.OnRightPress(position);
+            return;
         }
 
-        InvalidateHoveredInteraction();
-        _rightDragElement = HoveredInteractionAt(position).Element;
-        _rightDragStartMousePosition = new Vector2(mouseState.X, mouseState.Y);
-        _rightDragExceededTapThreshold = false;
+        foreach (var handler in _inputHandlers)
+        {
+            handler.OnRightPress(pressedElement, position);
+        }
+
+        _rightDragElement = pressedElement;
         _rightDragElement?.HandleRightDragStart();
     }
 
-    /// <summary>Forwards the total mouse-pixel delta since the drag started (not this frame's increment) to whichever element the drag started over -- see Window.HandleRightDrag. Also latches _rightDragExceededTapThreshold once this gesture has moved enough to count as a real drag, not a tap -- see HandleRightDragEnd.</summary>
-    private void HandleRightDrag(MouseState mouseState)
+    /// <summary>Forwards the total mouse-pixel delta since the press (not this frame's increment) to whichever element the drag started over -- see Window.HandleRightDrag -- so the receiving element never accumulates drift from many small deltas.</summary>
+    private void HandleRightDrag()
     {
-        var totalDelta = new Vector2(mouseState.X, mouseState.Y) - _rightDragStartMousePosition;
-
-        if (totalDelta.Length() > RightClickTapThresholdPixels)
-        {
-            _rightDragExceededTapThreshold = true;
-        }
-
-        _rightDragElement?.HandleRightDrag(totalDelta);
+        _rightGesture.Track(CurrentMousePosition);
+        _rightDragElement?.HandleRightDrag(new Vector2(CurrentMousePosition.X, CurrentMousePosition.Y) - _rightGesture.PressPosition);
     }
 
-    /// <summary>A gesture that never exceeded the tap threshold reads as a right-click tap (a cancel, say) instead of a drag-end -- a real drag's own end-of-gesture handling (e.g. MapWindow settling its smooth scroll onto the tile grid) has nothing to do for a tap anyway, since it never moved.</summary>
-    private void HandleRightDragEnd(Point releasePosition)
+    /// <summary>A press that never became a drag reads as a right-click tap (a cancel, say) instead of a drag-end -- offered to the element it started over, then each ancestor, until one handles it. A real drag's own end-of-gesture handling (e.g. MapWindow settling its smooth scroll onto the tile grid) has nothing to do for a tap anyway, since it never moved.</summary>
+    private void HandleRightDragEnd()
     {
-        if (_rightDragExceededTapThreshold)
+        var releasePosition = CurrentMousePosition;
+        _rightGesture.Track(releasePosition);
+        if (_rightGesture.IsDrag)
         {
             _rightDragElement?.HandleRightDragEnd();
         }
         else
         {
-            _rightDragElement?.HandleRightClickTap(releasePosition);
+            for (var candidate = _rightDragElement; candidate is not null; candidate = candidate.ParentElement)
+            {
+                if (candidate.HandleRightClickTap(releasePosition))
+                {
+                    break;
+                }
+            }
         }
 
         _rightDragElement = null;
@@ -1259,6 +1260,12 @@ public sealed class UiInputController
             return TryHitTestWhere(position, _isMenuModeExempt);
         }
 
+        return TryHitTestEveryLayer(position);
+    }
+
+    /// <summary>The topmost element at position in any layer, whatever menu mode allows.</summary>
+    private ElementInteraction TryHitTestEveryLayer(Point position)
+    {
         foreach (var layer in UiLayerStack.LayersDescending())
         {
             var interaction = TryHitTestInList(_layers[layer], position);
@@ -1270,6 +1277,11 @@ public sealed class UiInputController
 
         return ElementInteraction.NotHit;
     }
+
+    /// <summary>What a content drag at position would land on: the hovered element, or -- where menu mode leaves nothing hovered -- whatever is drawn there.</summary>
+    /// <remarks>Menu mode keeps clicks off everything behind the open menus, but carrying an item out of one onto the world (a chest on the map) is what dragging is for.</remarks>
+    private Element? DropElementAt(Element? hoveredElement, Point position) =>
+        hoveredElement ?? (_layers.IsMenuModeActive ? TryHitTestEveryLayer(position).Element : null);
 
     /// <summary>Hit-tests every layer descending, topmost-drawn-first within each, but only elements matching predicate -- a non-matching sibling sharing the same layer (a folder icon beside the popup it opened, both DynamicHud) is skipped entirely, never even hit-tested into its own children. Shared by TryHitTestInteraction's two menu-mode cases: UiLayerStack.IsMenuWindow (the open menu-window set) and UiLayerStack.IsMenuModeExempt (everything opted out of menu mode's blocking without itself being a menu window).</summary>
     private ElementInteraction TryHitTestWhere(Point position, Func<Element, bool> predicate)
@@ -1720,27 +1732,15 @@ public sealed class UiInputController
     /// when the cursor actually changes, to avoid a native call every single frame regardless of
     /// whether anything changed.
     /// </summary>
-    private void UpdateCursor(MouseState mouseState)
+    private void UpdateCursor()
     {
-        var position = new Point(mouseState.X, mouseState.Y);
+        var position = CurrentMousePosition;
 
         MouseCursor cursor;
-        if (_activeInteraction.Kind == ElementDragInteractionKind.Resize)
+        if (_activeInteraction is { Kind: ElementDragInteractionKind.Resize or ElementDragInteractionKind.Move } or { Kind: ElementDragInteractionKind.PointerDrag, Element: not null })
         {
-            cursor = GetResizeCursor(_activeInteraction.Edges);
+            cursor = GetHoverCursor(_activeInteraction);
             SetHoveredButton(null); // No hover feedback while a drag is actually in progress.
-            SetHoveredScrollbar(null, ScrollbarPart.None);
-        }
-        else if (_activeInteraction.Kind == ElementDragInteractionKind.Move)
-        {
-            cursor = MouseCursor.SizeAll;
-            SetHoveredButton(null);
-            SetHoveredScrollbar(null, ScrollbarPart.None);
-        }
-        else if (_activeInteraction is { Kind: ElementDragInteractionKind.PointerDrag, Element: { } pointerDragElement })
-        {
-            cursor = pointerDragElement.PointerDragCursor;
-            SetHoveredButton(null);
             SetHoveredScrollbar(null, ScrollbarPart.None);
         }
         else if (_activeInteraction.Kind is ElementDragInteractionKind.ScrollThumb or ElementDragInteractionKind.ScrollTrack)
@@ -1780,14 +1780,14 @@ public sealed class UiInputController
     /// wherever the mouse ended up.
     /// </summary>
     /// <remarks>
-    /// Re-tested after every press, release, wheel scroll and keyboard change, and whenever UiLayerStack.Version
-    /// changes, so a window opened by a click, a hotkey or the game, or content scrolled under the cursor, is seen the
-    /// same frame. A child element replaced inside a window with no input at all (a list rebuilt by the game) is seen
-    /// once the mouse next moves.
+    /// Re-tested after every press, release, wheel scroll and keyboard change, and whenever UiLayerStack.Version or
+    /// Element.TreeVersion changes, so a window opened by a click, a hotkey or the game, content scrolled under the
+    /// cursor, or a list rebuilt by the game is seen without the mouse moving. Each re-test moves Element.IsPointerOver.
     /// </remarks>
     private void RefreshHoveredInteraction(Point position)
     {
-        if (_hoveredInteractionPosition == position && _hoveredInteractionLayersVersion == _layers.Version)
+        var treeVersion = Element.TreeVersion;
+        if (_hoveredInteractionPosition == position && _hoveredInteractionLayersVersion == _layers.Version && _hoveredInteractionTreeVersion == treeVersion)
         {
             return;
         }
@@ -1795,6 +1795,24 @@ public sealed class UiInputController
         _hoveredInteraction = TryHitTestInteraction(position);
         _hoveredInteractionPosition = position;
         _hoveredInteractionLayersVersion = _layers.Version;
+        _hoveredInteractionTreeVersion = treeVersion;
+        SetPointerOverChain(_hoveredInteraction.Element);
+    }
+
+    /// <summary>Moves Element.IsPointerOver from the previously hovered element and its ancestors to hovered and its ancestors.</summary>
+    private void SetPointerOverChain(Element? hovered)
+    {
+        foreach (var element in _pointerOverChain)
+        {
+            element.IsPointerOver = false;
+        }
+
+        _pointerOverChain.Clear();
+        for (var element = hovered; element is not null; element = element.ParentElement)
+        {
+            element.IsPointerOver = true;
+            _pointerOverChain.Add(element);
+        }
     }
 
     /// <summary>Makes the next RefreshHoveredInteraction hit-test again whatever the position -- for an input that may have changed what's under the cursor.</summary>
@@ -1805,6 +1823,40 @@ public sealed class UiInputController
     {
         RefreshHoveredInteraction(position);
         return _hoveredInteraction;
+    }
+
+    /// <summary>What is under position, hit-tested again whatever the cache holds -- for a press or release, which may follow a change the versions don't see.</summary>
+    private ElementInteraction HitTestAt(Point position)
+    {
+        InvalidateHoveredInteraction();
+        return HoveredInteractionAt(position);
+    }
+
+    /// <summary>Dismisses the topmost open light-dismissable when pressedElement is outside it; returns whether it did.</summary>
+    private bool TryLightDismissAt(Element? pressedElement)
+    {
+        if (_layers.TopmostLightDismiss is not { } lightDismissable || IsInsideLightDismiss(lightDismissable, pressedElement))
+        {
+            return false;
+        }
+
+        lightDismissable.Dismiss();
+        _layers.CloseLightDismiss(lightDismissable);
+        return true;
+    }
+
+    /// <summary>Whether element or any of its ancestors counts as inside lightDismissable -- nothing hit counts as outside.</summary>
+    private static bool IsInsideLightDismiss(ILightDismissable lightDismissable, Element? element)
+    {
+        for (var candidate = element; candidate is not null; candidate = candidate.ParentElement)
+        {
+            if (lightDismissable.CountsAsInside(candidate))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -1824,7 +1876,8 @@ public sealed class UiInputController
         return false;
     }
 
-    /// <summary>True while a content drag is held and a drop handler says its payload can't be dropped on the hovered element (see IContentDropHandler.IsDropRefusedAt). Asked every frame, so the cursor reads correctly for every frame of a still hover, not just the one it first arrived on.</summary>
+    /// <summary>True while a content drag is held and a drop handler says its payload can't be dropped on what the hovered element names (see IContentDropHandler.IsDropRefusedAt). Asked every frame, so the cursor reads correctly for every frame of a still hover, not just the one it first arrived on.</summary>
+    /// <remarks>Once the drag shows its ghost, also tells every handler what it is held over (IContentDropHandler.OnDragOver), so a target can show whether it would take the drop.</remarks>
     private bool IsContentDropRefusedAt(Point position)
     {
         if (_contentDrag is not { } contentDrag)
@@ -1832,9 +1885,24 @@ public sealed class UiInputController
             return false;
         }
 
+        var dropTarget = FindDropTarget(DropElementAt(_hoveredInteraction.Element, position), contentDrag.Payload, position);
+        if (ContentDragGhostVisible)
+        {
+            foreach (var handler in _contentDropHandlers)
+            {
+                handler.OnDragOver(contentDrag.Payload, dropTarget, position);
+            }
+        }
+
+        return IsDropRefused(contentDrag.Payload, dropTarget, position);
+    }
+
+    /// <summary>Whether any drop handler refuses payload on dropTarget at position -- the refusal cursor while held, and on release a drop nothing acts on.</summary>
+    private bool IsDropRefused(object payload, object? dropTarget, Point position)
+    {
         foreach (var handler in _contentDropHandlers)
         {
-            if (handler.IsDropRefusedAt(contentDrag.Payload, _hoveredInteraction.Element, position))
+            if (handler.IsDropRefusedAt(payload, dropTarget, position))
             {
                 return true;
             }

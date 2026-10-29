@@ -194,8 +194,11 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
         AddQuad(texture, position, sourceSize * scale, rotation, normalizedOrigin, SpriteEffectQuads.NormalizedSource(source, new Point(texture.Width, texture.Height)), color, effects, style);
     }
 
+    /// <summary>Draws text starting on a whole screen pixel -- see OnWholeScreenPixel; its glyphs keep their own places within the string.</summary>
+    /// <remarks>Rounded once for the string, after DrawOffset: the atlas is point sampled, so text at a fractional screen position -- inside a window placed on a half pixel -- loses a row of its ink, while rounding each glyph apart would scatter them by a pixel.</remarks>
     public void DrawString(SpriteFontBase font, string text, Vector2 position, Color color, SpriteDrawStyle style)
     {
+        position = SpriteEffectQuads.OnWholeScreenPixel(position, _drawOffset);
         _textStyle = style;
         font.DrawText(this, text, position, color);
         _textStyle = default;
@@ -203,6 +206,7 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
 
     public void DrawOutlinedString(SpriteFontBase font, string text, Vector2 position, Color fillColor, float alphaMultiplier, SpriteDrawStyle style)
     {
+        position = SpriteEffectQuads.OnWholeScreenPixel(position, _drawOffset);
         _textStyle = style with { OutlineOnly = true };
         font.DrawText(this, text, position, ContrastTextRenderer.OutlineColor * alphaMultiplier);
         _textStyle = style;

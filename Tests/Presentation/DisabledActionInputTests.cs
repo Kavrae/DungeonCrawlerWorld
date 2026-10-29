@@ -63,8 +63,7 @@ public sealed class DisabledActionInputTests
 
         public void Click(HotkeySlot slot)
         {
-            HotbarController.OnSlotPressed(slot);
-            HotbarController.OnSlotTapped(slot);
+            HotbarController.OnSlotClicked(slot);
         }
 
         public void DisableMelee() => ComponentManager.Merge(PlayerEntityId, new MeleeDisabledComponent());
@@ -136,7 +135,7 @@ public sealed class DisabledActionInputTests
             simulationClock: clock);
 
         var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), actionStateView, new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog, TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: clock);
-        var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting, new TooltipController());
+        var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting, new TooltipController(), TestElementPoolServiceFactory.CreateContextMenuController(TestElementPoolServiceFactory.Create(TestFonts.Shared), new UiLayerStack()));
 
         return new Harness
         {

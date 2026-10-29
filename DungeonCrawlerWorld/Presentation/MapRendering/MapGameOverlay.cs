@@ -62,6 +62,8 @@ public sealed class MapGameOverlay : IDisposable
             AddSelectedTileHighlight();
         }
 
+        AddContainerDropHighlight();
+
         if (!_texels.IsEmpty)
         {
             DrawTileOverlay(spriteBatch, unitRectangle);
@@ -217,6 +219,24 @@ public sealed class MapGameOverlay : IDisposable
             }
 
             LabelRenderer.DrawCentered(spriteBatch, _badgeFontMeasurer, label, new Vector2(tileRectangle.X, tileRectangle.Y), new Vector2(tileRectangle.Width, tileRectangle.Height), Color.White, outline: true);
+        }
+    }
+
+    /// <summary>The container a held item is over, washed green when it would take the drop and red when it wouldn't, across its whole footprint.</summary>
+    private void AddContainerDropHighlight()
+    {
+        if (_mapViewState.ContainerDropHighlight is not { } highlight || !_mapView.TryGetOccupant(highlight.EntityId, out var container))
+        {
+            return;
+        }
+
+        var washColor = (highlight.Accepts ? GameWindowPalette.ContainerDropAccepted : GameWindowPalette.ContainerDropRefused) * TargetSelectionMaskAlpha;
+        for (var offsetX = 0; offsetX < container.Size.X; offsetX++)
+        {
+            for (var offsetY = 0; offsetY < container.Size.Y; offsetY++)
+            {
+                _texels.AddWash(container.Position.X + offsetX, container.Position.Y + offsetY, washColor);
+            }
         }
     }
 

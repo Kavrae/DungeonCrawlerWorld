@@ -26,8 +26,7 @@ namespace Presentation.UI.Content;
 /// state, rather than hiding the bar outright.
 /// </summary>
 /// <remarks>
-/// Also self-polls Mouse.GetState() every Update (see UpdateHover), the same idiom
-/// AbilityScoreWindow uses for its own hover popup, to drive a per-body-part breakdown popup
+/// While the pointer is over its window (Element.IsPointerOver), it drives a per-body-part breakdown popup
 /// (PlayerHealthHoverContent) -- owns and drives that popup Window directly (created in
 /// Initialize, added to UiLayer.Tooltip), mirroring HotbarController's own _summaryWindow
 /// pattern.
@@ -57,6 +56,9 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
 
     private int _hoveredFrames;
 
+    /// <summary>The body-part count the popup is sized for, so it is resized only when the count changes.</summary>
+    private int _popupRowCount;
+
     /// <summary>Test-only seam onto the popup this content owns/drives -- see the internal Update overload below for why the real screen-bounds source (Render.GraphicsDevice, unavailable headlessly) is also parameterized out for tests.</summary>
     internal Window HoverPopup => _hoverPopup;
 
@@ -72,7 +74,7 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
             Layout = new ElementLayoutOptions
             {
                 RelativePosition = Vector2.Zero, // Repositioned every frame by UpdateHover once hovered.
-                Size = PlayerHealthHoverContent.ContentSize + PopupBorderInsetDoubled,
+                Size = PlayerHealthHoverContent.ContentSizeFor(_popupRowCount) + PopupBorderInsetDoubled,
                 DisplayMode = ElementDisplayMode.Fixed,
                 IsVisible = false,
             },
@@ -84,18 +86,15 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
     }
 
     /// <summary>Whether the player currently has a SimpleHealthComponent and what fraction of effective max health remains is decided here -- Draw only reads the cached fraction and maps it to a fill color/width.</summary>
-    public void Update(GameTime gameTime) => Update(Mouse.GetState(), _hostWindow.Render.GraphicsDevice.Viewport.Bounds);
+    public void Update(GameTime gameTime) => Update(_hostWindow.Render.GraphicsDevice.Viewport.Bounds);
 
     /// <summary>
-    /// Takes explicit MouseState/screenBounds rather than reading Mouse.GetState()/
-    /// Render.GraphicsDevice itself -- the same seam UiInputController's own
-    /// dual-overload Update uses, extended to both of this method's real-environment reads (not
-    /// just MouseState) so a test can drive the real hover/positioning pipeline with synthetic
-    /// values instead of calling a private hover method directly or requiring a real
-    /// GraphicsDevice (unavailable headlessly -- see WindowGlowTests/FolderTests/
-    /// HotbarContentTests' own doc comments for the same constraint elsewhere in this codebase).
+    /// Takes screenBounds rather than reading Render.GraphicsDevice itself, so a test can drive the
+    /// real hover/positioning pipeline without a real GraphicsDevice (unavailable headlessly -- see
+    /// WindowGlowTests/FolderTests/HotbarContentTests' own doc comments for the same constraint
+    /// elsewhere in this codebase).
     /// </summary>
-    internal void Update(MouseState mouseState, Rectangle screenBounds)
+    internal void Update(Rectangle screenBounds)
     {
         var playerEntityId = world.PlayerEntityId;
         if (playerEntityId < 0 || !healthView.TryGetTotals(playerEntityId, out var currentHealth, out var maximumHealth) || maximumHealth <= 0)
@@ -113,20 +112,29 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
             _valueText = _valueTextCache.Get((ResourceBarRounding.DisplayedHealth(currentHealth), ResourceBarRounding.DisplayedMaximum(effectiveMaximumHealth)), static key => ResourceBarValueText.Format(key.Current, key.Maximum));
         }
 
-        UpdateHover(mouseState, screenBounds);
+        UpdateHover(screenBounds);
     }
 
     /// <summary>Delay-gated via HudChrome.HoverTooltipDelayFrames before showing (mirrors AbilityScoreWindow.UpdateHover), but hides immediately with no delay on hover loss.</summary>
-    private void UpdateHover(MouseState mouseState, Rectangle screenBounds)
+    private void UpdateHover(Rectangle screenBounds)
     {
         var barRectangle = BarRectangle();
-        var isHovering = barRectangle.Contains(new Point(mouseState.X, mouseState.Y));
+        var isHovering = _hostWindow.IsPointerOver;
         _hoveredFrames = isHovering ? _hoveredFrames + 1 : 0;
 
         if (!isHovering || _hoveredFrames < HudChrome.HoverTooltipDelayFrames)
         {
             _hoverPopup.IsVisible = false;
             return;
+        }
+
+        var rowCount = _bodyParts.Count(world.PlayerEntityId);
+        if (rowCount != _popupRowCount)
+        {
+            _popupRowCount = rowCount;
+            var popupSize = PlayerHealthHoverContent.ContentSizeFor(rowCount) + PopupBorderInsetDoubled;
+            _hoverPopup.SetMaximumSize(popupSize);
+            _hoverPopup.SetSize(popupSize);
         }
 
         _hoverPopup.SetRelativePosition(PopupPositioning.GetPositionWithinBounds(barRectangle, _hoverPopup.CurrentSize, PopupAnchor.South, PopupGap, screenBounds));

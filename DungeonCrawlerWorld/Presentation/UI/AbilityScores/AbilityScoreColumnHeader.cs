@@ -14,8 +14,7 @@ namespace Presentation.UI.AbilityScores;
 /// The non-scrolling header at the top of one ability-score column: the score's name centered
 /// on one line, its Total centered on the line below. A plain Element (not Window) -- same
 /// draw-only reasoning as InventoryItemStackCell: no title/chrome needed, just draws itself.
-/// IsHovered drives a translucent highlight overlay (see AbilityScoreWindow's own hover
-/// polling) -- immediate, unlike the hover-popup delay, since a highlight is instant feedback.
+/// IsPointerOver drives a translucent highlight overlay -- immediate, unlike the hover-popup delay, since a highlight is instant feedback.
 /// </summary>
 public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
     : Element(fontService, elementPoolService, renderService)
@@ -28,8 +27,6 @@ public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoo
     private FontStashTextMeasurer _totalFontMeasurer = null!;
 
     public AbilityScoreType Type { get; private set; }
-
-    public bool IsHovered { get; set; }
 
     public void Configure(AbilityScoreType type, ushort total, Vector2 headerSize)
     {
@@ -45,7 +42,7 @@ public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoo
         var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
-        if (IsHovered)
+        if (IsPointerOver)
         {
             spriteBatch.Draw(unitRectangle, LocalContentRectangle, WindowPalette.HighlightColor);
         }

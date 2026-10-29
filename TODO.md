@@ -478,6 +478,23 @@ tiles, so which costs less depends on how much of the screen auras reach.
 - Already in place, so measure against it: the fill is part of the ground image (`MapTileLayerCache`'s background colour), the glow's read point and texel transform are the vertex
   shader's, and one `GlowAt` serves both glow modes.
 
+#### UIEngine: pointer enter/leave events instead of polled hover
+
+`UiInputController.RefreshHoveredInteraction` sets `Element.IsPointerOver` on the hovered element and its ancestors, and
+every consumer (tooltips, hover highlights, the hotbar) reads it in its own update -- Dear ImGui's model. Most
+retained-mode toolkits send events instead: the DOM's `pointerenter`/`pointerleave`, WPF's `MouseEnter`/`MouseLeave`,
+Unity's `IPointerEnterHandler`/`IPointerExitHandler`, Godot's `mouse_entered`/`mouse_exited`, bevy_picking's
+`Pointer<Over>`/`Pointer<Out>`. `PLAN-unified-pointer-picking.md` Phase 2 chose the flag alone because every consumer
+already updates. Investigate the pros and cons of adding events.
+- **For:** an element that does nothing until hovered needs no per-update check; hover-start work (a tooltip's delay
+  timer, a highlight, a sound) has one place to begin and end; a leave is never missed when an element stops reading
+  the flag mid-hover (closed, pooled, hidden).
+- **Against:** a second path beside the flag that must agree with it; event subscriptions on pooled elements
+  (`ElementPoolService` already clears events on close); ordering questions (leave before enter, ancestors, what a
+  re-test under a still cursor fires); and the hover timers that must tick live (the hotbar's) still poll.
+- **Decide with:** a count of today's `IsPointerOver` readers and what each does per update, and whether any of them
+  would get simpler or cheaper. The outcome may be "keep polling".
+
 ### Low Priority
 
 #### Partial module replacement
@@ -1162,8 +1179,9 @@ item leaves an inventory treats it the same.
 - Hotbar item slot context menu: "Drop" -- one unit of the stack the slot is bound to, the same unit
   an activation from that slot would use (`ActivatedFromSlot`). The slot follows the rule
   `RepointAfterUnitMoved` already applies: it moves with the unit only if the stack it named is gone.
-- Possibly dragging an item out of the inventory onto the map (an `IDragDropResolver`, priority order
-  with Trade/Shop/Plain). Decide whether that is wanted or only the menu.
+- Dragging an item out of the inventory onto an empty tile (wanted, 2026-10-27): the ground resolver in
+  `PLAN-unified-pointer-picking.md` Phase 5's map-drop chain, after "into a container on the tile". Drops
+  the whole stack, as every drag does until "Stack Controls and Partial Stacks".
 
 **Decide**
 - Refused, with the disabled cursor and a reason, while the stack is winding up (`PendingWindupComponent`
@@ -2534,7 +2552,7 @@ options window) once there is somewhere for player settings to live.
 
 #### Non-targetable tiles in Ground mode
 
-A hotbar re-press in Ground mode lands on the hovered tile (`ActionTargetingController.PickHotkeyTargetTile`),
+A hotbar re-press in Ground mode lands on the hovered tile (`ActionTargetingController.TrySelectActivationTarget`),
 and a click confirms on whatever tile was clicked, as long as it is in `TargetableTiles` -- which is only
 range today, so a wall is a valid Ground target. A tile that can't be targeted (e.g. a wall) should fall
 back to the nearest targetable ground tile instead, for the re-press and the click alike. Investigate
@@ -2565,6 +2583,44 @@ glance:
   tile.
 - Supersedes the Low item "Change the cursor to a targeting mode indicator while armed" (removed).
 
+#### Marked targets
+
+Let the player mark entities as targets, so auto-targeting remembers who they are fighting instead of picking
+whatever is nearest. Marks are numbered; the first is the Primary Target.
+- **Mark Target command**, default key **T** (free today, beside Q/E/R; remappable with the other bindings once
+  "Input actions and mapping contexts" lands). Pressing it arms Mark Target like an aimed action; it is confirmed by
+  pressing T again while hovering an entity, clicking an entity, or pressing a number key while hovering one. It
+  marks only an entity (Target mode's choice on the tile: `TargetingView.Select(...).HasMarkedEntity`), never an
+  empty tile, and with nothing under the cursor it stays armed. Escape or right-click cancels, as for any armed
+  activation.
+- **Numbering.** Marks are numbered in the order they are placed (the lowest free number), or by the number key
+  pressed to confirm. Confirming with a number already in use moves that number to the new entity and unmarks the
+  entity that held it. While Mark Target is armed, the number keys assign mark numbers instead of activating the
+  hotbar row they are bound to (1-5 today). Decide how many marks (1-9 suggested).
+- **Unmarking.** Confirming Mark Target on an entity that is already marked removes its mark.
+- **Primary Target** is mark 1, or the lowest-numbered mark that is left once mark 1 is removed. Decide whether the
+  others renumber when a mark is removed, or keep their numbers with a gap.
+- **Rotation keys**, default **Tab** (forwards) and **Shift+Tab** (backwards): make the next or previous mark in
+  numeric order the Primary Target, wrapping around. With 0 or 1 marks they do nothing. Tab cycles window focus today
+  (`UiInputController.HandleFocusCycling`, unconditional); decide which wins -- e.g. focus cycling only while a
+  window holds keyboard focus, marks otherwise -- or fall back to **]** / **[**.
+- **Auto-targeting order** (`ActionTargetingController.TrySelectActivationTarget`, Target mode): the entity under the
+  cursor still wins, as the player's explicit choice; then the Primary Target, if it is in range (and the activation
+  can target it); then today's nearest target within `TargetSearchDistanceTiles` of the cursor, or of the player with
+  the cursor off the map; otherwise stay armed. Self, Adjacent and Ground-only activations ignore marks.
+- **Marking by use.** An activation that marks an entity (other than the player) while there are no marks marks it
+  as the Primary Target. That is the "remember the last target" behaviour, and it never overrides a mark the player
+  placed. Decide whether helpful activations (a heal on an ally) mark, with the friend/foe filter below.
+- **Lifetime.** Marks are Presentation state (`MapViewState`), held as `EntityKey`s, never ids. A destroyed entity's
+  mark is removed in `EntityDestroying`, as `ShellBootstrapper` already clears the inspected entity; decide whether a
+  dead one (a corpse) keeps its mark. An entity out of range keeps its mark, and is skipped by auto-targeting.
+- **Display.** A numbered badge on each marked entity, the Primary drawn distinctly (`MapGameOverlay` or a map badge,
+  see "Target Mode Clarity" for highlights); the mark number on the hover tooltip.
+- **Friend/foe.** Auto-targeting has no hostile/friendly filter yet: it arrives with the party feature's friend/foe
+  tags, and then the Primary Target is used only by activations that can affect it (harmful on a foe, helpful on a
+  friend).
+- Related: "Any command on the hotbar" (Low) would let Mark Target sit on a hotbar slot.
+
 #### Global hard minimum/maximum element sizes, and horizontally scrolling title text
 
 `UiInputController.ComputeResize`/`ClampResizeToBounds` clamp a drag-resize to `element.MinimumSize`/
@@ -2593,6 +2649,15 @@ Solve it once, as a single-line text mode on `TextWindow` (or a title element) t
 asks its host to grow within the global/per-element maximum, and scrolls horizontally past it -- not a
 per-window fix for each case.
 
+Note -- a related trap, found live: `Element.Build` defaults an unset `MaximumSize` to the parent's
+`ContentSize`, else to `Layout.Size` itself, so a parentless window is silently capped at the size it was
+built with and a later `SetSize` larger than that is clamped back with no error. The player health bar's
+hover popup (`PlayerHealthBarContent`) was built at its empty-row size and resized per body-part count:
+the window stayed a 2 px strip, its rows drew outside it, and the popup lost its background. It's patched
+locally (`SetMaximumSize` before `SetSize`); check every other `SetSize` caller on a parentless window for
+the same problem, and decide whether `SetSize` (or the fallback itself) should handle it generically --
+e.g. an unset maximum meaning the global hard maximum above, rather than the initial size.
+
 #### Inventory management -- grid cell reorder still open
 
 Read-only view, tabs, drag-onto-hotbar, and click-to-inspect all landed (`IMPLEMENTATION-NOTES.md`).
@@ -2617,6 +2682,9 @@ shift-click quick-transfer; WoW's vendor shift-click quantity popup; Path of Exi
 quantity slider) before settling on this game's own scheme -- see the industry-standard interface
 investigation in this session's transcript for a starting comparison. Blocked on grid drag-to-reorder
 (above) and a quantity-prompt UI (needs Context menu / mouse button coverage's remaining scope).
+The scheme also covers drags onto the map (`PLAN-unified-pointer-picking.md` Phase 5): into a container on
+a tile and onto the ground both move the whole stack in v1; v2 gives them the same half / exact-amount
+controls as a drag between grids.
 
 #### Equipped-item comparison
 
@@ -3772,6 +3840,56 @@ colour per tile, so the wave reads as continuous across tile edges.
 - Purely visual: it is driven by render time and changes nothing about when an exposure ticks.
 
 Related: "Animation primitives -- flipbooks, tweens and curves" and "Visual 2D lighting" (Medium).
+
+#### Any command on the hotbar
+
+Let the hotbar hold any command, not only actions and items: opening a window (inventory, Health, the map), an
+options page, Mark Target (see "Marked targets", High), switching the targeting mode. Each is bound to a slot like a
+spell or item and goes through the same slot press, so a player can put the commands they use on keys they choose,
+as FFXIV allows.
+- A slot binding today names an action or an item stack (`ActivatableReference`); a command is a third kind. Decide
+  whether commands are Presentation's alone (they change no game state) and how a binding names one stably (a
+  constant id per command, never a key).
+- A command is never armed, never has a cost or a cooldown, and never targets; it runs on the press.
+- Icons, tooltips and drag-to-bind from a command list (an options page, or a "Commands" tab).
+- Overlaps "Input actions and mapping contexts" (High): a command is an input action, and binding one to a slot is
+  binding that action to the slot's key.
+
+#### Targeting effect shader for splash, drink and other activations
+
+What a self-tagged item does on a map click depends on the targeting mode: Ground splashes at the clicked tile,
+Target marks the entity there, otherwise the player drinks it. The preview should show which will happen before the
+click, beyond the mode icon at the cursor (see "Target Mode Clarity", High):
+- A distinct effect per kind of activation -- a splash ring over the splash area, a drink effect on the player, a
+  projectile or beam line to a marked target -- drawn through the sprite effect as part of `MapGameOverlay`'s quad
+  (`SpriteEffectTileOverlay`) or as a shader mode of its own.
+- Driven by the same selection the activation will use (`ActionTargetingController`'s selection and
+  `TargetingView.Resolve`), so the effect shown is what lands.
+- Decide whether the windup telegraph uses the same effects.
+
+#### Cast style: arm and click, or quick cast
+
+A player setting for how a hotbar press uses an aimed action or item:
+- **Arm and click** (default, today): the first press arms, a re-press or click confirms.
+- **Quick cast:** the first press activates at once, on the target the re-press would pick today (Target mode: the
+  marked or hovered target, then the nearest within the search distance; Ground mode: the hovered tile), and stays
+  armed only when there is no target -- as GW2's "fast cast" and WoW's cast-at-cursor do.
+- Possibly per slot as well as global. Self and Adjacent activations already skip arming the target choice, so they
+  are unaffected. Saved with the other player settings (see "Options menu").
+
+#### UI edit mode: detach window sections, extra hotbars, per-window layout
+
+Let the player drag a piece of an existing window out into a standalone window of its own -- the Health window's
+buffs, debuffs, or one body part's health -- and leave it over the map to watch continuously. Layout controls that
+would clutter the screen in play live in a UI edit mode, as FFXIV's HUD Layout does:
+- **Detaching:** a window declares which of its sections can be detached; dragging one out opens a standalone,
+  persistent window showing the same live content. Decide whether the section stays in its source window as well, and
+  how a detached piece is put back.
+- **Per-window settings in edit mode:** transparency, size, rotation and a fixed position, each kept per window.
+- **Extra hotbars:** create hotbars not bound to any hotkey -- click-only, for emergency items and actions or a
+  player's own menu bars (pairs with "Any command on the hotbar").
+- Layouts are saved with "Data storage, starting with window locations and sizes" (Global, High). Related: "Window
+  docking / splitters" and "Options menu".
 
 ## Global
 
