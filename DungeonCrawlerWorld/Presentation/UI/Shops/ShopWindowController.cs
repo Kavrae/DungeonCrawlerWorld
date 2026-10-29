@@ -19,7 +19,8 @@ public sealed class ShopWindowController(
     InventoryWindowController inventoryWindowController,
     ContextMenuController contextMenuController,
     MapWindow mapWindow,
-    TooltipController tooltipController)
+    TooltipController tooltipController,
+    ElementGroup itemWindows)
 {
     private TargetedWindowLifecycle<ShopWindow> _slot = null!;
 
@@ -49,7 +50,7 @@ public sealed class ShopWindowController(
 
     public void Initialize(UiLayerStack layers)
     {
-        _slot = new TargetedWindowLifecycle<ShopWindow>(inventoryWindowController, layers, contextMenuController, () =>
+        _slot = new TargetedWindowLifecycle<ShopWindow>(inventoryWindowController, layers, contextMenuController, itemWindows, () =>
         {
             mapViewState.OpenShopEntityId = null;
             OnClosed?.Invoke();

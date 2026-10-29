@@ -26,7 +26,8 @@ public sealed class LootboxResultsWindowController(
     ContextMenuController contextMenuController,
     InventoryWindowController inventoryWindowController,
     MapWindow mapWindow,
-    IPlayerQuery playerQuery)
+    IPlayerQuery playerQuery,
+    ElementGroup itemWindows)
 {
     private UiLayerStack _layers = null!;
 
@@ -81,6 +82,7 @@ public sealed class LootboxResultsWindowController(
         window.Initialize();
         _layers.Add(UiLayer.DynamicHud, window);
         _layers.OpenMenuWindow(window);
+        itemWindows.Join(window);
 
         Window = window;
         Content = content;
@@ -112,6 +114,7 @@ public sealed class LootboxResultsWindowController(
     {
         _layers.Remove(UiLayer.DynamicHud, closedWindow);
         _layers.CloseMenuWindow(closedWindow);
+        itemWindows.Leave(closedWindow);
         if (ReferenceEquals(Window, closedWindow))
         {
             Window = null;

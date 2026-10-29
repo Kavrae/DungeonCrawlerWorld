@@ -26,7 +26,8 @@ public sealed class ItemComparisonController(
     MapWindow mapWindow,
     MapViewState mapViewState,
     ItemDetailsWindowController itemDetailsWindowController,
-    CursorTextContent cursorTextContent)
+    CursorTextContent cursorTextContent,
+    ElementGroup itemWindows)
 {
     /// <summary>Shown at the cursor for as long as IsArmed -- see Arm/Disarm/ClearComparison.</summary>
     private const string SelectNextItemMessage = "Select next item...";
@@ -287,6 +288,7 @@ public sealed class ItemComparisonController(
         window.Initialize();
         _layers.Add(UiLayer.DynamicHud, window);
         _layers.OpenMenuWindow(window);
+        itemWindows.Join(window);
 
         return window;
     }
@@ -296,6 +298,7 @@ public sealed class ItemComparisonController(
     {
         _layers.Remove(UiLayer.DynamicHud, closedWindow);
         _layers.CloseMenuWindow(closedWindow);
+        itemWindows.Leave(closedWindow);
 
         if (_isRebuilding || closedWindow is not ItemDetailsWindow closedColumn)
         {

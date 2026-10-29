@@ -43,7 +43,8 @@ public sealed class TradeWindowController(
     MapWindow mapWindow,
     int tradeOfferPlayerEntityId,
     int tradeOfferShopEntityId,
-    TooltipController tooltipController)
+    TooltipController tooltipController,
+    ElementGroup itemWindows)
 {
     /// <summary>
     /// Which of the four ways this window can close is currently in flight -- read (and reset back
@@ -128,6 +129,7 @@ public sealed class TradeWindowController(
         window.Closed += HandleWindowClosed;
         window.Initialize();
         _layers.Add(UiLayer.DynamicHud, window);
+        itemWindows.Join(window);
 
         var screenSize = mapWindow.CurrentSize;
         var centeredPosition = RectangleClamp.ClampInside((screenSize - window.CurrentSize) / 2f, window.CurrentSize, screenSize);
@@ -212,6 +214,7 @@ public sealed class TradeWindowController(
 
         _layers.Remove(UiLayer.DynamicHud, closedWindow);
         _layers.CloseMenuWindow(closedWindow);
+        itemWindows.Leave(closedWindow);
 
         var inventoryWindow = _subscribedInventoryWindow;
         if (inventoryWindow is not null)

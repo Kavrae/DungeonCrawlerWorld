@@ -28,7 +28,8 @@ public sealed class ItemDetailsWindowController(
     InventoryWindowController inventoryWindowController,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    MapWindow mapWindow) : ILightDismissable
+    MapWindow mapWindow,
+    ElementGroup itemWindows) : ILightDismissable
 {
 
     private UiLayerStack _layers = null!;
@@ -49,9 +50,6 @@ public sealed class ItemDetailsWindowController(
 
     public uint? CurrentStackInstanceId { get; private set; }
 
-    /// <summary>Settable late-bound check for the other windows a press may land on without closing this one -- an open corpse, container, shop, trade or loot box results window, or a comparison column. Wired by ItemWindowCoordinator, which builds those controllers after this one.</summary>
-    public Func<Element, bool>? IsTiedWindow { get; set; }
-
     /// <summary>Settable late-bound notification fired when this window closes -- wired by ItemWindowCoordinator to ItemComparisonController.ClearComparison, since a stale comparison against an item that's no longer even shown doesn't make sense.</summary>
     public Action? OnClosed { get; set; }
 
@@ -60,9 +58,8 @@ public sealed class ItemDetailsWindowController(
 
     public void Initialize(UiLayerStack layers) => _layers = layers;
 
-    /// <summary>This window, the player's Inventory window and every tied window (IsTiedWindow) are inside -- a press anywhere else closes it and goes no further.</summary>
-    public bool CountsAsInside(Element element) =>
-        element == _window || element == inventoryWindowController.PlayerInventoryWindow || IsTiedWindow?.Invoke(element) == true;
+    /// <summary>Every open item window (itemWindows: this one, inventory, loot, shop, trade, loot box results, comparison columns) is inside -- a press anywhere else closes it and goes no further.</summary>
+    public bool CountsAsInside(Element element) => itemWindows.Contains(element);
 
     public void Dismiss() => Close();
 
@@ -166,6 +163,7 @@ public sealed class ItemDetailsWindowController(
         window.Initialize();
         _layers.Add(UiLayer.DynamicHud, window);
         _layers.OpenMenuWindow(window); // Menu Mode, same as the player's own Inventory window and a corpse window.
+        itemWindows.Join(window);
         _layers.OpenLightDismiss(this);
 
         _window = window;
@@ -190,6 +188,7 @@ public sealed class ItemDetailsWindowController(
     {
         _layers.Remove(UiLayer.DynamicHud, closedWindow);
         _layers.CloseMenuWindow(closedWindow);
+        itemWindows.Leave(closedWindow);
         _layers.CloseLightDismiss(this);
         _window = null;
         _anchorWindow = null;

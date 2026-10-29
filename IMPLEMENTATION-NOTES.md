@@ -1585,7 +1585,7 @@ record in Achievements.
 - Click opens Item Details docked beside the results window: `ItemDetailsWindowController.Open` takes
   an optional anchor window, and a reward whose stack has since been used up opens read-only through
   `OpenDefinition` (stack id `ItemDetailsWindow.NoStackInstanceId`; Compare does nothing).
-  The results window counts as inside Item Details on its own (`IsTiedWindow`), never through another window.
+  The results window counts as inside Item Details on its own (it joins the item windows' `ElementGroup` while open), never through another window.
 
 ### Map areas, fixed placements and the Workshop Map tab (2026-10-22)
 
@@ -1840,7 +1840,7 @@ Level Up and Skill Up join later as new `FloatingTextKind` values.
   instead of one overwriting the other -- the green eligible-glow is comparison-only now, a
   shop-eligible item shows no glow, just its own price-line coloring. `TradeWindow`'s two columns are
   wired into the same comparison-aware click dispatch (`onItemSelected`) every other inventory grid
-  uses -- the trade window counts as inside Item Details on its own (`ItemDetailsWindowController.IsTiedWindow`),
+  uses -- the trade window counts as inside Item Details on its own (it joins the item windows' `ElementGroup` while open),
   never through the shop window -- confirmed live as a real bug when they shared one hook: the shop and
   trade windows are open *simultaneously* (unlike corpse-vs-shop, which really are mutually
   exclusive), so a single "pick whichever one's open" `Func<Rectangle>` made the shop window's own

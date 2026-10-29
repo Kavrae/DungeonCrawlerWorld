@@ -12,12 +12,13 @@ namespace Presentation.UI;
 /// whatever extra state they key off the open target (mark-looted vs MapViewState.OpenShopEntityId).
 /// Mirrors WindowLifecycle's own split: the target-keyed toggle/replace/cascade-position/context-menu
 /// wiring lives here once, an onOpened per call and a fixed onClosed (ctor-supplied, same shape as
-/// WindowLifecycle's own) cover what's still genuinely per-controller.
+/// WindowLifecycle's own) cover what's still genuinely per-controller. The open window is a member of itemWindows.
 /// </summary>
 public sealed class TargetedWindowLifecycle<TWindow>(
     InventoryWindowController inventoryWindowController,
     UiLayerStack layers,
     ContextMenuController contextMenuController,
+    ElementGroup itemWindows,
     Action onClosed)
     where TWindow : Window
 {
@@ -62,6 +63,7 @@ public sealed class TargetedWindowLifecycle<TWindow>(
         window.Initialize();
         layers.Add(UiLayer.DynamicHud, window);
         layers.OpenMenuWindow(window);
+        itemWindows.Join(window);
 
         _window = window;
         _currentTargetEntityId = targetEntityId;
@@ -72,6 +74,7 @@ public sealed class TargetedWindowLifecycle<TWindow>(
     {
         layers.Remove(UiLayer.DynamicHud, closedWindow);
         layers.CloseMenuWindow(closedWindow);
+        itemWindows.Leave(closedWindow);
         _window = null;
         _currentTargetEntityId = -1;
         onClosed();

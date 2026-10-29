@@ -21,7 +21,8 @@ public sealed class InventoryWindowController(
     InventoryView inventoryView,
     MapWindow mapWindow,
     ContextMenuController contextMenuController,
-    TooltipController tooltipController)
+    TooltipController tooltipController,
+    ElementGroup itemWindows)
 {
 
     private Button _button = null!;
@@ -65,7 +66,7 @@ public sealed class InventoryWindowController(
     public void Initialize(UiLayerStack layers)
     {
         _uiLayers = layers;
-        _windowLifecycle = new WindowLifecycle<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, layers, () => { });
+        _windowLifecycle = new WindowLifecycle<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, layers, () => { }, itemWindows);
 
         _button = elementPoolService.CreateElement<Button>(null, new ElementOptions
         {

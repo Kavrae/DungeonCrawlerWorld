@@ -23,6 +23,7 @@ namespace Presentation.UI.Inventory;
 /// - Activate arms the item's action; opening loot boxes shows their results, where a reward opens in Item Details
 ///   on the stack it landed in while that still exists, otherwise read-only from its definition.
 /// - A destroyed entity's id is reused straight away, so every window open for it closes (see ReleaseEntity).
+/// - Every item window joins one ElementGroup while open; a press on any of them leaves Item Details open.
 /// </remarks>
 public sealed class ItemWindowCoordinator
 {
@@ -47,17 +48,18 @@ public sealed class ItemWindowCoordinator
         var contextMenuController = shellServices.ContextMenuController;
         var tooltipController = shellServices.TooltipController;
         _mapViewState = shellServices.MapViewState;
+        var itemWindows = new ElementGroup();
 
-        Inventory = new InventoryWindowController(elementPoolService, world, inventoryView, mapWindow, contextMenuController, tooltipController);
+        Inventory = new InventoryWindowController(elementPoolService, world, inventoryView, mapWindow, contextMenuController, tooltipController, itemWindows);
         Inventory.Initialize(layers);
 
-        _secondaryInventory = new SecondaryInventoryWindowController(elementPoolService, lootCommands, Inventory, contextMenuController, mapWindow, tooltipController);
+        _secondaryInventory = new SecondaryInventoryWindowController(elementPoolService, lootCommands, Inventory, contextMenuController, mapWindow, tooltipController, itemWindows);
         _secondaryInventory.Initialize(layers);
 
-        _shop = new ShopWindowController(elementPoolService, _mapViewState, Inventory, contextMenuController, mapWindow, tooltipController);
+        _shop = new ShopWindowController(elementPoolService, _mapViewState, Inventory, contextMenuController, mapWindow, tooltipController, itemWindows);
         _shop.Initialize(layers);
 
-        var trade = new TradeWindowController(elementPoolService, Inventory, _shop, mapWindow, reservedEntityIds.TradeOfferPlayerEntityId, reservedEntityIds.TradeOfferShopEntityId, tooltipController);
+        var trade = new TradeWindowController(elementPoolService, Inventory, _shop, mapWindow, reservedEntityIds.TradeOfferPlayerEntityId, reservedEntityIds.TradeOfferShopEntityId, tooltipController, itemWindows);
         trade.Initialize(layers);
         _shop.OnOpened = trade.Open;
         _shop.OnClosed = trade.CloseForShopClosed;
@@ -68,11 +70,11 @@ public sealed class ItemWindowCoordinator
         // At most one of the two is ever open, so whichever isn't answers null.
         Inventory.GetSecondaryTargetEntityId = () => _secondaryInventory.OpenTargetEntityId ?? _shop.OpenTargetEntityId;
 
-        ItemDetails = new ItemDetailsWindowController(elementPoolService, inventoryView, itemCatalog, Inventory, contextMenuController, _mapViewState, mapWindow);
+        ItemDetails = new ItemDetailsWindowController(elementPoolService, inventoryView, itemCatalog, Inventory, contextMenuController, _mapViewState, mapWindow, itemWindows);
         ItemDetails.Initialize(layers);
 
         // Built after Item Details, whose pane is always the comparison's anchor (see ItemComparisonController.Arm).
-        ItemComparison = new ItemComparisonController(elementPoolService, inventoryView, itemCatalog, Inventory, contextMenuController, mapWindow, _mapViewState, ItemDetails, shellServices.CursorTextContent);
+        ItemComparison = new ItemComparisonController(elementPoolService, inventoryView, itemCatalog, Inventory, contextMenuController, mapWindow, _mapViewState, ItemDetails, shellServices.CursorTextContent, itemWindows);
         ItemComparison.Initialize(layers);
         ItemDetails.OnClosed = ItemComparison.ClearComparison;
         ItemDetails.OnCompareRequested = ItemComparison.Arm;
@@ -87,11 +89,8 @@ public sealed class ItemWindowCoordinator
 
         Inventory.OnActivateRequested = (_, stackInstanceId) => actionTargetingController.ArmItemFromStack(stackInstanceId);
 
-        var lootboxResults = new LootboxResultsWindowController(elementPoolService, lootboxCatalog, itemCatalog, tooltipController, contextMenuController, Inventory, mapWindow, world);
+        var lootboxResults = new LootboxResultsWindowController(elementPoolService, lootboxCatalog, itemCatalog, tooltipController, contextMenuController, Inventory, mapWindow, world, itemWindows);
         lootboxResults.Initialize(layers);
-        ItemDetails.IsTiedWindow = element =>
-            element == _secondaryInventory.Window || element == _shop.Window || element == trade.Window ||
-            element == lootboxResults.Window || element is ItemDetailsWindow column && ItemComparison.Columns.Contains(column);
         Inventory.OnOpenLootboxesRequested = entityId => lootboxResults.Show(lootboxCommands.OpenAll(entityId));
         lootboxResults.OnRewardClicked = reward =>
         {

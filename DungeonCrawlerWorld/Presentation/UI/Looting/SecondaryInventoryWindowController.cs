@@ -27,7 +27,8 @@ public sealed class SecondaryInventoryWindowController(
     InventoryWindowController inventoryWindowController,
     ContextMenuController contextMenuController,
     MapWindow mapWindow,
-    TooltipController tooltipController)
+    TooltipController tooltipController,
+    ElementGroup itemWindows)
 {
     private TargetedWindowLifecycle<SecondaryInventoryWindow> _slot = null!;
 
@@ -48,7 +49,7 @@ public sealed class SecondaryInventoryWindowController(
 
     public void Initialize(UiLayerStack layers)
     {
-        _slot = new TargetedWindowLifecycle<SecondaryInventoryWindow>(inventoryWindowController, layers, contextMenuController, () => { });
+        _slot = new TargetedWindowLifecycle<SecondaryInventoryWindow>(inventoryWindowController, layers, contextMenuController, itemWindows, () => { });
     }
 
     /// <summary>

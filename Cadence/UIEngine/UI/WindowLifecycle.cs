@@ -6,9 +6,9 @@ namespace UIEngine.UI;
 /// reused for a future open (see
 /// ElementPoolService) -- ElementPoolService.CloseElement clears every event on a pooled Element
 /// (Closed included) before it goes back into its pool, so HandleClosed's own subscription can't
-/// outlive the reuse cycle without detaching itself.
+/// outlive the reuse cycle without detaching itself. The open window is a member of group, if one is given.
 /// </summary>
-public sealed class WindowLifecycle<TWindow>(Func<TWindow> createAndConfigure, Func<bool> isDisabled, UiLayerStack layers, Action onClosed)
+public sealed class WindowLifecycle<TWindow>(Func<TWindow> createAndConfigure, Func<bool> isDisabled, UiLayerStack layers, Action onClosed, ElementGroup? group = null)
     where TWindow : Element
 {
     public TWindow? Window { get; private set; }
@@ -25,6 +25,7 @@ public sealed class WindowLifecycle<TWindow>(Func<TWindow> createAndConfigure, F
         window.Initialize();
         layers.Add(UiLayer.DynamicHud, window);
         layers.OpenMenuWindow(window); // See UiLayerStack.OpenMenuWindow: a host may pause while menu windows are open.
+        group?.Join(window);
         Window = window;
     }
 
@@ -46,6 +47,7 @@ public sealed class WindowLifecycle<TWindow>(Func<TWindow> createAndConfigure, F
     {
         layers.Remove(UiLayer.DynamicHud, closedWindow);
         layers.CloseMenuWindow(closedWindow);
+        group?.Leave(closedWindow);
         Window = null;
         onClosed();
     }
