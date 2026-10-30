@@ -19,16 +19,18 @@ public interface IStatusEffectApplier
     /// <param name="bodyPartId">The one body part to count the stacks of, or null for the stacks the entity holds as a whole. An effect that isn't held per body part ignores it.</param>
     int GetCurrentStackCount(int entityId, byte? bodyPartId = null);
 
-    /// <summary>Adds up to count stacks, attributed to source, and returns how many landed.</summary>
+    /// <summary>Adds up to count stacks, attributed to source, and returns how many landed and whether an immunity refused them.</summary>
     /// <remarks>
-    /// One immunity check and one write however many stacks are asked for. Fewer than count land
-    /// when the entity reaches MaxStacks; none land on an immune entity. An effect that doesn't stack
-    /// refreshes itself on an entity that already has it, and lands 0.
+    /// At most one immunity check and one write however many stacks are asked for. Fewer than count land
+    /// when the entity reaches MaxStacks; none land on an immune entity, which is the one case
+    /// reported as RefusedByImmunity. An effect that doesn't stack refreshes itself on an entity that
+    /// already has it, and lands 0.
     /// </remarks>
     /// <param name="now">The simulation frame the stacks land on -- a newly started effect's timer is scheduled from it (FrameDeadline.After(now, ...)).</param>
     /// <param name="announcesRefusal">False to leave an immunity's blocked event unpublished: the caller already reported this refusal.</param>
     /// <param name="bodyPartId">The one body part to hold the stacks on, or null for the entity as a whole. Named by whatever grants the stacks, never worked out here. An effect that isn't held per body part ignores it.</param>
-    int ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null);
+    /// <param name="immunityAlreadyChecked">True when the caller has just found the entity not immune (StatusEffectGrant): the stacks are added with no second check.</param>
+    StatusEffectStacksApplied ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null, bool immunityAlreadyChecked = false);
 
     /// <summary>Removes every stack of EffectType from entityId, ending the effect wherever it is held -- on the entity as a whole and on every body part. Returns whether there was anything to remove.</summary>
     bool RemoveAllStacks(int entityId);

@@ -35,10 +35,17 @@ public sealed class ParalysisModule : IGameModule
             StatusEffectType.Paralysis,
             timers,
             maxStacks: 1,
-            (entityId, count, source, now, announcesRefusal) =>
+            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked) =>
             {
+                if (count <= 0)
+                {
+                    return StatusEffectStacksApplied.Landed(0);
+                }
+
                 var wasParalyzed = timers.Has(entityId);
-                return count > 0 && ParalysisEffects.Apply(componentManager, entityId, source, now, eventBus, playerQuery, announcesRefusal) && !wasParalyzed ? 1 : 0;
+                return ParalysisEffects.Apply(componentManager, entityId, source, now, eventBus, playerQuery, announcesRefusal, immunityAlreadyChecked)
+                    ? StatusEffectStacksApplied.Landed(wasParalyzed ? 0 : 1)
+                    : StatusEffectStacksApplied.Refused;
             }));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph,
             timers,

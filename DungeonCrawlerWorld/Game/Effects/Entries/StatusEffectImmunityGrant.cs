@@ -1,7 +1,6 @@
 using Engine.ECS.Systems;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
 
 namespace Game.Effects.Entries;
 
@@ -28,7 +27,7 @@ public sealed record StatusEffectImmunityGrant(StatusEffectType Type, ushort? Du
 
     public EffectOutcome Apply(in EffectContext context)
     {
-        var immunities = context.Services.ComponentManager.GetMultiPool<StatusEffectImmunityComponent>();
+        var immunities = context.Services.StatusEffectImmunities;
         if (DurationFrames is null && context.HeldGrantKey is { } heldGrantKey)
         {
             StatusEffectImmunityEffects.GrantHeld(immunities, context.TargetEntityId, Type, heldGrantKey);
@@ -47,7 +46,7 @@ public sealed record StatusEffectImmunityGrant(StatusEffectType Type, ushort? Du
     {
         if (DurationFrames is null && context.HeldGrantKey is { } heldGrantKey)
         {
-            StatusEffectImmunityEffects.RevokeHeld(context.Services.ComponentManager.GetMultiPool<StatusEffectImmunityComponent>(), context.TargetEntityId, Type, heldGrantKey);
+            StatusEffectImmunityEffects.RevokeHeld(context.Services.StatusEffectImmunities, context.TargetEntityId, Type, heldGrantKey);
         }
     }
 }

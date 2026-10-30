@@ -11,25 +11,84 @@ namespace Game.Modules.Auras;
 /// entity sources' values (AuraField.Attribute). Each entry's attribution is fixed when it is added --
 /// the entity carrying it, or for an anchor whoever placed it -- and kept through moves. A query
 /// looks only at the chunks the aura's largest source could reach from, so a lookup near a few small
-/// sources reads a handful of buckets.
+/// sources reads a handful of buckets. Every exposure tick of an aura with entity sources asks one,
+/// so a chunk's bucket is an array slot in its neighborhood's grid (found as AuraTotals finds its
+/// neighborhoods), never a hash.
 /// </remarks>
-public sealed class AuraSourceIndex
+public sealed class AuraSourceIndex(int depth)
 {
     private const int ChunkShift = 5;
+    private const int ChunksPerSideShift = Neighborhoods.SizeShift - ChunkShift;
+    private const int ChunksPerSideMask = (1 << ChunksPerSideShift) - 1;
 
+    private readonly int _bucketsPerNeighborhood = depth << (2 * ChunksPerSideShift);
     private readonly AuraEntries?[] _entriesByAuraId = new AuraEntries?[byte.MaxValue + 1];
 
     /// <summary>One entity source: whose it is, where it is, its shape and whom its effects are credited to.</summary>
     private readonly record struct Entry(int EntityId, uint HeldGrantKey, Vector3Int Position, ushort Power, byte Size, ActionSource Attribution);
 
+    /// <summary>One aura's buckets in one neighborhood: a slot per chunk of every layer, null until a source is added there.</summary>
+    private sealed class EntryNeighborhood(int neighborhoodCellX, int neighborhoodCellY, int bucketCount)
+    {
+        public int NeighborhoodCellX { get; } = neighborhoodCellX;
+
+        public int NeighborhoodCellY { get; } = neighborhoodCellY;
+
+        public List<Entry>?[] Buckets { get; } = new List<Entry>?[bucketCount];
+    }
+
     private sealed class AuraEntries
     {
-        public Dictionary<(int ChunkX, int ChunkY, int Layer), List<Entry>> ByChunk { get; } = [];
+        private readonly List<EntryNeighborhood> _neighborhoods = [];
+        private EntryNeighborhood? _lastFound;
 
         public int Count { get; set; }
 
         /// <summary>The largest size any source of the aura has had: how far a query looks. Never shrinks, so it never misses one.</summary>
         public int MaximumSize { get; set; }
+
+        /// <summary>The bucket for chunk (chunkX, chunkY) on layer, or null when no source of the aura was ever added there.</summary>
+        public List<Entry>? FindBucket(int chunkX, int chunkY, int layer) =>
+            FindNeighborhood(chunkX >> ChunksPerSideShift, chunkY >> ChunksPerSideShift) is { } neighborhood &&
+            (uint)layer < (uint)(neighborhood.Buckets.Length >> (2 * ChunksPerSideShift))
+                ? neighborhood.Buckets[BucketIndexOf(chunkX, chunkY, layer)]
+                : null;
+
+        public List<Entry> GetOrAddBucket(int chunkX, int chunkY, int layer, int bucketsPerNeighborhood)
+        {
+            var neighborhoodCellX = chunkX >> ChunksPerSideShift;
+            var neighborhoodCellY = chunkY >> ChunksPerSideShift;
+            if (FindNeighborhood(neighborhoodCellX, neighborhoodCellY) is not { } neighborhood)
+            {
+                neighborhood = new EntryNeighborhood(neighborhoodCellX, neighborhoodCellY, bucketsPerNeighborhood);
+                _neighborhoods.Add(neighborhood);
+                _lastFound = neighborhood;
+            }
+
+            return neighborhood.Buckets[BucketIndexOf(chunkX, chunkY, layer)] ??= [];
+        }
+
+        private EntryNeighborhood? FindNeighborhood(int neighborhoodCellX, int neighborhoodCellY)
+        {
+            if (_lastFound is { } lastFound && lastFound.NeighborhoodCellX == neighborhoodCellX && lastFound.NeighborhoodCellY == neighborhoodCellY)
+            {
+                return lastFound;
+            }
+
+            foreach (var neighborhood in _neighborhoods)
+            {
+                if (neighborhood.NeighborhoodCellX == neighborhoodCellX && neighborhood.NeighborhoodCellY == neighborhoodCellY)
+                {
+                    _lastFound = neighborhood;
+                    return neighborhood;
+                }
+            }
+
+            return null;
+        }
+
+        private static int BucketIndexOf(int chunkX, int chunkY, int layer) =>
+            (chunkX & ChunksPerSideMask) | ((chunkY & ChunksPerSideMask) << ChunksPerSideShift) | (layer << (2 * ChunksPerSideShift));
     }
 
     /// <summary>Whether any entity source of auraId is indexed.</summary>
@@ -38,14 +97,8 @@ public sealed class AuraSourceIndex
     public void Add(int entityId, Vector3Int position, AuraSourceComponent source, ActionSource attribution)
     {
         var entries = _entriesByAuraId[source.AuraId] ??= new AuraEntries();
-        var key = ChunkOf(position);
-        if (!entries.ByChunk.TryGetValue(key, out var bucket))
-        {
-            bucket = [];
-            entries.ByChunk.Add(key, bucket);
-        }
-
-        bucket.Add(new Entry(entityId, source.HeldGrantKey, position, source.Power, source.Size, attribution));
+        entries.GetOrAddBucket(position.X >> ChunkShift, position.Y >> ChunkShift, position.Z, _bucketsPerNeighborhood)
+            .Add(new Entry(entityId, source.HeldGrantKey, position, source.Power, source.Size, attribution));
         entries.Count++;
         entries.MaximumSize = Math.Max(entries.MaximumSize, source.Size);
     }
@@ -76,14 +129,15 @@ public sealed class AuraSourceIndex
         }
 
         var chunkRadius = (entries.MaximumSize + (1 << ChunkShift) - 1) >> ChunkShift;
-        var (centreChunkX, centreChunkY, layer) = ChunkOf(position);
+        var centreChunkX = position.X >> ChunkShift;
+        var centreChunkY = position.Y >> ChunkShift;
         var found = false;
 
         for (var chunkY = centreChunkY - chunkRadius; chunkY <= centreChunkY + chunkRadius; chunkY++)
         {
             for (var chunkX = centreChunkX - chunkRadius; chunkX <= centreChunkX + chunkRadius; chunkX++)
             {
-                if (!entries.ByChunk.TryGetValue((chunkX, chunkY, layer), out var bucket))
+                if (entries.FindBucket(chunkX, chunkY, position.Z) is not { } bucket)
                 {
                     continue;
                 }
@@ -118,7 +172,8 @@ public sealed class AuraSourceIndex
 
     private Entry? TakeOut(int entityId, Vector3Int position, AuraSourceComponent source)
     {
-        if (_entriesByAuraId[source.AuraId] is not { } entries || !entries.ByChunk.TryGetValue(ChunkOf(position), out var bucket))
+        if (_entriesByAuraId[source.AuraId] is not { } entries ||
+            entries.FindBucket(position.X >> ChunkShift, position.Y >> ChunkShift, position.Z) is not { } bucket)
         {
             return null;
         }
@@ -137,6 +192,4 @@ public sealed class AuraSourceIndex
 
         return null;
     }
-
-    private static (int ChunkX, int ChunkY, int Layer) ChunkOf(Vector3Int position) => (position.X >> ChunkShift, position.Y >> ChunkShift, position.Z);
 }

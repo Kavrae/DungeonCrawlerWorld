@@ -28,16 +28,16 @@ public sealed class StatusEffectGrantFloatingTextTests
 
         public int MaxStacks => maxStacks;
 
-        public int ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null)
+        public StatusEffectStacksApplied ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null, bool immunityAlreadyChecked = false)
         {
             if (StatusEffectImmunity.HasImmunity(componentManager, entityId, EffectType))
             {
-                return 0;
+                return StatusEffectStacksApplied.Refused;
             }
 
             var stacksBefore = GetCurrentStackCount(entityId);
             _stacksByEntityId[entityId] = System.Math.Min(stacksBefore + count, maxStacks);
-            return _stacksByEntityId[entityId] - stacksBefore;
+            return StatusEffectStacksApplied.Landed(_stacksByEntityId[entityId] - stacksBefore);
         }
 
         public bool RemoveAllStacks(int entityId) => _stacksByEntityId.Remove(entityId);

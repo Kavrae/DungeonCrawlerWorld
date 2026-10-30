@@ -209,15 +209,44 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
             return; // Still mid-move from a previous decision -- nothing new to decide yet.
         }
 
-        if (TryDecideSelfHeal(entityId)
-            || TryDecideMeleeAttack(entityId, transform, now)
+        if (TryDecideSelfHeal(entityId))
+        {
+            return;
+        }
+
+        var hasNeighbors = HasOtherOccupantOnOrBeside(entityId, transform);
+        if ((hasNeighbors && TryDecideMeleeAttack(entityId, transform, now))
             || TryDecideRangedAttackOnPlayer(entityId, transform, now)
-            || TryDecideLootCorpse(entityId, transform, now))
+            || (hasNeighbors && TryDecideLootCorpse(entityId, transform, now)))
         {
             return;
         }
 
         DecideWander(entityId, transform, now);
+    }
+
+    /// <summary>Whether anything other than entityId stands on its footprint or a tile beside it, on its layer: the tiles both an adjacent melee target and a corpse to loot are looked for in.</summary>
+    /// <remarks>One pass over that rectangle, so the common case -- nobody around a wanderer -- rules out both branches without either scanning it.</remarks>
+    private bool HasOtherOccupantOnOrBeside(int entityId, TransformComponent transform)
+    {
+        var position = transform.Position;
+        var size = transform.Size;
+
+        for (var y = position.Y - 1; y <= position.Y + size.Y; y++)
+        {
+            for (var x = position.X - 1; x <= position.X + size.X; x++)
+            {
+                foreach (var occupantEntityId in _mapQuery.GetOccupantEntityIdSpanAt(new Vector3Int(x, y, position.Z)))
+                {
+                    if (occupantEntityId != entityId)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Below half health and holding at least one Health Potion -> drink it. Deliberately simple (a fixed 50% threshold, no smarter "how urgent is this" weighing) -- see this class's own doc comment on why.</summary>

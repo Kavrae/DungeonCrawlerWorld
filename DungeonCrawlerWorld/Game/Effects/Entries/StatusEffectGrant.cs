@@ -33,8 +33,13 @@ public enum StatusEffectGrantMode : byte
 /// <para>
 /// A type with no registered applier is skipped (not yet supported, not an error), and so is a dead
 /// target: a corpse receives no new effects, while one already running when the entity died keeps
-/// ticking until it expires. The applier makes one immunity check and one write however many stacks
-/// are asked for. StatusEffectAppliedEvent is published only when a stack landed.
+/// ticking until it expires. StatusEffectAppliedEvent is published only when a stack landed.
+/// </para>
+/// <para>
+/// Immunity is checked first, once: a refused grant resolves no body part, scales nothing and reads no
+/// stacks -- an aura ticking on an immune target is the commonest refusal there is -- and is Refused
+/// even when the target already holds every stack it could. A grant that goes ahead tells the applier
+/// the check is done, so it makes one write and no second check.
 /// </para>
 /// </remarks>
 public sealed record StatusEffectGrant(
@@ -57,6 +62,12 @@ public sealed record StatusEffectGrant(
             return EffectOutcome.NoEffect;
         }
 
+        if (StatusEffectImmunity.IsImmune(services.StatusEffectImmunities, targetEntityId, Type, context.Source, services.EventBus, services.PlayerQuery, context.AnnouncesRefusal))
+        {
+            StatusEffectGrantFloatingText.Publish(services.FloatingTextFeed, Type, targetEntityId, StatusEffectStacksApplied.Refused, context.AnnouncesRefusal);
+            return EffectOutcome.Refused;
+        }
+
         var bodyPartId = BodyPart.ResolvePartId(in context);
 
         int stacksToGrant = EffectModifiers.ScaleToUShort(in context, StackCount * context.Magnitude, StatModifierTarget.OutgoingStatusStacks, StatModifierTarget.IncomingStatusStacks);
@@ -70,15 +81,15 @@ public sealed record StatusEffectGrant(
             return EffectOutcome.NoEffect;
         }
 
-        var stacksLanded = applier.ApplyStacks(targetEntityId, stacksToGrant, context.Source, context.Now, context.AnnouncesRefusal, bodyPartId);
-        StatusEffectGrantFloatingText.Publish(services.FloatingTextFeed, services.ComponentManager, Type, targetEntityId, stacksLanded, context.AnnouncesRefusal);
+        var applied = applier.ApplyStacks(targetEntityId, stacksToGrant, context.Source, context.Now, context.AnnouncesRefusal, bodyPartId, immunityAlreadyChecked: true);
+        StatusEffectGrantFloatingText.Publish(services.FloatingTextFeed, Type, targetEntityId, applied, context.AnnouncesRefusal);
 
-        if (stacksLanded > 0)
+        if (applied.StacksLanded > 0)
         {
             services.EventBus.Publish(new StatusEffectAppliedEvent(targetEntityId, Type, context.Source));
             return EffectOutcome.Applied;
         }
 
-        return StatusEffectImmunity.HasImmunity(services.ComponentManager, targetEntityId, Type) ? EffectOutcome.Refused : EffectOutcome.NoEffect;
+        return EffectOutcome.NoEffect;
     }
 }

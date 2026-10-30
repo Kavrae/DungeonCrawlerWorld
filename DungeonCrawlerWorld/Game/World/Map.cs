@@ -362,18 +362,17 @@ public sealed class Map
     /// The off-map check is deliberate rather than incidental: callers rely on an off-map position
     /// answering as empty (ActionEffectResolver and TestCombatBehaviorSystem both walk resolved
     /// target tiles without re-checking bounds first). Each coordinate is checked on its own, so an
-    /// out-of-range coordinate never aliases into some other valid cell.
+    /// out-of-range coordinate never aliases into some other valid cell. Most cells asked about are
+    /// empty, so the column's layer mask -- a byte per column, a twelfth the size of the per-cell index
+    /// and so far more often in cache -- answers those before the index is read.
     /// </remarks>
     private bool TryGetOccupantList(Vector3Int position, out List<int> entityIds)
     {
-        if (!Contains(position))
-        {
-            entityIds = EmptyEntityIds;
-            return false;
-        }
-
-        var neighborhood = NeighborhoodAt(position.X, position.Y);
-        if (neighborhood is null)
+        if ((uint)position.Z >= (uint)_depth ||
+            NeighborhoodAt(position.X, position.Y) is not { } neighborhood ||
+            (position.X & CellMask) >= neighborhood.Width ||
+            (position.Y & CellMask) >= neighborhood.Height ||
+            (neighborhood.OccupiedLayerMaskByColumn[ColumnIndex(neighborhood, position.X, position.Y)] & LayerBit(position.Z)) == 0)
         {
             entityIds = EmptyEntityIds;
             return false;
@@ -416,6 +415,54 @@ public sealed class Map
 
         neighborhood.OccupantLists[listIndex].Add(entityId);
         neighborhood.OccupiedLayerMaskByColumn[ColumnIndex(neighborhood, position.X, position.Y)] |= LayerBit(position.Z);
+    }
+
+    /// <summary>Moves entityId from oldPosition to newPosition in one step when it is oldPosition's only occupant, newPosition holds nobody, and both are in the same loaded neighborhood -- a lone creature's step. Returns false, changing nothing, otherwise.</summary>
+    /// <remarks>
+    /// Hands oldPosition's occupant list to newPosition rather than emptying it and taking a slot again --
+    /// the same state RemoveOccupantEntityId then AddOccupantEntityId would leave, since the slot that
+    /// empties is the one the add would pop -- and moves the Blocking slot and layer bits with it. A
+    /// Blocking slot at oldPosition is cleared only if it records entityId, as ClearBlockingIfOccupiedBy does.
+    /// </remarks>
+    public bool TryMoveSoleOccupant(Vector3Int oldPosition, Vector3Int newPosition, int entityId, bool isBlocking)
+    {
+        if (NeighborhoodAt(oldPosition.X, oldPosition.Y) is not { } neighborhood ||
+            NeighborhoodAt(newPosition.X, newPosition.Y) != neighborhood)
+        {
+            return false;
+        }
+
+        var oldCellIndex = CellIndex(neighborhood, oldPosition);
+        var newCellIndex = CellIndex(neighborhood, newPosition);
+        var listIndex = neighborhood.OccupantListIndexByCell[oldCellIndex];
+        if (listIndex == NoOccupantListIndex || neighborhood.OccupantListIndexByCell[newCellIndex] != NoOccupantListIndex)
+        {
+            return false;
+        }
+
+        var entityIds = neighborhood.OccupantLists[listIndex];
+        if (entityIds.Count != 1 || entityIds[0] != entityId)
+        {
+            return false;
+        }
+
+        neighborhood.OccupantListIndexByCell[oldCellIndex] = NoOccupantListIndex;
+        neighborhood.OccupantListIndexByCell[newCellIndex] = listIndex;
+        neighborhood.OccupiedLayerMaskByColumn[ColumnIndex(neighborhood, oldPosition.X, oldPosition.Y)] &= (byte)~LayerBit(oldPosition.Z);
+        neighborhood.OccupiedLayerMaskByColumn[ColumnIndex(neighborhood, newPosition.X, newPosition.Y)] |= LayerBit(newPosition.Z);
+
+        ref var oldBlockingEntityId = ref neighborhood.BlockingEntityIds[oldCellIndex];
+        if (oldBlockingEntityId == entityId)
+        {
+            oldBlockingEntityId = -1;
+        }
+
+        if (isBlocking)
+        {
+            neighborhood.BlockingEntityIds[newCellIndex] = entityId;
+        }
+
+        return true;
     }
 
     /// <summary>Removes an entity from the occupant index at the specified position.</summary>

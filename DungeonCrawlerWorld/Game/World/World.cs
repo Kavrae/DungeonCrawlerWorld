@@ -98,6 +98,11 @@ public sealed class World(
         var size = transformComponent.Size;
         var oldPosition = transformComponent.Position;
 
+        if (size == TransformSize1 && Map.TryMoveSoleOccupant(oldPosition, newPosition, entityId, isBlocking))
+        {
+            return;
+        }
+
         RemoveFootprint(entityId, oldPosition, size);
 
         if (isBlocking)

@@ -19,6 +19,7 @@ using Game.Modules.StatModifiers.Components;
 using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
 using Game.Modules.StatusEffects;
+using Game.Modules.StatusEffects.Components;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -125,6 +126,7 @@ internal static class TestActionEffects
             mana ?? EmptyPools.Packed<ManaComponent>(),
             hotkeyExpansionUnlocks ?? EmptyPools.Packed<HotkeyExpansionUnlockComponent>(),
             statusEffectAppliers ?? new StatusEffectApplierRegistry(),
+            componentManager.IsRegistered<StatusEffectImmunityComponent>() ? componentManager.GetMultiPool<StatusEffectImmunityComponent>() : EmptyPools.Multi<StatusEffectImmunityComponent>(),
             sources,
             new AuraAnchors(componentManager, new EntityManager(componentManager, initialCapacity: 16), sources, NoAnchorSpawner),
             floatingTextFeed ?? EmptyPools.FloatingTextFeed());

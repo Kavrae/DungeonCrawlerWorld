@@ -57,7 +57,7 @@ public sealed class EffectOriginTests
             var entityKeys = new EntityKeys();
             Appliers.Register(new BurningApplier(componentManager, BodyPartTestWorld.CreaturesOf(componentManager), EventBus, new TestPlayerQuery(TargetEntityId)));
             Appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, componentManager.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks,
-                (entityId, count, source, now, announcesRefusal) => PoisonEffects.ApplyStacks(componentManager, entityKeys, entityId, count, source, durationInTicks: 5, now, EventBus, new TestPlayerQuery(TargetEntityId), announcesRefusal)));
+                (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked) => PoisonEffects.ApplyStacks(componentManager, entityKeys, entityId, count, source, durationInTicks: 5, now, EventBus, new TestPlayerQuery(TargetEntityId), announcesRefusal, immunityAlreadyChecked)));
         }
 
         public PackedComponentPool<SimpleHealthComponent> Health => ComponentManager.GetPackedPool<SimpleHealthComponent>();
@@ -75,7 +75,7 @@ public sealed class EffectOriginTests
 
         private EffectServices Services() =>
             TestActionEffects.Services(ComponentManager, new EntityKeys(), EventBus, new MathUtility(Random), Health,
-                statusEffectAppliers: Appliers, statModifiers: StatModifiers, bodyParts: BodyParts, floatingTextFeed: FloatingText.Feed);
+                playerQuery: new TestPlayerQuery(TargetEntityId), statusEffectAppliers: Appliers, statModifiers: StatModifiers, bodyParts: BodyParts, floatingTextFeed: FloatingText.Feed);
     }
 
     private static Fixture WithSimpleHealth(float currentHealth = 100)
@@ -421,6 +421,19 @@ public sealed class EffectOriginTests
     }
 
     [TestMethod]
+    public void StatusEffectGrant_ImmuneTargetAlreadyHoldingTheStacks_IsRefusedNotNoEffect()
+    {
+        var fixture = WithSimpleHealth();
+        BurningEffects.ApplyStacks(fixture.ComponentManager, TargetEntityId, count: 8, ActionSource.Admin, now: 0, fixture.EventBus, TestPlayerQuery.NoPlayer);
+        StatusEffectImmunityEffects.GrantPermanent(fixture.ComponentManager.GetMultiPool<StatusEffectImmunityComponent>(), TargetEntityId, StatusEffectType.Burning);
+
+        var outcome = new StatusEffectGrant(StatusEffectType.Burning, StackCount: 1, StatusEffectGrantMode.TopUpTo).Apply(fixture.Sourceless(magnitude: 8));
+
+        Assert.AreEqual(EffectOutcome.Refused, outcome);
+        Assert.AreEqual(8, fixture.BurningStacks);
+    }
+
+    [TestMethod]
     public void StatusEffectGrant_ImmuneTargetAlreadyReported_IsRefusedSilently()
     {
         var fixture = WithSimpleHealth();
@@ -513,8 +526,8 @@ public sealed class EffectOriginTests
         var first = PoisonEffects.ApplyStacks(fixture.ComponentManager, entityKeys, TargetEntityId, count: 250, ActionSource.Admin, durationInTicks: 5, now: 0, fixture.EventBus, TestPlayerQuery.NoPlayer);
         var second = PoisonEffects.ApplyStacks(fixture.ComponentManager, entityKeys, TargetEntityId, count: 250, ActionSource.Admin, durationInTicks: 5, now: 0, fixture.EventBus, TestPlayerQuery.NoPlayer);
 
-        Assert.AreEqual(250, first);
-        Assert.AreEqual(PoisonEffects.MaxStacks - 250, second);
+        Assert.AreEqual(250, first.StacksLanded);
+        Assert.AreEqual(PoisonEffects.MaxStacks - 250, second.StacksLanded);
         Assert.AreEqual(PoisonEffects.MaxStacks, fixture.ComponentManager.GetPackedPool<PoisonTimerComponent>().GetReadonly(TargetEntityId).StackCount);
     }
 }

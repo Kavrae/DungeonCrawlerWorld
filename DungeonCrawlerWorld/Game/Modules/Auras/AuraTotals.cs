@@ -7,9 +7,11 @@ namespace Game.Modules.Auras;
 /// <remarks>
 /// <para>
 /// Per aura id, per neighborhood, one slot per chunk of every layer; a chunk is a flat array of
-/// totals and a count of its non-zero cells. Reading a cell is two array reads after the
-/// neighborhood is found, and the last neighborhood each aura touched is cached, as scatters visit
-/// runs of cells in the same one.
+/// totals, its count of non-zero cells kept beside the slots. Reading a cell is two array reads after
+/// the neighborhood is found. An aura holds only the few neighborhoods around the window, so they
+/// are a short list searched in order -- cheaper than hashing, for the exposure ticks that read
+/// cells in no spatial order -- with the last one found checked first, as scatters visit runs of
+/// cells in the same one.
 /// </para>
 /// <para>
 /// A chunk is freed when its last cell returns to zero, and a neighborhood's slots when its last
@@ -32,7 +34,7 @@ public sealed class AuraTotals(int depth)
     private readonly int _chunkSlotsPerNeighborhood = depth << (2 * ChunksPerSideShift);
     private readonly AuraNeighborhoods?[] _neighborhoodsByAuraId = new AuraNeighborhoods?[byte.MaxValue + 1];
     private readonly List<byte> _auraIdsWithTotals = [];
-    private readonly Stack<Chunk> _spareChunks = [];
+    private readonly Stack<int[]> _spareChunks = [];
     private readonly Stack<Neighborhood> _spareNeighborhoods = [];
 
     /// <summary>What a write did to whether its cell holds anything for that aura.</summary>
@@ -49,10 +51,10 @@ public sealed class AuraTotals(int depth)
     /// <summary>Neighborhoods holding at least one chunk, counted once per aura.</summary>
     public int NeighborhoodCount { get; private set; }
 
-    /// <summary>Bytes held by chunks and neighborhoods' chunk slots, in use or kept for reuse.</summary>
+    /// <summary>Bytes held by chunks and neighborhoods' chunk slots and counts, in use or kept for reuse.</summary>
     public long AllocatedBytes =>
         ((long)ChunkCount + _spareChunks.Count) * CellsPerChunk * sizeof(int)
-        + ((long)NeighborhoodCount + _spareNeighborhoods.Count) * _chunkSlotsPerNeighborhood * IntPtr.Size;
+        + ((long)NeighborhoodCount + _spareNeighborhoods.Count) * _chunkSlotsPerNeighborhood * (IntPtr.Size + sizeof(int));
 
     public int Get(Vector3Int position, byte auraId)
     {
@@ -61,7 +63,7 @@ public sealed class AuraTotals(int depth)
             return 0;
         }
 
-        return neighborhood.ChunkSlots[ChunkSlotOf(position)] is { } chunk ? chunk.Values[CellIndexOf(position)] : 0;
+        return neighborhood.ChunkSlots[ChunkSlotOf(position)] is { } chunk ? chunk[CellIndexOf(position)] : 0;
     }
 
     /// <summary>Whether any aura other than exceptAuraId has a non-zero total at position.</summary>
@@ -95,22 +97,24 @@ public sealed class AuraTotals(int depth)
         }
 
         var neighborhood = neighborhoods.Find(position) ?? AddNeighborhood(neighborhoods, position);
-        ref var chunkSlot = ref neighborhood.ChunkSlots[ChunkSlotOf(position)];
+        var chunkSlotIndex = ChunkSlotOf(position);
+        ref var chunkSlot = ref neighborhood.ChunkSlots[chunkSlotIndex];
         if (chunkSlot is null)
         {
-            chunkSlot = _spareChunks.Count > 0 ? _spareChunks.Pop() : new Chunk();
+            chunkSlot = _spareChunks.Count > 0 ? _spareChunks.Pop() : new int[CellsPerChunk];
             neighborhood.ChunkCount++;
             ChunkCount++;
         }
 
         var chunk = chunkSlot;
-        ref var total = ref chunk.Values[CellIndexOf(position)];
+        ref var nonZeroCellCount = ref neighborhood.NonZeroCellCounts[chunkSlotIndex];
+        ref var total = ref chunk[CellIndexOf(position)];
         var previousTotal = total;
         total = previousTotal + signedContribution;
 
         if (previousTotal == 0)
         {
-            chunk.NonZeroCellCount++;
+            nonZeroCellCount++;
             return CellChange.BecameNonZero;
         }
 
@@ -119,8 +123,8 @@ public sealed class AuraTotals(int depth)
             return CellChange.Unchanged;
         }
 
-        chunk.NonZeroCellCount--;
-        if (chunk.NonZeroCellCount == 0)
+        nonZeroCellCount--;
+        if (nonZeroCellCount == 0)
         {
             chunkSlot = null;
             ChunkCount--;
@@ -141,7 +145,7 @@ public sealed class AuraTotals(int depth)
 
     private Neighborhood AddNeighborhood(AuraNeighborhoods neighborhoods, Vector3Int position)
     {
-        var neighborhood = _spareNeighborhoods.Count > 0 ? _spareNeighborhoods.Pop() : new Neighborhood(new Chunk?[_chunkSlotsPerNeighborhood]);
+        var neighborhood = _spareNeighborhoods.Count > 0 ? _spareNeighborhoods.Pop() : new Neighborhood(_chunkSlotsPerNeighborhood);
         neighborhood.NeighborhoodCellX = Neighborhoods.CellOf(position.X);
         neighborhood.NeighborhoodCellY = Neighborhoods.CellOf(position.Y);
         neighborhoods.Add(neighborhood);
@@ -167,29 +171,24 @@ public sealed class AuraTotals(int depth)
     private static int CellIndexOf(Vector3Int position) =>
         (position.X & ChunkCellMask) | ((position.Y & ChunkCellMask) << ChunkShift);
 
-    private sealed class Chunk
-    {
-        public int[] Values { get; } = new int[CellsPerChunk];
-
-        public int NonZeroCellCount { get; set; }
-    }
-
-    /// <summary>One aura's chunks in one neighborhood, every layer. Its slots are all empty again before it is freed, and it is reused for whichever neighborhood needs one next.</summary>
-    private sealed class Neighborhood(Chunk?[] chunkSlots)
+    /// <summary>One aura's chunks in one neighborhood, every layer, each slot's count of non-zero cells beside it. Its slots are all empty again before it is freed, and it is reused for whichever neighborhood needs one next.</summary>
+    private sealed class Neighborhood(int chunkSlotCount)
     {
         public int NeighborhoodCellX { get; set; }
 
         public int NeighborhoodCellY { get; set; }
 
-        public Chunk?[] ChunkSlots { get; } = chunkSlots;
+        public int[]?[] ChunkSlots { get; } = new int[]?[chunkSlotCount];
+
+        public int[] NonZeroCellCounts { get; } = new int[chunkSlotCount];
 
         public int ChunkCount { get; set; }
     }
 
-    /// <summary>One aura's neighborhoods, with the last one found cached.</summary>
+    /// <summary>One aura's neighborhoods, searched in order, with the last one found checked first.</summary>
     private sealed class AuraNeighborhoods
     {
-        private readonly Dictionary<(int NeighborhoodCellX, int NeighborhoodCellY), Neighborhood> _byNeighborhoodCell = [];
+        private readonly List<Neighborhood> _neighborhoods = [];
         private Neighborhood? _lastFound;
 
         public Neighborhood? Find(Vector3Int position)
@@ -201,23 +200,27 @@ public sealed class AuraTotals(int depth)
                 return lastFound;
             }
 
-            if (_byNeighborhoodCell.TryGetValue((neighborhoodCellX, neighborhoodCellY), out var neighborhood))
+            foreach (var neighborhood in _neighborhoods)
             {
-                _lastFound = neighborhood;
+                if (neighborhood.NeighborhoodCellX == neighborhoodCellX && neighborhood.NeighborhoodCellY == neighborhoodCellY)
+                {
+                    _lastFound = neighborhood;
+                    return neighborhood;
+                }
             }
 
-            return neighborhood;
+            return null;
         }
 
         public void Add(Neighborhood neighborhood)
         {
-            _byNeighborhoodCell.Add((neighborhood.NeighborhoodCellX, neighborhood.NeighborhoodCellY), neighborhood);
+            _neighborhoods.Add(neighborhood);
             _lastFound = neighborhood;
         }
 
         public void Remove(Neighborhood neighborhood)
         {
-            _byNeighborhoodCell.Remove((neighborhood.NeighborhoodCellX, neighborhood.NeighborhoodCellY));
+            _neighborhoods.Remove(neighborhood);
             if (_lastFound == neighborhood)
             {
                 _lastFound = null;

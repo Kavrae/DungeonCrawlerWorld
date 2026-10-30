@@ -21,6 +21,7 @@ using Game.Modules.Race;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects;
+using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Game.Effects;
@@ -47,6 +48,7 @@ public sealed record EffectServices(
     PackedComponentPool<ManaComponent> Mana,
     PackedComponentPool<HotkeyExpansionUnlockComponent> HotkeyExpansionUnlocks,
     StatusEffectApplierRegistry StatusEffectAppliers,
+    MultiComponentPool<StatusEffectImmunityComponent> StatusEffectImmunities,
     AuraSources AuraSources,
     AuraAnchors AuraAnchors,
     FloatingTextFeed FloatingTextFeed)
@@ -59,6 +61,7 @@ public sealed record EffectServices(
     [
         HealthModule.ModuleId, RaceModule.ModuleId, DeathModule.ModuleId, StatModifiersModule.ModuleId,
         AbilityScoresModule.ModuleId, ManaModule.ModuleId, ActionsModule.ModuleId, AurasModule.ModuleId,
+        StatusEffectsModule.ModuleId,
     ];
 
     /// <summary>The services over a build's registered pools.</summary>
@@ -93,6 +96,7 @@ public sealed record EffectServices(
             componentManager.GetPackedPool<ManaComponent>(),
             componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
             statusEffectAppliers,
+            componentManager.GetMultiPool<StatusEffectImmunityComponent>(),
             auraSources,
             new AuraAnchors(componentManager, entityManager, auraSources, spawnAuraAnchor),
             floatingTextFeed);

@@ -55,7 +55,7 @@ public sealed class StatusEffectRemovalTests
         var entityKeys = new EntityKeys();
         var appliers = new StatusEffectApplierRegistry();
         appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, componentManager.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks,
-            (entityId, count, source, now, announcesRefusal) => PoisonEffects.ApplyStacks(componentManager, entityKeys, entityId, count, source, 10, now, new EventBus(), TestPlayerQuery.NoPlayer, announcesRefusal)));
+            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked) => PoisonEffects.ApplyStacks(componentManager, entityKeys, entityId, count, source, 10, now, new EventBus(), TestPlayerQuery.NoPlayer, announcesRefusal, immunityAlreadyChecked)));
         return new Setup(componentManager, appliers, entityKeys);
     }
 

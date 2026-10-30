@@ -1,11 +1,12 @@
 using Engine.ECS.Components;
+using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Game.Modules.StatusEffects.Components;
 using Game.World;
 
 namespace Game.Modules.StatusEffects;
 
-/// <summary>The one chokepoint "is entityId currently immune to effectType" -- every ApplyStack implementation (PoisonEffects, BurningEffects, BurningApplier's body-part-scoped path, ParalysisEffects) checks this before adding a stack.</summary>
+/// <summary>The one chokepoint "is entityId currently immune to effectType" -- every ApplyStack implementation (PoisonEffects, BurningEffects, BurningApplier's body-part-scoped path, ParalysisEffects) checks this before adding a stack, unless its caller already has (StatusEffectGrant checks first and says so).</summary>
 public static class StatusEffectImmunity
 {
     /// <summary>
@@ -14,9 +15,13 @@ public static class StatusEffectImmunity
     /// HealthHeal.PublishHealEvent's identical shape.
     /// </summary>
     /// <param name="announcesRefusal">False to leave the blocked event unpublished: the caller already reported this refusal.</param>
-    public static bool IsImmune(ComponentManager componentManager, int entityId, StatusEffectType effectType, ActionSource source, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true)
+    public static bool IsImmune(ComponentManager componentManager, int entityId, StatusEffectType effectType, ActionSource source, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true) =>
+        IsImmune(componentManager.GetMultiPool<StatusEffectImmunityComponent>(), entityId, effectType, source, eventBus, playerQuery, announcesRefusal);
+
+    /// <summary>IsImmune for a caller that holds the immunity pool (EffectServices.StatusEffectImmunities), so the check fetches nothing by type.</summary>
+    public static bool IsImmune(MultiComponentPool<StatusEffectImmunityComponent> immunities, int entityId, StatusEffectType effectType, ActionSource source, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true)
     {
-        var immune = HasImmunity(componentManager, entityId, effectType);
+        var immune = HasImmunity(immunities, entityId, effectType);
 
         if (immune && announcesRefusal)
         {
@@ -27,9 +32,12 @@ public static class StatusEffectImmunity
     }
 
     /// <summary>Whether entityId is currently immune to effectType, without reporting a blocked grant.</summary>
-    public static bool HasImmunity(ComponentManager componentManager, int entityId, StatusEffectType effectType)
+    public static bool HasImmunity(ComponentManager componentManager, int entityId, StatusEffectType effectType) =>
+        HasImmunity(componentManager.GetMultiPool<StatusEffectImmunityComponent>(), entityId, effectType);
+
+    /// <inheritdoc cref="HasImmunity(ComponentManager, int, StatusEffectType)"/>
+    public static bool HasImmunity(MultiComponentPool<StatusEffectImmunityComponent> immunities, int entityId, StatusEffectType effectType)
     {
-        var immunities = componentManager.GetMultiPool<StatusEffectImmunityComponent>();
         for (var denseIndex = immunities.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = immunities.GetNextDenseIndex(denseIndex))
         {
             if (immunities.GetReadonlyByDenseIndex(denseIndex).EffectType == effectType)

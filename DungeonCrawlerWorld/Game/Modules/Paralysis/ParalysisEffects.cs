@@ -37,10 +37,11 @@ public static class ParalysisEffects
     /// </summary>
     /// <param name="now">The simulation frame Paralysis is applied on.</param>
     /// <param name="announcesRefusal">False to leave an immunity's blocked event unpublished.</param>
+    /// <param name="immunityAlreadyChecked">True when the caller has just found the entity not immune: no second check.</param>
     /// <returns>Whether it was applied.</returns>
-    public static bool Apply(ComponentManager componentManager, int entityId, ActionSource source, long now, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true)
+    public static bool Apply(ComponentManager componentManager, int entityId, ActionSource source, long now, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true, bool immunityAlreadyChecked = false)
     {
-        if (StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Paralysis, source, eventBus, playerQuery, announcesRefusal))
+        if (!immunityAlreadyChecked && StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Paralysis, source, eventBus, playerQuery, announcesRefusal))
         {
             return false;
         }

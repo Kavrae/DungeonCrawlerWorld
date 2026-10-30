@@ -25,15 +25,24 @@ public static class StandardActionLockFrames
         AbilityScoreMath.Lerp(dexterityTotal, MaximumLockFrames, MinimumLockFrames);
 
     /// <summary>The entity's standard lock: its Dexterity-derived length with its ActionLockFrames modifiers applied, at least 1 frame.</summary>
-    public static ushort ResolveForEntity(PackedComponentPool<AbilityScoresComponent> abilityScores, MultiComponentPool<StatModifierComponent> statModifiers, int entityId)
+    public static ushort ResolveForEntity(PackedComponentPool<AbilityScoresComponent> abilityScores, MultiComponentPool<StatModifierComponent> statModifiers, int entityId) =>
+        RoundStandardLock(StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.ActionLockFrames, DexterityLockFrames(abilityScores, entityId)));
+
+    /// <summary>The lock a step sets, before the diagonal multiplier: the standard lock with the entity's MovementLockFrames modifiers applied on top.</summary>
+    /// <remarks>Both modifier targets are read in one walk of the entity's modifier chain -- a step is the commonest lock there is.</remarks>
+    public static ushort ResolveMovementForEntity(PackedComponentPool<AbilityScoresComponent> abilityScores, MultiComponentPool<StatModifierComponent> statModifiers, int entityId)
     {
-        var dexterityLockFrames = AbilityScoreQueries.TryGetComponent(abilityScores, entityId, AbilityScoreType.Dexterity, out var dexterity)
+        var (actionLock, movementLock) = StatModifierMath.GetSums(statModifiers, entityId, StatModifierTarget.ActionLockFrames, StatModifierTarget.MovementLockFrames);
+        var standardLockFrames = RoundStandardLock(actionLock.ApplyTo(DexterityLockFrames(abilityScores, entityId)));
+        return MathUtility.ClampUShort(movementLock.ApplyTo(standardLockFrames), 0, ushort.MaxValue);
+    }
+
+    private static float DexterityLockFrames(PackedComponentPool<AbilityScoresComponent> abilityScores, int entityId) =>
+        AbilityScoreQueries.TryGetComponent(abilityScores, entityId, AbilityScoreType.Dexterity, out var dexterity)
             ? ComputeFromDexterity(dexterity.Total)
             : MaximumLockFrames;
 
-        var modifiedLockFrames = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.ActionLockFrames, dexterityLockFrames);
-        return MathUtility.ClampUShort(MathF.Round(modifiedLockFrames), 1, ushort.MaxValue);
-    }
+    private static ushort RoundStandardLock(float modifiedLockFrames) => MathUtility.ClampUShort(MathF.Round(modifiedLockFrames), 1, ushort.MaxValue);
 
     /// <summary>explicitLockFrames when an action or item states its own lock, otherwise the entity's standard lock.</summary>
     public static ushort ResolveForEntity(PackedComponentPool<AbilityScoresComponent> abilityScores, MultiComponentPool<StatModifierComponent> statModifiers, int entityId, ushort? explicitLockFrames) =>

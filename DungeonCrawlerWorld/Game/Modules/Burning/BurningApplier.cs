@@ -39,10 +39,10 @@ public sealed class BurningApplier(ComponentManager componentManager, BlueprintR
         return _entityTimers.TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
     }
 
-    public int ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null) =>
+    public StatusEffectStacksApplied ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null, bool immunityAlreadyChecked = false) =>
         bodyPartId is { } partId && _bodyParts.Has(entityId)
-            ? ApplyBodyPartScopedStacks(entityId, partId, count, source, now, announcesRefusal)
-            : BurningEffects.ApplyStacks(componentManager, entityId, count, source, now, eventBus, playerQuery, announcesRefusal);
+            ? ApplyBodyPartScopedStacks(entityId, partId, count, source, now, announcesRefusal, immunityAlreadyChecked)
+            : BurningEffects.ApplyStacks(componentManager, entityId, count, source, now, eventBus, playerQuery, announcesRefusal, immunityAlreadyChecked);
 
     /// <summary>Puts out every burn on entityId: the entity-scoped one and every body part's.</summary>
     public bool RemoveAllStacks(int entityId)
@@ -53,11 +53,16 @@ public sealed class BurningApplier(ComponentManager componentManager, BlueprintR
     }
 
     /// <summary>Adds up to count Burning stacks to entityId's partId and returns how many landed -- BurningEffects.ApplyStacks' own shape (immunity, capped at MaxStacks), scoped to the one part instead of the whole entity.</summary>
-    private int ApplyBodyPartScopedStacks(int entityId, byte partId, int count, ActionSource source, long now, bool announcesRefusal)
+    private StatusEffectStacksApplied ApplyBodyPartScopedStacks(int entityId, byte partId, int count, ActionSource source, long now, bool announcesRefusal, bool immunityAlreadyChecked)
     {
-        if (count <= 0 || StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Burning, source, eventBus, playerQuery, announcesRefusal))
+        if (count <= 0)
         {
-            return 0;
+            return StatusEffectStacksApplied.Landed(0);
+        }
+
+        if (!immunityAlreadyChecked && StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Burning, source, eventBus, playerQuery, announcesRefusal))
+        {
+            return StatusEffectStacksApplied.Refused;
         }
 
         var existingTimerDenseIndex = FindBodyPartTimer(entityId, partId);
@@ -65,7 +70,7 @@ public sealed class BurningApplier(ComponentManager componentManager, BlueprintR
         var stacksLanded = Math.Min(count, BurningEffects.MaxStacks - existingStackCount);
         if (stacksLanded <= 0)
         {
-            return 0;
+            return StatusEffectStacksApplied.Landed(0);
         }
 
         if (existingTimerDenseIndex != -1)
@@ -78,7 +83,7 @@ public sealed class BurningApplier(ComponentManager componentManager, BlueprintR
             BodyPartDamageEffects.ResetRegenLockout(_bodyParts, entityId, partId, now);
         }
 
-        return stacksLanded;
+        return StatusEffectStacksApplied.Landed(stacksLanded);
     }
 
     private int FindBodyPartTimer(int entityId, byte partId)

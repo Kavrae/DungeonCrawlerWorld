@@ -137,6 +137,48 @@ public static class StatModifierMath
         }
     }
 
+    /// <summary>GetSums for two targets in one walk of the entity's modifier chain, for a caller whose second base value is derived from the first's result.</summary>
+    /// <remarks>Unconditional modifiers only, as GetSums; summed in chain order, so each result is exactly what a GetEffectiveValue with no active tags would give.</remarks>
+    public static (StatModifierSums First, StatModifierSums Second) GetSums(MultiComponentPool<StatModifierComponent> pool, int entityId, StatModifierTarget first, StatModifierTarget second)
+    {
+        float firstAdditive = 0f, firstMultiplicative = 0f, secondAdditive = 0f, secondMultiplicative = 0f;
+
+        for (var denseIndex = pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
+        {
+            ref readonly var modifier = ref pool.GetReadonlyByDenseIndex(denseIndex);
+            if (!modifier.ConditionTag.IsNone)
+            {
+                continue;
+            }
+
+            var isAdditive = modifier.Operation == StatModifierOperation.Additive;
+            if (modifier.Target == first)
+            {
+                if (isAdditive)
+                {
+                    firstAdditive += modifier.Magnitude;
+                }
+                else
+                {
+                    firstMultiplicative += modifier.Magnitude;
+                }
+            }
+            else if (modifier.Target == second)
+            {
+                if (isAdditive)
+                {
+                    secondAdditive += modifier.Magnitude;
+                }
+                else
+                {
+                    secondMultiplicative += modifier.Magnitude;
+                }
+            }
+        }
+
+        return (new StatModifierSums(firstAdditive, firstMultiplicative), new StatModifierSums(secondAdditive, secondMultiplicative));
+    }
+
     /// <summary>Applies a base value's accumulated additive and multiplicative modifier sums.</summary>
     /// <remarks>Additive first, then multiplicative, per TODO.md's documented order -- see this class's own doc comment for the full formula rationale.</remarks>
     public static float CalculateTotal(float baseValue, float additiveSum, float multiplicativeSum) => (baseValue + additiveSum) * (1f + multiplicativeSum);

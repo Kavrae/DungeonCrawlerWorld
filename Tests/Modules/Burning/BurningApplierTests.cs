@@ -49,7 +49,7 @@ public sealed class BurningApplierTests
 
         var landed = applier.ApplyStacks(EntityId, count: 3, ActionSource.Admin, now: 0, bodyPartId: FootPartId);
 
-        Assert.AreEqual(3, landed);
+        Assert.AreEqual(StatusEffectStacksApplied.Landed(3), landed);
         Assert.AreEqual(3, PartStacks(componentManager, FootPartId));
         Assert.AreEqual(0, PartStacks(componentManager, HeadPartId));
         Assert.IsFalse(componentManager.GetPackedPool<BurningTimerComponent>().Has(EntityId), "A burn held on a part is not also held on the entity.");
@@ -136,8 +136,8 @@ public sealed class BurningApplierTests
         var first = applier.ApplyStacks(EntityId, count: 15, ActionSource.Admin, now: 0, bodyPartId: FootPartId);
         var second = applier.ApplyStacks(EntityId, count: 15, ActionSource.Admin, now: 0, bodyPartId: FootPartId);
 
-        Assert.AreEqual(15, first);
-        Assert.AreEqual(BurningEffects.MaxStacks - 15, second);
+        Assert.AreEqual(15, first.StacksLanded);
+        Assert.AreEqual(BurningEffects.MaxStacks - 15, second.StacksLanded);
         Assert.AreEqual(BurningEffects.MaxStacks, PartStacks(componentManager, FootPartId));
     }
 
@@ -150,7 +150,7 @@ public sealed class BurningApplierTests
 
         var landed = applier.ApplyStacks(EntityId, count: 3, ActionSource.Admin, now: 0, bodyPartId: FootPartId);
 
-        Assert.AreEqual(0, landed);
+        Assert.AreEqual(StatusEffectStacksApplied.Refused, landed);
         Assert.IsFalse(componentManager.GetMultiPool<BodyPartBurningTimerComponent>().Has(EntityId));
     }
 

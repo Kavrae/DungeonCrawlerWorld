@@ -3,6 +3,8 @@ using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.StatusEffects;
+using Game.Modules.StatusEffects.Components;
 using Microsoft.Xna.Framework;
 
 namespace Game.Blueprints.Races;
@@ -11,6 +13,7 @@ namespace Game.Blueprints.Races;
 /// A test fixture race for exercising melee status effects, deliberately with no
 /// SimpleHealthComponent.
 /// </summary>
+/// <remarks>Permanently immune to Burning and Poison: with no health they could only tick against nothing, and the UnderGround layer's lava kept every Ghost in it burning for good.</remarks>
 public static class Ghost
 {
     public static readonly Guid Id = new("7e6d6a3a-6b8f-4f0a-9f2a-7c9b1e6f2a3d");
@@ -66,5 +69,9 @@ public static class Ghost
         TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, context.Rolls, context.Items);
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
+
+        var immunities = componentManager.GetMultiPool<StatusEffectImmunityComponent>();
+        StatusEffectImmunityEffects.GrantPermanent(immunities, entityId, StatusEffectType.Burning);
+        StatusEffectImmunityEffects.GrantPermanent(immunities, entityId, StatusEffectType.Poison);
     }
 }

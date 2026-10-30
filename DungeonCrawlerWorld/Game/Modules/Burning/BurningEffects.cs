@@ -22,14 +22,20 @@ public static class BurningEffects
     public static void ApplyStack(ComponentManager componentManager, int entityId, ActionSource source, long now, EventBus eventBus, IPlayerQuery playerQuery) =>
         ApplyStacks(componentManager, entityId, count: 1, source, now, eventBus, playerQuery);
 
-    /// <summary>Adds up to count stacks, stopping at MaxStacks, and returns how many landed. None land on an entity currently immune to Burning (StatusEffectImmunity).</summary>
+    /// <summary>Adds up to count stacks, stopping at MaxStacks, and returns how many landed. None land on an entity currently immune to Burning (StatusEffectImmunity), reported as refused.</summary>
     /// <param name="now">The simulation frame the stacks land on. A new burn's first tick is TickIntervalFrames after it; a top-off leaves the running tick alone.</param>
     /// <param name="announcesRefusal">False to leave an immunity's blocked event unpublished.</param>
-    public static int ApplyStacks(ComponentManager componentManager, int entityId, int count, ActionSource source, long now, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true)
+    /// <param name="immunityAlreadyChecked">True when the caller has just found the entity not immune: no second check.</param>
+    public static StatusEffectStacksApplied ApplyStacks(ComponentManager componentManager, int entityId, int count, ActionSource source, long now, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true, bool immunityAlreadyChecked = false)
     {
-        if (count <= 0 || StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Burning, source, eventBus, playerQuery, announcesRefusal))
+        if (count <= 0)
         {
-            return 0;
+            return StatusEffectStacksApplied.Landed(0);
+        }
+
+        if (!immunityAlreadyChecked && StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Burning, source, eventBus, playerQuery, announcesRefusal))
+        {
+            return StatusEffectStacksApplied.Refused;
         }
 
         var timers = componentManager.GetPackedPool<BurningTimerComponent>();
@@ -37,7 +43,7 @@ public static class BurningEffects
         var stacksLanded = Math.Min(count, MaxStacks - (hasTimer ? existingTimer.StackCount : 0));
         if (stacksLanded <= 0)
         {
-            return 0;
+            return StatusEffectStacksApplied.Landed(0);
         }
 
         if (hasTimer)
@@ -49,6 +55,6 @@ public static class BurningEffects
             timers.Add(entityId, new BurningTimerComponent(FrameDeadline.AfterStaggered(now, TickIntervalFrames, entityId), stackCount: (byte)stacksLanded, source));
         }
 
-        return stacksLanded;
+        return StatusEffectStacksApplied.Landed(stacksLanded);
     }
 }

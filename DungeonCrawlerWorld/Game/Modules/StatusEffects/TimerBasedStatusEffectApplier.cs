@@ -3,8 +3,8 @@ using Game.World;
 
 namespace Game.Modules.StatusEffects;
 
-/// <summary>Applies stacks of one status effect: (entityId, count, source, now, announcesRefusal), returning how many landed -- see IStatusEffectApplier.ApplyStacks.</summary>
-public delegate int StatusEffectStackApplication(int entityId, int count, ActionSource source, long now, bool announcesRefusal);
+/// <summary>Applies stacks of one status effect: (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked), returning how many landed and whether an immunity refused them -- see IStatusEffectApplier.ApplyStacks.</summary>
+public delegate StatusEffectStacksApplied StatusEffectStackApplication(int entityId, int count, ActionSource source, long now, bool announcesRefusal, bool immunityAlreadyChecked);
 
 /// <summary>
 /// A single IStatusEffectApplier implementation for the shape every current status effect
@@ -25,8 +25,8 @@ public sealed class TimerBasedStatusEffectApplier<T>(StatusEffectType effectType
     public int GetCurrentStackCount(int entityId, byte? bodyPartId = null) =>
         timers.TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
 
-    public int ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null) =>
-        applyStacks(entityId, count, source, now, announcesRefusal);
+    public StatusEffectStacksApplied ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null, bool immunityAlreadyChecked = false) =>
+        applyStacks(entityId, count, source, now, announcesRefusal, immunityAlreadyChecked);
 
     /// <remarks>Removing the timer component is the whole effect: its stack count lives on it, and the effect's timer wheel drops a removed timer's scheduled tick on its own.</remarks>
     public bool RemoveAllStacks(int entityId) => timers.Remove(entityId);

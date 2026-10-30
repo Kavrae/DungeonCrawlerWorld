@@ -198,8 +198,8 @@ public sealed class AuraSystemTests
     private static StatusEffectApplierRegistry DefaultApplierRegistry(ComponentManager componentManager)
     {
         var registry = new StatusEffectApplierRegistry();
-        registry.Register(new TimerBasedStatusEffectApplier<BurningTimerComponent>(StatusEffectType.Burning, componentManager.GetPackedPool<BurningTimerComponent>(), BurningEffects.MaxStacks, (id, count, source, now, announcesRefusal) => BurningEffects.ApplyStacks(componentManager, id, count, source, now, new EventBus(), TestPlayerQuery.NoPlayer, announcesRefusal)));
-        registry.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, componentManager.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks, (id, count, source, now, announcesRefusal) => PoisonEffects.ApplyStacks(componentManager, new EntityKeys(), id, count, source, durationInTicks: 1, now, new EventBus(), TestPlayerQuery.NoPlayer, announcesRefusal)));
+        registry.Register(new TimerBasedStatusEffectApplier<BurningTimerComponent>(StatusEffectType.Burning, componentManager.GetPackedPool<BurningTimerComponent>(), BurningEffects.MaxStacks, (id, count, source, now, announcesRefusal, immunityAlreadyChecked) => BurningEffects.ApplyStacks(componentManager, id, count, source, now, new EventBus(), TestPlayerQuery.NoPlayer, announcesRefusal, immunityAlreadyChecked)));
+        registry.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, componentManager.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks, (id, count, source, now, announcesRefusal, immunityAlreadyChecked) => PoisonEffects.ApplyStacks(componentManager, new EntityKeys(), id, count, source, durationInTicks: 1, now, new EventBus(), TestPlayerQuery.NoPlayer, announcesRefusal, immunityAlreadyChecked)));
         return registry;
     }
 

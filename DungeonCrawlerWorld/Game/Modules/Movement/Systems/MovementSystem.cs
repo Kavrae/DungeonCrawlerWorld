@@ -1,7 +1,6 @@
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
-using Engine.Math;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.BodyPartEffects.Components;
@@ -10,7 +9,6 @@ using Game.Modules.Death.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
-using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.World;
 
@@ -194,11 +192,7 @@ public sealed class MovementSystem : ITieredSystem
             transformComponent.Position = newPosition;
         }))
         {
-            var baseLockFrames = StandardActionLockFrames.ResolveForEntity(_abilityScores, _statModifiers, entityId);
-            var standardLockFrames = MathUtility.ClampUShort(
-                StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.MovementLockFrames, baseLockFrames),
-                0,
-                ushort.MaxValue);
+            var standardLockFrames = StandardActionLockFrames.ResolveMovementForEntity(_abilityScores, _statModifiers, entityId);
             var lockFrames = isDiagonal
                 ? (ushort)MathF.Round(standardLockFrames * DiagonalActionLockMultiplier)
                 : standardLockFrames;

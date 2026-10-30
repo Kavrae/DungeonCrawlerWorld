@@ -34,7 +34,7 @@ public sealed class AuraField
     private readonly List<byte> _auraIdsInField = [];
     private readonly AuraFalloff[] _falloffInFieldByAuraId = new AuraFalloff[byte.MaxValue + 1];
     private readonly int[] _sourceCountByAuraId = new int[byte.MaxValue + 1];
-    private readonly AuraSourceIndex _entitySources = new();
+    private readonly AuraSourceIndex _entitySources;
 
     /// <summary>For each aura id, the one terrain type radiating it (RadiatingTerrainTypeOf); null until first asked and after any terrain or aura definition changes.</summary>
     private ushort[]? _radiatingTerrainTypeByAuraId;
@@ -52,6 +52,7 @@ public sealed class AuraField
         _terrain = terrain;
         _auras = auras;
         _auraGrid = new AuraGrid(map);
+        _entitySources = new AuraSourceIndex(map.Bounds.Depth);
 
         eventBus.Subscribe<TerrainChangedEvent>(OnTerrainChanged);
         eventBus.Subscribe<TerrainLoadedEvent>(OnTerrainLoaded);

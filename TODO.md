@@ -650,21 +650,53 @@ The IDE's Error List shows severity, description, table, record, field and layer
 
 #### Resolve highest performance costs
 
-Find and fix what costs the most per frame. Headless Release, seed 1, frames 600-3600, map 3072 (2026-10-27, the
-world since deterministic generation, fingerprint `AE2E5D7BDDC0CE36`; baseline `baseline-build-release-deterministic-generation`,
-`Log/phase-benchmarks/20261027-233439.json`): `EcsContext.Update` 1.56 ms/frame, of which `TestCombatBehaviorSystem`
-0.61, `AuraSystem` 0.35, `MovementSystem` 0.18 and `BurningSystem` 0.09 -- the four are 79% of it. Run-to-run spread
-is ~3%, so a change must beat that to count.
-- **The averages:** profile the top systems in Release, work out where the time goes (lookups, scans, cache misses,
-  work repeated per visit), and fix the largest first.
-- **The worst frame:** the slowest frame in every run is frame 727 at 6.5-16 ms (it varies run to run), four to ten
-  times the average frame, with no GC on it: `DeathSystem` (5.2-13.4 ms), almost all of it inside
-  `AuraSourceRemovedEvent` (4.8-12.6 ms) -- a death removing aura sources and rescanning. Find out what that death
-  removes and why its rescan costs that much.
-- **GC pauses:** 21 gen-0 collections in the 3000 frames (one every ~143), 7 of them also gen-1, each adding 2.3-3.8 ms
-  to the frame it lands on (frames 713, 1643, 2064, 2495, 2933 among the slowest); which frame depends on allocation
-  elsewhere, so it can land on the worst one (seen with `--diagnostics-link`). Reduce what each frame allocates
-  (`Process/AllocatedBytes` gauge: 67 KB per frame on average, 439 KB at most, at frame 3023).
+Find and fix what costs the most per frame. Headless Release, seed 1, frames 600-3600, map 3072 (2026-10-29,
+fingerprint `816159193C649584`, after the combat scan, aura lookup and movement fixes -- IMPLEMENTATION-NOTES
+"Performance pass (2026-10-29)"): `EcsContext.Update` 1.15 ms/frame, of which `TestCombatBehaviorSystem` 0.40,
+`AuraSystem` 0.26, `MovementSystem` 0.14 and `BurningSystem` 0.07 (a quiet machine; a busy one reads ~10% higher on
+every row). Since Ghosts became immune to Burning and Poison the world differs (fingerprint `EA01C26D6323B7D0`):
+`BurningSystem` ~0.02, `AuraSystem` ~10% higher; save a fresh baseline before comparing. Run-to-run spread is ~1-5%, so a change must beat that to count. How to profile per method here (the
+sampler's bias, the probes): that section.
+- **AuraSystem, further -- on hold until more auras are defined and used.** Today's seed is almost all lava (terrain,
+  static, ~970 k of 1.06 M ticks, most of them on the ~20 k Ghost test fixtures standing in UnderGround lava), so it
+  can't tell static from moving sources, small from large reach, or a write-heavy aura from a read-heavy one -- and
+  those decide which of these pays. Re-profile once the content exists:
+  - Per tick (IMPLEMENTATION-NOTES has the breakdown): the wheel finding and validating the instance (~160 ns), the
+    dead/transform/catalog checks (~105 ns), the re-arm walking the exposure chain again and being replayed as a
+    deferred schedule (~90 ns). A timer-wheel contract that re-arms the instance it already holds would cut that last
+    one for every wheel (Burning, Poison) at once.
+  - `StartExposures` asks every aura in the field on each move into covered ground, so it grows with the aura count.
+    Preferred fix: a per-chunk list of the auras that have an `AuraTotals` chunk there (changed only when a chunk is
+    allocated or freed; bounded by the auras overlapping that 32x32, never combinatorial). Rejected for now: an
+    interned aura set per cell (sets multiply with overlap patterns and need refcounting).
+  - Per-cell strongest source and power (precomputed credit) would save up to ~865 ns an entity-sourced tick but turn
+    a moving source's move from ~1 µs into tens to hundreds of µs (re-ranking every cell of both diamonds). Worth it
+    only for static, read-heavy sources; a chunk-level cached credit invalidated by a version bump when an entity
+    source in reach changes gets most of the read saving without the write cost.
+  - If small moving carried auras come to dominate, consider a hybrid: large static auras stay in the field, small
+    moving ones push timed effects to the entities in their radius (a stacking and credit decision, not only
+    performance).
+- **TestCombatBehaviorSystem, further:** the shared nearby-occupant pass reads nine tiles a wanderer through the
+  occupant index. A one-bit-per-cell occupancy map (`NeighborhoodBits`, ~128 KB a plane per neighborhood) or one
+  neighborhood lookup per 3x3 block would cut it again.
+- **MovementSystem, further:** ~257 steps a frame, each still ~650 ns of scattered reads (the destination re-check,
+  blocking state, transform, lock, map indexes). The remaining lever is that `TestCombatBehaviorSystem` decides a step
+  and `MovementSystem` takes it in the same frame with hundreds of entities between, so each entity's data is fetched
+  from memory twice. Deciding and stepping in one pass would halve that, but changes the order entities act in (and so
+  every seeded world): a decision for when NPC behaviour is reworked, not a performance patch.
+- **BurningSystem, further:** with Ghosts immune, what is left is real burns (~540 ns a simple-health tick,
+  ~400 ns a body part through `BodyPartBurningSystem`) and burns ticking on corpses (~40 k ticks in the range,
+  ~0.007 ms/frame). Poison costs the same per tick on the same target, except a body-part creature (~870 ns: it goes
+  through the general complex-health path rather than straight to one part).
+- **First-use JIT stalls:** the worst frame (727, 6.5-16 ms) is the JIT compiling the first aura source removal's code
+  path (7.6 of `DeathSystem`'s 7.8 ms); smaller ones at frames 736, 1228 and 1802. GameShell sets
+  `TieredCompilation=false`, so every method is fully optimised on first call (~0.5 ms each). Tiered compilation on
+  through the environment cut frame 727 to 3.0 ms but moved the run's worst frame elsewhere (9.4 ms) with the same
+  average. Try compiling the gameplay assemblies ahead of time (ReadyToRun) or preparing the hot paths during loading,
+  and A/B both the average and the worst frame.
+- **GC pauses:** 21 gen-0 collections in the 3000 frames, 7 of them also gen-1, 1.3-3.3 ms each; the slowest frames
+  after 727 are all GC. Reduce what each frame allocates (`Process/AllocatedBytes`: ~64 KB a frame on average,
+  0.4 MB at most, at frame 3023).
 - **Measure each fix** with a `phase-performance-testing` A/B, Release, against a baseline saved just before it.
 
 #### Attribute effects to the action or item that applied them

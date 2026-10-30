@@ -41,13 +41,19 @@ public static class PoisonEffects
     public static void ApplyStack(ComponentManager componentManager, EntityKeys entityKeys, int entityId, ActionSource source, ushort durationInTicks, long now, EventBus eventBus, IPlayerQuery playerQuery) =>
         ApplyStacks(componentManager, entityKeys, entityId, count: 1, source, durationInTicks, now, eventBus, playerQuery);
 
-    /// <summary>ApplyStack for up to count stacks at once, stopping at MaxStacks; returns how many landed.</summary>
+    /// <summary>ApplyStack for up to count stacks at once, stopping at MaxStacks; returns how many landed, or refused for an immune entity.</summary>
     /// <param name="announcesRefusal">False to leave an immunity's blocked event unpublished.</param>
-    public static int ApplyStacks(ComponentManager componentManager, EntityKeys entityKeys, int entityId, int count, ActionSource source, ushort durationInTicks, long now, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true)
+    /// <param name="immunityAlreadyChecked">True when the caller has just found the entity not immune: no second check.</param>
+    public static StatusEffectStacksApplied ApplyStacks(ComponentManager componentManager, EntityKeys entityKeys, int entityId, int count, ActionSource source, ushort durationInTicks, long now, EventBus eventBus, IPlayerQuery playerQuery, bool announcesRefusal = true, bool immunityAlreadyChecked = false)
     {
-        if (count <= 0 || StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Poison, source, eventBus, playerQuery, announcesRefusal))
+        if (count <= 0)
         {
-            return 0;
+            return StatusEffectStacksApplied.Landed(0);
+        }
+
+        if (!immunityAlreadyChecked && StatusEffectImmunity.IsImmune(componentManager, entityId, StatusEffectType.Poison, source, eventBus, playerQuery, announcesRefusal))
+        {
+            return StatusEffectStacksApplied.Refused;
         }
 
         var timers = componentManager.GetPackedPool<PoisonTimerComponent>();
@@ -55,7 +61,7 @@ public static class PoisonEffects
         var stacksLanded = Math.Min(count, MaxStacks - (hasTimer ? existingTimer.StackCount : 0));
         if (stacksLanded <= 0)
         {
-            return 0;
+            return StatusEffectStacksApplied.Landed(0);
         }
 
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
@@ -74,7 +80,7 @@ public static class PoisonEffects
             timers.Add(entityId, new PoisonTimerComponent(FrameDeadline.AfterStaggered(now, TickIntervalFrames, entityId), stackCount: (byte)stacksLanded, remainingDurationTicks: scaledDuration, source));
         }
 
-        return stacksLanded;
+        return StatusEffectStacksApplied.Landed(stacksLanded);
     }
 
     private static ushort ScaleDebuffDuration(EntityKeys entityKeys, MultiComponentPool<StatModifierComponent> statModifiers, ActionSource source, int targetEntityId, ushort durationInTicks)

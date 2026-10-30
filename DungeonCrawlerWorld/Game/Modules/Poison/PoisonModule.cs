@@ -55,7 +55,7 @@ public sealed class PoisonModule : IGameModule
             StatusEffectType.Poison,
             timers,
             PoisonEffects.MaxStacks,
-            (entityId, count, source, now, announcesRefusal) => PoisonEffects.ApplyStacks(componentManager, entityKeys, entityId, count, source, AuraDurationTicks, now, eventBus, playerQuery, announcesRefusal)));
+            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked) => PoisonEffects.ApplyStacks(componentManager, entityKeys, entityId, count, source, AuraDurationTicks, now, eventBus, playerQuery, announcesRefusal, immunityAlreadyChecked)));
         context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph,
             timers,
             static (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames,

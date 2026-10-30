@@ -1736,6 +1736,112 @@ gameplay roll), and so did the headless fingerprint.
 `baseline-build-release-deterministic-generation` and `Log/phase-benchmarks/20261027-233439.json`. Runs on earlier
 builds play a different world and aren't comparable row for row.
 
+### Performance pass (2026-10-29)
+
+TODO "Resolve highest performance costs". Every number is headless Release, seed 1, frames 600-3600, map 3072.
+
+**Profiling here.** `dotnet-trace` (installed globally) offers only `dotnet-sampled-thread-time` on Windows (~100 Hz).
+It suspends threads at GC safe points, so self time lands on the next safe point: it put 80% of `AuraSystem` on
+`EventBus.Publish`, which costs ~0.1 µs a call. Use it for which branch is expensive, never for which method. `wpr`
+(kernel sampling, unbiased) needs an elevated prompt. Exact splits came from temporary probes: a static Stopwatch
+accumulator gated to the benchmark range from `SystemManager.Update`, printed at exit. Probes inflate totals (~2.7x
+here), so read proportions and per-call costs only. `JitInfo.GetCompilationTime(true)` around a call tells a JIT stall
+from real work.
+
+**The worst frame is JIT, not a rescan.** Frame 727's 6.5-16 ms is the first aura source ever removed (a Healing
+shrine, size 4, 41 cells, 3 occupants): 7.6 ms of `DeathSystem`'s 7.8 is the JIT compiling 14 methods. Every later
+removal costs 3-45 µs. GameShell sets `TieredCompilation=false`, so a method's first call compiles it fully optimised.
+
+**TestCombatBehaviorSystem.** Its cost is the Neighborhood tier (visited every 120 frames): ~560 decisions a frame,
+91% ending in a wander. Each read the 8 tiles around the NPC for an enemy, then the same 3x3 again for a corpse --
+13.8 M tile reads in the range, 96.5% of them empty, ~72 ns each (the per-cell occupant index is 12 MB a
+neighborhood, so nearly every read missed cache). Two changes, same world fingerprint, `TestCombatBehaviorSystem`
+0.503 -> 0.403 ms/frame (-20%), `EcsContext.Update` 1.300 -> 1.186 (-8.8%):
+- `Map.TryGetOccupantList` finds the neighborhood once rather than twice, and tests the column's layer mask (a byte a
+  column) before the per-cell index, so an empty cell is answered from a twelfth of the memory. Alone: -7.4% on the
+  system, and every occupant reader shares it.
+- `TestCombatBehaviorSystem.HasOtherOccupantOnOrBeside` passes once over the footprint and the ring around it -- every
+  tile a melee target or a lootable corpse can be on. Nobody else there and both branches are skipped unread. Neither
+  writes or rolls before finding an occupant, so nothing a decision does changes.
+
+**AuraSystem's ticks.** ~350 exposure ticks a frame (1.06 M in the range; lava's burn 970 k of them). Per tick, before
+the change below: the wheel finding and validating the instance ~160 ns, the dead/transform/catalog checks ~105,
+`GetTotalPowerAt` ~205, `TryFindStrongest` ~20 for an aura with no entity sources and ~865 for one with them (Healing:
+9,509 shrines, 5% of ticks), the effects ~350, the re-arm ~60 plus ~30 replaying it as a deferred schedule. The effects'
+share is a few pool reads per step (body part, stack scaling, current stacks, applying, the event), and
+`StatModifierMath.GetEffectiveValue` is already one page read for an entity with no modifiers. The benchmark's own
+per-event timing adds ~0.1 µs to every published event, so event-heavy paths read a little worse under
+`--benchmark-frames` than in play.
+
+The field's two lookups were chains of dependent reads through hash tables, and ticks read cells in no spatial order,
+so every one missed the last-found cache. Same world fingerprint, `AuraSystem` 0.292 -> 0.262 ms/frame (-10.5%),
+`EcsContext.Update` 1.185 -> 1.148:
+- `AuraTotals`: an aura's neighborhoods are a short list searched in order (it holds only the dozen or so around the
+  window) instead of a tuple-keyed dictionary, and a chunk slot holds its `int[]` directly, the non-zero counts in an
+  array beside the slots -- one read fewer per cell.
+- `AuraSourceIndex`: a chunk's bucket is an array slot in its neighborhood's grid (the same list search finds the
+  neighborhood) instead of a dictionary keyed by (chunk X, chunk Y, layer), so each of the up to nine chunks a query
+  reads is an index, not a hash. This is the path every entity-sourced aura's tick takes.
+
+Further aura work is on hold until more auras exist (TODO): today's seed is almost all static lava, which can't show
+which of the remaining options pays.
+
+**MovementSystem.** ~650 visits a frame, nearly all Neighborhood tier: 43% waiting out a retry backoff (~66 ns), 9%
+dead, 8% with nowhere to go, 39% stepping (~257 a frame, every one cardinal, ~900 ns each). Of a step: the map indexes
+400 ns (leaving the old cell 236), the lock frames 163, the destination re-check 137 (kept: other entities step between
+the decision and the move), `IsBlocking` 60, the transform, lock and frame-buffer writes ~130. Two changes, same world
+fingerprint, `MovementSystem` 0.164 -> 0.151 ms/frame (-7.9%, 5 runs a side, spread 4.2%) -- less than the probes
+predicted, since they inflate small steps:
+- `Map.TryMoveSoleOccupant`: a 1x1 entity alone in its cell stepping into an empty one in the same neighborhood hands
+  its occupant list to the new cell and moves its Blocking slot and layer bits -- exactly the state a remove then an
+  add leaves (the slot the remove frees is the one the add pops). `World.MoveEntityUnchecked` tries it first;
+  anything else takes the remove-and-add path.
+- `StandardActionLockFrames.ResolveMovementForEntity`: a step's lock reads ActionLockFrames and MovementLockFrames in
+  one walk of the modifier chain (`StatModifierMath.GetSums` for two targets, `StatModifierSums`) instead of two.
+  Summed in chain order with only unconditional modifiers, so every result is the same float as before.
+
+**BurningSystem and the Ghosts.** 926 k burn ticks in the range, 778 k (84%) on Ghosts -- the test-fixture race with
+no health, 2% of the UnderGround layer, which is a dirt and lava mix, so ~20 k of them stood in lava. Each tick there
+damaged nothing (~90 ns) and re-armed (~55 ns), and the lava aura's next tick topped the burn back up to 20, so it
+never ended: ~18.9 k timers alive throughout, and most of `AuraSystem`'s ticks were the same Ghosts. The real burns:
+~143 k simple-health ticks (~540 ns: incoming damage ~105, the health write with its maximum-health walk ~115, the
+damage ledger ~85, death, floating text and player checks ~45), ~184 k body-part ticks (~400 ns), ~40 k on corpses.
+`PoisonSystem` is the same shape and cost per tick (~605 ns simple health), except a body-part creature (~870 ns,
+through the general complex-health path). Ghosts are now permanently immune to Burning and Poison (granted in their
+build, as the shrine and chest do): `BurningSystem` 0.084 -> 0.023 ms/frame (-72.5%), `StatusEffectAppliedEvent`
+-73%, but `AuraSystem` +10.6% -- a refused grant is the dearer path (TODO). The world changed: fingerprint
+`EA01C26D6323B7D0` from here on.
+
+**A refusal is decided once.** A refused grant used to check immunity up to three times: the applier's own check
+(`StatusEffectImmunity.IsImmune`, inside `BurningEffects`/`PoisonEffects`/`ParalysisEffects.ApplyStacks` and
+`BurningApplier`'s body-part path), then `StatusEffectGrantFloatingText` again for "Immune" when the target is
+near the player, then `StatusEffectGrant` again to choose Refused over NoEffect. `IStatusEffectApplier.ApplyStacks`
+(and its `StatusEffectStackApplication` delegate) now returns `StatusEffectStacksApplied` -- the stacks landed and
+whether an immunity refused them -- and both readers use that. Zero stacks for any other reason (the cap, a
+refreshed non-stacking effect) is still NoEffect, so every outcome is as before: same fingerprint
+(`EA01C26D6323B7D0`). A landed grant does the same work as before. The A/B was too noisy to read (spread 36%);
+on the arithmetic it saves one immunity lookup per refused tick, ~0.02-0.03 ms/frame here.
+
+**A refusal is the cheap path.** `StatusEffectGrant` checks immunity first, before it resolves a body part, scales
+the stacks through both modifier ends or reads the current stacks, and stops there: it publishes the same blocked
+event and "Immune" text the applier did and returns Refused. A grant that goes ahead passes
+`immunityAlreadyChecked: true` (`IStatusEffectApplier.ApplyStacks`, the `StatusEffectStackApplication` delegate,
+`BurningEffects`/`PoisonEffects.ApplyStacks`, `ParalysisEffects.Apply`, `BurningApplier`'s body-part path), so a landed
+grant still checks immunity exactly once; direct callers of the stack functions (potion abuse, `FloorBuilder`, tests)
+keep their own check. Two deliberate differences: a target that already holds every stack it could and then becomes
+immune is Refused rather than NoEffect (`StatusEffectGrant_ImmuneTargetAlreadyHoldingTheStacks_IsRefusedNotNoEffect`),
+and a refused `Random`-part grant no longer rolls a part from the Effects stream. Same world fingerprint here (the
+refused targets, Ghosts, have no parts to roll). Against the build before the Ghost immunity, `AuraSystem` reads +2.1%
+(was +10.6% with the immunity alone, +5.8% after deciding the refusal once; spread ~9%) with `BurningSystem` -71.5%.
+
+**The immunity pool is held, not fetched.** `EffectServices.StatusEffectImmunities` holds the immunity pool, and
+`StatusEffectImmunity.IsImmune`/`HasImmunity` take it directly (the `ComponentManager` overloads stay, for callers
+outside effects), so a grant's immunity check is no longer a dictionary lookup by type; `StatusEffectImmunityGrant`
+uses the same pool. That makes StatusEffects one of `EffectServices.RequiredModuleIds` -- every built-in module that
+applies effects already had it (`BuiltInModulesTests` passed unchanged). Quiet machine (spread 1.1%), against the
+build before the Ghost immunity: `AuraSystem` -3.4% (0.270 -> 0.261), `EcsContext.Update` -7.1% (1.168 -> 1.085),
+same world (`EA01C26D6323B7D0`). The Ghost immunity's +10.6% on `AuraSystem` is gone and then some.
+
 ## Presentation
 
 ### Floating Text

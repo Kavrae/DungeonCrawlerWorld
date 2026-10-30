@@ -47,14 +47,14 @@ public sealed class ActionEffectResolverTests
 
         public int MaxStacks => int.MaxValue;
 
-        public int ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null)
+        public StatusEffectStacksApplied ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null, bool immunityAlreadyChecked = false)
         {
             for (var stack = 0; stack < count; stack++)
             {
                 AppliedCalls.Add((entityId, source));
             }
 
-            return count;
+            return StatusEffectStacksApplied.Landed(count);
         }
 
         public bool RemoveAllStacks(int entityId) => AppliedCalls.RemoveAll(call => call.EntityId == entityId) > 0;
