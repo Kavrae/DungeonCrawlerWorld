@@ -102,6 +102,7 @@ public sealed class AuraAttributionTests
         Assert.IsTrue(session.Components.GetPackedPool<AuraAnchorComponent>().Count > 0, "Precondition: the cloud was set down.");
         Assert.IsTrue(poisons.TryGetReadonly(victimId, out var poison), "Precondition: the cloud poisoned the goblin beside it.");
         Assert.IsTrue(session.IsCreditedTo(poison.Source, casterId));
+        Assert.AreEqual(SourceCause.Of(TestContent.Action(BuiltInActionIds.ToxicAura)), poison.Source.Cause, "The cloud's poison names the action that set it down.");
         Assert.IsFalse(poisons.Has(casterId), "The cloud set down at its feet reaches the caster, but Toxic Aura holds a Poison immunity on its user.");
 
         session.RunFrames(5 * FramesPerSecond);

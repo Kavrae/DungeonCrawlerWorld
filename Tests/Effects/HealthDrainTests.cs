@@ -97,7 +97,7 @@ public sealed class HealthDrainTests
         var bodyParts = build.Context.EffectServices.BodyParts;
         var partCount = bodyParts.Count(goblinId);
         var before = PartHealths(bodyParts, goblinId);
-        var context = EffectContext.FromEntity(build.Context.EffectServices, goblinId, goblinId, "Test", default, build.Context.SimulationClock.CurrentFrame);
+        var context = EffectContext.FromEntity(build.Context.EffectServices, goblinId, goblinId, TestActivatables.Action(), build.Context.SimulationClock.CurrentFrame);
 
         new HealthDrain((ushort)(partCount * 2)).Apply(in context);
 

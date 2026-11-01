@@ -41,7 +41,7 @@ public sealed class EffectModifierTests
             StatModifierEffects.Apply(Components, entityId, target, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: true, magnitude: 1f, FrameDeadline.Never, ActionSource.Admin, conditionTag);
 
         public EffectContext Context(GameplayTagSet tags = default) =>
-            EffectContext.FromEntity(Build.Context.EffectServices, SourceId, TargetId, "Test", tags, Build.Context.SimulationClock.CurrentFrame);
+            EffectContext.FromEntity(Build.Context.EffectServices, SourceId, TargetId, TestActivatables.Action(tags: tags), Build.Context.SimulationClock.CurrentFrame);
 
         public EffectContext SourcelessContext() =>
             new(Build.Context.EffectServices, ActionSource.Admin, SourceEntityId: null, TargetId, "Test", default, Build.Context.SimulationClock.CurrentFrame);

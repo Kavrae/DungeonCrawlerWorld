@@ -25,7 +25,8 @@ public sealed class SecondaryInventoryWindow(
     MapViewState mapViewState,
     Engine.ECS.Systems.SimulationClock simulationClock,
     EntityNaming entityNaming,
-    HealthView healthView)
+    HealthView healthView,
+    ActionSourceNaming actionSourceNaming)
     : ContainerInventoryWindow(fontService, elementPoolService, renderService, inventoryServices, world, contextMenuController, mapViewState, simulationClock)
 {
     /// <summary>Five plain cells, the "2x5" shape a ten-item corpse reads as.</summary>
@@ -44,15 +45,10 @@ public sealed class SecondaryInventoryWindow(
     protected override IReadOnlyList<string> BuildSummaryLines() =>
         [entityNaming.NameOf(EntityId), $"Slain by: {ResolveKillerName()}", $"Died at tick: {ResolveDiedAtFrame()}"];
 
-    private string ResolveKillerName()
-    {
-        if (!healthView.TryGetDeath(EntityId, out var death) || death.KilledBy is not { Kind: ActionSourceKind.Entity } killer)
-        {
-            return "Unknown";
-        }
-
-        return killer.Identity.DisplayName;
-    }
+    private string ResolveKillerName() =>
+        healthView.TryGetDeath(EntityId, out var death)
+            ? actionSourceNaming.Describe(death.KilledBy, EntityId)
+            : "Unknown";
 
     private long ResolveDiedAtFrame() => healthView.TryGetDeath(EntityId, out var death) ? death.DiedAtFrame : 0;
 }

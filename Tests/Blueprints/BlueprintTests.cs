@@ -578,6 +578,8 @@ public sealed class BlueprintTests
             var modifier = statModifiers.GetReadonlyByDenseIndex(denseIndex);
             if (modifier.Target == StatModifierTarget.HealthRegen && modifier.Operation == StatModifierOperation.Multiplicative && modifier.Magnitude == 0.10f)
             {
+                Assert.AreEqual(new SourceCause(SourceCauseKind.Class, Tank.Name), modifier.Source.Cause, "Tank's bonus must be credited to the Tank class.");
+                Assert.IsTrue(modifier.Source.IsEntity(componentManager.Keys.GetKey(entityId)), "Tank's bonus must be the entity's own.");
                 return;
             }
         }

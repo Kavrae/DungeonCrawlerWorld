@@ -71,7 +71,7 @@ public sealed class EffectOriginTests
             new(Services(), ActionSource.FromTerrain(LavaTerrainTypeId), SourceEntityId: null, TargetEntityId, "Lava", ActivatorTags: [], Now: 0) { Magnitude = magnitude };
 
         public EffectContext FromEntity() =>
-            EffectContext.FromEntity(Services(), SourceEntityId, TargetEntityId, "Test", activatorTags: [], now: 0);
+            EffectContext.FromEntity(Services(), SourceEntityId, TargetEntityId, TestActivatables.Action(), now: 0);
 
         private EffectServices Services() =>
             TestActionEffects.Services(ComponentManager, new EntityKeys(), EventBus, new MathUtility(Random), Health,

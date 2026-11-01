@@ -25,7 +25,7 @@ public static class Boss
 
     private static void Build(BlueprintContext context)
     {
-        var source = ActionSource.FromEntity(context.ComponentManager, context.EntityKeys, context.EntityId, context.Definitions);
+        var source = context.PartSource();
 
         MaximumHealthShift.ApplyModifier(context.ComponentManager, context.Definitions, context.EntityId, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: MaximumHealthBonusMultiplier, expiresAtFrame: FrameDeadline.Never, source);

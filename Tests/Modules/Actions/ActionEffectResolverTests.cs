@@ -229,7 +229,7 @@ public sealed class ActionEffectResolverTests
 
         Assert.HasCount(1, applier.AppliedCalls);
         Assert.AreEqual(BlockingTargetEntityId, applier.AppliedCalls[0].EntityId);
-        Assert.AreEqual(ActionSource.FromEntity(componentManager, Keys, SourceEntityId, creatures: new BlueprintRegistry()), applier.AppliedCalls[0].Source);
+        Assert.AreEqual(ActionSource.FromEntity(componentManager, Keys, SourceEntityId, creatures: new BlueprintRegistry(), SourceCause.Of(ActionWithStatusEffect)), applier.AppliedCalls[0].Source);
     }
 
     [TestMethod]
@@ -284,7 +284,7 @@ public sealed class ActionEffectResolverTests
         Assert.IsNotNull(published);
         Assert.AreEqual(BlockingTargetEntityId, published!.Value.EntityId);
         Assert.AreEqual(StatusEffectType.Paralysis, published.Value.EffectType);
-        Assert.AreEqual(ActionSource.FromEntity(componentManager, Keys, SourceEntityId, creatures: new BlueprintRegistry()), published.Value.Source);
+        Assert.AreEqual(ActionSource.FromEntity(componentManager, Keys, SourceEntityId, creatures: new BlueprintRegistry(), SourceCause.Of(ActionWithStatusEffect)), published.Value.Source);
     }
 
     [TestMethod]

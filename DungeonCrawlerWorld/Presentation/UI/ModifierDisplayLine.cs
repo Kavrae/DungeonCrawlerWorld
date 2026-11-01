@@ -2,6 +2,9 @@ using Game;
 using Game.Modules.StatModifiers;
 using Game.Views;
 using Game.World;
+using Microsoft.Xna.Framework;
+using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI;
 
@@ -24,14 +27,26 @@ public readonly record struct ModifierDisplayLine(string Text, ActionSource? Sou
 /// <summary>Shared formatting for ModifierDisplayLine's Source/RemainingDurationFrames -- one place so every consumer (AbilityScoreModifierFormatter today, Skills/Action-leveling formatters later) reads the same source name and duration text for the same underlying StatModifierComponent.</summary>
 public static class ModifierDisplayFormatting
 {
-    /// <summary>The hover popup for one effect and where it came from: the source's name as the title, then the effect and how long it has left.</summary>
+    /// <summary>The source popup's width: room for a labelled row's name and value side by side.</summary>
+    public static readonly Vector2 SourcePopupMaximumSize = new(260, 10000f);
+
+    /// <summary>The hover popup for one effect and where it came from: the effect and how long it has left, then a labelled row for the source entity ("Self" for the entity's own) and one for what it came through, when recorded ("Class: Tank").</summary>
+    /// <param name="describedEntityId">The entity the effect is on -- its own source reads "Self".</param>
     /// <param name="effectText">The effect alone, with no source and no duration.</param>
-    public static (string Title, string Body) SourcePopup(ActionSourceNaming actionSourceNaming, ActionSource source, string effectText, int? remainingDurationFrames) =>
-        SourcePopupShowingSeconds(actionSourceNaming, source, effectText, RemainingSecondsShown(remainingDurationFrames));
+    public static (string Body, IReadOnlyList<TooltipRow> Rows) SourcePopup(ActionSourceNaming actionSourceNaming, ActionSource source, int describedEntityId, string effectText, int? remainingDurationFrames) =>
+        SourcePopupShowingSeconds(actionSourceNaming, source, describedEntityId, effectText, RemainingSecondsShown(remainingDurationFrames));
 
     /// <summary>SourcePopup from the remaining duration as shown (RemainingSecondsShown) -- for a caller that keys a cache on it, so the popup is rebuilt once a second rather than every frame.</summary>
-    public static (string Title, string Body) SourcePopupShowingSeconds(ActionSourceNaming actionSourceNaming, ActionSource source, string effectText, int? remainingSeconds) =>
-        (actionSourceNaming.Describe(source), $"{effectText}\n{FormatRemainingSeconds(remainingSeconds)}");
+    public static (string Body, IReadOnlyList<TooltipRow> Rows) SourcePopupShowingSeconds(ActionSourceNaming actionSourceNaming, ActionSource source, int describedEntityId, string effectText, int? remainingSeconds)
+    {
+        var rows = new List<TooltipRow> { new("Source", actionSourceNaming.DescribeEntity(source, describedEntityId), WindowPalette.TitleTextColor) };
+        if (source.Cause is { Kind: not SourceCauseKind.None, Name: { } causeName } cause)
+        {
+            rows.Add(new TooltipRow(ActionSourceNaming.CauseLabel(cause.Kind), causeName, WindowPalette.TitleTextColor));
+        }
+
+        return ($"{effectText}\n{FormatRemainingSeconds(remainingSeconds)}", rows);
+    }
 
     /// <summary>"Permanent" when null (a StatModifierComponent whose ExpiresAtFrame is FrameDeadline.Never), else "{n}s remaining" -- n = Ceiling(frames / GameFrameRate.FramesPerSecond), the same rounding convention PotionCooldownEffects.RemainingSeconds already uses.</summary>
     public static string FormatDuration(int? remainingDurationFrames) => FormatRemainingSeconds(RemainingSecondsShown(remainingDurationFrames));

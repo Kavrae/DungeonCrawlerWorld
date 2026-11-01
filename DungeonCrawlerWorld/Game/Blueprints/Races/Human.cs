@@ -1,3 +1,4 @@
+using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
@@ -5,6 +6,7 @@ using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Movement.Components;
+using Game.Modules.StatModifiers;
 using Microsoft.Xna.Framework;
 
 namespace Game.Blueprints.Races;
@@ -70,7 +72,17 @@ public static class Human
         {
             AbilityScoreEffects.Grant(componentManager, entityId, abilityScoreType, RollAbilityScoreBaseValue(context.Rolls));
         }
+
+        var racialSource = context.PartSource();
+        foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
+        {
+            AbilityScoreEffects.GrantModifier(componentManager, entityId, abilityScoreType, StatModifierOperation.Additive, StatModifierPolarity.Buff,
+                canModify: true, RacialAbilityScoreBonus, expiresAtFrame: FrameDeadline.Never, racialSource);
+        }
     }
+
+    /// <summary>Every Human's racial bonus to each ability score, shown as "Human" on its own lines.</summary>
+    private const float RacialAbilityScoreBonus = 1f;
 
     /// <summary>Two Next(1,6) rolls summed -- range [2,10] per the spec, clustering around the middle rather than uniform across the whole range. Exact shape isn't load-bearing since level-up moves these later.</summary>
     private static ushort RollAbilityScoreBaseValue(MathUtility rolls) => (ushort)(rolls.Next(1, 6) + rolls.Next(1, 6));

@@ -23,5 +23,5 @@ public static class ActivationEffectsApplier
 
     /// <summary>The context a definition's activation effects apply in: source and target both entityId.</summary>
     internal static EffectContext UserContext(EffectServices effectServices, int entityId, ActivatableDefinition definition, long now) =>
-        EffectContext.FromEntity(effectServices, entityId, entityId, definition.Name, definition.Tags, now);
+        EffectContext.FromEntity(effectServices, entityId, entityId, definition, now);
 }

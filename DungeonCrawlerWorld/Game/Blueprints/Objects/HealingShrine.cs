@@ -61,7 +61,7 @@ public static class HealingShrine
 
         componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
 
-        var actionSource = ActionSource.FromEntity(componentManager, context.EntityKeys, entityId, context.Definitions);
+        var actionSource = context.PartSource();
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: false, -DamageResistance, FrameDeadline.Never, actionSource);
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,

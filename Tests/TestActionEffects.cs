@@ -87,7 +87,7 @@ internal static class TestActionEffects
         FloatingTextFeed? FloatingTextFeed = null) =>
         EffectContext.FromEntity(
             Services(ComponentManager, EntityKeys, EventBus, MathUtility, Health, PlayerQuery, StatusEffectAppliers, StatModifiers, DeadEntities, AbilityScores, Mana, HotkeyExpansionUnlocks, AuraSources, Auras, BodyParts, Definitions, FloatingTextFeed),
-            SourceEntityId, TargetEntityId, ActivatorName, ActivatorTags, Now, DurationScaleMultiplier) with { ChainDepth = ChainDepth };
+            SourceEntityId, TargetEntityId, TestActivatables.Action(ActivatorName, ActivatorTags), Now, DurationScaleMultiplier) with { ChainDepth = ChainDepth };
 
     /// <summary>The services every effect entry works with, over the pools a test names and EmptyPools for the rest.</summary>
     public static EffectServices Services(

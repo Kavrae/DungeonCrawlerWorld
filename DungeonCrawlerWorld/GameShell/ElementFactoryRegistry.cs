@@ -98,7 +98,7 @@ public static class ElementFactoryRegistry
 
         elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(
             uiEngineContext.FontService, elementPool, uiEngineContext.RenderService, inventoryServices, world, contextMenuController, mapViewState,
-            simulationClock: gameSession.SimulationClock, entityNaming: views.EntityNaming, healthView: views.HealthView));
+            simulationClock: gameSession.SimulationClock, entityNaming: views.EntityNaming, healthView: views.HealthView, actionSourceNaming: views.ActionSourceNaming));
         elementPool.RegisterFactory<ShopWindow>(() => new ShopWindow(
             uiEngineContext.FontService, elementPool, uiEngineContext.RenderService, inventoryServices, world, contextMenuController, mapViewState,
             simulationClock: gameSession.SimulationClock, entityNaming: views.EntityNaming));

@@ -1,5 +1,6 @@
 using Engine.Math;
 using Engine.Tags;
+using Game.Modules.Actions;
 using Game.Modules.Health;
 using Game.World;
 
@@ -61,15 +62,15 @@ public readonly record struct EffectContext(
     /// <remarks>Set only by Toggles. Unique among one entity's active toggles, and never 0.</remarks>
     public uint? HeldGrantKey { get; init; }
 
-    /// <summary>A context for effects sourceEntityId causes, attributed to it as it is now.</summary>
-    public static EffectContext FromEntity(EffectServices services, int sourceEntityId, int targetEntityId, string activatorName, GameplayTagSet activatorTags, long now, float durationScaleMultiplier = 1.0f) =>
+    /// <summary>A context for effects sourceEntityId causes by using definition, attributed to it as it is now and to the action or item it used.</summary>
+    public static EffectContext FromEntity(EffectServices services, int sourceEntityId, int targetEntityId, ActivatableDefinition definition, long now, float durationScaleMultiplier = 1.0f) =>
         new(
             services,
-            ActionSource.FromEntity(services.ComponentManager, services.EntityKeys, sourceEntityId, services.Definitions),
+            ActionSource.FromEntity(services.ComponentManager, services.EntityKeys, sourceEntityId, services.Definitions, SourceCause.Of(definition)),
             sourceEntityId,
             targetEntityId,
-            activatorName,
-            activatorTags,
+            definition.Name,
+            definition.Tags,
             now,
             durationScaleMultiplier);
 }

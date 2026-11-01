@@ -723,25 +723,12 @@ sampler's bias, the probes): that section.
   0.4 MB at most, at frame 3023).
 - **Measure each fix** with a `phase-performance-testing` A/B, Release, against a baseline saved just before it.
 
-#### Attribute effects to the action or item that applied them
+#### Intern an action source once per entity and cause
 
-An effect from an action or item is credited to the entity that used it and nothing else
-(`ActionSource.FromEntity`). So a Draught of Thrift's buff shows "Player1 (crawler #)" as its source
-in the Health window's hover popup, and a poison from Toxic Strike reads the same as one from a
-Toxic Potion. Name the action or item as well: "Draught of Thrift (Player1)".
-- **Every recorded source:** stat modifiers, status effect timers (poison, burning, body-part
-  burning), immunities, `DeadComponent.KilledBy` and the floating-text/activity log lines read the same
-  `ActionSource`, so all of them gain it at once.
-- **Storage stays 8 bytes** (`ActionSource`'s remarks: a 16-byte source made BurningSystem ~50%
-  slower). The entity's 24-bit detail is already an interned handle (`EntityIdentities`), so intern
-  (identity, cause) pairs instead of identities alone, rather than widening the struct. Interning per
-  use would be per application -- intern per (entity, action or item) once, on first use.
-- **Where it is set:** whoever builds the `EffectContext` for an action or item activation
-  (`ActionEffectResolver`, the item activators, `Toggles` for held and periodic effects) knows the
-  definition; terrain, auras and admin keep their own kinds. An aura an anchor places credits its
-  placer today (`AuraSystem.AttributionOf`); it could name the action that placed it the same way.
-- **Display:** `ActionSourceNaming.Describe` prints "{cause} ({entity})" for an entity source with a
-  cause, the entity alone without one.
+`ActionSource.FromEntity` resolves the entity's name and interns (name, crawler number, cause) in `EntityIdentities`
+-- a lock and a dictionary lookup -- on every action or item use (`EffectContext.FromEntity`), as it did for the
+identity alone before causes were recorded. Intern once per (entity, action or item) instead, on first use, if it
+ever shows in a profile; a renamed entity or a newly drawn crawler number must still get a fresh identity.
 
 #### Lingering areas -- effects that stay on their tiles
 
@@ -3115,28 +3102,6 @@ fields read with `TileData.get_custom_data`), *physics, navigation and occlusion
 *animated tiles* (frame columns, per-frame durations, and a random-start mode so neighbours don't
 animate in sync). RimWorld's linked atlas, cited in the plan, is the sides-only case of the same idea.
 
-#### Show "Self" as the source when an entity is its own source
-
-A `ActionSource` created from the entity the effect landed on renders as that entity's own name
-today -- the player's self-granted modifiers read "Player1" in the Ability Score window's line prefix
-and hover title, and in `PlayerActivityLog`'s `source=` field, as though something else did it to them.
-It should read "Self" instead. There are real self-sourced modifiers to see this on right now:
-`Tank`'s MaximumHealth/HealthRegen bonuses and `PlayerKit`'s multiplicative ability-score seeds
-all pass `ActionSource.FromEntity(..., player)`.
-
-The rule is per-viewer, not player-global: the source is "Self" when its entity is the same entity the
-line is describing. That way inspecting an NPC's own self-buff reads "Self" too, rather than only ever
-special-casing the player. Compare with `ActionSource.IsEntity(key)` against an `EntityKey` --
-never an entity id, which is recycled the moment an entity is destroyed (`IPlayerQuery.PlayerEntityKey`
-is the player's). That means the describe call needs the subject entity's key threaded in, which it
-doesn't take today.
-
-Fold the two copies of the logic into one while doing it: `ModifierDisplayFormatting.DescribeSource`
-(`Presentation/UI/ModifierDisplayLine.cs`) and `PlayerActivityLog.DescribeSource` are the same
-Entity-vs-`ToString()` switch written twice, and `SecondaryInventoryWindow.ResolveKillerName` is a
-third partial copy (the corpse "killed by" line -- suicide/self-kill should read "Self" there as well).
-`ActionSource.ToString()` stays as-is: it's diagnostics with no subject to be relative to.
-
 #### Input actions and mapping contexts
 
 Keys are hardcoded where they're handled: around 50 `Keys.*` checks across `UiInputController`,
@@ -3473,13 +3438,6 @@ expanded-group border) with no deliberate pass on how they read together. Confir
 bottom-right number silently means "how many I have" vs. "uses left" with zero visual distinction
 (`HotbarContent` has the identical ambiguity, same fix should cover both). No redesign specified --
 needs a deliberate look once there's room to design against.
-
-#### Ability score buffs name where they come from
-
-Each modifier line in the Ability Score window (`AbilityScoreModifierFormatter`) shows its source as
-an entity, e.g. "#1234". A modifier granted by a blueprint part should name that part and its kind
-instead, e.g. "Race(Human)" or "Class(Tank)". When a line has a part to name, that replaces the
-entity-number source entirely.
 
 #### Animation primitives -- flipbooks, tweens and curves
 

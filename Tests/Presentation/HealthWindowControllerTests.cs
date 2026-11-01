@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Game.Blueprints;
 using Game.Modules.Auras;
 using Game.Modules.Burning;
 using Game.Modules.Burning.Components;
@@ -70,6 +71,7 @@ public sealed class HealthWindowControllerTests
 
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
 
+        componentManager.Keys.Issue(PlayerEntityId);
         componentManager.Merge(PlayerEntityId, new SimpleHealthComponent(50, 100));
 
         var statusEffectDisplays = new StatusEffectDisplayRegistry();
@@ -89,7 +91,7 @@ public sealed class HealthWindowControllerTests
         tooltipController.Initialize(pool, layers);
 
         pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, new UiRenderService(), new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), new StatModifierView(componentManager), TestActionStateViews.Over(componentManager), BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog, TestGameplayTags.BuiltIn, simulationClock: new SimulationClock(),
-            TestActionSources.Naming(terrain, auras), tooltipController));
+            TestActionSources.Naming(terrain, auras, componentManager.Keys), tooltipController));
         pool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, pool, new UiRenderService()));
         pool.RegisterFactory<FractionBarElement>(() => new FractionBarElement(fontService, pool, new UiRenderService()));
 
@@ -128,7 +130,7 @@ public sealed class HealthWindowControllerTests
         SelfAndDescendants(window).OfType<TextWindow>().Last(row => row.OriginalText.Contains(textFragment));
 
     [TestMethod]
-    public void HoveringATerrainSourcedModifierRow_ShowsTheTerrainsName_AndMovingOffHidesIt()
+    public void HoveringATerrainSourcedModifierRow_ShowsTheEffectWithNoTitle_AndMovingOffHidesIt()
     {
         var harness = BuildHarness();
         var holyGroundId = harness.Terrain.Register(new TerrainDefinition("test:holy", "Holy Ground", "", ".", default));
@@ -146,7 +148,7 @@ public sealed class HealthWindowControllerTests
 
         HoverFor(harness, window, row.Rectangle.Center, 1);
         Assert.IsTrue(tooltip.IsVisible);
-        Assert.AreEqual("Holy Ground", tooltip.TitleText);
+        Assert.AreEqual(string.Empty, tooltip.TitleText);
         Assert.AreEqual("50% Damage Resistance\nPermanent", tooltip.OriginalText);
 
         HoverFor(harness, window, new Point(1999, 1999), 1);
@@ -155,7 +157,23 @@ public sealed class HealthWindowControllerTests
     }
 
     [TestMethod]
-    public void HoveringAnAuraSourcedBodyPartBurn_ShowsTheAurasName_AndMovingOffHidesIt()
+    public void HoveringAModifierRow_ShowsTheWiderSourcePopup()
+    {
+        var harness = BuildHarness();
+        var selfSource = ActionSource.FromEntity(harness.ComponentManager, harness.ComponentManager.Keys, PlayerEntityId, new BlueprintRegistry(), new SourceCause(SourceCauseKind.Class, "Tank"));
+        harness.ComponentManager.GetMultiPool<StatModifierComponent>().Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: true, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, selfSource));
+        var window = OpenWindow(harness);
+
+        HoverFor(harness, window, FindRow(window, "Resistance").Rectangle.Center, PopupChrome.HoverTooltipDelayFrames);
+
+        var tooltip = FindTooltip(harness.Layers);
+        Assert.IsTrue(tooltip.IsVisible);
+        Assert.AreEqual(ModifierDisplayFormatting.SourcePopupMaximumSize.X, tooltip.CurrentSize.X);
+    }
+
+    [TestMethod]
+    public void HoveringAnAuraSourcedBodyPartBurn_ShowsTheEffectWithNoTitle_AndMovingOffHidesIt()
     {
         var harness = BuildHarness();
         var auraId = harness.Auras.Register(new AuraDefinition(new Guid("00000000-0000-0000-0000-00000000b002"), "Lava", Color.OrangeRed));
@@ -166,7 +184,7 @@ public sealed class HealthWindowControllerTests
 
         HoverFor(harness, window, bodyPartBurningRow.Rectangle.Center, PopupChrome.HoverTooltipDelayFrames);
         Assert.IsTrue(tooltip.IsVisible);
-        Assert.AreEqual("Lava", tooltip.TitleText);
+        Assert.AreEqual(string.Empty, tooltip.TitleText);
         StringAssert.Contains(tooltip.OriginalText, "Burning x3");
 
         HoverFor(harness, window, new Point(1999, 1999), 1);

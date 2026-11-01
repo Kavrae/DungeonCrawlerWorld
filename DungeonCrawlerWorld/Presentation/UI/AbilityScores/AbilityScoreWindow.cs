@@ -70,8 +70,8 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     private Element? _hoveredCandidate;
     private int _hoveredFrames;
 
-    /// <summary>The hovered modifier row's source popup, rebuilt only when its source, effect or shown remaining seconds change.</summary>
-    private readonly KeyedCache<(ActionSource Source, string ModifierText, int? RemainingSeconds), (string Title, string Body)> _sourcePopup = new();
+    /// <summary>The hovered modifier row's source popup, rebuilt only when its source, whether that source is this window's entity itself, its effect or its shown remaining seconds change.</summary>
+    private readonly KeyedCache<(ActionSource Source, bool IsOwnSource, string ModifierText, int? RemainingSeconds), (string Body, IReadOnlyList<TooltipRow> Rows)> _sourcePopup = new();
 
     /// <summary>Mirrors AdminMode.IsOn as of the last BuildColumns -- Update rebuilds (not just refreshes) whenever this goes stale, since toggling admin mode changes the column *count*, not just their contents.</summary>
     private bool _lastAdminModeOn;
@@ -173,11 +173,12 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         }
         else if (candidate is AbilityScoreModifierRow row)
         {
-            var (title, body) = _sourcePopup.Get(
-                (row.Source!.Value, row.ModifierText!, ModifierDisplayFormatting.RemainingSecondsShown(row.RemainingDurationFrames)),
-                actionSourceNaming,
-                static (key, naming) => ModifierDisplayFormatting.SourcePopupShowingSeconds(naming, key.Source, key.ModifierText, key.RemainingSeconds));
-            _tooltipController.Show(this, row.Rectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, PopupChrome.HoverPopupMaximumSize, body, title);
+            var source = row.Source!.Value;
+            var (body, rows) = _sourcePopup.Get(
+                (source, actionSourceNaming.IsOwnSource(source, _entityId), row.ModifierText!, ModifierDisplayFormatting.RemainingSecondsShown(row.RemainingDurationFrames)),
+                (Naming: actionSourceNaming, EntityId: _entityId),
+                static (key, state) => ModifierDisplayFormatting.SourcePopupShowingSeconds(state.Naming, key.Source, state.EntityId, key.ModifierText, key.RemainingSeconds));
+            _tooltipController.Show(this, row.Rectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, ModifierDisplayFormatting.SourcePopupMaximumSize, body, rows: rows, useFixedWidth: true);
         }
     }
 

@@ -212,6 +212,81 @@ public sealed class PlayerActivityLogTests
     }
 
     [TestMethod]
+    public void EntityDamaged_PlayerIsItsOwnSource_LogsSelf()
+    {
+        var world = CreateWorld(playerEntityId: 0);
+        var eventBus = new EventBus();
+        var simulationClock = new SimulationClock();
+        var logPath = CreateTempLogPath();
+        var componentManager = CreateComponentManager();
+        var entityKeys = IssueKeys(new EntityKeys());
+        componentManager.Merge(0, new DisplayTextComponent("PlayerOne", "The player."));
+        try
+        {
+            var log = new PlayerActivityLog(world, componentManager, eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming(entityKeys: entityKeys));
+
+            eventBus.Publish(new EntityDamagedEvent(0, 12, ActionSource.FromEntity(componentManager, entityKeys, 0, creatures: new BlueprintRegistry()), 88, 100, "Default Attack"));
+            log.Dispose();
+
+            var contents = File.ReadAllText(logPath);
+            StringAssert.Contains(contents, "source=Self");
+            StringAssert.Contains(contents, "target=PlayerOne (#0)");
+        }
+        finally
+        {
+            File.Delete(logPath);
+        }
+    }
+
+    [TestMethod]
+    public void EntityDamaged_ByAnotherEntitysAction_LogsTheActionAndTheEntity()
+    {
+        var world = CreateWorld(playerEntityId: 0);
+        var eventBus = new EventBus();
+        var simulationClock = new SimulationClock();
+        var logPath = CreateTempLogPath();
+        var componentManager = CreateComponentManager();
+        var entityKeys = IssueKeys(new EntityKeys());
+        componentManager.Merge(5, new DisplayTextComponent("Goblin", "A goblin."));
+        try
+        {
+            var log = new PlayerActivityLog(world, componentManager, eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming(entityKeys: entityKeys));
+
+            var source = ActionSource.FromEntity(componentManager, entityKeys, 5, creatures: new BlueprintRegistry(), new SourceCause(SourceCauseKind.Action, "Toxic Strike"));
+            eventBus.Publish(new EntityDamagedEvent(0, 12, source, 88, 100, "Toxic Strike"));
+            log.Dispose();
+
+            StringAssert.Contains(File.ReadAllText(logPath), "source=Toxic Strike (Goblin)");
+        }
+        finally
+        {
+            File.Delete(logPath);
+        }
+    }
+
+    [TestMethod]
+    public void EntityHealed_PlayerHealedThemself_LogsSelf()
+    {
+        var world = CreateWorld(playerEntityId: 0);
+        var eventBus = new EventBus();
+        var simulationClock = new SimulationClock();
+        var logPath = CreateTempLogPath();
+        try
+        {
+            var log = new PlayerActivityLog(world, CreateComponentManager(), eventBus, simulationClock, logPath, creatures: new BlueprintRegistry(), actionSourceNaming: TestActionSources.Naming());
+
+            eventBus.Publish(new EntityHealedEvent(0, 12f, 0, 93f, 100f, "Healing Potion"));
+            log.Dispose();
+
+            StringAssert.Contains(File.ReadAllText(logPath), "source=Self");
+        }
+        finally
+        {
+            File.Delete(logPath);
+        }
+    }
+
+    [TestMethod]
     public void EntityHealed_ForPlayer_IsLoggedWithAmountAndSource()
     {
         var world = CreateWorld(playerEntityId: 0);

@@ -31,7 +31,7 @@ public static class Tank
         var componentManager = context.ComponentManager;
         var entityId = context.EntityId;
 
-        var source = ActionSource.FromEntity(componentManager, context.EntityKeys, entityId, context.Definitions);
+        var source = context.PartSource();
 
         if (!componentManager.GetPackedPool<SimpleHealthComponent>().Has(entityId) && !EntityBodyParts.For(componentManager, context.Definitions).Has(entityId))
         {

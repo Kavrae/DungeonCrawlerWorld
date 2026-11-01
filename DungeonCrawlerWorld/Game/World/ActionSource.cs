@@ -73,9 +73,13 @@ public readonly record struct ActionSource
     /// <summary>Who the source entity was when this source was created, for Kind Entity; the unknown identity otherwise.</summary>
     public EntityIdentity Identity => EntityIdentities.Get(Kind == ActionSourceKind.Entity ? Detail : EntityIdentities.UnknownHandle);
 
-    /// <summary>A source for entityId, recording its key and its current name and crawler number.</summary>
+    /// <summary>What the source entity acted through, for Kind Entity; None otherwise or when nothing was recorded.</summary>
+    public SourceCause Cause => Identity.Cause;
+
+    /// <summary>A source for entityId, recording its key, its current name and crawler number, and what it acts through.</summary>
     /// <param name="creatures">The session's races and classes, so a creature that is named by its race rather than by a component of its own (see EntityNaming) is still named here.</param>
-    public static ActionSource FromEntity(ComponentManager componentManager, EntityKeys entityKeys, int entityId, BlueprintRegistry creatures)
+    /// <param name="cause">The race, class, trait, action, spell or item the effect comes through; None when there is nothing more specific than the entity.</param>
+    public static ActionSource FromEntity(ComponentManager componentManager, EntityKeys entityKeys, int entityId, BlueprintRegistry creatures, SourceCause cause = default)
     {
         ArgumentNullException.ThrowIfNull(componentManager);
         ArgumentNullException.ThrowIfNull(entityKeys);
@@ -87,7 +91,7 @@ public readonly record struct ActionSource
             ? crawler.CrawlerNumber
             : null;
 
-        return new ActionSource(ActionSourceKind.Entity, entityKeys.GetKey(entityId), EntityIdentities.Intern(new EntityIdentity(name, crawlerNumber)));
+        return new ActionSource(ActionSourceKind.Entity, entityKeys.GetKey(entityId), EntityIdentities.Intern(new EntityIdentity(name, crawlerNumber, cause)));
     }
 
     public static ActionSource FromTerrain(ushort terrainTypeId) => new(ActionSourceKind.Terrain, EntityKey.None, terrainTypeId);

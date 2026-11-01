@@ -167,7 +167,7 @@ public sealed class EntityBuilder
             ClassEffects.Grant(componentManager, context.EntityId, partId, classGrantedBy);
         }
 
-        definition.Build?.Invoke(context);
+        definition.Build?.Invoke(context with { Part = definition });
     }
 
     /// <summary>Gives entityId a source of each granted aura it doesn't already radiate.</summary>

@@ -363,8 +363,9 @@ public sealed class HealthWindow(
             return;
         }
 
-        var (title, body) = _sourcePopup.Get(sourcePopupKey, this, static (key, window) => window.BuildSourcePopup(key));
-        tooltipController.Show(this, rowRectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, PopupChrome.HoverPopupMaximumSize, body, title);
+        sourcePopupKey = sourcePopupKey with { IsOwnSource = actionSourceNaming.IsOwnSource(sourcePopupKey.Source, _entityId) };
+        var (body, rows) = _sourcePopup.Get(sourcePopupKey, this, static (key, window) => window.BuildSourcePopup(key));
+        tooltipController.Show(this, rowRectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, ModifierDisplayFormatting.SourcePopupMaximumSize, body, rows: rows, useFixedWidth: true);
     }
 
     /// <summary>The status-effect, buff or debuff row the pointer is over, if any -- never one scrolled out of view or under another window.</summary>
@@ -426,19 +427,19 @@ public sealed class HealthWindow(
         return null;
     }
 
-    /// <summary>Everything the source popup for a row is built from: its source, the effect with no duration (a modifier row or a status effect row), and the remaining duration as shown -- the cache key for that popup, so it's rebuilt once a second, not every frame.</summary>
-    private readonly record struct SourcePopupKey(ActionSource Source, ModifierRow? Modifier, StatusEffectRow? StatusEffect, int? RemainingSeconds);
+    /// <summary>Everything the source popup for a row is built from: its source, whether that source is this window's entity itself, the effect with no duration (a modifier row or a status effect row), and the remaining duration as shown -- the cache key for that popup, so it's rebuilt once a second, not every frame.</summary>
+    private readonly record struct SourcePopupKey(ActionSource Source, ModifierRow? Modifier, StatusEffectRow? StatusEffect, int? RemainingSeconds, bool IsOwnSource = false);
 
-    private (string Title, string Body) BuildSourcePopup(SourcePopupKey key)
+    private (string Body, IReadOnlyList<TooltipRow> Rows) BuildSourcePopup(SourcePopupKey key)
     {
         var effectText = key.Modifier is { } modifierRow
             ? FormatModifierRow(modifierRow, gameplayTags)
             : FormatStatusEffectRow(key.StatusEffect!.Value);
-        return ModifierDisplayFormatting.SourcePopupShowingSeconds(actionSourceNaming, key.Source, effectText, key.RemainingSeconds);
+        return ModifierDisplayFormatting.SourcePopupShowingSeconds(actionSourceNaming, key.Source, _entityId, effectText, key.RemainingSeconds);
     }
 
     /// <summary>The hovered row's source popup -- see SourcePopupKey.</summary>
-    private readonly KeyedCache<SourcePopupKey, (string Title, string Body)> _sourcePopup = new();
+    private readonly KeyedCache<SourcePopupKey, (string Body, IReadOnlyList<TooltipRow> Rows)> _sourcePopup = new();
 
     /// <summary>What the row shows as of now, as the source popup's key (see SourcePopupKey). False when the row's effect is gone or records no source.</summary>
     private bool TryDescribeRowSource(HoveredRow row, out SourcePopupKey key)

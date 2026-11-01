@@ -10,6 +10,7 @@ using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Currency.Components;
 using Game.Modules.Death;
+using Game.Modules.Death.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.Modules.Lootboxes;
@@ -17,6 +18,7 @@ using Game.Modules.Shops.Components;
 using Game.Spawning;
 using Game.Tags;
 using Game.Views;
+using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.UI;
@@ -46,7 +48,7 @@ public sealed class ItemWindowCoordinatorTests
 
     private static readonly Guid PotionItemId = Guid.NewGuid();
 
-    private sealed record Harness(ItemWindowCoordinator Coordinator, MapWindow MapWindow, MapViewState MapViewState, Engine.ECS.Components.ComponentManager ComponentManager, UiLayerStack Layers, ItemCatalog ItemCatalog, ContextMenuController ContextMenuController);
+    private sealed record Harness(ItemWindowCoordinator Coordinator, MapWindow MapWindow, MapViewState MapViewState, Engine.ECS.Components.ComponentManager ComponentManager, UiLayerStack Layers, ItemCatalog ItemCatalog, ContextMenuController ContextMenuController, Game.Terrain.TerrainRegistry Terrain);
 
     private static Harness Build()
     {
@@ -88,7 +90,8 @@ public sealed class ItemWindowCoordinatorTests
         var definitions = new BlueprintRegistry();
         var entityNaming = EntityNaming.For(componentManager, definitions);
         var healthView = new HealthView(componentManager, Game.Modules.Health.EntityBodyParts.For(componentManager, definitions));
-        var mapView = new MapViewQuery(world, componentManager, new ActionCatalog(), new Game.Terrain.TerrainRegistry(), definitions, new SimulationClock());
+        var terrain = new Game.Terrain.TerrainRegistry();
+        var mapView = new MapViewQuery(world, componentManager, new ActionCatalog(), terrain, definitions, new SimulationClock());
         var contextMenuController = shellServices.ContextMenuController;
 
         elementPool.RegisterFactory<Tooltip>(() => new Tooltip(fontService, elementPool, new UiRenderService()));
@@ -105,7 +108,7 @@ public sealed class ItemWindowCoordinatorTests
         elementPool.RegisterFactory<EntityIconElement>(() => new EntityIconElement(fontService, elementPool, new UiRenderService(), spriteSheetService, mapView));
         elementPool.RegisterFactory<ItemDetailsWindow>(() => new ItemDetailsWindow(fontService, elementPool, new UiRenderService(), new ActionCatalog(), TestGameplayTags.BuiltIn, inventoryServices.ActionStateView, world));
         elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(fontService, elementPool, new UiRenderService(), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
-        elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(fontService, elementPool, new UiRenderService(), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming, healthView: healthView));
+        elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(fontService, elementPool, new UiRenderService(), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming, healthView: healthView, actionSourceNaming: TestActionSources.Naming(terrain, entityKeys: componentManager.Keys)));
         elementPool.RegisterFactory<ShopWindow>(() => new ShopWindow(fontService, elementPool, new UiRenderService(), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming));
         elementPool.RegisterFactory<TradeWindow>(() => new TradeWindow(fontService, elementPool, new UiRenderService(), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
 
@@ -125,7 +128,7 @@ public sealed class ItemWindowCoordinatorTests
             new LootboxCommands(new LootboxOpener(componentManager, lootboxCatalog, itemCatalog, seed: 1)),
             mapViewState.ReservedEntityIds);
 
-        return new Harness(coordinator, mapHarness.MapWindow, mapViewState, componentManager, layers, itemCatalog, contextMenuController);
+        return new Harness(coordinator, mapHarness.MapWindow, mapViewState, componentManager, layers, itemCatalog, contextMenuController, terrain);
     }
 
     private static int? OpenSecondaryTarget(Harness harness) => harness.Coordinator.Inventory.GetSecondaryTargetEntityId!();
@@ -247,6 +250,34 @@ public sealed class ItemWindowCoordinatorTests
 
     private static int RowsShown(Window grid) =>
         (int)System.Math.Round(grid.CurrentSize.Y / (InventoryGridContent.CellSize.Y + InventoryGridContent.CellGap));
+
+    private static string SlainByLine(SecondaryInventoryWindow window) =>
+        window.ChildElements.OfType<TextWindow>().Single(line => line.OriginalText.StartsWith("Slain by:")).OriginalText;
+
+    [TestMethod]
+    public void ACorpseThatKilledItself_IsSlainBySelf()
+    {
+        var harness = Build();
+        harness.ComponentManager.Keys.Issue(CorpseEntityId);
+        var killer = ActionSource.FromEntity(harness.ComponentManager, harness.ComponentManager.Keys, CorpseEntityId, new BlueprintRegistry());
+        harness.ComponentManager.Merge(CorpseEntityId, new DeadComponent(killer, DiedAtFrame: 0));
+
+        var (window, _) = OpenCorpseLoot(harness);
+
+        Assert.AreEqual("Slain by: Self", SlainByLine(window));
+    }
+
+    [TestMethod]
+    public void ACorpseKilledByTerrain_IsSlainByTheTerrainsName()
+    {
+        var harness = Build();
+        var lavaId = harness.Terrain.Register(new Game.Terrain.TerrainDefinition("test:lava", "Lava", "", "~", default));
+        harness.ComponentManager.Merge(CorpseEntityId, new DeadComponent(ActionSource.FromTerrain(lavaId), DiedAtFrame: 0));
+
+        var (window, _) = OpenCorpseLoot(harness);
+
+        Assert.AreEqual("Slain by: Lava", SlainByLine(window));
+    }
 
     [TestMethod]
     public void ALootWindow_IsAsWideAsFiveColumns_AndCantBeResized()

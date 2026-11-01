@@ -53,7 +53,7 @@ public static class ActionEffectResolver
         var eventBus = effectServices.EventBus;
         eventBus.Publish(new ActionActivatedEvent(sourceEntityId, action.Id));
 
-        var context = EffectContext.FromEntity(effectServices, sourceEntityId, targetEntityId: sourceEntityId, action.Name, action.Tags, now);
+        var context = EffectContext.FromEntity(effectServices, sourceEntityId, targetEntityId: sourceEntityId, action, now);
 
         var isDodgeable = action.Tags.Has(GameTags.TraitDodgeable);
         var isStaggering = action.Tags.Has(GameTags.TraitStaggering);

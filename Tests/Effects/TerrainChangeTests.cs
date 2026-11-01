@@ -30,7 +30,7 @@ public sealed class TerrainChangeTests
         public ComponentManager Components => Build.EcsContext.ComponentManager;
 
         public EffectContext Context() =>
-            EffectContext.FromEntity(Build.Context.EffectServices, CasterId, CasterId, "Test", activatorTags: [], Build.Context.SimulationClock.CurrentFrame);
+            EffectContext.FromEntity(Build.Context.EffectServices, CasterId, CasterId, TestActivatables.Action(), Build.Context.SimulationClock.CurrentFrame);
 
         public bool IsLava(Vector3Int tile) => World.Map.GetTerrain(tile.X, tile.Y, TerrainLayer.Ground).TypeId == World.Terrain.GetId(BuiltInTerrain.LavaKey);
 

@@ -34,7 +34,7 @@ public static class AbilityScoreModifierFormatter
 
         foreach (var modifier in ordered)
         {
-            lines.Add(FormatModifierLine(modifier, actionSourceNaming, now));
+            lines.Add(FormatModifierLine(modifier, actionSourceNaming, entityId, now));
         }
 
         return lines;
@@ -45,9 +45,9 @@ public static class AbilityScoreModifierFormatter
             ? component.BaseValue
             : throw new InvalidOperationException($"No {type} ability score for entity {entityId}.");
 
-    private static ModifierDisplayLine FormatModifierLine(StatModifierComponent modifier, ActionSourceNaming actionSourceNaming, long now)
+    private static ModifierDisplayLine FormatModifierLine(StatModifierComponent modifier, ActionSourceNaming actionSourceNaming, int entityId, long now)
     {
-        var sourceName = actionSourceNaming.DescribeByName(modifier.Source);
+        var sourceName = actionSourceNaming.DescribeByName(modifier.Source, entityId);
         var modifierText = modifier.Operation == StatModifierOperation.Additive
             ? FormatSigned((int)MathF.Round(modifier.Magnitude))
             : $"{FormatSigned((int)MathF.Round(modifier.Magnitude * 100))}%";

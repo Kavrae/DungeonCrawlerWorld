@@ -31,7 +31,7 @@ public sealed class GameViews
         TargetingView = new TargetingView(context.TargetResolution, EntityActions, context.Items, componentManager);
         TransformView = new TransformView(componentManager);
         AuraPower = new AuraPowerView(context.AuraField, context.Auras);
-        ActionSourceNaming = new ActionSourceNaming(context.Terrain, context.Auras);
+        ActionSourceNaming = new ActionSourceNaming(context.Terrain, context.Auras, context.EntityKeys);
         ContentSpriteNames = new ContentSpriteNames(context.Definitions, context.Terrain, context.Actions, context.Items, context.Lootboxes);
     }
 

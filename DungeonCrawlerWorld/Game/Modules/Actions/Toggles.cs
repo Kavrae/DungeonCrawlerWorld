@@ -137,7 +137,7 @@ public sealed class Toggles(MultiComponentPool<ActiveToggleComponent> activeTogg
 
     /// <summary>Source and target both the holder: a toggle applies to whoever has it on.</summary>
     private EffectContext HolderContext(int holderEntityId, ActivatableDefinition definition, long now) =>
-        EffectContext.FromEntity(effectServices, holderEntityId, holderEntityId, definition.Name, definition.Tags, now);
+        EffectContext.FromEntity(effectServices, holderEntityId, holderEntityId, definition, now);
 
     private EffectContext HeldContext(int holderEntityId, uint key, ActivatableDefinition definition, long now) =>
         HolderContext(holderEntityId, definition, now) with { HeldGrantKey = key };

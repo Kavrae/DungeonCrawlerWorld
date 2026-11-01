@@ -397,7 +397,7 @@ public sealed class ItemActivationSystem : ISystem
 
         if (_potionCooldowns.TryGetReadonly(targetEntityId, out var cooldown) && PotionCooldownEffects.FramesRemaining(cooldown, _now) > 0)
         {
-            PoisonEffects.ApplyStack(_componentManager, _entityKeys, targetEntityId, ActionSource.FromEntity(_componentManager, _entityKeys, sourceEntityId, _creatures), PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames), _now, _eventBus, _playerQuery);
+            PoisonEffects.ApplyStack(_componentManager, _entityKeys, targetEntityId, ActionSource.FromEntity(_componentManager, _entityKeys, sourceEntityId, _creatures, SourceCause.Of(item)), PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames), _now, _eventBus, _playerQuery);
             _eventBus.Publish(new PotionCooldownAbusedEvent(targetEntityId));
         }
 
@@ -493,5 +493,5 @@ public sealed class ItemActivationSystem : ISystem
 
     /// <summary>The EffectContext for one target of an item's activation; only a scroll sets DurationScaleMultiplier away from 1.</summary>
     private EffectContext BuildContext(ItemDefinition item, int sourceEntityId, int targetEntityId, float durationScaleMultiplier = 1.0f) =>
-        EffectContext.FromEntity(_effectServices, sourceEntityId, targetEntityId, item.Name, item.Tags, _now, durationScaleMultiplier);
+        EffectContext.FromEntity(_effectServices, sourceEntityId, targetEntityId, item, _now, durationScaleMultiplier);
 }

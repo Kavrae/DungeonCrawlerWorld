@@ -38,6 +38,28 @@ public sealed class HumanTests
         BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)), initialEntityCapacity: 100, initialComponentCapacity: 50).EcsContext;
 
     [TestMethod]
+    public void Build_GrantsAPlusOneRacialBonusToEveryAbilityScore_CreditedToHuman()
+    {
+        var ecsContext = BuildEcsContext();
+        var entityId = ecsContext.EntityManager.CreateEntity();
+
+        ecsContext.BuildDefinition(entityId, Human.Id);
+
+        var modifiers = new List<Game.Modules.StatModifiers.Components.StatModifierComponent>();
+        new Game.Views.StatModifierView(ecsContext.ComponentManager).CopyStatModifiers(entityId, modifiers);
+        var ownKey = ecsContext.EntityManager.Keys.GetKey(entityId);
+        foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
+        {
+            var target = AbilityScoreMath.ToStatModifierTarget(abilityScoreType);
+            var racial = modifiers.Single(modifier => modifier.Target == target);
+            Assert.AreEqual(StatModifierOperation.Additive, racial.Operation);
+            Assert.AreEqual(1f, racial.Magnitude);
+            Assert.AreEqual(new SourceCause(SourceCauseKind.Race, Human.Name), racial.Source.Cause);
+            Assert.IsTrue(racial.Source.IsEntity(ownKey), $"{abilityScoreType}'s racial bonus must be the Human's own.");
+        }
+    }
+
+    [TestMethod]
     public void Build_GrantsRaceGlyphBodyPartsMovementActionLockTransformAbilityScoresAndQuickAttack()
     {
         var ecsContext = BuildEcsContext();

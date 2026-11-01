@@ -117,6 +117,24 @@ public sealed class AbilityScoreModifierFormatterTests
         Assert.AreEqual("Iron Ring : +1", lines[1].Text);
     }
 
+    [TestMethod]
+    public void GetOrderedLines_TheEntityIsItsOwnSource_ShowsSelf()
+    {
+        var manager = CreateRegisteredManager();
+        var entityKeys = new EntityKeys();
+        entityKeys.Issue(0);
+        entityKeys.Issue(1);
+        AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
+        manager.Merge(0, new DisplayTextComponent("Player1", ""));
+        manager.Merge(1, new DisplayTextComponent("Iron Ring", "A plain iron ring."));
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 2f, ActionSource.FromEntity(manager, entityKeys, 0, creatures: new BlueprintRegistry()));
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, ActionSource.FromEntity(manager, entityKeys, 1, creatures: new BlueprintRegistry()));
+
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), TestActionSources.Naming(entityKeys: entityKeys), 0, AbilityScoreType.Strength, now: 0);
+
+        CollectionAssert.AreEquivalent(new[] { "Self : +2", "Iron Ring : +1" }, lines.Skip(1).Select(static line => line.Text).ToArray());
+    }
+
     /// <summary>The name is recorded when the modifier is granted, so it still shows once the source entity is gone and its id belongs to someone else. A row shows the name alone, never the crawler number beside it.</summary>
     [TestMethod]
     public void GetOrderedLines_SourceEntityDestroyedAndIdReused_StillShowsTheOriginalName()

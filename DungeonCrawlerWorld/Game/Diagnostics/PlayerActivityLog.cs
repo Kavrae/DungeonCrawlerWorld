@@ -73,7 +73,7 @@ public sealed class PlayerActivityLog : IDisposable
             return;
         }
 
-        Write($"DAMAGE amount={damaged.Amount:0.##} type={damaged.DamageType} source={_actionSourceNaming.Describe(damaged.Source)} target={DescribeEntity(damaged.EntityId)} currentHealth={damaged.CurrentHealth} maximumHealth={damaged.MaximumHealth}");
+        Write($"DAMAGE amount={damaged.Amount:0.##} type={damaged.DamageType} source={_actionSourceNaming.Describe(damaged.Source, damaged.EntityId)} target={DescribeEntity(damaged.EntityId)} currentHealth={damaged.CurrentHealth} maximumHealth={damaged.MaximumHealth}");
     }
 
     /// <summary>Mirrors OnEntityDamaged exactly -- both directions the player can appear in a heal event (healed, or the source that healed someone else) are logged, same reasoning as the DAMAGE line above.</summary>
@@ -87,7 +87,7 @@ public sealed class PlayerActivityLog : IDisposable
             return;
         }
 
-        Write($"HEAL amount={healed.Amount:0.##} type={healed.HealType} source={(healed.SourceEntityId is { } healerEntityId ? DescribeEntity(healerEntityId) : "Admin")} target={DescribeEntity(healed.EntityId)} currentHealth={healed.CurrentHealth:0.##} maximumHealth={healed.MaximumHealth:0.##}");
+        Write($"HEAL amount={healed.Amount:0.##} type={healed.HealType} source={DescribeHealer(healed)} target={DescribeEntity(healed.EntityId)} currentHealth={healed.CurrentHealth:0.##} maximumHealth={healed.MaximumHealth:0.##}");
     }
 
     /// <summary>Mirrors OnEntityDamaged/OnEntityHealed exactly -- StatusEffectImmunity.IsImmune already gates the publish itself on player-involvement, so this handler's own check is defense in depth, not the only guard.</summary>
@@ -101,7 +101,7 @@ public sealed class PlayerActivityLog : IDisposable
             return;
         }
 
-        Write($"BLOCKED type={blocked.EffectType} source={_actionSourceNaming.Describe(blocked.Source)} target={DescribeEntity(blocked.EntityId)} (immune)");
+        Write($"BLOCKED type={blocked.EffectType} source={_actionSourceNaming.Describe(blocked.Source, blocked.EntityId)} target={DescribeEntity(blocked.EntityId)} (immune)");
     }
 
     /// <summary>One of the player's toggles was switched off without the player asking: its upkeep couldn't be met, or the player died.</summary>
@@ -114,6 +114,14 @@ public sealed class PlayerActivityLog : IDisposable
 
         Write($"TOGGLE_OFF name={ended.ToggleName} reason={ended.Reason}");
     }
+
+    /// <summary>"Self" when the healed entity healed itself, "Admin" when no entity did, otherwise the healer -- the event carries the two ids from the same frame, so comparing them can't be fooled by a recycled id.</summary>
+    private string DescribeHealer(EntityHealedEvent healed) => healed.SourceEntityId switch
+    {
+        null => "Admin",
+        { } healerEntityId when healerEntityId == healed.EntityId => ActionSourceNaming.SelfName,
+        { } healerEntityId => DescribeEntity(healerEntityId),
+    };
 
     /// <summary>entityId alone, or "Name (#entityId)" when anything names it (its own DisplayTextComponent, or its race -- see EntityNaming) -- shared by both the source and target sides of a DAMAGE line.</summary>
     private string DescribeEntity(int entityId) =>

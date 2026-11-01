@@ -3,6 +3,7 @@ using Engine.ECS.Entities;
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Inventory;
+using Game.World;
 
 namespace Game.Blueprints;
 
@@ -14,4 +15,12 @@ namespace Game.Blueprints;
 /// <param name="Actions">The session's action definitions -- what an action granted by id is read from (see ActionGrantEffects).</param>
 /// <param name="Items">The session's item definitions -- what an item granted, stocked or dropped by id is read from.</param>
 /// <cleanupVersion>1</cleanupVersion>
-public readonly record struct BlueprintContext(ComponentManager ComponentManager, int EntityId, MathUtility Rolls, EntityKeys EntityKeys, uint Seed, BlueprintRegistry Definitions, ActionCatalog Actions, ItemCatalog Items);
+public readonly record struct BlueprintContext(ComponentManager ComponentManager, int EntityId, MathUtility Rolls, EntityKeys EntityKeys, uint Seed, BlueprintRegistry Definitions, ActionCatalog Actions, ItemCatalog Items)
+{
+    /// <summary>The part whose Build step is running; null outside one.</summary>
+    public BlueprintDefinition? Part { get; init; }
+
+    /// <summary>The entity as the source of what this part grants it, credited to the part: "Tank" rather than the entity alone.</summary>
+    public ActionSource PartSource() =>
+        ActionSource.FromEntity(ComponentManager, EntityKeys, EntityId, Definitions, Part is { } part ? SourceCause.Of(part) : SourceCause.None);
+}
