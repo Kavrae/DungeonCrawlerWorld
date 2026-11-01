@@ -180,7 +180,7 @@ public sealed class LootboxResultsContent(
             _hoveredFrames = candidate is null ? 0 : 1;
         }
 
-        if (candidate is null || _hoveredFrames < HudChrome.HoverTooltipDelayFrames || !itemCatalog.TryGet(candidateReward.ItemDefinitionId, out var definition))
+        if (candidate is null || _hoveredFrames < PopupChrome.HoverTooltipDelayFrames || !itemCatalog.TryGet(candidateReward.ItemDefinitionId, out var definition))
         {
             tooltipController.Hide(this);
             return;

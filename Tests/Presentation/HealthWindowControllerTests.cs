@@ -28,6 +28,7 @@ using Tests.UIEngine;
 using UIEngine.Input;
 using UIEngine.Rendering;
 using UIEngine.UI;
+using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
 
 namespace Tests.Presentation;
@@ -140,7 +141,7 @@ public sealed class HealthWindowControllerTests
         HoverFor(harness, window, row.Rectangle.Center, 1);
         Assert.AreEqual(global::UIEngine.UI.ColorPalettes.WindowPalette.HighlightColor, row.ContentColor);
 
-        HoverFor(harness, window, row.Rectangle.Center, HudChrome.HoverTooltipDelayFrames - 2);
+        HoverFor(harness, window, row.Rectangle.Center, PopupChrome.HoverTooltipDelayFrames - 2);
         Assert.IsFalse(tooltip.IsVisible);
 
         HoverFor(harness, window, row.Rectangle.Center, 1);
@@ -163,7 +164,7 @@ public sealed class HealthWindowControllerTests
         var bodyPartBurningRow = FindRow(window, "Burning");
         var tooltip = FindTooltip(harness.Layers);
 
-        HoverFor(harness, window, bodyPartBurningRow.Rectangle.Center, HudChrome.HoverTooltipDelayFrames);
+        HoverFor(harness, window, bodyPartBurningRow.Rectangle.Center, PopupChrome.HoverTooltipDelayFrames);
         Assert.IsTrue(tooltip.IsVisible);
         Assert.AreEqual("Lava", tooltip.TitleText);
         StringAssert.Contains(tooltip.OriginalText, "Burning x3");
@@ -180,7 +181,7 @@ public sealed class HealthWindowControllerTests
             canModify: true, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         var window = OpenWindow(harness);
         var tooltip = FindTooltip(harness.Layers);
-        HoverFor(harness, window, FindRow(window, "Resistance").Rectangle.Center, HudChrome.HoverTooltipDelayFrames);
+        HoverFor(harness, window, FindRow(window, "Resistance").Rectangle.Center, PopupChrome.HoverTooltipDelayFrames);
         Assert.IsTrue(tooltip.IsVisible);
 
         var button = FindButton(harness.Layers);

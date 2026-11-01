@@ -115,14 +115,14 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
         UpdateHover(screenBounds);
     }
 
-    /// <summary>Delay-gated via HudChrome.HoverTooltipDelayFrames before showing (mirrors AbilityScoreWindow.UpdateHover), but hides immediately with no delay on hover loss.</summary>
+    /// <summary>Delay-gated via PopupChrome.HoverTooltipDelayFrames before showing (mirrors AbilityScoreWindow.UpdateHover), but hides immediately with no delay on hover loss.</summary>
     private void UpdateHover(Rectangle screenBounds)
     {
         var barRectangle = BarRectangle();
         var isHovering = _hostWindow.IsPointerOver;
         _hoveredFrames = isHovering ? _hoveredFrames + 1 : 0;
 
-        if (!isHovering || _hoveredFrames < HudChrome.HoverTooltipDelayFrames)
+        if (!isHovering || _hoveredFrames < PopupChrome.HoverTooltipDelayFrames)
         {
             _hoverPopup.IsVisible = false;
             return;

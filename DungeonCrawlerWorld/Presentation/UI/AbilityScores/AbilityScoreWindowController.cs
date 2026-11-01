@@ -51,6 +51,7 @@ public sealed class AbilityScoreWindowController(
             Button = new ButtonOptions { SpriteName = "AbilityScore", HotkeyLabel = "O" },
         });
         _button.Initialize();
+        _button.TooltipText = "Ability Scores";
         _button.Clicked += _ => _slot.Toggle();
         layers.Add(UiLayer.DynamicHud, _button);
 

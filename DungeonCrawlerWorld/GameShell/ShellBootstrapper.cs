@@ -124,7 +124,7 @@ public static class ShellBootstrapper
             inventoryTransferDropHandler,
             new MapDropHandler(views.MapView, views.ShopView, mapViewState, inventoryTransferDropHandler),
         ];
-        var inputController = new UiInputController(uiLayers, screenSize, pointerState, inputHandlers, contentDropHandlers, contextMenuController.Dropdowns);
+        var inputController = new UiInputController(uiLayers, screenSize, pointerState, inputHandlers, contentDropHandlers, contextMenuController.Dropdowns, tooltipController);
         inputController.SetDefaultFocusElement(mapWindow);
         inputController.FocusElement(mapWindow);
 

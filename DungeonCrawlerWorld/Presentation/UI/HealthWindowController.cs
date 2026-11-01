@@ -41,6 +41,7 @@ public sealed class HealthWindowController(
             Button = new ButtonOptions { HotkeyLabel = "U" },
         });
         _button.Initialize();
+        _button.TooltipText = "Health";
         _button.Clicked += _ => _slot.Toggle();
         layers.Add(UiLayer.DynamicHud, _button);
 

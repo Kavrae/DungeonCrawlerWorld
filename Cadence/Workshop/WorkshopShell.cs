@@ -94,11 +94,13 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
 
         uiEngine.RegisterFrameworkElementFactories(_contextMenuController);
         _contextMenuController.Dropdowns.Initialize(_layers);
+        var tooltipController = new TooltipController();
+        tooltipController.Initialize(uiEngine.ElementPoolService, _layers);
 
         BuildTabStrip();
 
         IUiInputHandler[] commandHotkeys = [.. _commands.Select(command => new KeyPressInputHandler(command.Hotkey, () => command.Run(this), firesWhileTyping: true, command.Modifiers))];
-        _inputController = new UiInputController(_layers, screenSize, new PointerState(), commandHotkeys, [], _contextMenuController.Dropdowns);
+        _inputController = new UiInputController(_layers, screenSize, new PointerState(), commandHotkeys, [], _contextMenuController.Dropdowns, tooltipController);
         _layerHost = new UiLayerHost(_layers, uiEngine.RenderService);
         _tabNavigator = new TabNavigator(tabs, OpenTab, this);
         _loadProblems = tabSet.LoadProblems;

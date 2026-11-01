@@ -89,7 +89,7 @@ public sealed class HotbarController
             _hoveredSlotFrames = candidateSlot is null ? 0 : 1;
         }
 
-        _mapViewState.HoverSlot = _hoveredSlotFrames >= HudChrome.HoverTooltipDelayFrames ? candidateSlot : null;
+        _mapViewState.HoverSlot = _hoveredSlotFrames >= PopupChrome.HoverTooltipDelayFrames ? candidateSlot : null;
 
         UpdateSummary();
     }

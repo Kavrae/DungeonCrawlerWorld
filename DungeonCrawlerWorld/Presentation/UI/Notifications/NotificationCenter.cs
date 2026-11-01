@@ -76,6 +76,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         // of the codebase's convention of a control's own Initialize running before its children
         // are attached (see Window.OnChildrenInitialized/GridControl/AbilityScoreWindow).
         _folder.Initialize();
+        _folder.TooltipText = "Achievements";
         layers.Add(UiLayer.DynamicHud, _folder);
 
         // Opening another category's notification (or re-opening this one) from the summary

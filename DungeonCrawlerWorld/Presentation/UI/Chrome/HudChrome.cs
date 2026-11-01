@@ -1,4 +1,3 @@
-using Engine.Utilities;
 using Microsoft.Xna.Framework;
 using Presentation.UI.Content;
 
@@ -9,12 +8,6 @@ public static class HudChrome
 {
     public static Vector2 Margin = new(30, 30);
     public static Vector2 EntrySize = new(65, 21);
-
-    /// <summary>Standard hover-tooltip wait time before a hover-triggered popup (e.g. the Armed
-    /// Hotkey Summary, and future hover-triggered UI) appears -- shared so every such element feels
-    /// consistent. 0.4s, expressed in frames via GameTiming.FramesForSeconds so it stays testable
-    /// via repeated synthetic Update() calls.</summary>
-    public static int HoverTooltipDelayFrames = GameTiming.FramesForSeconds(0.4f);
 
     private const float ActionLockGap = 8f;
     private const float ManaBarGap = 3f;

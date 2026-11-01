@@ -134,6 +134,7 @@ public sealed class ItemDetailsWindow(
         if (OnCompareRequested is not null)
         {
             var compareButton = BuildTitleButton(this, "↔");
+            compareButton.TooltipText = "Compare";
             compareButton.Clicked += _ =>
             {
                 if (_currentStackInstanceId != NoStackInstanceId)

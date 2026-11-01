@@ -3474,12 +3474,6 @@ bottom-right number silently means "how many I have" vs. "uses left" with zero v
 (`HotbarContent` has the identical ambiguity, same fix should cover both). No redesign specified --
 needs a deliberate look once there's room to design against.
 
-#### Button tooltips
-
-No icon/symbol-only button explains itself on hover. Needs the existing `Tooltip` pattern on: every
-`Window` title button, the Inventory/Ability Score folder tiles, the Notification/Inventory folder
-icons. Mechanical -- reusing an existing pattern in a few more places.
-
 #### Ability score buffs name where they come from
 
 Each modifier line in the Ability Score window (`AbilityScoreModifierFormatter`) shows its source as

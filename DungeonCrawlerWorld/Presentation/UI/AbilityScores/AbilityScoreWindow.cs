@@ -144,7 +144,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     /// <summary>
     /// Header highlight is immediate (instant visual feedback); the popup itself is delay-gated
     /// the same way HotbarController.UpdateHover gates its own Armed Hotkey Summary popup,
-    /// against the same shared HudChrome.HoverTooltipDelayFrames -- but hides immediately on candidate change/
+    /// against the same shared PopupChrome.HoverTooltipDelayFrames -- but hides immediately on candidate change/
     /// loss (no delay on hiding, only on showing, same convention MapViewState.HoverSlot uses).
     /// </summary>
     private void UpdateHover()
@@ -161,7 +161,7 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
             _hoveredFrames = candidate is null ? 0 : 1;
         }
 
-        if (candidate is null || _hoveredFrames < HudChrome.HoverTooltipDelayFrames)
+        if (candidate is null || _hoveredFrames < PopupChrome.HoverTooltipDelayFrames)
         {
             _tooltipController.Hide(this);
             return;

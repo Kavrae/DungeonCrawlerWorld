@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using UIEngine.Geometry;
 using UIEngine.UI;
+using UIEngine.UI.Chrome;
 
 namespace UIEngine.Input;
 
@@ -177,9 +178,17 @@ public sealed class UiInputController
     /// <summary>See StartTextInput.</summary>
     internal Action StopTextInput = TextInputEXT.StopTextInput;
 
+    /// <summary>Shows a hovered element's own TooltipText -- null in setups that build none, where no element tooltip ever shows.</summary>
+    private readonly TooltipController? _tooltipController;
+
+    /// <summary>The element the pointer is resting on for its tooltip, and for how many frames -- see UpdateElementTooltip.</summary>
+    private Element? _tooltipHoveredElement;
+
+    private int _tooltipHoveredFrames;
+
     /// <param name="inputHandlers">The application's raw-input rules, called in this order -- see IUiInputHandler.</param>
     /// <param name="contentDropHandlers">What a content drop means, tried in this order until one claims it -- see IContentDropHandler.</param>
-    public UiInputController(UiLayerStack layers, Vector2 screenSize, PointerState pointerState, IReadOnlyList<IUiInputHandler> inputHandlers, IReadOnlyList<IContentDropHandler> contentDropHandlers, DropdownController? dropdownController = null)
+    public UiInputController(UiLayerStack layers, Vector2 screenSize, PointerState pointerState, IReadOnlyList<IUiInputHandler> inputHandlers, IReadOnlyList<IContentDropHandler> contentDropHandlers, DropdownController? dropdownController = null, TooltipController? tooltipController = null)
     {
         _layers = layers;
         _screenSize = screenSize;
@@ -187,6 +196,7 @@ public sealed class UiInputController
         _inputHandlers = [.. inputHandlers];
         _contentDropHandlers = [.. contentDropHandlers];
         _dropdownController = dropdownController;
+        _tooltipController = tooltipController;
         _isMenuWindow = layers.IsMenuWindow;
         _isMenuModeExempt = layers.IsMenuModeExempt;
 
@@ -395,6 +405,7 @@ public sealed class UiInputController
 
         UpdateMouseWheelScroll(keyboardState, mouseState);
         UpdateCursor();
+        UpdateElementTooltip(mouseState);
         NotifyInputHandlersOfPointer();
 
         if (_contentDrag is { } contentDrag)
@@ -755,6 +766,37 @@ public sealed class UiInputController
 
         _contentDrag = start;
         _contentDragSourceSize = start.SourceSize;
+    }
+
+    /// <summary>
+    /// Shows the TooltipText of the button or element under a resting pointer once it has stayed there for
+    /// PopupChrome.HoverTooltipDelayFrames, below it; any press, drag or window interaction hides it and starts the wait again.
+    /// </summary>
+    private void UpdateElementTooltip(MouseState mouseState)
+    {
+        if (_tooltipController is null)
+        {
+            return;
+        }
+
+        var isPointerResting = mouseState.LeftButton == ButtonState.Released
+            && mouseState.RightButton == ButtonState.Released
+            && _activeInteraction.Kind == ElementDragInteractionKind.None;
+        var hoveredElement = isPointerResting ? _hoveredButton ?? _hoveredInteraction.Element : null;
+
+        if (!ReferenceEquals(hoveredElement, _tooltipHoveredElement))
+        {
+            _tooltipHoveredElement = hoveredElement;
+            _tooltipHoveredFrames = 0;
+        }
+
+        if (_tooltipHoveredElement?.TooltipText is not { } tooltipText || ++_tooltipHoveredFrames < PopupChrome.HoverTooltipDelayFrames)
+        {
+            _tooltipController.Hide(this);
+            return;
+        }
+
+        _tooltipController.Show(this, _tooltipHoveredElement.Rectangle, PopupAnchor.South, PopupChrome.ElementTooltipGap, PopupChrome.HoverPopupMaximumSize, tooltipText);
     }
 
     /// <summary>Tells every input handler what the pointer is over and where, once per frame after the cursor is chosen, and whether a window move, resize or scrollbar drag is under way (the hovered element isn't refreshed during one).</summary>

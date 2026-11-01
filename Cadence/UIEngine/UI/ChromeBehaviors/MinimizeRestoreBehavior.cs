@@ -36,5 +36,8 @@ public sealed class MinimizeRestoreBehavior : IChromeBehavior
         button.LeftText = isMinimized
             ? "O"
             : "_";
+        button.TooltipText = isMinimized
+            ? "Restore"
+            : "Minimize";
     }
 }

@@ -18,6 +18,7 @@ using Tests.UIEngine;
 using UIEngine.Input;
 using UIEngine.Rendering;
 using UIEngine.UI;
+using UIEngine.UI.Chrome;
 
 namespace Tests.Presentation;
 
@@ -130,7 +131,7 @@ public sealed class PlayerHealthBarContentTests
         var (content, hostWindow, input) = Build(complexHealth: true);
         var insidePoint = InsideBar(hostWindow);
 
-        for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames - 1; frame++)
+        for (var frame = 0; frame < PopupChrome.HoverTooltipDelayFrames - 1; frame++)
         {
             Frame(input, content, insidePoint);
             Assert.IsFalse(content.HoverPopup.IsVisible, $"Popup must stay hidden before the delay threshold (frame {frame}).");
@@ -143,7 +144,7 @@ public sealed class PlayerHealthBarContentTests
         var (content, hostWindow, input) = Build(complexHealth: true);
         var insidePoint = InsideBar(hostWindow);
 
-        for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames; frame++)
+        for (var frame = 0; frame < PopupChrome.HoverTooltipDelayFrames; frame++)
         {
             Frame(input, content, insidePoint);
         }
@@ -157,7 +158,7 @@ public sealed class PlayerHealthBarContentTests
         var (content, hostWindow, input) = Build(complexHealth: true);
         var insidePoint = InsideBar(hostWindow);
 
-        for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames; frame++)
+        for (var frame = 0; frame < PopupChrome.HoverTooltipDelayFrames; frame++)
         {
             Frame(input, content, insidePoint);
         }
@@ -174,7 +175,7 @@ public sealed class PlayerHealthBarContentTests
         var (content, hostWindow, input) = Build(complexHealth: true);
         var insidePoint = InsideBar(hostWindow);
 
-        for (var frame = 0; frame < HudChrome.HoverTooltipDelayFrames; frame++)
+        for (var frame = 0; frame < PopupChrome.HoverTooltipDelayFrames; frame++)
         {
             Frame(input, content, insidePoint);
         }

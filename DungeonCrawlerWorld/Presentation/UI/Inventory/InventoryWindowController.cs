@@ -76,6 +76,7 @@ public sealed class InventoryWindowController(
             Button = new ButtonOptions { SpriteName = "Inventory", HotkeyLabel = "I" },
         });
         _button.Initialize();
+        _button.TooltipText = "Inventory";
         _button.Clicked += _ => _windowLifecycle.Toggle();
         layers.Add(UiLayer.DynamicHud, _button);
 

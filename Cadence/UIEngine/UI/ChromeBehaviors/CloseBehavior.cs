@@ -6,6 +6,7 @@ public sealed class CloseBehavior : IChromeBehavior
     public void Attach(Window window)
     {
         var closeButton = Window.BuildTitleButton(window, "X");
+        closeButton.TooltipText = "Close";
         closeButton.Clicked += _ => window.Close();
         window.AddTitleButton(closeButton);
     }

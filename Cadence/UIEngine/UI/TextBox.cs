@@ -33,7 +33,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
     /// <summary>Multiline boxes start tall enough for exactly this many lines and never shrink below it, regardless of how little text is in the box. See AutoSizeToContent.</summary>
     private const int MinimumVisibleLines = 2;
 
-    /// <summary>Same delay-gated frame-counter idiom as HudChrome.HoverTooltipDelayFrames/DebouncedTextFilter -- toggles CaretVisible every half-second while focused.</summary>
+    /// <summary>Same delay-gated frame-counter idiom as PopupChrome.HoverTooltipDelayFrames/DebouncedTextFilter -- toggles CaretVisible every half-second while focused.</summary>
     private static readonly int CaretBlinkIntervalFrames = GameTiming.FramesForSeconds(0.5f);
 
     /// <summary>Roughly standard OS double-click timing -- a second click on (near) the same character within this window counts as a double-click; a third, a triple-click. See RegisterClickForMultiClick.</summary>

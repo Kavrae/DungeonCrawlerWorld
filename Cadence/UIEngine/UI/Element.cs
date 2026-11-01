@@ -416,6 +416,9 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// <summary>Unlike the other CanUserXxx flags (opt-in, default false), this defaults to true -- every window participates in focus unless explicitly opted out.</summary>
     public bool CanUserFocus { get; set; }
 
+    /// <summary>Shown in the shared tooltip once the pointer has rested on this element for PopupChrome.HoverTooltipDelayFrames (UiInputController); null shows nothing.</summary>
+    public string? TooltipText { get; set; }
+
     protected virtual bool RequiresContentViewport => CanUserScrollHorizontal || CanUserScrollVertical;
 
     /*========Scroll========*/
@@ -469,6 +472,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         // used for -- see Tag's own doc comment.
         Tag = null;
         DropTarget = null;
+        TooltipText = null;
 
         /*========Display========*/
         _geometry.DisplayMode = layout?.DisplayMode ?? ElementDisplayMode.Fixed;

@@ -251,6 +251,7 @@ public sealed class DebugLaunchSection(DebugTabServices services, WorkshopDebugg
             Text = new TextOptions { Text = CopyGlyph, TextColor = WindowPalette.ControlLabelTextColor },
             Button = new ButtonOptions { SpriteName = CopySpriteName },
         });
+        copyButton.TooltipText = "Copy";
         copyButton.Clicked += _ =>
         {
             services.CopyToClipboard(box.OriginalText);

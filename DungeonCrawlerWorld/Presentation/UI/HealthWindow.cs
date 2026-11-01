@@ -330,7 +330,7 @@ public sealed class HealthWindow(
         RefreshRowValues();
     }
 
-    /// <summary>Shows the source popup for the row under the cursor once it has been hovered for HudChrome.HoverTooltipDelayFrames, and hides it as soon as the cursor leaves or the row's effect is gone.</summary>
+    /// <summary>Shows the source popup for the row under the cursor once it has been hovered for PopupChrome.HoverTooltipDelayFrames, and hides it as soon as the cursor leaves or the row's effect is gone.</summary>
     /// <remarks>The row is the one UiInputController finds under the pointer (Element.IsPointerOver). The source, the effect and its duration are read here each frame the popup is up, never kept on the row.</remarks>
     private void UpdateHover()
     {
@@ -356,7 +356,7 @@ public sealed class HealthWindow(
         }
 
         if (hoveredRow is not { } row
-            || _hoveredFrames < HudChrome.HoverTooltipDelayFrames
+            || _hoveredFrames < PopupChrome.HoverTooltipDelayFrames
             || !TryDescribeRowSource(row, out var sourcePopupKey))
         {
             tooltipController.Hide(this);

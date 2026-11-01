@@ -471,7 +471,7 @@ public sealed class InventoryGridContent(
 
     /// <summary>
     /// Header highlight is immediate (instant visual feedback); the popup itself is delay-gated
-    /// against the same shared HudChrome.HoverTooltipDelayFrames AbilityScoreWindow/
+    /// against the same shared PopupChrome.HoverTooltipDelayFrames AbilityScoreWindow/
     /// HotbarController use -- but hides immediately on candidate change/loss (no delay on
     /// hiding, only on showing, same convention MapViewState.HoverSlot uses).
     /// </summary>
@@ -489,7 +489,7 @@ public sealed class InventoryGridContent(
             _hoveredFrames = candidate is null ? 0 : 1;
         }
 
-        if (candidate is null || _hoveredFrames < HudChrome.HoverTooltipDelayFrames)
+        if (candidate is null || _hoveredFrames < PopupChrome.HoverTooltipDelayFrames)
         {
             tooltipController.Hide(this);
             return;
