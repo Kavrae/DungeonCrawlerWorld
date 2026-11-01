@@ -1,3 +1,4 @@
+using Engine.Utilities;
 using FontStashSharp;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -28,8 +29,12 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
     private static readonly Color TextColor = WindowPalette.TitleTextColor;
 
     private string _text = string.Empty;
+    private string? _sourceName;
     private SpriteFontBase _font = null!;
     private readonly TextSizeCache _textSize = new();
+
+    /// <summary>The line as drawn, fitted to the row's width -- rebuilt only when the line, the width or the font changes.</summary>
+    private readonly KeyedCache<(string Text, string? SourceName, string? ModifierText, float Width, SpriteFontBase Font), string> _drawnText = new();
 
     public ActionSource? Source { get; private set; }
 
@@ -40,6 +45,7 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
     public void Configure(ModifierDisplayLine line, float rowHeight)
     {
         _text = line.Text;
+        _sourceName = line.SourceName;
         Source = line.Source;
         ModifierText = line.ModifierText;
         RemainingDurationFrames = line.RemainingDurationFrames;
@@ -57,6 +63,24 @@ public sealed class AbilityScoreModifierRow(FontService fontService, ElementPool
         }
 
         var footprintSize = new Vector2(ContentSize.X - Padding, ContentSize.Y);
-        LabelRenderer.DrawRightAligned(spriteBatch, _font, _text, _textSize.SizeOf(_font, _text).X, Vector2.Zero, footprintSize, TextColor);
+        var drawnText = _drawnText.Get((_text, _sourceName, ModifierText, footprintSize.X, _font), FontService, static (key, fontService) => FitToWidth(fontService.GetTextMeasurer(key.Font), key.Text, key.SourceName, key.ModifierText, key.Width));
+        LabelRenderer.DrawRightAligned(spriteBatch, _font, drawnText, _textSize.SizeOf(_font, drawnText).X, Vector2.Zero, footprintSize, TextColor);
+    }
+
+    /// <summary>The line unchanged when it fits width, else with the source name shortened by an ellipsis so the value after it still shows; a line with no source is shortened as a whole.</summary>
+    internal static string FitToWidth(ITextMeasurer textMeasurer, string text, string? sourceName, string? modifierText, float width)
+    {
+        if (textMeasurer.MeasureWidth(text) <= width)
+        {
+            return text;
+        }
+
+        if (sourceName is null || modifierText is null)
+        {
+            return StringUtility.TruncateWithEllipsis(textMeasurer, text, width);
+        }
+
+        var valueSuffix = $" : {modifierText}";
+        return StringUtility.TruncateWithEllipsis(textMeasurer, sourceName, width - textMeasurer.MeasureWidth(valueSuffix)) + valueSuffix;
     }
 }

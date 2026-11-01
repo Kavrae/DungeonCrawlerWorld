@@ -16,9 +16,10 @@ namespace Presentation.UI;
 /// value/percent alone (e.g. "+1", "-10%"), without the source prefix Text carries -- the hover
 /// popup shows it under a title of its own (the source name), so it shouldn't repeat it.
 /// Operation is what lets a caller (e.g. AbilityScoreWindow) detect the Additive/Multiplicative
-/// group boundary to draw a separator at, without re-deriving it from Text.
+/// group boundary to draw a separator at, without re-deriving it from Text. SourceName is the
+/// source part of Text alone, so a row short of room can shorten just the name and keep the value.
 /// </summary>
-public readonly record struct ModifierDisplayLine(string Text, ActionSource? Source, int? RemainingDurationFrames, string? ModifierText = null, StatModifierOperation? Operation = null);
+public readonly record struct ModifierDisplayLine(string Text, ActionSource? Source, int? RemainingDurationFrames, string? ModifierText = null, StatModifierOperation? Operation = null, string? SourceName = null);
 
 /// <summary>Shared formatting for ModifierDisplayLine's Source/RemainingDurationFrames -- one place so every consumer (AbilityScoreModifierFormatter today, Skills/Action-leveling formatters later) reads the same source name and duration text for the same underlying StatModifierComponent.</summary>
 public static class ModifierDisplayFormatting

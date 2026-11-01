@@ -2068,11 +2068,11 @@ scrolling back off post-`Initialize()` if `MaxScrollOffset` is 0.
 - **Settle loop** in `Element.Measure`: size, measure children, recompute scroll bounds, and
   re-measure if `Auto` now wants a different bar state -- at most once more per axis (Debug.Fail
   past that). It converges because content only grows as its width shrinks.
-  - Changes found outside `Measure` (`AddChild`/`RemoveChild`, child `Resized`,
-    `TextWindow.UpdateText`) go through `SettleScrollbarsOutsideMeasure`. It does nothing inside the
+  - Changes found outside `Measure` (a child added, removed, shown, hidden, resized or moved:
+    `OnChildLayoutChanged`) go through `SettleScrollbarsOutsideMeasure`. It does nothing inside the
     element's own `Measure` (`_measureDepth`), and defers to the end of an open `BeginLayoutBatch`.
-  - WrapContent: only `TextWindow`'s capped WrapContent scrolls. It adds the gutter within its own
-    `MaximumSize`.
+  - WrapContent: a capped WrapContent element (a `TextWindow`, or any element whose children reach its
+    cap) scrolls. It adds the gutter within its own `MaximumSize`.
 - **`ContentResized`**: raised at the end of `Measure` whenever `ContentSize` changed. A gutter
   changes `ContentSize` without `CurrentSize`, so `Resized` misses it. Anything laying children out
   from `ContentSize` should listen to it: `InventoryGridContent` does. Its `RebuildCells` runs in a
@@ -2090,6 +2090,58 @@ scrolling back off post-`Initialize()` if `MaxScrollOffset` is 0.
 - **Wheel**: vertical by default. Horizontal when the element only scrolls horizontally, when Shift
   is held, or over its horizontal bar -- each only if horizontal scrolling is allowed at all.
 - **Not planned**: keyboard scrolling (PageUp/PageDown/Home/End), arrow buttons on bars.
+
+### Element sizing: caps, constraints and the parent's reaction (2026-11-01)
+
+From PLAN-wrapcontent-sizing.md (TODO "WrapContent parent sizing collapses when a child resizes itself
+after attach").
+- **Cap and constraint are separate.**
+  - `MaximumSize` is the cap the author set (`Layout.MaximumSize`, `SetMaximumSize`), or the screen
+    (`UiRenderService.ScreenSize`, the back buffer, read live) when none was set. Measure never writes it.
+  - `AvailableSize` is the space the last measure offered.
+  - Every clamp reads `EffectiveMaximumSize`, the smaller of the two; a root's is its `MaximumSize`.
+  - Before this, `Measure` overwrote the author's cap with the space offered, and `Build` defaulted an
+    unset cap to the parent's content size or the element's own starting size. That lost caps, and
+    left windows that could never grow past the size they were built at.
+  - The screen is only a fallback, not a chosen limit; see TODO "Global hard minimum/maximum element
+    sizes".
+  - A host whose back buffer changes calls `UiLayerStack.MeasureAndArrangeRoots` (the Workshop, from
+    `WorkshopShell.Resize`).
+- **One answer whoever measures.** A child re-measuring itself (`MeasureAndArrange`) is offered exactly
+  what its parent's own pass would offer it (`ContentSizeOfferedToChildren`). A WrapContent element
+  offers its children the most its content area can be within its cap, after border, title bar,
+  padding and scrollbars. Before, a child measured against a WrapContent parent's previous content
+  size (itself), and the parent's pass then offered it something else.
+- **A WrapContent element keeps to its cap**: it stops there, and content past it is clipped or
+  scrolls.
+- **WrapContent's `ContentSize` excludes padding and scrollbars**, as Fixed and Fill always did. It
+  used to include the padding, so its clip ran past its background and its scroll range came up short.
+- **The parent reacts to a child in one place**, `Element.OnChildLayoutChanged`:
+  - **What it does:** a WrapContent element re-fits (and so on up its WrapContent ancestors), deferred
+    to an open layout batch, with tiled children re-tiled at once either way. Any other element
+    re-tiles if it tiles its children, then recalculates its scroll range.
+  - **Who calls it:** `MeasureAndArrange` (when the size changed, or the element was attached or moved
+    since), `RemoveChild` and the `IsVisible` setter. Showing a child measures it first, since a
+    measure skips hidden children.
+  - `TextWindow.RelayoutText` is a `MeasureAndArrange`, so a text change resizes like anything else.
+  - Before, a resize from text, a visibility change and a move each skipped some or all of this: the
+    Inspection window's component dump left gaps until scrolled.
+- **`ChildrenExtent`** is what WrapContent sizes around and a scrolling element scrolls over. Tiled
+  children are taken where `RetileChildren` will put them, since `Measure` runs before `Arrange`.
+- **Chrome setters lay out nothing** (`ContentPadding`, `CanUserScroll*`, `ScrollbarVisibility`,
+  `SetMinimumSize`/`SetMaximumSize`); their callers lay out afterwards. Announcing them is in TODO
+  "Complete the Engine and UIEngine hooks, used or not".
+- **A Fixed element with no `Size` is 0×0** until something sizes it. That is legitimate when it is
+  sized before it is shown (the shared `Dropdown`, `TradeWindow`); the audit is in TODO "Global hard
+  minimum/maximum element sizes".
+- **A Minimized element's children are out of play**: not measured, drawn, updated or hit-tested, wherever
+  they sit, until it is restored (its own content -- `IElementContent.Update` -- still ticks: the
+  Inspection window's content is what clears it). Minimizing or restoring changes its size, so a tiling
+  parent re-tiles the siblings after it (`OnChildLayoutChanged`). Closes TODO "Window minimize
+  completeness"; drawing was already skipped, so only updates and hit-testing were new.
+- **The quest composer is WrapContent.** Its old Fixed popup resized itself to the box plus a
+  hard-coded 30 px of chrome. The real chrome is 32 px, so every clamp shrank it 2 px further, down to
+  its title bar.
 
 ### Tall sprites, wall faces and tops, and the sprite manifest
 

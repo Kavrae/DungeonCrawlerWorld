@@ -26,8 +26,8 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     public const float RowHeight = 18f;
     public const float RowTextGap = 6f;
 
-    /// <summary>A generous, effectively-unlimited per-row height cap -- see InspectionWindowContent.UnboundedChildHeight's own doc comment for why this is needed: without it, a row tiled past the host window's own one-screen-tall content size gets silently clamped to nothing.</summary>
-    public const float UnboundedChildHeight = 10000f;
+    /// <summary>A wrapping text line's height cap: taller than any screen, so a long line grows with its column, which scrolls, rather than stopping at the screen's height (an element's default cap).</summary>
+    public const float MaximumTextRowHeight = 10000f;
 
     /// <summary>Soft per-widget height cap for the target shape preview grid -- independent of the window's own overall MaximumSize/scroll safety net, so one large-AreaSize Circle can't single-handedly blow out the window's height; TargetShapePreviewGeometry.ComputeCellSize shrinks cells to fit within this instead.</summary>
     private const float TargetShapePreviewMaxHeight = 160f;
@@ -217,7 +217,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         var line = elementPoolService.CreateElement<TextWindow>(host, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, RowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(width, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
             Text = new TextOptions { Text = text, TextColor = color },
@@ -232,7 +232,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         var line = elementPoolService.CreateElement<TextWindow>(host, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.WrapContent },
+            Layout = new ElementLayoutOptions { MaximumSize = new Vector2(width, MaximumTextRowHeight), DisplayMode = ElementDisplayMode.WrapContent },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
             Text = new TextOptions { Text = text, TextColor = BodyTextColor },
@@ -247,7 +247,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         var divider = elementPoolService.CreateElement<TextDivider>(host, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, RowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(width, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
@@ -271,7 +271,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         var row = elementPoolService.CreateElement<Window>(host, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, rowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(width, rowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });

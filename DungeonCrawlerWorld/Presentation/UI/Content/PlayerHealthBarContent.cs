@@ -133,7 +133,6 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
         {
             _popupRowCount = rowCount;
             var popupSize = PlayerHealthHoverContent.ContentSizeFor(rowCount) + PopupBorderInsetDoubled;
-            _hoverPopup.SetMaximumSize(popupSize);
             _hoverPopup.SetSize(popupSize);
         }
 

@@ -25,14 +25,13 @@ public readonly record struct TooltipRow(string LeftText, string RightText, Colo
 /// A single persistent, pooled-style TextWindow shown/hidden via IsVisible (rather than
 /// created/closed per popup) and positioned relative to whatever triggered it -- one of the 8
 /// PopupAnchor compass directions plus a pixel gap, resolved by PopupPositioning. Always a
-/// top-level element (parent null), deliberately -- a nested child's own MaximumSize gets
-/// silently overwritten every layout pass to (parent.ContentSize - RelativePosition) (see
-/// Element.MeasureAndArrange's non-root branch), which is fine for content meant to stay inside
-/// its parent but structurally incompatible with a popup that's meant to float outside it (East of a
-/// header/row near the parent's right edge would shrink to nothing). Being top-level sidesteps that entirely
-/// -- RelativePosition is already the absolute screen position, and MaximumSize behaves as the
-/// stable, position-independent cap it was configured with (see Element.Measure's root branch:
-/// availableSize is read from, then written straight back to, MaximumSize -- a no-op).
+/// top-level element (parent null), deliberately -- a child is measured within the space its
+/// parent offers it (parent.ContentSize - RelativePosition, see ComputeChildAvailableSize), which is
+/// fine for content meant to stay inside its parent but structurally incompatible with a popup that's
+/// meant to float outside it (East of a header/row near the parent's right edge would shrink to
+/// nothing). Being top-level sidesteps that entirely -- RelativePosition is already the absolute
+/// screen position, and a root is offered exactly its MaximumSize, the position-independent cap
+/// TooltipController.Show sets.
 ///
 /// Added to UiLayer.Tooltip, not DynamicHud -- Tooltip sits structurally above DynamicHud and
 /// below User (see UiLayer's own doc comment), so this always draws over whatever window it's
@@ -98,7 +97,7 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
     /// <summary>Whether the last layout already shows exactly this text, title and rows at the current maximum size and width mode.</summary>
     private bool IsLaidOutFor(string bodyText, string? titleText, IReadOnlyList<TooltipRow>? rows) =>
         _hasLaidOut &&
-        _laidOutMaximumSize == _geometry.MaximumSize &&
+        _laidOutMaximumSize == EffectiveMaximumSize &&
         _laidOutUseFixedWidth == UseFixedWidth &&
         _headerState.ShowHeader == (titleText is not null) &&
         TitleText == (titleText ?? string.Empty) &&
@@ -230,7 +229,7 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
         base.RecalculateWrapContentSize();
 
         _hasLaidOut = true;
-        _laidOutMaximumSize = _geometry.MaximumSize;
+        _laidOutMaximumSize = EffectiveMaximumSize;
         _laidOutUseFixedWidth = UseFixedWidth;
 
         // Extends the sizing by one more text line per row, a LinePadding gap above the whole
@@ -257,10 +256,11 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
         }
 
         // Re-pins width to MaximumSize.X after the base class's shrink-to-widest-line pass above.
-        var fixedContentWidth = _geometry.MaximumSize.X - BorderInsetDoubled.X;
+        var fixedWidth = EffectiveMaximumSize.X;
+        var fixedContentWidth = fixedWidth - BorderInsetDoubled.X;
         _contentState.Size.X = fixedContentWidth;
         _contentState.BackgroundSize.X = fixedContentWidth;
-        _geometry.CurrentSize.X = _geometry.MaximumSize.X;
+        _geometry.CurrentSize.X = fixedWidth;
 
         if (_headerState.ShowHeader)
         {

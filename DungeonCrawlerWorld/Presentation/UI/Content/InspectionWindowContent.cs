@@ -80,8 +80,8 @@ public sealed class InspectionWindowContent(
     /// <summary>Same cadence SelectionWindowContent's own per-component refresh used -- most components update every 10 frames, so more frequent text refreshes are wasted work.</summary>
     private const int AdminDumpRefreshInterval = 10;
 
-    /// <summary>A generous, effectively-unlimited per-row height cap -- see SelectionWindowContent.UnboundedChildHeight's own doc comment for why this is needed: without it, a row tiled past the host window's own one-screen-tall content size gets silently clamped to nothing.</summary>
-    private const float UnboundedChildHeight = 10000f;
+    /// <summary>A wrapping text row's height cap: taller than any screen, so a long description or component dump grows with the column, which scrolls, rather than stopping at the screen's height (an element's default cap).</summary>
+    private const float MaximumTextRowHeight = 10000f;
 
     private readonly DirectComponentPool<SpawnRecordComponent> _spawnRecords = componentManager.GetDirectPool<SpawnRecordComponent>();
 
@@ -376,7 +376,7 @@ public sealed class InspectionWindowContent(
         var header = elementPoolService.CreateElement<Window>(_hostWindow, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(blockWidth, headerHeight), MaximumSize = new Vector2(blockWidth, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(blockWidth, headerHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
@@ -402,7 +402,7 @@ public sealed class InspectionWindowContent(
         var row = elementPoolService.CreateElement<TextWindow>(parent, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, rowIndex * RowHeight), Size = new Vector2(width, RowHeight), MaximumSize = new Vector2(width, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(x, rowIndex * RowHeight), Size = new Vector2(width, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
             Text = new TextOptions { Text = text, TextColor = WindowPalette.TitleTextColor },
@@ -421,7 +421,7 @@ public sealed class InspectionWindowContent(
         var row = elementPoolService.CreateElement<Window>(_hostWindow, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(blockWidth, rowHeight), MaximumSize = new Vector2(blockWidth, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(blockWidth, rowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
@@ -456,7 +456,7 @@ public sealed class InspectionWindowContent(
         var descriptionWindow = elementPoolService.CreateElement<TextWindow>(_hostWindow, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { MaximumSize = new Vector2(blockWidth, UnboundedChildHeight), DisplayMode = ElementDisplayMode.WrapContent },
+            Layout = new ElementLayoutOptions { MaximumSize = new Vector2(blockWidth, MaximumTextRowHeight), DisplayMode = ElementDisplayMode.WrapContent },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
             Text = new TextOptions { Text = description, TextColor = WindowPalette.TitleTextColor },
@@ -479,7 +479,7 @@ public sealed class InspectionWindowContent(
         var spacer = elementPoolService.CreateElement<Window>(_hostWindow, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(blockWidth, spacerHeight), MaximumSize = new Vector2(blockWidth, UnboundedChildHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
+            Layout = new ElementLayoutOptions { Size = new Vector2(blockWidth, spacerHeight), DisplayMode = ElementDisplayMode.Fixed, IsTransparent = true },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
         });
         _hostWindow.AddChild(spacer);
@@ -518,7 +518,7 @@ public sealed class InspectionWindowContent(
             var componentWindow = elementPoolService.CreateElement<TextWindow>(_hostWindow, new ElementOptions
             {
                 Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-                Layout = new ElementLayoutOptions { MaximumSize = new Vector2(blockWidth, UnboundedChildHeight), DisplayMode = ElementDisplayMode.WrapContent },
+                Layout = new ElementLayoutOptions { MaximumSize = new Vector2(blockWidth, MaximumTextRowHeight), DisplayMode = ElementDisplayMode.WrapContent },
                 Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = entry.ComponentType.Name, ShowBorder = true, BorderSize = new Vector2(1, 1) },
                 Text = new TextOptions { Text = entry.Value, TextColor = WindowPalette.TitleTextColor },
             });

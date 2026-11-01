@@ -35,6 +35,24 @@ public sealed class UiRenderService
 
     public GraphicsDevice GraphicsDevice { get; private set; } = null!;
 
+    /// <summary>The screen size reported while there is no device: nothing is capped by the screen.</summary>
+    public static readonly Vector2 NoScreenSize = new(float.MaxValue, float.MaxValue);
+
+    /// <summary>The size of the back buffer the UI draws into, read live so it follows a resized game window.</summary>
+    /// <remarks>An element with no authored maximum size is capped at this. Before Initialize (a headless test) it is NoScreenSize.</remarks>
+    public Vector2 ScreenSize
+    {
+        get
+        {
+            if (GraphicsDevice?.PresentationParameters is not { } presentationParameters)
+            {
+                return NoScreenSize;
+            }
+
+            return new Vector2(presentationParameters.BackBufferWidth, presentationParameters.BackBufferHeight);
+        }
+    }
+
     /// <summary>What every draw in the UI goes through, between BeginFrame and EndFrame.</summary>
     public SpriteEffectBatch Batch { get; private set; } = null!;
 

@@ -137,6 +137,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
         LayOutTabStrip();
         LayOutBottomPanel();
         _tabs[_openTabIndex].Resize(TabArea());
+        _layers.MeasureAndArrangeRoots();
     }
 
     /// <inheritdoc/>

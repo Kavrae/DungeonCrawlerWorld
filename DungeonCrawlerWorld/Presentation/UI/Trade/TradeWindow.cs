@@ -177,18 +177,12 @@ public sealed class TradeWindow(
     /// in Configure. Unlike ShopWindow/SecondaryInventoryWindow -- both created with their own
     /// final Layout.Size already known and passed at CreateElement time -- this window's own final
     /// size isn't known until here, so it's built with no Layout.Size at all (see
-    /// TradeWindowController.Open). Element.Build's own MaximumSize fallback chain
-    /// (Layout.MaximumSize ?? parent.ContentSize ?? Layout.Size ?? Vector2.Zero) resolves to a bare
-    /// Vector2.Zero for a parentless window with none of those set -- SetMaximumSize here raises it
-    /// to the real final size before SetSize, the same "AbilityScoreWindow column count" fix this
-    /// codebase already needed once before (Element.Build only ever sets MaximumSize once; a later
-    /// SetSize past a stale/wrong ceiling silently clamps back down to it otherwise).
+    /// TradeWindowController.Open) and sized here, before it is first drawn.
     /// </summary>
     protected override void OnChildrenInitialized()
     {
         var outerInsets = CurrentSize - ContentSize;
         var finalSize = new Vector2(ContentWidth, ContentHeight) + outerInsets;
-        SetMaximumSize(finalSize);
         SetMinimumSize(finalSize);
         SetSize(finalSize);
 

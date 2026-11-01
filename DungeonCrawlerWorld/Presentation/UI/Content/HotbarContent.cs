@@ -121,16 +121,7 @@ public sealed class HotbarContent(
     /// <summary>The bar's current total bounding size -- depends on how many Expansion rows/pages are currently revealed, so unlike most HUD content's Size this is an instance property, not a static constant.</summary>
     public Vector2 Size => ComputeSize(GetExpansionRowsVisible(_unlockedExpansionSlots), GetExpansionPagesVisible(_unlockedExpansionSlots));
 
-    /// <summary>
-    /// The largest the bar can ever grow to (both Expansion pages, both rows) -- ShellBootstrapper
-    /// gives the host Window this as its Layout.MaximumSize (rather than leaving it unset, which
-    /// falls back to the initial Size -- see Element.Build) specifically so RefreshLayoutIfChanged's
-    /// later SetBounds calls, as more slots unlock, aren't clamped straight back down to whatever
-    /// page/row count happened to be visible at construction time. Confirmed bug: a player starting
-    /// with exactly the DefaultUnlockedExpansionSlots fallback (page 1 only) baked that width in as
-    /// a hard cap, so page 2's slots -- drawn fine by DrawContent/SlotBounds, which don't
-    /// go through the clamped Rectangle -- were never actually clickable/droppable once revealed.
-    /// </summary>
+    /// <summary>The largest the bar can ever grow to (both Expansion pages, both rows): the host Window's Layout.MaximumSize, and the space HudChrome keeps clear above the bar for other HUD windows.</summary>
     public static readonly Vector2 MaximumSize = ComputeSize(HotbarChrome.MaxExpansionRows, HotbarChrome.MaxExpansionPages);
 
     private static Vector2 ComputeSize(int rowsVisible, int pagesVisible)

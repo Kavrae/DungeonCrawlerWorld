@@ -383,24 +383,13 @@ public static class ShellBootstrapper
     /// <summary>TEMPORARYOpens a fresh closeable popup with one multiline TextBox; submitting posts a Quest notification and closes the popup. Returns the popup so the caller can focus it.</summary>
     private static Window OpenQuestComposer(ElementPoolService windowService, NotificationCenter notificationCenter, UiLayerStack layers)
     {
-        // Deliberately Fixed, not WrapContent: a WrapContent parent's ContentSize starts at
-        // ~(0,0) before it's ever measured a child, and Window.Measure overwrites a child's own
-        // MaximumSize with _parentElement.ContentSize on every pass -- so a WrapContent popup
-        // and a TextBox whose growth cap is itself derived from that popup's ContentSize
-        // collapse each other down to ~0 instead of settling on a real size (confirmed by a
-        // failing test before this comment existed). Fixed has no such circularity: popupSize
-        // is stable and known before textBoxMaximumSize's own TextBox is ever measured. The
-        // popup still shrinks/grows with the TextBox -- just explicitly, below, off the
-        // TextBox's own Resized event, rather than through WrapContent's automatic fit-to-
-        // children pass.
-        var popupSize = new Vector2(420, 220);
         var textBoxMaximumSize = new Vector2(400, 190);
-        var popupChromeHeight = popupSize.Y - textBoxMaximumSize.Y;
 
+        // WrapContent: the popup fits around the TextBox and follows it as it grows.
         var popup = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(200, 250), Size = popupSize, DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(200, 250), DisplayMode = ElementDisplayMode.WrapContent },
             Chrome = new ElementChromeOptions { ShowBorder = true, ShowTitle = true, TitleText = "New Quest (Enter to submit)", CanUserClose = true, CanUserMove = true },
         });
         popup.Initialize();
@@ -428,10 +417,6 @@ public static class ShellBootstrapper
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserScrollVertical = true },
             Text = new TextOptions { Multiline = true },
         });
-        // Subscribed before AddChildWindow -- Initialize (called from within AddChildWindow) is
-        // what fires the first Resized, shrinking the popup down from popupSize to match the
-        // TextBox's own initial 2-line height, not just later growth.
-        textBox.Resized += _ => popup.SetSize(new Vector2(popup.CurrentSize.X, textBox.CurrentSize.Y + popupChromeHeight));
         textBox.TextSubmitted += text =>
         {
             // showImmediately: false -- created already minimized (queued in the Quest summary

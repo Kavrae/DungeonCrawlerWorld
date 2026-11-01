@@ -281,6 +281,20 @@ public sealed class UiLayerStack
         }
     }
 
+    /// <summary>Measures and arranges every element in every layer again.</summary>
+    /// <remarks>For a host whose screen changed size: an element with no authored maximum size is capped at the screen, so each is fitted to the new one.</remarks>
+    public void MeasureAndArrangeRoots()
+    {
+        foreach (var layer in LayersAscending())
+        {
+            var snapshot = ElementsIn(layer).ToArray();
+            foreach (var element in snapshot)
+            {
+                element.MeasureAndArrange();
+            }
+        }
+    }
+
     /// <summary>Every declared UiLayer, bottom to top -- Draw/Update/LoadContent order.</summary>
     public static ReadOnlySpan<UiLayer> LayersAscending() => AscendingLayers;
 

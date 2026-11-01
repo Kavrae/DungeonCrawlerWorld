@@ -446,7 +446,7 @@ public class Window : Element
         // doesn't know about text width, only _header.Size.X) would tile them overlapping each
         // other or the text.
         var headerWidth = MinimumHeaderWidth();
-        ApplyMinimizedSize(headerWidth, MathHelper.Clamp(headerWidth + BorderInsetDoubled.X, _geometry.MinimumSize.X, _geometry.MaximumSize.X));
+        ApplyMinimizedSize(headerWidth, MathHelper.Clamp(headerWidth + BorderInsetDoubled.X, _geometry.MinimumSize.X, EffectiveMaximumSize.X));
     }
 
     /// <summary>Collapses this window to its title bar: a header headerWidth wide and as tall as the expanded title bar, the window windowWidth wide and as tall as the header plus its border.</summary>

@@ -1637,21 +1637,21 @@ public sealed class UiInputController
 
         if (edges.HasFlag(ResizeEdges.Right))
         {
-            size.X = MathHelper.Clamp(dragStartSize.X + dragDelta.X, element.MinimumSize.X, element.MaximumSize.X);
+            size.X = MathHelper.Clamp(dragStartSize.X + dragDelta.X, element.MinimumSize.X, element.EffectiveMaximumSize.X);
         }
         if (edges.HasFlag(ResizeEdges.Bottom))
         {
-            size.Y = MathHelper.Clamp(dragStartSize.Y + dragDelta.Y, element.MinimumSize.Y, element.MaximumSize.Y);
+            size.Y = MathHelper.Clamp(dragStartSize.Y + dragDelta.Y, element.MinimumSize.Y, element.EffectiveMaximumSize.Y);
         }
         if (edges.HasFlag(ResizeEdges.Left))
         {
-            var clampedWidth = MathHelper.Clamp(dragStartSize.X - dragDelta.X, element.MinimumSize.X, element.MaximumSize.X);
+            var clampedWidth = MathHelper.Clamp(dragStartSize.X - dragDelta.X, element.MinimumSize.X, element.EffectiveMaximumSize.X);
             relativePosition.X = dragStartRelativePosition.X + (dragStartSize.X - clampedWidth);
             size.X = clampedWidth;
         }
         if (edges.HasFlag(ResizeEdges.Top))
         {
-            var clampedHeight = MathHelper.Clamp(dragStartSize.Y - dragDelta.Y, element.MinimumSize.Y, element.MaximumSize.Y);
+            var clampedHeight = MathHelper.Clamp(dragStartSize.Y - dragDelta.Y, element.MinimumSize.Y, element.EffectiveMaximumSize.Y);
             relativePosition.Y = dragStartRelativePosition.Y + (dragStartSize.Y - clampedHeight);
             size.Y = clampedHeight;
         }

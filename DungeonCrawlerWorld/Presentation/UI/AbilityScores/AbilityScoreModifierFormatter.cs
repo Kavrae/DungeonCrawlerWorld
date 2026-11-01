@@ -47,14 +47,14 @@ public static class AbilityScoreModifierFormatter
 
     private static ModifierDisplayLine FormatModifierLine(StatModifierComponent modifier, ActionSourceNaming actionSourceNaming, long now)
     {
-        var sourceName = actionSourceNaming.Describe(modifier.Source);
+        var sourceName = actionSourceNaming.DescribeByName(modifier.Source);
         var modifierText = modifier.Operation == StatModifierOperation.Additive
             ? FormatSigned((int)MathF.Round(modifier.Magnitude))
             : $"{FormatSigned((int)MathF.Round(modifier.Magnitude * 100))}%";
 
         var remainingFrames = modifier.ExpiresAtFrame == FrameDeadline.Never ? (int?)null : FrameDeadline.Remaining(modifier.ExpiresAtFrame, now);
 
-        return new ModifierDisplayLine($"{sourceName} : {modifierText}", modifier.Source, remainingFrames, modifierText, modifier.Operation);
+        return new ModifierDisplayLine($"{sourceName} : {modifierText}", modifier.Source, remainingFrames, modifierText, modifier.Operation, sourceName);
     }
 
     private static string FormatSigned(int value) => value >= 0 ? $"+{value}" : value.ToString();

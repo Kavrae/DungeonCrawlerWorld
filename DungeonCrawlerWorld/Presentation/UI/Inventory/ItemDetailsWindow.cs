@@ -43,9 +43,9 @@ namespace Presentation.UI.Inventory;
 /// against its own already-small content size instead of a stable outer budget on every
 /// subsequent rebuild, silently clamping a later child's height to 0 once an earlier one's real
 /// content pushed it far enough down the column -- confirmed by reproduction (Tags rendering on
-/// top of Description). WrapContent's own Measure path always threads its MaximumSize through to
-/// children unchanged instead, sidestepping that shrink-feedback loop entirely, the same
-/// mechanism Tooltip already relies on for its own auto-height content. Since ContentSize is
+/// top of Description). WrapContent's own Measure offers children the most its content area can be
+/// within its MaximumSize instead, a stable budget, sidestepping that shrink-feedback loop entirely,
+/// the same mechanism Tooltip already relies on for its own auto-height content. Since ContentSize is
 /// therefore an *output* of Measure here, not a stable input, every row is built against an
 /// explicit contentWidth passed into Configure (the player's own Inventory window's ContentSize.X)
 /// instead of reading this window's own ContentSize.X the way InspectionWindowContent's Fixed-mode

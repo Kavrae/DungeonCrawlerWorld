@@ -21,4 +21,11 @@ public sealed class ActionSourceNaming(TerrainRegistry terrain, AuraCatalog aura
         ActionSourceKind.Terrain or ActionSourceKind.Aura => source.ToString(),
         _ => source.Kind.ToString(),
     };
+
+    /// <summary>Describe, but an entity by its name alone, without its crawler number -- for a line with little room.</summary>
+    /// <remarks>An entity recorded with no name is still described by its crawler number.</remarks>
+    public string DescribeByName(ActionSource source) =>
+        source.Kind == ActionSourceKind.Entity && source.Identity.Name is { } name
+            ? name
+            : Describe(source);
 }

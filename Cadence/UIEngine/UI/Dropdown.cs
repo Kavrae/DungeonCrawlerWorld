@@ -10,8 +10,8 @@ namespace UIEngine.UI;
 /// <summary>
 /// A vertically-stacked list of clickable options in a popup -- a right-click context menu at the cursor (a corpse's
 /// "Loot", a TextBox's Cut/Copy/Paste/Select All), or a DropdownField's choices under the field. Always top-level
-/// (parent null), same reasoning as Tooltip (see its own doc comment): a nested child's own MaximumSize gets
-/// silently overwritten every layout pass, fine for content meant to stay inside its parent but
+/// (parent null), same reasoning as Tooltip (see its own doc comment): a child is measured within its parent's
+/// content area, fine for content meant to stay inside its parent but
 /// wrong for a popup meant to float outside it. One persistent, pooled instance shared across
 /// every caller (see DropdownController, the only thing that ever calls Show/Hide) -- each
 /// Show rebuilds its row Buttons fresh from whatever option list this call was given, the same
@@ -82,9 +82,8 @@ public sealed class Dropdown(FontService fontService, ElementPoolService element
         // The outer window's own border AND ContentPadding (this Window has children) both eat
         // into its ContentSize (see RecalculateFixedSize) -- sizing the window to exactly width
         // by totalHeight would leave a content area shorter/narrower than that, which then clamps
-        // the first row's own Fixed size down below its MinimumSize during Measure (parent-relative
-        // Measure always overwrites a child's MaximumSize to the parent's real available content
-        // size -- see Tooltip's own doc comment on the same fact). Adding both insets back here is
+        // the first row's own Fixed size down below its MinimumSize during Measure (a child is
+        // measured within its parent's content area). Adding both insets back here is
         // what makes the *content* area actually come out to width by totalHeight, matching what
         // every row below is itself sized to.
         SetBounds(topLeft, MeasureOuterSize(width, System.Math.Min(rowsHeight, maximumHeight), scrolls));

@@ -136,10 +136,10 @@ public sealed class ItemDetailsWindowController(
                 // budget, silently clamping a later child's height to 0 once an earlier one's
                 // real content pushed it far enough down a tall column -- confirmed by
                 // reproduction (Tags rendering on top of Description). WrapContent's own Measure
-                // path always threads this MaximumSize through to children unchanged, sidestepping
-                // that shrink-feedback loop entirely -- the same mechanism Tooltip already relies
-                // on for its own auto-height content. MaximumSize.Y still caps growth at the map's
-                // visible area (CanUserScrollVertical covers whatever still overflows that).
+                // offers children the content area within this MaximumSize, a stable budget,
+                // sidestepping that shrink-feedback loop entirely -- the same mechanism Tooltip
+                // already relies on for its own auto-height content. MaximumSize.Y caps growth at
+                // the map's visible area (CanUserScrollVertical scrolls whatever overflows that).
                 MaximumSize = new Vector2(anchorWindow.CurrentSize.X, mapWindow.CurrentSize.Y),
                 DisplayMode = ElementDisplayMode.WrapContent,
             },

@@ -12,14 +12,9 @@ public static class NotificationChrome
     public static Vector2 FolderPosition = HudChrome.Margin;
 
     /// <summary>
-    /// Generous ceiling for the Folder's WrapContent sizing -- a root WrapContent window's own
-    /// MaximumSize is otherwise left at Vector2.Zero (see Window.BuildWindow: it only falls
-    /// back to a parent's ContentSize or an explicit Layout.Size/MaximumSize, and a root Folder
-    /// has neither a parent nor a fixed Size), which would zero-cap every child's own Measure
-    /// pass forever, since a root window's MaximumSize is otherwise never recomputed after
-    /// BuildWindow. Comfortably larger than the widest/tallest the category stack can ever be.
-    /// HealthWindowChrome positions its own button beneath this one, derived from this ceiling
-    /// rather than a second, silently-driftable duplicate of the same number.
+    /// The largest the Folder's WrapContent sizing may grow -- comfortably larger than the widest/tallest
+    /// the category stack can ever be. HealthWindowChrome positions its own button beneath this one,
+    /// derived from this ceiling rather than a second, silently-driftable duplicate of the same number.
     /// </summary>
     public static Vector2 FolderMaximumSize = new(200, 400);
 

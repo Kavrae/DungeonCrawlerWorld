@@ -218,16 +218,6 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
     /// CoreTypes.Length columns) is already correct as-is. Respects a player's own manual resize
     /// (CanUserResize is true) the same way -- it preserves whatever the column width actually
     /// was, not a hardcoded constant.
-    ///
-    /// SetMaximumSize before SetSize -- Element.Build sets a parentless Fixed-mode window's own
-    /// MaximumSize once, falling back to its initial Layout.Size when (as here) no explicit
-    /// MaximumSize is given, which otherwise permanently ceilings this window at whatever width it
-    /// was first created with: SetSize alone silently clamped right back down to that stale
-    /// original-5-column ceiling every time (confirmed live -- the window only ever "grew" back up
-    /// to its own starting size, never past it, however many times admin mode was toggled back on).
-    /// Only ever raises the ceiling (Math.Max against whatever it already is), never lowers it --
-    /// shrinking back to 5 columns doesn't need a smaller ceiling, and lowering it here would also
-    /// undo any headroom a player's own manual drag-resize had already established.
     /// </summary>
     private void ResizeWindowToPreserveColumnWidth()
     {
@@ -243,7 +233,6 @@ public sealed class AbilityScoreWindow(FontService fontService, ElementPoolServi
         var horizontalInset = CurrentSize.X - ContentSize.X;
         var targetOuterWidth = newContentWidth + horizontalInset;
 
-        SetMaximumSize(new Vector2(System.Math.Max(MaximumSize.X, targetOuterWidth), MaximumSize.Y));
         SetSize(new Vector2(targetOuterWidth, CurrentSize.Y));
 
         // A window that grows to the right could otherwise end up partly off-screen -- the same

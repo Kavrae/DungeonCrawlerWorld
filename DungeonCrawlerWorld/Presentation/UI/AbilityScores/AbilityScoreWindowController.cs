@@ -28,6 +28,8 @@ public sealed class AbilityScoreWindowController(
     ContextMenuController contextMenuController,
     TooltipController tooltipController)
 {
+    /// <summary>How much wider than the Inventory window this one opens: a third wider, so each column has room to read a source's name.</summary>
+    private const float WidthRelativeToInventoryWindow = 4f / 3f;
 
     private Button _button = null!;
     private WindowLifecycle<AbilityScoreWindow> _slot = null!;
@@ -72,12 +74,12 @@ public sealed class AbilityScoreWindowController(
     /// </summary>
     private AbilityScoreWindow CreateAbilityScoreWindow()
     {
-        var windowWidth = mapWindow.CurrentSize.X * InventoryChrome.WindowWidthFraction;
-        var childSize = new Vector2(windowWidth, InventoryChrome.WindowHeight);
+        var inventoryWindowWidth = mapWindow.CurrentSize.X * InventoryChrome.WindowWidthFraction;
+        var childSize = new Vector2(inventoryWindowWidth * WidthRelativeToInventoryWindow, InventoryChrome.WindowHeight);
 
         var relativePosition = inventory.PlayerInventoryWindow is { } playerWindow
             ? WindowCascadePlacement.ComputePosition(playerWindow.Rectangle, childSize, 0, mapWindow.CurrentSize)
-            : RectangleClamp.ClampInside(new Vector2(InventoryChrome.WindowPosition.X + windowWidth + WindowCascadePlacement.Gap, InventoryChrome.WindowPosition.Y), childSize, mapWindow.CurrentSize);
+            : RectangleClamp.ClampInside(new Vector2(InventoryChrome.WindowPosition.X + inventoryWindowWidth + WindowCascadePlacement.Gap, InventoryChrome.WindowPosition.Y), childSize, mapWindow.CurrentSize);
 
         var window = elementPoolService.CreateElement<AbilityScoreWindow>(null, new ElementOptions
         {

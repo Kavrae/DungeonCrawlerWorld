@@ -75,7 +75,7 @@ public sealed class NumericAndColorFieldTests
         Assert.AreEqual(0d, field.Value);
         Assert.AreEqual(0f, window.ScrollOffset.Y);
 
-        harness.Wheel(filler.Rectangle.Center, notches: -1);
+        harness.Wheel(new Point(filler.Rectangle.Center.X, window.ContentRectangle.Bottom - 5), notches: -1);
         Assert.IsGreaterThan(0f, window.ScrollOffset.Y, "Anywhere else, the wheel still scrolls the window.");
     }
 

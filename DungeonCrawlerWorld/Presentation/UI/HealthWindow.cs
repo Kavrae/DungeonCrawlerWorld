@@ -91,9 +91,6 @@ public sealed class HealthWindow(
     private const float DividerWidthFraction = 0.95f;
     private const float DividerLabelTextPosition = 0.125f;
 
-    /// <summary>A generous, effectively-unlimited per-row height cap -- see InspectionWindowContent.UnboundedChildHeight's own doc comment for why this is needed: without it, a row tiled past this window's own one-screen-tall content size gets silently clamped to nothing.</summary>
-    private const float UnboundedRowHeight = 10000f;
-
     /// <summary>Text-refresh cadence for live remaining-duration numbers and bar fractions -- same cadence InspectionWindowContent's own admin dump uses (AdminDumpRefreshInterval), since both refresh continuously-changing component values without needing to rebuild structure every frame.</summary>
     private const int TextRefreshInterval = 10;
 
@@ -248,14 +245,13 @@ public sealed class HealthWindow(
     /// Both columns are Fixed-size/Fixed-position -- they don't reflow on their own just because
     /// this window's own ContentSize changed. A user drag-resize sets this window's own
     /// OriginalSize directly (Element.SetBounds, via UiInputController's resize-drag handling),
-    /// which only reaches a child as a Measure-time MaximumSize clamp against that child's own
+    /// which only reaches a child as the space Measure offers it, clamped against that child's own
     /// still-stale OriginalSize/RelativePosition -- it never actually moves or regrows the child.
     /// Left unfixed: shrinking this window left the right column's stale (too-large) RelativePosition.X
     /// in place, driving its own available width negative and corrupting its Measure/RetileChildren
     /// pass (the reported bug -- column scrolling breaking, rows overlapping); growing this window
-    /// just left dead space with neither column any bigger. Re-running the same layout math on every
-    /// Resized and pushing it into both columns via SetBounds mirrors the WrapContent quest
-    /// composer's own resize-reflow fix (see TODO.md's own note on that).
+    /// just left dead space with neither column any bigger. So the same layout math re-runs on every
+    /// Resized and pushes it into both columns via SetBounds.
     /// </summary>
     private void HandleResized(Element _)
     {
@@ -733,7 +729,7 @@ public sealed class HealthWindow(
         var divider = ElementPoolService.CreateElement<TextDivider>(parent, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, RowHeight), MaximumSize = new Vector2(width, UnboundedRowHeight), DisplayMode = ElementDisplayMode.Fixed, SpacingAfter = spacingAfter },
+            Layout = new ElementLayoutOptions { Size = new Vector2(width, RowHeight), DisplayMode = ElementDisplayMode.Fixed, SpacingAfter = spacingAfter },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });
@@ -746,7 +742,7 @@ public sealed class HealthWindow(
         var row = ElementPoolService.CreateElement<TextWindow>(parent, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
-            Layout = new ElementLayoutOptions { Size = new Vector2(parent.ContentSize.X, RowHeight), MaximumSize = new Vector2(parent.ContentSize.X, UnboundedRowHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(parent.ContentSize.X, RowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
             Text = new TextOptions { Text = text, TextColor = textColor },
@@ -772,7 +768,7 @@ public sealed class HealthWindow(
         var row = ElementPoolService.CreateElement<Window>(parent, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
-            Layout = new ElementLayoutOptions { Size = new Vector2(width, rowHeight), MaximumSize = new Vector2(width, UnboundedRowHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Layout = new ElementLayoutOptions { Size = new Vector2(width, rowHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
             Content = new ElementContentOptions { ContentColor = Color.Transparent },
         });

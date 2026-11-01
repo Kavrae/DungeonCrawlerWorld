@@ -29,7 +29,13 @@ internal sealed class ElementGeometryState
     public Vector2 CurrentSize;
     public Vector2 OriginalSize;
     public Vector2 MinimumSize;
-    public Vector2 MaximumSize;
+
+    /// <summary>The cap the element's author set (Layout.MaximumSize, SetMaximumSize), or null when none was set.</summary>
+    public Vector2? AuthoredMaximumSize;
+
+    /// <summary>The space the last Measure offered this element; only Measure writes it.</summary>
+    public Vector2 AvailableSize;
+
     public Rectangle Rectangle;
 
     /// <summary>Gap tiled after this element by RetileChildren, on top of its own CurrentSize -- replaces inserting a separate blank spacer element into the sibling chain.</summary>

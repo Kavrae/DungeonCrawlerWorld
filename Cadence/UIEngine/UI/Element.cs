@@ -138,23 +138,53 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     public Vector2 OriginalSize => _geometry.OriginalSize;
     public Vector2 CurrentSize => _geometry.CurrentSize;
     public Vector2 MinimumSize => _geometry.MinimumSize;
-    public Vector2 MaximumSize => _geometry.MaximumSize;
+    /// <summary>The cap this element's author set, or the screen when none was set.</summary>
+    public Vector2 MaximumSize => _geometry.AuthoredMaximumSize ?? Render.ScreenSize;
+
+    /// <summary>The space the last measure offered this element.</summary>
+    public Vector2 AvailableSize => _geometry.AvailableSize;
+
+    /// <summary>The largest this element may be now: the smaller of its MaximumSize and the space its parent last offered it.</summary>
+    /// <remarks>A root is offered exactly its MaximumSize, so for a root this follows SetMaximumSize and a resized screen before any re-measure.</remarks>
+    public Vector2 EffectiveMaximumSize => _parent is null ? MaximumSize : Vector2.Min(MaximumSize, _geometry.AvailableSize);
+
     public Rectangle Rectangle => _geometry.Rectangle;
 
     protected bool _isVisible = true;
 
+    /// <summary>Whether this element is drawn, updated and given space in its parent's layout.</summary>
+    /// <remarks>A change re-lays out the parent (OnChildLayoutChanged): an invisible child takes no space when tiled or wrapped around, and none of the scroll range. Shown again, the element is measured first, since a measure skips it while hidden.</remarks>
     public bool IsVisible
     {
         get => _isVisible;
         set
         {
-            if (_isVisible != value)
+            if (_isVisible == value)
             {
-                _isVisible = value;
-                MarkTreeChanged();
+                return;
             }
+
+            _isVisible = value;
+            MarkTreeChanged();
+
+            if (_parent is null)
+            {
+                return;
+            }
+
+            if (value)
+            {
+                _hasUnreportedLayoutChange = true;
+                MeasureAndArrange();
+                return;
+            }
+
+            _parent.OnChildLayoutChanged();
         }
     }
+
+    /// <summary>Set when this element was attached or moved since its parent last heard of it, so its next MeasureAndArrange reports it even if its size is unchanged.</summary>
+    private bool _hasUnreportedLayoutChange;
 
     /// <summary>Whether the pointer is over this element or one of its descendants, as UiInputController's hit test last found it -- topmost only, so an element under another window, outside its scrolled viewport or behind menu mode is never over.</summary>
     /// <remarks>Set by UiInputController for the hovered element and every ancestor; not refreshed during a window move, resize or scrollbar drag. Cleared when the element is built from its pool.</remarks>
@@ -448,7 +478,8 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
             : _geometry.RelativePosition;
 
         _geometry.MinimumSize = layout?.MinimumSize ?? new Vector2(0, 0);
-        _geometry.MaximumSize = layout?.MaximumSize ?? _parent?.ContentSize ?? layout?.Size ?? new Vector2(0, 0);
+        _geometry.AuthoredMaximumSize = layout?.MaximumSize;
+        _geometry.AvailableSize = MaximumSize;
         _geometry.OriginalSize = layout?.Size ?? new Vector2(0, 0);
         _geometry.CurrentSize = _geometry.OriginalSize;
         _geometry.SpacingAfter = layout?.SpacingAfter ?? 0f;
@@ -510,17 +541,10 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
     public virtual void Initialize()
     {
-        // Skipped when the parent is currently Minimized (collapsed, deliberately zero content
-        // area, see RecalculateMinimizedSize) -- there is nothing real to measure against yet.
-        // This element just keeps its Build-time CurrentSize/RelativePosition until the parent's
-        // own next real (non-Minimized) Measure/Arrange pass reaches it -- see Measure's own
-        // matching Minimized guard, which is what actually performs that later remeasure once
-        // the parent expands. Root elements (no parent) are unaffected -- MeasureAndArrange's
-        // own root branch never depends on a parent's state.
-        if (_parent is null || _parent.DisplayMode != ElementDisplayMode.Minimized)
-        {
-            MeasureAndArrange();
-        }
+        // Under a Minimized parent this measures nothing (see MeasureAndArrange): the element keeps
+        // its Build-time CurrentSize/RelativePosition until the parent's next real (non-Minimized)
+        // Measure/Arrange pass reaches it. Under a WrapContent parent it also re-fits the parent.
+        MeasureAndArrange();
 
         RecalculateCameraTransform(); // TODO zoom/rotation, if ever needed -- see RecalculateCameraTransform.
 
@@ -602,6 +626,13 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     public virtual void Update(GameTime gameTime)
     {
         UpdateHeaderExtras(gameTime);
+
+        // A Minimized element's children are neither drawn nor hit-tested (see Draw and
+        // TryHitTestInteraction), so they don't tick either until it is restored.
+        if (_geometry.DisplayMode == ElementDisplayMode.Minimized)
+        {
+            return;
+        }
 
         foreach (var childElement in _children)
         {
@@ -795,7 +826,8 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
             return ElementInteraction.Scrollbar(this, ownPart);
         }
 
-        for (var index = _children.Count - 1; index >= 0; index--)
+        var childCount = _geometry.DisplayMode == ElementDisplayMode.Minimized ? 0 : _children.Count;
+        for (var index = childCount - 1; index >= 0; index--)
         {
             var childInteraction = _children[index].TryHitTestScrollbar(position);
             if (childInteraction.Element is not null)
@@ -1234,7 +1266,9 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
             return ElementInteraction.PointerDrag(this);
         }
 
-        for (var index = _children.Count - 1; index >= 0; index--)
+        // A Minimized element's children aren't drawn, so they are never what was hit, wherever they sit.
+        var childCount = _geometry.DisplayMode == ElementDisplayMode.Minimized ? 0 : _children.Count;
+        for (var index = childCount - 1; index >= 0; index--)
         {
             var childInteraction = _children[index].TryHitTestInteraction(position);
             if (childInteraction.Element is not null)
@@ -1309,37 +1343,10 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         _children.Insert(clampedInsertIndex, newChild);
         MarkTreeChanged();
 
+        // Measures newChild, which then reports itself to this element as a layout change
+        // (OnChildLayoutChanged): re-fit, re-tile, scroll range.
+        newChild._hasUnreportedLayoutChange = true;
         newChild.Initialize();
-
-        // Repositions every Horizontal/Vertical-tiled child (not just newChild) from their
-        // current, now-final CurrentSize -- see RetileChildren's own doc comment. Cheap: no
-        // remeasuring, just the same position-chaining arithmetic Arrange already does on every
-        // layout pass.
-        Arrange();
-
-        // A WrapContent parent's own size depends on its children's -- re-fit around the
-        // newly added child. Gated to WrapContent only: for Fixed/Fill/Minimized parents the
-        // Arrange call above already repositions every affected child, and the parent's own
-        // size never depends on children in those modes, so an unconditional call here would
-        // just re-walk the entire existing sibling list for no effect. Deferred to the end of
-        // the batch (see BeginLayoutBatch) if one is open, rather than re-fitting after every
-        // single AddChild in a loop that's about to add several more.
-        if (_geometry.DisplayMode == ElementDisplayMode.WrapContent)
-        {
-            MeasureAndArrangeNowOrDeferToLayoutBatch();
-        }
-
-        // A scrollable parent's own MaxScrollOffset depends on its children's total extent the
-        // same way a WrapContent parent's own size does above -- re-fit it here, and keep it
-        // in sync with newChildWindow's own future resizes (a child TextWindow
-        // whose text changes) via Resized, the same way TextBox tells a
-        // WrapContent parent to re-fit after resizing itself (see TextBox.AutoSizeToContent).
-        if (CanUserScrollVertical || CanUserScrollHorizontal)
-        {
-            newChild.Resized += OnChildElementResizedForScrollBounds;
-            RecalculateScrollBoundsFromChildren();
-            SettleScrollbarsOutsideMeasure();
-        }
     }
 
     /// <summary>Removes the child, then retiles the remaining ones so later siblings close the gap instead of keeping the removed window's slot as dead space.</summary>
@@ -1351,28 +1358,12 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
             return;
         }
 
-        var removedChild = _children[childElementIndex];
         _children.RemoveAt(childElementIndex);
         MarkTreeChanged();
 
-        // Repositions every remaining Horizontal/Vertical-tiled child to close the gap -- see
-        // RetileChildren's own doc comment. Never touches Initialize -- every remaining sibling
-        // here is already live; only its position may need recomputing.
-        Arrange();
-
-        // See the matching comment in AddChild -- a WrapContent parent needs to shrink to fit
-        // around the removed child; other modes don't depend on children for sizing.
-        if (_geometry.DisplayMode == ElementDisplayMode.WrapContent)
-        {
-            MeasureAndArrangeNowOrDeferToLayoutBatch();
-        }
-
-        if (CanUserScrollVertical || CanUserScrollHorizontal)
-        {
-            removedChild.Resized -= OnChildElementResizedForScrollBounds;
-            RecalculateScrollBoundsFromChildren();
-            SettleScrollbarsOutsideMeasure();
-        }
+        // Later siblings close the gap, a WrapContent element shrinks around what is left, and
+        // the scroll range shrinks with it.
+        OnChildLayoutChanged();
     }
 
     /// <summary>Depth of nested BeginLayoutBatch scopes currently open on this element -- 0 means none.</summary>
@@ -1405,10 +1396,10 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// behaves exactly as before, so nothing that currently reads geometry synchronously right
     /// after a mutation is affected unless it explicitly opts into batching.
     ///
-    /// Does not defer the position-only Arrange in AddChild/RemoveChild (see RetileChildren) --
-    /// that's cheap (no remeasuring) and keeping it immediate means a child's own position is
-    /// always correct immediately after AddChild returns, batch or not; only the WrapContent
-    /// size refit (the actually expensive full remeasure) is deferred.
+    /// Does not defer re-tiling (see OnChildLayoutChanged and RetileChildren) -- that's cheap
+    /// (no remeasuring) and keeping it immediate means a child's own position is always correct
+    /// immediately after AddChild returns, batch or not; only the WrapContent size refit (the
+    /// actually expensive full remeasure) is deferred.
     /// </summary>
     public IDisposable BeginLayoutBatch()
     {
@@ -1438,12 +1429,6 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         }
     }
 
-    private void OnChildElementResizedForScrollBounds(Element _)
-    {
-        RecalculateScrollBoundsFromChildren();
-        SettleScrollbarsOutsideMeasure();
-    }
-
     /// <summary>Re-measures this element if its MaxScrollOffset changed which scrollbars Auto calls for, outside of its own Measure.</summary>
     /// <remarks>Inside Measure the settle loop handles it instead; inside a layout batch it's deferred to the batch's end, so clearing and refilling a grid re-measures once rather than flipping the bar on every child.</remarks>
     protected void SettleScrollbarsOutsideMeasure()
@@ -1464,17 +1449,23 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         return showVertical != _scrollbars.ShowVertical || showHorizontal != _scrollbars.ShowHorizontal;
     }
 
-    /// <summary>
-    /// A scrollable parent's MaxScrollOffset is how far its children's total extent exceeds
-    /// its own (fixed) content size -- the same maxRight/maxBottom-from-children computation
-    /// RecalculateWrapContentWindowSize uses to size a WrapContent parent around its children,
-    /// applied here to bound scrolling instead of sizing.
-    /// </summary>
+    /// <summary>A scrollable element's MaxScrollOffset: how far its children's extent exceeds its content size.</summary>
     private void RecalculateScrollBoundsFromChildren()
     {
-        var maxRight = 0f;
-        var maxBottom = 0f;
+        var childrenExtent = ChildrenExtent();
+        SetMaxScrollOffset(new Vector2(childrenExtent.X - _contentState.Size.X, childrenExtent.Y - _contentState.Size.Y));
+    }
 
+    /// <summary>The right and bottom edges of this element's visible children, in content coordinates: what a WrapContent element sizes itself around and a scrolling one scrolls over.</summary>
+    /// <remarks>
+    /// Tiled children are placed where RetileChildren will put them from their current sizes, not where the last
+    /// Arrange left them: Measure runs before Arrange, so a child whose size just changed hasn't been re-tiled yet.
+    /// Relative position + measured size, never the absolute Rectangle, for the same reason.
+    /// </remarks>
+    private Vector2 ChildrenExtent()
+    {
+        var extent = Vector2.Zero;
+        var nextTileOffset = 0f;
         foreach (var childElement in _children)
         {
             if (!childElement.IsVisible)
@@ -1482,11 +1473,57 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
                 continue;
             }
 
-            maxRight = System.Math.Max(maxRight, childElement.RelativePosition.X + childElement.CurrentSize.X);
-            maxBottom = System.Math.Max(maxBottom, childElement.RelativePosition.Y + childElement.CurrentSize.Y);
+            var childSize = childElement._geometry.CurrentSize;
+            var childPosition = _childrenTileMode switch
+            {
+                ChildElementTileMode.Horizontal => new Vector2(nextTileOffset, 0),
+                ChildElementTileMode.Vertical => new Vector2(0, nextTileOffset),
+                _ => childElement._geometry.RelativePosition,
+            };
+            nextTileOffset += (_childrenTileMode == ChildElementTileMode.Horizontal ? childSize.X : childSize.Y) + childElement._geometry.SpacingAfter;
+            extent = Vector2.Max(extent, childPosition + childSize);
         }
 
-        SetMaxScrollOffset(new Vector2(maxRight - _contentState.Size.X, maxBottom - _contentState.Size.Y));
+        return extent;
+    }
+
+    /// <summary>Re-lays out this element after one of its children was added, removed, shown, hidden, resized or moved outside this element's own Measure.</summary>
+    /// <remarks>
+    /// The one place a parent reacts to a child: a WrapContent element re-fits around its children (and so on up its
+    /// WrapContent ancestors), deferred to the end of an open layout batch, though tiled children are re-tiled at once
+    /// so their positions are right straight after AddChild (see BeginLayoutBatch); any other re-tiles them, so the siblings
+    /// after the child move at once, and recalculates its scroll range from where they now are. A Minimized element
+    /// does nothing: its children are re-laid out when it is restored.
+    /// </remarks>
+    private void OnChildLayoutChanged()
+    {
+        if (_geometry.DisplayMode == ElementDisplayMode.Minimized)
+        {
+            return;
+        }
+
+        var tilesChildren = _childrenTileMode != ChildElementTileMode.Floating;
+        if (_geometry.DisplayMode == ElementDisplayMode.WrapContent)
+        {
+            if (_layoutBatchDepth > 0 && tilesChildren)
+            {
+                Arrange();
+            }
+
+            MeasureAndArrangeNowOrDeferToLayoutBatch();
+            return;
+        }
+
+        if (tilesChildren)
+        {
+            Arrange();
+        }
+
+        if (CanUserScrollVertical || CanUserScrollHorizontal)
+        {
+            RecalculateScrollBoundsFromChildren();
+            SettleScrollbarsOutsideMeasure();
+        }
     }
 
     /// <summary>
@@ -1495,33 +1532,53 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// Measure/Arrange below for why this is split into two passes rather than one.
     /// </summary>
     /// <remarks>
-    /// Internal, not private: a WrapContent parent's own size depends on its children's (see
-    /// RecalculateWrapContentWindowSize), but nothing propagates that automatically when a
-    /// child resizes *itself* after already being attached -- AddChildWindow/RemoveChildWindow
-    /// re-fit the parent on attach/detach, but a child calling its own SetSize/SetBounds later
-    /// (e.g. TextBox.AutoSizeToContent, growing as the user types) has no such hook. Exposing
-    /// this lets a child ask ParentElement to re-measure itself directly rather than needing a
-    /// whole new "child resized" event/subscription mechanism for what's currently a single
-    /// caller.
+    /// Measures against exactly what the parent's own pass would offer (ContentSizeOfferedToChildren), so an element
+    /// is the same size whichever side started the measure. A WrapContent parent's size depends on its children, so it
+    /// is the same size whichever side started the measure. When its size changed, or it was attached or moved since,
+    /// the parent hears of it (OnChildLayoutChanged). Nothing is measured under a Minimized parent: it has no content
+    /// area to measure against.
     /// </remarks>
     internal void MeasureAndArrange()
     {
-        // Root element: guaranteed to have a maximum set (from Build) already sitting in
-        // _geometry.MaximumSize. Otherwise, see ComputeChildAvailableSize's own doc comment.
+        if (_parent is { DisplayMode: ElementDisplayMode.Minimized })
+        {
+            return;
+        }
+
+        var previousSize = _geometry.CurrentSize;
         var availableSize = _parent is null
-            ? _geometry.MaximumSize
-            : ComputeChildAvailableSize(_parent, this, _parent.ContentSize);
+            ? MaximumSize
+            : ComputeChildAvailableSize(_parent, this, _parent.ContentSizeOfferedToChildren());
 
         Measure(availableSize);
         Arrange();
+
+        if (_parent is null || (_geometry.CurrentSize == previousSize && !_hasUnreportedLayoutChange))
+        {
+            return;
+        }
+
+        _hasUnreportedLayoutChange = false;
+        _parent.OnChildLayoutChanged();
+    }
+
+    /// <summary>The content size this element's own Measure hands its children: when WrapContent, the most its content area can be within its cap (its own size isn't known until theirs is), else its content size.</summary>
+    private Vector2 ContentSizeOfferedToChildren()
+    {
+        if (_geometry.DisplayMode == ElementDisplayMode.WrapContent)
+        {
+            var chromeSize = BorderInsetDoubled + ChildContentPaddingDoubled + new Vector2(0, WrapContentHeaderHeight) + ScrollbarGutterSize;
+            return Vector2.Max(Vector2.Zero, EffectiveMaximumSize - chromeSize);
+        }
+
+        return _contentState.Size;
     }
 
     /// <summary>
     /// Per axis: a scrollable parent (see AddChildWindow/RecalculateScrollBoundsFromChildren)
     /// deliberately lets its children exceed its own content size on that axis -- overflow is
     /// meant to be revealed by scrolling, not clamped away -- so on that axis the child's own
-    /// already-configured _geometry.MaximumSize (its Layout.MaximumSize option, which may be a
-    /// generous unbounded sentinel) is the real constraint
+    /// MaximumSize (its authored cap, else the screen) is the real constraint
     /// instead of the parent's visible content size. Otherwise a scrollable parent's
     /// children would be reclamped to its small content size on every Measure, whatever
     /// Layout.MaximumSize asked for.
@@ -1549,17 +1606,18 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         // it.
         var effectiveParentContentSize = parentContentSize + new Vector2(0, parent.FooterHeight);
         var rawAvailableSize = effectiveParentContentSize - child._geometry.RelativePosition;
+        var childMaximumSize = child.MaximumSize;
         return new Vector2(
-            parent.CanUserScrollHorizontal ? child._geometry.MaximumSize.X : rawAvailableSize.X,
-            parent.CanUserScrollVertical ? child._geometry.MaximumSize.Y : rawAvailableSize.Y);
+            parent.CanUserScrollHorizontal ? childMaximumSize.X : rawAvailableSize.X,
+            parent.CanUserScrollVertical ? childMaximumSize.Y : rawAvailableSize.Y);
     }
 
     /// <summary>
     /// Bottom-up size computation. WrapContent needs its children's sizes to compute its
-    /// own, so it measures children first, threading its OWN available space through to them
-    /// unchanged (the same resolution Android's View.measure() uses for WRAP_CONTENT: a
-    /// wrap-content node's own final size isn't known yet, so it can't offer children a real
-    /// constraint of its own -- it passes through what it was given). Fixed/Fill/Minimized's
+    /// own, so it measures children first, offering them the most its content area can be
+    /// within its own cap (the same resolution Android's View.measure() uses for WRAP_CONTENT,
+    /// AT_MOST: a wrap-content node's own final size isn't known yet, so it offers children an
+    /// upper bound rather than a size). Fixed/Fill/Minimized's
     /// own size never depends on children, so they compute themselves first and hand children
     /// their own now-final content size as the real constraint.
     /// </summary>
@@ -1567,7 +1625,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     {
         var previousSize = _geometry.CurrentSize;
         var previousContentSize = _contentState.Size;
-        _geometry.MaximumSize = availableSize;
+        _geometry.AvailableSize = availableSize;
 
         if (_geometry.DisplayMode == ElementDisplayMode.Minimized)
         {
@@ -1589,7 +1647,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
             {
                 for (var settlePass = 0; ; settlePass++)
                 {
-                    MeasureOwnSizeAndChildren(availableSize, previousContentSize, isSettlePass: settlePass > 0);
+                    MeasureOwnSizeAndChildren();
 
                     if (!AutoScrollbarVisibilityDiffers(out var showVertical, out var showHorizontal))
                     {
@@ -1623,13 +1681,13 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         }
     }
 
-    /// <summary>One pass of Measure for a non-Minimized element: its own size, its children, and (when its content size moved) its scroll bounds, all under the current scrollbar visibility.</summary>
-    private void MeasureOwnSizeAndChildren(Vector2 availableSize, Vector2 previousContentSize, bool isSettlePass)
+    /// <summary>One pass of Measure for a non-Minimized element: its own size, its children, and its scroll bounds, all under the current scrollbar visibility.</summary>
+    private void MeasureOwnSizeAndChildren()
     {
         switch (_geometry.DisplayMode)
         {
             case ElementDisplayMode.WrapContent:
-                MeasureChildren(availableSize);
+                MeasureChildren(ContentSizeOfferedToChildren());
                 RecalculateWrapContentSize();
                 break;
             case ElementDisplayMode.Fixed:
@@ -1648,20 +1706,15 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         // comment), not here -- both this cascade and MeasureAndArrange's own first-measure
         // call site route through it, so it only needs applying once.
 
-        // AddChild/RemoveChild and a child's own Resized (OnChildElementResizedForScrollBounds)
-        // already keep a scrollable element's MaxScrollOffset in sync when a CHILD changes.
-        // Neither one fires when THIS element's own ContentSize changes with no child involved
-        // -- e.g. a Fixed-size scrollable window resized via SetBounds/drag-resize, whose
-        // children keep their own already-configured sizes on the scrollable axis (see
-        // MeasureAndArrange's own scrollable-axis exemption above). Left unhandled, shrinking
-        // such a window would leave MaxScrollOffset stale, the newly hidden content unreachable. Gated on having actual children: a
+        // Every measure, since this element or any of its children may have changed size in it.
+        // Gated on having actual children: a
         // childless scrollable element (TextWindow/TextBox, scrolling wrapped text rather than
         // child Elements) already computes its own correct MaxScrollOffset from text metrics in
         // its own RecalculateFixedSize/RecalculateFillSize/RecalculateWrapContentSize override
         // (see TextWindow.UpdateScrollBounds) -- recalculating "from children" here as well
         // would just zero it back out, clobbering that already-correct value with the fact that
         // there's nothing to sum over.
-        if ((CanUserScrollVertical || CanUserScrollHorizontal) && _children.Count > 0 && (isSettlePass || _contentState.Size != previousContentSize))
+        if ((CanUserScrollVertical || CanUserScrollHorizontal) && _children.Count > 0)
         {
             RecalculateScrollBoundsFromChildren();
         }
@@ -1674,8 +1727,8 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
             // An invisible child is excluded from measurement entirely -- the same
             // Visibility.Collapsed/View.GONE treatment RecalculateWrapContentSize and
             // RetileChildren give it, not just skipped when sizing this element around its
-            // children. Becoming visible again re-triggers a full MeasureAndArrange via
-            // SetIsVisible, so nothing is permanently stale once it reappears.
+            // children. Becoming visible again measures it (the IsVisible setter), so nothing is
+            // permanently stale once it reappears.
             if (!childElement.IsVisible)
             {
                 continue;
@@ -1809,15 +1862,16 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         var windowSize = _headerState.Size + BorderInsetDoubled;
 
         _geometry.CurrentSize = new Vector2(
-            MathHelper.Clamp(windowSize.X, _geometry.MinimumSize.X, _geometry.MaximumSize.X),
+            MathHelper.Clamp(windowSize.X, _geometry.MinimumSize.X, EffectiveMaximumSize.X),
             windowSize.Y);
     }
 
     protected virtual void RecalculateFixedSize()
     {
+        var effectiveMaximumSize = EffectiveMaximumSize;
         _geometry.CurrentSize = new Vector2(
-            MathHelper.Clamp(_geometry.OriginalSize.X, _geometry.MinimumSize.X, _geometry.MaximumSize.X),
-            MathHelper.Clamp(_geometry.OriginalSize.Y, _geometry.MinimumSize.Y, _geometry.MaximumSize.Y));
+            MathHelper.Clamp(_geometry.OriginalSize.X, _geometry.MinimumSize.X, effectiveMaximumSize.X),
+            MathHelper.Clamp(_geometry.OriginalSize.Y, _geometry.MinimumSize.Y, effectiveMaximumSize.Y));
 
         // Resize horizontally to fit the new element's size, but keep the vertical size.
         _headerState.Size = new Vector2(
@@ -1837,7 +1891,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
     protected virtual void RecalculateFillSize()
     {
-        _geometry.CurrentSize = _geometry.MaximumSize;
+        _geometry.CurrentSize = EffectiveMaximumSize;
 
         _headerState.Size = new Vector2(
             _geometry.CurrentSize.X - BorderInsetDoubled.X,
@@ -1853,64 +1907,46 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
     protected virtual void RecalculateWrapContentSize()
     {
-        if (_canContainChildren && _children.Count > 0)
-        {
-            // Relative position + measured size, not the absolute Rectangle -- this
-            // runs during Measure, before children have been Arranged, so their absolute
-            // position isn't valid yet. Also more correct in general: fitting to children
-            // shouldn't need absolute screen coordinates at all.
-            var maxRight = 0f;
-            var maxBottom = 0f;
-            foreach (var child in _children)
-            {
-                if (!child.IsVisible)
-                {
-                    continue;
-                }
-
-                maxRight = System.Math.Max(maxRight, child.RelativePosition.X + child.CurrentSize.X);
-                maxBottom = System.Math.Max(maxBottom, child.RelativePosition.Y + child.CurrentSize.Y);
-            }
-            _contentState.Size = new Vector2(maxRight, maxBottom);
-        }
-        else
-        {
-            _contentState.Size = new Vector2(0, 0);
-        }
+        _contentState.Size = _canContainChildren ? ChildrenExtent() : Vector2.Zero;
 
         // Children's own RelativePosition values are relative to this element's ContentAbsolutePosition,
         // which is ALREADY inset by ChildContentPadding (see RecalculateAbsolutePositions) -- so
-        // maxRight/maxBottom above measure only the children's own footprint, with no padding baked
-        // in yet. ChildContentPaddingDoubled (gated on CanContainChildren alone, not "and has a
-        // child right now" -- see its own doc comment) reserves room for both that leading inset
-        // and a matching trailing gap, even while still childless -- a WrapContent element's own
-        // outer bounds are computed FROM this (not the reverse, like Fixed/Fill), so there's no
-        // separate BackgroundSize stage; it's set to the same final value below. A still-childless
-        // CanContainChildren element (e.g. Folder before its first child is added) gets this same
-        // floor rather than zero, so its header (see MinimumHeaderWidth) never has to shrink from a
-        // literal (0,0) content size.
-        _contentState.Size += ChildContentPaddingDoubled;
+        // ChildrenExtent measures only the children's own footprint, with no padding baked
+        // in yet. The background adds ChildContentPaddingDoubled (gated on CanContainChildren alone,
+        // not "and has a child right now" -- see its own doc comment) for both that leading inset and
+        // a matching trailing gap, even while still childless, so a childless CanContainChildren
+        // element (e.g. Folder before its first child is added) never has to size its header (see
+        // MinimumHeaderWidth) from a literal (0,0) background. It also adds the scrollbars shown.
+        var scrollbarGutterSize = ScrollbarGutterSize;
+        var backgroundSize = _contentState.Size + ChildContentPaddingDoubled + scrollbarGutterSize;
 
         // A WrapContent element must be at least as wide as its header needs (e.g. Window's
         // title text + buttons -- see MinimumHeaderWidth), not just its content.
         if (_headerState.ShowHeader)
         {
-            _contentState.Size.X = System.Math.Max(_contentState.Size.X, MinimumHeaderWidth());
+            backgroundSize.X = System.Math.Max(backgroundSize.X, MinimumHeaderWidth());
         }
 
-        // No separate "before padding" stage exists for WrapContent (see this method's own
-        // padding comment above) -- BackgroundSize is the same final value, so this element's own
-        // background fill still covers its full outer content area, padding included.
-        _contentState.BackgroundSize = _contentState.Size;
+        // Never larger than its own cap leaves after the border and header; content past it is
+        // clipped, and scrolls where the element allows scrolling.
+        var wrapContentHeaderHeight = WrapContentHeaderHeight;
+        backgroundSize = Vector2.Min(backgroundSize, Vector2.Max(Vector2.Zero, EffectiveMaximumSize - BorderInsetDoubled - new Vector2(0, wrapContentHeaderHeight)));
 
-        _geometry.CurrentSize = _contentState.Size;
+        // Size is the area children occupy -- padding and scrollbars excluded, as for Fixed and Fill.
+        _contentState.BackgroundSize = backgroundSize;
+        _contentState.Size = Vector2.Max(Vector2.Zero, backgroundSize - ChildContentPaddingDoubled - scrollbarGutterSize);
+
+        _geometry.CurrentSize = backgroundSize;
         if (_headerState.ShowHeader)
         {
-            _headerState.Size = new Vector2(_contentState.Size.X, _headerState.OriginalSize.Y - BorderInset.Y);
-            _geometry.CurrentSize.Y += _headerState.Size.Y;
+            _headerState.Size = new Vector2(backgroundSize.X, wrapContentHeaderHeight);
+            _geometry.CurrentSize.Y += wrapContentHeaderHeight;
         }
         _geometry.CurrentSize += BorderInsetDoubled;
     }
+
+    /// <summary>The header height RecalculateWrapContentSize gives a WrapContent element: its built height less the top border, or zero with no header.</summary>
+    private float WrapContentHeaderHeight => _headerState.ShowHeader ? _headerState.OriginalSize.Y - BorderInset.Y : 0f;
 
     /// <summary>Recalculates draw rectangles from the current absolute positions/sizes.</summary>
     /// <summary>
@@ -2007,12 +2043,6 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         _border.RightRectangle = right;
     }
 
-    public void SetIsVisible(bool isVisible)
-    {
-        IsVisible = isVisible;
-        _parent?.MeasureAndArrange();
-    }
-
     internal void SetFocused(bool isFocused)
     {
         if (_isFocused == isFocused)
@@ -2044,8 +2074,18 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// </summary>
     public void SetRelativePosition(Vector2 relativePosition)
     {
-        _geometry.RelativePosition = relativePosition;
+        SetRelativePositionField(relativePosition);
         MeasureAndArrange();
+    }
+
+    /// <summary>Writes RelativePosition, noting a real move so the next MeasureAndArrange reports it to the parent (its scroll range and wrap-around depend on where children are).</summary>
+    private void SetRelativePositionField(Vector2 relativePosition)
+    {
+        if (_geometry.RelativePosition != relativePosition)
+        {
+            _geometry.RelativePosition = relativePosition;
+            _hasUnreportedLayoutChange = true;
+        }
     }
 
     /// <summary>
@@ -2069,17 +2109,9 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// </summary>
     public void SetMinimumSize(Vector2 minimumSize) => _geometry.MinimumSize = minimumSize;
 
-    /// <summary>
-    /// Sets MaximumSize after construction -- same reasoning as SetMinimumSize, one door up: Build
-    /// only ever sets it once (Layout.MaximumSize if given, else a parented element inherits its
-    /// parent's own ContentSize, else -- the case a parentless Fixed-mode window with no explicit
-    /// MaximumSize hits -- it falls back to Layout.Size itself, permanently ceiling that window at
-    /// whatever size it happened to be created with). A window that needs to grow past its own
-    /// original size later (widening for extra columns, say) needs this raised first -- SetSize alone
-    /// clamps right back down to the old ceiling. Does not itself trigger a re-measure -- call SetSize afterward if the current
-    /// size also needs to move up to the new ceiling.
-    /// </summary>
-    public void SetMaximumSize(Vector2 maximumSize) => _geometry.MaximumSize = maximumSize;
+    /// <summary>Sets the authored cap after construction, replacing Layout.MaximumSize.</summary>
+    /// <remarks>Measure never changes it. Does not itself re-measure -- call SetSize afterward if the current size also needs to follow the new cap.</remarks>
+    public void SetMaximumSize(Vector2 maximumSize) => _geometry.AuthoredMaximumSize = maximumSize;
 
     /// <summary>
     /// Sets relative position and Fixed-mode size together in one MeasureAndArrange pass --
@@ -2090,7 +2122,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// </summary>
     public void SetBounds(Vector2 relativePosition, Vector2 size)
     {
-        _geometry.RelativePosition = relativePosition;
+        SetRelativePositionField(relativePosition);
         _geometry.OriginalSize = size;
         MeasureAndArrange();
     }

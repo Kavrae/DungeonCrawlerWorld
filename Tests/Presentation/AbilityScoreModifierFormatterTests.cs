@@ -117,9 +117,9 @@ public sealed class AbilityScoreModifierFormatterTests
         Assert.AreEqual("Iron Ring : +1", lines[1].Text);
     }
 
-    /// <summary>The name is recorded when the modifier is granted, so it still shows once the source entity is gone and its id belongs to someone else.</summary>
+    /// <summary>The name is recorded when the modifier is granted, so it still shows once the source entity is gone and its id belongs to someone else. A row shows the name alone, never the crawler number beside it.</summary>
     [TestMethod]
-    public void GetOrderedLines_SourceEntityDestroyedAndIdReused_StillShowsTheOriginalNameAndCrawlerNumber()
+    public void GetOrderedLines_SourceEntityDestroyedAndIdReused_StillShowsTheOriginalName()
     {
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
@@ -132,7 +132,21 @@ public sealed class AbilityScoreModifierFormatterTests
 
         var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), TestActionSources.Naming(), 0, AbilityScoreType.Strength, now: 0);
 
-        Assert.AreEqual("Iron Ring (Crawler #4242) : +1", lines[1].Text);
+        Assert.AreEqual("Iron Ring : +1", lines[1].Text);
+        Assert.AreEqual("Iron Ring", lines[1].SourceName);
+    }
+
+    [TestMethod]
+    public void GetOrderedLines_CrawlerSourceWithNoName_IsShownByItsCrawlerNumber()
+    {
+        var manager = CreateRegisteredManager();
+        AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Strength, 5);
+        manager.Merge(1, new Game.Modules.Crawler.Components.CrawlerComponent(4242));
+        GrantModifier(manager, 0, AbilityScoreType.Strength, StatModifierOperation.Additive, 1f, ActionSource.FromEntity(manager, new EntityKeys(), 1, creatures: new BlueprintRegistry()));
+
+        var lines = AbilityScoreModifierFormatter.GetOrderedLines(new AbilityScoreView(manager), new StatModifierView(manager), TestActionSources.Naming(), 0, AbilityScoreType.Strength, now: 0);
+
+        Assert.AreEqual("Crawler #4242 : +1", lines[1].Text);
     }
 
     [TestMethod]

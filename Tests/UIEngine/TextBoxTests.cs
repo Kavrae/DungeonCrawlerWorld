@@ -212,16 +212,11 @@ public sealed class TextBoxTests
     }
 
     /// <summary>
-    /// Regression test for the reported bug, using the same pattern ShellBootstrapper's
-    /// quest-composer popup does: a Fixed (not WrapContent) parent explicitly resizing itself
-    /// off the TextBox's own Resized event, using a chrome-overhead constant computed once up
-    /// front. A WrapContent parent was tried first and rejected -- see AutoSizeToContent's own
-    /// remarks and this method's sibling notes: Window.Measure overwrites a child's own
-    /// MaximumSize with _parentWindow.ContentSize on every pass, and a WrapContent parent's
-    /// ContentSize starts at ~(0,0) before it has ever measured a child -- so a WrapContent
-    /// parent and a child whose growth cap depends on that same parent's ContentSize collapse
-    /// each other to ~0 instead of settling on a real size. A Fixed parent has no such
-    /// circularity: its own ContentSize is already stable before the child is ever measured.
+    /// A Fixed parent can follow a growing TextBox by resizing itself off the box's own Resized event, with
+    /// a chrome-overhead constant computed up front. A WrapContent parent does this on its own (see
+    /// WrapContentLayoutTests); this covers a parent that keeps a fixed width or a size of its own. The
+    /// constant must be the parent's real chrome: one smaller than it clamps the box on every resize, and
+    /// each Resized then shrinks the parent further, down to nothing.
     /// </summary>
     [TestMethod]
     public void FixedParent_ExplicitlyResizedOffTextBoxResizedEvent_ShrinksThenGrowsWithIt()

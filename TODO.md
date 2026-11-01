@@ -240,6 +240,30 @@ then an in-game and in-Workshop check of every hotkey and the TextBox/DropdownFi
 
 ### Medium Priority
 
+#### Complete the Engine and UIEngine hooks, used or not
+
+The engine roots are meant to serve another game (see CLAUDE.md "Folders"), but their hooks were added only
+as Game or Presentation needed them, so a gap shows up only when this game first needs it, and is then
+patched at the call site instead of in the engine. Audit both libraries for missing hooks and add them
+even where nothing in Game or Presentation uses them yet. That covers events, overridable members,
+`EngineHooks` channels and handler interfaces. Each should follow its library's existing shape: an event
+raised where the state changes, a default-bodied interface member caught by `InputHookImplementationTests`,
+or a listener-null-checked channel.
+
+Gaps already known (from PLAN-wrapcontent-sizing.md, 2026-11-01):
+- **`Element`** raises `Resized`, `ContentResized`, `Moved`, `DisplayModeChanged`, `FocusChanged`,
+  `Opened` and `Closed`, but has no `VisibilityChanged`, `ChildAdded`/`ChildRemoved`, `ScrollOffsetChanged`
+  or `MaxScrollOffsetChanged`. Code that cares watches by polling or by hooking the call site instead.
+- **`UiRenderService.ScreenSize`** has no change event. A host has to remember to call
+  `UiLayerStack.MeasureAndArrangeRoots` after resizing its back buffer (the Workshop does; GameShell's
+  window can't be resized yet).
+- **The chrome setters** (`ContentPadding`, `CanUserScrollVertical`/`Horizontal`, `ScrollbarVisibility`,
+  `SetMinimumSize`/`SetMaximumSize`) neither re-lay out nor announce a change. Every caller lays out by
+  hand afterwards.
+
+Engine (ECS, modules, settings, diagnostics) gets the same audit: list what each manager, registry and
+service exposes, compare it with what a second game would expect, and add what is missing.
+
 #### FrameEventBuffer double-buffering + event system cleanup
 
 `FrameEventBuffer<T>` (`Engine/ECS/Systems/`) throws on a second same-cycle `Record` (a safety net, not
@@ -2873,14 +2897,21 @@ Solve it once, as a single-line text mode on `TextWindow` (or a title element) t
 asks its host to grow within the global/per-element maximum, and scrolls horizontally past it -- not a
 per-window fix for each case.
 
-Note -- a related trap, found live: `Element.Build` defaults an unset `MaximumSize` to the parent's
-`ContentSize`, else to `Layout.Size` itself, so a parentless window is silently capped at the size it was
-built with and a later `SetSize` larger than that is clamped back with no error. The player health bar's
-hover popup (`PlayerHealthBarContent`) was built at its empty-row size and resized per body-part count:
-the window stayed a 2 px strip, its rows drew outside it, and the popup lost its background. It's patched
-locally (`SetMaximumSize` before `SetSize`); check every other `SetSize` caller on a parentless window for
-the same problem, and decide whether `SetSize` (or the fallback itself) should handle it generically --
-e.g. an unset maximum meaning the global hard maximum above, rather than the initial size.
+Related traps:
+- **Unset maximum (fixed by PLAN-wrapcontent-sizing.md Phase 1, 2026-11-01).** `Element.Build` used to
+  default an unset `MaximumSize` to the parent's `ContentSize`, else to `Layout.Size`, so a parentless
+  window was silently capped at the size it was built with. That is how the player health bar's hover
+  popup (`PlayerHealthBarContent`) stayed a 2 px strip. An unset maximum now means the screen, which is
+  only a fallback; the global hard maximum above should replace or narrow it. The `SetMaximumSize`
+  patches written for the old fallback (`PlayerHealthBarContent`, `TradeWindow`, `AbilityScoreWindow`)
+  are gone (Phase 4), so none of those windows has a cap of its own yet; give each a real one here if it
+  needs one. See IMPLEMENTATION-NOTES "Element sizing: caps, constraints and the parent's reaction".
+- **A Fixed element with no `Size` is 0×0 until something sizes it**, with no warning. Only Fixed mode
+  reads `Size`; WrapContent, Fill and Minimized ignore it. Building one without `Size` is legitimate when
+  it is sized before it is shown (the shared `Dropdown`, sized by `SetBounds` on every `Show`), so this
+  can't be a build error. Audit every Fixed element created without `Layout.Size` and check that each is
+  sized before it is shown. Give each one a starting size, or make it WrapContent if it should fit its
+  content (as the quest composer now does).
 
 #### Inventory management -- grid cell reorder still open
 
@@ -3891,18 +3922,6 @@ name into one (dragging a slider). A shared primitive shaped like `UndoRedo` ans
 question: `TextBox` records its edits into it with its own coalescing rule, and later users (Admin Mode
 spawn/apply, inventory rearranging) record theirs.
 
-#### WrapContent parent sizing collapses when a child resizes itself after attach
-
-Discovered building the quest composer: a `WrapContent` window whose size depends on a child, paired
-with a child that resizes *itself* later (not at attach time), collapses both toward `(0,0)`. Root
-cause: `Window.Measure` unconditionally overwrites a child's `MaximumSize` with
-`_parentWindow.ContentSize - RelativePosition` every pass -- circular for a `WrapContent` parent, whose
-own `ContentSize` starts at `(0,0)` and is derived from the same children. Today's workaround (quest
-composer stays `Fixed`, explicitly resized off the TextBox's `Resized` event) doesn't generalize. Real
-fix likely: a child's own explicitly-authored `MaximumSize` should take precedence over a not-yet-settled
-parent `ContentSize` when the parent is itself `WrapContent` mid-resolution. Touches the shared
-Measure/Arrange pipeline -- worth a real design pass, not a quick patch.
-
 #### Selectable/copyable read-only text -- move selection out of TextBox into TextWindow
 
 `TextBox`'s selection machinery (hit-testing, double/triple-click, click-drag, Ctrl+A, Ctrl+C) is built
@@ -3920,12 +3939,6 @@ TabbedContent's tab strip, which is only `TabHeaderHeight` tall: give up a littl
 end for a pair of scroll buttons (◀ ▶ / ▲ ▼) instead. Such an element would use
 `ScrollbarVisibility.Hidden` today. Show the buttons only while that axis overflows, disable each one at
 its end of the range, and scroll a step per click, repeating while held.
-
-#### Window minimize completeness
-
-Two standing gaps: minimized windows don't hide/show their children (still draw underneath); sibling
-windows in a tiled parent don't retile when one minimizes/restores (same class of bug already fixed for
-add/remove via `RetileChildrenFrom`, not yet extended to `SetWindowDisplayMode`).
 
 #### Window docking / splitters
 

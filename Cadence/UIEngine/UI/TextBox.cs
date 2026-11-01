@@ -1164,6 +1164,7 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
     /// fresh ReformatDisplayText) of its own, which would make that call re-entrant. Called
     /// once after Initialize and again after every edit instead.
     /// </summary>
+    /// <remarks>Only the height changes: the width stays the one the box was given (OriginalSize), never a width a measure clamped it to. SetSize re-fits a WrapContent parent itself.</remarks>
     private void AutoSizeToContent()
     {
         if (!_multiline)
@@ -1174,23 +1175,9 @@ public class TextBox(FontService fontService, ElementPoolService elementPoolServ
         var desiredContentHeight = ContentFont.LineHeight * System.Math.Max(MinimumVisibleLines, DisplayText.LineCount) + LinePadding * 2;
         var desiredWindowHeight = desiredContentHeight + BorderInsetDoubled.Y + HeaderInsetHeight;
 
-        if (desiredWindowHeight != CurrentSize.Y)
+        if (desiredWindowHeight != OriginalSize.Y)
         {
-            SetSize(new Vector2(CurrentSize.X, desiredWindowHeight));
-
-            // SetSize only re-measures this window itself. A WrapContent parent needs to be
-            // told separately that a child it already contains has changed size --
-            // AddChildWindow/RemoveChildWindow handle that on attach/detach, but nothing does
-            // for a child resizing itself afterward. A Fixed/Fill parent doesn't need this,
-            // though: its own size never depends on children, and the supported pattern for
-            // sizing one around a growing TextBox (see TextBoxTests.FixedParent_...) is to
-            // resize it from this box's own Resized event -- which the SetSize call above
-            // already fired -- so re-measuring it again here would just be a second, redundant
-            // layout pass on every keystroke that changes line count.
-            if (ParentElement?.DisplayMode == ElementDisplayMode.WrapContent)
-            {
-                ParentElement.MeasureAndArrange();
-            }
+            SetSize(new Vector2(OriginalSize.X, desiredWindowHeight));
         }
     }
 

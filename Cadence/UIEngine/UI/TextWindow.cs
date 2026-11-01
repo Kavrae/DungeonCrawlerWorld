@@ -71,27 +71,18 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
 
     protected override void RecalculateWrapContentSize()
     {
-        // Only a child window's MaximumSize is actually a parent-relative boundary (inherited
-        // as _parentElement.ContentSize, see BuildWindow) -- subtracting RelativePosition there
-        // gives the space still available after this child's own offset within the parent. A
-        // root window's MaximumSize (like a notification popup's explicit cap) is just a
-        // literal bound with no parent edge to offset against; subtracting RelativePosition.X
-        // from it would pin a draggable window's right edge to a fixed screen x.
-        // Y has the same shape as X here, so it gets the same ParentElement-is-null check.
+        // A child's available size already excludes its RelativePosition (ComputeChildAvailableSize).
         // Clamped to 0, not left possibly negative: a tiled sibling positioned far enough down
-        // a tall column (e.g. by earlier siblings' own long text) can have RelativePosition.Y
-        // exceed MaximumSize.Y outright. An unclamped negative maximumContentHeight fed into
+        // a tall column (e.g. by earlier siblings' own long text) can be offered no height at all.
+        // An unclamped negative maximumContentHeight fed into
         // the Math.Min below would make this window's own Size.Y negative -- which then makes
         // RetileChildrenFrom's next-sibling chain (previousChildWindow.RelativePosition.Y +
         // previousChildWindow.CurrentSize.Y) step backward instead of forward, landing the next
         // sibling on top of this one instead of below it.
         var scrollbarGutterSize = ScrollbarGutterSize;
-        var maximumContentWidth = System.Math.Max(0, (ParentElement is not null
-            ? _geometry.MaximumSize.X - _geometry.RelativePosition.X - BorderInsetDoubled.X
-            : _geometry.MaximumSize.X - BorderInsetDoubled.X) - scrollbarGutterSize.X);
-        var maximumContentHeight = System.Math.Max(0, (ParentElement is not null
-            ? _geometry.MaximumSize.Y - _geometry.RelativePosition.Y
-            : _geometry.MaximumSize.Y) - BorderInsetDoubled.Y - HeaderInsetHeight - scrollbarGutterSize.Y);
+        var effectiveMaximumSize = EffectiveMaximumSize;
+        var maximumContentWidth = System.Math.Max(0, effectiveMaximumSize.X - BorderInsetDoubled.X - scrollbarGutterSize.X);
+        var maximumContentHeight = System.Math.Max(0, effectiveMaximumSize.Y - BorderInsetDoubled.Y - HeaderInsetHeight - scrollbarGutterSize.Y);
 
         // Wrap against the maximum first (this is the width word-wrap decisions need), then
         // shrink the window itself to the widest line that wrapping actually produced --
@@ -194,27 +185,7 @@ public class TextWindow(FontService fontService, ElementPoolService elementPoolS
         RelayoutText();
     }
 
-    /// <summary>Re-wraps OriginalText and re-lays-out the window at its current size and display mode -- for a subclass whose other content changed the size its text needs (Tooltip's rows).</summary>
-    protected void RelayoutText()
-    {
-        switch (_geometry.DisplayMode)
-        {
-            case ElementDisplayMode.Fixed:
-                RecalculateFixedSize();
-                break;
-            case ElementDisplayMode.Fill:
-                RecalculateFillSize();
-                break;
-            case ElementDisplayMode.WrapContent:
-                RecalculateWrapContentSize();
-                break;
-        }
-
-        // Without this, a text-driven resize left the window's rectangles/absolute
-        // positions/title button positions stale (still reflecting the size before the
-        // text change) even though CurrentSize/ContentSize above were already correct.
-        Arrange();
-
-        SettleScrollbarsOutsideMeasure();
-    }
+    /// <summary>Re-wraps OriginalText and re-lays-out the window at its current display mode -- for a subclass whose other content changed the size its text needs (Tooltip's rows).</summary>
+    /// <remarks>A full MeasureAndArrange, so a size the text changed reaches the parent like any other resize: Resized fires, a WrapContent parent re-fits and a tiling parent moves the siblings after this window.</remarks>
+    protected void RelayoutText() => MeasureAndArrange();
 }

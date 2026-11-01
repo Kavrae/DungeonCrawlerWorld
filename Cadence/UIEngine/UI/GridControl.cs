@@ -62,11 +62,10 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
     /// container Window would otherwise get for having children (see Element.ContentPadding's own
     /// doc comment). Set here rather than in OnChildrenInitialized: this Window's own initial
     /// Measure/Arrange pass (which computes ContentSize) runs between Build and
-    /// OnChildrenInitialized, and every child built in OnChildrenInitialized without an explicit
-    /// MaximumSize falls back to reading THIS ContentSize as its own MaximumSize at that same
-    /// moment (see Element.Build) -- so the zero padding must be set here, before that pass, or a
-    /// new instance's search box is clamped shorter than its declared Size.Y on its first open
-    /// (ContentPadding is a plain field that Build never resets).
+    /// OnChildrenInitialized, and the children built in OnChildrenInitialized are measured within
+    /// that ContentSize -- so the zero padding must be set here, before that pass, or a new
+    /// instance's search box is measured shorter than its declared Size.Y on its first open
+    /// (ContentPadding is a plain field that Build never resets, and setting it re-lays out nothing).
     /// </summary>
     public override void Build(Element? parent, ElementOptions options)
     {

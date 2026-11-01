@@ -176,7 +176,7 @@ public sealed class MapPreviewWindow(FontService fontService, ElementPoolService
     {
         _mapViewHeight = DefaultMapViewHeight;
         BuildRows();
-        var overflow = CurrentSize.Y - MaximumSize.Y;
+        var overflow = CurrentSize.Y - EffectiveMaximumSize.Y;
         if (_mapView is not null && overflow > 0)
         {
             _mapViewHeight = System.Math.Max(MinimumMapViewHeight, _mapViewHeight - overflow);
