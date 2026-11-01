@@ -32,6 +32,9 @@ public sealed class TargetingView(TargetResolution targetResolution, EntityActio
     public TargetSelection SelectEntity(int casterEntityId, IActionActivator activator, int targetEntityId) =>
         targetResolution.SelectEntity(casterEntityId, activator, targetEntityId);
 
+    /// <inheritdoc cref="TargetResolution.IsTargetableTile"/>
+    public bool IsTargetableTile(Vector3Int tile) => targetResolution.IsTargetableTile(tile);
+
     /// <inheritdoc cref="TargetResolution.ResolveReachable"/>
     public void ResolveReachable(TargetingSpec spec, Vector3Int origin, Vector2Byte originSize, List<Vector3Int> aimableTiles, List<Vector3Int> reachedTiles) =>
         targetResolution.ResolveReachable(spec, origin, originSize, aimableTiles, reachedTiles);

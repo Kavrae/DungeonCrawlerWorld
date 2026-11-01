@@ -65,8 +65,9 @@ public static class TargetShapeResolver
     /// With lineOfSight's aim rule, an aim the caster's footprint can't see (LineOfSight) resolves nothing, unless the shape
     /// is the same wherever it is aimed (IsAimIndependent). With its shape rule, only the tiles visible from the anchor are
     /// kept: from the end tile at TargetAnchor.PathEnd, from any tile of the caster's footprint at TargetAnchor.Caster.
-    /// With either rule, an end tile inside a wall resolves nothing at TargetAnchor.PathEnd (TargetLineOfSight.PlacementWalls): a
-    /// wall never hides its own tile, so a shape centred inside one would see out of both sides of it.
+    /// With walls, an aim inside a wall resolves nothing unless the shape is the same wherever it is aimed, and neither does an
+    /// end tile inside one at TargetAnchor.PathEnd (TargetLineOfSight.PlacementWalls): a wall never hides its own tile, so a
+    /// shape centred inside one would see out of both sides of it.
     /// </remarks>
     public static void Resolve(TargetShape shape, TargetAnchor anchor, Vector3Int origin, Vector2Byte originSize, Vector3Int aimedTile, TargetRanges ranges, MapBounds bounds, List<Vector3Int> results, TargetLineOfSight lineOfSight = default) =>
         Resolve(shape, anchor, origin, originSize, aimedTile, endTile: aimedTile, ranges, bounds, results, lineOfSight);
@@ -133,7 +134,7 @@ public static class TargetShapeResolver
                 return;
             }
 
-            if (anchor == TargetAnchor.PathEnd && lineOfSight.PlacementWalls is { } placementWalls && (shapeWalls ?? placementWalls).BlocksSight(endTile.X, endTile.Y, endTile.Z))
+            if (lineOfSight.PlacementWalls is { } placementWalls && IsAimOrEndInsideWall(shape, anchor, aimedTile, endTile, shapeWalls ?? placementWalls))
             {
                 return;
             }
@@ -158,6 +159,11 @@ public static class TargetShapeResolver
         }
     }
 
+    /// <summary>Whether a shape that faces its aim is aimed inside a wall, or one at TargetAnchor.PathEnd ends inside one.</summary>
+    private static bool IsAimOrEndInsideWall(TargetShape shape, TargetAnchor anchor, Vector3Int aimedTile, Vector3Int endTile, ISightBlockers walls) =>
+        (!IsAimIndependent(shape, anchor) && walls.BlocksSight(aimedTile.X, aimedTile.Y, aimedTile.Z)) ||
+        (anchor == TargetAnchor.PathEnd && walls.BlocksSight(endTile.X, endTile.Y, endTile.Z));
+
     /// <summary>
     /// Fills results with every tile the given shape can be aimed at or reach from origin, whatever the aim -- the area
     /// a player picks from before there is a direction.
@@ -165,7 +171,7 @@ public static class TargetShapeResolver
     /// <remarks>
     /// A shape that is aim-independent (IsAimIndependent) is its own tiles. Otherwise it is the range band, MinimumRange to
     /// MaximumRange of the footprint -- with the footprint itself excluded at TargetAnchor.Caster, where aiming at it gives no
-    /// direction, and with lineOfSight's aim rule only the tiles the footprint can see (LineOfSight.ComputeVisible), and at TargetAnchor.PathEnd under either rule no wall tile -- plus,
+    /// direction, and with lineOfSight's aim rule only the tiles the footprint can see (LineOfSight.ComputeVisible), and with walls no wall tile -- plus,
     /// at TargetAnchor.Caster, the tiles of whatever non-directional shapes are combined with it. The results list is
     /// cleared at the start of the method.
     ///
@@ -191,7 +197,7 @@ public static class TargetShapeResolver
         var casterCentredShape = anchor == TargetAnchor.Caster ? shape & ~DirectionalShapes : TargetShape.None;
         var firesIntoWalls = path != TargetPath.Placed && pathWalls is PathWallRule.StopsAtWall or PathWallRule.BouncesOffWalls && lineOfSight.Walls is not null;
         var sightWalls = lineOfSight.AimWalls ?? (firesIntoWalls ? lineOfSight.Walls : null);
-        var removesWalls = (anchor == TargetAnchor.PathEnd && lineOfSight.PlacementWalls is not null) || firesIntoWalls;
+        var removesWalls = lineOfSight.PlacementWalls is not null;
         var hidesCasterCentred = casterCentredShape != TargetShape.None && lineOfSight.ShapeWalls is not null;
         var sweepsLargeFootprint = sightWalls is not null && originSize != SingleTileFootprint;
         var cachedWalls = lineOfSight.Walls is { } walls && (removesWalls || hidesCasterCentred || sweepsLargeFootprint)

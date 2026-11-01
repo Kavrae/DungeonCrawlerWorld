@@ -180,6 +180,25 @@ public sealed class TargetResolutionTests
     }
 
     [TestMethod]
+    public void NoLineOfSightRule_AWallTile_IsNotTargetable_AndResolvesNothing()
+    {
+        var session = BuildSession();
+        var wallTile = new Vector3Int(CasterPosition.X + 2, 5, Ground);
+        var behindWall = new Vector3Int(CasterPosition.X + 3, 5, Ground);
+        var world = session.Build.World;
+        world.SetStructure(wallTile, new Game.Terrain.TerrainCell(world.Terrain.GetId(Game.Terrain.BuiltInTerrain.StoneWallKey)));
+        var selection = session.Resolution.Select(session.CasterId, SingleTargetRangeEight, TargetingMode.Ground, wallTile, Now);
+
+        var (tiles, _) = session.Resolve(SingleTargetRangeEight, selection);
+
+        Assert.IsEmpty(tiles);
+        Assert.IsFalse(session.Resolution.IsTargetableTile(wallTile));
+        Assert.IsFalse(session.Resolution.IsAimable(session.CasterId, SingleTargetRangeEight.Targeting, wallTile));
+        Assert.IsTrue(session.Resolution.IsTargetableTile(behindWall));
+        Assert.IsTrue(session.Resolution.IsAimable(session.CasterId, SingleTargetRangeEight.Targeting, behindWall), "With no sight rule, the tile behind the wall is still aimable.");
+    }
+
+    [TestMethod]
     public void Projectile_HitCountOne_HitsTheFirstEntity_AndCentresItsShapeThere()
     {
         var session = BuildSession();

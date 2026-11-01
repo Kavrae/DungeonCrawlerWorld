@@ -1053,6 +1053,28 @@ public sealed class MapWindowTests
     }
 
     [TestMethod]
+    public void HandleClick_ArmedActionInGroundMode_ClickOnAWall_LandsOnTheNearestTileInReach_OnTheCastersSide()
+    {
+        var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        var burstActionId = Guid.NewGuid();
+        actionCatalog.Register(new ActionDefinition(burstActionId, "Test Burst", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Circle, MaximumRange: 5, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(burstActionId, overrideDefinition: null));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, burstActionId));
+        var wall = world.Terrain.Register(new Game.Terrain.TerrainDefinition("test:wall", "Wall", "", "#", Color.Gray, BlocksMovement: true));
+        world.SetStructure(new Vector3Int(103, 100, 0), new Game.Terrain.TerrainCell(wall));
+        mapViewState.TargetingMode = TargetingMode.Ground;
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D4), new KeyboardState());
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+        Assert.DoesNotContain(new Vector3Int(103, 100, 0), mapViewState.TargetableTiles, "A wall is never a tile to aim at.");
+
+        mapWindow.HandleClick(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(103, 100, 0)));
+
+        var pendingActivations = componentManager.GetPackedPool<PendingActionActivationComponent>();
+        Assert.IsTrue(pendingActivations.Has(PlayerEntityId));
+        Assert.AreEqual(new Vector3Int(102, 100, 0), pendingActivations.GetReadonly(PlayerEntityId).Selection.AimedTile, "Four tiles are one from the wall; the one nearest the caster wins.");
+    }
+
+    [TestMethod]
     public void HandleClick_ArmedLineAction_ClickInDirection_QueuesActivationAlongThatLine()
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));

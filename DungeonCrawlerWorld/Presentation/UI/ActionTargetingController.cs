@@ -208,7 +208,7 @@ public sealed class ActionTargetingController(
         var hoveredTile = new Vector3Int(hoveredColumnRow.X, hoveredColumnRow.Y, playerTransform.Position.Z);
         mapViewState.HoveredTile = hoveredTile;
 
-        if (TrySelectActivationTarget(activator, hoveredTile, isMapClick: true, out _, out var selection))
+        if (TrySelectActivationTarget(activator, hoveredTile, isMapClick: true, fallsBackFromUntargetableTile: true, out _, out var selection))
         {
             RefreshHoveredFootprint(activator, selection, playerTransform.Position, playerTransform.Size);
             return;
@@ -258,7 +258,7 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>Activates the armed action or item as a map click on targetTile (see TrySelectActivationTarget); with nothing to land on it stays armed, exactly like clicking empty space doesn't clear an inspector selection either.</summary>
-    private void TryConfirmActivationAtTile(Vector3Int targetTile) => TryActivateArmed(targetTile, isMapClick: true);
+    private void TryConfirmActivationAtTile(Vector3Int targetTile) => TryActivateArmed(targetTile, isMapClick: true, fallsBackFromUntargetableTile: true);
 
     /// <summary>
     /// Cancels an armed action/item (right-click tap or Escape), or, if nothing is armed, drops
@@ -328,7 +328,7 @@ public sealed class ActionTargetingController(
             }
 
             claimedKeys.Add(key);
-            TryConfirmActivationAtTile(transform.Position + direction);
+            TryActivateArmed(transform.Position + direction, isMapClick: true, fallsBackFromUntargetableTile: false);
             return;
         }
     }
@@ -612,17 +612,17 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>Activates whatever is armed without a map click -- a re-press of its hotbar slot, by key or by clicking the slot -- against the hovered tile, if the cursor is on the map.</summary>
-    private void TryActivateArmedFromHotkey() => TryActivateArmed(mapViewState.HoveredTile, isMapClick: false);
+    private void TryActivateArmedFromHotkey() => TryActivateArmed(mapViewState.HoveredTile, isMapClick: false, fallsBackFromUntargetableTile: true);
 
     /// <summary>Queues and disarms whatever is armed, aimed by TrySelectActivationTarget; nothing to land on, or a confirm that would be refused, leaves it armed with nothing paid.</summary>
-    private void TryActivateArmed(Vector3Int? cursorTile, bool isMapClick)
+    private void TryActivateArmed(Vector3Int? cursorTile, bool isMapClick, bool fallsBackFromUntargetableTile)
     {
         if (!TryGetArmedActivator(out var activator) || !CanConfirmArmed())
         {
             return;
         }
 
-        if (!TrySelectActivationTarget(activator, cursorTile, isMapClick, out var aimedTile, out var selection))
+        if (!TrySelectActivationTarget(activator, cursorTile, isMapClick, fallsBackFromUntargetableTile, out var aimedTile, out var selection))
         {
             return;
         }
@@ -636,13 +636,16 @@ public sealed class ActionTargetingController(
     /// In order: a shape that is the same wherever it is aimed (TargetShapeResolver.IsAimIndependent) lands around the caster, whatever the mode. A GameTags.TargetingSelf
     /// action or item used from the hotbar lands on the player (a potion is drunk, Dodge dodges in
     /// place); a map click follows the mode instead. Ground mode (the player's, or an activator that
-    /// offers no other) lands on cursorTile when it is in reach -- a potion splashes there. Target mode
-    /// marks the target on cursorTile when it is in reach; else, for a TargetingSelf map click, the
+    /// offers no other) lands on cursorTile when it is in reach -- a potion splashes there -- or, with
+    /// fallsBackFromUntargetableTile, when cursorTile is one nothing may target (TargetingView.IsTargetableTile: a wall),
+    /// on the tile in reach nearest it within MapViewState.TargetSearchDistanceTiles, ties going to the one nearer the
+    /// player. Target mode marks the target on cursorTile when it is in reach; else, for a TargetingSelf map click, the
     /// player; else the target in reach nearest cursorTile, or nearest the player with the cursor off
     /// the map, within MapViewState.TargetSearchDistanceTiles of it. False when there is nothing to land on.
     /// </remarks>
+    /// <param name="fallsBackFromUntargetableTile">False for a tile that is a direction rather than the cursor (Dodge's WASD step), which lands there or nowhere.</param>
     /// <param name="aimedTile">The tile aimed at -- for Dodge, the tile it steps to.</param>
-    private bool TrySelectActivationTarget(IActionActivator activator, Vector3Int? cursorTile, bool isMapClick, out Vector3Int aimedTile, out TargetSelection selection)
+    private bool TrySelectActivationTarget(IActionActivator activator, Vector3Int? cursorTile, bool isMapClick, bool fallsBackFromUntargetableTile, out Vector3Int aimedTile, out TargetSelection selection)
     {
         aimedTile = default;
         selection = default;
@@ -678,7 +681,13 @@ public sealed class ActionTargetingController(
 
         if (mode == TargetingMode.Ground)
         {
-            if (cursorTileInReach is not { } groundTile)
+            var groundTileInReach = cursorTileInReach;
+            if (groundTileInReach is null && fallsBackFromUntargetableTile && cursorTile is { } untargetableTile && !targetingView.IsTargetableTile(untargetableTile))
+            {
+                groundTileInReach = NearestAimableTile(nearestTo: untargetableTile, tiebreakTile: playerPosition);
+            }
+
+            if (groundTileInReach is not { } groundTile)
             {
                 return false;
             }
@@ -720,6 +729,22 @@ public sealed class ActionTargetingController(
         foreach (var tile in _aimableTiles)
         {
             if (GridDistance.IsWithinRoundedRadius(nearestTo, tile, mapViewState.TargetSearchDistanceTiles) && IsTargetAt(activator, tile, now))
+            {
+                _targetCandidateTilesBuffer.Add(tile);
+            }
+        }
+
+        return ClosestPointSelector.SelectClosest(nearestTo, tiebreakTile, CollectionsMarshal.AsSpan(_targetCandidateTilesBuffer));
+    }
+
+    /// <summary>The tile the armed thing can be aimed at nearest nearestTo, no further from it than MapViewState.TargetSearchDistanceTiles, ties going to the one nearer tiebreakTile; null when there is none.</summary>
+    /// <remarks>Reads _aimableTiles, which RefreshTargetableTiles has just brought up to date.</remarks>
+    private Vector3Int? NearestAimableTile(Vector3Int nearestTo, Vector3Int tiebreakTile)
+    {
+        _targetCandidateTilesBuffer.Clear();
+        foreach (var tile in _aimableTiles)
+        {
+            if (GridDistance.IsWithinRoundedRadius(nearestTo, tile, mapViewState.TargetSearchDistanceTiles))
             {
                 _targetCandidateTilesBuffer.Add(tile);
             }

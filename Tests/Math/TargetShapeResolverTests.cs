@@ -1288,6 +1288,7 @@ public sealed class TargetShapeResolverTests
     [TestMethod]
     [DataRow(LineOfSightRule.Required, LineOfSightRule.NotRequired)]
     [DataRow(LineOfSightRule.NotRequired, LineOfSightRule.Required)]
+    [DataRow(LineOfSightRule.NotRequired, LineOfSightRule.NotRequired)]
     public void LineOfSight_AnAimInsideAWall_ResolvesNothing(LineOfSightRule aim, LineOfSightRule shape)
     {
         var origin = new Vector3Int(10, 10, 0);
@@ -1315,7 +1316,7 @@ public sealed class TargetShapeResolverTests
     }
 
     [TestMethod]
-    public void NoLineOfSightRule_StillAimsInsideAWall()
+    public void NoLineOfSightRule_NeverAimsInsideAWall()
     {
         var origin = new Vector3Int(10, 10, 0);
         var tiles = new List<Vector3Int>();
@@ -1323,6 +1324,57 @@ public sealed class TargetShapeResolverTests
         TargetShapeResolver.Resolve(TargetShape.SingleTarget, TargetAnchor.PathEnd, origin, SingleTile, new Vector3Int(12, 12, 0), new TargetRanges(MaximumRange: 8), Bounds, tiles,
             new TargetLineOfSight(new WallTiles((12, 12))));
 
+        Assert.IsEmpty(tiles);
+    }
+
+    [TestMethod]
+    public void NoWalls_StillAimsAnywhere()
+    {
+        var origin = new Vector3Int(10, 10, 0);
+        var tiles = new List<Vector3Int>();
+
+        TargetShapeResolver.Resolve(TargetShape.SingleTarget, TargetAnchor.PathEnd, origin, SingleTile, new Vector3Int(12, 12, 0), new TargetRanges(MaximumRange: 8), Bounds, tiles);
+
         CollectionAssert.AreEqual(new[] { new Vector3Int(12, 12, 0) }, tiles);
+    }
+
+    [TestMethod]
+    public void NoLineOfSightRule_Reachable_LeavesOutWallTiles()
+    {
+        var origin = new Vector3Int(10, 10, 0);
+        var tiles = new List<Vector3Int>();
+
+        TargetShapeResolver.ResolveReachable(TargetShape.SingleTarget, TargetAnchor.PathEnd, origin, SingleTile, new TargetRanges(MaximumRange: 4), Bounds, tiles,
+            new TargetLineOfSight(new WallTiles((12, 10))));
+
+        CollectionAssert.DoesNotContain(tiles, new Vector3Int(12, 10, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(13, 10, 0), "With no sight rule, a tile behind the wall is still aimable.");
+    }
+
+    [TestMethod]
+    public void CasterAnchoredCone_AimedInsideAWall_ResolvesNothing_AndTheWallIsNotReachable()
+    {
+        var origin = new Vector3Int(10, 10, 0);
+        var walls = new TargetLineOfSight(new WallTiles((11, 10)));
+        var tiles = new List<Vector3Int>();
+
+        TargetShapeResolver.Resolve(TargetShape.Cone, TargetAnchor.Caster, origin, SingleTile, new Vector3Int(11, 10, 0), new TargetRanges(MaximumRange: 0, AreaSize: 4), Bounds, tiles, walls);
+        Assert.IsEmpty(tiles);
+
+        TargetShapeResolver.ResolveReachable(TargetShape.Cone, TargetAnchor.Caster, origin, SingleTile, new TargetRanges(MaximumRange: 0, AreaSize: 4), Bounds, tiles, walls);
+        CollectionAssert.DoesNotContain(tiles, new Vector3Int(11, 10, 0));
+        CollectionAssert.Contains(tiles, new Vector3Int(11, 11, 0));
+    }
+
+    [TestMethod]
+    public void AimIndependentShape_BesideAWall_StillResolves()
+    {
+        var origin = new Vector3Int(10, 10, 0);
+        var tiles = new List<Vector3Int>();
+
+        TargetShapeResolver.Resolve(TargetShape.Adjacent, TargetAnchor.Caster, origin, SingleTile, new Vector3Int(11, 10, 0), new TargetRanges(), Bounds, tiles,
+            new TargetLineOfSight(new WallTiles((11, 10))));
+
+        Assert.HasCount(8, tiles);
     }
 }

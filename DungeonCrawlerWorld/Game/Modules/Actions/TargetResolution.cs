@@ -186,12 +186,16 @@ public sealed class TargetResolution(
         }
     }
 
-    /// <summary>Whether casterEntityId could aim spec at tile now: in its aim's range band (TargetingSpec.AimRanges) and, with spec's aim rule, in its sight, and not inside a wall when it needs sight.</summary>
+    /// <summary>Whether casterEntityId could aim spec at tile now: a targetable tile (IsTargetableTile) in its aim's range band (TargetingSpec.AimRanges) and, with spec's aim rule, in its sight.</summary>
     public bool IsAimable(int casterEntityId, TargetingSpec spec, Vector3Int tile) =>
+        IsTargetableTile(tile) &&
         transforms.TryGetReadonly(casterEntityId, out var transform) &&
         spec.AimRanges.IsInRangeBand(transform.Position, transform.Size, tile) &&
-        (spec.AimLineOfSight != LineOfSightRule.Required || LineOfSight.IsVisibleFromFootprint(transform.Position, transform.Size, tile, walls)) &&
-        (spec.Anchor != TargetAnchor.PathEnd || LineOfSightOf(spec).PlacementWalls is not { } placementWalls || !placementWalls.BlocksSight(tile.X, tile.Y, tile.Z));
+        (spec.AimLineOfSight != LineOfSightRule.Required || LineOfSight.IsVisibleFromFootprint(transform.Position, transform.Size, tile, walls));
+
+    /// <summary>Whether anything may be aimed at or placed on tile, whoever aims and in either mode: not a wall, and on the map.</summary>
+    /// <remarks>The rule every resolve applies through its walls (TargetLineOfSight.PlacementWalls), named for a caller choosing a tile: an NPC, or the player's aim falling back to a tile near a wall.</remarks>
+    public bool IsTargetableTile(Vector3Int tile) => !walls.BlocksSight(tile.X, tile.Y, tile.Z);
 
     /// <summary>The entity Target mode marks on tile: a living Blocking one, else a Tiny one (several: picked by a roll seeded from tile and now), else a Phasing one. Null for none.</summary>
     public int? PickMarked(Vector3Int tile, long now)

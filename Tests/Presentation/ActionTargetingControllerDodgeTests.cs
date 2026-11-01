@@ -28,9 +28,15 @@ public sealed class ActionTargetingControllerDodgeTests
     private const int PlayerEntityId = 1;
     private static readonly Vector3Int PlayerPosition = new(5, 5, 0);
 
-    private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager, PlayerMovementController PlayerMovement, SimulationClock Clock, EventBus EventBus) Build()
+    private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager, PlayerMovementController PlayerMovement, SimulationClock Clock, EventBus EventBus) Build(Vector3Int? wallTile = null)
     {
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
+        if (wallTile is { } wallPosition)
+        {
+            var wall = world.Terrain.Register(new Game.Terrain.TerrainDefinition("test:wall", "Wall", "", "#", Microsoft.Xna.Framework.Color.Gray, BlocksMovement: true));
+            world.SetStructure(wallPosition, new Game.Terrain.TerrainCell(wall));
+        }
+
         var mapViewState = new MapViewState();
 
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
@@ -135,6 +141,32 @@ public sealed class ActionTargetingControllerDodgeTests
         eventBus.Publish(new Game.World.ActionActivatedEvent(PlayerEntityId, BuiltInActionIds.Dodge));
 
         Assert.IsNull(componentManager.GetPackedPool<MovementComponent>().GetReadonly(PlayerEntityId).NextMapPosition);
+    }
+
+    [TestMethod]
+    public void ArmingDodge_BesideAWall_LeavesTheWallOutOfTheTilesItsHintsAreDrawnOn()
+    {
+        var (actionTargeting, mapViewState, _, _, _, _) = Build(wallTile: new Vector3Int(6, 5, 0));
+
+        actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+        Assert.DoesNotContain(new Vector3Int(6, 5, 0), mapViewState.TargetableTiles);
+        Assert.Contains(new Vector3Int(4, 5, 0), mapViewState.TargetableTiles);
+    }
+
+    [TestMethod]
+    public void TryClaimDodgeDirectionalKey_IntoAWall_QueuesNothing_AndStaysArmed()
+    {
+        var (actionTargeting, mapViewState, componentManager, _, _, _) = Build(wallTile: new Vector3Int(6, 5, 0));
+        actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+        var claimedKeys = new HashSet<Keys>();
+
+        actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.D), new KeyboardState(), claimedKeys);
+
+        Assert.IsFalse(componentManager.GetPackedPool<PendingActionActivationComponent>().Has(PlayerEntityId), "A step is a direction: into a wall it lands nowhere, never on a tile beside it.");
+        Assert.AreEqual(BuiltInActionIds.Dodge, mapViewState.ArmedActionId);
+        Assert.Contains(Keys.D, claimedKeys);
     }
 
     [TestMethod]
