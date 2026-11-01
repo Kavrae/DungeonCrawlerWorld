@@ -131,6 +131,10 @@ public sealed class Map
     /// <summary>Whether the map covers a fixed, declared rectangle rather than sliding with whatever is loaded.</summary>
     public bool IsBounded => _declaredBounds is not null;
 
+    /// <summary>Changes whenever a structure is written or a neighborhood loads or unloads: everything that can move a wall or the map's edge.</summary>
+    /// <remarks>Only ever goes up, so a reader that kept the value it last saw knows its answer may be stale when they differ.</remarks>
+    public int StructureVersion { get; private set; }
+
     /// <summary>Whether neighborhood (cellX, cellY) could be loaded: anywhere on an unbounded map, inside the declared rectangle of a bounded one.</summary>
     public bool CanHold(int cellX, int cellY) =>
         _declaredBounds is not { } declared ||
@@ -195,12 +199,14 @@ public sealed class Map
             layoutCellStores.TerrainTypeIds.CopyTo(loadedCellStores.TerrainTypeIds, 0);
             layoutCellStores.StructureTypeIds.CopyTo(loadedCellStores.StructureTypeIds, 0);
             loadedCellStores.LayoutSeed = layoutCellStores.LayoutSeed;
+            StructureVersion++;
             return;
         }
 
         _loadedNeighborhoods.Add(neighborhoodCoordinate, layoutCellStores);
         SetLookupSlot(layout.CellX, layout.CellY, layoutCellStores);
         RecomputeBounds();
+        StructureVersion++;
     }
 
     /// <summary>Drops neighborhood (cellX, cellY)'s stores, so its positions are no longer on the map.</summary>
@@ -214,6 +220,7 @@ public sealed class Map
 
         SetLookupSlot(cellX, cellY, null);
         RecomputeBounds();
+        StructureVersion++;
     }
 
     /// <summary>Moves the fast lookup to the square of neighborhoods centred on (cellX, cellY) -- where the window is. What is loaded doesn't change.</summary>
@@ -576,6 +583,7 @@ public sealed class Map
         var neighborhood = LoadedNeighborhoodAt(position.X, position.Y);
         var index = CellIndex(neighborhood, position);
         neighborhood.StructureTypeIds[index] = cell.TypeId;
+        StructureVersion++;
     }
 
     /// <summary>The seed the look of the structure at position is picked from (CellSeeds), its face and top alike; 0 where the neighborhood is unloaded.</summary>

@@ -59,7 +59,7 @@ public sealed class HotbarControllerTests
             TestActionId, "Test Self Spell", null, "*", default, [],
             Effects: [Effect.None],
             Activator: new SpellActivator(
-                new TargetingSpec(TargetShape.Self, Range: 0),
+                new TargetingSpec(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster),
                 new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         var itemCatalog = new ItemCatalog();
 

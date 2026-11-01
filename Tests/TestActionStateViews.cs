@@ -33,7 +33,7 @@ internal static class TestActionStateViews
 
     /// <summary>A TargetingView over a test's own pools and map, resolving through the same TargetResolution activations do. A pool the test didn't register reads as empty; with no key table nothing can be marked, so every selection lands as Ground.</summary>
     public static TargetingView Targeting(ComponentManager componentManager, IMapQuery mapQuery, ActionCatalog? actionCatalog = null, ItemCatalog? itemCatalog = null, EntityKeys? entityKeys = null) =>
-        new(new TargetResolution(mapQuery,
+        new(new TargetResolution(mapQuery, mapQuery as Engine.Tiles.ISightBlockers ?? EmptyPools.NoWalls,
                 componentManager.IsRegistered<TransformComponent>() ? componentManager.GetDirectPool<TransformComponent>() : EmptyPools.Direct<TransformComponent>(),
                 entityKeys ?? new EntityKeys(),
                 componentManager.IsRegistered<DeadComponent>() ? componentManager.GetPackedPool<DeadComponent>() : EmptyPools.Packed<DeadComponent>(),

@@ -283,7 +283,7 @@ internal static class TestSystems
     internal static TargetResolution TargetResolutionOver(EffectServices services, IMapQuery mapQuery)
     {
         var componentManager = services.ComponentManager;
-        return new(mapQuery,
+        return new(mapQuery, mapQuery as Engine.Tiles.ISightBlockers ?? EmptyPools.NoWalls,
             componentManager.IsRegistered<TransformComponent>() ? componentManager.GetDirectPool<TransformComponent>() : EmptyPools.Direct<TransformComponent>(),
             services.EntityKeys, services.DeadEntities,
             componentManager.IsRegistered<NonBlockingComponent>() ? componentManager.GetMultiPool<NonBlockingComponent>() : EmptyPools.Multi<NonBlockingComponent>(),
@@ -316,7 +316,7 @@ internal static class TestSystems
             TestActionEffects.Services(BuiltInTestComponents.RegisterAll(new ComponentManager(16, 16)), entityKeys ?? new EntityKeys(), new EventBus(), mathUtility, deadEntities: deadEntities, mana: mana),
             meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>(),
             playerQuery ?? TestPlayerQuery.NoPlayer,
-            new TargetResolution(mapQuery, transformPool, entityKeys ?? new EntityKeys(), deadEntities ?? EmptyPools.Packed<DeadComponent>(), EmptyPools.Multi<NonBlockingComponent>(), EmptyPools.Packed<AbilityScoresComponent>()),
+            new TargetResolution(mapQuery, mapQuery as Engine.Tiles.ISightBlockers ?? EmptyPools.NoWalls, transformPool, entityKeys ?? new EntityKeys(), deadEntities ?? EmptyPools.Packed<DeadComponent>(), EmptyPools.Multi<NonBlockingComponent>(), EmptyPools.Packed<AbilityScoresComponent>()),
             corpseLooting ?? new NpcCorpseLooting(BuiltInTestComponents.RegisterAll(new ComponentManager(16, 16)), new ItemCatalog(), playerQuery ?? TestPlayerQuery.NoPlayer, entityKeys ?? new EntityKeys(), mapQuery, new ProcessingTierQuery(processingTiers)),
             TestContent.Item(Game.Modules.Inventory.BuiltInItemIds.HealthPotion).Activator!);
 

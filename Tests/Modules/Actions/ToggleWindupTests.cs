@@ -221,7 +221,7 @@ public sealed class ToggleWindupTests
         var player = harness.PlayerEntityId;
         var delayedAura = TestContent.Action(BuiltInActionIds.ToxicAura) with
         {
-            Activator = new DirectAction(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Delayed)),
+            Activator = new DirectAction(new TargetingSpec(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Delayed)),
             Toggle = ToggleSpec.HoldsEffectsOnly,
             ActivationEffects = [new Effect([new ManaDrain(2)])],
         };
@@ -257,7 +257,7 @@ public sealed class ToggleWindupTests
         var player = harness.PlayerEntityId;
         var delayedAura = TestContent.Action(BuiltInActionIds.ToxicAura) with
         {
-            Activator = new DirectAction(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Delayed)),
+            Activator = new DirectAction(new TargetingSpec(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Delayed)),
             Toggle = ToggleSpec.HoldsEffectsOnly,
             ActivationEffects = [new Effect([new ManaDrain(10)])],
         };

@@ -27,7 +27,7 @@ public sealed class EffectiveActionPresentationTests
     private static readonly ActionDefinition CatalogSpell = new(
         SpellId, "Catalog Spell", null, "*", Color.White, [],
         Effects: [Effect.None],
-        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: 0)));
+        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: 0)));
 
     private static ActionCatalog Catalog()
     {
@@ -74,7 +74,7 @@ public sealed class EffectiveActionPresentationTests
         var harness = TestMapWindows.Create(20, 20, 1, playerPosition: new Vector3Int(5, 5, 0), Catalog());
         var overrideSpell = CatalogSpell with
         {
-            Activator = new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 4), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: 0)),
+            Activator = new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 4), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: 0)),
         };
         harness.ComponentManager.Merge(PlayerEntityId, new ActionInstanceComponent(SpellId, overrideDefinition: overrideSpell));
         harness.ComponentManager.GetMultiPool<ActionHotkeyBindingComponent>().Add(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot1, SpellId));

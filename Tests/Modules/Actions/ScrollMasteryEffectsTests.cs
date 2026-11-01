@@ -26,7 +26,7 @@ public sealed class ScrollMasteryEffectsTests
             Guid.NewGuid(), "Test Scroll", "Scroll", "s", Color.White,
             Tags: [GameTags.ItemConsumableScroll, GameTags.ItemConsumable],
             Effects: [Effect.None],
-            Activator: new ScrollActivator(new TargetingSpec(TargetShape.Adjacent, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, 30, null), SpellId));
+            Activator: new ScrollActivator(new TargetingSpec(TargetShape.Adjacent, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate, 30, null), SpellId));
 
         return (componentManager, new EventBus(), new ActionCatalog(), scroll);
     }
@@ -64,7 +64,7 @@ public sealed class ScrollMasteryEffectsTests
         var (componentManager, eventBus, actionCatalog, scroll) = Build();
         var existingSpell = new ActionDefinition(
             SpellId, "Existing Spell", null, "e", Color.Red, Tags: [], Effects: [Effect.None],
-            Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, 30, null)));
+            Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate, 30, null)));
         actionCatalog.Register(existingSpell);
 
         var masteredCount = 0;

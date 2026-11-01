@@ -11,7 +11,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Input;
 using Presentation.MapRendering;
-using UIEngine.Input;
+using System.Runtime.InteropServices;
 using UIEngine.UI;
 
 namespace Presentation.UI;
@@ -38,39 +38,41 @@ public sealed class ActionTargetingController(
     SimulationClock simulationClock)
 {
 
-    // Reused across calls (see TargetShapeResolver's own doc comment on why Resolve writes into
-    // a caller-owned buffer instead of allocating).
-    private readonly List<Vector3Int> _candidateTilesBuffer = [];
+    /// <summary>What TargetingView resolves into, copied out at once into _targetableTiles or _hoveredFootprint; reused so a resolve allocates nothing.</summary>
+    private readonly List<Vector3Int> _resolvedTilesBuffer = [];
+
     private readonly List<Vector3Int> _targetCandidateTilesBuffer = [];
 
-    /// <summary>
-    /// Backs MapViewState.TargetableTiles -- populated by RefreshTargetableTiles (Clear +
-    /// repopulate) rather than replaced with a fresh HashSet every arm/move, since a HashSet
-    /// allocation here runs against a heap already holding this world's entity-indexed component
-    /// arrays (see CLAUDE.md's Scale note); a GC pass triggered at just the wrong moment against
-    /// that heap is exactly the kind of one-time stutter a per-call allocation risks causing.
-    /// </summary>
-    private readonly HashSet<Vector3Int> _targetableTilesSet = [];
+    /// <summary>What TargetingView.ResolveReachable fills with the tiles the armed thing can reach, copied out at once into _targetableTiles.</summary>
+    private readonly List<Vector3Int> _reachedTilesBuffer = [];
 
-    /// <summary>The caster position TargetableTiles was last computed from -- lets RefreshTargetableTiles (called every frame something is armed) cheaply skip recomputation on frames where the caster hasn't moved.</summary>
-    private Vector3Int? _targetableTilesOrigin;
+    /// <summary>Backs MapViewState.TargetableTiles, every tile the armed thing could hit: refilled in place by RefreshTargetableTiles, never replaced, so arming or moving allocates nothing.</summary>
+    private readonly TileSet _targetableTiles = new();
 
-    /// <summary>The armed action/item's actual hit-footprint at the current hover position, recomputed every Update (see UpdateHoveredTile).</summary>
-    private readonly List<Vector3Int> _hoveredFootprintBuffer = [];
+    /// <summary>The tiles the cursor can aim the armed thing at, and NearestTargetTile picks from: TargetableTiles less what only a Projectile's path passes on its way. Refilled with it.</summary>
+    private readonly TileSet _aimableTiles = new();
 
-    /// <summary>
-    /// Companion to _hoveredFootprintBuffer for O(1) membership checks (see
-    /// HoveredFootprintContains) -- rebuilt from the buffer in lockstep every UpdateHoveredTile
-    /// call, the same "list for order/indexing, parallel set for membership" split
-    /// _targetableTilesSet already uses relative to _candidateTilesBuffer.
-    /// </summary>
-    private readonly HashSet<Vector3Int> _hoveredFootprintSet = [];
+    /// <summary>What TargetableTiles was last resolved from; RefreshTargetableTiles, called every frame something is armed, resolves again only when it changes.</summary>
+    private ReachableAreaKey? _targetableTilesKey;
 
-    /// <summary>Read-only view of _hoveredFootprintBuffer for tests -- same internal-for-test-visibility pattern as UiInputController.CurrentCursor/DragDelta.</summary>
-    internal IReadOnlyList<Vector3Int> HoveredFootprint => _hoveredFootprintBuffer;
+    /// <summary>The armed action/item's actual hit-footprint at the current hover position, brought up to date every Update (see UpdateHoveredTile).</summary>
+    private readonly TileSet _hoveredFootprint = new();
 
-    /// <summary>O(1) via _hoveredFootprintSet -- MapWindow's targeting-highlight draw calls this once per visible targetable tile, every frame something is armed, so a linear List.Contains here would cost O(TargetableTiles.Count * HoveredFootprint.Count) per frame instead.</summary>
-    internal bool HoveredFootprintContains(Vector3Int tile) => _hoveredFootprintSet.Contains(tile);
+    /// <summary>What HoveredFootprint was last resolved from, when everything it depends on is in the key; null resolves it again next Update.</summary>
+    private HoveredFootprintKey? _hoveredFootprintKey;
+
+    /// <summary>The hovered footprint, in order -- for MapGameOverlay's second pass and for tests.</summary>
+    internal TileSet HoveredFootprint => _hoveredFootprint;
+
+    /// <summary>Constant time -- MapGameOverlay calls this once per targetable tile, every frame something is armed.</summary>
+    internal bool HoveredFootprintContains(Vector3Int tile) => _hoveredFootprint.Contains(tile);
+
+    /// <summary>Everything TargetingView.ResolveReachable's tiles depend on: its arguments, and the walls and map edge (TargetingView.SightVersion).</summary>
+    private readonly record struct ReachableAreaKey(TargetingSpec Targeting, Vector3Int Position, Vector2Byte Size, int SightVersion);
+
+    /// <summary>Everything a Placed Ground-mode resolve's tiles depend on: the targeting, the selection, the caster's footprint, and the walls and map edge (TargetingView.SightVersion).</summary>
+    /// <remarks>A path meets whoever stands on it and a marked entity moves, so neither is ever keyed: they resolve every Update.</remarks>
+    private readonly record struct HoveredFootprintKey(TargetingSpec Targeting, TargetSelection Selection, Vector3Int Position, Vector2Byte Size, int SightVersion);
 
     private readonly List<Vector3Int> _playerWindupTilesBuffer = [];
 
@@ -187,11 +189,9 @@ public sealed class ActionTargetingController(
     /// </summary>
     public void UpdateHoveredTile(Point? mousePosition, Vector2 contentAbsolutePosition)
     {
-        _hoveredFootprintBuffer.Clear();
-        _hoveredFootprintSet.Clear();
-
         if (!TryGetArmedActivator(out var activator) || !transformView.TryGetTransform(world.PlayerEntityId, out var playerTransform))
         {
+            ClearHoveredFootprint();
             mapViewState.HoveredTile = null;
             return;
         }
@@ -200,6 +200,7 @@ public sealed class ActionTargetingController(
 
         if (mousePosition is not { } mouse || !camera.TryGetHoveredMapPosition(mouse, contentAbsolutePosition, out var hoveredColumnRow))
         {
+            ClearHoveredFootprint();
             mapViewState.HoveredTile = null;
             return;
         }
@@ -209,13 +210,34 @@ public sealed class ActionTargetingController(
 
         if (TrySelectActivationTarget(activator, hoveredTile, isMapClick: true, out _, out var selection))
         {
-            targetingView.Resolve(world.PlayerEntityId, activator, selection, _hoveredFootprintBuffer);
+            RefreshHoveredFootprint(activator, selection, playerTransform.Position, playerTransform.Size);
+            return;
         }
 
-        foreach (var tile in _hoveredFootprintBuffer)
+        ClearHoveredFootprint();
+    }
+
+    private void ClearHoveredFootprint()
+    {
+        _hoveredFootprint.Clear();
+        _hoveredFootprintKey = null;
+    }
+
+    /// <summary>Brings HoveredFootprint up to date for selection, resolving again only when something a keyed resolve depends on changed (HoveredFootprintKey).</summary>
+    private void RefreshHoveredFootprint(IActionActivator activator, TargetSelection selection, Vector3Int casterPosition, Vector2Byte casterSize)
+    {
+        HoveredFootprintKey? key = activator.Targeting.Path == TargetPath.Placed && !selection.HasMarkedEntity
+            ? new HoveredFootprintKey(activator.Targeting, selection, casterPosition, casterSize, targetingView.SightVersion)
+            : null;
+        if (key is not null && _hoveredFootprintKey == key)
         {
-            _hoveredFootprintSet.Add(tile);
+            return;
         }
+
+        _hoveredFootprintKey = key;
+        _resolvedTilesBuffer.Clear();
+        targetingView.Resolve(world.PlayerEntityId, activator, selection, _resolvedTilesBuffer);
+        _hoveredFootprint.SetTo(CollectionsMarshal.AsSpan(_resolvedTilesBuffer));
     }
 
     /// <summary>
@@ -443,11 +465,11 @@ public sealed class ActionTargetingController(
         mapViewState.ArmedActionId = actionId;
         mapViewState.ArmedItemStackInstanceId = null;
         mapViewState.ArmedSlot = slot;
-        _targetableTilesOrigin = null; // Forces RefreshTargetableTiles below to (re)compute regardless of any stale origin left over from a previous arm.
+        _targetableTilesKey = null;
 
-        if (actionStateView.TryGetEffectiveAction(world.PlayerEntityId, actionId, out var action) && transformView.TryGetTransform(world.PlayerEntityId, out var transform))
+        if (TryGetArmedTargeting(out var targeting) && transformView.TryGetTransform(world.PlayerEntityId, out var transform))
         {
-            RefreshTargetableTiles(action.Activator.Targeting, transform.Position, transform.Size);
+            RefreshTargetableTiles(targeting, transform.Position, transform.Size);
         }
     }
 
@@ -459,7 +481,7 @@ public sealed class ActionTargetingController(
         mapViewState.ArmedItemStackInstanceId = stackInstanceId;
         mapViewState.ArmedActionId = null;
         mapViewState.ArmedSlot = slot;
-        _targetableTilesOrigin = null;
+        _targetableTilesKey = null;
 
         if (TryGetArmedTargeting(out var targeting) && transformView.TryGetTransform(world.PlayerEntityId, out var transform))
         {
@@ -510,7 +532,9 @@ public sealed class ActionTargetingController(
         mapViewState.ArmedItemStackInstanceId = null;
         mapViewState.ArmedSlot = null;
         mapViewState.TargetableTiles = null;
-        _targetableTilesOrigin = null;
+        _targetableTilesKey = null;
+        _targetableTiles.Clear();
+        _aimableTiles.Clear();
     }
 
     /// <summary>
@@ -562,67 +586,29 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// (Re)computes TargetableTiles from currentPosition -- but only if it hasn't already been
-    /// computed from that exact position, so an armed-and-stationary caster doesn't redo this
-    /// work every single frame. Called both by Arm (first computation) and every UpdateHoveredTile
-    /// call thereafter, so the highlighted reachable area re-centers on the caster's new position
-    /// if it moves while still armed, instead of staying fixed at wherever it was standing at arm
-    /// time. Repopulates the shared _targetableTilesSet in place (Clear + re-add) rather than
-    /// assigning a fresh HashSet -- see that field's own doc comment for why.
+    /// Brings TargetableTiles and the aimable tiles up to date from one resolve (TargetingView.ResolveReachable), whatever
+    /// the cursor: the highlight is every tile targeting could hit from the caster, and the aimable tiles -- what the cursor
+    /// and NearestTargetTile pick from -- are those it can be aimed at. They differ only by what a Projectile's path passes
+    /// on its way.
     /// </summary>
+    /// <remarks>
+    /// Called on arming and every UpdateHoveredTile after, so the area follows a caster that moves while armed. It resolves
+    /// again only when something the tiles depend on changed (ReachableAreaKey): the caster's position or size, the
+    /// effective targeting (a range modifier or scroll scaling that starts or ends mid-arm), or the walls and map edge.
+    /// </remarks>
     private void RefreshTargetableTiles(TargetingSpec targeting, Vector3Int currentPosition, Vector2Byte currentSize)
     {
-        if (_targetableTilesOrigin == currentPosition)
+        var key = new ReachableAreaKey(targeting, currentPosition, currentSize, targetingView.SightVersion);
+        if (_targetableTilesKey == key)
         {
             return;
         }
 
-        _targetableTilesOrigin = currentPosition;
-
-        ComputeTargetableTiles(currentPosition, currentSize, targeting, _candidateTilesBuffer);
-
-        _targetableTilesSet.Clear();
-        foreach (var tile in _candidateTilesBuffer)
-        {
-            _targetableTilesSet.Add(tile);
-        }
-
-        mapViewState.TargetableTiles = _targetableTilesSet;
-    }
-
-    /// <summary>Whether shape needs no cursor position at all to resolve its real footprint -- true exactly when it's built entirely from Adjacent/Self bits (both always caster-centered, regardless of what else is combined with them). Scales automatically as TargetShape gains flags later, instead of a hand-maintained "these specific shapes" list.</summary>
-    private static bool IsCursorIndependent(TargetShape shape) => (shape & ~(TargetShape.Adjacent | TargetShape.Self)) == 0;
-
-    /// <summary>
-    /// The full universe of tiles the given targeting could possibly be aimed at from
-    /// attackerPosition -- a cursor-independent shape's (Adjacent and/or Self) fixed perimeter/
-    /// footprint around the attacker (see TargetShapeResolver's own doc comment), or every tile
-    /// within Range for every cursor-directed shape (SingleTarget/Burst/Line/Cone) via a
-    /// Burst-shaped scatter, not the real Shape -- there's no single "aim direction" yet at arm
-    /// time, only a reachable area. Through RefreshTargetableTiles, both the highlight and
-    /// NearestTargetTile's candidate pool, so the two never drift out of sync with each other.
-    /// </summary>
-    private void ComputeTargetableTiles(Vector3Int attackerPosition, Vector2Byte attackerSize, TargetingSpec targeting, List<Vector3Int> buffer)
-    {
-        if (IsCursorIndependent(targeting.Shape))
-        {
-            TargetShapeResolver.Resolve(targeting.Shape, attackerPosition, attackerSize, attackerPosition, range: 0, areaSize: 0, world.Map.Bounds, buffer);
-            return;
-        }
-
-        // SingleTarget + Chebyshev + Range 1 (Dodge's own targeting) is exactly Adjacent | Self's
-        // resolved footprint -- the self+8-neighbor block -- so reuse that exact resolve for the
-        // arm-time preview instead of the generic Manhattan-Burst approximation below, which would
-        // otherwise show the wrong 5-tile diamond (cardinal neighbors only) rather than the real
-        // 9-tile block. Not worth a general arbitrary-radius Chebyshev scatter until something
-        // besides Dodge needs Range > 1 here.
-        if (targeting.Shape == TargetShape.SingleTarget && targeting.Metric == DistanceMetric.Chebyshev && targeting.Range == 1)
-        {
-            TargetShapeResolver.Resolve(TargetShape.Adjacent | TargetShape.Self, attackerPosition, attackerSize, attackerPosition, range: 0, areaSize: 0, world.Map.Bounds, buffer);
-            return;
-        }
-
-        TargetShapeResolver.Resolve(TargetShape.Burst, attackerPosition, attackerSize, attackerPosition, range: 0, targeting.Range, world.Map.Bounds, buffer);
+        _targetableTilesKey = key;
+        targetingView.ResolveReachable(targeting, currentPosition, currentSize, _resolvedTilesBuffer, _reachedTilesBuffer);
+        _aimableTiles.SetTo(CollectionsMarshal.AsSpan(_resolvedTilesBuffer));
+        _targetableTiles.SetTo(CollectionsMarshal.AsSpan(_reachedTilesBuffer));
+        mapViewState.TargetableTiles = _targetableTiles;
     }
 
     /// <summary>Activates whatever is armed without a map click -- a re-press of its hotbar slot, by key or by clicking the slot -- against the hovered tile, if the cursor is on the map.</summary>
@@ -647,7 +633,7 @@ public sealed class ActionTargetingController(
 
     /// <summary>Where an activation of the armed activator lands, with the cursor on cursorTile (null when it isn't on the map) -- one rule for every way to activate, and for the hover preview.</summary>
     /// <remarks>
-    /// In order: an Adjacent/Self shape lands around the caster, whatever the mode. A GameTags.TargetingSelf
+    /// In order: a shape that is the same wherever it is aimed (TargetShapeResolver.IsAimIndependent) lands around the caster, whatever the mode. A GameTags.TargetingSelf
     /// action or item used from the hotbar lands on the player (a potion is drunk, Dodge dodges in
     /// place); a map click follows the mode instead. Ground mode (the player's, or an activator that
     /// offers no other) lands on cursorTile when it is in reach -- a potion splashes there. Target mode
@@ -671,7 +657,7 @@ public sealed class ActionTargetingController(
         var now = simulationClock.CurrentFrame;
         var targeting = targetingView.EffectiveSpec(playerEntityId, activator);
 
-        if (IsCursorIndependent(targeting.Shape))
+        if (TargetShapeResolver.IsAimIndependent(targeting.Shape, targeting.Anchor))
         {
             aimedTile = playerPosition;
             selection = targetingView.Select(playerEntityId, activator, TargetingMode.Ground, playerPosition, now);
@@ -687,7 +673,7 @@ public sealed class ActionTargetingController(
         }
 
         RefreshTargetableTiles(targeting, playerPosition, playerTransform.Size);
-        var cursorTileInReach = cursorTile is { } tile && _targetableTilesSet.Contains(tile) ? cursorTile : null;
+        var cursorTileInReach = cursorTile is { } tile && _aimableTiles.Contains(tile) ? cursorTile : null;
         var mode = targeting.Modes == TargetingModes.GroundOnly ? TargetingMode.Ground : mapViewState.TargetingMode;
 
         if (mode == TargetingMode.Ground)
@@ -726,20 +712,20 @@ public sealed class ActionTargetingController(
         return true;
     }
 
-    /// <summary>The tile in TargetableTiles holding a target nearest nearestTo, no further from it than MapViewState.TargetSearchDistanceTiles, ties going to the one nearer tiebreakTile; null when there is none.</summary>
-    /// <remarks>Reads _candidateTilesBuffer, which RefreshTargetableTiles has just brought up to date.</remarks>
+    /// <summary>The tile the armed thing can be aimed at holding a target nearest nearestTo, no further from it than MapViewState.TargetSearchDistanceTiles, ties going to the one nearer tiebreakTile; null when there is none.</summary>
+    /// <remarks>Reads _aimableTiles, which RefreshTargetableTiles has just brought up to date.</remarks>
     private Vector3Int? NearestTargetTile(IActionActivator activator, Vector3Int nearestTo, Vector3Int tiebreakTile, long now)
     {
         _targetCandidateTilesBuffer.Clear();
-        foreach (var tile in _candidateTilesBuffer)
+        foreach (var tile in _aimableTiles)
         {
-            if (GridDistance.ManhattanDistance(nearestTo, tile) <= mapViewState.TargetSearchDistanceTiles && IsTargetAt(activator, tile, now))
+            if (GridDistance.IsWithinRoundedRadius(nearestTo, tile, mapViewState.TargetSearchDistanceTiles) && IsTargetAt(activator, tile, now))
             {
                 _targetCandidateTilesBuffer.Add(tile);
             }
         }
 
-        return ClosestPointSelector.SelectClosest(nearestTo, tiebreakTile, _targetCandidateTilesBuffer);
+        return ClosestPointSelector.SelectClosest(nearestTo, tiebreakTile, CollectionsMarshal.AsSpan(_targetCandidateTilesBuffer));
     }
 
     /// <summary>Whether something other than the player stands on tile to be targeted: its blocking occupant, else an entity Target mode would mark there.</summary>
@@ -787,7 +773,7 @@ public sealed class ActionTargetingController(
             // current tile guarantees an occupant is found there -- see DodgeActivation's own doc
             // comment for why it also reads SourceEntityId rather than TargetEntityId, in case
             // something else shares that tile. Dodge is Ground only, so this is all its selection is.
-            selection = TargetSelection.Ground(casterTransform.Position) with { Range = selection.Range };
+            selection = TargetSelection.Ground(casterTransform.Position) with { MaximumRange = selection.MaximumRange };
             stepOnActivation = DodgeStep(aimedTile, casterTransform.Position);
         }
 
@@ -798,7 +784,7 @@ public sealed class ActionTargetingController(
 
     /// <summary>The tile a Dodge aimed at <paramref name="aimedTile"/> steps to, or null for a Dodge in place.</summary>
     /// <remarks>
-    /// Dodge's own targeting (SingleTarget + Metric.Chebyshev, Range 1) aims at exactly one tile -- self, or one
+    /// Dodge's own targeting (SingleTarget, Range 1, the 3x3 block) aims at exactly one tile -- self, or one
     /// adjacent tile. The step goes through PlayerCommands to MovementComponent.NextMapPosition, the same path
     /// ordinary movement uses, never World.MoveEntity: that only updates Map's occupancy index, not
     /// TransformComponent.Position, and would leave the two out of step. MovementSystem's own occupancy/wall/diagonal

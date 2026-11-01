@@ -33,6 +33,16 @@ internal static class EmptyPools
     public static ProcessingTierQuery Tiers() =>
         new(Direct<ProcessingTierComponent>());
 
+    /// <summary>No walls anywhere: line of sight is never blocked.</summary>
+    public static Engine.Tiles.ISightBlockers NoWalls { get; } = new NoSightBlockers();
+
+    private sealed class NoSightBlockers : Engine.Tiles.ISightBlockers
+    {
+        public int Version => 0;
+
+        public bool BlocksSight(int x, int y, int z) => false;
+    }
+
     /// <summary>A ledger over its own empty pools, recording against deadEntities when the test has one.</summary>
     public static DamageLedger DamageLedger(PackedComponentPool<DeadComponent>? deadEntities = null) =>
         new(Multi<DamageContributionComponent>(), Packed<DamageLedgerExpiryComponent>(),

@@ -34,7 +34,7 @@ public sealed class ActivationQueriesTests
     private static ActionDefinition Spell(ushort manaCost, ushort? cooldownFrames = null) => new(
         SpellId, "Test Spell", null, "s", Color.White, [GameTags.TargetingSelf],
         Effects: [Effect.None],
-        Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: cooldownFrames)))
+        Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate, CooldownFrames: cooldownFrames)))
     {
         ActivationEffects = Costing(manaCost),
     };
@@ -42,7 +42,7 @@ public sealed class ActivationQueriesTests
     private static ActionDefinition MeleeSpell(ushort manaCost) => new(
         MeleeSpellId, "Test Melee Spell", null, "m", Color.White, [GameTags.DeliveryMelee],
         Effects: [Effect.None],
-        Activator: new SpellActivator(new TargetingSpec(TargetShape.Adjacent, Range: 0), new ActionTiming(ActionTimingCategory.Immediate)))
+        Activator: new SpellActivator(new TargetingSpec(TargetShape.Adjacent, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate)))
     {
         ActivationEffects = Costing(manaCost),
     };
@@ -52,7 +52,7 @@ public sealed class ActivationQueriesTests
     private static ActionDefinition FreeCast(ushort cooldownFrames) => new(
         FreeCastId, "Test Free Cast", null, "f", Color.White, [GameTags.TargetingSelf],
         Effects: [Effect.None],
-        Activator: new DirectAction(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.FreeCast, CooldownFrames: cooldownFrames)));
+        Activator: new DirectAction(new TargetingSpec(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.FreeCast, CooldownFrames: cooldownFrames)));
 
     private static ComponentManager Components(float currentMana = 10f, bool meleeDisabled = false, uint lockedUntilFrame = 0)
     {

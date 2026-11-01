@@ -1,4 +1,5 @@
 using Engine.Math;
+using Engine.Tiles;
 using Game.Floors;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
@@ -37,10 +38,10 @@ public sealed class MapViewState
     /// <summary>See ArmedActionId/ArmedItemStackInstanceId -- shared regardless of which of the two is actually armed.</summary>
     public HotkeySlot? ArmedSlot;
 
-    /// <summary>The player's targeting mode for every activation that offers one: Target (default) marks the entity on the confirmed tile, Ground aims at the tile. Switched with Left Alt (TargetingModeSwitch), kept for the session and not saved yet.</summary>
-    public TargetingMode TargetingMode = TargetingMode.Target;
+    /// <summary>The player's targeting mode for every activation that offers one: Ground (default) aims at the tile, Target marks the entity on the confirmed tile. Switched with Left Alt (TargetingModeSwitch), kept for the session and not saved yet.</summary>
+    public TargetingMode TargetingMode = TargetingMode.Ground;
 
-    /// <summary>How far, in tiles of Manhattan distance, Target mode looks for a target when none is under the cursor: around the cursor, or around the player with the cursor off the map.</summary>
+    /// <summary>How far, as a rounded circle (GridDistance.IsWithinRoundedRadius), Target mode looks for a target when none is under the cursor: around the cursor, or around the player with the cursor off the map.</summary>
     /// <remarks>Session only; the player will set it later.</remarks>
     public int TargetSearchDistanceTiles = 2;
 
@@ -50,8 +51,8 @@ public sealed class MapViewState
     /// over ArmedSlot, since a live hover is the most immediate signal of intent.</summary>
     public HotkeySlot? HoverSlot;
 
-    /// <summary>Every tile the currently-armed action could possibly be aimed at from the caster's current position -- Adjacent's fixed footprint, or every tile within the action's Range for cursor-directed shapes. Computed at arm time and recomputed if the caster moves while still armed (see ActionTargetingController.RefreshTargetableTiles). Null when nothing is armed.</summary>
-    public IReadOnlySet<Vector3Int>? TargetableTiles;
+    /// <summary>Every tile the currently-armed action could hit from the caster's current position -- Adjacent's fixed footprint, or every tile within the action's Range it can be aimed at, plus whatever a Projectile passes on its way there. Computed at arm time and recomputed whenever what it depends on changes while still armed (see ActionTargetingController.RefreshTargetableTiles). Null when nothing is armed.</summary>
+    public TileSet? TargetableTiles;
 
     /// <summary>The map tile the mouse is currently over, on the player's own Z layer -- null when nothing is armed or the mouse isn't over the map. Updated every frame while an action is armed (see MapWindow.UpdateHoveredTile).</summary>
     public Vector3Int? HoveredTile;

@@ -34,19 +34,19 @@ public sealed class ScrollScalingEffectsTests
     [TestMethod]
     public void ScaleTargeting_ScalesRangeAndAreaSize_RoundedToNearestInt()
     {
-        var baseTargeting = new TargetingSpec(TargetShape.Burst, Range: 5, AreaSize: 3);
+        var baseTargeting = new TargetingSpec(TargetShape.Circle, MaximumRange: 5, AreaSize: 3);
 
         var scaled = ScrollScalingEffects.ScaleTargeting(baseTargeting, 4.0f);
 
-        Assert.AreEqual(20, scaled.Range);
+        Assert.AreEqual(20, scaled.MaximumRange);
         Assert.AreEqual(12, scaled.AreaSize);
-        Assert.AreEqual(TargetShape.Burst, scaled.Shape);
+        Assert.AreEqual(TargetShape.Circle, scaled.Shape);
     }
 
     [TestMethod]
     public void ScaleTargeting_MultiplierOfOne_LeavesTargetingUnchanged()
     {
-        var baseTargeting = new TargetingSpec(TargetShape.Adjacent, Range: 0, AreaSize: 0);
+        var baseTargeting = new TargetingSpec(TargetShape.Adjacent, MaximumRange: 0, AreaSize: 0, Anchor: TargetAnchor.Caster);
 
         var scaled = ScrollScalingEffects.ScaleTargeting(baseTargeting, 1.0f);
 

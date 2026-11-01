@@ -35,7 +35,7 @@ public sealed class ActionEffectResolverTests
     private static readonly ActionDefinition Action = new(
         Guid.NewGuid(), "Test Attack", null, "#", default, [],
         Effects: [new Effect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
-        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
+        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
 
     /// <summary>Records every stack ApplyStacks is asked for instead of touching any real component pool -- keeps these tests independent of any concrete effect (Burning/Poison/Paralysis).</summary>
     private sealed class FakeStatusEffectApplier(StatusEffectType effectType) : IStatusEffectApplier
@@ -181,7 +181,7 @@ public sealed class ActionEffectResolverTests
     private static readonly ActionDefinition StrengthTaggedAction = new(
         Guid.NewGuid(), "Test Strength Attack", null, "#", default, [GameTags.StatsAbilityScoreStrength],
         Effects: [new Effect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
-        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
+        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
 
     [TestMethod]
     public void Apply_ActionTaggedWithMatchingAbilityScore_AddsScoreTotalToBaseDamage()
@@ -215,7 +215,7 @@ public sealed class ActionEffectResolverTests
     private static readonly ActionDefinition ActionWithStatusEffect = new(
         Guid.NewGuid(), "Test Status Effect Attack", null, "#", default, [],
         Effects: [new Effect([new StatusEffectGrant(StatusEffectType.Paralysis)])],
-        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
+        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
 
     [TestMethod]
     public void Apply_BlockingOccupant_GrantsRegisteredStatusEffect()
@@ -318,7 +318,7 @@ public sealed class ActionEffectResolverTests
     private static readonly ActionDefinition DodgeableAction = new(
         Guid.NewGuid(), "Test Dodgeable Attack", null, "#", default, [GameTags.TraitDodgeable],
         Effects: [new Effect([new DirectDamage(MinFlatDamage: 15, MaxFlatDamage: 15)])],
-        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
+        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
 
     [TestMethod]
     public void Apply_DodgeableAction_SkipsTargetCurrentlyDodging()

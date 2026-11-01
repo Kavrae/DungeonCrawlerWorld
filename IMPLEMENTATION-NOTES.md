@@ -582,7 +582,7 @@ Decisions (confirmed in the plan's reviews, not to be reopened):
   per tile is gone. Falloff is per aura: `Linear`, `power * (size + 1 - distance) / (size + 1)` rounded
   up, so the edge fades to about 1, or `None`, full power to the edge. Content kept its numbers as
   power and size, so the middle of each aura got stronger (the shrine heals 16, 13, 10, 7, 4).
-- **Targeting modes, Target (default) and Ground**, the player's choice (Left Alt), kept in
+- **Targeting modes, Ground (default since 2026-10-31) and Target**, the player's choice (Left Alt), kept in
   Presentation for the session. Game resolves targets: a request carries a `TargetSelection`, and one
   function (`TargetResolution.Resolve`) turns it into tiles for the activation, the preview, the
   telegraph and NPCs, so what is drawn is what lands. Which activations have a mode and what Target

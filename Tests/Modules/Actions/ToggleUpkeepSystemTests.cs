@@ -124,7 +124,7 @@ public sealed class ToggleUpkeepSystemTests
     private static ActionDefinition Toggle(IReadOnlyList<Effect>? activationEffects = null, IReadOnlyList<Effect>? periodicEffects = null, ushort intervalFrames = IntervalFrames) =>
         new(Guid.NewGuid(), "Test Toggle", null, "t", Color.White, [],
             Effects: [new Effect([new AuraSourceGrant(TestAuras.PoisonGlowOnly, Power: 8, Size: 3)])],
-            Activator: new DirectAction(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.FreeCast)),
+            Activator: new DirectAction(new TargetingSpec(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.FreeCast)),
             Toggle: new ToggleSpec(periodicEffects is null ? null : new TogglePeriodicEffects(periodicEffects, intervalFrames)))
         {
             ActivationEffects = activationEffects ?? [],

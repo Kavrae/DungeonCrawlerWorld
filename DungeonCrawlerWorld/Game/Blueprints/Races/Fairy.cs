@@ -68,7 +68,7 @@ public static class Fairy
         {
             Activator = spell with
             {
-                Targeting = spell.Targeting with { Range = MagicMissileRange },
+                Targeting = spell.Targeting with { MaximumRange = MagicMissileRange },
                 Timing = new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: MagicMissileWindupFrames, CooldownFrames: null),
             },
         };

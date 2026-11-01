@@ -17,7 +17,7 @@ public sealed class World(
     MultiComponentPool<ForceBlockingComponent> forceBlockingComponents,
     EventBus eventBus,
     EntityKeys entityKeys,
-    TerrainRegistry terrain) : IMapQuery, IPlayerQuery
+    TerrainRegistry terrain) : IMapQuery, IPlayerQuery, ISightBlockers
 {
     public Map Map { get; set; } = map;
 
@@ -199,6 +199,20 @@ public sealed class World(
 
     /// <inheritdoc cref="IMapQuery"/>
     public bool IsCellBlocked(Vector3Int position) => IsOnMap(position) && IsCellBlockedOnMap(position);
+
+    /// <summary>Changes whenever BlocksSight may answer differently somewhere: a structure written, a neighborhood loaded or unloaded, or a terrain definition replaced.</summary>
+    /// <remarks>Both counts only go up, so their sum changes with either.</remarks>
+    public int SightVersion => unchecked(Map.StructureVersion + Terrain.Version);
+
+    int ISightBlockers.Version => SightVersion;
+
+    /// <summary>Whether (x, y) on map layer z blocks sight: a structure that blocks movement (a wall), or a tile off the map.</summary>
+    /// <remarks>The walls LineOfSight is computed over. Terrain never blocks sight, whatever it does to movement.</remarks>
+    public bool BlocksSight(int x, int y, int z)
+    {
+        var position = new Vector3Int(x, y, z);
+        return !IsOnMap(position) || Terrain.BlocksMovement(Map.GetStructureTypeId(position));
+    }
 
     /// <summary>IsCellBlocked for a position already known to be on the map.</summary>
     private bool IsCellBlockedOnMap(Vector3Int position)

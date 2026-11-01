@@ -44,7 +44,7 @@ public sealed class EntityActionsTests
 
     private static ActionDefinition ActionWithDamage(Guid actionId, string name, short flatDamage, ushort? cooldownFrames = null) =>
         new(actionId, name, null, "#", default, [], [new Effect([new DirectDamage(MinFlatDamage: flatDamage, MaxFlatDamage: flatDamage)])],
-            new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 0, CooldownFrames: cooldownFrames)));
+            new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 0, CooldownFrames: cooldownFrames)));
 
     /// <summary>A race and a class, a trait that grants an action of its own, the creature they make, and a champion of it that overrides the racial attack.</summary>
     private static Fixture Build()

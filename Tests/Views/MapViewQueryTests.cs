@@ -371,7 +371,7 @@ public sealed class MapViewQueryTests
         fixture.Actions.Register(new ActionDefinition(
             ChargingActionId, "Slam", null, "!", Color.Orange, [],
             Effects: [Effect.None],
-            Activator: new DirectAction(new TargetingSpec(TargetShape.Adjacent, Range: 0), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 45, CooldownFrames: null))));
+            Activator: new DirectAction(new TargetingSpec(TargetShape.Adjacent, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 45, CooldownFrames: null))));
         fixture.Components.Merge(5, new ActionInstanceComponent(ChargingActionId, overrideDefinition: null));
         fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingActionId, default, readyAtFrame: 45));
         fixture.Components.Merge(5, new ActionLockComponent(currentLockTotalFrames: 45, unlockedAtFrame: 45));
@@ -389,7 +389,7 @@ public sealed class MapViewQueryTests
         var catalogAction = new ActionDefinition(
             ChargingActionId, "Slam", null, "!", Color.Orange, [],
             Effects: [Effect.None],
-            Activator: new DirectAction(new TargetingSpec(TargetShape.Adjacent, Range: 0), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 45, CooldownFrames: null)));
+            Activator: new DirectAction(new TargetingSpec(TargetShape.Adjacent, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 45, CooldownFrames: null)));
         fixture.Actions.Register(catalogAction);
         fixture.Components.Merge(5, new ActionInstanceComponent(ChargingActionId, overrideDefinition: catalogAction with { Glyph = "?", GlyphColor = Color.Purple }));
         fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingActionId, default, readyAtFrame: 45));

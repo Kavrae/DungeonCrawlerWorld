@@ -18,7 +18,7 @@ public sealed class ActionGrantEffectsTests
     private static readonly ActionDefinition TestActionDefinition = new(
         ActionId, "Test Action", null, "#", default, [],
         Effects: [new Effect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
-        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
+        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null)));
 
     private static readonly ActionDefinition DrainingActionDefinition = TestActionDefinition with { ActivationEffects = [new Effect([new ManaDrain(2)])] };
 

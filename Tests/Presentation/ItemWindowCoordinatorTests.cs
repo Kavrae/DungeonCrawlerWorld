@@ -54,7 +54,7 @@ public sealed class ItemWindowCoordinatorTests
         itemCatalog.Register(new ItemDefinition(
             PotionItemId, "Test Potion", null, "p", Color.Green, Tags: [GameTags.ItemConsumablePotion, GameTags.TargetingSelf],
             Effects: [new Effect([new DirectHeal(0.5f)])],
-            Activator: new PotionActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
+            Activator: new PotionActivator(new TargetingSpec(TargetShape.Circle, MaximumRange: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
         var mapHarness = TestMapWindows.Create(20, 20, 1, new Vector3Int(5, 5, 0), itemCatalog: itemCatalog);
         var world = mapHarness.World;

@@ -51,7 +51,8 @@ public sealed record EffectServices(
     MultiComponentPool<StatusEffectImmunityComponent> StatusEffectImmunities,
     AuraSources AuraSources,
     AuraAnchors AuraAnchors,
-    FloatingTextFeed FloatingTextFeed)
+    FloatingTextFeed FloatingTextFeed,
+    World.World World)
 {
     /// <summary>The stream every effect entry rolls from: damage variance, crits, procs, and the body part an effect lands on.</summary>
     public static readonly RandomStreamKey RandomStream = new(CoreModule.ModuleId, "Effects");
@@ -65,6 +66,7 @@ public sealed record EffectServices(
     ];
 
     /// <summary>The services over a build's registered pools.</summary>
+    /// <param name="world">The build's world, through which an effect changes terrain (World.SetTerrain).</param>
     /// <param name="spawnAuraAnchor">Spawns an AuraAnchor at a tile, for an aura placed there (AuraAnchors).</param>
     public static EffectServices For(
         ComponentManager componentManager,
@@ -77,6 +79,7 @@ public sealed record EffectServices(
         AuraCatalog auras,
         FloatingTextFeed floatingTextFeed,
         EntityManager entityManager,
+        World.World world,
         Func<Vector3Int, int> spawnAuraAnchor)
     {
         var auraSources = new AuraSources(componentManager.GetMultiPool<AuraSourceComponent>(), auras, eventBus);
@@ -99,6 +102,7 @@ public sealed record EffectServices(
             componentManager.GetMultiPool<StatusEffectImmunityComponent>(),
             auraSources,
             new AuraAnchors(componentManager, entityManager, auraSources, spawnAuraAnchor),
-            floatingTextFeed);
+            floatingTextFeed,
+            world);
     }
 }

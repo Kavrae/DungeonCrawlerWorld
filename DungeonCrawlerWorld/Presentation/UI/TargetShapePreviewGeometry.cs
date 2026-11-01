@@ -9,9 +9,9 @@ namespace Presentation.UI;
 /// Pure geometry backing TargetShapePreviewElement -- turns a TargetingSpec into relative tile
 /// offsets from the caster (a small, static preview, not a live map query) plus a shrink-to-fit
 /// cell size. Calls TargetShapeResolver.Resolve (Engine/Math/TargetShapeResolver.cs) directly
-/// with the real Shape/Range/AreaSize -- not ActionTargetingController.ComputeTargetableTiles/
-/// MapViewState.TargetableTiles, which TODO.md already documents as a Burst-shaped overshoot
-/// stand-in, the wrong shape for Cone/Line.
+/// with the real Shape, Anchor and ranges -- not MapViewState.TargetableTiles, which is the area the
+/// shape can be aimed at or reach in any direction (TargetShapeResolver.ResolveReachable), not one
+/// aim's footprint.
 /// </summary>
 public static class TargetShapePreviewGeometry
 {
@@ -27,18 +27,18 @@ public static class TargetShapePreviewGeometry
     /// <summary>
     /// Relative (X, Y) tile offsets from the caster -- (0,0) is the caster's own tile, whether or
     /// not it's actually among the results (see TargetShape's own per-shape doc comments --
-    /// Self (alone or combined, e.g. Adjacent | Self) includes it, everything else doesn't). Cone/Line have no real cursor
-    /// in a static preview, so both resolve against one fixed "north" direction (negative Y) --
+    /// Self (alone or combined, e.g. Adjacent | Self) includes it, everything else doesn't). Directional shapes (Line, Cone, Wall, Sweep), and anything with a minimum range, have no real cursor
+    /// in a static preview, so they are aimed at maximum range in one fixed "north" direction (negative Y) --
     /// a display convention, not a claim about real facing.
     /// </summary>
     public static List<Point> ComputeOffsets(TargetingSpec spec)
     {
-        var cursorTile = spec.Shape is TargetShape.Cone or TargetShape.Line
-            ? SentinelOrigin + new Vector3Int(0, -spec.Range, 0)
+        var aimedTile = TargetShapeResolver.IsDirectional(spec.Shape) || spec.MinimumRange > 0
+            ? SentinelOrigin + new Vector3Int(0, -System.Math.Max(1, spec.AimRanges.MaximumRange), 0)
             : SentinelOrigin;
 
         var results = new List<Vector3Int>();
-        TargetShapeResolver.Resolve(spec.Shape, SentinelOrigin, SingleTileFootprint, cursorTile, spec.Range, spec.AreaSize, SentinelBounds, results, spec.Metric);
+        TargetShapeResolver.Resolve(spec.Shape, spec.Anchor, SentinelOrigin, SingleTileFootprint, aimedTile, spec.Ranges, SentinelBounds, results);
 
         var offsets = new List<Point>(results.Count);
         foreach (var tile in results)

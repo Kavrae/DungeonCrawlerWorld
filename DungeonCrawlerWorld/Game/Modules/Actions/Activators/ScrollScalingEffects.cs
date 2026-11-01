@@ -15,7 +15,7 @@ public static class ScrollScalingEffects
     public static TargetingSpec ScaleTargeting(TargetingSpec baseTargeting, float multiplier) =>
         baseTargeting with
         {
-            Range = (int)Math.Round(baseTargeting.Range * multiplier),
+            MaximumRange = (int)Math.Round(baseTargeting.MaximumRange * multiplier),
             AreaSize = (int)Math.Round(baseTargeting.AreaSize * multiplier),
         };
 }

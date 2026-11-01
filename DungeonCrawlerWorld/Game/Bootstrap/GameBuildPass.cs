@@ -128,6 +128,7 @@ public static class GameBuildPass
         ContentTagValidation.EnsureDeclared(context);
         ToggleContentValidation.EnsureValid(context);
         TargetingContentValidation.EnsureValid(context);
+        TerrainReferenceValidation.EnsureRegistered(context);
         AreaContentValidation.EnsureValid(context);
     }
 

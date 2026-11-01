@@ -299,7 +299,7 @@ public sealed class ItemActivationSystem : ISystem
     /// <summary>Whether a consumable landing on targetEntityId's tile reaches it: not while it is frozen, the same seam ActionEffectResolver keeps -- nothing targets across the simulated/frozen boundary.</summary>
     private bool IsTargetable(int targetEntityId) => _processingTiers.IsSimulated(targetEntityId);
 
-    /// <summary>Every targetable entity selection reaches for item, once each, in the order first reached: the marked entity alone for a MarkedOnly item in Target mode, otherwise everyone on the resolved tiles.</summary>
+    /// <summary>Every targetable entity selection reaches for item, once each, in the order first reached: the marked entity alone for a MarkedOnly item in Target mode, otherwise everyone a projectile's path hit, then everyone on the resolved tiles.</summary>
     /// <remarks>A multi-tile entity occupies every cell of its footprint, so a shape covering several of them reaches it once per cell; a consumable affects it once.</remarks>
     private List<int> CollectTargets(ItemDefinition item, int sourceEntityId, TargetSelection selection)
     {
@@ -316,6 +316,14 @@ public sealed class ItemActivationSystem : ISystem
             }
 
             return _targetIdsScratch;
+        }
+
+        foreach (var targetEntityId in resolved.PathHitEntityIds)
+        {
+            if (IsTargetable(targetEntityId) && _seenTargetIdsScratch.Add(targetEntityId))
+            {
+                _targetIdsScratch.Add(targetEntityId);
+            }
         }
 
         foreach (var tile in _targetTilesScratch)
@@ -342,7 +350,7 @@ public sealed class ItemActivationSystem : ISystem
         ApplyOnce(item, sourceEntityId);
     }
 
-    /// <summary>Applies item's entries placed once per activation (EffectSequence.ApplyOnce), where the last CollectTargets call landed.</summary>
+    /// <summary>Applies item's entries placed once per activation (EffectSequence.ApplyOnce) and on each tile (EffectSequence.ApplyOnEachTile), where the last CollectTargets call landed.</summary>
     /// <remarks>A marked entity that isn't targetable receives none of them; only the AtLocation ones are placed.</remarks>
     private void ApplyOnce(ItemDefinition item, int sourceEntityId, float durationScaleMultiplier = 1.0f)
     {
@@ -350,10 +358,13 @@ public sealed class ItemActivationSystem : ISystem
         if (_lastResolved.MarkedEntityId is { } markedEntityId && !IsTargetable(markedEntityId))
         {
             EffectSequence.ApplyAtLocation(item.Effects, context, _lastResolved.Centre);
-            return;
+        }
+        else
+        {
+            EffectSequence.ApplyOnce(item.Effects, context, _lastResolved.MarkedEntityId, _lastResolved.Centre);
         }
 
-        EffectSequence.ApplyOnce(item.Effects, context, _lastResolved.MarkedEntityId, _lastResolved.Centre);
+        EffectSequence.ApplyOnEachTile(item.Effects, context, _targetTilesScratch);
     }
 
     /// <summary>

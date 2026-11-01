@@ -11,5 +11,5 @@ internal static class TestSelections
 
     /// <summary>A Ground selection of tile: the activation lands on tile, with the given area, wherever its caster stands.</summary>
     public static TargetSelection At(Vector3Int tile, int areaSize = 0) =>
-        TargetSelection.Ground(tile) with { Range = AnyRange, AreaSize = (ushort)areaSize };
+        TargetSelection.Ground(tile) with { MaximumRange = AnyRange, AreaSize = (ushort)areaSize };
 }

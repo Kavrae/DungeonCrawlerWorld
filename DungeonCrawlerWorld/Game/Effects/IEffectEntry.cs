@@ -11,7 +11,7 @@ namespace Game.Effects;
 /// aura all hold the same lists and apply them through the same call. An entry knows nothing about
 /// what applied it -- everything it needs arrives in the EffectContext. The same goes for checking
 /// a build's content: an entry says what it names (ReferencedTags, ReferencedAuras,
-/// NestedEffects) and the checks never look at what kind of entry it is.
+/// ReferencedTerrainKeys, NestedEffects) and the checks never look at what kind of entry it is.
 /// </remarks>
 public interface IEffectEntry
 {
@@ -20,6 +20,9 @@ public interface IEffectEntry
 
     /// <summary>The auras this entry names, which the build registers so each has an id before anything radiates it.</summary>
     IEnumerable<AuraDefinition> ReferencedAuras => [];
+
+    /// <summary>The terrain keys this entry names, each of which the build's TerrainRegistry must hold.</summary>
+    IEnumerable<string> ReferencedTerrainKeys => [];
 
     /// <summary>The effects this entry applies in turn, for anything that walks every entry a definition holds.</summary>
     IReadOnlyList<Effect> NestedEffects => [];

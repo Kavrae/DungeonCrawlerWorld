@@ -44,7 +44,7 @@ public sealed class InventoryGridContentActivateTests
         var itemCatalog = new ItemCatalog();
         itemCatalog.Register(new ItemDefinition(
             MeleeItemId, "Test Brass Knuckles", null, "k", Color.White, Tags: [GameTags.DeliveryMelee], Effects: [],
-            Activator: new PotionActivator(new TargetingSpec(TargetShape.Self, Range: 0, AreaSize: 0), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
+            Activator: new PotionActivator(new TargetingSpec(TargetShape.Self, MaximumRange: 0, AreaSize: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());

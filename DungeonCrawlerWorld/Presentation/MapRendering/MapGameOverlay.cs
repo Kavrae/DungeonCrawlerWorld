@@ -124,10 +124,10 @@ public sealed class MapGameOverlay : IDisposable
     /// AddSelectedTileHighlight below (ability targeting vs. the inspector's click-to-select).
     ///
     /// A second pass then adds whatever's left of HoveredFootprint that TargetableTiles didn't
-    /// already cover -- needed for Burst: TargetableTiles is capped strictly at the action's own
-    /// Range (ActionTargetingController.ComputeTargetableTiles' reachable-area scatter), but
-    /// TargetShapeResolver.ResolveBurst's actual hit footprint is AreaSize-radius around the
-    /// anchor tile once that anchor passes the Range check -- i.e. the real splash can (and
+    /// already cover -- needed for a Circle at the path end: TargetableTiles is capped strictly at the action's own
+    /// MaximumRange (TargetShapeResolver.ResolveReachable: for a shape at the path end, the anchors in range), but
+    /// a Circle's actual hit footprint is AreaSize-radius around the
+    /// anchor tile once that anchor passes the range check -- i.e. the real splash can (and
     /// often does) reach past Range even though the anchor itself never could. Without this pass
     /// the highlight understated what the ability actually hits. Safe to always run: every shape
     /// only ever populates HoveredFootprint from an in-range anchor, so this never marks a tile

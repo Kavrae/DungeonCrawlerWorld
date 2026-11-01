@@ -54,4 +54,31 @@ public sealed class GridDistanceTests
 
         Assert.AreEqual(7, GridDistance.ManhattanDistance(a, b));
     }
+
+    [TestMethod]
+    [DataRow(1, 1, 1, true)]
+    [DataRow(2, 0, 1, false)]
+    [DataRow(2, 1, 2, true)]
+    [DataRow(2, 2, 2, false)]
+    [DataRow(3, 0, 3, true)]
+    [DataRow(2, 2, 3, true)]
+    [DataRow(3, 2, 3, false)]
+    [DataRow(0, 0, 0, true)]
+    [DataRow(0, 0, -1, false)]
+    public void IsWithinRoundedRadius_HoldsTilesWhoseCentreIsWithinRadiusAndAHalf(int deltaX, int deltaY, int radius, bool expected)
+    {
+        Assert.AreEqual(expected, GridDistance.IsWithinRoundedRadius(deltaX, deltaY, radius));
+    }
+
+    [TestMethod]
+    public void IsWithinRoundedRadius_Footprint_MeasuresFromTheNearestTile()
+    {
+        var origin = new Vector3Int(10, 10, 0);
+        var size = new Vector2Byte(3, 2);
+
+        Assert.IsTrue(GridDistance.IsWithinRoundedRadius(origin, size, new Vector3Int(11, 11, 0), radius: 0));
+        Assert.IsTrue(GridDistance.IsWithinRoundedRadius(origin, size, new Vector3Int(14, 12, 0), radius: 2));
+        Assert.IsFalse(GridDistance.IsWithinRoundedRadius(origin, size, new Vector3Int(14, 12, 0), radius: 1));
+        Assert.IsFalse(GridDistance.IsWithinRoundedRadius(origin, size, new Vector3Int(7, 8, 0), radius: 2));
+    }
 }

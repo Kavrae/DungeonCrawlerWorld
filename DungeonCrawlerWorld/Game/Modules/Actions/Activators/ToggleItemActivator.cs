@@ -17,7 +17,7 @@ namespace Game.Modules.Actions.Activators;
 /// <param name="IsToggledOn">Whether this unit is lit.</param>
 public sealed record ToggleItemActivator(ActionTiming Timing, bool IsToggledOn = false) : IActionActivator
 {
-    private static readonly TargetingSpec SelfTargeting = new(Shape: TargetShape.Self, Range: 0, AreaSize: 0);
+    private static readonly TargetingSpec SelfTargeting = new(Shape: TargetShape.Self, MaximumRange: 0, AreaSize: 0, Anchor: TargetAnchor.Caster);
 
     private static readonly GameplayTagSet ToggleImpliedTags = [GameTags.ItemToggle];
 

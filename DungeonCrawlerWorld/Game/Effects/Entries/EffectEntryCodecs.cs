@@ -21,6 +21,7 @@ internal static class EffectEntryCodecs
         contentTypes.RegisterPolymorphic<IEffectEntry, StatusEffectImmunityGrant>(nameof(StatusEffectImmunityGrant), new StatusEffectImmunityGrantCodec());
         contentTypes.RegisterPolymorphic<IEffectEntry, StatusEffectRemoval>(nameof(StatusEffectRemoval), new StatusEffectRemovalCodec());
         contentTypes.RegisterPolymorphic<IEffectEntry, ChainedEffect>(nameof(ChainedEffect), new ChainedEffectCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, TerrainChange>(nameof(TerrainChange), new TerrainChangeCodec());
     }
 
     private sealed class DirectDamageCodec : ContentCodec<DirectDamage>
@@ -101,6 +102,15 @@ internal static class EffectEntryCodecs
         public override void WriteProperties(ContentWriter writer, ManaDrain value) => writer.Integer("a", value.Amount);
 
         public override ManaDrain Read(ContentObject element) => new(ContentNumbers.UInt16(element.Integer("a"), "a"));
+    }
+
+    private sealed class TerrainChangeCodec : ContentCodec<TerrainChange>
+    {
+        public override ContentSchema Schema { get; } = new(nameof(TerrainChange), [ContentField.Text("tr", "Terrain key", isRequired: true)]);
+
+        public override void WriteProperties(ContentWriter writer, TerrainChange value) => writer.String("tr", value.TerrainKey);
+
+        public override TerrainChange Read(ContentObject element) => new(element.String("tr"));
     }
 
     private sealed class StatModifierGrantCodec : ContentCodec<StatModifierGrant>

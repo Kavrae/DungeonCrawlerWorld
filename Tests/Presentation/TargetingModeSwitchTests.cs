@@ -50,9 +50,9 @@ public sealed class TargetingModeSwitchTests
     }
 
     [TestMethod]
-    public void StartsInTargetMode()
+    public void StartsInGroundMode()
     {
-        Assert.AreEqual(TargetingMode.Target, BuildHarness().MapViewState.TargetingMode);
+        Assert.AreEqual(TargetingMode.Ground, BuildHarness().MapViewState.TargetingMode);
     }
 
     [TestMethod]
@@ -62,13 +62,13 @@ public sealed class TargetingModeSwitchTests
 
         TapLeftAlt(harness);
 
-        Assert.AreEqual(TargetingMode.Ground, harness.MapViewState.TargetingMode);
-        Assert.AreEqual(TargetingModeSwitch.TextFor(TargetingMode.Ground), harness.CursorText.ShownText);
+        Assert.AreEqual(TargetingMode.Target, harness.MapViewState.TargetingMode);
+        Assert.AreEqual(TargetingModeSwitch.TextFor(TargetingMode.Target), harness.CursorText.ShownText);
 
         TapLeftAlt(harness);
 
-        Assert.AreEqual(TargetingMode.Target, harness.MapViewState.TargetingMode);
-        Assert.AreEqual(TargetingModeSwitch.TextFor(TargetingMode.Target), harness.CursorText.ShownText);
+        Assert.AreEqual(TargetingMode.Ground, harness.MapViewState.TargetingMode);
+        Assert.AreEqual(TargetingModeSwitch.TextFor(TargetingMode.Ground), harness.CursorText.ShownText);
     }
 
     [TestMethod]
@@ -80,7 +80,7 @@ public sealed class TargetingModeSwitchTests
         harness.Input.Update(LeftAltDown, MouseAway);
         harness.Input.Update(LeftAltDown, MouseAway);
 
-        Assert.AreEqual(TargetingMode.Ground, harness.MapViewState.TargetingMode);
+        Assert.AreEqual(TargetingMode.Target, harness.MapViewState.TargetingMode);
     }
 
     [TestMethod]
@@ -91,7 +91,7 @@ public sealed class TargetingModeSwitchTests
 
         TapLeftAlt(harness);
 
-        Assert.AreEqual(TargetingMode.Target, harness.MapViewState.TargetingMode);
+        Assert.AreEqual(TargetingMode.Ground, harness.MapViewState.TargetingMode);
         Assert.AreEqual(TargetingModeSwitch.RefusedDuringWindupText, harness.CursorText.ShownText);
     }
 }

@@ -69,13 +69,13 @@ public static class PlayerKit
 
         // TEMPORARY -- exercises divergence in a field other than charges (see the per-slot item
         // divergence work): a single Wand of Fireball with Adjacent targeting instead of the
-        // normal Burst, built directly via AddDivergentItem rather than WandGrantEffects.Grant
+        // normal Circle, built directly via AddDivergentItem rather than WandGrantEffects.Grant
         // since this is a synthetic, already-divergent single unit, not a fresh batch. Remove once
         // a real, player-driven way to diverge a non-charge field exists.
         var baseWand = context.Items.Get(BuiltInItemIds.WandOfFireball);
         var adjacentTargetingWand = baseWand with
         {
-            Activator = ((WandActivator)baseWand.Activator!) with { Targeting = new TargetingSpec(TargetShape.Adjacent, Range: 0, Modes: TargetingModes.GroundOnly), Charges = TestAdjacentWandCharges, MaxCharges = TestAdjacentWandCharges },
+            Activator = ((WandActivator)baseWand.Activator!) with { Targeting = new TargetingSpec(TargetShape.Adjacent, MaximumRange: 0, Modes: TargetingModes.GroundOnly, Anchor: TargetAnchor.Caster), Charges = TestAdjacentWandCharges, MaxCharges = TestAdjacentWandCharges },
         };
         InventoryActions.AddDivergentItem(componentManager, entityId, adjacentTargetingWand);
 
@@ -87,6 +87,10 @@ public static class PlayerKit
         ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.ToxicAura, overrideDefinition: null);
         ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.Lantern, overrideDefinition: null);
         ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.Fireball, overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.LightningBolt, overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.FireFan, overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.WallOfFire, overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.RingOfLava, overrideDefinition: null);
 
         // TEMPORARY, for testing spells (Fireball costs 15): 30 mana whatever Intelligence would give. Remove once mana is balanced.
         var mana = componentManager.GetPackedPool<ManaComponent>();
@@ -115,6 +119,16 @@ public static class PlayerKit
         // TEMPORARY, like the two above: the Lantern (test content for a toggle placing an aura anchor) on Slot9, unlocked by the fourth
         // Hotkey Expansion Potion. Remove with LanternAction.
         componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot9, BuiltInActionIds.Lantern));
+
+        // TEMPORARY, like the three above: Lightning Bolt (Line) on Slot10, unlocked by the first Hotkey Expansion Potion, and Fire Fan
+        // (Cone) on Slot11, unlocked by the second, for testing Line and Cone targeting. Remove once a rebind UI exists.
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot10, BuiltInActionIds.LightningBolt));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot11, BuiltInActionIds.FireFan));
+
+        // TEMPORARY, like the ones above: Wall of Fire (Wall) on Slot12 and Ring of Lava (Ring, a terrain change on each tile) on
+        // Slot13, locked until Hotkey Expansion Potions unlock them, for testing the Wall and Ring shapes. Remove once a rebind UI exists.
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot12, BuiltInActionIds.WallOfFire));
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot13, BuiltInActionIds.RingOfLava));
         componentManager.Merge(entityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: DefaultUnlockedExpansionSlots));
 
         StartingCurrencyGrant.GrantFixedStartingGold(componentManager, entityId);

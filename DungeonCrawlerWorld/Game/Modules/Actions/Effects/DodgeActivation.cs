@@ -16,8 +16,8 @@ namespace Game.Modules.Actions.Effects;
 /// this effect always finds at least the caster there, but that tile could still be shared with
 /// another entity (a co-located Tiny/Phasing occupant) that must not also receive the grant.
 ///
-/// Deliberately does not move the caster: DodgeAction's targeting (SingleTarget + Metric.Chebyshev,
-/// Range 1) resolves to exactly one destination tile chosen at confirm time, and Presentation
+/// Deliberately does not move the caster: DodgeAction's targeting (SingleTarget,
+/// Range 1, the 3x3 block) resolves to exactly one destination tile chosen at confirm time, and Presentation
 /// (PlayerCommands) writes that step to MovementComponent.NextMapPosition once it sees this
 /// activation's ActionActivatedEvent. DodgeAction's ReleasesActionLock frees the caster in the same
 /// frame, so MovementSystem takes the step on its next pass (or leaves the entity in place if the

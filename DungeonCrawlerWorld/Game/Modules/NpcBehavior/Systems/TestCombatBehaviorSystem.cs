@@ -293,7 +293,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
             return false;
         }
 
-        TargetShapeResolver.Resolve(TargetShape.Adjacent, transform.Position, transform.Size, transform.Position, range: 0, areaSize: 0, _mapQuery.Bounds, _adjacentTilesBuffer);
+        TargetShapeResolver.Resolve(TargetShape.Adjacent, TargetAnchor.Caster, transform.Position, transform.Size, transform.Position, default, _mapQuery.Bounds, _adjacentTilesBuffer);
 
         if (!HasAttackableNeighbor(_adjacentTilesBuffer, attackerRaceId))
         {
@@ -312,7 +312,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         return true;
     }
 
-    /// <summary>TEMPORARY, with the rest of this system: an entity granted Magic Missile casts it at the player when the player is in range and not adjacent, aiming in Target or Ground mode at random for each cast.</summary>
+    /// <summary>TEMPORARY, with the rest of this system: an entity granted Magic Missile casts it at the player when it could aim at the player (TargetResolution.IsAimable: in range and, if the spell needs it, in sight) and the player is not adjacent, aiming in Target or Ground mode at random for each cast.</summary>
     /// <remarks>
     /// Only at the player: ranged attacks at any hostile wait on TODO "Spatial queries for NPC
     /// decisions". The mode is drawn from the behavior stream this system
@@ -332,9 +332,8 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
             return false;
         }
 
-        var range = action.Activator.Targeting.Range;
         if (GridDistance.ChebyshevDistance(transform.Position, playerTransform.Position) <= 1 ||
-            GridDistance.ManhattanDistance(transform.Position, playerTransform.Position) > range ||
+            !_targetResolution.IsAimable(entityId, action.Activator.Targeting, playerTransform.Position) ||
             ActivationQueries.GetBlocker(entityId, action, action.Activator, isToggledOn: false, _meleeDisabled, _effectServices, now) != ActivationBlocker.None)
         {
             return false;

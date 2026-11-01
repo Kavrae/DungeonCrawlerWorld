@@ -1,6 +1,8 @@
 using Engine.Modules;
 using Game.Modules.Auras;
+using Game.Modules.Burning;
 using Game.Modules.Poison;
+using Game.Terrain;
 
 namespace Game.Modules.Actions.Definitions;
 
@@ -16,8 +18,8 @@ public sealed class CoreActionsModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    /// <summary>Actions owns the codecs the table is read through, Auras the aura sources it grants, Poison the status effect it applies.</summary>
-    public IReadOnlyList<Guid> Requires { get; } = [ActionsModule.ModuleId, AurasModule.ModuleId, PoisonModule.ModuleId];
+    /// <summary>Actions owns the codecs the table is read through, Auras the aura sources it grants, Poison and Burning the status effects it applies, Terrain the terrain it lays.</summary>
+    public IReadOnlyList<Guid> Requires { get; } = [ActionsModule.ModuleId, AurasModule.ModuleId, PoisonModule.ModuleId, BurningModule.ModuleId, TerrainModule.ModuleId];
 
     public void Configure(GameModuleContext context)
     {

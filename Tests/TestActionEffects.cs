@@ -107,7 +107,8 @@ internal static class TestActionEffects
         AuraCatalog? auras = null,
         EntityBodyParts? bodyParts = null,
         BlueprintRegistry? definitions = null,
-        FloatingTextFeed? floatingTextFeed = null)
+        FloatingTextFeed? floatingTextFeed = null,
+        Game.World.World? world = null)
     {
         var sources = TestAuras.Sources(auraSources, eventBus, auras);
         return new(
@@ -129,7 +130,8 @@ internal static class TestActionEffects
             componentManager.IsRegistered<StatusEffectImmunityComponent>() ? componentManager.GetMultiPool<StatusEffectImmunityComponent>() : EmptyPools.Multi<StatusEffectImmunityComponent>(),
             sources,
             new AuraAnchors(componentManager, new EntityManager(componentManager, initialCapacity: 16), sources, NoAnchorSpawner),
-            floatingTextFeed ?? EmptyPools.FloatingTextFeed());
+            floatingTextFeed ?? EmptyPools.FloatingTextFeed(),
+            world ?? TestWorlds.Create(Game.Bootstrap.GameBuildPass.CreatePlaceholderMap(), eventBus: eventBus, entityKeys: entityKeys));
     }
 
     /// <summary>A test built without an entity factory can't place an aura anchor: one that tries fails loudly rather than placing nothing.</summary>

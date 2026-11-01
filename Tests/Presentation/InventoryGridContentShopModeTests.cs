@@ -39,7 +39,7 @@ public sealed class InventoryGridContentShopModeTests
     private const int PotionValue = 10;
     private const int ToolValue = 20;
 
-    private static readonly PotionActivator TestPotionActivator = new(new TargetingSpec(TargetShape.Self, Range: 0, AreaSize: 0), new ActionTiming(ActionTimingCategory.Immediate, 60, null));
+    private static readonly PotionActivator TestPotionActivator = new(new TargetingSpec(TargetShape.Self, MaximumRange: 0, AreaSize: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate, 60, null));
 
     private static (InventoryGridContent Grid, Window HostWindow, ComponentManager ComponentManager, MapViewState MapViewState) Build(int gridEntityId)
     {

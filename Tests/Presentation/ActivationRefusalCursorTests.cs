@@ -99,7 +99,7 @@ public sealed class ActivationRefusalCursorTests
         actionCatalog.Register(new ActionDefinition(
             SpellId, "Test Self Spell", null, "*", Color.White, [GameTags.TargetingSelf],
             Effects: [Effect.None],
-            Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: 600))));
+            Activator: new SpellActivator(new TargetingSpec(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: 600))));
         var harness = TestMapWindows.Create(20, 20, 1, playerPosition: new Vector3Int(5, 5, 0), actionCatalog);
         var componentManager = harness.ComponentManager;
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));

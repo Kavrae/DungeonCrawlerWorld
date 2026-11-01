@@ -95,7 +95,7 @@ public static class ItemComparisonStatExtraction
         // ItemDetailsWindow's own shape-preview grid for the separate, shape-match-gated tile
         // diff highlight that stands in for comparing shapes visually instead).
         stats.Add(new ItemComparisonStat("activator:shape", $"Shape: {activator.Targeting.Shape}", null, HigherIsBetter: true));
-        stats.Add(new ItemComparisonStat("activator:range", $"Range: {activator.Targeting.Range}", activator.Targeting.Range, HigherIsBetter: true));
+        stats.Add(new ItemComparisonStat("activator:range", $"Range: {activator.Targeting.AimRanges.MaximumRange}", activator.Targeting.AimRanges.MaximumRange, HigherIsBetter: true));
 
         if (activator.Targeting.AreaSize > 0)
         {

@@ -29,7 +29,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     /// <summary>A generous, effectively-unlimited per-row height cap -- see InspectionWindowContent.UnboundedChildHeight's own doc comment for why this is needed: without it, a row tiled past the host window's own one-screen-tall content size gets silently clamped to nothing.</summary>
     public const float UnboundedChildHeight = 10000f;
 
-    /// <summary>Soft per-widget height cap for the target shape preview grid -- independent of the window's own overall MaximumSize/scroll safety net, so one large-AreaSize Burst can't single-handedly blow out the window's height; TargetShapePreviewGeometry.ComputeCellSize shrinks cells to fit within this instead.</summary>
+    /// <summary>Soft per-widget height cap for the target shape preview grid -- independent of the window's own overall MaximumSize/scroll safety net, so one large-AreaSize Circle can't single-handedly blow out the window's height; TargetShapePreviewGeometry.ComputeCellSize shrinks cells to fit within this instead.</summary>
     private const float TargetShapePreviewMaxHeight = 160f;
 
     /// <summary>BuildActivationSection divides its own width into this many equal zones -- text (left), the target shape grid (centered in the middle one), and an empty zone (right, reserved for now).</summary>

@@ -31,6 +31,9 @@ public sealed class AuraGrid
     private readonly NeighborhoodBits _coveredCells;
     private readonly IMapQuery _map;
 
+    /// <summary>One splat's signed value at each distance from its source, worked out once per splat rather than once per cell; reused by every splat.</summary>
+    private int[] _signedValuesByDistance = [];
+
     /// <param name="map">Read for its depth, and for a bounded map's rectangle, past which no contribution is stored.</param>
     public AuraGrid(IMapQuery map)
     {
@@ -74,14 +77,33 @@ public sealed class AuraGrid
         Splat(previousPosition, power, size, falloff, auraId, sign: -1, excludedCenter: writesChangedSidesOnly ? currentPosition : null);
     }
 
-    private void Splat(Vector3Int sourcePosition, int power, int size, AuraFalloff falloff, byte auraId, int sign, Vector3Int? excludedCenter) =>
-        ManhattanDiamond.ForEachCellOutside(sourcePosition, size, ReachLimits, excludedCenter,
-            new SplatTarget(this, auraId, sign, power, size, falloff),
-            static (cellPosition, distance, target) =>
-                target.Grid.AddToCell(target.AuraId, cellPosition, target.Sign * target.Falloff.ValueAt(target.Power, target.Size, distance)));
+    private void Splat(Vector3Int sourcePosition, int power, int size, AuraFalloff falloff, byte auraId, int sign, Vector3Int? excludedCenter)
+    {
+        if (size < 0)
+        {
+            return;
+        }
 
-    /// <summary>What one splat writes into: the aura, the sign its values are added with, and the source's shape.</summary>
-    private readonly record struct SplatTarget(AuraGrid Grid, byte AuraId, int Sign, int Power, int Size, AuraFalloff Falloff);
+        if (_signedValuesByDistance.Length <= size)
+        {
+            _signedValuesByDistance = new int[size + 1];
+        }
+
+        for (var distance = 0; distance <= size; distance++)
+        {
+            _signedValuesByDistance[distance] = sign * falloff.ValueAt(power, size, distance);
+        }
+
+        var target = new SplatTarget(this, auraId, _signedValuesByDistance);
+        ManhattanDiamond.ForEachCellOutside(sourcePosition, size, ReachLimits, excludedCenter, ref target);
+    }
+
+    /// <summary>What one splat writes into: the aura, and the signed value it adds at each distance from the source.</summary>
+    private readonly record struct SplatTarget(AuraGrid Grid, byte AuraId, int[] SignedValuesByDistance) : ManhattanDiamond.ICellVisitor
+    {
+        public void Visit(Vector3Int cellPosition, int distance) =>
+            Grid.AddToCell(AuraId, cellPosition, SignedValuesByDistance[distance]);
+    }
 
     private void AddToCell(byte auraId, Vector3Int cellPosition, int signedContribution)
     {

@@ -36,30 +36,54 @@ internal static class ActionContentCodecs
         public override ContentSchema Schema { get; } = new(nameof(TargetingSpec),
         [
             ContentField.Enum<TargetShape>("sh", "Shape"),
-            ContentField.Integer("r", "Range", 0),
+            ContentField.Integer("r", "Maximum range", 0),
             ContentField.Integer("a", "Area size", 0),
-            ContentField.Enum<DistanceMetric>("me", "Distance metric"),
             ContentField.Enum<TargetingModes>("mo", "Targeting modes"),
             ContentField.Enum<TargetModeAffects>("ta", "Target mode affects"),
+            ContentField.Enum<TargetAnchor>("an", "Anchor"),
+            ContentField.Integer("mn", "Minimum range", 0),
+            ContentField.Enum<TargetPath>("pa", "Path"),
+            ContentField.Enum<ProjectilePathEnd>("pe", "Projectile path end"),
+            ContentField.Integer("ph", "Projectile hit count (65535: every entity on the way)", 0, ushort.MaxValue),
+            ContentField.Enum<LineOfSightRule>("al", "Aim line of sight"),
+            ContentField.Enum<PathWallRule>("pw", "Path walls"),
+            ContentField.Integer("wb", "Wall bounce count", 0, byte.MaxValue),
+            ContentField.Enum<LineOfSightRule>("sl", "Shape line of sight"),
         ]);
 
         public override void WriteProperties(ContentWriter writer, TargetingSpec value)
         {
             writer.Enum("sh", value.Shape);
-            writer.Integer("r", value.Range);
+            writer.Integer("r", value.MaximumRange);
             writer.Integer("a", value.AreaSize);
-            writer.Enum("me", value.Metric, DistanceMetric.Manhattan);
             writer.Enum("mo", value.Modes, TargetingModes.Both);
             writer.Enum("ta", value.TargetModeAffects, TargetModeAffects.Area);
+            writer.Enum("an", value.Anchor, TargetAnchor.PathEnd);
+            writer.Integer("mn", value.MinimumRange);
+            writer.Enum("pa", value.Path, TargetPath.Placed);
+            writer.Enum("pe", value.PathEnd, ProjectilePathEnd.AtAimedTile);
+            writer.Integer("ph", value.ProjectileHitCount);
+            writer.Enum("al", value.AimLineOfSight, LineOfSightRule.NotRequired);
+            writer.Enum("pw", value.PathWalls, PathWallRule.StopsAtWall);
+            writer.Integer("wb", value.WallBounceCount);
+            writer.Enum("sl", value.ShapeLineOfSight, LineOfSightRule.NotRequired);
         }
 
         public override TargetingSpec Read(ContentObject element) => new(
             element.Enum<TargetShape>("sh"),
             ContentNumbers.Int32(element.Integer("r"), "r"),
             ContentNumbers.Int32(element.Integer("a"), "a"),
-            element.Enum("me", DistanceMetric.Manhattan),
             element.Enum("mo", TargetingModes.Both),
-            element.Enum("ta", TargetModeAffects.Area));
+            element.Enum("ta", TargetModeAffects.Area),
+            element.Enum("an", TargetAnchor.PathEnd),
+            ContentNumbers.Int32(element.Integer("mn"), "mn"),
+            element.Enum("pa", TargetPath.Placed),
+            element.Enum("pe", ProjectilePathEnd.AtAimedTile),
+            ContentNumbers.UInt16(element.Integer("ph"), "ph"),
+            element.Enum("al", LineOfSightRule.NotRequired),
+            element.Enum("pw", PathWallRule.StopsAtWall),
+            ContentNumbers.Byte(element.Integer("wb"), "wb"),
+            element.Enum("sl", LineOfSightRule.NotRequired));
     }
 
     private sealed class ActionTimingCodec : ContentCodec<ActionTiming>

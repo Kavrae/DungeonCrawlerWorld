@@ -20,7 +20,7 @@ namespace Presentation.UI.Content;
 ///
 /// Cells to the right of the caster on its own row (offset.Y == 0, offset.X > 0) also get a
 /// distance number -- offset.X, the same "area size 3 means 3 tiles out" reading
-/// RangeIndicatorElement's own ruler gives the Range stat -- so a Burst's AreaSize isn't just an
+/// RangeIndicatorElement's own ruler gives the Range stat -- so a Circle's AreaSize isn't just an
 /// abstract stat either. The caster's own cell and the mirrored left side are left blank -- the
 /// left side would just repeat the same distance values already visible on the right.
 /// </summary>

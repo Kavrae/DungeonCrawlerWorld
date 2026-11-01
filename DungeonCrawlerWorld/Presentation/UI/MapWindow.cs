@@ -204,7 +204,7 @@ public sealed class MapWindow : Window, IContentDropTarget
     internal void UpdateHoveredTile(Point? mousePosition) => _actionTargeting.UpdateHoveredTile(mousePosition, ContentAbsolutePosition);
 
     /// <summary>Read-only view of the armed ability's current hit-footprint -- see ActionTargetingController.HoveredFootprint.</summary>
-    internal IReadOnlyList<Vector3Int> HoveredFootprint => _actionTargeting.HoveredFootprint;
+    internal TileSet HoveredFootprint => _actionTargeting.HoveredFootprint;
 
     /// <inheritdoc cref="ActionTargetingController.IsArmedConfirmRefused"/>
     internal bool IsArmedConfirmRefused => _actionTargeting.IsArmedConfirmRefused;

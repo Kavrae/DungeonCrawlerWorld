@@ -10,9 +10,14 @@ public sealed class ManhattanDiamondTests
 
     private static Dictionary<Vector3Int, int> Visit(Vector3Int center, int radius, MapBounds bounds, Vector3Int? excludedCenter = null)
     {
-        var visited = new Dictionary<Vector3Int, int>();
-        ManhattanDiamond.ForEachCellOutside(center, radius, bounds, excludedCenter, visited, static (cellPosition, distance, cells) => cells.Add(cellPosition, distance));
-        return visited;
+        var recorder = new CellRecorder(new Dictionary<Vector3Int, int>());
+        ManhattanDiamond.ForEachCellOutside(center, radius, bounds, excludedCenter, ref recorder);
+        return recorder.Cells;
+    }
+
+    private readonly record struct CellRecorder(Dictionary<Vector3Int, int> Cells) : ManhattanDiamond.ICellVisitor
+    {
+        public void Visit(Vector3Int cellPosition, int distance) => Cells.Add(cellPosition, distance);
     }
 
     [TestMethod]

@@ -4,11 +4,15 @@ using Game.Tags;
 
 namespace Game.Modules.Actions;
 
-/// <summary>Checks that every activation the build's registered content defines offers Target mode only where it makes sense.</summary>
+/// <summary>Checks that every activation the build's registered content defines has targeting that means what it says: Target mode only where it makes sense, and no setting that would do nothing.</summary>
 /// <remarks>
-/// A melee swing (Delivery.Melee) and an Adjacent shape strike the tiles around the caster, with no
-/// tile aimed at to mark anyone on, so either must be TargetingModes.GroundOnly. Run beside
-/// ToggleContentValidation, so a mod breaking it fails its dry run.
+/// A melee swing (Delivery.Melee) and an Adjacent shape anchored on the caster strike the tiles around the caster, with no
+/// tile aimed at to mark anyone on, so either must be TargetingModes.GroundOnly. A minimum range past the aim's maximum
+/// (TargetingSpec.AimRanges) fails, and so does any setting the targeting never reads: a maximum range on a Placed shape
+/// anchored on its caster (aimed within its own area), Self away from the caster or SingleTarget on it, an area size on
+/// shapes with no size, a Lobbed path that doesn't land on its aim, hit counts and path ends without a Projectile, wall
+/// rules without a path, and bounces without BouncesOffWalls. Run beside ToggleContentValidation, so a mod breaking it fails
+/// its dry run.
 /// </remarks>
 internal static class TargetingContentValidation
 {
@@ -29,8 +33,18 @@ internal static class TargetingContentValidation
         }
     }
 
+    /// <summary>The shapes AreaSize sizes.</summary>
+    private const TargetShape SizedShapes = TargetShape.Line | TargetShape.Cone | TargetShape.Circle | TargetShape.Ring | TargetShape.Wall | TargetShape.Square | TargetShape.Cross;
+
     private static void EnsureValid(TargetingSpec targeting, GameplayTagSet tags, string definedBy)
     {
+        EnsureEverySettingIsRead(targeting, definedBy);
+
+        if (targeting.MinimumRange > targeting.AimRanges.MaximumRange)
+        {
+            throw new InvalidOperationException($"{definedBy} has a minimum range ({targeting.MinimumRange}) past the farthest it can be aimed ({targeting.AimRanges.MaximumRange}): nothing could be aimed at.");
+        }
+
         if (targeting.Modes == TargetingModes.GroundOnly)
         {
             return;
@@ -41,9 +55,53 @@ internal static class TargetingContentValidation
             throw new InvalidOperationException($"{definedBy} is Delivery.Melee but offers Target mode: a melee activation must be TargetingModes.GroundOnly.");
         }
 
-        if ((targeting.Shape & TargetShape.Adjacent) != 0)
+        if ((targeting.Shape & TargetShape.Adjacent) != 0 && targeting.Anchor == TargetAnchor.Caster)
         {
-            throw new InvalidOperationException($"{definedBy} has an Adjacent shape but offers Target mode: it strikes the tiles around its caster, so it must be TargetingModes.GroundOnly.");
+            throw new InvalidOperationException($"{definedBy} has an Adjacent shape anchored on its caster but offers Target mode: it strikes the tiles around its caster, so it must be TargetingModes.GroundOnly.");
+        }
+    }
+
+    /// <exception cref="InvalidOperationException">targeting sets something it never reads, naming the definition and the setting.</exception>
+    private static void EnsureEverySettingIsRead(TargetingSpec targeting, string definedBy)
+    {
+        if (targeting.Anchor == TargetAnchor.Caster && targeting.Path == TargetPath.Placed && targeting.MaximumRange != 0)
+        {
+            throw new InvalidOperationException($"{definedBy} has a maximum range ({targeting.MaximumRange}) but is placed around its caster, where it is aimed within its own area size: leave the maximum range out.");
+        }
+
+        if (targeting.Anchor == TargetAnchor.PathEnd && (targeting.Shape & TargetShape.Self) != 0)
+        {
+            throw new InvalidOperationException($"{definedBy} has a Self shape where its path ends: Self is the caster's own tiles, at a Caster anchor; the end tile is SingleTarget.");
+        }
+
+        if (targeting.Anchor == TargetAnchor.Caster && (targeting.Shape & TargetShape.SingleTarget) != 0)
+        {
+            throw new InvalidOperationException($"{definedBy} has a SingleTarget shape anchored on its caster: SingleTarget is the end tile, at a PathEnd anchor; the caster's own tiles are Self.");
+        }
+
+        if (targeting.AreaSize != 0 && (targeting.Shape & SizedShapes) == 0)
+        {
+            throw new InvalidOperationException($"{definedBy} has an area size ({targeting.AreaSize}) but its shape ({targeting.Shape}) has no size: leave the area size out.");
+        }
+
+        if (targeting.Path == TargetPath.Lobbed && targeting.PathEnd != ProjectilePathEnd.AtAimedTile)
+        {
+            throw new InvalidOperationException($"{definedBy} has a Lobbed path ending {targeting.PathEnd}: a Lobbed path always lands on its aimed tile, so leave the path end out.");
+        }
+
+        if (targeting.Path != TargetPath.Projectile && (targeting.ProjectileHitCount != 0 || targeting.PathEnd != ProjectilePathEnd.AtAimedTile))
+        {
+            throw new InvalidOperationException($"{definedBy} has a projectile hit count or path end but its path is {targeting.Path}: only a Projectile reads them.");
+        }
+
+        if (targeting.Path == TargetPath.Placed && targeting.PathWalls != PathWallRule.StopsAtWall)
+        {
+            throw new InvalidOperationException($"{definedBy} has a path wall rule ({targeting.PathWalls}) but no path: leave it out.");
+        }
+
+        if (targeting.WallBounceCount != 0 && (targeting.Path == TargetPath.Placed || targeting.PathWalls != PathWallRule.BouncesOffWalls))
+        {
+            throw new InvalidOperationException($"{definedBy} has a wall bounce count ({targeting.WallBounceCount}) but its path doesn't bounce off walls: leave it out.");
         }
     }
 }

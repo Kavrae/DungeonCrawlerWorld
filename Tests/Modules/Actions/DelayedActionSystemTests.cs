@@ -70,7 +70,7 @@ public sealed class DelayedActionSystemTests
         actionCatalog.Register(new ActionDefinition(
             ActionId, "Test Delayed Attack", null, "#", default, [],
             Effects: [new Effect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
-            Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 30, CooldownFrames: null))));
+            Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 10), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 30, CooldownFrames: null))));
 
         var tierEvents = new ProcessingTierEvents();
         var system = TestSystems.DelayedActionSystem(

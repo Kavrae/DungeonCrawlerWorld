@@ -1,6 +1,7 @@
-using Engine.Math;
 using Game.Bootstrap;
 using Game.Content;
+
+Game.GameFrameRate.Apply();
 
 const string SolutionFileName = "DungeonCrawlerWorld.sln";
 const string OutputPrefix = "--output=";

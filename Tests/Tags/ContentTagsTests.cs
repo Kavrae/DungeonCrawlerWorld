@@ -52,7 +52,7 @@ public sealed class ContentTagsTests
     private static ActionDefinition ActionTagged(GameplayTagSet tags, IActionActivator activator) =>
         new(Guid.NewGuid(), "Tagged Action", null, "?", Color.White, tags, [], activator);
 
-    private static readonly TargetingSpec SelfTargeting = new(TargetShape.Self, Range: 0);
+    private static readonly TargetingSpec SelfTargeting = new(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster);
     private static readonly ActionTiming ImmediateTiming = new(ActionTimingCategory.Immediate, 30, null);
 
     [TestMethod]

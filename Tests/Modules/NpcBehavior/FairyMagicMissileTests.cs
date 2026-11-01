@@ -81,7 +81,7 @@ public sealed class FairyMagicMissileTests
         Assert.AreEqual(15f, session.Components.GetPackedPool<ManaComponent>().GetReadonly(session.FairyId).MaximumMana);
         Assert.IsTrue(EntityActions.For(session.Components, session.Build.Context.Actions, session.Build.Context.Definitions).TryGetEffectiveAction(session.FairyId, BuiltInActionIds.MagicMissile, out var magicMissile));
         Assert.AreEqual(ActionTimingCategory.Delayed, magicMissile.Activator.Timing.Category);
-        Assert.AreEqual(8, magicMissile.Activator.Targeting.Range);
+        Assert.AreEqual(8, magicMissile.Activator.Targeting.MaximumRange);
     }
 
     [TestMethod]

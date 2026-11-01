@@ -377,7 +377,7 @@ public sealed class ToggleActionTests
     public void ToggleActionThatIsNotSelfTargeted_FailsTheBuild()
     {
         var action = new ActionDefinition(Guid.NewGuid(), "Thrown Stance", null, "?", Color.White, [], Effects: [],
-            Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 3), new ActionTiming(ActionTimingCategory.FreeCast)),
+            Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 3), new ActionTiming(ActionTimingCategory.FreeCast)),
             Toggle: ToggleSpec.HoldsEffectsOnly);
 
         var exception = Assert.ThrowsExactly<InvalidOperationException>(() => BuiltInTestModules.BuildModules([new RegisteringModule(context => context.Actions.Register(action))]));

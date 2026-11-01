@@ -21,7 +21,7 @@ public sealed class WandGrantEffectsTests
 
     private static ItemDefinition CreateBaseWandDefinition() =>
         new(Guid.NewGuid(), "Test Wand", SpriteName: null, Glyph: "w", Color.White, Tags: [], Effects: [],
-            Activator: new WandActivator(new TargetingSpec(TargetShape.Burst, Range: 10, AreaSize: 3), new ActionTiming(ActionTimingCategory.Immediate), Charges: 0, MaxCharges: 0));
+            Activator: new WandActivator(new TargetingSpec(TargetShape.Circle, MaximumRange: 10, AreaSize: 3), new ActionTiming(ActionTimingCategory.Immediate), Charges: 0, MaxCharges: 0));
 
     [TestMethod]
     public void Grant_RecipientHasIntelligenceScore_BakesInIntelligenceDerivedMaxCharges()

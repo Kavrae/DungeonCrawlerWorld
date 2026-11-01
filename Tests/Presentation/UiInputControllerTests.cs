@@ -3682,7 +3682,7 @@ public sealed class UiInputControllerTests
         var actionId = Guid.NewGuid();
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(actionId, "Test Action", null, "t", Color.White, [], Effects: [Effect.None],
-            Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+            Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
 
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);

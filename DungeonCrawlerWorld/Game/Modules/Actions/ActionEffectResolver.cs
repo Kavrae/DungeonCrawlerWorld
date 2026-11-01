@@ -29,7 +29,11 @@ namespace Game.Modules.Actions;
 /// source -- after the dodge skip, so a dodged hit never staggers.
 ///
 /// The entries placed once per activation follow the marked entity's fate: one the action doesn't
-/// reach (dodging, or not simulated) receives none of them, and only the AtLocation ones are placed.
+/// reach (dodging, or not simulated) receives none of them, and only the AtLocation ones are placed. The
+/// OnEachTile entries land on every resolved tile whoever was reached: they change the tiles, not who stands there.
+///
+/// A projectile's path hits (ResolvedTargets.PathHitEntityIds) are reached first, in the order it met them, and an entity
+/// both on the way and in the shape is reached once.
 /// </summary>
 public static class ActionEffectResolver
 {
@@ -60,13 +64,32 @@ public static class ActionEffectResolver
                 || ApplyToTarget(action, context, markedEntityId, effectServices, processingTiers, dodgingEntities, isDodgeable, isStaggering);
 
             ApplyOnce(action, context, resolved, markedEntityReached);
+            EffectSequence.ApplyOnEachTile(action.Effects, context, targetTiles);
             return;
         }
 
         bool? markedOccupantReached = null;
-        HashSet<int>? resolvedTargetIds = targetTiles.Count > 1 ? [] : null;
+        var pathHitCount = resolved.PathHitEntityIds.Count;
+        HashSet<int>? resolvedTargetIds = targetTiles.Count > 1 || pathHitCount > 0 ? [] : null;
 
         Span<int> occupantIdBuffer = stackalloc int[OccupantIdBufferLength];
+
+        // Copied first: the list is TargetResolution's buffer, and applying an effect may resolve again.
+        var pathHitEntityIds = pathHitCount <= occupantIdBuffer.Length ? occupantIdBuffer[..pathHitCount] : new int[pathHitCount];
+        for (var index = 0; index < pathHitCount; index++)
+        {
+            pathHitEntityIds[index] = resolved.PathHitEntityIds[index];
+        }
+
+        foreach (var targetEntityId in pathHitEntityIds)
+        {
+            resolvedTargetIds!.Add(targetEntityId);
+            var reached = ApplyToTarget(action, context, targetEntityId, effectServices, processingTiers, dodgingEntities, isDodgeable, isStaggering);
+            if (targetEntityId == resolved.MarkedEntityId)
+            {
+                markedOccupantReached = reached;
+            }
+        }
 
         foreach (var tile in targetTiles)
         {
@@ -94,6 +117,7 @@ public static class ActionEffectResolver
             ?? (resolved.MarkedEntityId is not { } markedOutsideArea || Reaches(markedOutsideArea, effectServices, processingTiers, dodgingEntities, isDodgeable));
 
         ApplyOnce(action, context, resolved, markedEntityWasReached);
+        EffectSequence.ApplyOnEachTile(action.Effects, context, targetTiles);
     }
 
     /// <summary>Applies the entries placed once per activation: all of them when the marked entity was reached (or nothing was marked), only the AtLocation ones when it was missed.</summary>

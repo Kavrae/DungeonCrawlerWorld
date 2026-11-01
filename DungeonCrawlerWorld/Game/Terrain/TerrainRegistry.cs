@@ -28,6 +28,9 @@ public sealed class TerrainRegistry
     /// <remarks>For what is derived from a definition and held outside it -- the aura field's reach, an entity's exposure to a contact -- to follow a definition replaced during a session. Nothing subscribes during Configure, when a mod overriding a built-in is the usual cause.</remarks>
     public event Action<ushort, TerrainDefinition, TerrainDefinition>? DefinitionChanged;
 
+    /// <summary>Changes whenever a registered definition is replaced (DefinitionChanged), so what a type blocks may have changed; only ever goes up.</summary>
+    public int Version { get; private set; }
+
     /// <summary>Registers definition and returns its runtime id. Registering a key again replaces that definition in place and keeps its id, so a mod can override a built-in, and raises DefinitionChanged.</summary>
     public ushort Register(TerrainDefinition definition)
     {
@@ -39,6 +42,7 @@ public sealed class TerrainRegistry
             _definitions[existingId] = definition;
             _linkGroups[existingId] = 0;
             _blocksMovement[existingId] = definition.BlocksMovement;
+            Version++;
             DefinitionChanged?.Invoke(existingId, previous, definition);
             return existingId;
         }

@@ -76,7 +76,7 @@ public sealed class ActionActivationSystemTests
         var eventBus = new EventBus();
         var mathUtility = new MathUtility();
         var damageEffects = new Effect[] { new([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)]) };
-        var targeting = new TargetingSpec(TargetShape.SingleTarget, Range: 10);
+        var targeting = new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 10);
 
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(
@@ -620,7 +620,7 @@ public sealed class ActionActivationSystemTests
         actionCatalog.Register(new ActionDefinition(
             meleeActionId, "Test Punch", null, "#", default, actionTags,
             [new Effect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
-            new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+            new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
 
         var meleeDisabled = componentManager.GetPackedPool<Game.Modules.BodyPartEffects.Components.MeleeDisabledComponent>();
         meleeDisabled.Add(CasterEntityId, default);

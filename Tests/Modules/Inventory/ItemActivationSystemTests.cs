@@ -54,7 +54,7 @@ public sealed class ItemActivationSystemTests
     private static ItemDefinition CreateWandDefinition(ushort charges, ushort maxCharges) =>
         new(WandId, "Test Wand", null, "w", Color.OrangeRed, Tags: [],
             Effects: [new Effect([new DirectDamage(10, 10)])],
-            Activator: new WandActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null), charges, maxCharges));
+            Activator: new WandActivator(new TargetingSpec(TargetShape.Circle, MaximumRange: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null), charges, maxCharges));
 
     private sealed class FakeMapQuery : IMapQuery
     {
@@ -89,7 +89,7 @@ public sealed class ItemActivationSystemTests
 
 
         var itemCatalog = new ItemCatalog();
-        var splashTargeting = new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1);
+        var splashTargeting = new TargetingSpec(TargetShape.Circle, MaximumRange: 3, AreaSize: 1);
         itemCatalog.Register(new ItemDefinition(
             PotionId, "Test Potion", null, "p", Color.Green, Tags: [],
             Effects: [new Effect([new DirectHeal(0.5f)])],
@@ -101,7 +101,7 @@ public sealed class ItemActivationSystemTests
         itemCatalog.Register(new ItemDefinition(
             HotkeyExpansionPotionId, "Test Hotkey Expansion Potion", null, "k", Color.Orange, Tags: [],
             Effects: [new Effect([new HotkeyExpansionGrant(5)])],
-            Activator: new PotionActivator(new TargetingSpec(TargetShape.Self, Range: 0, AreaSize: 0), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
+            Activator: new PotionActivator(new TargetingSpec(TargetShape.Self, MaximumRange: 0, AreaSize: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
         itemCatalog.Register(new ItemDefinition(NonConsumableId, "Test Hammer", null, "h", Color.Gray, Tags: [], Effects: []));
         itemCatalog.Register(CreateWandDefinition(charges: 0, maxCharges: 0)); // Placeholder -- never granted directly, see CreateWandDefinition's own doc comment.
 
@@ -143,7 +143,7 @@ public sealed class ItemActivationSystemTests
         TestTransforms.Set(componentManager, CasterEntityId, new TransformComponent(new Vector3Int(1, 1, 0), new Vector2Byte(1, 1)));
 
         var itemCatalog = new ItemCatalog();
-        var splashTargeting = new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1);
+        var splashTargeting = new TargetingSpec(TargetShape.Circle, MaximumRange: 3, AreaSize: 1);
         itemCatalog.Register(new ItemDefinition(
             PotionId, "Test Potion", null, "p", Color.Green, Tags: [],
             Effects: [new Effect([new DirectHeal(0.5f)])],

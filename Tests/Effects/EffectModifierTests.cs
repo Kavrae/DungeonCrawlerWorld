@@ -210,7 +210,7 @@ public sealed class EffectModifierTests
         StatModifierEffects.Apply(session.Components, session.SourceId, StatModifierTarget.OutgoingManaDrain, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: true, magnitude: 0.5f, FrameDeadline.Never, ActionSource.Admin, GameTags.Magic);
         StatModifierEffects.Apply(session.Components, session.SourceId, StatModifierTarget.IncomingManaDrain, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: true, magnitude: -0.25f, FrameDeadline.Never, ActionSource.Admin);
         var spell = new ActionDefinition(Guid.NewGuid(), "Test Spell", null, "s", Color.White, [], [Effect.None],
-            new SpellActivator(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Immediate)))
+            new SpellActivator(new TargetingSpec(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate)))
         {
             ActivationEffects = [new Effect([new ManaDrain(10)])],
         };

@@ -490,7 +490,7 @@ public sealed class MapWindowTests
         actionCatalog.Register(new ActionDefinition(
             TestActionId, "Test Adjacent", null, "#", default, [],
             Effects: [Effect.None],
-            Activator: new DirectAction(new TargetingSpec(TargetShape.Adjacent, Range: 0), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+            Activator: new DirectAction(new TargetingSpec(TargetShape.Adjacent, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
 
     [TestMethod]
     public void HandleHotkeys_PressingBoundSlot_ArmsIt()
@@ -547,7 +547,7 @@ public sealed class MapWindowTests
         actionCatalog.Register(new ActionDefinition(
             rangedActionId, "Test Ranged", null, "*", default, [],
             Effects: [Effect.None],
-            Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+            Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(slot, rangedActionId));
         return rangedActionId;
@@ -566,6 +566,7 @@ public sealed class MapWindowTests
     public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_WithNoHoveredTarget_PicksTheTargetNearestTheCursor()
     {
         var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Target;
         var rangedActionId = RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
         PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(97, 100, 0));
@@ -586,6 +587,7 @@ public sealed class MapWindowTests
     public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_WithTheCursorOffTheMap_PicksTheTargetNearestThePlayer()
     {
         var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Target;
         RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
         PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(98, 100, 0));
@@ -604,6 +606,7 @@ public sealed class MapWindowTests
     public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_WithTheOnlyTargetBeyondTheSearchDistanceOfTheCursor_StaysArmed()
     {
         var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Target;
         RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
 
@@ -619,6 +622,7 @@ public sealed class MapWindowTests
     public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_WithTheCursorOffTheMap_SearchesOnlyTheDistanceAroundThePlayer()
     {
         var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Target;
         RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
 
@@ -654,6 +658,7 @@ public sealed class MapWindowTests
     public void HandleClick_ArmedSelfPotionInTargetMode_ClickOnAnAllyInRange_MarksTheAlly()
     {
         var (world, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Target;
         RegisterTestPotion(itemCatalog);
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
@@ -672,6 +677,7 @@ public sealed class MapWindowTests
     public void HandleClick_ArmedSelfPotionInTargetMode_ClickOnAnEmptyTile_DrinksIt()
     {
         var (world, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Target;
         RegisterTestPotion(itemCatalog);
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
@@ -726,6 +732,7 @@ public sealed class MapWindowTests
     public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_PrefersTheHoveredTarget()
     {
         var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Target;
         RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(105, 100, 0));
         PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(102, 100, 0));
@@ -743,6 +750,7 @@ public sealed class MapWindowTests
     public void HandleHotkeys_PressingArmedSlotAgainInTargetMode_WithNoTargetInRange_QueuesNothingAndStaysArmed()
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Target;
         RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
@@ -853,20 +861,22 @@ public sealed class MapWindowTests
     }
 
     [TestMethod]
-    public void HandleHotkeys_ArmingRangedAction_SetsTargetableTilesToTheFullDiamondWithinRange()
+    public void HandleHotkeys_ArmingRangedAction_SetsTargetableTilesToTheFullCircleWithinRange()
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var rangedActionId = Guid.NewGuid();
-        actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
 
-        // Diamond of radius 10: 2*10^2 + 2*10 + 1 = 221 (same worked formula as DistanceFalloffTests).
+        // Rounded circle of radius 10: every offset with x^2 + y^2 <= 10^2 + 10.
         Assert.IsNotNull(mapViewState.TargetableTiles);
-        Assert.HasCount(221, mapViewState.TargetableTiles);
+        Assert.HasCount(349, mapViewState.TargetableTiles);
         Assert.Contains(new Vector3Int(110, 100, 0), mapViewState.TargetableTiles, "Exactly at range 10 must be included.");
+        Assert.Contains(new Vector3Int(107, 107, 0), mapViewState.TargetableTiles, "The diagonal reaches 7 tiles out.");
+        Assert.DoesNotContain(new Vector3Int(108, 107, 0), mapViewState.TargetableTiles, "Past the circle's diagonal edge must be excluded.");
         Assert.DoesNotContain(new Vector3Int(111, 100, 0), mapViewState.TargetableTiles, "Beyond range 10 must be excluded.");
     }
 
@@ -898,6 +908,28 @@ public sealed class MapWindowTests
         Assert.DoesNotContain(new Vector3Int(101, 100, 0), mapViewState.TargetableTiles, "The footprint must move with the caster, not stay anchored to the position it was armed at.");
         Assert.DoesNotContain(new Vector3Int(105, 100, 0), mapViewState.TargetableTiles, "The caster's own new tile is no longer part of Adjacent's footprint either.");
         Assert.Contains(new Vector3Int(106, 100, 0), mapViewState.TargetableTiles);
+    }
+
+    [TestMethod]
+    public void Update_WallBuiltWhileArmedAndStandingStill_RecomputesTargetableTiles()
+    {
+        var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        var sightedActionId = Guid.NewGuid();
+        actionCatalog.Register(new ActionDefinition(sightedActionId, "Test Sighted", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 5, AimLineOfSight: LineOfSightRule.Required), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(sightedActionId, overrideDefinition: null));
+        componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, sightedActionId));
+        var wall = world.Terrain.Register(new Game.Terrain.TerrainDefinition("test:wall", "Wall", "", "#", Color.Gray, BlocksMovement: true));
+
+        mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+        Assert.Contains(new Vector3Int(104, 100, 0), mapViewState.TargetableTiles);
+
+        world.SetStructure(new Vector3Int(102, 100, 0), new Game.Terrain.TerrainCell(wall));
+        mapWindow.Update(new GameTime());
+
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+        Assert.DoesNotContain(new Vector3Int(104, 100, 0), mapViewState.TargetableTiles, "The new wall hides the tile behind it, though the caster never moved.");
+        Assert.Contains(new Vector3Int(101, 100, 0), mapViewState.TargetableTiles);
     }
 
     /// <summary>Right-click/Escape is the cancel path now (see CancelArmedOrPendingAction) -- re-pressing the same hotkey confirms rather than disarms, so this exercises the actual disarm path.</summary>
@@ -935,7 +967,7 @@ public sealed class MapWindowTests
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         mapViewState.TargetingMode = TargetingMode.Ground;
         var rangedActionId = Guid.NewGuid();
-        actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
@@ -952,7 +984,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var rangedActionId = Guid.NewGuid();
-        actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, Range: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        actionCatalog.Register(new ActionDefinition(rangedActionId, "Test Ranged", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 10), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(rangedActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, rangedActionId));
 
@@ -1006,7 +1038,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var burstActionId = Guid.NewGuid();
-        actionCatalog.Register(new ActionDefinition(burstActionId, "Test Burst", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        actionCatalog.Register(new ActionDefinition(burstActionId, "Test Burst", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Circle, MaximumRange: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(burstActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, burstActionId));
         mapViewState.TargetingMode = TargetingMode.Ground;
@@ -1025,7 +1057,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var lineActionId = Guid.NewGuid();
-        actionCatalog.Register(new ActionDefinition(lineActionId, "Test Line", null, "#", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Line, Range: 2), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        actionCatalog.Register(new ActionDefinition(lineActionId, "Test Line", null, "#", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Line, MaximumRange: 2, AreaSize: 2, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(lineActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot4, lineActionId));
         mapViewState.TargetingMode = TargetingMode.Ground;
@@ -1047,7 +1079,7 @@ public sealed class MapWindowTests
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
         var burstActionId = Guid.NewGuid();
-        actionCatalog.Register(new ActionDefinition(burstActionId, "Test Burst", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Burst, Range: 10, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
+        actionCatalog.Register(new ActionDefinition(burstActionId, "Test Burst", null, "*", default, [], Effects: [Effect.None], Activator: new DirectAction(new TargetingSpec(TargetShape.Circle, MaximumRange: 10, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(burstActionId, overrideDefinition: null));
         componentManager.Merge(PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot5, burstActionId));
         mapViewState.TargetingMode = TargetingMode.Ground;
@@ -1070,6 +1102,7 @@ public sealed class MapWindowTests
     public void HandleClick_ArmedActionInTargetMode_ClickEmptyTile_MarksTheTargetNearestTheClick()
     {
         var (world, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Target;
         var rangedActionId = RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
         PlaceTestTarget(world, componentManager, entityId: 2, new Vector3Int(106, 100, 0));
         PlaceTestTarget(world, componentManager, entityId: 3, new Vector3Int(100, 103, 0));
@@ -1088,6 +1121,7 @@ public sealed class MapWindowTests
     public void HandleClick_ArmedActionInTargetMode_ClickEmptyTileWithNoTargetInRange_QueuesNothingAndStaysArmed()
     {
         var (_, mapViewState, mapWindow, componentManager, actionCatalog) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Target;
         RegisterTestRangedAction(actionCatalog, componentManager, HotkeySlot.Slot5);
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D5), new KeyboardState());
 
@@ -1478,14 +1512,14 @@ public sealed class MapWindowTests
         itemCatalog.Register(new ItemDefinition(
             TestPotionId, "Test Potion", null, "p", Color.Green, Tags: [GameTags.TargetingSelf],
             Effects: [new Effect([new DirectHeal(0.5f)])],
-            Activator: new PotionActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1, TargetModeAffects: TargetModeAffects.MarkedOnly), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
+            Activator: new PotionActivator(new TargetingSpec(TargetShape.Circle, MaximumRange: 3, AreaSize: 1, TargetModeAffects: TargetModeAffects.MarkedOnly), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
     /// <summary>Same PotionActivator/Burst shape as RegisterTestPotion, but deliberately untagged Self -- covers using an item on the player being keyed off GameTags.TargetingSelf rather than any particular IActionActivator kind.</summary>
     private static void RegisterTestNonSelfPotion(ItemCatalog itemCatalog) =>
         itemCatalog.Register(new ItemDefinition(
             TestNonSelfPotionId, "Test Non-Self Potion", null, "p", Color.Green, Tags: [],
             Effects: [new Effect([new DirectHeal(0.5f)])],
-            Activator: new PotionActivator(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
+            Activator: new PotionActivator(new TargetingSpec(TargetShape.Circle, MaximumRange: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
 
     private static void RegisterTestNonConsumableItem(ItemCatalog itemCatalog) =>
         itemCatalog.Register(new ItemDefinition(TestNonConsumableItemId, "Test Hammer", null, "h", Color.Gray, Tags: [], Effects: []));
@@ -1534,6 +1568,7 @@ public sealed class MapWindowTests
     public void HandleHotkeys_PressingArmedNonSelfItemSlotAgainInTargetMode_PicksTheNearestTarget()
     {
         var (world, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Target;
         RegisterTestNonSelfPotion(itemCatalog);
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestNonSelfPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));
@@ -1628,6 +1663,7 @@ public sealed class MapWindowTests
     public void HandleClick_ArmedPotion_ClickOwnTileInTargetMode_MarksThePlayer()
     {
         var (world, mapViewState, mapWindow, componentManager, itemCatalog) = BuildMapWindowWithPlayerAndItems(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapViewState.TargetingMode = TargetingMode.Target;
         RegisterTestPotion(itemCatalog);
         var stackInstanceId = InventoryActions.AddItem(componentManager, PlayerEntityId, TestPotionId, quantity: 1);
         componentManager.Merge(PlayerEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, stackInstanceId));

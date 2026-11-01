@@ -3,7 +3,7 @@ using Engine.Math;
 namespace Game.Effects;
 
 /// <summary>Applies an ordered list of Effect, in list order.</summary>
-/// <remarks>The one loop everything that applies effects shares: an action's or item's activation (split by placement into ApplyOnEachTarget and ApplyOnce), and everything that applies to a single entity (an aura's tick, a terrain contact, ChainedEffect's triggered effects).</remarks>
+/// <remarks>The one loop everything that applies effects shares: an action's or item's activation (split by placement into ApplyOnEachTarget, ApplyOnce and ApplyOnEachTile), and everything that applies to a single entity (an aura's tick, a terrain contact, ChainedEffect's triggered effects).</remarks>
 public static class EffectSequence
 {
     public static EffectOutcome Apply(IReadOnlyList<Effect> effects, in EffectContext context)
@@ -84,6 +84,54 @@ public static class EffectSequence
         }
 
         return outcome;
+    }
+
+    /// <summary>Applies the OnEachTile entries of effects at each of tiles with no target entity, tile by tile, each tile's in list order.</summary>
+    /// <remarks>context's target is replaced; its source, name, tags and frame are kept.</remarks>
+    public static EffectOutcome ApplyOnEachTile(IReadOnlyList<Effect> effects, in EffectContext context, IReadOnlyList<Vector3Int> tiles)
+    {
+        var outcome = EffectOutcome.NoEffect;
+        if (!HoldsPlacement(effects, EffectPlacement.OnEachTile))
+        {
+            return outcome;
+        }
+
+        for (var tileIndex = 0; tileIndex < tiles.Count; tileIndex++)
+        {
+            var tileContext = context with { TargetEntityId = EffectContext.NoTargetEntity, TargetLocation = tiles[tileIndex] };
+            for (var effectIndex = 0; effectIndex < effects.Count; effectIndex++)
+            {
+                var entries = effects[effectIndex].Entries;
+                for (var entryIndex = 0; entryIndex < entries.Count; entryIndex++)
+                {
+                    var entry = entries[entryIndex];
+                    if (entry.Placement == EffectPlacement.OnEachTile)
+                    {
+                        outcome = EffectOutcomes.Combine(outcome, entry.Apply(in tileContext));
+                    }
+                }
+            }
+        }
+
+        return outcome;
+    }
+
+    /// <summary>Whether any entry effects holds directly is placed by placement.</summary>
+    private static bool HoldsPlacement(IReadOnlyList<Effect> effects, EffectPlacement placement)
+    {
+        for (var effectIndex = 0; effectIndex < effects.Count; effectIndex++)
+        {
+            var entries = effects[effectIndex].Entries;
+            for (var entryIndex = 0; entryIndex < entries.Count; entryIndex++)
+            {
+                if (entries[entryIndex].Placement == placement)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>The first reason an entry effects holds can't be applied to context.TargetEntityId now (IEffectEntry.CanApply), or None when all of them can. None for no effects.</summary>

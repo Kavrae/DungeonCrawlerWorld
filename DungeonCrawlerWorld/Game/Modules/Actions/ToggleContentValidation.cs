@@ -1,4 +1,3 @@
-using Engine.Tiles;
 using Game.Effects;
 using Game.Modules.Actions.Activators;
 
@@ -19,9 +18,9 @@ internal static class ToggleContentValidation
             var heldBy = $"Action '{action.Name}'";
 
             // A toggle applies to whoever has it on, so there is no other target for it to resolve.
-            if (action.Toggle is not null && action.Activator.Targeting.Shape != TargetShape.Self)
+            if (action.Toggle is not null && !action.Activator.Targeting.IsSelfOnly)
             {
-                throw new InvalidOperationException($"{heldBy} is a toggle but is not Self-targeted: a toggle applies to its holder.");
+                throw new InvalidOperationException($"{heldBy} is a toggle but is not Self-targeted (a Self shape anchored on the caster): a toggle applies to its holder.");
             }
 
             EnsureHeldEffectsCanBeReverted(action, heldBy);

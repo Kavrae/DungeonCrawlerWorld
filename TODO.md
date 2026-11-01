@@ -719,6 +719,88 @@ Toxic Potion. Name the action or item as well: "Draught of Thrift (Player1)".
 - **Display:** `ActionSourceNaming.Describe` prints "{cause} ({entity})" for an entity source with a
   cause, the entity alone without one.
 
+#### Lingering areas -- effects that stay on their tiles
+
+Every targeting shape hits once, at the moment it lands (PLAN-targeting-model.md). Most comparable games leave areas
+behind that keep working for a while: DCSS clouds, Baldur's Gate 3 surfaces, ToME's lasting walls of fire, Divinity's
+burning ground. Add a lingering area: a shape that stays on its tiles for a duration and affects whoever is in it.
+- **Test implementation: Wall of Fire.** Its wall (PLAN-targeting-model.md, Phase 2: `Wall`, range 10, length 9) stays
+  for **X seconds**, X scaled by the caster's Intelligence, burning whoever stands in or enters it. When the wall ends,
+  its tiles keep a **burning ground** effect for **2X seconds**: lighter, Burning stacks only. So one cast leaves two
+  lingering areas, one after the other, each with its own effects and duration.
+- **What a lingering area is.** Decide between an entity per area (as an aura anchor is: the area's tiles, its source,
+  its effects and a deadline on a timer wheel) and a temporary layer on the tiles themselves (a terrain overlay with an
+  expiry). The anchor model already has ownership, destruction with a neighborhood's unload and the per-chunk index
+  (`AuraSourceIndex`); the terrain model already has stepping on, standing in and repeats (`TerrainContactSystem`).
+  Whichever it is, entering and standing in it reuse terrain contact's rules (apply on entering, then every repeat
+  while there), never a second set.
+- **Duration from Intelligence.** X comes from the caster's Intelligence at the cast, through the duration stat
+  modifiers every duration already goes through (`EffectModifiers`) -- see "Scroll and spell durations scaling with
+  Intelligence". Decide the curve, and whether the 2X follow-up is fixed at the cast or read when the wall ends.
+- **Rules to decide:** overlapping areas of the same kind (add, refresh, or the stronger wins); credit (the caster's
+  snapshot `ActionSource`, as kill credit does today); whether an area blocks movement or sight (Wall of Fire: neither,
+  so it is a hazard to cross, not a barrier); what happens when its neighborhood unloads (it ends, as anchors do); NPCs
+  avoiding lingering hazards (waits on "Grid pathfinding and navigation").
+- **Presentation:** draw the area on its tiles for as long as it lasts (fire on the wall, embers on the burning ground),
+  fading as it nears its end, and say what it does and how long it has left on hover.
+- **Cost:** many areas at once must stay cheap -- index them by chunk like aura sources, and tick on a timer wheel, never a
+  scan.
+
+#### Flood fill -- explosions, gases and liquids that spread through open tiles
+
+A shape today covers its tiles by geometry, and `ShapeLineOfSight` (PLAN-targeting-model.md) can only cut away what a
+wall hides. Explosions, gases and liquids instead spread **through open tiles**, around corners and through doorways,
+the way they do in Brogue, DCSS and Dwarf Fortress. Add flood fill. It is likely two options, because these spread for
+different reasons:
+- **Walk a distance (explosions).** Spread breadth-first from the anchor through open tiles, up to N steps, so a blast
+  goes round a corner but not through a wall, and a room's doorway lets it out. Every reached tile is hit; its step
+  count is its distance (for "Falloff in targeting").
+- **Fill by volume (gases and liquids).** A quantity released at the anchor spreads tile to tile -- each step moving
+  some of a tile's amount to its open neighbours -- until it either **reaches equilibrium** (liquid pooling in a room,
+  every tile holding about the same) or **dissipates** (gas thinning until a tile's amount falls below a set minimum,
+  where it is gone). The amount on a tile can scale the effect there. Brogue's gases (concentrations that spread and
+  fade) and Dwarf Fortress's liquid depths are the references.
+- **Fill speed** for both, in tiles (or spreading steps) per second: an explosion fills its whole reach within a frame or
+  two; a liquid creeps over seconds; a gas drifts. With a speed, flood fill is a lingering area that changes shape
+  while it lasts ("Lingering areas", above), so build the two together.
+- **Rules to decide:** what counts as open (walls block; closed doors; entities never block a gas but might block a
+  liquid's flow -- probably not); map layers (does a liquid fall to the layer below?); mixing (water on lava,
+  gas on fire); a cap on tiles per fill and per frame, so a flood of a huge open area stays bounded; deterministic
+  order (the same spread every run on a seed).
+- **Content to test it with:** an explosion that rounds a corner, a poison gas cloud that fills a room and seeps out of
+  its door, and a water pour that pools.
+
+#### Falloff in targeting shapes
+
+Every tile a shape covers gets the effect at full strength. Cogmind's explosions weaken toward their edge, and many games
+have a strong centre and a weak rim. Auras already have this (`AuraFalloff`, Engine.Tiles: `Linear` or `None` by distance
+from the source). Add an optional falloff to targeting.
+- **What falls off:** `EffectContext.Magnitude`, which already scales amounts (damage, healing, stacks) and never
+  durations, so every effect entry follows with no change.
+- **Measured from:** the anchor for shapes that surround it (Circle, Ring, Square, Cross), the shape's origin for
+  directional ones (Cone, Line, Wall), the walk distance for flood fill ("Flood fill", above), and per entity hit for a
+  projectile with a hit count above 1 (each pierced target weaker than the last).
+- **Kinds:** `None` (default, today), `Linear` to a set fraction at the edge, and steps (full in the centre, half beyond
+  a radius). Reuse `AuraFalloff` -- generalised and renamed if it no longer only means auras -- rather than a second
+  falloff.
+- **Presentation:** the preview and telegraph show strength across the shape (a brighter centre), so a player can see
+  where it is safest to stand.
+- **Content to test it with:** Fireball with a linear falloff, and a piercing bolt that weakens with each target.
+
+#### Fast projectile tile sweep
+
+With travel time (PLAN-targeting-model.md, Phase 5), a projectile moves some tiles a frame and creatures move too. A
+projectile and a creature can pass through each other without ever being on the same tile at a moment it checks.
+- **The problem:** a projectile on tile 5 flies east at 2 tiles a frame; a goblin on tile 6 walks west, one tile this
+  frame. Movement runs first: the goblin is now on tile 5. The projectile checks the tiles it crosses this frame -- 6 and
+  7 -- finds both empty, and lands on 7. The two crossed each other, and nothing was hit.
+- **The fix:** sweep every tile the projectile crosses this frame against both where each creature is now and where it
+  was at the start of the frame (the frame's moves, `FrameEventBuffer`), and treat a creature that crossed the
+  projectile's path as met, at the tile where they crossed. Decide which of several met in one frame comes first (the
+  nearest to where the projectile started this frame), so the hit count stays exact.
+- **Tests:** head-on crossings, a creature stepping sideways into the path, two creatures in one frame with a hit count
+  of 1, and a projectile faster than one tile a frame against one slower than a tile a frame.
+
 #### Melee targeting shapes -- Strike, Sweep and Whirlwind
 
 Every melee attack today is an Adjacent ring (`QuickAttackAction`, `PowerAttackAction`): it hits
@@ -1225,6 +1307,62 @@ item leaves an inventory treats it the same.
 - Currency: a "Drop" on the currency row, or never.
 - Destroying an item outright stays "Destroyed items", not a drop.
 
+#### Bouncing actions -- chain lightning
+
+An action that hits one target, then jumps to the next nearest target from there, a set number of times (chain lightning).
+Nothing like it exists: every activation resolves one shape once (`TargetResolution.Resolve`) and applies to what it
+covers.
+- **What it is.** Decide whether bouncing is part of the path (`PathTracer`, which already bounces off walls) or its own effect entry that
+  applies its nested effects to a target, then finds and hits the next -- the second keeps the shape system unchanged and
+  lets any effect bounce.
+- **Rules to decide:** jump count and range per jump (a rounded radius, as every range is), whether it can return to a
+  target already hit, how targets are chosen (nearest, random from a seeded roll, hostiles only), whether each jump falls
+  off in damage (`Magnitude` per jump), whether a jump needs line of sight, and how it is credited.
+- **Presentation:** the preview can show only the first target; the telegraph and floating text need to show the chain as
+  it happens (each jump a short beam). Probably waits on "Gameplay Cues".
+- **First content:** a Chain Lightning spell for the player, and an NPC that casts it.
+
+#### Push and pull effects with a direction
+
+Into the Breach is built on pushes; most tactics games have knockback, pulls and shoves. Nothing here moves another
+entity, and no effect knows which way it was going. Add push and pull effect entries, and give every hit a direction to
+read.
+- **A direction on every hit.** The resolver already knows a shape's direction (caster toward the aimed tile) and anchor
+  (PLAN-targeting-model.md); hand each hit its own direction in `EffectContext`: away from the anchor (a blast pushes
+  outward), toward the caster (a pull), along the path (a beam shoves down its line), or across it (a wall's shove). The
+  entry says which it uses.
+- **Entries:** `Push(distance, direction kind)` and `Pull(distance)`, moving the entity tile by tile through the same
+  rules as walking (`MovementCandidates`, the diagonal rule included), never `World.MoveEntity` directly.
+- **Blocked moves:** what happens when the next tile is a wall or another entity is "Entity displacement with damage"
+  (Low): stop there, take collision damage, or both (Into the Breach's bump damage). Decide it here, since this is what
+  needs it.
+- **Rules to decide:** large entities (move the whole footprint or not at all), immunity to being moved (bosses,
+  anchored entities), order when one action pushes several entities into each other, interaction with a windup (a push
+  cancels it, as Stagger does?) and Dodge.
+- **Needed by:** "Moving a boss into its own attacks" (BOSS-MECHANICS.md).
+- **Content to test it with:** a pushing blast (Circle, away from the centre), a pull (toward the caster), and a shoving
+  beam.
+
+#### Several aims in one action
+
+Baldur's Gate 3's Magic Missile and Scorching Ray: one cast, several aims -- each dart or ray at a target of the
+player's choosing, the same target allowed more than once. Every activation here has one aim (`TargetSelection`). Add
+actions that take several aims, using Baldur's Gate 3 as the benchmark for how choosing them feels.
+- **Target limit.** The action declares how many aims it takes (Magic Missile: 3), and whether one target may take more
+  than one (BG3: yes for darts).
+- **Manual.** The player picks each aim in turn while armed -- a click or a re-press per aim -- and the preview shows
+  every aim chosen so far, numbered, with what is left. Right-click or Escape cancels as it does today; a way to undo the
+  last aim (BG3 lets you remove one) is worth having.
+- **Early activation.** The player can fire before reaching the limit (a key or a confirm on the last aim), with the aims
+  chosen so far; whether the unused aims are lost or reduce the cost is the action's to say.
+- **Automatic.** The action picks its own aims up to the limit: nearest targets first, spread across distinct targets
+  before repeating, or rolled from a seeded random (the same choices "Bouncing actions" makes; share them). NPCs always
+  use the automatic form.
+- **Resolution.** The activation carries a list of aims instead of one; each resolves through `TargetResolution` with
+  the same spec, so every path, shape and wall rule works per aim. Costs are paid once; a Delayed windup fixes every aim
+  at confirm and resolves them together, or one after another (Scorching Ray's rays), which the action declares.
+- **Content to test it with:** Magic Missile with 3 darts (manual), and an automatic multi-target spell for an NPC.
+
 #### Fuzzy targeting
 
 Version 2 of "an area effect that attaches to one entity attaches to the entity on its center tile"
@@ -1653,6 +1791,17 @@ Until then a shop or small building is a single entity up to Huge, like the 2x2 
 
 ### Low Priority
 
+#### Lobbed paths: the arc and throwing range
+
+`Lobbed` (PLAN-targeting-model.md) resolves like a `Projectile` that hits no entity on the way, with the same wall rule
+-- walls reach the ceiling, so a lob never passes one. What makes it its own path comes later, and it should be the
+usual choice for anything thrown:
+- **The arc.** Draw a lobbed shot as an arc from the caster to the landing tile (and, with travel time, a shadow or
+  landing telegraph on the ground), so a thrown potion or grenade reads as thrown, not fired.
+- **Throwing range from the thrower.** A lobbed action's maximum range grows with Strength and with throwing skills
+  ("Skills", High), through a stat modifier on range like scroll scaling's -- `MaximumRange` only, never
+  `MinimumRange`. Decide the curve and whether it depends on what is thrown (an item's weight, "Item weight").
+
 #### Terrain contact as a range-0 aura -- revisit if contact needs to come from entities
 
 Terrain contact (`TerrainContactSystem`) and auras (`AuraSystem`) now hold the same `Effect` lists,
@@ -2018,7 +2167,9 @@ relationships"):
 - **Consumers:** `DamageLedger.TryGetTopContributor` groups contributions by the contributor's party at
   death (party pooling); `IsAttackable` treats party members as friendly until factions exist ("Factions",
   under perception); EndOfLevelStairs carries the player's party (Companions and followers, below); the
-  party inventory UI (Presentation).
+  party inventory UI (Presentation); friend-or-foe targeting -- which entities in a shape or on a path an action
+  affects (everyone, hostiles only, allies only, everyone but the caster), and whether an ally soaks a projectile's hit
+  count (PLAN-targeting-model.md, "Waiting on other work").
 - Open: whether a party's members share its tier (today they're near the player, so Local anyway); what
   happens to a member left behind in a neighborhood that unloads (`UnlinkReason` doesn't tell an unload
   from a death); whether NPC packs (goblin pack courage, raids) are parties too.
@@ -2574,6 +2725,47 @@ as if it were a self-targeted activation. Fix:
   "Grants a Poison aura (size 4, power 16)" (`EffectFormatting.FormatAuraSourceGrant`) and the
   Summary's "(range 4)" lose them. The Item Details comparison already keys them separately
   (`ItemComparisonStatExtraction`, `effect:aura:{id}:size` and `:power`).
+
+#### Item Details for the targeting model
+
+Item Details (`ItemDetailsWindow`, `ActivatableDetailsSections`), action tooltips and the item comparison still describe
+targeting as a shape, a range and an area size. `TargetingSpec` now has many more independent settings
+(PLAN-targeting-model.md), and none of the new ones reach the player. Show what each activation does:
+- **Path:** Placed, Projectile or Lobbed; for a Projectile, its hit count ("first target", "pierces 2", "every target")
+  and where it ends (at the aimed tile or at maximum range).
+- **Walls:** whether the path stops at, passes through or bounces off walls (and how many times), and whether aiming and
+  the shape need line of sight.
+- **Ranges and anchor:** minimum and maximum range as a band, the area size named for its shape (radius, length, arm,
+  half-side), and whether the shape is laid out around the caster or where the path ends.
+- **Shape preview** (`TargetShapePreviewGeometry`): draws nothing for a shape of `None` (Magic Missile, Lightning Bolt)
+  and knows nothing of paths. Show the path as well -- a line to where it stops, the minimum range left out -- and every
+  new shape (Ring, Wall, Square, Cross, Sweep).
+- **Comparison** (`ItemComparisonStatExtraction`): key the new settings so two items differing in path, hit count, walls
+  or minimum range compare.
+- Decide what belongs in a hover tooltip versus Item Details, and word the settings in the player's terms, not the
+  spec's.
+
+#### Targeting indicator improvements
+
+The targeting highlight (`MapGameOverlay`, `ActionTargetingController.HoveredFootprint`) and the windup telegraph wash
+every tile an activation reaches, the path's tiles and the shape's alike (`TargetingView.Resolve`/`TryResolveWindup`
+add `ResolvedTargets.PathTiles`), so the player sees what is hit but not why those tiles were chosen. Show it:
+- **Straight lines** for the path and the shape's geometry: the line from the caster through the aim to where the path
+  stops, a Cone's edges, a Wall across the aim, a Circle's or Ring's outline -- so the selection reads as the geometry
+  that produced it rather than a set of washed tiles.
+- **Path and shape told apart:** the path's tiles in their own look, the shape's area in another, the end tile (where the
+  shape is laid out) marked.
+- **Why a path stopped** (`PathTrace.StopReason`): an indicator where it was blocked by a wall, stopped on the entity that
+  reached its hit count, ran out of range, or met the map's edge -- and a clear "blocked" state when the whole path is
+  blocked before it gets anywhere (an aim out of sight, a wall at the caster's feet).
+- **Bounces:** the reflected legs drawn as lines, with the bounce point marked.
+- **Lobs:** an arc from the caster to the landing tile instead of a straight line, and the landing tile marked, so a
+  lobbed shot reads as passing over whoever is in the way.
+- **Line of sight:** tiles left out of the highlight or a shape because of walls shown as shadowed rather than simply
+  unlit, so the player sees the wall is the reason.
+- The same indicators for the windup telegraph of NPC activations, so the player can read an enemy's shot before it
+  lands. Shares its drawing with "Target Mode Clarity" and the travel-time projectile sprites (PLAN-targeting-model.md,
+  Phase 5).
 
 #### Player setting for the target search distance
 
@@ -3157,16 +3349,6 @@ screens, and note what's worth adopting for the Inventory window and the Equipme
 below). Check it against the still-open Stack Controls and Partial Stacks (High, above), which
 already calls for a similar industry comparison. A party's members come from Parties (Game).
 
-#### TextDivider label clipping and right-line spacing
-
-Investigate why the bottom of some `TextDivider` label letters (descenders -- g/y/p, etc.) render
-clipped -- possibly `DrawContent`'s `textY` centering (`(ContentSize.Y - textSize.Y) / 2f`) against a
-`MeasureString`-reported height that doesn't fully account for a descender's real glyph extent, combined
-with a tight `ContentSize.Y` (e.g. `HealthWindow.RowHeight`) leaving no slack. Separately: `textEnd`
-(`textStart + textSize.X`) is where the right-hand divider line starts immediately, with no gap against
-the label -- move it further right (a small fixed or width-fraction-relative pad before `rightEdge >
-textEnd`'s line-drawing) so the line doesn't sit flush against the text.
-
 #### Diagonal movement input timing
 
 `PlayerMovementController.HandleInput` only treats a move as diagonal if both keys are down in the
@@ -3174,13 +3356,6 @@ exact same poll -- a few-frame gap between W and D lands as cardinal. Needs a sh
 window before committing to a cardinal move. Part of "Input actions and mapping contexts" (High,
 above): movement becomes one 2D-vector action built from the four keys, and a trigger holds a lone
 cardinal for a few frames to see if the second key arrives.
-
-#### Targeting tile highlights extend beyond the actual spell/scroll range
-
-`ActionTargetingController.ComputeTargetableTiles` approximates every cursor-directed shape as a
-`Burst` scatter (no cursor direction yet at arm time) -- overshoots for Cone/Line, showing tiles as
-targetable that the real shape could never hit. Confirmed in-game. Needs a real per-shape reachable-area
-computation, at least for Cone/Line.
 
 #### Confirming activation on an empty tile still fires the spell/scroll
 
@@ -3510,24 +3685,6 @@ frame), and `visible_characters` gives a typewriter reveal. Text shaping, BiDi a
 handled by the `TextServer`, which is the part hardest to replicate; for Latin-script languages,
 FontStashSharp's measuring is enough.
 
-#### Inspection panel's minimize alternates between two looks
-
-Repeatedly toggling the inspection panel's minimize/restore button cycles through four states instead of two:
-restored -> minimized with no title -> restored -> minimized with the title -> (repeat). A minimized panel should look
-the same every time.
-
-Leads, not yet confirmed:
-- Minimizing clears the inspection target and the title in `InspectionWindow.OnDisplayModeChanged`, which runs on
-  `DisplayModeChanged` -- after `SetDisplayMode` has already laid out the minimized bar (`RecalculateMinimizedSize`)
-  with the old title -- so whether a title shows depends on the order of layout, the handler and whatever re-titles
-  the panel (`InspectionWindowContent` from `MapViewState.InspectionMode`) on the next restore.
-- The panel also sizes its collapsed bar by its own rule (`ApplyMinimizedSize(OriginalSize.X, OriginalSize.X)`: a
-  header as wide as the whole window, where every other window's is the window minus its border inset, and no
-  `MinimumSize`/`MaximumSize` clamp); `Folder` has a third rule. Once the cycle is fixed, consider one rule for a
-  minimized window's width (e.g. a `Window` option "keep the restored width when minimized") so no subclass computes
-  header and window sizes by hand.
-Check the title buttons' positions and the panel's width against `PlayerHealthBarContent` (`HudChrome`) in both modes.
-
 #### Investigate one rule set for what can be dragged and where it can drop
 
 The "can't drag this" and "can't drop that here" rules are spread across five places, each deciding part of it:
@@ -3573,10 +3730,6 @@ boss's blueprint. Blocked on "Player status window" (Medium Priority, this secti
 
 The Health Window has two columns today (see IMPLEMENTATION-NOTES.md, "HealthWindow"). Move status
 effects into a third column of their own.
-
-#### Health bar hover popup text in white
-
-The player health bar's hover popup (`PlayerHealthHoverContent`) should draw its text in white.
 
 #### Compare input hit-testing against a unified picking pipeline
 
@@ -3803,6 +3956,11 @@ modality, `IMPLEMENTATION-NOTES.md`), no new modality code needed. Settings it c
 the user layer of "Layered config files" (Global); Unreal's equivalent is `UGameUserSettings`, one
 object holding user-changeable options, loaded from and saved to the user's `GameUserSettings.ini`
 with `ApplySettings`/`SaveSettings`.
+
+Settings it holds:
+- **Default Targeting Mode** -- Ground or Target (default Ground). `MapViewState.TargetingMode` is set to the
+  selected value on startup; Left Alt (`TargetingModeSwitch`) still switches it for the rest of the session without
+  changing the setting.
 
 #### Floating text settings on the options menu
 

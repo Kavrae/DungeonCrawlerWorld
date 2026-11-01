@@ -24,9 +24,9 @@ public sealed class TargetResolutionTests
     private static readonly Vector3Int CasterPosition = new(5, 5, Ground);
     private static readonly Vector3Int TargetPosition = new(8, 5, Ground);
 
-    private static readonly IActionActivator SingleTargetRangeEight = Immediate(new TargetingSpec(TargetShape.SingleTarget, Range: 8));
-    private static readonly IActionActivator BurstRangeEightAreaOne = Immediate(new TargetingSpec(TargetShape.Burst, Range: 8, AreaSize: 1));
-    private static readonly IActionActivator PotionLike = Immediate(new TargetingSpec(TargetShape.Burst, Range: 3, AreaSize: 1, TargetModeAffects: TargetModeAffects.MarkedOnly));
+    private static readonly IActionActivator SingleTargetRangeEight = Immediate(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 8));
+    private static readonly IActionActivator BurstRangeEightAreaOne = Immediate(new TargetingSpec(TargetShape.Circle, MaximumRange: 8, AreaSize: 1));
+    private static readonly IActionActivator PotionLike = Immediate(new TargetingSpec(TargetShape.Circle, MaximumRange: 3, AreaSize: 1, TargetModeAffects: TargetModeAffects.MarkedOnly));
 
     private static IActionActivator Immediate(TargetingSpec spec) => new SpellActivator(spec, new ActionTiming(ActionTimingCategory.Immediate));
 
@@ -131,7 +131,7 @@ public sealed class TargetResolutionTests
 
         Assert.AreEqual(moved, resolved.Centre);
         Assert.AreEqual(targetId, resolved.MarkedEntityId);
-        Assert.HasCount(5, tiles, "The Burst's area, centred on where the target is now.");
+        Assert.HasCount(9, tiles, "The Burst's area, centred on where the target is now.");
         CollectionAssert.DoesNotContain(tiles, TargetPosition);
     }
 
@@ -160,6 +160,108 @@ public sealed class TargetResolutionTests
         var (tiles, _) = session.Resolve(SingleTargetRangeEight, selection);
 
         CollectionAssert.AreEqual(new[] { new Vector3Int(CasterPosition.X + 8, 5, Ground) }, tiles);
+    }
+
+    [TestMethod]
+    public void AimLineOfSight_AWallOnTheMapBetweenCasterAndAim_ResolvesNothing_AndIsNotAimable()
+    {
+        var session = BuildSession();
+        var sighted = Immediate(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 8, AimLineOfSight: LineOfSightRule.Required));
+        var selection = session.Resolution.Select(session.CasterId, sighted, TargetingMode.Ground, TargetPosition, Now);
+        Assert.IsTrue(session.Resolution.IsAimable(session.CasterId, sighted.Targeting, TargetPosition));
+
+        var world = session.Build.World;
+        world.SetStructure(new Vector3Int(CasterPosition.X + 2, 5, Ground), new Game.Terrain.TerrainCell(world.Terrain.GetId(Game.Terrain.BuiltInTerrain.StoneWallKey)));
+        var (tiles, _) = session.Resolve(sighted, selection);
+
+        Assert.IsEmpty(tiles);
+        Assert.IsFalse(session.Resolution.IsAimable(session.CasterId, sighted.Targeting, TargetPosition));
+        Assert.IsTrue(session.Resolution.IsAimable(session.CasterId, sighted.Targeting, new Vector3Int(CasterPosition.X, 8, Ground)));
+    }
+
+    [TestMethod]
+    public void Projectile_HitCountOne_HitsTheFirstEntity_AndCentresItsShapeThere()
+    {
+        var session = BuildSession();
+        var fireballLike = Immediate(new TargetingSpec(TargetShape.Circle, MaximumRange: 8, AreaSize: 1, Path: TargetPath.Projectile, ProjectileHitCount: 1));
+        var nearId = session.Spawn(Goblin.Id, new Vector3Int(CasterPosition.X + 2, 5, Ground));
+        session.Spawn(Goblin.Id, new Vector3Int(CasterPosition.X + 5, 5, Ground));
+        var selection = session.Resolution.Select(session.CasterId, fireballLike, TargetingMode.Ground, new Vector3Int(CasterPosition.X + 6, 5, Ground), Now);
+
+        var (tiles, resolved) = session.Resolve(fireballLike, selection);
+
+        Assert.AreEqual(new Vector3Int(CasterPosition.X + 2, 5, Ground), resolved.Centre);
+        CollectionAssert.AreEqual(new[] { nearId }, resolved.PathHitEntityIds.ToArray());
+        Assert.HasCount(9, tiles);
+        CollectionAssert.Contains(resolved.PathTiles.ToList(), new Vector3Int(CasterPosition.X + 1, 5, Ground));
+    }
+
+    [TestMethod]
+    public void Projectile_StoppedBeforeTheMarkedEntity_DoesNotReachIt()
+    {
+        var session = BuildSession();
+        var bolt = Immediate(new TargetingSpec(TargetShape.None, MaximumRange: 8, Path: TargetPath.Projectile, ProjectileHitCount: 1));
+        session.Spawn(Goblin.Id, new Vector3Int(CasterPosition.X + 1, 5, Ground));
+        session.Spawn(Goblin.Id, TargetPosition);
+        var selection = session.Resolution.Select(session.CasterId, bolt, TargetingMode.Target, TargetPosition, Now);
+        Assert.IsTrue(selection.HasMarkedEntity);
+
+        var (_, resolved) = session.Resolve(bolt, selection);
+
+        Assert.IsNull(resolved.MarkedEntityId);
+        Assert.HasCount(1, resolved.PathHitEntityIds);
+    }
+
+    [TestMethod]
+    public void Projectile_AimOutOfSight_FiresNothing()
+    {
+        var session = BuildSession();
+        var bolt = Immediate(new TargetingSpec(TargetShape.None, MaximumRange: 8, Path: TargetPath.Projectile, ProjectileHitCount: 1, AimLineOfSight: LineOfSightRule.Required));
+        session.Spawn(Goblin.Id, TargetPosition);
+        var world = session.Build.World;
+        world.SetStructure(new Vector3Int(CasterPosition.X + 2, 5, Ground), new Game.Terrain.TerrainCell(world.Terrain.GetId(Game.Terrain.BuiltInTerrain.StoneWallKey)));
+        var selection = session.Resolution.Select(session.CasterId, bolt, TargetingMode.Ground, TargetPosition, Now);
+
+        var (_, resolved) = session.Resolve(bolt, selection);
+
+        Assert.IsEmpty(resolved.PathHitEntityIds);
+        Assert.IsEmpty(resolved.PathTiles);
+    }
+
+    [TestMethod]
+    public void MagicMissile_DamagesOnlyTheFirstGoblinInLine()
+    {
+        var session = BuildSession();
+        var action = session.Build.Context.Actions.Get(BuiltInActionIds.MagicMissile);
+        var nearId = session.Spawn(Goblin.Id, new Vector3Int(CasterPosition.X + 2, 5, Ground));
+        var farId = session.Spawn(Goblin.Id, new Vector3Int(CasterPosition.X + 4, 5, Ground));
+        var selection = session.Resolution.Select(session.CasterId, action.Activator, TargetingMode.Ground, new Vector3Int(CasterPosition.X + 6, 5, Ground), Now);
+        var tiles = new List<Vector3Int>();
+        var resolved = session.Resolution.Resolve(session.CasterId, action.Activator.Targeting, selection, tiles);
+
+        ActionEffectResolver.Apply(action, session.CasterId, tiles, resolved, session.Build.Context.EffectServices, session.Build.World, Now,
+            session.Components.GetPackedPool<Game.Modules.Actions.Components.DodgingComponent>(),
+            new Game.Modules.ProcessingTier.ProcessingTierQuery(session.Components.GetDirectPool<Game.Modules.ProcessingTier.Components.ProcessingTierComponent>()));
+
+        var damageTaken = session.Components.GetMultiPool<Game.Modules.Health.Components.DamageContributionComponent>();
+        Assert.IsTrue(damageTaken.Has(nearId));
+        Assert.IsFalse(damageTaken.Has(farId));
+        Assert.AreEqual(1, damageTaken.CountForEntity(nearId));
+    }
+
+    [TestMethod]
+    public void TargetMode_TargetMovedNearerThanMinimumRange_LandsOnTheFirstTileFarEnoughPastIt()
+    {
+        var session = BuildSession();
+        var mortar = Immediate(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 8, MinimumRange: 3));
+        var targetId = session.Spawn(Goblin.Id, TargetPosition);
+        var selection = session.Resolution.Select(session.CasterId, mortar, TargetingMode.Target, TargetPosition, Now);
+
+        session.MoveTo(targetId, new Vector3Int(CasterPosition.X + 1, 5, Ground));
+        var (tiles, resolved) = session.Resolve(mortar, selection);
+
+        CollectionAssert.AreEqual(new[] { new Vector3Int(CasterPosition.X + 3, 5, Ground) }, tiles);
+        Assert.AreEqual(new Vector3Int(CasterPosition.X + 3, 5, Ground), resolved.Centre);
     }
 
     [TestMethod]
@@ -212,7 +314,7 @@ public sealed class TargetResolutionTests
     {
         var session = BuildSession();
         session.Spawn(Goblin.Id, TargetPosition);
-        var groundOnly = Immediate(new TargetingSpec(TargetShape.SingleTarget, Range: 8, Modes: TargetingModes.GroundOnly));
+        var groundOnly = Immediate(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 8, Modes: TargetingModes.GroundOnly));
 
         var selection = session.Resolution.Select(session.CasterId, groundOnly, TargetingMode.Target, TargetPosition, Now);
 
@@ -232,7 +334,7 @@ public sealed class TargetResolutionTests
         Assert.IsTrue(targeted.MarkedOnly);
         Assert.AreEqual(targetId, targeted.MarkedEntityId);
         Assert.IsFalse(grounded.MarkedOnly);
-        Assert.HasCount(5, groundTiles);
+        Assert.HasCount(9, groundTiles);
     }
 
     [TestMethod]
@@ -264,13 +366,13 @@ public sealed class TargetResolutionTests
     {
         var session = BuildSession();
         AbilityScoreEffects.Grant(session.Components, session.CasterId, AbilityScoreType.Intelligence, baseValue: 150);
-        var scroll = new ScrollActivator(new TargetingSpec(TargetShape.Burst, Range: 5, AreaSize: 3), new ActionTiming(ActionTimingCategory.Immediate), Guid.NewGuid());
+        var scroll = new ScrollActivator(new TargetingSpec(TargetShape.Circle, MaximumRange: 5, AreaSize: 3), new ActionTiming(ActionTimingCategory.Immediate), Guid.NewGuid());
         var expected = ScrollScalingEffects.ScaleTargeting(scroll.Targeting, ScrollScalingEffects.ComputeScaleMultiplier(150));
 
         var selection = session.Resolution.Select(session.CasterId, scroll, TargetingMode.Ground, TargetPosition, Now);
 
-        Assert.IsGreaterThan(5, expected.Range, "Precondition: Intelligence 150 scales the scroll.");
-        Assert.AreEqual(expected.Range, selection.Range);
+        Assert.IsGreaterThan(5, expected.MaximumRange, "Precondition: Intelligence 150 scales the scroll.");
+        Assert.AreEqual(expected.MaximumRange, selection.MaximumRange);
         Assert.AreEqual(expected.AreaSize, selection.AreaSize);
     }
 }

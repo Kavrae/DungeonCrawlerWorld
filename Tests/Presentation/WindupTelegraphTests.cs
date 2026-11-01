@@ -26,7 +26,7 @@ public sealed class WindupTelegraphTests
     {
         var actionCatalog = new ActionCatalog();
         actionCatalog.Register(new ActionDefinition(BurstActionId, "Test Burst", null, "*", default, [], Effects: [Effect.None],
-            Activator: new DirectAction(new TargetingSpec(TargetShape.Burst, Range: 10, AreaSize: 1), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 60))));
+            Activator: new DirectAction(new TargetingSpec(TargetShape.Circle, MaximumRange: 10, AreaSize: 1), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 60))));
         var harness = TestMapWindows.Create(300, 300, 1, PlayerPosition, actionCatalog);
         var world = harness.World;
         var components = harness.ComponentManager;
@@ -36,7 +36,7 @@ public sealed class WindupTelegraphTests
         TestTransforms.Set(components, TargetEntityId, targetTransform);
         world.PlaceEntityOnMap(TargetEntityId, TargetPosition, ref targetTransform);
         var targetKey = world.EntityKeys.Issue(TargetEntityId);
-        components.Merge(CasterEntityId, PendingWindupComponent.ForAction(BurstActionId, new TargetSelection(TargetingMode.Target, TargetPosition, targetKey, default, Range: 10, AreaSize: 1), readyAtFrame: 60));
+        components.Merge(CasterEntityId, PendingWindupComponent.ForAction(BurstActionId, new TargetSelection(TargetingMode.Target, TargetPosition, targetKey, default, MaximumRange: 10, AreaSize: 1), readyAtFrame: 60));
 
         var moved = new Vector3Int(TargetPosition.X, TargetPosition.Y + 3, 0);
         world.MoveEntity(TargetEntityId, moved, targetTransform);
@@ -44,7 +44,7 @@ public sealed class WindupTelegraphTests
 
         var telegraph = harness.ActionTargetingController.AllPendingWindupTargets().Single(windup => windup.EntityId == CasterEntityId);
 
-        Assert.HasCount(5, telegraph.TargetTiles);
+        Assert.HasCount(9, telegraph.TargetTiles);
         CollectionAssert.Contains(telegraph.TargetTiles.ToList(), moved);
         CollectionAssert.DoesNotContain(telegraph.TargetTiles.ToList(), TargetPosition);
     }

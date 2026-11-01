@@ -136,7 +136,7 @@ public sealed class HealthDrainTests
     {
         var (context, _) = SimplePayer(currentHealth: 50);
         var action = new ActionDefinition(Guid.NewGuid(), "Test", null, "t", Color.White, [], [Effect.None],
-            new DirectAction(new TargetingSpec(TargetShape.Self, Range: 0), new ActionTiming(ActionTimingCategory.Immediate)))
+            new DirectAction(new TargetingSpec(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Immediate)))
         {
             ActivationEffects = [new Effect([new ManaDrain(5), new HealthDrain(3)]), new Effect([new HealthDrain(2)])],
         };

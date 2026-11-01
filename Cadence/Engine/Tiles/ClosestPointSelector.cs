@@ -10,26 +10,34 @@ public static class ClosestPointSelector
     /// Pure Manhattan-distance comparison over a caller-supplied candidate list.
     /// </remarks>
     /// <cleanupVersion>1</cleanupVersion>
-    public static Vector3Int? SelectClosest(Vector3Int primary, Vector3Int secondary, IReadOnlyList<Vector3Int> candidates)
+    public static Vector3Int? SelectClosest(Vector3Int primary, Vector3Int secondary, ReadOnlySpan<Vector3Int> candidates)
     {
-        Vector3Int? best = null;
+        if (candidates.IsEmpty)
+        {
+            return null;
+        }
+
+        var bestIndex = -1;
         var bestPrimaryDistance = int.MaxValue;
         var bestSecondaryDistance = int.MaxValue;
 
-        foreach (var candidate in candidates)
+        for (var index = 0; index < candidates.Length; index++)
         {
-            var primaryDistance = GridDistance.ManhattanDistance(primary, candidate);
-            var secondaryDistance = GridDistance.ManhattanDistance(secondary, candidate);
-
-            if (primaryDistance < bestPrimaryDistance ||
-                (primaryDistance == bestPrimaryDistance && secondaryDistance < bestSecondaryDistance))
+            var primaryDistance = GridDistance.ManhattanDistance(primary, candidates[index]);
+            if (primaryDistance > bestPrimaryDistance)
             {
-                best = candidate;
+                continue;
+            }
+
+            var secondaryDistance = GridDistance.ManhattanDistance(secondary, candidates[index]);
+            if (primaryDistance < bestPrimaryDistance || secondaryDistance < bestSecondaryDistance)
+            {
+                bestIndex = index;
                 bestPrimaryDistance = primaryDistance;
                 bestSecondaryDistance = secondaryDistance;
             }
         }
 
-        return best;
+        return candidates[bestIndex];
     }
 }

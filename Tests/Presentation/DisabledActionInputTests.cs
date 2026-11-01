@@ -95,7 +95,7 @@ public sealed class DisabledActionInputTests
             SpellId, "Test Self Spell", null, "*", Color.White, [GameTags.TargetingSelf],
             Effects: [Effect.None],
             Activator: new SpellActivator(
-                new TargetingSpec(TargetShape.Self, Range: 0),
+                new TargetingSpec(TargetShape.Self, MaximumRange: 0, Anchor: TargetAnchor.Caster),
                 new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: SpellCooldownFrames)))
         {
             ActivationEffects = [new Effect([new ManaDrain(SpellManaCost)])],
