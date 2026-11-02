@@ -5,11 +5,24 @@ namespace Game.Effects;
 /// Owns its own application loop; there is deliberately no separate resolver class -- Apply contains
 /// no per-kind knowledge at all, every entry applies itself. Entries apply in strict list order, and
 /// later entries observe the live component state earlier ones left behind, so composition order is
-/// meaningful.
+/// meaningful. Two Effects are equal when their entries are, in order, whichever lists hold them.
 /// </remarks>
 public sealed record Effect(IReadOnlyList<IEffectEntry> Entries)
 {
     public static readonly Effect None = new([]);
+
+    public bool Equals(Effect? other) => other is not null && Entries.SequenceEqual(other.Entries);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (var entry in Entries)
+        {
+            hash.Add(entry);
+        }
+
+        return hash.ToHashCode();
+    }
 
     public EffectOutcome Apply(in EffectContext context)
     {

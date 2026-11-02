@@ -10,11 +10,6 @@ using UIEngine.UI.ColorPalettes;
 
 namespace UIEngine.UI;
 
-// TODO minimize and restore: child windows should hide/show and the parent should
-// resize to title-bar-only when minimized. Opened/Closed/Resized/Moved below are the
-// event-based mechanism intended to drive that.
-// TODO recalculate tiled sibling windows on minimize and restore
-// TODO persist selectionWindow child windows until selection changes
 /// <summary>
 /// The common base every interactive UI box derives from -- hierarchy, geometry/sizing,
 /// border, glow, focus, click hit-testing, scrolling, input routing, and a generic header
@@ -550,7 +545,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         // Measure/Arrange pass reaches it. Under a WrapContent parent it also re-fits the parent.
         MeasureAndArrange();
 
-        RecalculateCameraTransform(); // TODO zoom/rotation, if ever needed -- see RecalculateCameraTransform.
+        RecalculateCameraTransform();
 
         InitializeHeaderExtras();
 

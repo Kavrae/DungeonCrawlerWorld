@@ -52,4 +52,34 @@ public sealed record AuraDefinition(
 
     /// <summary>What the aura's damage and healing are named after: its name and "Aura".</summary>
     public string EffectName { get; } = $"{Name} Aura";
+
+    /// <summary>Equal when every field is, and the effects are, in order, whichever lists hold them.</summary>
+    public bool Equals(AuraDefinition? other) =>
+        other is not null &&
+        Id == other.Id &&
+        Name == other.Name &&
+        GlowColor == other.GlowColor &&
+        Tags == other.Tags &&
+        Magnitude == other.Magnitude &&
+        Falloff == other.Falloff &&
+        GlowOpacityMultiplier == other.GlowOpacityMultiplier &&
+        Effects.SequenceEqual(other.Effects);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Id);
+        hash.Add(Name);
+        hash.Add(GlowColor);
+        hash.Add(Tags);
+        hash.Add(Magnitude);
+        hash.Add(Falloff);
+        hash.Add(GlowOpacityMultiplier);
+        foreach (var effect in Effects)
+        {
+            hash.Add(effect);
+        }
+
+        return hash.ToHashCode();
+    }
 }

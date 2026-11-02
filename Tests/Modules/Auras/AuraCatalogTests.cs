@@ -1,4 +1,6 @@
 using Engine.Events;
+using Game.Effects;
+using Game.Effects.Entries;
 using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
 using Microsoft.Xna.Framework;
@@ -40,6 +42,32 @@ public sealed class AuraCatalogTests
 
         Assert.AreEqual(1, auras.Count);
         Assert.AreEqual(0, changes);
+    }
+
+    [TestMethod]
+    public void Register_AnEqualDefinitionWithEffectsBuiltSeparately_ReturnsItsIdAndAnnouncesNothing()
+    {
+        var auras = new AuraCatalog();
+        var auraId = auras.Register(new AuraDefinition(FirstAuraGuid, "First", Color.Red, [new Effect([new DirectHeal(0f, FlatAmount: 1f)])]));
+        var changes = 0;
+        auras.DefinitionChanged += _ => changes++;
+
+        Assert.AreEqual(auraId, auras.Register(new AuraDefinition(FirstAuraGuid, "First", Color.Red, [new Effect([new DirectHeal(0f, FlatAmount: 1f)])])));
+
+        Assert.AreEqual(0, changes);
+    }
+
+    [TestMethod]
+    public void Register_TheSameGuidWithDifferentEffects_AnnouncesIt()
+    {
+        var auras = new AuraCatalog();
+        var auraId = auras.Register(new AuraDefinition(FirstAuraGuid, "First", Color.Red, [new Effect([new DirectHeal(0f, FlatAmount: 1f)])]));
+        var changedAuraIds = new List<byte>();
+        auras.DefinitionChanged += changedAuraIds.Add;
+
+        auras.Register(new AuraDefinition(FirstAuraGuid, "First", Color.Red, [new Effect([new DirectHeal(0f, FlatAmount: 2f)])]));
+
+        CollectionAssert.AreEqual(new[] { auraId }, changedAuraIds);
     }
 
     [TestMethod]

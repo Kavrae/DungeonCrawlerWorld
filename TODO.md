@@ -1482,19 +1482,53 @@ Most of the original list landed with the deferred-build work (2026-09-23): `Rac
 `ClassComponent` became two-`ushort` slot components, `BodyPartComponent` became race templates plus a
 per-entity state component, `ActionInstanceComponent` became per-definition grants, and
 `InventoryItemStackComponent` went 56 -> 24 B (interned item id, counter stack id, counter acquisition
-sequence) with `MovementComponent` 40 -> 32 B. What is left:
+sequence) with `MovementComponent` 40 -> 32 B.
 
-- **`InventoryItemStackComponent`, 24 B, still the largest pool at ~75 MB.** 8 of those bytes are the
-  `ItemDefinition? Override` reference, set on a small minority of stacks and scanned by every gen-2
-  GC. Moving it to a side table keyed by stack instance id would take the struct to 16 B and drop the
-  reference, but that table has to be cleaned up when a stack is removed -- including when an entity
-  is destroyed with its stacks still in it -- so it needs a real owner, not a static dictionary.
-- **`PendingDelayedActionComponent`, 32 B with references.** A `Guid` action id where a catalog index
-  would do, plus a target-tile array per pending action.
+Where the bytes are (memory report of 2026-10-25, 662,885 entities, 184 MB of pools):
 
-Components holding references are scanned by every gen-2 GC as well as being larger, so moving
-strings and overrides out is worth more than the byte count alone suggests. Measure pool memory
-before and after (the diagnostics memory report lists each pool) and fix the largest total first.
+- **`InventoryItemStackComponent` is 74.6 MB of it, and the struct is the smaller part.** 583k stacks
+  x 24 B is 14 MB. A Multi pool slot also carries 16 B of bookkeeping (entity id, version, next,
+  previous), and stacks are built-only, so `WorldSessionBootstrapper` reserves 3.3x the startup count
+  for the three built neighborhoods a walk settles at: about 1.75M slots x 40 B, plus the chain pages.
+  The count is NPCs carrying items, which stays: NPCs will use what they hold once behaviors land, so
+  loot is never rolled at death. `TemporaryNpcLootGrant`'s ~8 stacks per NPC is placeholder density;
+  real loot tables decide the real size.
+- **Strings are not a component cost.** `DisplayTextComponent`, `SpriteComponent` and
+  `GlyphComponent` are per-instance overrides with no instances in a normal session; names and
+  descriptions are held once per definition, and `EntityIdentities` interns source names. String
+  literals live on the frozen heap, which no GC scans, so moving them to localization files is for
+  translation, never memory. Per-frame string garbage is "Gen-1 GC frames during window shifts".
+- **The other reference-holding pools are tiny** (`ShopComponent`, `ActionInstanceComponent`,
+  `UnclaimedAchievementLootboxComponent`: under ten instances each). `PendingWindupComponent` is 72 B
+  with no references and ~1.4k instances; its `ActivatableReference` carries a `Guid` action id where a
+  catalog index would do, not worth doing at that count.
+
+Overrides. Today an `Override` is rare and shared: only wands carry one, and every NPC rolling the
+same charges shares one `GetOrCreateDerived` definition. Overrides are expected to become rare and
+**unique** -- one sword with more damage, another with a better crit rate, a third with a fire element
+-- with identical ones the exception (the same healing item crafted many times with the same
+heal-over-time buff). That changes the weighing:
+
+- **Move the reference to a side table keyed by stack instance id.** The struct goes 24 -> 16 B for
+  every stack (about 14 MB at the reserved capacity), and the pool array holds no references, so a
+  full GC doesn't walk 1.75M slots and a fresh override (a gen-0 object) written into it doesn't
+  dirty a card in a large-object array. The table needs a real owner that removes an entry with its
+  stack, including an entity destroyed with stacks still in it (`ComponentRemoving` on the stack
+  pool, as `ToggleItemHolderSync` observes it) -- never a static dictionary.
+- **Then the cost is the override objects, wherever the reference lives.** Each one is a whole
+  `ItemDefinition` copied with `with`: its own object, plus any list it rebuilt, kept and scanned by
+  every gen-2 GC for as long as the item exists. With unique overrides that is one graph per unique
+  item. Two ways to shrink it, measure before choosing:
+  - Hold the variation as a delta -- shared modifier definitions plus rolled values (+damage, +crit,
+    an added fire effect) -- and resolve the effective definition where it is read, cached per stack.
+  - Intern equal overrides, so the same crafted item made many times shares one definition across
+    inventories, not only within the stack it merged into. Needs a structural hash beside
+    `InventoryActions.AreEquivalentOverrides`. Every record holding an effect list (`Effect`,
+    `ChainedEffect`, `AuraDefinition`, `TogglePeriodicEffects`) already compares and hashes by content.
+
+Other levers on the stack pool: the Multi pool's 16 B of bookkeeping per slot (an engine change, every
+Multi pool gains), and the built-only reserve factor once real loot density is known. Measure pool
+memory before and after (the diagnostics memory report lists each pool) and fix the largest total first.
 
 #### Quest NPC simulation tickets
 

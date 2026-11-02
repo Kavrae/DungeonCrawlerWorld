@@ -65,9 +65,9 @@ public static class InventoryActions
 
     /// <summary>
     /// Structural equality for two divergence Overrides -- ItemDefinition's auto-generated record
-    /// equality isn't reliable here, since its Effects list-typed field compares by reference,
-    /// not content, and two independently-`with`-derived definitions won't reliably share the same
-    /// list reference. Used to decide whether a new unit can merge into an existing stack rather
+    /// equality isn't reliable here, since its Effects and ActivationEffects list-typed fields compare
+    /// by reference, not content, and two independently-`with`-derived definitions won't reliably share
+    /// the same list reference. Used to decide whether a new unit can merge into an existing stack rather
     /// than needing its own.
     /// </summary>
     internal static bool AreEquivalentOverrides(ItemDefinition a, ItemDefinition b) =>
@@ -82,8 +82,11 @@ public static class InventoryActions
         Equals(a.Contents, b.Contents) &&
         Equals(a.Toggle, b.Toggle) &&
         a.CanTrade == b.CanTrade &&
+        a.GoldValue == b.GoldValue &&
+        a.MaximumShopStock == b.MaximumShopStock &&
         a.Tags == b.Tags &&
-        a.Effects.SequenceEqual(b.Effects);
+        a.Effects.SequenceEqual(b.Effects) &&
+        a.ActivationEffects.SequenceEqual(b.ActivationEffects);
 
     /// <summary>What a unit is, apart from which stack holds it: the stacks it can join, and the stack it starts when none has room.</summary>
     private readonly struct StackTemplate(Guid itemDefinitionId, ItemDefinition? overrideDefinition, bool isDivergent, bool isDisabled)

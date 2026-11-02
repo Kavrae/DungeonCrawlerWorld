@@ -20,4 +20,20 @@ public sealed record ToggleSpec(TogglePeriodicEffects? Periodic = null)
 
 /// <summary>What a toggle does every interval while it is on.</summary>
 /// <param name="IntervalFrames">Simulation frames between applications.</param>
-public sealed record TogglePeriodicEffects(IReadOnlyList<Effect> Effects, ushort IntervalFrames);
+public sealed record TogglePeriodicEffects(IReadOnlyList<Effect> Effects, ushort IntervalFrames)
+{
+    /// <summary>Equal when the interval and the effects are, in order, whichever lists hold them.</summary>
+    public bool Equals(TogglePeriodicEffects? other) => other is not null && IntervalFrames == other.IntervalFrames && Effects.SequenceEqual(other.Effects);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(IntervalFrames);
+        foreach (var effect in Effects)
+        {
+            hash.Add(effect);
+        }
+
+        return hash.ToHashCode();
+    }
+}

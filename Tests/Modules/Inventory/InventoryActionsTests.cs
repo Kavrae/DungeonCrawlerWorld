@@ -1,4 +1,8 @@
 using Engine.ECS.Components;
+using Game.Effects;
+using Game.Effects.Entries;
+using Game.Modules.Actions;
+using Game.Modules.Auras;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
 using Game.World;
@@ -210,6 +214,93 @@ public sealed class InventoryActionsTests
         Assert.AreEqual(1, pool.CountForEntity(0));
         Assert.AreEqual(10, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).Quantity);
         Assert.IsFalse(pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).IsDivergent);
+    }
+
+    [TestMethod]
+    public void AddItemWithOverride_EqualEffectsBuiltSeparately_MergesIntoOneStack()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10) with { Effects = [new Effect([new DirectHeal(0.1f)])], ActivationEffects = [new Effect([new ChainedEffect(0.5f, [new Effect([new ManaDrain(2)])])])] }, quantity: 4);
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10) with { Effects = [new Effect([new DirectHeal(0.1f)])], ActivationEffects = [new Effect([new ChainedEffect(0.5f, [new Effect([new ManaDrain(2)])])])] }, quantity: 6);
+
+        var pool = manager.GetMultiPool<InventoryItemStackComponent>();
+        Assert.AreEqual(1, pool.CountForEntity(0));
+        Assert.AreEqual(10, pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0)).Quantity);
+    }
+
+    [TestMethod]
+    public void AddItemWithOverride_EqualAuraGrantsBuiltSeparately_MergesIntoOneStack()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+        var auraId = Guid.NewGuid();
+
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10) with { Effects = [new Effect([new AuraSourceGrant(new AuraDefinition(auraId, "Glow", Color.Gold, [new Effect([new DirectHeal(0f, FlatAmount: 1f)])]), Power: 3, Size: 2)])] }, quantity: 4);
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10) with { Effects = [new Effect([new AuraSourceGrant(new AuraDefinition(auraId, "Glow", Color.Gold, [new Effect([new DirectHeal(0f, FlatAmount: 1f)])]), Power: 3, Size: 2)])] }, quantity: 6);
+
+        Assert.AreEqual(1, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
+
+    [TestMethod]
+    public void AddItemWithOverride_EqualTogglePeriodicEffectsBuiltSeparately_MergesIntoOneStack()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10) with { Toggle = new ToggleSpec(new TogglePeriodicEffects([new Effect([new ManaDrain(1)])], IntervalFrames: 60)) }, quantity: 4);
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10) with { Toggle = new ToggleSpec(new TogglePeriodicEffects([new Effect([new ManaDrain(1)])], IntervalFrames: 60)) }, quantity: 6);
+
+        Assert.AreEqual(1, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
+
+    [TestMethod]
+    public void AddItemWithOverride_TogglePeriodicEffectsDifferingOnlyInInterval_KeepSeparateStacks()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10) with { Toggle = new ToggleSpec(new TogglePeriodicEffects([new Effect([new ManaDrain(1)])], IntervalFrames: 60)) }, quantity: 4);
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10) with { Toggle = new ToggleSpec(new TogglePeriodicEffects([new Effect([new ManaDrain(1)])], IntervalFrames: 30)) }, quantity: 6);
+
+        Assert.AreEqual(2, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
+
+    [TestMethod]
+    public void AddItemWithOverride_OverridesDifferingOnlyInActivationEffects_KeepSeparateStacks()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10) with { ActivationEffects = [new Effect([new ManaDrain(2)])] }, quantity: 4);
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10) with { ActivationEffects = [new Effect([new ManaDrain(3)])] }, quantity: 6);
+
+        Assert.AreEqual(2, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
+
+    [TestMethod]
+    public void AddItemWithOverride_OverridesDifferingOnlyInGoldValue_KeepSeparateStacks()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10) with { GoldValue = 5 }, quantity: 4);
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10) with { GoldValue = 9 }, quantity: 6);
+
+        Assert.AreEqual(2, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
+    }
+
+    [TestMethod]
+    public void AddItemWithOverride_OverridesDifferingOnlyInMaximumShopStock_KeepSeparateStacks()
+    {
+        var manager = CreateRegisteredManager();
+        var itemId = Guid.NewGuid();
+
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10) with { MaximumShopStock = 5 }, quantity: 4);
+        InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 10), quantity: 6);
+
+        Assert.AreEqual(2, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
     }
 
     [TestMethod]

@@ -21,6 +21,21 @@ public sealed record ChainedEffect(float TriggerChance, IReadOnlyList<Effect> Tr
 
     public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => Modifiers;
 
+    /// <summary>Equal when the chance and the triggered effects are, in order, whichever lists hold them.</summary>
+    public bool Equals(ChainedEffect? other) => other is not null && TriggerChance == other.TriggerChance && TriggeredEffects.SequenceEqual(other.TriggeredEffects);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(TriggerChance);
+        foreach (var triggeredEffect in TriggeredEffects)
+        {
+            hash.Add(triggeredEffect);
+        }
+
+        return hash.ToHashCode();
+    }
+
     /// <remarks>TriggerChance is scaled by Outgoing/IncomingProcChance (EffectModifiers) before it is rolled.</remarks>
     public EffectOutcome Apply(in EffectContext context)
     {
