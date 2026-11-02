@@ -26,25 +26,18 @@ namespace Presentation.UI.Content;
 /// state, rather than hiding the bar outright.
 /// </summary>
 /// <remarks>
-/// While the pointer is over its window (Element.IsPointerOver), it drives a per-body-part breakdown popup
-/// (PlayerHealthHoverContent) -- owns and drives that popup Window directly (created in
-/// Initialize, added to UiLayer.Tooltip), mirroring HotbarController's own _summaryWindow
-/// pattern.
+/// While the pointer is over its window (Element.IsPointerOver), it drives a popup with the
+/// player's regeneration rate and a per-body-part breakdown (PlayerHealthHoverContent), through
+/// a ResourceBarHoverPopup created in Initialize.
 /// </remarks>
 public sealed class PlayerHealthBarContent(World world, HealthView healthView, EntityBodyParts bodyParts, StatModifierView statModifierView, FontService fontService, UiLayerStack layers) : IElementContent
 {
     public static readonly Vector2 Size = new(HudChrome.EntrySize.X * 4.5f, HudChrome.EntrySize.Y * 0.75f);
 
-    /// <summary>Matches ShowBorder's default (1,1) BorderSize, doubled -- see Element.BorderInsetDoubled. The popup's row content itself reads its host window's actual resolved ContentSize at draw time, so this only needs to be a reasonable approximation, not pixel-exact.</summary>
-    private static readonly Vector2 PopupBorderInsetDoubled = new(2, 2);
-
-    /// <summary>Popup sits directly below the bar (PopupAnchor.South) -- the bar sits in the top-right HUD corner, so North would risk clipping off the top of the screen.</summary>
-    private static readonly Vector2 PopupGap = new(0, 2);
-
     private readonly EntityBodyParts _bodyParts = bodyParts;
 
     private Window _hostWindow = null!;
-    private Window _hoverPopup = null!;
+    private ResourceBarHoverPopup _hoverPopup = null!;
 
     /// <summary>The "current / maximum" text drawn, rebuilt only when either number changes.</summary>
     private readonly KeyedCache<(int Current, int Maximum), string> _valueTextCache = new();
@@ -54,13 +47,8 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
     private bool _hasHealth;
     private float _healthFraction = 1f;
 
-    private int _hoveredFrames;
-
-    /// <summary>The body-part count the popup is sized for, so it is resized only when the count changes.</summary>
-    private int _popupRowCount;
-
     /// <summary>Test-only seam onto the popup this content owns/drives -- see the internal Update overload below for why the real screen-bounds source (Render.GraphicsDevice, unavailable headlessly) is also parameterized out for tests.</summary>
-    internal Window HoverPopup => _hoverPopup;
+    internal Window HoverPopup => _hoverPopup.Window;
 
     /// <summary>The "current / maximum" text the bar draws, or null when the player has no health to show.</summary>
     internal string? ValueText => _hasHealth ? _valueText : null;
@@ -68,21 +56,7 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
     public void Initialize(Window hostWindow)
     {
         _hostWindow = hostWindow;
-
-        _hoverPopup = hostWindow.ElementPoolService.CreateElement<Window>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions
-            {
-                RelativePosition = Vector2.Zero, // Repositioned every frame by UpdateHover once hovered.
-                Size = PlayerHealthHoverContent.ContentSizeFor(_popupRowCount) + PopupBorderInsetDoubled,
-                DisplayMode = ElementDisplayMode.Fixed,
-                IsVisible = false,
-            },
-            Chrome = new ElementChromeOptions { ShowBorder = true, BorderStyle = BorderStyle.Outset, ShowTitle = false, CanUserFocus = false, CanUserClose = false },
-        });
-        _hoverPopup.SetContent(new PlayerHealthHoverContent(world, _bodyParts, fontService, statModifierView));
-        _hoverPopup.Initialize();
-        layers.Add(UiLayer.Tooltip, _hoverPopup);
+        _hoverPopup = new ResourceBarHoverPopup(hostWindow, layers, new PlayerHealthHoverContent(world, healthView, _bodyParts, fontService, statModifierView), PlayerHealthHoverContent.ContentSizeFor(0));
     }
 
     /// <summary>Whether the player currently has a SimpleHealthComponent and what fraction of effective max health remains is decided here -- Draw only reads the cached fraction and maps it to a fill color/width.</summary>
@@ -112,32 +86,8 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
             _valueText = _valueTextCache.Get((ResourceBarRounding.DisplayedHealth(currentHealth), ResourceBarRounding.DisplayedMaximum(effectiveMaximumHealth)), static key => ResourceBarValueText.Format(key.Current, key.Maximum));
         }
 
-        UpdateHover(screenBounds);
-    }
-
-    /// <summary>Delay-gated via PopupChrome.HoverTooltipDelayFrames before showing (mirrors AbilityScoreWindow.UpdateHover), but hides immediately with no delay on hover loss.</summary>
-    private void UpdateHover(Rectangle screenBounds)
-    {
-        var barRectangle = BarRectangle();
-        var isHovering = _hostWindow.IsPointerOver;
-        _hoveredFrames = isHovering ? _hoveredFrames + 1 : 0;
-
-        if (!isHovering || _hoveredFrames < PopupChrome.HoverTooltipDelayFrames)
-        {
-            _hoverPopup.IsVisible = false;
-            return;
-        }
-
-        var rowCount = _bodyParts.Count(world.PlayerEntityId);
-        if (rowCount != _popupRowCount)
-        {
-            _popupRowCount = rowCount;
-            var popupSize = PlayerHealthHoverContent.ContentSizeFor(rowCount) + PopupBorderInsetDoubled;
-            _hoverPopup.SetSize(popupSize);
-        }
-
-        _hoverPopup.SetRelativePosition(PopupPositioning.GetPositionWithinBounds(barRectangle, _hoverPopup.CurrentSize, PopupAnchor.South, PopupGap, screenBounds));
-        _hoverPopup.IsVisible = true;
+        var bodyPartCount = playerEntityId < 0 ? 0 : _bodyParts.Count(playerEntityId);
+        _hoverPopup.Update(_hostWindow.IsPointerOver, BarRectangle(), PlayerHealthHoverContent.ContentSizeFor(bodyPartCount), screenBounds);
     }
 
     private Rectangle BarRectangle()

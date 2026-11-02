@@ -1,9 +1,11 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Burning.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatusEffects.Components;
 
 namespace Game.Views;
@@ -15,6 +17,8 @@ public sealed class HealthView(ComponentManager componentManager, EntityBodyPart
     private readonly MultiComponentPool<BodyPartBurningTimerComponent> _bodyPartBurningTimers = componentManager.GetMultiPool<BodyPartBurningTimerComponent>();
     private readonly MultiComponentPool<StatusEffectImmunityComponent> _statusEffectImmunities = componentManager.GetMultiPool<StatusEffectImmunityComponent>();
     private readonly PackedComponentPool<DeadComponent> _deaths = componentManager.GetPackedPool<DeadComponent>();
+    private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
 
     /// <summary>entityId's simple health, if it has simple rather than complex health.</summary>
     public bool TryGetSimpleHealth(int entityId, out SimpleHealthComponent health) => _simpleHealth.TryGetReadonly(entityId, out health);
@@ -22,6 +26,9 @@ public sealed class HealthView(ComponentManager componentManager, EntityBodyPart
     /// <inheritdoc cref="HealthQueries.TryGetTotals"/>
     public bool TryGetTotals(int entityId, out float current, out float maximum) =>
         HealthQueries.TryGetTotals(_simpleHealth, entityBodyParts, entityId, out current, out maximum);
+
+    /// <inheritdoc cref="HealthRegeneration.LandedPerSecond"/>
+    public float RegenerationPerSecond(int entityId) => HealthRegeneration.LandedPerSecond(_abilityScores, _statModifiers, entityId);
 
     /// <summary>Replaces destination's contents with every burning timer on entityId's body parts.</summary>
     public void CopyBodyPartBurningTimers(int entityId, List<BodyPartBurningTimerComponent> destination) => CopyAll(_bodyPartBurningTimers, entityId, destination);

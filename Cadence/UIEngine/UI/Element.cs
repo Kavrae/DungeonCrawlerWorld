@@ -370,7 +370,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     public Color BorderColor => _border.Color;
 
     /*========Content========*/
-    /// <summary>Content-area bookkeeping -- see ElementGeometryState's doc comment for the same "grouped, plain fields" rationale. Named _contentState, not _content, to avoid colliding with the name of Window's own pluggable IElementContent field.</summary>
+    /// <summary>Content-area bookkeeping (ElementContentState). Named _contentState, not _content, to avoid colliding with the name of Window's own pluggable IElementContent field.</summary>
     private protected readonly ElementContentState _contentState = new();
 
     public Vector2 ContentAbsolutePosition => _contentState.AbsolutePosition;

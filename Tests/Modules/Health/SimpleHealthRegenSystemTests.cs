@@ -160,6 +160,23 @@ public sealed class SimpleHealthRegenSystemTests
     }
 
     [TestMethod]
+    public void Update_AdditiveIncomingHealingOnThrottledEntity_AddsPerSecondNotPerVisit()
+    {
+        var pool = CreatePool();
+        var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 500));
+        var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingHealing, StatModifierOperation.Additive, StatModifierPolarity.Buff,
+            canModify: false, magnitude: 1f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
+        var system = TestSystems.SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), statModifiers, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
+
+        system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
+
+        var secondsPerVisit = system.StripeCount * ProcessingTierDivisors.ByTierIndex[(int)ProcessingTierLevel.Neighborhood] / (float)GameFrameRate.FramesPerSecond;
+        Assert.AreEqual(50f + (6f + 1f) * secondsPerVisit, pool.GetReadonly(0).CurrentHealth, 0.001f);
+    }
+
+    [TestMethod]
     public void Update_ThrottledEntity_OnEligibleCycle_Regenerates()
     {
         var pool = CreatePool();

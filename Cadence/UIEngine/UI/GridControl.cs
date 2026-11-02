@@ -65,7 +65,7 @@ public sealed class GridControl(FontService fontService, ElementPoolService elem
     /// OnChildrenInitialized, and the children built in OnChildrenInitialized are measured within
     /// that ContentSize -- so the zero padding must be set here, before that pass, or a new
     /// instance's search box is measured shorter than its declared Size.Y on its first open
-    /// (ContentPadding is a plain field that Build never resets, and setting it re-lays out nothing).
+    /// (ContentPadding is a plain auto-property that Build never resets, and setting it re-lays out nothing).
     /// </summary>
     public override void Build(Element? parent, ElementOptions options)
     {

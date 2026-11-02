@@ -20,7 +20,8 @@ namespace Presentation.UI.Content;
 /// ability yet" (see ManaGrant.EnsureManaComponentExists), the same fallback treatment
 /// PlayerHealthBarContent gives a hypothetical SimpleHealthComponent-less player.
 /// </summary>
-public sealed class PlayerManaBarContent(World world, ActionStateView actionStateView, StatModifierView statModifierView, FontService fontService) : IElementContent
+/// <remarks>While the pointer is over its window, it drives a popup with the player's mana regeneration rate (PlayerManaHoverContent).</remarks>
+public sealed class PlayerManaBarContent(World world, ActionStateView actionStateView, StatModifierView statModifierView, FontService fontService, UiLayerStack layers) : IElementContent
 {
     public static readonly Vector2 Size = PlayerHealthBarContent.Size;
 
@@ -30,6 +31,7 @@ public sealed class PlayerManaBarContent(World world, ActionStateView actionStat
     private readonly TextSizeCache _valueTextSize = new();
 
     private Window _hostWindow = null!;
+    private ResourceBarHoverPopup _hoverPopup = null!;
 
     private bool _hasMana;
     private float _manaFraction = 1f;
@@ -37,10 +39,26 @@ public sealed class PlayerManaBarContent(World world, ActionStateView actionStat
     /// <summary>The "current / maximum" text the bar draws, or null when the player has no mana to show.</summary>
     internal string? ValueText => _hasMana ? _valueText : null;
 
-    public void Initialize(Window hostWindow) => _hostWindow = hostWindow;
+    /// <summary>Test-only seam onto the popup this content drives.</summary>
+    internal Window HoverPopup => _hoverPopup.Window;
+
+    public void Initialize(Window hostWindow)
+    {
+        _hostWindow = hostWindow;
+        _hoverPopup = new ResourceBarHoverPopup(hostWindow, layers, new PlayerManaHoverContent(world, actionStateView, fontService), PlayerManaHoverContent.ContentSize);
+    }
 
     /// <summary>Whether the player currently has a ManaComponent and what fraction of effective max mana remains is decided here -- Draw only reads the cached fraction and maps it to a fill color/width.</summary>
-    public void Update(GameTime gameTime)
+    public void Update(GameTime gameTime) => Update(_hostWindow.Render.GraphicsDevice.Viewport.Bounds);
+
+    /// <summary>Takes screenBounds rather than reading Render.GraphicsDevice itself, so a test can drive the hover pipeline without a GraphicsDevice -- see PlayerHealthBarContent.Update.</summary>
+    internal void Update(Rectangle screenBounds)
+    {
+        UpdateMana();
+        _hoverPopup.Update(_hostWindow.IsPointerOver, _hostWindow.ContentRectangle, PlayerManaHoverContent.ContentSize, screenBounds);
+    }
+
+    private void UpdateMana()
     {
         var playerEntityId = world.PlayerEntityId;
         if (playerEntityId < 0 || !actionStateView.TryGetMana(playerEntityId, out var mana) || mana.MaximumMana <= 0)

@@ -20,12 +20,6 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
 {
     public byte StripeCount => (byte)GameFrameRate.FramesPerSecond;
 
-    /// <summary>Flat HP/sec at Constitution total 1 -- adjustable in a later balance pass, same as every other placeholder stat-scaling constant in this codebase.</summary>
-    private const float MinHealthRegenPerSecond = 2f;
-
-    /// <summary>Flat HP/sec at Constitution total 300.</summary>
-    private const float MaxHealthRegenPerSecond = 6f;
-
     private readonly PackedComponentPool<SimpleHealthComponent> _healthComponents;
     private readonly EntityBodyParts _bodyParts;
     private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
@@ -60,7 +54,7 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, healthComponents, processingTiers, processingTierEvents);
     }
 
-    /// <summary>Updates the current health of all entities in the current stripe by the regen amount, routed through HealthHeal.Apply (sourceEntityId: entityId, a self-heal) so a regen tick carries Outgoing/IncomingHealing modifiers the same way any other heal does.</summary>
+    /// <summary>Updates the current health of all entities in the current stripe by the regen amount, routed through HealthHeal.Apply (sourceEntityId: entityId, a self-heal) with Outgoing/IncomingHealing already in the per-second rate (HealthRegeneration.LandedPerSecond).</summary>
     /// <param name="time"></param>
     /// <param name="stripeIndex"></param>
     public void Update(EngineTime time, byte stripeIndex) => TieredSystemRunner.Run(this, time);
@@ -86,22 +80,13 @@ public sealed class SimpleHealthRegenSystem : ITieredSystem
             return;
         }
 
-        // This entity never got a Constitution score (e.g. a non-creature SimpleHealthComponent
-        // holder) -- 0 regen, same as the effectiveRegen == 0 skip below, just resolved a step earlier.
-        if (!AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Constitution, out var constitution))
-        {
-            return;
-        }
-
-        var amountPerSecond = AbilityScoreMath.Lerp(constitution.Total, MinHealthRegenPerSecond, MaxHealthRegenPerSecond);
-        var rawAmount = amountPerSecond * seconds;
-        var effectiveRegen = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.HealthRegen, rawAmount);
+        var effectiveRegen = HealthRegeneration.LandedPerSecond(_abilityScores, _statModifiers, entityId) * seconds;
 
         if (effectiveRegen == 0f)
         {
             return;
         }
 
-        HealthHeal.Apply(_healthComponents, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, eventBus: _eventBus, playerQuery: _playerQuery, floatingTextFeed: _floatingTextFeed, healCategory: ResourceGainCategory.Regeneration, healType: "Regeneration");
+        HealthHeal.Apply(_healthComponents, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, eventBus: _eventBus, playerQuery: _playerQuery, floatingTextFeed: _floatingTextFeed, healCategory: ResourceGainCategory.Regeneration, healType: "Regeneration", appliesHealingModifiers: false);
     }
 }

@@ -7,6 +7,9 @@ internal static class HealthBarPalette
 {
     public static readonly Color OutlineColor = Color.Black;
 
+    /// <summary>The regeneration rate in the HUD bar's hover popup.</summary>
+    public static readonly Color RegenerationTextColor = Color.LimeGreen;
+
     /// <summary>Green at full health, yellow at half, red at empty -- two linear segments (100%-50% and 50%-0%) rather than one 100%-0% lerp, so the midpoint lands exactly on yellow instead of a muddy green-red blend.</summary>
     public static Color FractionColor(float healthFraction) =>
         healthFraction >= 0.5f

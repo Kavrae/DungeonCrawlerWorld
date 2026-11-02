@@ -4,8 +4,8 @@ namespace UIEngine.UI;
 public sealed class ButtonOptions
 {
     /// <summary>Looked up in the sprite manifest (SpriteSheetService.Sprites), drawn centered in the content area in place of Text.Text -- falls back to drawing Text.Text as a glyph (the same sprite-or-glyph degrade Folder's own icon uses) if the name isn't found there.</summary>
-    public string? SpriteName { get; set; }
+    public string? SpriteName { get; init; }
 
     /// <summary>A short (1-2 char) key label drawn in the button's top-left corner, over whatever else it draws -- as an icon bar labels each slot with its key. Null (the default) draws nothing extra; set by a HUD-trigger button whose window can also be opened via a global keyboard hotkey.</summary>
-    public string? HotkeyLabel { get; set; }
+    public string? HotkeyLabel { get; init; }
 }

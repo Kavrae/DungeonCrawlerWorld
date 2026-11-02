@@ -2,6 +2,7 @@ using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Game.Effects;
+using Game.Modules.AbilityScores.Components;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
@@ -9,8 +10,10 @@ using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.Mana;
 using Game.Modules.Mana.Components;
 using Game.Modules.ProcessingTier;
+using Game.Modules.StatModifiers.Components;
 
 namespace Game.Views;
 
@@ -23,6 +26,8 @@ public sealed class ActionStateView(ComponentManager componentManager, EntityAct
 {
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks = componentManager.GetPackedPool<ActionLockComponent>();
     private readonly PackedComponentPool<ManaComponent> _mana = componentManager.GetPackedPool<ManaComponent>();
+    private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores = componentManager.GetPackedPool<AbilityScoresComponent>();
+    private readonly MultiComponentPool<StatModifierComponent> _statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
     private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns = componentManager.GetPackedPool<PotionCooldownComponent>();
     private readonly PackedComponentPool<PendingWindupComponent> _pendingWindups = componentManager.GetPackedPool<PendingWindupComponent>();
     private readonly PackedComponentPool<MeleeDisabledComponent> _meleeDisabled = componentManager.GetPackedPool<MeleeDisabledComponent>();
@@ -34,6 +39,9 @@ public sealed class ActionStateView(ComponentManager componentManager, EntityAct
     public bool IsActionLocked(int entityId, long now) => ActionLockGate.IsBlocked(_actionLocks, entityId, now);
 
     public bool TryGetMana(int entityId, out ManaComponent mana) => _mana.TryGetReadonly(entityId, out mana);
+
+    /// <inheritdoc cref="ManaRegeneration.EffectivePerSecond"/>
+    public float ManaRegenerationPerSecond(int entityId) => ManaRegeneration.EffectivePerSecond(_abilityScores, _statModifiers, entityId);
 
     public bool TryGetPotionCooldown(int entityId, out PotionCooldownComponent potionCooldown) => _potionCooldowns.TryGetReadonly(entityId, out potionCooldown);
 

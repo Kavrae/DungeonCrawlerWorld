@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Game.Modules.AbilityScores;
 using Game.Modules.Core.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
@@ -232,7 +233,7 @@ public sealed class PlayerHealthBarContentTests
         bodyPartWorld.Components.GetMultiPool<StatModifierComponent>().Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: true, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(5, 5, 1)), playerEntityId: PlayerEntityId);
-        var hoverContent = new PlayerHealthHoverContent(world, bodyParts, TestFonts.Shared, new StatModifierView(bodyPartWorld.Components));
+        var hoverContent = new PlayerHealthHoverContent(world, new HealthView(bodyPartWorld.Components, bodyParts), bodyParts, TestFonts.Shared, new StatModifierView(bodyPartWorld.Components));
 
         var rows = new List<PlayerHealthHoverContent.RowData>();
         hoverContent.BuildRows(rows);
@@ -250,5 +251,47 @@ public sealed class PlayerHealthBarContentTests
         hoverContent.BuildRows(rows);
 
         Assert.IsEmpty(rows, "A Simple-health entity has no body parts to enumerate, and there's no Total row to fall back to.");
+    }
+
+    [TestMethod]
+    public void RegenerationText_LowestConstitutionWithRegenBuff_ShowsModifiedRatePerSecond()
+    {
+        var bodyPartWorld = BodyPartTestWorld.WithParts(PlayerEntityId, ("Head", BodyPartType.Head, 10, 10, true));
+        AbilityScoreEffects.Grant(bodyPartWorld.Components, PlayerEntityId, AbilityScoreType.Constitution, 1);
+        bodyPartWorld.Components.GetMultiPool<StatModifierComponent>().Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.HealthRegen, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
+            canModify: true, magnitude: 0.1f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(5, 5, 1)), playerEntityId: PlayerEntityId);
+        var hoverContent = new PlayerHealthHoverContent(world, new HealthView(bodyPartWorld.Components, bodyPartWorld.BodyParts), bodyPartWorld.BodyParts, TestFonts.Shared, new StatModifierView(bodyPartWorld.Components));
+
+        Assert.AreEqual("+2.2/s", hoverContent.RegenerationText());
+    }
+
+    [TestMethod]
+    public void RegenerationText_IncomingHealingBuff_ShowsWhatLandsPerSecond()
+    {
+        var bodyPartWorld = BodyPartTestWorld.WithParts(PlayerEntityId, ("Head", BodyPartType.Head, 10, 10, true));
+        AbilityScoreEffects.Grant(bodyPartWorld.Components, PlayerEntityId, AbilityScoreType.Constitution, 1);
+        bodyPartWorld.Components.GetMultiPool<StatModifierComponent>().Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.IncomingHealing, StatModifierOperation.Additive, StatModifierPolarity.Buff,
+            canModify: true, magnitude: 1f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(5, 5, 1)), playerEntityId: PlayerEntityId);
+        var hoverContent = new PlayerHealthHoverContent(world, new HealthView(bodyPartWorld.Components, bodyPartWorld.BodyParts), bodyPartWorld.BodyParts, TestFonts.Shared, new StatModifierView(bodyPartWorld.Components));
+
+        Assert.AreEqual("+3.0/s", hoverContent.RegenerationText());
+    }
+
+    [TestMethod]
+    public void Update_HoveringPastDelay_PopupHoldsRegenerationRowAndBodyPartRowsInsideItsPadding()
+    {
+        var (content, hostWindow, input) = Build(complexHealth: true);
+        var insidePoint = InsideBar(hostWindow);
+
+        for (var frame = 0; frame < PopupChrome.HoverTooltipDelayFrames; frame++)
+        {
+            Frame(input, content, insidePoint);
+        }
+
+        Assert.AreEqual(PlayerHealthHoverContent.ContentSizeFor(6), content.HoverPopup.ContentSize);
+        Assert.AreEqual(content.HoverPopup.RelativePosition + new Vector2(1f) + content.HoverPopup.ContentPadding, content.HoverPopup.ContentAbsolutePosition);
+        Assert.IsGreaterThan(0f, content.HoverPopup.ContentPadding.X);
     }
 }

@@ -11,45 +11,45 @@ namespace UIEngine.UI;
 public sealed class ElementChromeOptions
 {
     /*========Title========*/
-    public bool? ShowTitle { get; set; }
+    public bool? ShowTitle { get; init; }
 
     /// <summary>Whether the title bar still shows when the window is minimized (so title-less windows don't disappear entirely).</summary>
-    public bool? ShowTitleWhenMinimized { get; set; }
+    public bool? ShowTitleWhenMinimized { get; init; }
 
-    public string? TitleText { get; set; }
+    public string? TitleText { get; init; }
 
-    public Color? TitleColor { get; set; }
-    public Color? TitleTextColor { get; set; }
+    public Color? TitleColor { get; init; }
+    public Color? TitleTextColor { get; init; }
 
     /*========Border========*/
-    public bool? ShowBorder { get; set; }
+    public bool? ShowBorder { get; init; }
 
-    public Vector2? BorderSize { get; set; }
+    public Vector2? BorderSize { get; init; }
 
     /// <summary>Defaults to Flat (today's solid-color look) -- Outset/Inset are opt-in for windows.</summary>
-    public BorderStyle? BorderStyle { get; set; }
+    public BorderStyle? BorderStyle { get; init; }
 
     /// <summary>Only affects BorderStyle.Flat -- Outset/Inset's bevel shading (see BorderRenderer) is independent of this.</summary>
-    public Color? BorderColor { get; set; }
+    public Color? BorderColor { get; init; }
 
     /*========User Controls========*/
-    public bool? CanUserClose { get; set; }
+    public bool? CanUserClose { get; init; }
 
-    public bool? CanUserMinimize { get; set; }
+    public bool? CanUserMinimize { get; init; }
 
     /// <summary>Not yet implemented -- reserved for click-and-drag window moving.</summary>
-    public bool? CanUserMove { get; set; }
+    public bool? CanUserMove { get; init; }
 
     /// <summary>Not yet implemented -- reserved for drag-to-resize.</summary>
-    public bool? CanUserResize { get; set; }
+    public bool? CanUserResize { get; init; }
 
-    public bool? CanUserScrollHorizontal { get; set; }
+    public bool? CanUserScrollHorizontal { get; init; }
 
-    public bool? CanUserScrollVertical { get; set; }
+    public bool? CanUserScrollVertical { get; init; }
 
     /// <summary>Defaults to Auto -- see ScrollbarVisibility.</summary>
-    public ScrollbarVisibility? ScrollbarVisibility { get; set; }
+    public ScrollbarVisibility? ScrollbarVisibility { get; init; }
 
     /// <summary>Defaults to true (opt-out, unlike every other CanUserXxx flag here) -- see Window.CanUserFocus.</summary>
-    public bool? CanUserFocus { get; set; }
+    public bool? CanUserFocus { get; init; }
 }

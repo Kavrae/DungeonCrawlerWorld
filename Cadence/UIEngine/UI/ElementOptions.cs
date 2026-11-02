@@ -5,17 +5,17 @@ namespace UIEngine.UI;
 /// </summary>
 public sealed class ElementOptions
 {
-    public ElementHierarchyOptions? Hierarchy { get; set; }
+    public ElementHierarchyOptions? Hierarchy { get; init; }
 
-    public ElementLayoutOptions? Layout { get; set; }
+    public ElementLayoutOptions? Layout { get; init; }
 
-    public ElementChromeOptions? Chrome { get; set; }
+    public ElementChromeOptions? Chrome { get; init; }
 
-    public ElementContentOptions? Content { get; set; }
+    public ElementContentOptions? Content { get; init; }
 
-    public TextOptions? Text { get; set; }
+    public TextOptions? Text { get; init; }
 
-    public FolderOptions? Folder { get; set; }
+    public FolderOptions? Folder { get; init; }
 
-    public ButtonOptions? Button { get; set; }
+    public ButtonOptions? Button { get; init; }
 }

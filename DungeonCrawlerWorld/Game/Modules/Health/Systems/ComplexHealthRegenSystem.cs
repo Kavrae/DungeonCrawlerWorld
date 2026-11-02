@@ -31,12 +31,6 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
 {
     public byte StripeCount => (byte)GameFrameRate.FramesPerSecond;
 
-    /// <summary>Flat HP/sec at Constitution total 1 -- matches SimpleHealthRegenSystem's own placeholder constant.</summary>
-    private const float MinHealthRegenPerSecond = 2f;
-
-    /// <summary>Flat HP/sec at Constitution total 300.</summary>
-    private const float MaxHealthRegenPerSecond = 6f;
-
     private readonly EntityBodyParts _bodyParts;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
@@ -104,23 +98,13 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
         // BodyPartSelection.PickLowestPercentage compares against the current frame, so nothing
         // has to visit a part for its lockout to end.
 
-        // This entity never got a Constitution score --
-        // 0 regen, same as SimpleHealthRegenSystem's own effectiveRegen == 0 skip below, just
-        // resolved a step earlier.
-        if (!AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Constitution, out var constitution))
-        {
-            return;
-        }
-
-        var amountPerSecond = AbilityScoreMath.Lerp(constitution.Total, MinHealthRegenPerSecond, MaxHealthRegenPerSecond);
-        var rawAmount = amountPerSecond * seconds;
-        var effectiveRegen = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.HealthRegen, rawAmount);
+        var effectiveRegen = HealthRegeneration.LandedPerSecond(_abilityScores, _statModifiers, entityId) * seconds;
 
         if (effectiveRegen == 0f)
         {
             return;
         }
 
-        HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, eventBus: _eventBus, playerQuery: _playerQuery, floatingTextFeed: _floatingTextFeed, healCategory: ResourceGainCategory.Regeneration, healType: "Regeneration");
+        HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, eventBus: _eventBus, playerQuery: _playerQuery, floatingTextFeed: _floatingTextFeed, healCategory: ResourceGainCategory.Regeneration, healType: "Regeneration", appliesHealingModifiers: false);
     }
 }

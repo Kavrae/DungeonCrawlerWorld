@@ -213,7 +213,7 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        playerManaBarWindow.SetContent(new PlayerManaBarContent(world, gameSession.Views.ActionStateView, gameSession.Views.StatModifierView, uiEngine.FontService));
+        playerManaBarWindow.SetContent(new PlayerManaBarContent(world, gameSession.Views.ActionStateView, gameSession.Views.StatModifierView, uiEngine.FontService, layers));
         playerManaBarWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerManaBarWindow);
 

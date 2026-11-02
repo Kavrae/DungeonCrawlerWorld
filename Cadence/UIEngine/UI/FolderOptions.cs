@@ -6,13 +6,13 @@ namespace UIEngine.UI;
 public sealed class FolderOptions
 {
     /// <summary>Looked up in the sprite manifest (SpriteSheetService.Sprites). Falls back to FallbackGlyph if the name isn't found there.</summary>
-    public string? SpriteName { get; set; }
+    public string? SpriteName { get; init; }
 
-    public string? FallbackGlyph { get; set; }
+    public string? FallbackGlyph { get; init; }
 
     /// <summary>Defaults to Folder.DefaultIconSize if unset.</summary>
-    public Vector2? IconSize { get; set; }
+    public Vector2? IconSize { get; init; }
 
     /// <summary>Defaults to WindowPalette.HeaderBackground if unset -- matches Window's own title-bar default, since Folder's header reads as the same kind of chrome.</summary>
-    public Color? BackgroundColor { get; set; }
+    public Color? BackgroundColor { get; init; }
 }

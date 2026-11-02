@@ -7,5 +7,8 @@ internal static class ManaBarPalette
 {
     public static readonly Color OutlineColor = Color.Black;
 
+    /// <summary>The regeneration rate in the HUD bar's hover popup.</summary>
+    public static readonly Color RegenerationTextColor = Color.LightBlue;
+
     public static Color FractionColor(float manaFraction) => Color.Lerp(Color.DarkBlue, Color.SkyBlue, manaFraction);
 }

@@ -144,6 +144,10 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
   map reads a hovered tile only while `PointerState.IsOver` it (`PointerState.HoveredElement`, the
   element the input handlers were handed that frame), so a hotbar click isn't aimed at the tile under
   the hotbar.
+- Ground mode fires on a tile with nothing on it, for every shape and every activator, and pays its
+  activation effects as usual (decided 2026-11-02): aiming at a space that holds no target when it is
+  aimed is deliberate, and future gameplay depends on it; a miss animation will show it. Only Target
+  mode refuses for want of a target.
 - `MapWindow` telegraphs every entity's (not just the player's) in-flight `PendingDelayedActionComponent`
   every frame (`ActionTargetingController.AllPendingDelayedActionTargets`, a small `PackedComponentPool`
   -- dense iteration, no spatial index needed): dark green for the player's own, red/yellow for an

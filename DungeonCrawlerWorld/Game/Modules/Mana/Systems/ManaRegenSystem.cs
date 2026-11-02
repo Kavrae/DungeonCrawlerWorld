@@ -19,9 +19,6 @@ public sealed class ManaRegenSystem : ITieredSystem
 {
     public byte StripeCount => (byte)GameFrameRate.FramesPerSecond;
 
-    private const float MinManaRegenPerSecond = 0.1f;
-    private const float MaxManaRegenPerSecond = 0.3f;
-
     private readonly PackedComponentPool<ManaComponent> _manaComponents;
     private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
@@ -69,19 +66,16 @@ public sealed class ManaRegenSystem : ITieredSystem
                 continue;
             }
 
-            if (!AbilityScoreQueries.TryGetComponent(_abilityScores, entityId, AbilityScoreType.Intelligence, out var intelligence))
+            if (!ManaRegeneration.TryGetBasePerSecond(_abilityScores, entityId, out var basePerSecond))
             {
                 continue;
             }
 
-            var amountPerSecond = AbilityScoreMath.Lerp(intelligence.Total, MinManaRegenPerSecond, MaxManaRegenPerSecond);
-            var rawAmount = amountPerSecond * secondsPerVisit;
-
             pairs[0] = (StatModifierTarget.MaximumMana, currentManaComponent.MaximumMana);
-            pairs[1] = (StatModifierTarget.ManaRegen, rawAmount);
+            pairs[1] = (StatModifierTarget.ManaRegen, basePerSecond);
             StatModifierMath.GetEffectiveValues(_statModifiers, entityId, pairs, effectiveValues);
             var effectiveMaximumMana = effectiveValues[0];
-            var effectiveRegen = effectiveValues[1];
+            var effectiveRegen = effectiveValues[1] * secondsPerVisit;
 
             if (effectiveRegen == 0f)
             {

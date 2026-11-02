@@ -45,7 +45,8 @@ public static class ComplexHealthHeal
         IPlayerQuery playerQuery,
         int? sourceEntityId = null,
         GameplayTagSet activatorTags = default,
-        string healType = "Heal")
+        string healType = "Heal",
+        bool appliesHealingModifiers = true)
     {
         var partCount = bodyParts.Count(entityId);
 
@@ -54,7 +55,7 @@ public static class ComplexHealthHeal
             return;
         }
 
-        var totalAmount = HealthHeal.ComputeAmount(statModifiers, sourceEntityId, entityId, activatorTags, percentOfMaxHealth, flatAmount, effectiveMaximumHealth);
+        var totalAmount = HealthHeal.ComputeAmount(statModifiers, sourceEntityId, entityId, activatorTags, percentOfMaxHealth, flatAmount, effectiveMaximumHealth, appliesHealingModifiers);
         var perPartAmount = totalAmount / partCount;
 
         for (var partId = 0; partId < partCount; partId++)
@@ -80,7 +81,8 @@ public static class ComplexHealthHeal
         long now,
         EventBus eventBus,
         IPlayerQuery playerQuery,
-        string healType = "Heal")
+        string healType = "Heal",
+        bool appliesHealingModifiers = true)
     {
         var partId = ResolvePartId(bodyParts, entityId, statModifiers, targetRule, targetMode, mathUtility, now);
         if (partId == -1 || !HealthQueries.TryGetEffectiveMaximum(health, bodyParts, statModifiers, entityId, out var effectiveMaximumHealth))
@@ -88,7 +90,7 @@ public static class ComplexHealthHeal
             return;
         }
 
-        var amount = HealthHeal.ComputeAmount(statModifiers, sourceEntityId, entityId, activatorTags, percentOfMaxHealth, flatAmount, effectiveMaximumHealth);
+        var amount = HealthHeal.ComputeAmount(statModifiers, sourceEntityId, entityId, activatorTags, percentOfMaxHealth, flatAmount, effectiveMaximumHealth, appliesHealingModifiers);
         ApplyToPart(bodyParts, entityId, partId, statModifiers, amount);
 
         PublishAggregateHealEvent(bodyParts, health, eventBus, playerQuery, entityId, sourceEntityId, amount, healType, statModifiers);

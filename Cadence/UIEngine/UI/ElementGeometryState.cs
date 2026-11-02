@@ -16,6 +16,10 @@ namespace UIEngine.UI;
 /// plain fields, not properties, even where a given field isn't compound-mutated today --
 /// it signals "mutable bag, not an encapsulated object with invariants" and keeps the
 /// option open for compound mutation later without a later conversion.
+///
+/// The one exception is state with a single writer that everything else only reads, such as
+/// PointerState (written by UiInputController): it uses properties with an internal setter, so
+/// a reader can't write it.
 /// </summary>
 internal sealed class ElementGeometryState
 {

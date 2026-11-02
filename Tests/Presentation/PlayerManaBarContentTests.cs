@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Math;
+using Game.Modules.AbilityScores;
 using Game.Modules.Mana.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -34,7 +35,7 @@ public sealed class PlayerManaBarContentTests
             componentManager.Merge(PlayerEntityId, playerMana);
         }
 
-        var content = new PlayerManaBarContent(world, TestActionStateViews.Over(componentManager), new StatModifierView(componentManager), fontService);
+        var content = new PlayerManaBarContent(world, TestActionStateViews.Over(componentManager), new StatModifierView(componentManager), fontService, new UiLayerStack());
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions
@@ -56,7 +57,7 @@ public sealed class PlayerManaBarContentTests
     {
         var (content, _) = Build(new ManaComponent(2.7f, 5f));
 
-        content.Update(new GameTime());
+        content.Update(new Rectangle(0, 0, 1920, 1080));
 
         Assert.AreEqual("2 / 5", content.ValueText);
     }
@@ -68,7 +69,7 @@ public sealed class PlayerManaBarContentTests
         componentManager.GetMultiPool<StatModifierComponent>().Add(PlayerEntityId, new StatModifierComponent(StatModifierTarget.MaximumMana, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: 3f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
 
-        content.Update(new GameTime());
+        content.Update(new Rectangle(0, 0, 1920, 1080));
 
         Assert.AreEqual("4 / 8", content.ValueText);
     }
@@ -78,8 +79,18 @@ public sealed class PlayerManaBarContentTests
     {
         var (content, _) = Build(null);
 
-        content.Update(new GameTime());
+        content.Update(new Rectangle(0, 0, 1920, 1080));
 
         Assert.IsNull(content.ValueText);
+    }
+
+    [TestMethod]
+    public void RegenerationText_LowestIntelligence_ShowsBaseRatePerSecond()
+    {
+        var (content, componentManager) = Build(new ManaComponent(4f, 5f));
+        AbilityScoreEffects.Grant(componentManager, PlayerEntityId, AbilityScoreType.Intelligence, 1);
+        var hoverContent = (PlayerManaHoverContent)content.HoverPopup.Content!;
+
+        Assert.AreEqual("+0.1/s", hoverContent.RegenerationText());
     }
 }

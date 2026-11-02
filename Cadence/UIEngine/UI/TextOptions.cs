@@ -11,13 +11,13 @@ namespace UIEngine.UI;
 public sealed class TextOptions
 {
     /// <summary>Text to display, formatted by StringUtility before rendering.</summary>
-    public string? Text { get; set; }
+    public string? Text { get; init; }
 
-    public Color? TextColor { get; set; }
+    public Color? TextColor { get; init; }
 
     /// <summary>TextBox only -- whether Shift+Enter inserts a newline (true) or is treated the same as a plain Enter (false, the default). See TextBox.OnHotkeysAction.</summary>
-    public bool? Multiline { get; set; }
+    public bool? Multiline { get; init; }
 
     /// <summary>TextWindow only -- see TextWindow.Bold's own doc comment for how this renders without a real bold font asset.</summary>
-    public bool? Bold { get; set; }
+    public bool? Bold { get; init; }
 }

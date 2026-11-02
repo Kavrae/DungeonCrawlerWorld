@@ -3387,13 +3387,6 @@ window before committing to a cardinal move. Part of "Input actions and mapping 
 above): movement becomes one 2D-vector action built from the four keys, and a trigger holds a lone
 cardinal for a few frames to see if the second key arrives.
 
-#### Confirming activation on an empty tile still fires the spell/scroll
-
-`TryConfirmActivationAtTile` only checks the clicked tile is in `TargetableTiles`, never whether the
-resolved footprint actually contains an occupant -- clicking empty space still consumes a charge/mana
-for no effect. Needs an occupant check, at minimum for `SingleTarget`/`Adjacent`; an AOE shape landing
-empty but catching something else in its footprint is a separate case to decide deliberately.
-
 #### Minimap + Fog of War, folded into Neighborhood/Borough zoom
 
 Collapsed minimap (bottom-right); expanding it takes over the zoom-out feature rather than living
@@ -3882,15 +3875,6 @@ directly (Page Down) must not bypass it outside Admin Mode. Needs a disturbed-ea
 Side-by-side with inventory, collapsible either direction, click-and-drag equipping. Pauses while open
 -- just call `layers.OpenMenuWindow(window)`/`CloseMenuWindow(window)` (see Pause modality,
 `IMPLEMENTATION-NOTES.md`), no new modality code needed.
-
-#### Player health bar hover -- per-body-part HP dropdown
-
-Hovering the player's health bar would show a small popup: total % first, then one line per body part
-(name + current/max %), reusing the existing delay-gated `HoverPopupWindow` pattern. A `SimpleHealth`
-player (today, always) has nothing to show beyond the total line until the player race is ever made
-Complex. Lighter-weight than `HealthWindow` (`IMPLEMENTATION-NOTES.md`) -- a glanceable hover, not a
-full window. Worth sharing one "format a body part's HP line" helper with `HealthWindow` once both
-exist.
 
 #### Text input undo/redo (Ctrl+Z/Ctrl+Y)
 
@@ -4414,10 +4398,56 @@ windows that already exist.
 
 #### Field and property cleanup
 
-General pass once UI/core systems stop churning -- auto-properties with no logic that could be plain
-fields, or the reverse, plus consistency in when a type uses plain fields (see
-`WindowGeometryState`/`WindowTitleState`/etc.'s own doc comments) vs. properties. Housekeeping, not a
-bug list.
+The `*State` convention (`ElementGeometryState`'s doc comment) and the UIEngine options bags (`init`) are
+settled. Left: components. Field, auto-property and `record struct` writes compile to identical machine
+code (checked with the Tier1 disassembly), so a component's shape is chosen for what it allows, not speed:
+- Mutable components: auto-properties (most already are; the interfaces `IScheduledTimer`,
+  `IRelationshipLink` and `IHotkeySlotBinding` need properties anyway). A field only where a member must
+  be passed by `ref` or a nested struct mutated in place. `NonBlockingComponent.Kind` is the one field today.
+- `readonly` struct/record only for a component never changed after it is added (markers, snapshots).
+  Replacing a whole struct (`with` + set) costs about 25% more per write than changing it in place:
+  `DamageContributionComponent` is rewritten on every hit that way.
+- Any non-auto member of a mutable component is `readonly` (none breaks this today).
+- Updates: a generic struct updater replaces the delegate `TryUpdate`/`UpdateByDenseIndex` overloads
+  (~43 Game call sites) on Direct, Packed and Multi pools:
+  `pool.TryUpdate(entityId, new HealUpdate(amount, maximum))`, with
+  `where TUpdater : unmanaged, IComponentUpdater<T>` (`void Update(ref T component)`). The updater
+  carries its own inputs, so there is no state tuple. Measured the fastest path: about 1.6 ns per
+  sequential update, against 1.7 for a raw `ref` and 1.85-1.9 for the delegate. Chosen over a
+  `ref struct` writer (`using (var write = pool.TryWrite(id))`) because it is what worker threads need:
+  - It is a plain value, so a worker can record it and the main thread can apply it in a fixed order
+    (system, then entity id), keeping seeded worlds deterministic. A `ref struct` can't be stored or
+    queued.
+  - `unmanaged` stops an updater holding a pool, the bus or any reference, so its result depends only
+    on the component and its own fields, and a scheduler can trust that `TUpdater` writes `T` and
+    nothing else. Lambdas that read another pool mid-update today (`HealthDamage` and `ManaCost` read
+    `StatModifiers`) move that read before the update.
+  - It holds no `ref` into the dense array until it is applied, so another thread growing the pool
+    can't leave it writing to the old array.
+  - Cost: a named struct per distinct update. Many call sites share one (`NextMapPosition = null` x4,
+    `Quantity += add` x5, timer deadlines), so about 20-25 types, the shared ones kept beside their
+    component.
+- Change notification: an engine mechanic the game opts into per pool at registration, never per write.
+  - Today any subscriber to `ComponentChanged` switches it on: the timer wheels and `Relationship`
+    (engine), and `AuraSystem`, `ToggleItemHolderSync` and `StatModifierExpirySystem` (game). Direct
+    pools have none.
+  - Declare it instead (e.g. `RegisterPackedPool<T>(..., ComponentChangeObservation.Observed)`), fixed
+    for the build. Subscribing to an undeclared pool throws. A timer wheel or relationship is only
+    built over an observed pool, so `IScheduledTimer` components and link pools get it automatically.
+  - Not per write: automatic timer scheduling, relationship consistency and lit-item toggles all hold
+    only because no writer can skip the notification.
+  - Free: the mode is a readonly branch in the inlined `MarkChanged`, the same cost as today's null
+    check. The updater's `Update` stays specialised and inlined, since notification happens after it.
+    An unobserved pool skips the event field entirely. The observer call stays a delegate, paid only
+    by observed pools. Making the observer a generic parameter of the pool would inline it, but every
+    `GetPackedPool<T>` would then have to name the observer type, so not worth it.
+  - For workers: a write to an observed pool appends `(entityId, denseIndex)` to that thread's change
+    list; the main thread replays the lists in system order, then entity order, at the sync point.
+    Unobserved pools need nothing, so most pools can be written in parallel with no bookkeeping.
+  - State the contract now, while every write is synchronous: changes reach observers no later than
+    the end of the system that made them. The timer wheels already fit (they act only at their own
+    `Update`). Check `Relationship` and `ToggleItemHolderSync` against it, e.g. code that reads a
+    link's target side straight after writing the link.
 
 #### Solution-wide code style cleanup
 
@@ -4430,7 +4460,7 @@ property cleanup above -- possibly the same pass.
 
 #### Possible future UI gaps, likely out of scope
 
-Tooltips (mostly landed already elsewhere), localization/IME, and accessibility (screen reader) hooks
+Localization/IME, and accessibility (screen reader) hooks
 are standard in general GUI frameworks, but this is an admin/debug UI over a game world, not a general
 application shell. Noted for completeness, not expected soon.
 

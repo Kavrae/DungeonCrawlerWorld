@@ -37,6 +37,7 @@ namespace Game.Modules.Health;
 /// </remarks>
 public static class HealthHeal
 {
+    /// <param name="appliesHealingModifiers">False when the amount already carries Outgoing/IncomingHealing -- a regen tick, whose per-second rate HealthRegeneration.LandedPerSecond scales once so the rate does not depend on how often the entity is visited.</param>
     /// <returns>Whether entityId had health to restore, so the heal was applied; false leaves everything untouched.</returns>
     public static bool Apply(
         PackedComponentPool<SimpleHealthComponent> health,
@@ -55,7 +56,8 @@ public static class HealthHeal
         BodyPartTargetMode targetMode = BodyPartTargetMode.All,
         BodyPartTargetRule? targetRule = null,
         MathUtility? mathUtility = null,
-        string healType = "Heal")
+        string healType = "Heal",
+        bool appliesHealingModifiers = true)
     {
         if (!HealthQueries.HasMissingHealth(health, bodyParts, statModifiers, entityId))
         {
@@ -66,7 +68,7 @@ public static class HealthHeal
         var showsHealedText = floatingTextFeed.IsShownFor(entityId)
             && HealthQueries.TryGetTotals(health, bodyParts, entityId, out healthBefore, out _);
 
-        ApplyHeal(health, entityId, percentOfMaxHealth, now, statModifiers, bodyParts, eventBus, playerQuery, flatAmount, sourceEntityId, activatorTags, targetMode, targetRule, mathUtility, healType);
+        ApplyHeal(health, entityId, percentOfMaxHealth, now, statModifiers, bodyParts, eventBus, playerQuery, flatAmount, sourceEntityId, activatorTags, targetMode, targetRule, mathUtility, healType, appliesHealingModifiers);
 
         if (showsHealedText && HealthQueries.TryGetTotals(health, bodyParts, entityId, out var healthAfter, out _))
         {
@@ -105,7 +107,8 @@ public static class HealthHeal
         BodyPartTargetMode targetMode,
         BodyPartTargetRule? targetRule,
         MathUtility? mathUtility,
-        string healType)
+        string healType,
+        bool appliesHealingModifiers)
     {
         if (!health.Has(entityId))
         {
@@ -113,11 +116,11 @@ public static class HealthHeal
             {
                 if (targetMode == BodyPartTargetMode.All)
                 {
-                    ComplexHealthHeal.ApplyToAllParts(bodyParts, health, entityId, percentOfMaxHealth, flatAmount, statModifiers, eventBus, playerQuery, sourceEntityId, activatorTags, healType);
+                    ComplexHealthHeal.ApplyToAllParts(bodyParts, health, entityId, percentOfMaxHealth, flatAmount, statModifiers, eventBus, playerQuery, sourceEntityId, activatorTags, healType, appliesHealingModifiers);
                 }
                 else
                 {
-                    ComplexHealthHeal.ApplyToSinglePart(bodyParts, health, entityId, percentOfMaxHealth, flatAmount, statModifiers, sourceEntityId, activatorTags, targetRule, targetMode, mathUtility, now, eventBus, playerQuery, healType);
+                    ComplexHealthHeal.ApplyToSinglePart(bodyParts, health, entityId, percentOfMaxHealth, flatAmount, statModifiers, sourceEntityId, activatorTags, targetRule, targetMode, mathUtility, now, eventBus, playerQuery, healType, appliesHealingModifiers);
                 }
             }
 
@@ -129,7 +132,7 @@ public static class HealthHeal
             return;
         }
 
-        var amount = ComputeAmount(statModifiers, sourceEntityId, entityId, activatorTags, percentOfMaxHealth, flatAmount, effectiveMaximumHealth);
+        var amount = ComputeAmount(statModifiers, sourceEntityId, entityId, activatorTags, percentOfMaxHealth, flatAmount, effectiveMaximumHealth, appliesHealingModifiers);
 
         health.TryUpdate(entityId, (amount, effectiveMaximumHealth), static (ref SimpleHealthComponent healthComponent, (float Amount, float EffectiveMaximumHealth) state) =>
         {
@@ -139,11 +142,22 @@ public static class HealthHeal
         PublishHealEvent(eventBus, playerQuery, entityId, sourceEntityId, amount, healType, health.GetReadonly(entityId).CurrentHealth, effectiveMaximumHealth);
     }
 
-    /// <summary>flat + percent*effectiveMaxHealth, then OutgoingHealing (sourceEntityId, if known) then IncomingHealing (targetEntityId) -- shared by the Simple path above and every ComplexHealthHeal path, so a body-parts entity gets the exact same modifier chain as a Simple one.</summary>
-    internal static float ComputeAmount(MultiComponentPool<StatModifierComponent> statModifiers, int? sourceEntityId, int targetEntityId, GameplayTagSet activatorTags, float percentOfMaxHealth, float flatAmount, float effectiveMaxHealth)
+    /// <summary>flat + percent*effectiveMaxHealth, then OutgoingHealing (sourceEntityId, if known) then IncomingHealing (targetEntityId) unless appliesHealingModifiers is false -- shared by the Simple path above and every ComplexHealthHeal path, so a body-parts entity gets the exact same modifier chain as a Simple one.</summary>
+    internal static float ComputeAmount(MultiComponentPool<StatModifierComponent> statModifiers, int? sourceEntityId, int targetEntityId, GameplayTagSet activatorTags, float percentOfMaxHealth, float flatAmount, float effectiveMaxHealth, bool appliesHealingModifiers = true)
     {
         var amount = flatAmount + percentOfMaxHealth * effectiveMaxHealth;
 
+        if (!appliesHealingModifiers)
+        {
+            return amount;
+        }
+
+        return ScaleByHealingModifiers(statModifiers, sourceEntityId, targetEntityId, activatorTags, amount);
+    }
+
+    /// <summary>amount through OutgoingHealing (sourceEntityId, if known) then IncomingHealing (targetEntityId).</summary>
+    internal static float ScaleByHealingModifiers(MultiComponentPool<StatModifierComponent> statModifiers, int? sourceEntityId, int targetEntityId, GameplayTagSet activatorTags, float amount)
+    {
         if (sourceEntityId is { } source)
         {
             amount = StatModifierMath.GetEffectiveValue(statModifiers, source, StatModifierTarget.OutgoingHealing, amount, activatorTags);
