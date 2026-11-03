@@ -49,6 +49,7 @@ public sealed class MapWindow : Window, IContentDropTarget
 
     /// <summary>The entities whose drawn sprites overhangs fade over this frame (OverhangFade). A field so it isn't reallocated per frame.</summary>
     private readonly List<int> _watchedEntityIds = [];
+    private readonly List<MapGroundMark> _groundMarks = [];
 
     private readonly int _tileDepth;
 
@@ -228,15 +229,16 @@ public sealed class MapWindow : Window, IContentDropTarget
         _mapViewState.CurrentMapLayer = System.Math.Clamp(layer, 0, _tileDepth - 1);
     }
 
-    /// <summary>Draws one frame of the map viewport: the world (MapRenderer), then targeting and selection highlights, then floating text.</summary>
-    /// <remarks>Highlights come after the world so they land on whatever is on the tile -- terrain, an occupant's sprite or glyph, or glow -- with no depth buffer to sort them.</remarks>
+    /// <summary>Draws one frame of the map viewport: the world (MapRenderer) with the selection's ring on its ground, then targeting highlights, then floating text.</summary>
+    /// <remarks>The selection ring lies on the ground, so the renderer draws it under what stands there; targeting highlights come after the world so they land on whatever is on the tile -- terrain, an occupant's sprite or glyph, or glow -- with no depth buffer to sort them.</remarks>
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
         var unitRectangle = Render.UnitRectangle;
 
         OverhangFade.CollectWatchedEntities(_watchedEntityIds, _mapView.PlayerEntityId, _mapViewState.InspectionMode, _mapViewState.InspectedEntityId);
-        _renderer.Draw(_mapViewState.CurrentMapLayer, _watchedEntityIds);
+        _overlay.CollectGroundMarks(_groundMarks);
+        _renderer.Draw(_mapViewState.CurrentMapLayer, _watchedEntityIds, _groundMarks);
         _overlay.Draw(spriteBatch, unitRectangle);
         _floatingTextRenderer.Draw(spriteBatch, _mapViewState.CurrentMapLayer);
     }

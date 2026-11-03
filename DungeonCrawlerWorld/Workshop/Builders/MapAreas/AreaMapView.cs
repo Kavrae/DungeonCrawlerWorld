@@ -42,6 +42,7 @@ public sealed class AreaMapView(FontService fontService, ElementPoolService elem
     private static readonly Color HoverColor = Color.White;
     private static readonly Color LoadingDimColor = new(0, 0, 0, 150);
     private static readonly IReadOnlyList<int> NoWatchedEntities = [];
+    private static readonly IReadOnlyList<MapGroundMark> NoGroundMarks = [];
 
     private readonly SpriteFontBase _markerFont = fontService.GetFont(MarkerLabelFontSize);
     private readonly SpriteFontBase _areaLabelFont = fontService.GetFont(AreaLabelFontSize);
@@ -199,7 +200,7 @@ public sealed class AreaMapView(FontService fontService, ElementPoolService elem
 
     private void DrawScene(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, MapRenderer renderer, MapCamera camera, IMapPreviewScene scene)
     {
-        renderer.Draw((int)Layer, NoWatchedEntities);
+        renderer.Draw((int)Layer, NoWatchedEntities, NoGroundMarks);
 
         if (scene.Area is { } area)
         {

@@ -19,7 +19,8 @@ namespace Presentation.MapRendering;
 /// <remarks>
 /// <para>
 /// Reads the world only through IMapViewQuery and AuraPowerView, so the game feeds it a live session and a map editor an
-/// authored layout. Draws nothing about what the player is doing (targeting, selection): that is drawn over it by its host.
+/// authored layout. Reads nothing about what the player is doing: its host draws targeting over it, and hands it the selection
+/// as ground marks (MapGroundMark), which belong under what stands on them.
 /// </para>
 /// <para>
 /// Two calls a frame: Update, outside the UI's pass, re-renders the cached ground and wall-top images when they are
@@ -32,7 +33,7 @@ namespace Presentation.MapRendering;
 /// Draw order is significant, not incidental -- each pass lands on top of the previous one with no depth buffer
 /// (SpriteEffectBatch draws in call order): the flat fill first so everything else has something to draw over,
 /// then the ground (a terrain's sprite is its background; terrain with none shows the flat fill under its glyph), the
-/// walls' tops, and the row walk. The glow is not a pass: the sprite effect lights each draw as it is made (see Draw).
+/// ground marks, the walls' tops, and the row walk. The glow is not a pass: the sprite effect lights each draw as it is made (see Draw).
 /// </para>
 /// </remarks>
 public sealed class MapRenderer : IDisposable
@@ -115,6 +116,8 @@ public sealed class MapRenderer : IDisposable
     /// <summary>The grid _wallPlan was last planned for; the cached tops and the row walk's overhangs read the plan, so it must match what is drawn.</summary>
     private readonly MapBuildStamp _plannedWalls = new();
 
+    private readonly MapGroundRing _groundRing = new();
+
     public MapRenderer(
         IMapViewQuery mapView,
         AuraPowerView auraPower,
@@ -149,6 +152,7 @@ public sealed class MapRenderer : IDisposable
         _groundCache?.Dispose();
         _topsCache?.Dispose();
         _glowTexture.Dispose();
+        _groundRing.Dispose();
         _groundCache = null;
         _topsCache = null;
     }
@@ -201,7 +205,7 @@ public sealed class MapRenderer : IDisposable
         _topsCache?.EnsureRendered(_renderService.Batch, key, _drawTopsIntoCache);
     }
 
-    /// <summary>Draws one frame of the map: the flat fill, the ground, the walls' tops, then the row walk -- lit by the auras' glow.</summary>
+    /// <summary>Draws one frame of the map: the flat fill, the ground, the ground marks, the walls' tops, then the row walk -- lit by the auras' glow.</summary>
     /// <remarks>
     /// Drawn into the UI's one pass (UiRenderService.Batch), in its place among the windows and under their draw offset
     /// and clip: the map sets the batch's Glow for its own draws and clears it after, which ends the run, so nothing
@@ -213,8 +217,9 @@ public sealed class MapRenderer : IDisposable
     /// and never for walls' tops or the cues drawn over the map (health bars, badges).
     /// </remarks>
     /// <param name="watchedEntityIds">The entities whose drawn sprites overhangs fade over, so whoever stands behind a wall stays visible.</param>
+    /// <param name="groundMarks">Rings drawn on the ground, unlit, after it and before anything standing on it -- the host's selection.</param>
     /// <remarks>Needs the GraphicsDevice: unlike Update, it is never called on a headless renderer.</remarks>
-    public void Draw(int mapLayer, IReadOnlyList<int> watchedEntityIds)
+    public void Draw(int mapLayer, IReadOnlyList<int> watchedEntityIds, IReadOnlyList<MapGroundMark> groundMarks)
     {
         var key = MapImageKey.Of(_camera, mapLayer);
         var glowTexture = _glowTexture.Ensure(_renderService.GraphicsDevice, key, _auraPower.Version);
@@ -222,7 +227,7 @@ public sealed class MapRenderer : IDisposable
         batch.Glow = SpriteEffectGlow.OverTileGrid(glowTexture, key.TileSize, _camera.TileOrigin(0, 0), MapGlowTexels.MarginTiles);
         try
         {
-            DrawMap(batch, key, watchedEntityIds);
+            DrawMap(batch, key, watchedEntityIds, groundMarks);
         }
         finally
         {
@@ -230,7 +235,7 @@ public sealed class MapRenderer : IDisposable
         }
     }
 
-    private void DrawMap(SpriteEffectBatch batch, MapImageKey key, IReadOnlyList<int> watchedEntityIds)
+    private void DrawMap(SpriteEffectBatch batch, MapImageKey key, IReadOnlyList<int> watchedEntityIds, IReadOnlyList<MapGroundMark> groundMarks)
     {
         var unitRectangle = _renderService.UnitRectangle;
         var litAtPixel = SpriteDrawStyle.Plain.WithGlowAtPixel();
@@ -244,6 +249,8 @@ public sealed class MapRenderer : IDisposable
         {
             PlanWalls(key);
         }
+
+        DrawGroundMarks(batch, key, groundMarks);
 
         if (_topsCache?.Draw(batch, key, -_camera.RenderPixelOffset, SpriteDrawStyle.Plain) != true)
         {
@@ -345,6 +352,18 @@ public sealed class MapRenderer : IDisposable
         if (_terrainCells.TryGetFloor(mapNodeX, mapNodeY, out var floor))
         {
             DrawVisual(batch, floor, _mediumFontMeasurer, tileOrigin, new Vector2(tileSize.X, tileSize.Y), footprintTiles: null, glow, groundRowY: 0f, out _);
+        }
+    }
+
+    /// <summary>Each ground mark as an ellipse under its footprint, over the ground and walls' faces and under the walls' tops and the row walk.</summary>
+    private void DrawGroundMarks(SpriteEffectBatch batch, MapImageKey key, IReadOnlyList<MapGroundMark> groundMarks)
+    {
+        for (var markIndex = 0; markIndex < groundMarks.Count; markIndex++)
+        {
+            var mark = groundMarks[markIndex];
+            var footprintTopLeft = _camera.TileOrigin(mark.Position.X - key.Scroll.X, mark.Position.Y - key.Scroll.Y);
+            var footprintSize = new Vector2(mark.Size.X * key.TileSize.X, mark.Size.Y * key.TileSize.Y);
+            _groundRing.Draw(batch, mark.Color, footprintTopLeft, footprintSize);
         }
     }
 

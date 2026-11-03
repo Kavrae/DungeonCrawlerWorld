@@ -2843,13 +2843,13 @@ glance:
   `ActionTargetingController` resolves, not the player's setting).
 - **Hover and click highlights follow the mode.** Target: the entity is highlighted -- a more transparent colour on
   hover, a less transparent one when selected. Ground: the same rule for the tile -- more transparent on hover, less
-  on selection. Today the hover footprint (`MapGameOverlay.AddTargetingHighlights`, `HoveredFootprint`) and the
-  selection ring (`AddSelectedTileHighlight`/`AddSelectedTileGlow`) are tile washes and rings whatever the mode.
+  on selection. Today the hover footprint (`MapGameOverlay.AddTargetingHighlights`, `HoveredFootprint`) is a tile
+  wash whatever the mode, and the selection is a ground ellipse (`MapGroundMark`, drawn by `MapRenderer` under the
+  occupants) under the selected tile's Blocking occupant or the followed entity.
   Target's highlight marks the entity Target mode would mark (`TargetingView.Select(...).HasMarkedEntity`: Blocking,
   else Tiny, else Phasing), across its whole footprint for a large entity, and nothing when the tile has no entity
-  (it resolves as Ground). Decide whether the entity highlight is a footprint wash or the sprite itself (see
-  "Highlighted-tile visual redesign" and "Circle selection under the entity", Low) -- a tall sprite overhangs its
-  tile.
+  (it resolves as Ground). Decide whether the entity highlight is a footprint wash, a ground mark like the selection's,
+  or the sprite itself (see "Highlighted-tile visual redesign", Low) -- a tall sprite overhangs its tile.
 - Supersedes the Low item "Change the cursor to a targeting mode indicator while armed" (removed).
 
 #### Marked targets
@@ -3803,16 +3803,6 @@ brackets instead of a full perimeter. No corner-mark geometry worked out for (2)
 A third option once "Sprite shaders and tinting" (Medium) exists: outline the highlighted *sprite*
 rather than the tile (the common Godot approach, a `canvas_item` outline shader on the selected
 sprite), which also stays correct for tall sprites that overhang their tile.
-
-#### Circle selection under the entity instead of a tile border
-
-Inspired by Dungeon Settlers. `MapGameOverlay.DrawSelectedTileGlow` marks the selected/followed tile with
-an interior-fade glow over the whole tile. Replace it with a circle (ellipse) on the ground under the
-entity, drawn *before* the entity sprite rather than on top. That needs it inside the occupant pass,
-not after it the way highlights draw today. Pairs with the tall-sprite item (High, above): once
-sprites extend past their own tile, a tile-shaped highlight stops lining up with the character. May
-settle the Highlighted-tile visual redesign above for selection specifically, but not for ability
-targeting. There's no circle primitive yet -- `unitRectangle` plus `GlowRenderer` are all the map has.
 
 #### Extract a shared tick-fraction HUD bar element
 

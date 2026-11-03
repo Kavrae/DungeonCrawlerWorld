@@ -13,7 +13,7 @@ using UIEngine.UI;
 
 namespace Presentation.MapRendering;
 
-/// <summary>Draws what the player is doing on the map over the world MapRenderer drew: targeting and footprint highlights, windup charge fills, Dodge's WASD hints, and the selected tile's or followed entity's glow.</summary>
+/// <summary>Draws what the player is doing on the map over the world MapRenderer drew -- targeting and footprint highlights, windup charge fills, Dodge's WASD hints -- and names the selection's ground mark, which MapRenderer draws under the entities.</summary>
 /// <remarks>
 /// The game's overlay, not the map's: it reads the player's targeting and inspection state (ActionTargetingController,
 /// MapViewState). Everything shown on tiles is written into MapOverlayTexels each frame and drawn as one quad over the visible
@@ -47,21 +47,26 @@ public sealed class MapGameOverlay : IDisposable
         _badgeFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont(GameFontChrome.MapBadgeFontSize));
     }
 
-    /// <summary>Draws the targeting highlights and the selection's -- the followed entity's in Detail inspection, the selected tile's otherwise -- as one tile overlay, then Dodge's letters.</summary>
+    /// <summary>Fills groundMarks with the selection's ring for MapRenderer to draw under what stands on it: under the followed entity in Detail inspection, under the selected tile's Blocking occupant -- or the tile itself when it has none -- otherwise.</summary>
+    public void CollectGroundMarks(List<MapGroundMark> groundMarks)
+    {
+        groundMarks.Clear();
+
+        if (_mapViewState.InspectionMode == InspectionMode.Detail)
+        {
+            AddFollowedEntityMark(groundMarks);
+        }
+        else
+        {
+            AddSelectedTileMark(groundMarks);
+        }
+    }
+
+    /// <summary>Draws the targeting highlights as one tile overlay, then Dodge's letters.</summary>
     public void Draw(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
     {
         _texels.Begin(_camera.CurrentScrollPosition, _camera.TileColumns, _camera.TileRows);
         AddTargetingHighlights();
-
-        if (_mapViewState.InspectionMode == InspectionMode.Detail)
-        {
-            AddFollowedEntityHighlight();
-        }
-        else
-        {
-            AddSelectedTileHighlight();
-        }
-
         AddContainerDropHighlight();
 
         if (!_texels.IsEmpty)
@@ -121,7 +126,7 @@ public sealed class MapGameOverlay : IDisposable
     /// currently hovered," a 50% PlayerTargetColor wash for whichever of those tiles the armed
     /// shape's hover-resolved footprint (see ActionTargetingController.HoveredFootprint,
     /// recomputed every Update) actually covers right now. Conceptually distinct from
-    /// AddSelectedTileHighlight below (ability targeting vs. the inspector's click-to-select).
+    /// AddSelectedTileMark below (ability targeting vs. the inspector's click-to-select).
     ///
     /// A second pass then adds whatever's left of HoveredFootprint that TargetableTiles didn't
     /// already cover -- needed for a Circle at the path end: TargetableTiles is capped strictly at the action's own
@@ -241,40 +246,38 @@ public sealed class MapGameOverlay : IDisposable
         }
     }
 
-    private void AddSelectedTileHighlight()
+    /// <summary>Basic inspection's ring: under the selected tile's Blocking occupant, across its whole footprint, or on the tile alone when nothing blocks it.</summary>
+    private void AddSelectedTileMark(List<MapGroundMark> groundMarks)
     {
         if (_mapViewState.SelectedMapNodePosition is not { } selectedPosition)
         {
             return;
         }
 
-        AddSelectedTileGlow(selectedPosition.X, selectedPosition.Y);
+        var blockingEntityId = _mapView.GetBlockingEntityId(new Vector3Int(selectedPosition.X, selectedPosition.Y, _mapViewState.CurrentMapLayer));
+        if (blockingEntityId != -1 && _mapView.TryGetOccupant(blockingEntityId, out var occupant))
+        {
+            groundMarks.Add(SelectionMark(occupant));
+            return;
+        }
+
+        groundMarks.Add(new MapGroundMark(selectedPosition, new Vector2Byte(1, 1), GameWindowPalette.Selected));
     }
 
-    /// <summary>
-    /// Detail/Admin inspection's own highlight -- tracks the followed entity's live
-    /// TransformComponent.Position every frame instead of a frozen tile position (see
-    /// AddSelectedTileHighlight, Basic mode's equivalent), so the highlight moves with the
-    /// entity as it walks. Highlights every tile of the entity's own footprint (TransformComponent.
-    /// Size), not just its origin tile -- a multi-tile (Huge) entity should read as fully
-    /// selected, the same footprint MapRenderer draws the entity's sprite across.
-    /// </summary>
-    private void AddFollowedEntityHighlight()
+    /// <summary>Detail/Admin inspection's ring, under the followed entity's whole footprint wherever it is this frame, so it moves with the entity as it walks; nothing while it is on another layer than the one shown.</summary>
+    private void AddFollowedEntityMark(List<MapGroundMark> groundMarks)
     {
         var entityId = _mapViewState.InspectedEntityId;
-        if (entityId == -1 || !_mapView.TryGetOccupant(entityId, out var followed))
+        if (entityId == -1 || !_mapView.TryGetOccupant(entityId, out var followed) || followed.Position.Z != _mapViewState.CurrentMapLayer)
         {
             return;
         }
 
-        for (var offsetX = 0; offsetX < followed.Size.X; offsetX++)
-        {
-            for (var offsetY = 0; offsetY < followed.Size.Y; offsetY++)
-            {
-                AddSelectedTileGlow(followed.Position.X + offsetX, followed.Position.Y + offsetY);
-            }
-        }
+        groundMarks.Add(SelectionMark(followed));
     }
+
+    private static MapGroundMark SelectionMark(OccupantView occupant) =>
+        new(new Point(occupant.Position.X, occupant.Position.Y), occupant.Size, GameWindowPalette.Selected);
 
     /// <summary>
     /// A charging Delayed action's own per-tile telegraph -- an always-visible, dim full-tile
@@ -288,8 +291,4 @@ public sealed class MapGameOverlay : IDisposable
         _texels.AddWash(mapNodeX, mapNodeY, fillColor * (TargetSelectionMaskAlpha * ChargeBackdropAlphaFraction));
         _texels.AddFill(mapNodeX, mapNodeY, fillColor * TargetSelectionMaskAlpha, fillFraction);
     }
-
-    /// <summary>The inspector's own "this tile is selected" highlight -- a light-blue inward glow, the same as GlowRenderer's InteriorFade (inventory cells use it too, so the two read as the same visual language), so terrain and sprites underneath stay legible rather than tinted.</summary>
-    private void AddSelectedTileGlow(int mapNodeX, int mapNodeY) =>
-        _texels.SetRing(mapNodeX, mapNodeY, GameWindowPalette.Selected * GlowRenderer.FadeMaximumAlpha, GlowRenderer.FadeRingCount);
 }
