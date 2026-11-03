@@ -107,25 +107,8 @@ public sealed class Toggle(FontService fontService, ElementPoolService elementPo
     }
 
     /// <summary>Two diagonals corner-to-corner across checkboxRectangle, inset so the mark's own endpoints don't touch the checkbox's border.</summary>
-    private static void DrawCheckMark(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle checkboxRectangle, Color color)
-    {
-        var topLeft = new Vector2(checkboxRectangle.X + CheckMarkInset, checkboxRectangle.Y + CheckMarkInset);
-        var topRight = new Vector2(checkboxRectangle.Right - CheckMarkInset, checkboxRectangle.Y + CheckMarkInset);
-        var bottomLeft = new Vector2(checkboxRectangle.X + CheckMarkInset, checkboxRectangle.Bottom - CheckMarkInset);
-        var bottomRight = new Vector2(checkboxRectangle.Right - CheckMarkInset, checkboxRectangle.Bottom - CheckMarkInset);
-
-        DrawLine(spriteBatch, unitRectangle, topLeft, bottomRight, color);
-        DrawLine(spriteBatch, unitRectangle, topRight, bottomLeft, color);
-    }
-
-    /// <summary>unitRectangle (a 1x1 white pixel) stretched into a thickness-tall strip spanning start-to-end and rotated to match -- the standard "line as a rotated rectangle" trick this renderer has no dedicated line primitive for yet.</summary>
-    private static void DrawLine(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 start, Vector2 end, Color color)
-    {
-        var delta = end - start;
-        var length = delta.Length();
-        var rotation = MathF.Atan2(delta.Y, delta.X);
-        spriteBatch.Draw(unitRectangle, start, null, color, rotation, Vector2.Zero, new Vector2(length, CheckMarkThickness), SpriteEffects.None);
-    }
+    private static void DrawCheckMark(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle checkboxRectangle, Color color) =>
+        CrossRenderer.Draw(spriteBatch, unitRectangle, new Vector2(checkboxRectangle.X, checkboxRectangle.Y), new Vector2(checkboxRectangle.Width, checkboxRectangle.Height), CheckMarkInset, CheckMarkThickness, color);
 
     /// <summary>
     /// Splits ContentRectangle into the checkbox square (fixed CheckboxSize, on the edge

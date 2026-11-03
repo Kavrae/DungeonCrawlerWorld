@@ -50,6 +50,13 @@ public sealed class MapRenderer : IDisposable
     private const float LootBagBadgeSizeFraction = 0.4f;
     private const string LootBagSpriteName = "LootBag-Red";
 
+    /// <summary>The X over a corpse's footprint, so a corpse never reads as a living entity standing still.</summary>
+    private static readonly Color CorpseMarkerColor = new Color(200, 30, 30) * 0.8f;
+
+    /// <summary>Fractions of a single tile's size: how far the X's ends sit in from the footprint's edges, and how thick its lines are.</summary>
+    private const float CorpseMarkerInsetFraction = 0.2f;
+    private const float CorpseMarkerThicknessFraction = 0.08f;
+
     /// <summary>Color of a dodging entity's own inner-fade glow -- Combat Overhaul: Dodge.</summary>
     private static readonly Color DodgingGlowColor = Color.LightGreen;
 
@@ -397,6 +404,7 @@ public sealed class MapRenderer : IDisposable
             {
                 case MapDrawItemKind.Corpse:
                     TryDrawEntityVisual(batch, item.EntityId, FontMeasurerForSize(item.Size.X), footprintTopLeft, footprintSize, item.Size, GroundRowY(footprintTopLeft, footprintSize, key.TileSize));
+                    DrawCorpseMarker(batch, unitRectangle, footprintTopLeft, footprintSize, key.TileSize);
                     DrawLootBagBadge(batch, _mapView.GetStatus(item.EntityId).LootBag, footprintTopLeft, footprintSize, key.TileSize);
                     break;
 
@@ -530,6 +538,14 @@ public sealed class MapRenderer : IDisposable
         {
             GlowRenderer.Draw(batch, unitRectangle, new Rectangle((int)footprintTopLeft.X, (int)footprintTopLeft.Y, (int)footprintSize.X, (int)footprintSize.Y), DodgingGlowColor, GlowMode.InteriorFade, DodgingGlowAlphaMultiplier);
         }
+    }
+
+    /// <summary>A red X across a corpse's footprint, unlit, under its loot badge; scaled by the tile, so a large corpse's lines are no thicker than a small one's.</summary>
+    private static void DrawCorpseMarker(SpriteEffectBatch batch, Texture2D unitRectangle, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize)
+    {
+        var tileExtent = Math.Min(tileSize.X, tileSize.Y);
+        var thickness = Math.Max(1f, tileExtent * CorpseMarkerThicknessFraction);
+        CrossRenderer.Draw(batch, unitRectangle, footprintTopLeft, footprintSize, tileExtent * CorpseMarkerInsetFraction, thickness, CorpseMarkerColor, SpriteDrawStyle.Plain);
     }
 
     /// <summary>

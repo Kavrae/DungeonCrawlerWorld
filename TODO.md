@@ -3766,19 +3766,14 @@ Every `RegisterFactory<T>` call hand-writes the same `FontService`/`ElementPoolS
 triple with only a few type-specific extras varying. Worth a helper taking just the extras. Boilerplate,
 not error-prone -- low priority.
 
-#### Red X marker over dead entities
-
-`MapRenderer.TryDrawEntityVisual` has no `DeadComponent` check -- a corpse looks identical to a
-just-motionless living entity. Draw a red X overlay when `DeadComponent` is present.
-
 #### Blood pool under dead entities
 
 A blood pool drawn under a corpse on every tile of its footprint (`TransformComponent.Size`, same
 per-tile loop `MapGameOverlay.DrawFollowedEntityHighlight` uses), colored per entity. Nothing carries a blood color
 today -- add one per race blueprint (a field or small component, e.g. red for Human/Goblin), and
 decide what a Ghost leaves (none, or ectoplasm). Draw it under the corpse in the occupant pass
-(`MapRenderer.DrawOccupants`, before the corpse sprite), not after. Pairs with Red X marker above (both
-make a corpse read as dead) and Corpse decay/destruction (Game) -- the pool should go when the
+(`MapRenderer.DrawOccupants`, before the corpse sprite), not after. Pairs with the red X
+`MapRenderer.DrawCorpseMarker` draws over a corpse (both make a corpse read as dead) and Corpse decay/destruction (Game) -- the pool should go when the
 corpse does.
 
 #### Folder glow blink
