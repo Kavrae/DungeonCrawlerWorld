@@ -1,6 +1,8 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
+using Engine.Math;
 using Game.Modules.AbilityScores;
 using Game.Modules.AbilityScores.Components;
 using Game.Modules.BodyPartEffects.Components;
@@ -165,7 +167,7 @@ public sealed class MovementSystem : ITieredSystem
     /// <remarks>This is generally used for idle entities.</remarks>
     /// <param name="entityId">The ID of the entity.</param>
     private void ClearArrivedDestinationIfIdle(int entityId) =>
-        _movementComponents.TryUpdate(entityId, static (ref MovementComponent m) => m.NextMapPosition = null);
+        _movementComponents.TryUpdate(entityId, new SetNextMapPositionUpdate(null));
 
     /// <summary>Attempts to move the entity to its next map position.</summary>
     /// <remarks>Blocking entities are gated by occupancy checks.</remarks>
@@ -183,14 +185,11 @@ public sealed class MovementSystem : ITieredSystem
         if (!MovementCandidates.CanOccupy(_mapQuery, newPosition, transformComponent.Size, entityId, isBlocking) ||
             (isDiagonal && !MovementCandidates.IsDiagonalMoveClear(_mapQuery, oldPosition, newPosition, transformComponent.Size, entityId, isBlocking)))
         {
-            _movementComponents.TryUpdate(entityId, static (ref MovementComponent m) => m.NextMapPosition = null);
+            _movementComponents.TryUpdate(entityId, new SetNextMapPositionUpdate(null));
             return;
         }
 
-        if (_transformComponents.TryUpdate(entityId, newPosition, static (ref transformComponent, newPosition) =>
-        {
-            transformComponent.Position = newPosition;
-        }))
+        if (_transformComponents.TryUpdate(entityId, new SetPositionUpdate(newPosition)))
         {
             var standardLockFrames = StandardActionLockFrames.ResolveMovementForEntity(_abilityScores, _statModifiers, entityId);
             var lockFrames = isDiagonal
@@ -208,5 +207,10 @@ public sealed class MovementSystem : ITieredSystem
                 _eventBus.Publish(entityMovedEvent);
             }
         }
+    }
+
+    private readonly struct SetPositionUpdate(Vector3Int position) : IComponentUpdater<TransformComponent>
+    {
+        public void Update(ref TransformComponent transform) => transform.Position = position;
     }
 }

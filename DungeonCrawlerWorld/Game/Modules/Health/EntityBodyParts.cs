@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
+using Engine.Math;
 using Game.Modules.Health.Components;
 using Game.Modules.Race.Components;
 using Game.Blueprints;
@@ -92,44 +93,20 @@ public sealed class EntityBodyParts(
     }
 
     /// <summary>Takes amount off the part, clamped to its effective maximum, disabling it and locking it out of regen for lockoutFrames the moment it lands at 0.</summary>
-    public void Damage(int entityId, int partId, float amount, float effectiveMaximumHealth, long now, ushort lockoutFrames)
-    {
-        Update(entityId, partId, (amount, effectiveMaximumHealth, now, lockoutFrames), static (ref BodyPartStateComponent state, int id, (float Amount, float EffectiveMaximum, long Now, ushort LockoutFrames) change) =>
-        {
-            var current = Microsoft.Xna.Framework.MathHelper.Clamp(state.CurrentHealthOf(id) - change.Amount, 0f, change.EffectiveMaximum);
-            state.SetCurrentHealth(id, current);
-
-            if (current == 0)
-            {
-                state.SetDisabled(id, true);
-                state.SetRegenLockedUntilFrame(id, FrameDeadline.After(change.Now, change.LockoutFrames));
-            }
-        });
-    }
+    public void Damage(int entityId, int partId, float amount, float effectiveMaximumHealth, long now, ushort lockoutFrames) =>
+        Update(entityId, new DamagePartUpdate(partId, amount, effectiveMaximumHealth, FrameDeadline.After(now, lockoutFrames)));
 
     /// <summary>Puts amount back onto the part, clamped to its effective maximum, re-enabling it once it is above 0.</summary>
-    public void Heal(int entityId, int partId, float amount, float effectiveMaximumHealth)
-    {
-        Update(entityId, partId, (amount, effectiveMaximumHealth), static (ref BodyPartStateComponent state, int id, (float Amount, float EffectiveMaximum) change) =>
-        {
-            var current = Microsoft.Xna.Framework.MathHelper.Clamp(state.CurrentHealthOf(id) + change.Amount, 0f, change.EffectiveMaximum);
-            state.SetCurrentHealth(id, current);
-
-            if (current > 0)
-            {
-                state.SetDisabled(id, false);
-            }
-        });
-    }
+    public void Heal(int entityId, int partId, float amount, float effectiveMaximumHealth) =>
+        Update(entityId, new HealPartUpdate(partId, amount, effectiveMaximumHealth));
 
     /// <summary>Pushes the part's regen lockout out to lockoutFrames from now, whatever its health.</summary>
     public void LockOutOfRegen(int entityId, int partId, long now, ushort lockoutFrames) =>
-        Update(entityId, partId, (now, lockoutFrames), static (ref BodyPartStateComponent state, int id, (long Now, ushort LockoutFrames) change) =>
-            state.SetRegenLockedUntilFrame(id, FrameDeadline.After(change.Now, change.LockoutFrames)));
+        Update(entityId, new LockPartOutOfRegenUpdate(partId, FrameDeadline.After(now, lockoutFrames)));
 
     /// <summary>Writes the part's current health outright, touching nothing else -- for bookkeeping that is neither damage nor healing (MaximumHealthShift).</summary>
     public void SetCurrentHealth(int entityId, int partId, float value) =>
-        Update(entityId, partId, value, static (ref BodyPartStateComponent state, int id, float health) => state.SetCurrentHealth(id, health));
+        Update(entityId, new SetPartHealthUpdate(partId, value));
 
     /// <summary>The entity's current and maximum health, summed across its parts.</summary>
     public bool TryGetTotals(int entityId, out float current, out float maximum)
@@ -148,11 +125,10 @@ public sealed class EntityBodyParts(
         return any;
     }
 
-    private delegate void StateChange<TState>(ref BodyPartStateComponent state, int partId, TState change);
-
-    /// <summary>Creates the entity's state component if this is the first thing to happen to it, then applies change to one part.</summary>
-    private void Update<TState>(int entityId, int partId, TState change, StateChange<TState> apply)
+    /// <summary>Creates the entity's state component if this is the first thing to happen to it, then applies updater to the part it names.</summary>
+    private void Update<TUpdater>(int entityId, TUpdater updater) where TUpdater : unmanaged, IBodyPartUpdater
     {
+        var partId = updater.PartId;
         var stateDenseIndex = states.GetDenseIndex(entityId);
         if (stateDenseIndex < 0)
         {
@@ -168,8 +144,7 @@ public sealed class EntityBodyParts(
             return;
         }
 
-        states.UpdateByDenseIndex(stateDenseIndex, (partId, change, apply), static (ref BodyPartStateComponent state, (int PartId, TState Change, StateChange<TState> Apply) call) =>
-            call.Apply(ref state, call.PartId, call.Change));
+        states.UpdateByDenseIndex(stateDenseIndex, updater);
     }
 
     /// <summary>Gives the entity a state component holding every part at its template health, and returns its dense slot.</summary>
@@ -238,5 +213,58 @@ public sealed class EntityBodyParts(
             Current = owner.ViewOf(_partId, in template, stateDenseIndex);
             return true;
         }
+    }
+
+    /// <summary>A change to one body part, which Update checks against the entity's plan before applying.</summary>
+    private interface IBodyPartUpdater : IComponentUpdater<BodyPartStateComponent>
+    {
+        int PartId { get; }
+    }
+
+    private readonly struct DamagePartUpdate(int partId, float amount, float effectiveMaximumHealth, uint regenLockedUntilFrame) : IBodyPartUpdater
+    {
+        public int PartId => partId;
+
+        public void Update(ref BodyPartStateComponent state)
+        {
+            var current = MathUtility.Clamp(state.CurrentHealthOf(partId) - amount, 0f, effectiveMaximumHealth);
+            state.SetCurrentHealth(partId, current);
+
+            if (current == 0)
+            {
+                state.SetDisabled(partId, true);
+                state.SetRegenLockedUntilFrame(partId, regenLockedUntilFrame);
+            }
+        }
+    }
+
+    private readonly struct HealPartUpdate(int partId, float amount, float effectiveMaximumHealth) : IBodyPartUpdater
+    {
+        public int PartId => partId;
+
+        public void Update(ref BodyPartStateComponent state)
+        {
+            var current = MathUtility.Clamp(state.CurrentHealthOf(partId) + amount, 0f, effectiveMaximumHealth);
+            state.SetCurrentHealth(partId, current);
+
+            if (current > 0)
+            {
+                state.SetDisabled(partId, false);
+            }
+        }
+    }
+
+    private readonly struct LockPartOutOfRegenUpdate(int partId, uint regenLockedUntilFrame) : IBodyPartUpdater
+    {
+        public int PartId => partId;
+
+        public void Update(ref BodyPartStateComponent state) => state.SetRegenLockedUntilFrame(partId, regenLockedUntilFrame);
+    }
+
+    private readonly struct SetPartHealthUpdate(int partId, float health) : IBodyPartUpdater
+    {
+        public int PartId => partId;
+
+        public void Update(ref BodyPartStateComponent state) => state.SetCurrentHealth(partId, health);
     }
 }

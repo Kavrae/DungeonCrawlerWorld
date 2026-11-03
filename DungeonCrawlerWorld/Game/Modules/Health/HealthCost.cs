@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Game.Modules.Death.Components;
@@ -66,8 +67,7 @@ public static class HealthCost
 
         if (health.TryGetReadonly(entityId, out var before))
         {
-            health.TryUpdate(entityId, amount, static (ref SimpleHealthComponent healthComponent, float amount) =>
-                healthComponent.CurrentHealth = MathF.Max(0f, healthComponent.CurrentHealth - amount));
+            health.TryUpdate(entityId, new TakeHealthUpdate(amount));
 
             if (before.CurrentHealth > 0 && health.GetReadonly(entityId).CurrentHealth == 0 && entityId != playerQuery.PlayerEntityId)
             {
@@ -102,5 +102,10 @@ public static class HealthCost
                 return;
             }
         }
+    }
+
+    private readonly struct TakeHealthUpdate(float amount) : IComponentUpdater<SimpleHealthComponent>
+    {
+        public void Update(ref SimpleHealthComponent health) => health.CurrentHealth = MathF.Max(0f, health.CurrentHealth - amount);
     }
 }

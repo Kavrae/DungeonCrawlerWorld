@@ -64,10 +64,10 @@ public sealed class FairyMagicMissileTests
 
         var fairyId = build.Factory.Spawn(SpawnRequest.At(definitions.GetId(Fairy.Id), FairyPosition) with { Seed = 1 });
         var components = build.EcsContext.ComponentManager;
-        components.GetPackedPool<MovementComponent>().TryUpdate(fairyId, static (ref MovementComponent movement) => movement.MovementMode = MovementMode.Random);
+        components.GetPackedPool<MovementComponent>().TrySet(fairyId, components.GetPackedPool<MovementComponent>().GetReadonly(fairyId) with { MovementMode = MovementMode.Random });
         if (fairyMana is { } mana)
         {
-            components.GetPackedPool<ManaComponent>().TryUpdate(fairyId, mana, static (ref ManaComponent component, float value) => component.CurrentMana = value);
+            components.GetPackedPool<ManaComponent>().TrySet(fairyId, components.GetPackedPool<ManaComponent>().GetReadonly(fairyId) with { CurrentMana = mana });
         }
 
         return new Session(build, fairyId, playerId);

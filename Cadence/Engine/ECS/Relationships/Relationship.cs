@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 
@@ -217,7 +218,7 @@ public sealed class Relationship<TLink> : IRelationship where TLink : struct, IR
     {
         var unlinkedLink = link;
         _targetEntityIdBySourceEntityId.GetWritable(sourceEntityId) = -1;
-        _relatedSources.RemoveFirst(targetEntityId, sourceEntityId, static (ref readonly relatedSource, sourceId) => relatedSource.SourceEntityId == sourceId);
+        _relatedSources.RemoveFirst(targetEntityId, new SourceMatcher(sourceEntityId));
         SourceUnlinked?.Invoke(sourceEntityId, targetEntityId, in unlinkedLink, reason);
     }
 
@@ -324,5 +325,10 @@ public sealed class Relationship<TLink> : IRelationship where TLink : struct, IR
     {
         list.Clear();
         _sourceEntityIdListPool.Push(list);
+    }
+
+    private readonly struct SourceMatcher(int sourceEntityId) : IComponentMatcher<RelatedSourceComponent<TLink>>
+    {
+        public bool Matches(in RelatedSourceComponent<TLink> relatedSource) => relatedSource.SourceEntityId == sourceEntityId;
     }
 }

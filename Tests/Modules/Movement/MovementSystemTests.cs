@@ -741,6 +741,6 @@ public sealed class MovementSystemTests
             return;
         }
 
-        movementPool.TryUpdate(entityId, candidate, static (ref MovementComponent movement, Vector3Int target) => movement.NextMapPosition = target);
+        movementPool.TrySet(entityId, movementPool.GetReadonly(entityId) with { NextMapPosition = candidate });
     }
 }

@@ -75,7 +75,7 @@ public sealed class BurningApplier(ComponentManager componentManager, BlueprintR
 
         if (existingTimerDenseIndex != -1)
         {
-            _bodyPartTimers.UpdateByDenseIndex(existingTimerDenseIndex, (byte)stacksLanded, static (ref BodyPartBurningTimerComponent t, byte added) => t.StackCount += added);
+            _bodyPartTimers.UpdateByDenseIndex(existingTimerDenseIndex, new AddStacksUpdate((byte)stacksLanded));
         }
         else
         {
@@ -97,5 +97,10 @@ public sealed class BurningApplier(ComponentManager componentManager, BlueprintR
         }
 
         return -1;
+    }
+
+    private readonly struct AddStacksUpdate(byte addedStacks) : IComponentUpdater<BodyPartBurningTimerComponent>
+    {
+        public void Update(ref BodyPartBurningTimerComponent timer) => timer.StackCount += addedStacks;
     }
 }

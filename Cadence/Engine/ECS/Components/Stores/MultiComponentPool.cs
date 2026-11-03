@@ -8,7 +8,7 @@ namespace Engine.ECS.Components.Stores;
 /// Each entity's chain head, count and version live in a paged index (see EntityPages), so a pool costs the id ranges its holders fall in rather than the world's entity capacity; dense storage grows geometrically (see DenseCapacityGrowth).
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool where T : struct
+public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool, IObservableComponentPool where T : struct
 {
     private static readonly EntityChain EmptyChain = new(-1, 0, 0);
 
@@ -61,18 +61,6 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <summary> A read-only span of the version for each component in <see cref="Components"/>, at the same dense index. </summary>
     public ReadOnlySpan<uint> Versions => new(_denseVersions, 0, _count);
 
-    /// <summary> A delegate that defines a method for updating a component in place. </summary>
-    public delegate void ComponentUpdater(ref T component);
-
-    /// <summary> A delegate that defines a method for updating a component to a given state. </summary>
-    public delegate void ComponentUpdater<TState>(ref T component, TState state);
-
-    /// <summary> A delegate that defines a predicate to test against a component. </summary>
-    public delegate bool ComponentPredicate(ref readonly T component);
-
-    /// <summary> A delegate that defines a predicate to test against a component, given a state. </summary>
-    public delegate bool ComponentPredicate<TState>(ref readonly T component, TState state);
-
     /// <summary> Fired on an entity's 0-to-1 (EntityAdded) or 1-to-0 (EntityRemoved) membership transition. </summary>
     /// <remarks>
     /// Not fired on every individual Add/Remove call, since an entity can hold several instances
@@ -88,10 +76,11 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     public event Action<int>? EntityRemoved;
 
     /// <summary>
-    /// Opt-in: fired after every write to a component *instance* -- (entityId, denseIndex) -- at
+    /// Fired after every write to a component *instance* -- (entityId, denseIndex) -- at
     /// exactly the points the pool bumps that instance's version: every Add (not just an entity's
     /// first, unlike EntityAdded), UpdateByDenseIndex, TryUpdateFirst and
-    /// IncrementVersionByDenseIndex. Not fired by removals.
+    /// IncrementVersionByDenseIndex. Not fired by removals. Subscribing throws unless the pool is
+    /// Observed (see ComponentChangeObservation).
     /// </summary>
     /// <remarks>
     /// Same purpose and contract as PackedComponentPool.ComponentChanged -- see its remarks. Per
@@ -99,20 +88,46 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// that already has one raises no EntityAdded, and that is precisely the case a timer wheel
     /// must not miss. The dense index is only valid until the next removal from this pool.
     /// </remarks>
-    public event Action<int, int>? ComponentChanged;
+    public event Action<int, int>? ComponentChanged
+    {
+        add
+        {
+            ThrowIfUnobserved();
+            _componentChanged += value;
+        }
+        remove => _componentChanged -= value;
+    }
 
-    /// <summary>Opt-in: fired before a component instance is removed -- (entityId, denseIndex) -- while it can still be read.</summary>
+    /// <summary>Fired before a component instance is removed -- (entityId, denseIndex) -- while it can still be read. Subscribing throws unless the pool is Observed.</summary>
     /// <remarks>
     /// Raised by every removal path (Remove, RemoveFirst, RemoveByDenseIndex), once per instance, and
     /// not by Clear. A handler may read the instance and write other pools, but must not add to or
     /// remove from this one.
     /// </remarks>
-    public event Action<int, int>? ComponentRemoving;
+    public event Action<int, int>? ComponentRemoving
+    {
+        add
+        {
+            ThrowIfUnobserved();
+            _componentRemoving += value;
+        }
+        remove => _componentRemoving -= value;
+    }
+
+    /// <summary>Whether ComponentChanged and ComponentRemoving can be subscribed to, fixed while the build registers components.</summary>
+    public ComponentChangeObservation Observation { get; private set; }
+
+    /// <summary>Makes the pool Observed: ComponentManager.ObserveChanges, while components are being registered.</summary>
+    void IObservableComponentPool.MarkObserved() => Observation = ComponentChangeObservation.Observed;
+
+    private Action<int, int>? _componentChanged;
+    private Action<int, int>? _componentRemoving;
 
     /// <summary> Initializes a new instance of the <see cref="MultiComponentPool{T}"/> class with the specified capacities. </summary>
     /// <param name="entityCapacity">The entity id space the chain index's page table starts out covering; ids beyond it grow it on demand.</param>
     /// <param name="initialCapacity">The initial dense storage size.</param>
-    public MultiComponentPool(int entityCapacity, int initialCapacity)
+    /// <param name="observation">Whether the pool's changes can be observed; always Observed for an IScheduledTimer component.</param>
+    public MultiComponentPool(int entityCapacity, int initialCapacity, ComponentChangeObservation observation = ComponentChangeObservation.Unobserved)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(entityCapacity);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(initialCapacity);
@@ -130,6 +145,17 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         Array.Fill(_densePrevious, -1);
 
         _count = 0;
+        Observation = typeof(IScheduledTimer).IsAssignableFrom(typeof(T))
+            ? ComponentChangeObservation.Observed
+            : observation;
+    }
+
+    private void ThrowIfUnobserved()
+    {
+        if (Observation != ComponentChangeObservation.Observed)
+        {
+            ComponentPoolThrows.Unobserved<T>();
+        }
     }
 
     /// <summary> Grows the chain index's page table to cover the new entity capacity. Allocates no pages. </summary>
@@ -190,7 +216,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
             EntityAdded?.Invoke(entityId);
         }
 
-        ComponentChanged?.Invoke(entityId, newDenseIndex);
+        _componentChanged?.Invoke(entityId, newDenseIndex);
     }
 
     /// <summary> Removes every component instance the specified entity owns. </summary>
@@ -212,46 +238,18 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         return true;
     }
 
-    /// <summary> Removes the first of entityId's components matching predicate. </summary>
-    /// <remarks>Walks the dense per-entity chain in insertion order, same as every other predicate-based lookup on this type -- see TryGetFirst/TryUpdateFirst.</remarks>
+    /// <summary> Removes the first of entityId's components matcher accepts. </summary>
+    /// <remarks>Walks the dense per-entity chain in insertion order, same as every other matcher-based lookup on this type -- see TryGetFirst/TryUpdateFirst.</remarks>
     /// <param name="entityId">The ID of the entity to check.</param>
-    /// <param name="predicate">The predicate a component must match to be removed.</param>
+    /// <param name="matcher">Which component to remove.</param>
     /// <returns>True if a matching component was found and removed, false otherwise.</returns>
-    public bool RemoveFirst(int entityId, ComponentPredicate predicate)
+    public bool RemoveFirst<TMatcher>(int entityId, TMatcher matcher) where TMatcher : unmanaged, IComponentMatcher<T>
     {
-        ArgumentNullException.ThrowIfNull(predicate);
-
         for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1;)
         {
             var next = _denseNext[denseIndex];
 
-            if (predicate(ref _denseComponents[denseIndex]))
-            {
-                RemoveDenseIndexInternal(denseIndex);
-                return true;
-            }
-
-            denseIndex = next;
-        }
-
-        return false;
-    }
-
-    /// <summary> Removes the first of entityId's components matching predicate. </summary>
-    /// <remarks>state-passing overload of RemoveFirst -- avoids a per-call closure allocation when predicate needs an external value.</remarks>
-    /// <param name="entityId">The ID of the entity to check.</param>
-    /// <param name="state">The state to pass to the predicate.</param>
-    /// <param name="predicate">The predicate a component must match to be removed.</param>
-    /// <returns>True if a matching component was found and removed, false otherwise.</returns>
-    public bool RemoveFirst<TState>(int entityId, TState state, ComponentPredicate<TState> predicate)
-    {
-        ArgumentNullException.ThrowIfNull(predicate);
-
-        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1;)
-        {
-            var next = _denseNext[denseIndex];
-
-            if (predicate(ref _denseComponents[denseIndex], state))
+            if (matcher.Matches(in _denseComponents[denseIndex]))
             {
                 RemoveDenseIndexInternal(denseIndex);
                 return true;
@@ -264,7 +262,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     }
 
     /// <summary> Removes a single component instance by its dense index. </summary>
-    /// <remarks>Unconditional -- for callers that already located the instance themselves (e.g. via GetFirstDenseIndex/GetNextDenseIndex) and don't need a predicate re-check.</remarks>
+    /// <remarks>Unconditional -- for callers that already located the instance themselves (e.g. via GetFirstDenseIndex/GetNextDenseIndex) and don't need a matcher re-check.</remarks>
     /// <param name="denseIndex">The dense index of the component instance to remove.</param>
     /// <returns>Always true.</returns>
     public bool RemoveByDenseIndex(int denseIndex)
@@ -359,50 +357,34 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     {
         _denseVersions[denseIndex]++;
         _chains.GetWritable(entityId).Version++;
-        ComponentChanged?.Invoke(entityId, denseIndex);
+        _componentChanged?.Invoke(entityId, denseIndex);
     }
 
-    /// <summary> Updates a component instance in place by dense index using a custom update function. </summary>
+    /// <summary> Applies updater to the component instance at the given dense index, in place. </summary>
     /// <param name="denseIndex">The dense index of the component instance.</param>
-    /// <param name="updater">The function to update the component.</param>
-    public void UpdateByDenseIndex(int denseIndex, ComponentUpdater updater)
+    /// <param name="updater">The change to apply.</param>
+    public void UpdateByDenseIndex<TUpdater>(int denseIndex, TUpdater updater) where TUpdater : unmanaged, IComponentUpdater<T>
     {
-        ArgumentNullException.ThrowIfNull(updater);
-
-        updater(ref _denseComponents[denseIndex]);
+        updater.Update(ref _denseComponents[denseIndex]);
         MarkChanged(_denseIndexToEntityIdMap[denseIndex], denseIndex);
     }
 
-    /// <summary> Updates a component instance in place by dense index using a custom update function and state. </summary>
-    /// <typeparam name="TState">The type of the state parameter.</typeparam>
-    /// <param name="denseIndex">The dense index of the component instance.</param>
-    /// <param name="state">The state to pass to the update function.</param>
-    /// <param name="updater">The function to update the component.</param>
-    public void UpdateByDenseIndex<TState>(int denseIndex, TState state, ComponentUpdater<TState> updater)
-    {
-        ArgumentNullException.ThrowIfNull(updater);
-
-        updater(ref _denseComponents[denseIndex], state);
-        MarkChanged(_denseIndexToEntityIdMap[denseIndex], denseIndex);
-    }
-
-    /// <summary> Finds and updates the first of entityId's components matching predicate. </summary>
-    /// <remarks>Walks the dense per-entity chain in insertion order, same as every other predicate-based lookup on this type -- see TryGetFirst/RemoveFirst.</remarks>
+    /// <summary> Applies updater to the first of entityId's components matcher accepts. </summary>
+    /// <remarks>Walks the dense per-entity chain in insertion order, same as every other matcher-based lookup on this type -- see TryGetFirst/RemoveFirst.</remarks>
     /// <param name="entityId">The ID of the entity to check.</param>
-    /// <param name="predicate">The predicate a component must match to be updated.</param>
-    /// <param name="updater">The function to update the matching component.</param>
+    /// <param name="matcher">Which component to change.</param>
+    /// <param name="updater">The change to apply.</param>
     /// <returns>True if a matching component was found and updated, false otherwise.</returns>
-    public bool TryUpdateFirst(int entityId, ComponentPredicate predicate, ComponentUpdater updater)
+    public bool TryUpdateFirst<TMatcher, TUpdater>(int entityId, TMatcher matcher, TUpdater updater)
+        where TMatcher : unmanaged, IComponentMatcher<T>
+        where TUpdater : unmanaged, IComponentUpdater<T>
     {
-        ArgumentNullException.ThrowIfNull(predicate);
-        ArgumentNullException.ThrowIfNull(updater);
-
         for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseNext[denseIndex])
         {
             ref var component = ref _denseComponents[denseIndex];
-            if (predicate(ref component))
+            if (matcher.Matches(in component))
             {
-                updater(ref component);
+                updater.Update(ref component);
                 MarkChanged(entityId, denseIndex);
                 return true;
             }
@@ -411,46 +393,14 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         return false;
     }
 
-    /// <summary> Finds and updates the first of entityId's components matching predicate. </summary>
-    /// <remarks>state-passing overload of TryUpdateFirst -- avoids a per-call closure allocation when predicate/updater need an external value.</remarks>
-    /// <param name="entityId">The ID of the entity to check.</param>
-    /// <param name="state">The state to pass to the predicate and update function.</param>
-    /// <param name="predicate">The predicate a component must match to be updated.</param>
-    /// <param name="updater">The function to update the matching component.</param>
-    /// <returns>True if a matching component was found and updated, false otherwise.</returns>
-    public bool TryUpdateFirst<TState>(
-        int entityId,
-        TState state,
-        ComponentPredicate<TState> predicate,
-        ComponentUpdater<TState> updater)
+    /// <summary>Finds the first of entityId's components matcher accepts.</summary>
+    /// <remarks>Walks the dense per-entity chain in insertion order, same as every other matcher-based lookup on this type -- see TryUpdateFirst/RemoveFirst.</remarks>
+    public bool TryGetFirst<TMatcher>(int entityId, TMatcher matcher, out T result) where TMatcher : unmanaged, IComponentMatcher<T>
     {
-        ArgumentNullException.ThrowIfNull(predicate);
-        ArgumentNullException.ThrowIfNull(updater);
-
-        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseNext[denseIndex])
-        {
-            ref var component = ref _denseComponents[denseIndex];
-            if (predicate(ref component, state))
-            {
-                updater(ref component, state);
-                MarkChanged(entityId, denseIndex);
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>Finds the first component matching predicate for entityId.</summary>
-    /// <remarks>Walks the dense per-entity chain in insertion order, same as every other predicate-based lookup on this type -- see TryUpdateFirst/RemoveFirst.</remarks>
-    public bool TryGetFirst(int entityId, ComponentPredicate predicate, out T result)
-    {
-        ArgumentNullException.ThrowIfNull(predicate);
-
         for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseNext[denseIndex])
         {
             ref readonly var component = ref _denseComponents[denseIndex];
-            if (predicate(in component))
+            if (matcher.Matches(in component))
             {
                 result = component;
                 return true;
@@ -461,54 +411,14 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         return false;
     }
 
-    /// <summary>Finds the first component matching predicate for entityId.</summary>
-    /// <remarks>state-passing overload of TryGetFirst -- avoids a per-call closure allocation when predicate needs an external value, the same reasoning TryUpdateFirst/RemoveFirst's own TState overloads use.</remarks>
-    public bool TryGetFirst<TState>(int entityId, TState state, ComponentPredicate<TState> predicate, out T result)
+    /// <summary>Counts how many of entityId's components matcher accepts.</summary>
+    /// <remarks>Named CountMatching, not Count, so it doesn't collide with the whole-pool Count property or the matcher-less per-entity CountForEntity.</remarks>
+    public int CountMatching<TMatcher>(int entityId, TMatcher matcher) where TMatcher : unmanaged, IComponentMatcher<T>
     {
-        ArgumentNullException.ThrowIfNull(predicate);
-
-        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseNext[denseIndex])
-        {
-            ref readonly var component = ref _denseComponents[denseIndex];
-            if (predicate(in component, state))
-            {
-                result = component;
-                return true;
-            }
-        }
-
-        result = default!;
-        return false;
-    }
-
-    /// <summary>Counts how many of entityId's components match predicate.</summary>
-    /// <remarks>Named CountMatching, not Count, so it doesn't collide with the whole-pool Count property or the predicate-less per-entity CountForEntity.</remarks>
-    public int CountMatching(int entityId, ComponentPredicate predicate)
-    {
-        ArgumentNullException.ThrowIfNull(predicate);
-
         var matchCount = 0;
         for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseNext[denseIndex])
         {
-            if (predicate(ref _denseComponents[denseIndex]))
-            {
-                matchCount++;
-            }
-        }
-
-        return matchCount;
-    }
-
-    /// <summary>Counts how many of entityId's components match predicate.</summary>
-    /// <remarks>state-passing overload of CountMatching -- same closure-avoidance reasoning as TryGetFirst's own TState overload.</remarks>
-    public int CountMatching<TState>(int entityId, TState state, ComponentPredicate<TState> predicate)
-    {
-        ArgumentNullException.ThrowIfNull(predicate);
-
-        var matchCount = 0;
-        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseNext[denseIndex])
-        {
-            if (predicate(ref _denseComponents[denseIndex], state))
+            if (matcher.Matches(in _denseComponents[denseIndex]))
             {
                 matchCount++;
             }
@@ -549,7 +459,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     private void RemoveDenseIndexInternal(int denseIndex)
     {
         var ownerEntityId = _denseIndexToEntityIdMap[denseIndex];
-        ComponentRemoving?.Invoke(ownerEntityId, denseIndex);
+        _componentRemoving?.Invoke(ownerEntityId, denseIndex);
 
         var prev = _densePrevious[denseIndex];
         var next = _denseNext[denseIndex];

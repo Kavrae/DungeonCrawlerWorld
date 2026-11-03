@@ -33,7 +33,7 @@ public static class ShopStock
     private static void EnsurePreferredStockLevel(ComponentManager componentManager, int entityId, Guid itemDefinitionId, byte preferredStockLevel)
     {
         var preferences = componentManager.GetMultiPool<ShopStockPreferenceComponent>();
-        if (!preferences.TryGetFirst(entityId, itemDefinitionId, static (ref readonly ShopStockPreferenceComponent pref, Guid id) => pref.ItemDefinitionId == id, out _))
+        if (!preferences.TryGetFirst(entityId, new ShopStockPreferenceForItemMatcher(itemDefinitionId), out _))
         {
             preferences.Add(entityId, new ShopStockPreferenceComponent(itemDefinitionId, preferredStockLevel));
         }

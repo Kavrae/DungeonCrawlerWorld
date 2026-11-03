@@ -29,8 +29,7 @@ public static class AbilityScoreEffects
         var clampedBase = AbilityScoreMath.ClampBaseValue(baseValue);
         var total = AbilityScoreMath.ComputeTotal(StatModifiersOf(componentManager), entityId, type, clampedBase);
 
-        Write(componentManager.GetPackedPool<AbilityScoresComponent>(), entityId, (type, clampedBase, total), static (ref AbilityScoresComponent scores, (AbilityScoreType Type, ushort Base, ushort Total) granted) =>
-            scores.Set(granted.Type, granted.Base, granted.Total));
+        Write(componentManager.GetPackedPool<AbilityScoresComponent>(), entityId, new SetScoreUpdate(type, clampedBase, total));
     }
 
     public static void GrantDefaults(ComponentManager componentManager, int entityId, ushort baseValue)
@@ -91,8 +90,7 @@ public static class AbilityScoreEffects
         var clampedBase = AbilityScoreMath.ClampBaseValue(newBaseValue);
         var newTotal = AbilityScoreMath.ComputeTotal(StatModifiersOf(componentManager), entityId, type, clampedBase);
 
-        abilityScores.UpdateByDenseIndex(denseIndex, (type, clampedBase, newTotal), static (ref AbilityScoresComponent scores, (AbilityScoreType Type, ushort Base, ushort Total) values) =>
-            scores.Set(values.Type, values.Base, values.Total));
+        abilityScores.UpdateByDenseIndex(denseIndex, new SetScoreUpdate(type, clampedBase, newTotal));
         eventBus.Publish(new AbilityScoreBaseValueChangedEvent(entityId, type, clampedBase));
     }
 
@@ -126,22 +124,32 @@ public static class AbilityScoreEffects
         }
 
         var newTotal = AbilityScoreMath.ComputeTotal(StatModifiersOf(componentManager), entityId, type, score.BaseValue);
-        abilityScores.UpdateByDenseIndex(denseIndex, (type, newTotal), static (ref AbilityScoresComponent scores, (AbilityScoreType Type, ushort Total) values) =>
-            scores.SetTotal(values.Type, values.Total));
+        abilityScores.UpdateByDenseIndex(denseIndex, new SetTotalUpdate(type, newTotal));
     }
 
     private static MultiComponentPool<StatModifierComponent> StatModifiersOf(ComponentManager componentManager) =>
         componentManager.GetMultiPool<StatModifierComponent>();
 
-    private static void Write<TState>(PackedComponentPool<AbilityScoresComponent> abilityScores, int entityId, TState state, PackedComponentPool<AbilityScoresComponent>.ComponentUpdater<TState> updater)
+    private static void Write<TUpdater>(PackedComponentPool<AbilityScoresComponent> abilityScores, int entityId, TUpdater updater)
+        where TUpdater : unmanaged, IComponentUpdater<AbilityScoresComponent>
     {
-        if (abilityScores.TryUpdate(entityId, state, updater))
+        if (abilityScores.TryUpdate(entityId, updater))
         {
             return;
         }
 
         var scores = default(AbilityScoresComponent);
-        updater(ref scores, state);
+        updater.Update(ref scores);
         abilityScores.Add(entityId, scores);
+    }
+
+    private readonly struct SetScoreUpdate(AbilityScoreType type, ushort baseValue, ushort total) : IComponentUpdater<AbilityScoresComponent>
+    {
+        public void Update(ref AbilityScoresComponent scores) => scores.Set(type, baseValue, total);
+    }
+
+    private readonly struct SetTotalUpdate(AbilityScoreType type, ushort total) : IComponentUpdater<AbilityScoresComponent>
+    {
+        public void Update(ref AbilityScoresComponent scores) => scores.SetTotal(type, total);
     }
 }

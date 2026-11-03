@@ -15,15 +15,13 @@ public static class ManaRestore
         float amount,
         MultiComponentPool<StatModifierComponent> statModifiers)
     {
-        if (!mana.Has(entityId))
+        var denseIndex = mana.GetDenseIndex(entityId);
+        if (denseIndex < 0)
         {
             return;
         }
 
-        mana.TryUpdate(entityId, (statModifiers, entityId, amount), static (ref ManaComponent manaComponent, (MultiComponentPool<StatModifierComponent> StatModifiers, int EntityId, float Amount) state) =>
-        {
-            var effectiveMaximumMana = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumMana, manaComponent.MaximumMana);
-            manaComponent.CurrentMana = MathHelper.Clamp(manaComponent.CurrentMana + state.Amount, 0f, effectiveMaximumMana);
-        });
+        var effectiveMaximumMana = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumMana, mana.GetReadonlyByDenseIndex(denseIndex).MaximumMana);
+        mana.UpdateByDenseIndex(denseIndex, new ShiftCurrentManaUpdate(amount, effectiveMaximumMana));
     }
 }

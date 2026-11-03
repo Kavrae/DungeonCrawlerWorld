@@ -131,7 +131,7 @@ public sealed class MaximumHealthShiftTests
         var expiry = BuildExpirySystem(componentManager, eventBus);
 
         GrantFiftyPercentBuff(componentManager, expiresAtFrame: 10);
-        health.TryUpdate(EntityId, static (ref SimpleHealthComponent component) => component.CurrentHealth = 10f);
+        health.TrySet(EntityId, health.GetReadonly(EntityId) with { CurrentHealth = 10f });
 
         expiry.Update(new EngineTime(default, default, false, FrameCount: 10), 0);
 

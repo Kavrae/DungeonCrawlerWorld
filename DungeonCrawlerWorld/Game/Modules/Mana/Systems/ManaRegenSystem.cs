@@ -56,7 +56,8 @@ public sealed class ManaRegenSystem : ITieredSystem
 
         foreach (var entityId in entityIds)
         {
-            if (!_manaComponents.TryGetReadonly(entityId, out var currentManaComponent))
+            var manaDenseIndex = _manaComponents.GetDenseIndex(entityId);
+            if (manaDenseIndex < 0)
             {
                 continue;
             }
@@ -71,7 +72,7 @@ public sealed class ManaRegenSystem : ITieredSystem
                 continue;
             }
 
-            pairs[0] = (StatModifierTarget.MaximumMana, currentManaComponent.MaximumMana);
+            pairs[0] = (StatModifierTarget.MaximumMana, _manaComponents.GetReadonlyByDenseIndex(manaDenseIndex).MaximumMana);
             pairs[1] = (StatModifierTarget.ManaRegen, basePerSecond);
             StatModifierMath.GetEffectiveValues(_statModifiers, entityId, pairs, effectiveValues);
             var effectiveMaximumMana = effectiveValues[0];
@@ -82,10 +83,7 @@ public sealed class ManaRegenSystem : ITieredSystem
                 continue;
             }
 
-            _manaComponents.TryUpdate(entityId, (effectiveRegen, effectiveMaximumMana), static (ref ManaComponent manaComponent, (float EffectiveRegen, float EffectiveMaximumMana) state) =>
-            {
-                manaComponent.CurrentMana = MathHelper.Clamp(manaComponent.CurrentMana + state.EffectiveRegen, 0f, state.EffectiveMaximumMana);
-            });
+            _manaComponents.UpdateByDenseIndex(manaDenseIndex, new ShiftCurrentManaUpdate(effectiveRegen, effectiveMaximumMana));
         }
     }
 }

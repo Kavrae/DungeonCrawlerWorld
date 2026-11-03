@@ -3284,7 +3284,8 @@ public sealed class UiInputControllerTests
         // shop -- the reported repro's own "5 scrolls of torch" scenario.
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         var denseIndex = stacks.GetFirstDenseIndex(tradeShopEntityId);
-        stacks.UpdateByDenseIndex(denseIndex, (ushort)5, static (ref InventoryItemStackComponent stack, ushort qty) => stack.Quantity = qty);
+        stacks.GetByDenseIndex(denseIndex).Quantity = 5;
+        stacks.IncrementVersionByDenseIndex(denseIndex);
         ((InventoryGridContent)tradeShopGridWindow.DropTarget!).Update(new GameTime());
 
         var cell = (TradeItemStackCell)tradeShopGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();

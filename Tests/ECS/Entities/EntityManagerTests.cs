@@ -108,7 +108,7 @@ public sealed class EntityManagerTests
     public void IsDestroying_IsTrueFromEntityDestroyingUntilTheComponentsAreRemoved_AndOnlyForThatEntity()
     {
         var componentManager = new ComponentManager(4, 4);
-        componentManager.RegisterMultiPool<TestComponent>();
+        componentManager.RegisterMultiPool<TestComponent>(observation: ComponentChangeObservation.Observed);
         var entityManager = new EntityManager(componentManager, 4);
         var destroyed = entityManager.CreateEntity();
         var other = entityManager.CreateEntity();

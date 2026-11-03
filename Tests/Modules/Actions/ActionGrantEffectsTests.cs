@@ -15,6 +15,11 @@ public sealed class ActionGrantEffectsTests
 {
     private static readonly Guid ActionId = Guid.NewGuid();
 
+    private readonly struct InstanceMatcher(Guid actionId) : IComponentMatcher<ActionInstanceComponent>
+    {
+        public bool Matches(in ActionInstanceComponent instance) => instance.ActionId == actionId;
+    }
+
     private static readonly ActionDefinition TestActionDefinition = new(
         ActionId, "Test Action", null, "#", default, [],
         Effects: [new Effect([new DirectDamage(MinFlatDamage: 0, MaxFlatDamage: 0)])],
@@ -43,7 +48,7 @@ public sealed class ActionGrantEffectsTests
 
         ActionGrantEffects.Grant(manager, CatalogWith(TestActionDefinition), 0, ActionId, overrideDefinition);
 
-        Assert.IsTrue(manager.GetMultiPool<ActionInstanceComponent>().TryGetFirst(0, ActionId, static (ref readonly ActionInstanceComponent candidate, Guid id) => candidate.ActionId == id, out var instance));
+        Assert.IsTrue(manager.GetMultiPool<ActionInstanceComponent>().TryGetFirst(0, new InstanceMatcher(ActionId), out var instance));
         Assert.AreEqual(overrideDefinition, instance.Override);
     }
 

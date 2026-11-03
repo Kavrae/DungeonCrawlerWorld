@@ -57,8 +57,7 @@ public static class MaximumHealthShift
             var shift = StatModifierMath.CalculateTotal(storedMaximum, additiveAfter, multiplicativeAfter)
                 - StatModifierMath.CalculateTotal(storedMaximum, additiveBefore, multiplicativeBefore);
 
-            health.TryUpdate(entityId, shift, static (ref SimpleHealthComponent healthComponent, float amount) =>
-                healthComponent.CurrentHealth = Shifted(healthComponent.CurrentHealth, amount));
+            health.TryUpdate(entityId, new ShiftedHealthUpdate(shift));
             return;
         }
 
@@ -100,4 +99,9 @@ public static class MaximumHealthShift
 
     private static MultiComponentPool<StatModifierComponent> StatModifiers(ComponentManager componentManager) =>
         componentManager.GetMultiPool<StatModifierComponent>();
+
+    private readonly struct ShiftedHealthUpdate(float shift) : IComponentUpdater<SimpleHealthComponent>
+    {
+        public void Update(ref SimpleHealthComponent health) => health.CurrentHealth = Shifted(health.CurrentHealth, shift);
+    }
 }

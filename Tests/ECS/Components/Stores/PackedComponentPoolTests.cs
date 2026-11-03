@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 
 namespace Tests.ECS.Components.Stores;
@@ -8,6 +9,11 @@ public sealed class PackedComponentPoolTests
     private struct TestComponent
     {
         public int Value;
+    }
+
+    private readonly struct AddUpdate(int amount) : IComponentUpdater<TestComponent>
+    {
+        public void Update(ref TestComponent component) => component.Value += amount;
     }
 
     private static Engine.ECS.Components.MergeAction<TestComponent> AverageMerge =>
@@ -80,7 +86,7 @@ public sealed class PackedComponentPoolTests
         var pool = new PackedComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4, AverageMerge);
         pool.Add(5, new TestComponent { Value = 1 });
 
-        pool.UpdateByDenseIndex(0, static (ref c) => c.Value += 100);
+        pool.UpdateByDenseIndex(0, new AddUpdate(100));
 
         Assert.AreEqual(101, pool.GetByDenseIndex(0).Value);
         Assert.AreEqual(2u, pool.GetVersionByDenseIndex(0));

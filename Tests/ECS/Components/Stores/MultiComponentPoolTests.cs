@@ -1,5 +1,6 @@
 namespace Tests.ECS.Components.Stores;
 
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 
 [TestClass]
@@ -8,6 +9,11 @@ public sealed class MultiComponentPoolTests
     private struct TestComponent
     {
         public int Value;
+    }
+
+    private readonly struct ValueMatcher(int value) : IComponentMatcher<TestComponent>
+    {
+        public bool Matches(in TestComponent component) => component.Value == value;
     }
 
     [TestMethod]
@@ -80,7 +86,7 @@ public sealed class MultiComponentPoolTests
         pool.Add(0, new TestComponent { Value = 1 });
         pool.Add(0, new TestComponent { Value = 2 });
 
-        var removed = pool.RemoveFirst(0, (ref readonly c) => c.Value == 1);
+        var removed = pool.RemoveFirst(0, new ValueMatcher(1));
 
         Assert.IsTrue(removed);
         Assert.AreEqual(1, pool.CountForEntity(0));
@@ -97,7 +103,7 @@ public sealed class MultiComponentPoolTests
         pool.Add(0, new TestComponent { Value = 2 });
         pool.Add(0, new TestComponent { Value = 3 });
 
-        pool.RemoveFirst(0, (ref readonly c) => c.Value == 1);
+        pool.RemoveFirst(0, new ValueMatcher(1));
 
         Assert.AreEqual(2, pool.CountForEntity(0));
         Assert.AreEqual(1, pool.CountForEntity(1));
@@ -136,10 +142,10 @@ public sealed class MultiComponentPoolTests
         var removedFiredCount = 0;
         pool.EntityRemoved += _ => removedFiredCount++;
 
-        pool.RemoveFirst(0, (ref readonly c) => c.Value == 1);
+        pool.RemoveFirst(0, new ValueMatcher(1));
         Assert.AreEqual(0, removedFiredCount);
 
-        pool.RemoveFirst(0, (ref readonly c) => c.Value == 2);
+        pool.RemoveFirst(0, new ValueMatcher(2));
         Assert.AreEqual(1, removedFiredCount);
     }
 
@@ -213,7 +219,7 @@ public sealed class MultiComponentPoolTests
         var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
         pool.Add(0, new TestComponent { Value = 5 }); // dense index 0, version 1
         pool.Add(0, new TestComponent { Value = 5 }); // dense index 1, version 1
-        pool.UpdateByDenseIndex(pool.GetFirstDenseIndex(0), static (ref TestComponent c) => { }); // bumps whichever instance is first in the chain to version 2
+        pool.IncrementVersionByDenseIndex(pool.GetFirstDenseIndex(0)); // bumps whichever instance is first in the chain to version 2
         var destination = new List<Engine.ECS.Components.InspectedComponentEntry>();
 
         pool.CopyInspectionDataForEntity(0, destination);
@@ -291,7 +297,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void ComponentRemoving_FiresForEveryRemovalPath_WithTheInstanceStillReadable()
     {
-        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4, ComponentChangeObservation.Observed);
         var removing = new List<(int EntityId, int Value)>();
         pool.ComponentRemoving += (entityId, denseIndex) => removing.Add((entityId, pool.GetReadonlyByDenseIndex(denseIndex).Value));
 
@@ -304,8 +310,8 @@ public sealed class MultiComponentPoolTests
         pool.Add(4, new TestComponent { Value = 41 });
         Assert.IsEmpty(removing, "An add is not a removal.");
 
-        pool.RemoveFirst(1, static (ref readonly TestComponent component) => component.Value == 10);
-        pool.RemoveFirst(4, 41, static (ref readonly TestComponent component, int value) => component.Value == value);
+        pool.RemoveFirst(1, new ValueMatcher(10));
+        pool.RemoveFirst(4, new ValueMatcher(41));
         pool.RemoveByDenseIndex(pool.GetFirstDenseIndex(2));
         pool.Remove(3);
 
@@ -317,7 +323,7 @@ public sealed class MultiComponentPoolTests
     [TestMethod]
     public void ComponentRemoving_FiresBeforeTheEntityStopsHoldingTheInstance()
     {
-        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
+        var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4, ComponentChangeObservation.Observed);
         pool.Add(1, new TestComponent { Value = 10 });
         var countSeenWhileRemoving = -1;
         pool.ComponentRemoving += (entityId, _) => countSeenWhileRemoving = pool.CountForEntity(entityId);

@@ -78,11 +78,7 @@ public sealed class EntityActions(
     {
         var readyAtFrame = FrameDeadline.After(now, cooldownFrames);
 
-        if (cooldowns.TryUpdateFirst(
-            entityId,
-            (ActionId: actionId, ReadyAt: readyAtFrame),
-            static (ref readonly ActionCooldownComponent cooldown, (Guid ActionId, uint ReadyAt) state) => cooldown.ActionId == state.ActionId,
-            static (ref ActionCooldownComponent cooldown, (Guid ActionId, uint ReadyAt) state) => cooldown.ReadyAtFrame = state.ReadyAt))
+        if (cooldowns.TryUpdateFirst(entityId, new CooldownMatcher(actionId), new SetReadyAtUpdate(readyAtFrame)))
         {
             return;
         }
@@ -93,7 +89,7 @@ public sealed class EntityActions(
     /// <summary>Whether the entity has actionId, and the override that comes with it (null when there is none).</summary>
     private bool TryGetGrant(int entityId, Guid actionId, out ActionDefinition? overrideDefinition)
     {
-        if (instances.TryGetFirst(entityId, actionId, static (ref readonly ActionInstanceComponent candidate, Guid id) => candidate.ActionId == id, out var instance))
+        if (instances.TryGetFirst(entityId, new InstanceMatcher(actionId), out var instance))
         {
             overrideDefinition = instance.Override;
             return true;
@@ -150,7 +146,7 @@ public sealed class EntityActions(
 
     private bool TryGetCooldownDeadline(int entityId, Guid actionId, out uint readyAtFrame)
     {
-        if (cooldowns.TryGetFirst(entityId, actionId, static (ref readonly ActionCooldownComponent candidate, Guid id) => candidate.ActionId == id, out var cooldown))
+        if (cooldowns.TryGetFirst(entityId, new CooldownMatcher(actionId), out var cooldown))
         {
             readyAtFrame = cooldown.ReadyAtFrame;
             return true;
@@ -158,5 +154,20 @@ public sealed class EntityActions(
 
         readyAtFrame = 0;
         return false;
+    }
+
+    private readonly struct InstanceMatcher(Guid actionId) : IComponentMatcher<ActionInstanceComponent>
+    {
+        public bool Matches(in ActionInstanceComponent instance) => instance.ActionId == actionId;
+    }
+
+    private readonly struct CooldownMatcher(Guid actionId) : IComponentMatcher<ActionCooldownComponent>
+    {
+        public bool Matches(in ActionCooldownComponent cooldown) => cooldown.ActionId == actionId;
+    }
+
+    private readonly struct SetReadyAtUpdate(uint readyAtFrame) : IComponentUpdater<ActionCooldownComponent>
+    {
+        public void Update(ref ActionCooldownComponent cooldown) => cooldown.ReadyAtFrame = readyAtFrame;
     }
 }

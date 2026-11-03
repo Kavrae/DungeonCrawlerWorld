@@ -69,7 +69,7 @@ public sealed class DisabledActionInputTests
         public void DisableMelee() => ComponentManager.Merge(PlayerEntityId, new MeleeDisabledComponent());
 
         public void SetMana(float currentMana) =>
-            ComponentManager.GetPackedPool<ManaComponent>().TryUpdate(PlayerEntityId, currentMana, static (ref ManaComponent mana, float value) => mana.CurrentMana = value);
+            ComponentManager.GetPackedPool<ManaComponent>().TrySet(PlayerEntityId, ComponentManager.GetPackedPool<ManaComponent>().GetReadonly(PlayerEntityId) with { CurrentMana = currentMana });
     }
 
     private static Harness Build()

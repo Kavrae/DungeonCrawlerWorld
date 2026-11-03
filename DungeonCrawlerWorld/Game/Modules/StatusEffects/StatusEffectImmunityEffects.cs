@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Game.Modules.StatusEffects.Components;
@@ -23,12 +24,7 @@ public static class StatusEffectImmunityEffects
     /// </summary>
     public static void Grant(MultiComponentPool<StatusEffectImmunityComponent> immunities, int entityId, StatusEffectType effectType, uint expiresAtFrame)
     {
-        var extended = immunities.TryUpdateFirst(
-            entityId,
-            (Type: effectType, Deadline: expiresAtFrame),
-            static (ref readonly StatusEffectImmunityComponent immunity, (StatusEffectType Type, uint Deadline) state) => immunity.EffectType == state.Type && immunity.HeldGrantKey == StatusEffectImmunityComponent.NoHeldGrantKey,
-            static (ref StatusEffectImmunityComponent immunity, (StatusEffectType Type, uint Deadline) state) =>
-                immunity.ExpiresAtFrame = System.Math.Max(immunity.ExpiresAtFrame, state.Deadline));
+        var extended = immunities.TryUpdateFirst(entityId, new HeldImmunityMatcher(effectType, StatusEffectImmunityComponent.NoHeldGrantKey), new ExtendExpiryUpdate(expiresAtFrame));
 
         if (!extended)
         {
@@ -46,10 +42,19 @@ public static class StatusEffectImmunityEffects
 
     /// <summary>Ends entityId's immunity to effectType held under heldGrantKey, if it has one; any other immunity to the type stays.</summary>
     public static void RevokeHeld(MultiComponentPool<StatusEffectImmunityComponent> immunities, int entityId, StatusEffectType effectType, uint heldGrantKey) =>
-        immunities.RemoveFirst(entityId, (Type: effectType, Key: heldGrantKey),
-            static (ref readonly StatusEffectImmunityComponent immunity, (StatusEffectType Type, uint Key) state) => immunity.EffectType == state.Type && immunity.HeldGrantKey == state.Key);
+        immunities.RemoveFirst(entityId, new HeldImmunityMatcher(effectType, heldGrantKey));
 
     /// <summary>Grant with no expiry -- for an entity that is immune by what it is (see TreasureChest/Shop), not by something that was cast on it.</summary>
     public static void GrantPermanent(MultiComponentPool<StatusEffectImmunityComponent> immunities, int entityId, StatusEffectType effectType) =>
         Grant(immunities, entityId, effectType, FrameDeadline.Never);
+
+    private readonly struct HeldImmunityMatcher(StatusEffectType effectType, uint heldGrantKey) : IComponentMatcher<StatusEffectImmunityComponent>
+    {
+        public bool Matches(in StatusEffectImmunityComponent immunity) => immunity.EffectType == effectType && immunity.HeldGrantKey == heldGrantKey;
+    }
+
+    private readonly struct ExtendExpiryUpdate(uint expiresAtFrame) : IComponentUpdater<StatusEffectImmunityComponent>
+    {
+        public void Update(ref StatusEffectImmunityComponent immunity) => immunity.ExpiresAtFrame = System.Math.Max(immunity.ExpiresAtFrame, expiresAtFrame);
+    }
 }

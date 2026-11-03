@@ -113,10 +113,11 @@ public sealed class EntityTeleporterTests
         var session = BuildSession();
         var componentManager = session.Ecs.ComponentManager;
         var origin = session.PositionOf(session.PlayerEntityId);
-        componentManager.GetPackedPool<MovementComponent>().TryUpdate(session.PlayerEntityId, (ref MovementComponent movement) =>
+        var movements = componentManager.GetPackedPool<MovementComponent>();
+        movements.TrySet(session.PlayerEntityId, movements.GetReadonly(session.PlayerEntityId) with
         {
-            movement.TargetMapPosition = origin with { X = origin.X + 5 };
-            movement.NextMapPosition = origin with { X = origin.X + 1 };
+            TargetMapPosition = origin with { X = origin.X + 5 },
+            NextMapPosition = origin with { X = origin.X + 1 },
         });
         componentManager.Merge(session.PlayerEntityId, PendingWindupComponent.ForAction(Guid.NewGuid(), TestSelections.At(origin with { X = origin.X + 1 }), 1_000));
 

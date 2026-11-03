@@ -41,7 +41,7 @@ public sealed class PlayerMovementControllerTests
         }
 
         public void SetNextMapPosition(Vector3Int? next) =>
-            ComponentManager.GetPackedPool<MovementComponent>().TryUpdate(PlayerEntityId, next, static (ref MovementComponent m, Vector3Int? n) => m.NextMapPosition = n);
+            ComponentManager.GetPackedPool<MovementComponent>().TrySet(PlayerEntityId, ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(PlayerEntityId) with { NextMapPosition = next });
     }
 
     private static Harness Build(Vector3Int? playerPosition = null, bool locked = true)

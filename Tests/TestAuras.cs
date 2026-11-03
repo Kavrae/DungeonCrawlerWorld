@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Game.Effects;
@@ -12,6 +13,11 @@ namespace Tests;
 /// <summary>Aura definitions, catalogs and aura-source services for a test that doesn't build content of its own.</summary>
 internal static class TestAuras
 {
+    private readonly struct AuraMatcher(byte auraId) : IComponentMatcher<AuraSourceComponent>
+    {
+        public bool Matches(in AuraSourceComponent source) => source.AuraId == auraId;
+    }
+
     /// <summary>The session-local id each catalog built here gives Light.</summary>
     public const byte LightId = 0;
 
@@ -61,7 +67,7 @@ internal static class TestAuras
     /// <summary>Adds an unkeyed source of the aura to entityId, or removes the one it has: a source switched on and off by hand.</summary>
     public static void ToggleSource(MultiComponentPool<AuraSourceComponent> sources, EventBus eventBus, int entityId, byte auraId, ushort power, byte size)
     {
-        if (sources.CountMatching(entityId, auraId, static (ref readonly AuraSourceComponent source, byte id) => source.AuraId == id) > 0)
+        if (sources.CountMatching(entityId, new AuraMatcher(auraId)) > 0)
         {
             AuraSourceEffects.Revoke(sources, eventBus, entityId, auraId);
             return;

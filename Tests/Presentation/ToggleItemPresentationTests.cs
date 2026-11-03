@@ -70,7 +70,7 @@ public sealed class ToggleItemPresentationTests
         }
 
         public void LockPlayer() =>
-            Ecs.ComponentManager.GetPackedPool<ActionLockComponent>().TryUpdate(PlayerEntityId, static (ref ActionLockComponent actionLock) => actionLock.UnlockedAtFrame = LockedUntilFrame);
+            Ecs.ComponentManager.GetPackedPool<ActionLockComponent>().TrySet(PlayerEntityId, Ecs.ComponentManager.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId) with { UnlockedAtFrame = LockedUntilFrame });
     }
 
     private static InputHarness BuildInput()
@@ -152,11 +152,8 @@ public sealed class ToggleItemPresentationTests
         var harness = BuildInput();
         var components = harness.Ecs.ComponentManager;
         components.GetMultiPool<ActionHotkeyBindingComponent>().Add(harness.PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot8, BuiltInActionIds.ToxicAura));
-        components.GetPackedPool<Game.Modules.Mana.Components.ManaComponent>().TryUpdate(harness.PlayerEntityId, static (ref Game.Modules.Mana.Components.ManaComponent mana) =>
-        {
-            mana.MaximumMana = 50;
-            mana.CurrentMana = 50;
-        });
+        var manaPool = components.GetPackedPool<Game.Modules.Mana.Components.ManaComponent>();
+        manaPool.TrySet(harness.PlayerEntityId, manaPool.GetReadonly(harness.PlayerEntityId) with { MaximumMana = 50, CurrentMana = 50 });
         harness.LockPlayer();
 
         harness.ActionTargeting.HandleHotkeySlotPress(HotkeySlot.Slot8);

@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Game;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
@@ -16,7 +17,7 @@ public sealed class StatModifierExpirySystemTests
 
     private static EngineTime Frame(long frame) => new(default, default, false, frame);
 
-    private static MultiComponentPool<StatModifierComponent> CreatePool() => new(entityCapacity: 10, initialCapacity: 4);
+    private static MultiComponentPool<StatModifierComponent> CreatePool() => new(entityCapacity: 10, initialCapacity: 4, ComponentChangeObservation.Observed);
 
     /// <summary>Mirrors StatModifiersModule's own registration -- merging keeps the earlier deadline, which is what makes a newly granted modifier pull the entity's pending expiry forward.</summary>
     private static PackedComponentPool<ExpiringStatModifierComponent> CreateExpiriesPool() =>

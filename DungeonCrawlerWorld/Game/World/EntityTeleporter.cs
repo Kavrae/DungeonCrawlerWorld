@@ -54,11 +54,7 @@ public sealed class EntityTeleporter(World world, DirectComponentPool<TransformC
         world.MoveEntity(entityId, destination, liveTransform);
         liveTransform.Position = destination;
 
-        movements.TryUpdate(entityId, static (ref MovementComponent movement) =>
-        {
-            movement.TargetMapPosition = null;
-            movement.NextMapPosition = null;
-        });
+        movements.TryUpdate(entityId, new ClearMovementTargetsUpdate());
         pendingActions.Remove(entityId);
 
         var teleportMove = new EntityMovedEvent(entityId, originPosition, destination, liveTransform.Size);

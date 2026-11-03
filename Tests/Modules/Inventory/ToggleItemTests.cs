@@ -27,6 +27,11 @@ public sealed class ToggleItemTests
     private static readonly Vector3Int PlayerPosition = new(10, 10, (int)MapLayer.Ground);
     private static readonly Vector3Int OtherPosition = new(30, 30, (int)MapLayer.Ground);
 
+    private readonly struct HeldSourceMatcher : IComponentMatcher<AuraSourceComponent>
+    {
+        public bool Matches(in AuraSourceComponent source) => source.HeldGrantKey != AuraSourceComponent.NoHeldGrantKey;
+    }
+
     private sealed class Harness
     {
         public required GameSession Session { get; init; }
@@ -57,7 +62,7 @@ public sealed class ToggleItemTests
         public int ActiveToggleCount(int entityId) => Components.GetMultiPool<ActiveToggleComponent>().CountForEntity(entityId);
 
         public int HeldSourceCount(int entityId) =>
-            Components.GetMultiPool<AuraSourceComponent>().CountMatching(entityId, static (ref readonly AuraSourceComponent source) => source.HeldGrantKey != AuraSourceComponent.NoHeldGrantKey);
+            Components.GetMultiPool<AuraSourceComponent>().CountMatching(entityId, new HeldSourceMatcher());
 
         public int PoisonStrengthAt(Vector3Int position)
         {
@@ -89,7 +94,7 @@ public sealed class ToggleItemTests
             Components.Merge(PlayerEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(PlayerPosition)));
 
         public void LockPlayerUntil(uint frame) =>
-            Components.GetPackedPool<ActionLockComponent>().TryUpdate(PlayerEntityId, frame, static (ref ActionLockComponent actionLock, uint unlockedAt) => actionLock.UnlockedAtFrame = unlockedAt);
+            Components.GetPackedPool<ActionLockComponent>().TrySet(PlayerEntityId, Components.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId) with { UnlockedAtFrame = frame });
 
         public bool IsPlayerLocked => ActionLockGate.IsBlocked(Components.GetPackedPool<ActionLockComponent>(), PlayerEntityId, _frame);
     }

@@ -43,7 +43,7 @@ public static class InventoryActions
             if (joinedDenseIndex != -1)
             {
                 var addNow = (ushort)System.Math.Min(remaining, effectiveCap - stacks.GetReadonlyByDenseIndex(joinedDenseIndex).Quantity);
-                stacks.UpdateByDenseIndex(joinedDenseIndex, addNow, static (ref InventoryItemStackComponent stack, ushort add) => stack.Quantity += add);
+                stacks.UpdateByDenseIndex(joinedDenseIndex, new AddQuantityUpdate(addNow));
                 lastStackInstanceId = stacks.GetReadonlyByDenseIndex(joinedDenseIndex).StackInstanceId;
                 remaining -= addNow;
                 continue;
@@ -145,7 +145,7 @@ public static class InventoryActions
 
         var target = stacks.GetReadonlyByDenseIndex(targetDenseIndex);
         var moved = (ushort)System.Math.Min(source.Quantity, effectiveCap - target.Quantity);
-        stacks.UpdateByDenseIndex(targetDenseIndex, moved, static (ref InventoryItemStackComponent stack, ushort add) => stack.Quantity += add);
+        stacks.UpdateByDenseIndex(targetDenseIndex, new AddQuantityUpdate(moved));
 
         if (moved == source.Quantity)
         {
@@ -153,7 +153,7 @@ public static class InventoryActions
             return target.StackInstanceId;
         }
 
-        stacks.UpdateByDenseIndex(sourceDenseIndex, moved, static (ref InventoryItemStackComponent stack, ushort taken) => stack.Quantity -= taken);
+        stacks.UpdateByDenseIndex(sourceDenseIndex, new RemoveQuantityUpdate(moved));
         return stackInstanceId;
     }
 
@@ -251,17 +251,13 @@ public static class InventoryActions
             return;
         }
 
-        stacks.UpdateByDenseIndex(denseIndex, static (ref InventoryItemStackComponent stack) => stack.Quantity--);
+        stacks.UpdateByDenseIndex(denseIndex, new RemoveQuantityUpdate(1));
     }
 
     /// <summary>Disables/enables one specific stack (e.g. an item withheld until some later trigger) -- distinct from SetInventoryDisabled below, which disables the whole inventory.</summary>
     public static void SetStackDisabled(ComponentManager componentManager, int entityId, Guid itemDefinitionId, bool disabled)
     {
-        componentManager.GetMultiPool<InventoryItemStackComponent>().TryUpdateFirst(
-            entityId,
-            (itemDefinitionId, disabled),
-            static (ref readonly stack, state) => stack.ItemDefinitionId == state.itemDefinitionId,
-            static (ref stack, state) => stack.IsDisabled = state.disabled);
+        componentManager.GetMultiPool<InventoryItemStackComponent>().TryUpdateFirst(entityId, new InventoryQueries.ItemDefinitionMatcher(itemDefinitionId), new SetStackDisabledUpdate(disabled));
     }
 
     /// <summary>Disables/enables an entity's whole inventory -- items still exist and can still be granted while disabled, but the management window can't be opened (see InventoryWindowController).</summary>
@@ -407,7 +403,7 @@ public static class InventoryActions
             return false;
         }
 
-        stacks.UpdateByDenseIndex(sourceDenseIndex, remaining, static (ref InventoryItemStackComponent stack, ushort left) => stack.Quantity = left);
+        stacks.UpdateByDenseIndex(sourceDenseIndex, new SetQuantityUpdate(remaining));
         return true;
     }
 
@@ -472,7 +468,7 @@ public static class InventoryActions
             }
 
             var added = (ushort)System.Math.Min(remaining, effectiveCap - existing.Quantity);
-            stacks.UpdateByDenseIndex(denseIndex, added, static (ref InventoryItemStackComponent stack, ushort add) => stack.Quantity += add);
+            stacks.UpdateByDenseIndex(denseIndex, new AddQuantityUpdate(added));
             remaining -= added;
         }
 
@@ -482,4 +478,24 @@ public static class InventoryActions
     /// <summary>Whether stack's item may leave its owner's inventory; an item the catalog doesn't know carries no restriction.</summary>
     private static bool CanTrade(ItemCatalog itemCatalog, in InventoryItemStackComponent stack) =>
         !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition) || definition.CanTrade;
+
+    private readonly struct AddQuantityUpdate(ushort added) : IComponentUpdater<InventoryItemStackComponent>
+    {
+        public void Update(ref InventoryItemStackComponent stack) => stack.Quantity += added;
+    }
+
+    private readonly struct RemoveQuantityUpdate(ushort removed) : IComponentUpdater<InventoryItemStackComponent>
+    {
+        public void Update(ref InventoryItemStackComponent stack) => stack.Quantity -= removed;
+    }
+
+    private readonly struct SetQuantityUpdate(ushort quantity) : IComponentUpdater<InventoryItemStackComponent>
+    {
+        public void Update(ref InventoryItemStackComponent stack) => stack.Quantity = quantity;
+    }
+
+    private readonly struct SetStackDisabledUpdate(bool disabled) : IComponentUpdater<InventoryItemStackComponent>
+    {
+        public void Update(ref InventoryItemStackComponent stack) => stack.IsDisabled = disabled;
+    }
 }

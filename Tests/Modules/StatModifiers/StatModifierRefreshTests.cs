@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -17,7 +18,7 @@ public sealed class StatModifierRefreshTests
 
     private static readonly ActionSource Terrain = ActionSource.FromTerrain(HolyGroundTerrainTypeId);
 
-    private static MultiComponentPool<StatModifierComponent> CreatePool() => new(entityCapacity: 10, initialCapacity: 4);
+    private static MultiComponentPool<StatModifierComponent> CreatePool() => new(entityCapacity: 10, initialCapacity: 4, ComponentChangeObservation.Observed);
 
     private static void Grant(MultiComponentPool<StatModifierComponent> pool, uint expiresAtFrame, ActionSource? source = null, float magnitude = -0.1f, Engine.Tags.GameplayTag conditionTag = default) =>
         StatModifierEffects.ApplyOrRefresh(pool, EntityId, StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: true, magnitude, expiresAtFrame, source ?? Terrain, conditionTag);

@@ -226,11 +226,7 @@ public sealed class ToggleWindupTests
             ActivationEffects = [new Effect([new ManaDrain(2)])],
         };
         ActionGrantEffects.Grant(harness.Components, harness.Session.Catalogs.ActionCatalog, player, BuiltInActionIds.ToxicAura, overrideDefinition: delayedAura);
-        harness.Components.GetPackedPool<ManaComponent>().TryUpdate(player, static (ref ManaComponent mana) =>
-        {
-            mana.MaximumMana = 100;
-            mana.CurrentMana = 50;
-        });
+        harness.Components.GetPackedPool<ManaComponent>().TrySet(player, harness.Components.GetPackedPool<ManaComponent>().GetReadonly(player) with { MaximumMana = 100, CurrentMana = 50 });
 
         harness.QueueAction(BuiltInActionIds.ToxicAura);
         harness.Frame();
@@ -262,11 +258,7 @@ public sealed class ToggleWindupTests
             ActivationEffects = [new Effect([new ManaDrain(10)])],
         };
         ActionGrantEffects.Grant(harness.Components, harness.Session.Catalogs.ActionCatalog, player, BuiltInActionIds.ToxicAura, overrideDefinition: delayedAura);
-        harness.Components.GetPackedPool<ManaComponent>().TryUpdate(player, static (ref ManaComponent mana) =>
-        {
-            mana.MaximumMana = 100;
-            mana.CurrentMana = 50;
-        });
+        harness.Components.GetPackedPool<ManaComponent>().TrySet(player, harness.Components.GetPackedPool<ManaComponent>().GetReadonly(player) with { MaximumMana = 100, CurrentMana = 50 });
 
         harness.QueueAction(BuiltInActionIds.ToxicAura);
         harness.Frame();

@@ -117,7 +117,7 @@ public sealed class ActionTargetingControllerDodgeTests
     {
         var (actionTargeting, _, componentManager, _, _, eventBus) = Build();
         var movementPool = componentManager.GetPackedPool<MovementComponent>();
-        movementPool.TryUpdate(PlayerEntityId, static (ref MovementComponent m) => m.NextMapPosition = new Vector3Int(9, 9, 0));
+        movementPool.TrySet(PlayerEntityId, movementPool.GetReadonly(PlayerEntityId) with { NextMapPosition = new Vector3Int(9, 9, 0) });
 
         actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
         actionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.A), new KeyboardState(), []);

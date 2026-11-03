@@ -69,11 +69,7 @@ public static class PoisonEffects
 
         if (hasTimer)
         {
-            timers.TryUpdate(entityId, ((byte)stacksLanded, scaledDuration), static (ref PoisonTimerComponent t, (byte Added, ushort NewDuration) state) =>
-            {
-                t.StackCount += state.Added;
-                t.RemainingDurationTicks = Math.Max(t.RemainingDurationTicks, state.NewDuration);
-            });
+            timers.TryUpdate(entityId, new AddStacksUpdate((byte)stacksLanded, scaledDuration));
         }
         else
         {
@@ -94,5 +90,14 @@ public static class PoisonEffects
 
         scaled = StatModifierMath.GetEffectiveValue(statModifiers, targetEntityId, StatModifierTarget.IncomingDebuffDuration, scaled);
         return MathUtility.ClampUShort(scaled, 0, ushort.MaxValue);
+    }
+
+    private readonly struct AddStacksUpdate(byte addedStacks, ushort durationTicks) : IComponentUpdater<PoisonTimerComponent>
+    {
+        public void Update(ref PoisonTimerComponent timer)
+        {
+            timer.StackCount += addedStacks;
+            timer.RemainingDurationTicks = Math.Max(timer.RemainingDurationTicks, durationTicks);
+        }
     }
 }

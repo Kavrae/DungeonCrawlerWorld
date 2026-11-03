@@ -43,7 +43,7 @@ public sealed class AurasModule : IGameModule
     {
         var componentManager = registration.ComponentManager;
 
-        componentManager.RegisterMultiPool<AuraSourceComponent>();
+        componentManager.RegisterMultiPool<AuraSourceComponent>(observation: ComponentChangeObservation.Observed);
         componentManager.RegisterMultiPool<AuraExposureComponent>();
         componentManager.RegisterPackedPool<AuraSourceExpiryComponent>(static (ref existing, incoming) => existing = incoming);
         componentManager.RegisterPackedPool<AuraAnchorComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 16);

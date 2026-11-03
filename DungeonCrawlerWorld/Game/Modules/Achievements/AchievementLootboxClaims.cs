@@ -19,13 +19,18 @@ public sealed class AchievementLootboxClaims(ComponentManager componentManager, 
     {
         var unclaimedLootboxes = componentManager.GetMultiPool<UnclaimedAchievementLootboxComponent>();
 
-        if (!unclaimedLootboxes.TryGetFirst(entityId, achievementId, static (ref readonly unclaimed, id) => unclaimed.AchievementId == id, out var unclaimedLootbox))
+        if (!unclaimedLootboxes.TryGetFirst(entityId, new AchievementMatcher(achievementId), out var unclaimedLootbox))
         {
             return false;
         }
 
-        unclaimedLootboxes.RemoveFirst(entityId, achievementId, static (ref readonly unclaimed, id) => unclaimed.AchievementId == id);
+        unclaimedLootboxes.RemoveFirst(entityId, new AchievementMatcher(achievementId));
         LootboxActions.Grant(componentManager, lootboxCatalog, eventBus, entityId, unclaimedLootbox.Reward);
         return true;
+    }
+
+    private readonly struct AchievementMatcher(Guid achievementId) : IComponentMatcher<UnclaimedAchievementLootboxComponent>
+    {
+        public bool Matches(in UnclaimedAchievementLootboxComponent unclaimed) => unclaimed.AchievementId == achievementId;
     }
 }

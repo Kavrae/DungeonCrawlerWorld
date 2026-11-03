@@ -36,6 +36,7 @@ public static class EcsBuilder
         var componentManager = new ComponentManager(request.InitialEntityCapacity, request.InitialComponentCapacity);
         var entityManager = new EntityManager(componentManager, request.InitialEntityCapacity) { IsEntityCreationHeld = true };
         RegisterComponents(modules, new ComponentRegistration(componentManager, declarations));
+        componentManager.CloseObservationRequests();
         CheckReplacements(replacements, declarations, request.SettingsSources);
 
         var eventBus = new EventBus();

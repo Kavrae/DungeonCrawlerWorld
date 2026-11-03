@@ -49,6 +49,23 @@ public sealed class MathUtility(Random? randomizer = null)
         return (ushort)System.Math.Clamp(value, min, max);
     }
 
+    /// <summary>Clamps a float value between a minimum and maximum value, inclusive.</summary>
+    /// <remarks>Never throws: a min greater than max returns min, as a rendering framework's clamp does, so a bound computed from modifiers can't fault the simulation.</remarks>
+    /// <param name="value">The float value to clamp.</param>
+    /// <param name="min">The minimum value.</param>
+    /// <param name="max">The maximum value.</param>
+    /// <returns>The clamped float value.</returns>
+    public static float Clamp(float value, float min, float max)
+    {
+        value = value > max
+            ? max
+            : value;
+        value = value < min
+            ? min
+            : value;
+        return value;
+    }
+
     /// <summary>
     /// Clamps an integer value into the range of a byte (0 to 255) instead of wrapping on cast, e.g. for arithmetic that may overflow/underflow byte.
     /// </summary>

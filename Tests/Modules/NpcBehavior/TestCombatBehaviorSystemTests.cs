@@ -383,7 +383,7 @@ public sealed class TestCombatBehaviorSystemTests
     {
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId);
-        fixture.MovementPool.TryUpdate(GoblinEntityId, static (ref MovementComponent m) => m.NextMapPosition = GoblinPosition);
+        fixture.MovementPool.TrySet(GoblinEntityId, fixture.MovementPool.GetReadonly(GoblinEntityId) with { NextMapPosition = GoblinPosition });
         fixture.RaceSlots.Add(PlayerEntityId, new RaceSlotsComponent(HumanRace));
         fixture.MapQuery.SetBlockingOccupant(AdjacentTile, PlayerEntityId);
 
@@ -398,7 +398,7 @@ public sealed class TestCombatBehaviorSystemTests
     {
         var fixture = Build();
         PlaceGoblin(fixture, GoblinEntityId, currentHealth: 50, maximumHealth: 200);
-        fixture.MovementPool.TryUpdate(GoblinEntityId, static (ref MovementComponent m) => m.NextMapPosition = GoblinPosition);
+        fixture.MovementPool.TrySet(GoblinEntityId, fixture.MovementPool.GetReadonly(GoblinEntityId) with { NextMapPosition = GoblinPosition });
         fixture.InventoryStacks.Add(GoblinEntityId, new InventoryItemStackComponent(BuiltInItemIds.HealthPotion, quantity: 1));
 
         fixture.System.Update(default, 0);

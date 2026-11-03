@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -95,12 +96,17 @@ public sealed class BurningSystem : ISystem
             return true;
         }
 
-        _timers.TryUpdate(entityId, remainingStacks, static (ref BurningTimerComponent t, byte stacks) =>
-        {
-            t.StackCount = stacks;
-            t.RepeatEvery(BurningEffects.TickIntervalFrames);
-        });
+        _timers.TryUpdate(entityId, new BurnTickUpdate(remainingStacks));
 
         return false;
+    }
+
+    private readonly struct BurnTickUpdate(byte remainingStacks) : IComponentUpdater<BurningTimerComponent>
+    {
+        public void Update(ref BurningTimerComponent timer)
+        {
+            timer.StackCount = remainingStacks;
+            timer.RepeatEvery(BurningEffects.TickIntervalFrames);
+        }
     }
 }

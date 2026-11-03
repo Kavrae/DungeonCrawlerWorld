@@ -1025,6 +1025,23 @@ item-item interactions. Storage + exact-match merging already exist.
 Needs the item-instance-divergence design (a consumable's remaining-uses count is per-slot state that
 doesn't exist yet) plus an actual "use" action.
 
+#### Consumed resources -- ammunition and anything else that uses something up
+
+Equipment that fires ammunition (bows, crossbows, slings), generalized into one system for anything that
+uses up a consumable resource: arrows and bolts, a lantern's oil, a torch's fuel, a spell's components.
+- **A consumer lists the resources it accepts, each with its own result:** a bow takes plain, fire and
+  poison arrows, and each input applies its own effects. Which accepted input is used when several are
+  held is the player's choice (a loaded input), never a guess.
+- **Consumption is per activation or on a timer:** an arrow per shot is an activation effect, as a spell's
+  mana is (costs as activation effects, IMPLEMENTATION-NOTES); oil burned while a lantern is lit is a
+  toggle's periodic effect. Either way the consumer is refused when its input runs out, with its own
+  `ActivationBlocker` and text, never a silent no-op.
+- **One new resource kind:** an item taken from the holder's inventory, an `IResourceDrain` beside
+  `ManaDrain`/`HealthDrain`, so `ActivationCosts` (the hotbar badge) counts it with nothing listing entry
+  types.
+- **Related:** "Equipment (Game)" (where a loaded input lives), "ItemBindingRule for hotkey-bound
+  consumables" (a slot that follows the next stack of an input), "Consumable items" above.
+
 #### Torch reveal + light-weakness damage, Scroll Mastery power-scaling
 
 - Scroll of Torch's light aura (`ScrollOfTorch.Aura`) is glow-only -- its `AuraDefinition` has no effects.
@@ -1210,6 +1227,21 @@ truth (what's lit, what's seen, what burns a light-weak creature), and the visua
 the same light sources to draw it. The two must agree on radius and falloff, so both read one light
 source definition. Godot TileSets can carry occluder shapes per tile (occlusion layers); here that is
 a "blocks sight" and "blocks light" flag on `TerrainDefinition` (beside `BlocksMovement`), read by both.
+
+#### Stealth -- perception, sneaking, invisibility and sound detection
+
+Symmetric: the player and creatures get the same full feature set. Anything a creature can do to stay
+hidden the player can do too, and anything that lets a creature find the player lets the player find it.
+Built on the senses in "Field of view and perception" above.
+- **Perception:** a per-entity ability to notice what is hidden, rolled against the hider's stealth, with
+  the senses' ranges. A hidden entity the player hasn't noticed isn't drawn or targetable; one only heard
+  is drawn as a noise marker at the heard location, not as the creature.
+- **Sneaking:** a movement mode, slower, that makes less noise and is harder to notice. The same mode for
+  NPCs (an ambusher) as for the player.
+- **Invisibility:** a status effect that removes its holder from the sight sense only. Hearing and touch
+  still find it, so an invisible creature that attacks or walks loudly gives itself away.
+- **Sound detection:** movement, combat and actions raise noise events with a loudness; walls reduce or
+  block them; anyone in range with hearing perceives the location, not the entity.
 
 ### Medium Priority
 
@@ -1836,6 +1868,15 @@ Until then a shop or small building is a single entity up to Huge, like the 2x2 
 
 ### Low Priority
 
+#### Doors that open and close
+
+A door is an entity in a doorway that the player and creatures open and close. Closed, it blocks movement,
+sight and light (field of view, Fog of War), and gases and liquids ("Flood fill"); open, it blocks none of
+them. Opening and closing are actions. Pathfinding treats a closed door as passable at the cost of opening
+it, for any creature able to (a nav link in "Grid pathfinding and navigation"). Locked doors and keys come
+later. **Requires rooms:** no room concept exists yet, so doors wait on rooms being created
+("Real map generation", areas with entry points -- "Area entry points").
+
 #### Lobbed paths: the arc and throwing range
 
 `Lobbed` (PLAN-targeting-model.md) resolves like a `Projectile` that hits no entity on the way, with the same wall rule
@@ -2170,6 +2211,24 @@ Handle it as a special case: pause the game, unload (later: save) the current wi
 load the 3x3 around the destination, then resume. It reuses the window's load/unload path rather
 than adding a second one.
 
+#### Floors: an 18-floor run with steep difficulty by depth
+
+A run is 18 floors. Difficulty rises dramatically from one floor to the next, and the player is
+expected to die long before the 18th: "how far did you get" is the realistic benchmark, not "how fast did
+you win". Whatever scales with depth (which creatures a floor's population draws from, their strength,
+loot and loot box rarity, the collapse timer) reads the floor number, which generation already has
+(`FloorBuilder.CreateMap`'s `floorNumber`, the neighborhood records). The run's result is the deepest floor
+reached, shown on the game over screen ("Game over screen on player 0 HP", Presentation).
+
+- **Collapse timer:** each floor has a timer that collapses it when it runs out, longer the deeper the
+  floor -- see "Level collapse timer" below.
+- **Stairs are a trade-off:** the player must find and enter a staircase ("EndOfLevelStairs", next) before
+  the floor collapses. Entering too soon gives up time that could have been spent levelling up and
+  preparing for the next floor; waiting too long risks the collapse.
+- **The AI grows less sane with depth:** the AI (the system running the crawl, not NPC behavior) makes
+  more extreme changes to the game the deeper the floor. What those changes are is left to future AI
+  features.
+
 #### EndOfLevelStairs (Game)
 
 A one-way teleport from one floor to the next -- never back up, and never between MapLayers
@@ -2376,6 +2435,17 @@ design yet for recipe/UI/materials/where performed.
   same open question (field vs. sparse component); should record the source's *name*, not id (ids
   recycle; corpses are the one exception, never destroyed).
 
+#### Item identification and recipes
+
+Unidentified items: a potion, scroll or wand shows a shared unknown appearance and name until identified.
+Which appearance each kind gets is shuffled per run, derived from the session seed (derive, don't draw).
+- **Learned by usage:** using an unknown item identifies its kind for the player from then on.
+- **Recipes** are learned by skills ("Skills"), at crafting tables, and by experimentation (combining
+  things and finding out). No crafting exists yet; recipes come with it, and Enchantment's open
+  "recipe/UI/materials/where performed" question is the same design.
+- **Open:** whether knowledge carries across floors (the run-level object in "Game flow") -- almost
+  certainly yes.
+
 #### ItemBindingRule for hotkey-bound consumables
 
 Item hotkeys bind to one exact `StackInstanceId` -- once depleted, the slot just goes empty. A future
@@ -2430,7 +2500,11 @@ The tag approach is the one to follow.
 #### Level collapse timer
 
 Global per-floor countdown pressure mechanic (not a `CountdownTicker` variant -- those are
-per-entity/per-effect). Needs a HUD countdown element below the mana bar.
+per-entity/per-effect). Needs a HUD countdown element below the mana bar. Each floor's timer is longer
+the deeper the floor. When it reaches 0 the floor collapses and the run is over: a game over, the same
+end state as the player's death ("Game flow -- start menu, session states, floor transitions"). The only
+way out is entering a staircase before then ("EndOfLevelStairs"). See "Floors: an 18-floor run with steep
+difficulty by depth".
 
 #### Tomes
 
@@ -3198,14 +3272,31 @@ as if a key were pressed, a ready shape for "Replay by recording input" and "In-
 
 #### Separate the drawing of backgrounds, borders, content and titles across UI elements
 
-`Element.Draw` draws in a fixed order with a few hooks (`DrawHeader`, `DrawContent`, scrollbars), but
-many elements and window contents override `Draw` or `DrawContent` and draw their own background, border,
-glow or title text alongside their content, each in its own order. Do a cleanup pass over every UI
-element and window content so each layer -- background, border, title/header, content, scrollbars,
-overlays such as glows and markers -- is drawn in its own step, in one consistent order. Where the same
-logic repeats, consolidate it into `Element` or `Window` (for example a background or border step an
-element configures rather than draws itself), leaving overrides only for what is truly the element's own
-content.
+`Element.Draw` already draws configured steps: border (`_border`), glow, header (`DrawHeader`), content
+background (`ContentBackgroundColor`, which a control overrides rather than painting its own, as `TextBox`
+does for disabled), content, children, overlay glow, scrollbars. Window's and Folder's titles go through
+`DrawHeader`. What remains is moving the elements that still draw their own chrome onto those steps,
+leaving overrides only for what is truly the element's own content:
+- **The order.** Settle one: today the border and glow come before the header and background, and the
+  overlay glow before the scrollbars, where the intent is background, border, header, content,
+  scrollbars, overlays.
+- **More than one glow.** `Element` holds one glow and one overlay glow; the cells below stack an
+  exterior and an interior fade, and several at once (armed, selected, compare, accepting a drag). The
+  base needs a list of glow layers (colour, mode, strength) before they can move.
+- **UIEngine overrides:** `TextBox.Draw` paints its focus border after `base.Draw` (a focus border
+  state on `Element`); `Window.DrawHeader` and `Folder.DrawHeader` each fill their own header
+  background (a header colour on `ElementHeaderState`); `Button.DrawContent` draws its hover overlay and
+  focus marker; `ListView.DrawContent` draws its column header bar and row backgrounds; `Tooltip` draws
+  per-row glows in its content.
+- **Presentation cells:** `InventoryItemStackCell.DrawBaseAndIcon` (shared by `ShopItemStackCell` and
+  `TradeItemStackCell`) draws the grid-square base, the hover/selected overlay, the compare glows and
+  `ToggleActiveMarker`, and `DrawGroupBorder` its group perimeter; `HotbarContent.DrawSlot` (drawn by
+  `HotbarSlotElement`) draws the slot fill, the inner vignette, the border and the armed, selected and
+  accepting-drag glows; `EmptyTradeSlotCell` draws its own glow.
+- **Workshop:** `SpriteSheetView` and `SpritePlacementPreview` fill a hard-coded background instead of
+  their content colour.
+- Content, not chrome, and staying as it is: `Toggle`'s checkbox, `ColorField`'s swatch, `SplitPane`'s
+  splitter, `DropdownField`'s arrow.
 
 #### Clean up item and action tooltips
 
@@ -4053,6 +4144,35 @@ would clutter the screen in play live in a UI edit mode, as FFXIV's HUD Layout d
 
 ### High Priority
 
+#### Remove XNA from Game and Presentation, starting with a colour wrapper
+
+Only Engine and UIEngine should reference `Microsoft.Xna.Framework`, so the framework can be updated or swapped
+in one place. Today `Game.csproj` and `Presentation.csproj` both reference the `FNA.NET` package directly.
+
+- **Game: a colour type is all it needs.** Game uses XNA's `Color` in about 35 files and nothing else from XNA:
+  - the definitions' glow and glyph colours (`ActionDefinition`, `ActivatableDefinition`, `ItemDefinition`,
+    `AuraDefinition`, `TerrainDefinition`, `LootboxTypeDefinition`);
+  - appearances (`AppearanceFacet`, `AppearanceBuilder`, `EntityAppearance`, `GlyphComponent`) and the
+    blueprints that set them;
+  - the content codec (`ContentColors`, which packs to a `uint`);
+  - the views that hand colours out (`AuraPowerView`, `MapViews`).
+
+  The game's `MathHelper.Clamp` calls already go through `Engine.Math.MathUtility.Clamp`.
+- **The wrapper:** an engine-owned colour value in Engine (no FNA), packed RGBA like XNA's so a definition stays
+  the same size and `ContentColors` still writes the same `uint`, so no content file changes. UIEngine converts
+  it to XNA's `Color` where it draws (`SpriteDrawStyle`, `LabelRenderer`, `SpriteOrGlyphRenderer`).
+- **Presentation needs more than colour.** It uses `Vector2` (~400), `Color` (~290), `Point` (~115),
+  `Rectangle` (~65), `Keys`/`KeyboardState` (~60), `Texture2D`/`GraphicsDevice` (~50), `MathHelper` (~15) and
+  `SpriteEffects`/`Viewport`. Once the colour wrapper lands, decide in turn:
+  - engine geometry types for the vector, point and rectangle values;
+  - an engine key enum for input, which `UiInputController` already translates;
+  - moving whatever touches the device or textures into UIEngine.
+
+  Presentation is a follow-up phase; it isn't needed to free Game.
+- **Guard it:** once a project is free, drop its `FNA.NET` reference so the build enforces the rule, and add an
+  architecture test beside `Game_DoesNotReferenceSpriteFormat` (`Game_DoesNotReferenceXna`, later
+  `Presentation_DoesNotReferenceXna`).
+
 #### Data storage, starting with window locations and sizes
 
 No serialization/save-and-load system exists anywhere. Window layout
@@ -4381,58 +4501,14 @@ which strings aren't going through the translation path at all (they come out un
 debug-only pseudolocalization switch on whatever text lookup exists would catch layout problems in
 windows that already exist.
 
-#### Field and property cleanup
+#### Change observation for worker-thread writes
 
-The `*State` convention (`ElementGeometryState`'s doc comment) and the UIEngine options bags (`init`) are
-settled. Left: components. Field, auto-property and `record struct` writes compile to identical machine
-code (checked with the Tier1 disassembly), so a component's shape is chosen for what it allows, not speed:
-- Mutable components: auto-properties (most already are; the interfaces `IScheduledTimer`,
-  `IRelationshipLink` and `IHotkeySlotBinding` need properties anyway). A field only where a member must
-  be passed by `ref` or a nested struct mutated in place. `NonBlockingComponent.Kind` is the one field today.
-- `readonly` struct/record only for a component never changed after it is added (markers, snapshots).
-  Replacing a whole struct (`with` + set) costs about 25% more per write than changing it in place:
-  `DamageContributionComponent` is rewritten on every hit that way.
-- Any non-auto member of a mutable component is `readonly` (none breaks this today).
-- Updates: a generic struct updater replaces the delegate `TryUpdate`/`UpdateByDenseIndex` overloads
-  (~43 Game call sites) on Direct, Packed and Multi pools:
-  `pool.TryUpdate(entityId, new HealUpdate(amount, maximum))`, with
-  `where TUpdater : unmanaged, IComponentUpdater<T>` (`void Update(ref T component)`). The updater
-  carries its own inputs, so there is no state tuple. Measured the fastest path: about 1.6 ns per
-  sequential update, against 1.7 for a raw `ref` and 1.85-1.9 for the delegate. Chosen over a
-  `ref struct` writer (`using (var write = pool.TryWrite(id))`) because it is what worker threads need:
-  - It is a plain value, so a worker can record it and the main thread can apply it in a fixed order
-    (system, then entity id), keeping seeded worlds deterministic. A `ref struct` can't be stored or
-    queued.
-  - `unmanaged` stops an updater holding a pool, the bus or any reference, so its result depends only
-    on the component and its own fields, and a scheduler can trust that `TUpdater` writes `T` and
-    nothing else. Lambdas that read another pool mid-update today (`HealthDamage` and `ManaCost` read
-    `StatModifiers`) move that read before the update.
-  - It holds no `ref` into the dense array until it is applied, so another thread growing the pool
-    can't leave it writing to the old array.
-  - Cost: a named struct per distinct update. Many call sites share one (`NextMapPosition = null` x4,
-    `Quantity += add` x5, timer deadlines), so about 20-25 types, the shared ones kept beside their
-    component.
-- Change notification: an engine mechanic the game opts into per pool at registration, never per write.
-  - Today any subscriber to `ComponentChanged` switches it on: the timer wheels and `Relationship`
-    (engine), and `AuraSystem`, `ToggleItemHolderSync` and `StatModifierExpirySystem` (game). Direct
-    pools have none.
-  - Declare it instead (e.g. `RegisterPackedPool<T>(..., ComponentChangeObservation.Observed)`), fixed
-    for the build. Subscribing to an undeclared pool throws. A timer wheel or relationship is only
-    built over an observed pool, so `IScheduledTimer` components and link pools get it automatically.
-  - Not per write: automatic timer scheduling, relationship consistency and lit-item toggles all hold
-    only because no writer can skip the notification.
-  - Free: the mode is a readonly branch in the inlined `MarkChanged`, the same cost as today's null
-    check. The updater's `Update` stays specialised and inlined, since notification happens after it.
-    An unobserved pool skips the event field entirely. The observer call stays a delegate, paid only
-    by observed pools. Making the observer a generic parameter of the pool would inline it, but every
-    `GetPackedPool<T>` would then have to name the observer type, so not worth it.
-  - For workers: a write to an observed pool appends `(entityId, denseIndex)` to that thread's change
-    list; the main thread replays the lists in system order, then entity order, at the sync point.
-    Unobserved pools need nothing, so most pools can be written in parallel with no bookkeeping.
-  - State the contract now, while every write is synchronous: changes reach observers no later than
-    the end of the system that made them. The timer wheels already fit (they act only at their own
-    `Update`). Check `Relationship` and `ToggleItemHolderSync` against it, e.g. code that reads a
-    link's target side straight after writing the link.
+Nothing writes components off the main thread yet. When something does: a write to an observed pool
+appends to that thread's change list and the main thread replays the lists in system order, then entity
+order. The list carries the written value, not `(entityId, denseIndex)`: every observer reads by dense
+index, which a removal invalidates. `Relationship` and `ToggleItemHolderSync` need immediate delivery as
+written (IMPLEMENTATION-NOTES "Change observation is declared per pool"), so their pools stay on the main
+thread or they are reworked first.
 
 #### Solution-wide code style cleanup
 

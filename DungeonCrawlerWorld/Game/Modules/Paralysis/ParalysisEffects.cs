@@ -51,8 +51,7 @@ public static class ParalysisEffects
 
         if (timers.Has(entityId))
         {
-            timers.TryUpdate(entityId, expiresAtFrame, static (ref ParalysisTimerComponent t, uint expires) =>
-                t.ExpiresAtFrame = Math.Max(t.ExpiresAtFrame, expires));
+            timers.TryUpdate(entityId, new ExtendUpdate(expiresAtFrame));
         }
         else
         {
@@ -61,5 +60,10 @@ public static class ParalysisEffects
 
         ActionLockGate.Lock(componentManager.GetPackedPool<ActionLockComponent>(), entityId, now, DurationFrames);
         return true;
+    }
+
+    private readonly struct ExtendUpdate(uint expiresAtFrame) : IComponentUpdater<ParalysisTimerComponent>
+    {
+        public void Update(ref ParalysisTimerComponent timer) => timer.ExpiresAtFrame = Math.Max(timer.ExpiresAtFrame, expiresAtFrame);
     }
 }

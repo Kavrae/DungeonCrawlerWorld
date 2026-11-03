@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Actions.Components;
 
@@ -15,9 +16,12 @@ public static class HotkeyExpansion
             return;
         }
 
-        hotkeyExpansionUnlocks.TryUpdate(entityId, amount, static (ref HotkeyExpansionUnlockComponent unlock, byte grantAmount) =>
-        {
-            unlock.UnlockedSlotCount = (byte)Math.Min(MaxUnlockedSlots, unlock.UnlockedSlotCount + grantAmount);
-        });
+        hotkeyExpansionUnlocks.TryUpdate(entityId, new UnlockSlotsUpdate(amount));
+    }
+
+    private readonly struct UnlockSlotsUpdate(byte amount) : IComponentUpdater<HotkeyExpansionUnlockComponent>
+    {
+        public void Update(ref HotkeyExpansionUnlockComponent unlock) =>
+            unlock.UnlockedSlotCount = (byte)Math.Min(MaxUnlockedSlots, unlock.UnlockedSlotCount + amount);
     }
 }

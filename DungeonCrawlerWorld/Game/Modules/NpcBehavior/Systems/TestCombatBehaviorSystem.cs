@@ -404,7 +404,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         var isBlocking = _mapQuery.IsBlocking(entityId);
         if (MovementCandidates.TryPickRandomAdjacentPosition(_mapQuery, _mathUtility, entityId, transform.Position, transform.Size, isBlocking, out var candidatePosition))
         {
-            _movementPool.TryUpdate(entityId, candidatePosition, static (ref MovementComponent m, Vector3Int candidate) => m.NextMapPosition = candidate);
+            _movementPool.TryUpdate(entityId, new SetNextMapPositionUpdate(candidatePosition));
             return;
         }
 
@@ -424,9 +424,8 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     }
 
     private void ClearStep(int entityId) =>
-        _movementPool.TryUpdate(entityId, static (ref MovementComponent m) => m.NextMapPosition = null);
+        _movementPool.TryUpdate(entityId, new SetNextMapPositionUpdate(null));
 
     private void SetIdle(int entityId, long now) =>
-        _movementPool.TryUpdate(entityId, FrameDeadline.After(now, MovementCandidates.FramesToWaitIfNoOptions),
-            static (ref MovementComponent m, uint waitUntil) => m.WaitUntilFrame = waitUntil);
+        _movementPool.TryUpdate(entityId, new SetWaitUntilFrameUpdate(FrameDeadline.After(now, MovementCandidates.FramesToWaitIfNoOptions)));
 }

@@ -25,6 +25,11 @@ public sealed class PoolMemoryReportTests
         public int Value;
     }
 
+    private readonly struct TagValueMatcher(int value) : IComponentMatcher<Tag>
+    {
+        public bool Matches(in Tag tag) => tag.Value == value;
+    }
+
     private static (ComponentManager Components, EntityManager Entities) CreateWorld()
     {
         var componentManager = new ComponentManager(initialEntityCapacity: 16, initialComponentCapacity: 4);
@@ -95,7 +100,7 @@ public sealed class PoolMemoryReportTests
 
         var report = new PoolMemoryReport(components, entities);
         report.CaptureBaseline();
-        tags.RemoveFirst(reordered, static (ref readonly tag) => tag.Value == 1);
+        tags.RemoveFirst(reordered, new TagValueMatcher(1));
         tags.Add(reordered, new Tag { Value = 1 });
         tags.Add(grown, new Tag { Value = 1 });
 

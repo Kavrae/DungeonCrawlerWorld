@@ -9,6 +9,9 @@ public interface IComponentPool
     /// <summary>Told about every by-entity read or write of this pool, in Debug builds only; null for none. See IEntityAccessGuard.</summary>
     IEntityAccessGuard? AccessGuard { get; set; }
 
+    /// <summary>Whether the pool's ComponentChanged and ComponentRemoving can be subscribed to; a pool that raises neither is Unobserved.</summary>
+    ComponentChangeObservation Observation => ComponentChangeObservation.Unobserved;
+
     bool Has(int entityId);
 
     void Resize(int newMaximumEntityCount);

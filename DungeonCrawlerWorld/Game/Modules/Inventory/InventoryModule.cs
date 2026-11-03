@@ -1,4 +1,5 @@
 using Engine.Content;
+using Engine.ECS.Components;
 using Engine.Modules;
 using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
@@ -39,7 +40,7 @@ public sealed class InventoryModule : IGameModule
     {
         var componentManager = registration.ComponentManager;
 
-        componentManager.RegisterMultiPool<InventoryItemStackComponent>();
+        componentManager.RegisterMultiPool<InventoryItemStackComponent>(observation: ComponentChangeObservation.Observed);
 
         // Rare -- generally only once at a time on the player, but could be more via a lock-down status effect.
         // Registered as Packed rather than Direct: Direct pool is reserved for genuinely near-universal components

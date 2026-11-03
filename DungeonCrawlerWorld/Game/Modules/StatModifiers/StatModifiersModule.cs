@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.Modules;
 using Game.Modules.StatModifiers.Components;
 using Game.Modules.StatModifiers.Systems;
@@ -21,7 +22,7 @@ public sealed class StatModifiersModule : IGameModule
     {
         var componentManager = registration.ComponentManager;
 
-        componentManager.RegisterMultiPool<StatModifierComponent>();
+        componentManager.RegisterMultiPool<StatModifierComponent>(observation: ComponentChangeObservation.Observed);
 
         // Merging keeps the EARLIER deadline: this is an entity's "next modifier to expire", so a
         // newly granted modifier only ever pulls it forward, and one granted with a later deadline

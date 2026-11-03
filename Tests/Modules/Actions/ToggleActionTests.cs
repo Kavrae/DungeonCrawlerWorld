@@ -83,18 +83,18 @@ public sealed class ToggleActionTests
 
         public float Mana => Components.GetPackedPool<ManaComponent>().GetReadonly(PlayerEntityId).CurrentMana;
 
-        public void SetMana(float mana) =>
-            Components.GetPackedPool<ManaComponent>().TryUpdate(PlayerEntityId, mana, static (ref ManaComponent component, float value) =>
-            {
-                component.MaximumMana = MathF.Max(component.MaximumMana, value);
-                component.CurrentMana = value;
-            });
+        public void SetMana(float mana)
+        {
+            var pool = Components.GetPackedPool<ManaComponent>();
+            var component = pool.GetReadonly(PlayerEntityId);
+            pool.TrySet(PlayerEntityId, component with { MaximumMana = MathF.Max(component.MaximumMana, mana), CurrentMana = mana });
+        }
 
         public void SetCurrentMana(float mana) =>
-            Components.GetPackedPool<ManaComponent>().TryUpdate(PlayerEntityId, mana, static (ref ManaComponent component, float value) => component.CurrentMana = value);
+            Components.GetPackedPool<ManaComponent>().TrySet(PlayerEntityId, Components.GetPackedPool<ManaComponent>().GetReadonly(PlayerEntityId) with { CurrentMana = mana });
 
         public void LockPlayer() =>
-            Components.GetPackedPool<ActionLockComponent>().TryUpdate(PlayerEntityId, static (ref ActionLockComponent actionLock) => actionLock.UnlockedAtFrame = LockedUntilFrame);
+            Components.GetPackedPool<ActionLockComponent>().TrySet(PlayerEntityId, Components.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId) with { UnlockedAtFrame = LockedUntilFrame });
 
         public bool IsPlayerLocked => ActionLockGate.IsBlocked(Components.GetPackedPool<ActionLockComponent>(), PlayerEntityId, CurrentFrame);
 

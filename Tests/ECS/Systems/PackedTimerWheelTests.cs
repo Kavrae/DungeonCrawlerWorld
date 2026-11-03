@@ -14,6 +14,15 @@ public sealed class PackedTimerWheelTests
         public int Stacks { get; set; }
     }
 
+    private readonly struct SpendStackUpdate(uint nextTickFrame) : IComponentUpdater<Burn>
+    {
+        public void Update(ref Burn burn)
+        {
+            burn.Stacks--;
+            burn.NextTickFrame = nextTickFrame;
+        }
+    }
+
     private const int Period = 10;
 
     private static PackedComponentPool<Burn> CreatePool() =>
@@ -33,11 +42,7 @@ public sealed class PackedTimerWheelTests
                     return true;
                 }
 
-                pool.TryUpdate(entityId, now, static (ref Burn b, long n) =>
-                {
-                    b.Stacks--;
-                    b.NextTickFrame = FrameDeadline.After(n, Period);
-                });
+                pool.TryUpdate(entityId, new SpendStackUpdate(FrameDeadline.After(now, Period)));
                 return false;
             });
         }
@@ -88,8 +93,8 @@ public sealed class PackedTimerWheelTests
         var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 5, Stacks = 1 });
 
-        pool.TryUpdate(3, static (ref Burn b) => b.Stacks = 2);
-        pool.TryUpdate(3, static (ref Burn b) => b.Stacks = 2);
+        pool.TrySet(3, pool.GetReadonly(3) with { Stacks = 2 });
+        pool.TrySet(3, pool.GetReadonly(3) with { Stacks = 2 });
 
         Assert.AreEqual(1, wheel.PendingCount);
         CollectionAssert.AreEqual(new[] { (5L, 3), (15L, 3) }, Run(wheel, pool, 0, 30));
@@ -116,7 +121,7 @@ public sealed class PackedTimerWheelTests
         var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 20, Stacks = 1 });
 
-        pool.TryUpdate(3, static (ref Burn b) => b.NextTickFrame = 8);
+        pool.TrySet(3, pool.GetReadonly(3) with { NextTickFrame = 8 });
 
         CollectionAssert.AreEqual(new[] { (8L, 3) }, Run(wheel, pool, 0, 40));
     }
@@ -128,7 +133,7 @@ public sealed class PackedTimerWheelTests
         var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 8, Stacks = 1 });
 
-        pool.TryUpdate(3, static (ref Burn b) => b.NextTickFrame = 20);
+        pool.TrySet(3, pool.GetReadonly(3) with { NextTickFrame = 20 });
 
         CollectionAssert.AreEqual(new[] { (20L, 3) }, Run(wheel, pool, 0, 40));
     }
@@ -184,7 +189,7 @@ public sealed class PackedTimerWheelTests
         {
             if (frame == 20)
             {
-                pool.TryUpdate(3, static (ref Burn b) => b.NextTickFrame = 25);
+                pool.TrySet(3, pool.GetReadonly(3) with { NextTickFrame = 25 });
             }
 
             wheel.Tick(frame, (_, _, now) => { fires.Add(now); return false; });
@@ -288,11 +293,7 @@ public sealed class PackedTimerWheelTests
                     return true;
                 }
 
-                pool.TryUpdate(entityId, static (ref Burn b) =>
-                {
-                    b.Stacks--;
-                    b.NextTickFrame = 5;
-                });
+                pool.TryUpdate(entityId, new SpendStackUpdate(5));
                 return false;
             });
         }
@@ -324,7 +325,7 @@ public sealed class PackedTimerWheelTests
                 fires.Add(now);
                 if (fires.Count == 1)
                 {
-                    pool.TryUpdate(entityId, static (ref Burn b) => b.NextTickFrame = 5);
+                    pool.TrySet(entityId, pool.GetReadonly(entityId) with { NextTickFrame = 5 });
                 }
 
                 return false;
@@ -356,7 +357,7 @@ public sealed class PackedTimerWheelTests
                 {
                     // Entity 2 already fired this frame and asked to be removed -- re-igniting it now
                     // is the case the flush has to notice.
-                    pool.TryUpdate(2, static (ref Burn b) => b.NextTickFrame = 14);
+                    pool.TrySet(2, pool.GetReadonly(2) with { NextTickFrame = 14 });
                 }
 
                 return true;

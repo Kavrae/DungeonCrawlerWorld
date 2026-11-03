@@ -230,7 +230,7 @@ public sealed class MapWindowTests
         Assert.AreEqual(new Point(100, 100), mapViewState.SelectedMapNodePosition, "Camera must not follow a merely-queued target -- MovementSystem hasn't moved the entity yet.");
 
         // Simulate MovementSystem actually applying the move (e.g. once the action lock clears).
-        transformPool.TryUpdate(PlayerEntityId, static (ref TransformComponent transform) => transform.Position = new Vector3Int(101, 100, 0));
+        transformPool.TrySet(PlayerEntityId, transformPool.GetReadonly(PlayerEntityId) with { Position = new Vector3Int(101, 100, 0) });
         mapWindow.Update(new GameTime());
 
         mapWindow.SelectMapNodes(new Point(ScreenCenterColumn * TileSizePixels + 1, ScreenCenterRow * TileSizePixels + 1));
@@ -900,7 +900,7 @@ public sealed class MapWindowTests
         Assert.DoesNotContain(new Vector3Int(105, 100, 0), mapViewState.TargetableTiles);
 
         // Simulate MovementSystem actually applying a move while the ability stays armed.
-        transformPool.TryUpdate(PlayerEntityId, static (ref TransformComponent transform) => transform.Position = new Vector3Int(105, 100, 0));
+        transformPool.TrySet(PlayerEntityId, transformPool.GetReadonly(PlayerEntityId) with { Position = new Vector3Int(105, 100, 0) });
         mapWindow.Update(new GameTime());
 
         Assert.IsNotNull(mapViewState.TargetableTiles);
@@ -1293,8 +1293,8 @@ public sealed class MapWindowTests
         var corpsePosition = new Vector3Int(101, 100, 0);
         PlaceCorpse(world, componentManager, corpsePosition);
         var lootOwnerEntityKey = world.EntityKeys.Issue(LootOwnerEntityId);
-        componentManager.GetPackedPool<DeadComponent>().TryUpdate(CorpseEntityId, lootOwnerEntityKey,
-            static (ref DeadComponent dead, Engine.ECS.Entities.EntityKey owner) => dead = dead with { LootOwnerEntityKey = owner });
+        var deadPool = componentManager.GetPackedPool<DeadComponent>();
+        deadPool.TrySet(CorpseEntityId, deadPool.GetReadonly(CorpseEntityId) with { LootOwnerEntityKey = lootOwnerEntityKey });
         return corpsePosition;
     }
 

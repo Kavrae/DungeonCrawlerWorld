@@ -65,9 +65,11 @@ public sealed class NpcCorpseLootingTests
             return corpse;
         }
 
-        public void ReserveLootFor(int corpse, int lootOwner) =>
-            Components.GetPackedPool<DeadComponent>().TryUpdate(corpse, Build.Context.EntityKeys.GetKey(lootOwner),
-                static (ref DeadComponent dead, Engine.ECS.Entities.EntityKey owner) => dead = dead with { LootOwnerEntityKey = owner });
+        public void ReserveLootFor(int corpse, int lootOwner)
+        {
+            var deadPool = Components.GetPackedPool<DeadComponent>();
+            deadPool.TrySet(corpse, deadPool.GetReadonly(corpse) with { LootOwnerEntityKey = Build.Context.EntityKeys.GetKey(lootOwner) });
+        }
 
         public bool TryLoot(int looter, long now) =>
             Looting.TryLootNearbyCorpse(looter, Components.GetDirectPool<TransformComponent>().GetReadonly(looter), now);
@@ -169,7 +171,7 @@ public sealed class NpcCorpseLootingTests
         var session = BuildSession();
         var itemId = Guid.NewGuid();
         var corpse = session.SpawnCorpse(AdjacentPosition, itemId, itemQuantity: 3);
-        session.Components.GetDirectPool<ProcessingTierComponent>().TryUpdate(corpse, static (ref ProcessingTierComponent tier) => tier = new ProcessingTierComponent(ProcessingTierLevel.Borough));
+        session.Components.GetDirectPool<ProcessingTierComponent>().TrySet(corpse, new ProcessingTierComponent(ProcessingTierLevel.Borough));
         var looter = session.SpawnEmptyGoblin(LooterPosition);
 
         Assert.IsFalse(session.TryLoot(looter, now: 0));
@@ -233,7 +235,7 @@ public sealed class NpcCorpseLootingTests
         var itemId = Guid.NewGuid();
         var corpse = session.SpawnCorpse(AdjacentPosition, itemId, itemQuantity: 3);
         var looter = session.SpawnEmptyGoblin(LooterPosition);
-        session.Components.GetPackedPool<MovementComponent>().TryUpdate(looter, static (ref MovementComponent movement) => movement.MovementMode = MovementMode.Random);
+        session.Components.GetPackedPool<MovementComponent>().TrySet(looter, session.Components.GetPackedPool<MovementComponent>().GetReadonly(looter) with { MovementMode = MovementMode.Random });
 
         for (var frame = 1L; frame <= 120 && !session.IsLooted(corpse); frame++)
         {
@@ -251,7 +253,7 @@ public sealed class NpcCorpseLootingTests
         build.Context.ProcessingTierResolver.SetReferencePosition(new Vector3Int(0, 0, (int)MapLayer.Ground));
         var session = new Session(build);
         var looter = session.SpawnEmptyGoblin(new Vector3Int(1023, 10, (int)MapLayer.Ground));
-        session.Components.GetPackedPool<MovementComponent>().TryUpdate(looter, static (ref MovementComponent movement) => movement.MovementMode = MovementMode.Random);
+        session.Components.GetPackedPool<MovementComponent>().TrySet(looter, session.Components.GetPackedPool<MovementComponent>().GetReadonly(looter) with { MovementMode = MovementMode.Random });
         var skeleton = build.Factory.Spawn(SpawnRequest.At(build.Context.Definitions.GetId(Goblin.Id), new Vector3Int(1024, 10, (int)MapLayer.Ground)) with { Seed = 3 });
         Assert.IsTrue(build.Factory.Skeletons.IsSkeleton(skeleton), "Sanity check: born across the boundary, into the frozen Borough tier.");
 
@@ -270,7 +272,7 @@ public sealed class NpcCorpseLootingTests
         var itemId = Guid.NewGuid();
         var corpse = session.SpawnCorpse(AdjacentPosition, itemId, itemQuantity: 3);
         var looter = session.SpawnEmptyGoblin(LooterPosition);
-        session.Components.GetPackedPool<MovementComponent>().TryUpdate(looter, static (ref MovementComponent movement) => movement.MovementMode = MovementMode.Random);
+        session.Components.GetPackedPool<MovementComponent>().TrySet(looter, session.Components.GetPackedPool<MovementComponent>().GetReadonly(looter) with { MovementMode = MovementMode.Random });
         var player = session.Build.Factory.Spawn(SpawnRequest.At(session.Build.Context.Definitions.GetId(Player.Id), new Vector3Int(9, 10, (int)MapLayer.Ground)) with { Seed = 1 });
         session.Components.GetPackedPool<MovementComponent>().Remove(player);
         session.Build.World.PlayerEntityId = player;

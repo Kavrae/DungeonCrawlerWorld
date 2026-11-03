@@ -48,7 +48,7 @@ public static class BurningEffects
 
         if (hasTimer)
         {
-            timers.TryUpdate(entityId, (byte)stacksLanded, static (ref BurningTimerComponent t, byte added) => t.StackCount += added);
+            timers.TryUpdate(entityId, new AddStacksUpdate((byte)stacksLanded));
         }
         else
         {
@@ -56,5 +56,10 @@ public static class BurningEffects
         }
 
         return StatusEffectStacksApplied.Landed(stacksLanded);
+    }
+
+    private readonly struct AddStacksUpdate(byte addedStacks) : IComponentUpdater<BurningTimerComponent>
+    {
+        public void Update(ref BurningTimerComponent timer) => timer.StackCount += addedStacks;
     }
 }

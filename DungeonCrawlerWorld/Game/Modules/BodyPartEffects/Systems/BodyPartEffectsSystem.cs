@@ -10,7 +10,7 @@ using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
 using Game.Tags;
 using Game.World;
-using Microsoft.Xna.Framework;
+using Engine.Math;
 
 namespace Game.Modules.BodyPartEffects.Systems;
 
@@ -169,7 +169,7 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
     }
 
     private static float HealthFraction(in BodyPartView part) =>
-        part.MaximumHealth > 0 ? MathHelper.Clamp(part.CurrentHealth / part.MaximumHealth, 0f, 1f) : 0f;
+        part.MaximumHealth > 0 ? MathUtility.Clamp(part.CurrentHealth / part.MaximumHealth, 0f, 1f) : 0f;
 
     /// <summary>Grants/updates/removes this system's own permanent multiplicative StatModifierComponent for target, so its effective value equals baseValue * combinedMultiplier (see StatModifierMath's own additive-then-multiplicative formula) -- StatModifierComponent's fields are get-only, so an actual change always means remove-then-re-add rather than an in-place magnitude edit.</summary>
     private void SyncModifier(int entityId, StatModifierTarget target, float combinedMultiplier, GameplayTag conditionTag = default)

@@ -23,6 +23,11 @@ public sealed class StatusEffectRemovalTests
     private const int SourceEntityId = 1;
     private const int TargetEntityId = 2;
 
+    private readonly struct PoisonImmunityMatcher : IComponentMatcher<StatusEffectImmunityComponent>
+    {
+        public bool Matches(in StatusEffectImmunityComponent immunity) => immunity.EffectType == StatusEffectType.Poison;
+    }
+
     private sealed record Setup(ComponentManager ComponentManager, StatusEffectApplierRegistry Appliers, EntityKeys EntityKeys)
     {
         public EffectContext Context(long now) => TestActionEffects.Context(
@@ -112,7 +117,7 @@ public sealed class StatusEffectRemovalTests
         Assert.AreEqual(0, setup.PoisonStacks, "Immune right after drinking.");
 
         var immunity = setup.ComponentManager.GetMultiPool<StatusEffectImmunityComponent>();
-        Assert.IsTrue(immunity.TryGetFirst(TargetEntityId, static (ref readonly StatusEffectImmunityComponent candidate) => candidate.EffectType == StatusEffectType.Poison, out var poisonImmunity));
+        Assert.IsTrue(immunity.TryGetFirst(TargetEntityId, new PoisonImmunityMatcher(), out var poisonImmunity));
         Assert.AreEqual(FrameDeadline.After(100, 5 * 60 * GameFrameRate.FramesPerSecond), poisonImmunity.ExpiresAtFrame);
     }
 

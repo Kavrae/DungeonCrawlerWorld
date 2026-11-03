@@ -6,7 +6,7 @@ using Game.Modules.Mana.Systems;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatModifiers.Components;
-using Microsoft.Xna.Framework;
+using Engine.Math;
 using Game.Modules.AbilityScores;
 using Game.Modules.Death;
 using Game.Modules.StatModifiers;
@@ -27,8 +27,8 @@ public sealed class ManaModule : IGameModule
 
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) =>
         {
-            existing.MaximumMana = MathHelper.Clamp((existing.MaximumMana + incoming.MaximumMana) / 2f, 0f, float.MaxValue);
-            existing.CurrentMana = MathHelper.Clamp((existing.CurrentMana + incoming.CurrentMana) / 2f, 0f, existing.MaximumMana);
+            existing.MaximumMana = MathUtility.Clamp((existing.MaximumMana + incoming.MaximumMana) / 2f, 0f, float.MaxValue);
+            existing.CurrentMana = MathUtility.Clamp((existing.CurrentMana + incoming.CurrentMana) / 2f, 0f, existing.MaximumMana);
         });
     }
 

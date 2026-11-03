@@ -39,7 +39,7 @@ public sealed class HealingShrineTests
         public float HealthOf(int entityId) => Components.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId).CurrentHealth;
 
         public void SetHealth(int entityId, float currentHealth) =>
-            Components.GetPackedPool<SimpleHealthComponent>().TryUpdate(entityId, currentHealth, static (ref SimpleHealthComponent health, float value) => health.CurrentHealth = value);
+            Components.GetPackedPool<SimpleHealthComponent>().TrySet(entityId, Components.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId) with { CurrentHealth = currentHealth });
 
         public void Damage(int entityId, ushort amount, bool fire = false, BodyPartTargetRule? targetRule = null) =>
             HealthDamage.Apply(

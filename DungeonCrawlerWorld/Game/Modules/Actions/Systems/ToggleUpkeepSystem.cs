@@ -111,11 +111,7 @@ public sealed class ToggleUpkeepSystem : ISystem
         _transforms.TryGetReadonly(entityId, out var transform) && _mapQuery.IsOnMap(transform.Position);
 
     private void Rearm(int entityId, uint key, uint nextTickFrame) =>
-        _activeToggles.TryUpdateFirst(
-            entityId,
-            (Key: key, NextTickFrame: nextTickFrame),
-            static (ref readonly ActiveToggleComponent toggle, (uint Key, uint NextTickFrame) state) => toggle.Key == state.Key,
-            static (ref ActiveToggleComponent toggle, (uint Key, uint NextTickFrame) state) => toggle.NextTickFrame = state.NextTickFrame);
+        _activeToggles.TryUpdateFirst(entityId, new TimerKeyMatcher<ActiveToggleComponent>(unchecked((int)key)), new SetNextTickUpdate<ActiveToggleComponent>(nextTickFrame));
 
     private void SwitchOff(IToggleOwner owner, int entityId, in ActiveToggleComponent toggle, ActivatableDefinition definition, ToggleEndReason reason, long now)
     {
@@ -166,8 +162,7 @@ public sealed class ToggleUpkeepSystem : ISystem
                 continue;
             }
 
-            _activeToggles.UpdateByDenseIndex(denseIndex, (Interval: (int)periodic.IntervalFrames, Now: now),
-                static (ref ActiveToggleComponent active, (int Interval, long Now) state) => active.SkipOwedPeriods(state.Interval, state.Now));
+            _activeToggles.UpdateByDenseIndex(denseIndex, new SkipOwedPeriodsUpdate<ActiveToggleComponent>((int)periodic.IntervalFrames, now));
         }
     }
 }

@@ -55,7 +55,8 @@ public static class HealthDamage
     {
         var wasDead = deadEntities.Has(entityId);
 
-        if (!health.TryGetReadonly(entityId, out var beforeHealth))
+        var healthDenseIndex = health.GetDenseIndex(entityId);
+        if (healthDenseIndex < 0)
         {
             if (bodyParts.Has(entityId))
             {
@@ -77,6 +78,7 @@ public static class HealthDamage
             return; // No SimpleHealthComponent or BodyPartComponent -- fine, e.g. an "immortal" entity a status effect still applied to.
         }
 
+        var beforeHealth = health.GetReadonlyByDenseIndex(healthDenseIndex);
         var wasAlive = beforeHealth.CurrentHealth > 0;
 
         // Reduced by the target's own IncomingDamage modifiers (e.g. a flat damage-reduction
@@ -89,13 +91,10 @@ public static class HealthDamage
         // permanent +max-HP buff actually raises the ceiling damage is clamped against -- see
         // StatModifierMath's own doc comment for why this is recomputed here rather than baked
         // into SimpleHealthComponent.MaximumHealth itself.
-        health.TryUpdate(entityId, (statModifiers, entityId, effectiveAmount), static (ref SimpleHealthComponent healthComponent, (MultiComponentPool<StatModifierComponent> StatModifiers, int EntityId, float Amount) state) =>
-        {
-            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(state.StatModifiers, state.EntityId, StatModifierTarget.MaximumHealth, healthComponent.MaximumHealth);
-            healthComponent.CurrentHealth = MathHelper.Clamp(healthComponent.CurrentHealth - state.Amount, 0f, effectiveMaximumHealth);
-        });
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, beforeHealth.MaximumHealth);
+        health.UpdateByDenseIndex(healthDenseIndex, new ShiftCurrentHealthUpdate(-effectiveAmount, effectiveMaximumHealth));
 
-        health.TryGetReadonly(entityId, out var updatedHealth);
+        var updatedHealth = health.GetReadonlyByDenseIndex(healthDenseIndex);
         damageLedger.Record(entityId, source, beforeHealth.CurrentHealth - updatedHealth.CurrentHealth, now);
 
         // Only on the wasAlive -> 0 transition, not every subsequent hit against an

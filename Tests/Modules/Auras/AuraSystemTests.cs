@@ -434,7 +434,7 @@ public sealed class AuraSystemTests
 
         // Simulate BurningSystem's own decay (not exercised by this system-level test) having
         // brought the stack count down since the last aura tick.
-        componentManager.GetPackedPool<BurningTimerComponent>().TryUpdate(ObserverEntityId, static (ref BurningTimerComponent t) => t.StackCount = 5);
+        componentManager.GetPackedPool<BurningTimerComponent>().TrySet(ObserverEntityId, componentManager.GetPackedPool<BurningTimerComponent>().GetReadonly(ObserverEntityId) with { StackCount = 5 });
 
         RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
 

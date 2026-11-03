@@ -47,21 +47,27 @@ public static class StatModifierEffects
     {
         var modifier = new StatModifierComponent(target, operation, polarity, canModify, magnitude, expiresAtFrame, source, conditionTag);
 
-        var refreshed = statModifiers.TryUpdateFirst(
-            entityId,
-            modifier,
-            static (ref readonly StatModifierComponent held, StatModifierComponent granted) =>
-                held.Target == granted.Target
-                && held.Operation == granted.Operation
-                && held.Polarity == granted.Polarity
-                && held.Magnitude == granted.Magnitude
-                && held.ConditionTag == granted.ConditionTag
-                && held.Source == granted.Source,
-            static (ref StatModifierComponent held, StatModifierComponent granted) => held.ExpiresAtFrame = granted.ExpiresAtFrame);
+        var refreshed = statModifiers.TryUpdateFirst(entityId, new SameGrantMatcher(modifier), new SetExpiryUpdate(expiresAtFrame));
 
         if (!refreshed)
         {
             statModifiers.Add(entityId, modifier);
         }
+    }
+
+    private readonly struct SameGrantMatcher(StatModifierComponent granted) : IComponentMatcher<StatModifierComponent>
+    {
+        public bool Matches(in StatModifierComponent held) =>
+            held.Target == granted.Target
+            && held.Operation == granted.Operation
+            && held.Polarity == granted.Polarity
+            && held.Magnitude == granted.Magnitude
+            && held.ConditionTag == granted.ConditionTag
+            && held.Source == granted.Source;
+    }
+
+    private readonly struct SetExpiryUpdate(uint expiresAtFrame) : IComponentUpdater<StatModifierComponent>
+    {
+        public void Update(ref StatModifierComponent held) => held.ExpiresAtFrame = expiresAtFrame;
     }
 }

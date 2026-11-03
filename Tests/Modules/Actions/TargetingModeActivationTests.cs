@@ -45,7 +45,7 @@ public sealed class TargetingModeActivationTests
         {
             var transforms = Components.GetDirectPool<TransformComponent>();
             Build.World.MoveEntity(entityId, position, transforms.GetReadonly(entityId));
-            transforms.TryUpdate(entityId, position, static (ref TransformComponent transform, Vector3Int moved) => transform.Position = moved);
+            transforms.TrySet(entityId, transforms.GetReadonly(entityId) with { Position = position });
         }
 
         public float HealthOf(int entityId)

@@ -45,23 +45,12 @@ public static class ClassEffects
     public static bool Remove(ComponentManager componentManager, int entityId, ushort classId)
     {
         var removed = componentManager.GetMultiPool<ClassMembershipComponent>()
-            .RemoveFirst(entityId, classId, static (ref readonly ClassMembershipComponent membership, ushort id) => membership.ClassId == id);
+            .RemoveFirst(entityId, new ClassMatcher(classId));
 
         var slots = componentManager.GetPackedPool<ClassSlotsComponent>();
         if (slots.TryGetReadonly(entityId, out var entitySlots) && entitySlots.Has(classId))
         {
-            slots.TryUpdate(entityId, classId, static (ref ClassSlotsComponent current, ushort id) =>
-            {
-                if (current.Class1 == id)
-                {
-                    current.Class1 = current.Class2;
-                    current.Class2 = ClassSlotsComponent.Empty;
-                }
-                else
-                {
-                    current.Class2 = ClassSlotsComponent.Empty;
-                }
-            });
+            slots.TryUpdate(entityId, new RemoveClassUpdate(classId));
             removed = true;
         }
 
@@ -74,8 +63,7 @@ public static class ClassEffects
     {
         var memberships = componentManager.GetMultiPool<ClassMembershipComponent>();
         var removed = 0;
-        while (memberships.RemoveFirst(entityId, floor, static (ref readonly ClassMembershipComponent membership, ushort completedFloor) =>
-            !membership.IsPermanent && membership.ExpiresAfterFloor <= completedFloor))
+        while (memberships.RemoveFirst(entityId, new ExpiredByFloorMatcher(floor)))
         {
             removed++;
         }
@@ -96,5 +84,31 @@ public static class ClassEffects
         }
 
         return held;
+    }
+
+    private readonly struct ClassMatcher(ushort classId) : IComponentMatcher<ClassMembershipComponent>
+    {
+        public bool Matches(in ClassMembershipComponent membership) => membership.ClassId == classId;
+    }
+
+    private readonly struct ExpiredByFloorMatcher(ushort completedFloor) : IComponentMatcher<ClassMembershipComponent>
+    {
+        public bool Matches(in ClassMembershipComponent membership) => !membership.IsPermanent && membership.ExpiresAfterFloor <= completedFloor;
+    }
+
+    private readonly struct RemoveClassUpdate(ushort classId) : IComponentUpdater<ClassSlotsComponent>
+    {
+        public void Update(ref ClassSlotsComponent slots)
+        {
+            if (slots.Class1 == classId)
+            {
+                slots.Class1 = slots.Class2;
+                slots.Class2 = ClassSlotsComponent.Empty;
+            }
+            else
+            {
+                slots.Class2 = ClassSlotsComponent.Empty;
+            }
+        }
     }
 }

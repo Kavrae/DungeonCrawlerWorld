@@ -73,7 +73,7 @@ public static class ShopStockPricing
     public static byte GetPreferredStockLevel(ComponentManager componentManager, int shopEntityId, Guid itemDefinitionId)
     {
         var preferences = componentManager.GetMultiPool<ShopStockPreferenceComponent>();
-        return preferences.TryGetFirst(shopEntityId, itemDefinitionId, static (ref readonly ShopStockPreferenceComponent pref, Guid id) => pref.ItemDefinitionId == id, out var match)
+        return preferences.TryGetFirst(shopEntityId, new ShopStockPreferenceForItemMatcher(itemDefinitionId), out var match)
             ? match.PreferredStockLevel
             : DefaultPreferredStockLevel;
     }

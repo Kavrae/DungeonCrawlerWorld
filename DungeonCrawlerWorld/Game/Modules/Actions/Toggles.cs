@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Math;
@@ -84,7 +85,7 @@ public sealed class Toggles(MultiComponentPool<ActiveToggleComponent> activeTogg
     /// <param name="definition">The toggle's definition, the same one it was switched on with.</param>
     public bool TurnOff(int holderEntityId, uint key, ActivatableDefinition definition, long now)
     {
-        if (!activeToggles.RemoveFirst(holderEntityId, key, static (ref readonly ActiveToggleComponent toggle, uint key) => toggle.Key == key))
+        if (!activeToggles.RemoveFirst(holderEntityId, new KeyMatcher(key)))
         {
             return false;
         }
@@ -97,7 +98,7 @@ public sealed class Toggles(MultiComponentPool<ActiveToggleComponent> activeTogg
     /// <remarks>For something the toggle holds ending without the toggle asking: an aura anchor it placed being destroyed.</remarks>
     public void SwitchOff(int holderEntityId, uint key, long now)
     {
-        if (!activeToggles.TryGetFirst(holderEntityId, key, static (ref readonly ActiveToggleComponent toggle, uint key) => toggle.Key == key, out var toggle) ||
+        if (!activeToggles.TryGetFirst(holderEntityId, new KeyMatcher(key), out var toggle) ||
             !TryGetOwner(toggle.Owner.Kind, out var owner) ||
             !owner.TryResolveDefinition(holderEntityId, in toggle, out var definition))
         {
@@ -109,7 +110,7 @@ public sealed class Toggles(MultiComponentPool<ActiveToggleComponent> activeTogg
 
     /// <summary>How many toggles belonging to owner holderEntityId has on.</summary>
     public int CountOn(int holderEntityId, ActivatableReference owner) =>
-        activeToggles.CountMatching(holderEntityId, owner, static (ref readonly ActiveToggleComponent toggle, ActivatableReference owner) => toggle.Owner == owner);
+        activeToggles.CountMatching(holderEntityId, new OwnerMatcher(owner));
 
     /// <summary>Whether holderEntityId has a toggle belonging to owner on.</summary>
     public bool IsOn(int holderEntityId, ActivatableReference owner) => TryGetKey(holderEntityId, owner, out _);
@@ -117,7 +118,7 @@ public sealed class Toggles(MultiComponentPool<ActiveToggleComponent> activeTogg
     /// <summary>The key of one of holderEntityId's toggles belonging to owner that is on; false when it has none.</summary>
     public bool TryGetKey(int holderEntityId, ActivatableReference owner, out uint key)
     {
-        var found = activeToggles.TryGetFirst(holderEntityId, owner, static (ref readonly ActiveToggleComponent toggle, ActivatableReference owner) => toggle.Owner == owner, out var toggle);
+        var found = activeToggles.TryGetFirst(holderEntityId, new OwnerMatcher(owner), out var toggle);
         key = toggle.Key;
         return found;
     }
@@ -141,4 +142,14 @@ public sealed class Toggles(MultiComponentPool<ActiveToggleComponent> activeTogg
 
     private EffectContext HeldContext(int holderEntityId, uint key, ActivatableDefinition definition, long now) =>
         HolderContext(holderEntityId, definition, now) with { HeldGrantKey = key };
+
+    private readonly struct KeyMatcher(uint key) : IComponentMatcher<ActiveToggleComponent>
+    {
+        public bool Matches(in ActiveToggleComponent toggle) => toggle.Key == key;
+    }
+
+    private readonly struct OwnerMatcher(ActivatableReference owner) : IComponentMatcher<ActiveToggleComponent>
+    {
+        public bool Matches(in ActiveToggleComponent toggle) => toggle.Owner == owner;
+    }
 }

@@ -1,4 +1,5 @@
 using Engine.Bootstrap;
+using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Modules;
 using Engine.Settings;
@@ -69,8 +70,22 @@ public sealed class BootstrapperTests
         }
     }
 
+    private sealed class ContractPoolObservingModule : IModule<TestBuildContext>
+    {
+        public Guid Id => MovementId;
+
+        public void RegisterComponents(ComponentRegistration registration) => registration.ComponentManager.ObserveChanges<ContractTestComponent>();
+
+        public void RegisterBehavior(BehaviorRegistration<TestBuildContext> registration)
+        {
+        }
+    }
+
     private static PoolRegisteringModule PackedPoolModule(string name) =>
         new(name, registration => registration.ComponentManager.RegisterPackedPool<ContractTestComponent>(static (ref existing, incoming) => existing = incoming));
+
+    private static PoolRegisteringModule ObservedMultiPoolModule(string name) =>
+        new(name, registration => registration.ComponentManager.RegisterMultiPool<ContractTestComponent>(observation: ComponentChangeObservation.Observed));
 
     private static EcsBuild<TestBuildContext> Build(
         IReadOnlyList<IModule<TestBuildContext>> modules,
@@ -409,6 +424,41 @@ public sealed class BootstrapperTests
             Build([PackedPoolModule("Core")], mods: [new PoolRegisteringModule("ReplacementCore", registration => registration.ComponentManager.RegisterMultiPool<ContractTestComponent>())]));
 
         Assert.Contains("ContractTestComponent (PackedComponentPool)", exception.Message);
+    }
+
+    [TestMethod]
+    public void Build_ModReplacingAModule_WithAnUnobservedPoolWhereTheReplacedOneWasObserved_Throws()
+    {
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() =>
+            Build([ObservedMultiPoolModule("Core")], mods: [new PoolRegisteringModule("ReplacementCore", registration => registration.ComponentManager.RegisterMultiPool<ContractTestComponent>())]));
+
+        Assert.Contains("ReplacementCore replaces Core but does not register: ContractTestComponent (MultiComponentPool, Observed)", exception.Message);
+    }
+
+    [TestMethod]
+    public void Build_ModReplacingAModule_WithAnObservedPoolWhereTheReplacedOneWasNot_Builds()
+    {
+        var build = Build(
+            [new PoolRegisteringModule("Core", registration => registration.ComponentManager.RegisterMultiPool<ContractTestComponent>())],
+            mods: [ObservedMultiPoolModule("ReplacementCore")]);
+
+        Assert.AreEqual("ReplacementCore", build.Modules.Single().Name);
+    }
+
+    [TestMethod]
+    public void Build_ModuleObservingAnotherModulesPool_ObservesItWhicheverRegistersFirst()
+    {
+        var observerFirst = Build([new ContractPoolObservingModule(), PackedPoolModule("Core")]);
+        var ownerFirst = Build([PackedPoolModule("Core"), new ContractPoolObservingModule()]);
+
+        Assert.AreEqual(ComponentChangeObservation.Observed, observerFirst.EcsContext.ComponentManager.GetPackedPool<ContractTestComponent>().Observation);
+        Assert.AreEqual(ComponentChangeObservation.Observed, ownerFirst.EcsContext.ComponentManager.GetPackedPool<ContractTestComponent>().Observation);
+    }
+
+    [TestMethod]
+    public void Build_ModuleObservingAPoolNoModuleRegisters_Throws()
+    {
+        Assert.ThrowsExactly<InvalidOperationException>(() => Build([new ContractPoolObservingModule()]));
     }
 
     [TestMethod]

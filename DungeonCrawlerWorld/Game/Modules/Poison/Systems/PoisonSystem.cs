@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -93,12 +94,17 @@ public sealed class PoisonSystem : ISystem
             return true;
         }
 
-        _timers.TryUpdate(entityId, remainingDuration, static (ref PoisonTimerComponent t, ushort remaining) =>
-        {
-            t.RemainingDurationTicks = remaining;
-            t.RepeatEvery(PoisonEffects.TickIntervalFrames);
-        });
+        _timers.TryUpdate(entityId, new PoisonTickUpdate(remainingDuration));
 
         return false;
+    }
+
+    private readonly struct PoisonTickUpdate(ushort remainingDurationTicks) : IComponentUpdater<PoisonTimerComponent>
+    {
+        public void Update(ref PoisonTimerComponent timer)
+        {
+            timer.RemainingDurationTicks = remainingDurationTicks;
+            timer.RepeatEvery(PoisonEffects.TickIntervalFrames);
+        }
     }
 }

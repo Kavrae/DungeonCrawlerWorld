@@ -40,9 +40,6 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <summary> A read-only span of the versions for the components in the pool indexed by entityId. </summary>
     public ReadOnlySpan<uint> Versions => _versions;
 
-    /// <summary> A delegate that defines a method for updating a component to a given state. </summary>
-    public delegate void ComponentUpdater<TState>(ref T component, TState state);
-
     /// <summary> Initializes a new instance of the <see cref="DirectComponentPool{T}"/> class with the specified initial capacity and merge implementation. </summary>
     /// <param name="initialCapacity">The initial pool size based on a maximum EntityId</param>
     /// <param name="mergeImplementation">Determines how two instances of a component should be merged together.</param>
@@ -217,42 +214,19 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         return true;
     }
 
-    /// <summary>Attempts to update the component for the specified entity using a custom update function if the entityId is in bounds and already contains the component.</summary>
+    /// <summary>Applies updater to the entity's component in place, if the entityId is in bounds and already contains the component.</summary>
     /// <param name="entityId">The ID of the entity to check.</param>
-    /// <param name="updater">The function to update the component.</param>
+    /// <param name="updater">The change to apply.</param>
     /// <returns>True if the component was updated, false otherwise.</returns>
-    public bool TryUpdate(int entityId, Engine.ECS.Components.ComponentUpdater<T> updater)
+    public bool TryUpdate<TUpdater>(int entityId, TUpdater updater) where TUpdater : unmanaged, IComponentUpdater<T>
     {
         Guard(entityId);
-        ArgumentNullException.ThrowIfNull(updater);
-
         if (!IsInBounds(entityId) || _present[entityId] == 0)
         {
             return false;
         }
 
-        updater(ref _components[entityId]);
-        _versions[entityId]++;
-        return true;
-    }
-
-    /// <summary>Attempts to update the component for the specified entity using a custom update function and state if the entityId is in bounds and already contains the component.</summary>
-    /// <typeparam name="TState">The type of the state parameter.</typeparam>
-    /// <param name="entityId">The ID of the entity to check.</param>
-    /// <param name="state">The state to pass to the update function.</param>
-    /// <param name="updater">The function to update the component.</param>
-    /// <returns>True if the component was updated, false otherwise.</returns>
-    public bool TryUpdate<TState>(int entityId, TState state, ComponentUpdater<TState> updater)
-    {
-        Guard(entityId);
-        ArgumentNullException.ThrowIfNull(updater);
-
-        if (!IsInBounds(entityId) || _present[entityId] == 0)
-        {
-            return false;
-        }
-
-        updater(ref _components[entityId], state);
+        updater.Update(ref _components[entityId]);
         _versions[entityId]++;
         return true;
     }

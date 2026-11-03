@@ -452,10 +452,10 @@ public sealed class WorldTests
 
         Assert.IsFalse(world.IsBlocking(1));
 
-        nonBlockingPool.RemoveFirst(1, static (ref readonly _) => true);
+        nonBlockingPool.RemoveByDenseIndex(nonBlockingPool.GetFirstDenseIndex(1));
         Assert.IsFalse(world.IsBlocking(1), "One source ended, but the other is still active.");
 
-        nonBlockingPool.RemoveFirst(1, static (ref readonly _) => true);
+        nonBlockingPool.RemoveByDenseIndex(nonBlockingPool.GetFirstDenseIndex(1));
         Assert.IsTrue(world.IsBlocking(1), "Both sources ended -- Blocking resumes.");
     }
 

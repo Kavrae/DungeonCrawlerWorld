@@ -16,4 +16,9 @@ internal static class ComponentPoolThrows
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static void DuplicateComponent<T>(int entityId) =>
         throw new InvalidOperationException($"Entity {entityId} already has a component of type {typeof(T).Name}.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void Unobserved<T>() =>
+        throw new InvalidOperationException($"The {typeof(T).Name} pool is not observed: register it with {nameof(ComponentChangeObservation)}.{nameof(ComponentChangeObservation.Observed)} to subscribe to its changes.");
 }

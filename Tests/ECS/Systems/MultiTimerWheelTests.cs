@@ -15,6 +15,11 @@ public sealed class MultiTimerWheelTests
         public readonly int TimerKey => Effect;
     }
 
+    private readonly struct EffectMatcher(int effect) : IComponentMatcher<Exposure>
+    {
+        public bool Matches(in Exposure exposure) => exposure.Effect == effect;
+    }
+
     private static MultiComponentPool<Exposure> CreatePool() => new(entityCapacity: 16, initialCapacity: 4);
 
     private static List<(long Frame, int EntityId, int Effect)> Run(MultiTimerWheel<Exposure> wheel, long from, long to, Func<int, Exposure, bool>? remove = null)
@@ -90,9 +95,7 @@ public sealed class MultiTimerWheelTests
             wheel.Tick(frame, (entityId, timer, now) =>
             {
                 fires.Add(now);
-                pool.TryUpdateFirst(entityId, (timer.Effect, now),
-                    static (ref readonly Exposure e, (int Effect, long Now) s) => e.Effect == s.Effect,
-                    static (ref Exposure e, (int Effect, long Now) s) => e.NextTickFrame = FrameDeadline.After(s.Now, 12));
+                pool.TryUpdateFirst(entityId, new EffectMatcher(timer.Effect), new SetNextTickUpdate<Exposure>(FrameDeadline.After(now, 12)));
                 return false;
             });
         }
@@ -108,7 +111,7 @@ public sealed class MultiTimerWheelTests
         pool.Add(2, new Exposure(1, 5));
         pool.Add(2, new Exposure(7, 9));
 
-        pool.RemoveFirst(2, static (ref readonly Exposure e) => e.Effect == 1);
+        pool.RemoveFirst(2, new EffectMatcher(1));
 
         CollectionAssert.AreEqual(new[] { (9L, 2, 7) }, Run(wheel, 0, 20));
     }
@@ -150,9 +153,7 @@ public sealed class MultiTimerWheelTests
         {
             if (frame == 20)
             {
-                pool.TryUpdateFirst(2,
-                    static (ref readonly Exposure e) => e.Effect == 1,
-                    static (ref Exposure e) => e.NextTickFrame = 25);
+                pool.TryUpdateFirst(2, new EffectMatcher(1), new SetNextTickUpdate<Exposure>(25));
             }
 
             wheel.Tick(frame, (_, _, now) => { fires.Add(now); return false; });
@@ -175,9 +176,7 @@ public sealed class MultiTimerWheelTests
         {
             if (frame == 10)
             {
-                pool.TryUpdateFirst(2,
-                    static (ref readonly Exposure e) => e.Effect == 1,
-                    static (ref Exposure e) => e.NextTickFrame = 5);
+                pool.TryUpdateFirst(2, new EffectMatcher(1), new SetNextTickUpdate<Exposure>(5));
             }
 
             wheel.Tick(frame, (_, _, now) => { fires.Add(now); return false; });
@@ -205,9 +204,7 @@ public sealed class MultiTimerWheelTests
                     return true;
                 }
 
-                pool.TryUpdateFirst(entityId, timer.Effect,
-                    static (ref readonly Exposure e, int effect) => e.Effect == effect,
-                    static (ref Exposure e, int effect) => e.NextTickFrame = 5);
+                pool.TryUpdateFirst(entityId, new EffectMatcher(timer.Effect), new SetNextTickUpdate<Exposure>(5));
                 return false;
             });
         }
@@ -240,7 +237,7 @@ public sealed class MultiTimerWheelTests
         var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
         pool.Add(2, new Exposure(1, 5));
 
-        pool.RemoveFirst(2, static (ref readonly Exposure e) => e.Effect == 1);
+        pool.RemoveFirst(2, new EffectMatcher(1));
         pool.Add(2, new Exposure(1, 9));
 
         CollectionAssert.AreEqual(new[] { (9L, 2, 1) }, Run(wheel, 0, 20));
@@ -268,7 +265,7 @@ public sealed class MultiTimerWheelTests
                 if (entityId == 3)
                 {
                     // Entity 2's instance already fired this frame and asked to be removed.
-                    pool.RemoveFirst(2, static (ref readonly Exposure e) => e.Effect == 1);
+                    pool.RemoveFirst(2, new EffectMatcher(1));
                     pool.Add(2, new Exposure(1, 15));
                 }
 

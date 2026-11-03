@@ -334,5 +334,5 @@ public sealed class PlayerCommands
     }
 
     private void SetNextMapPosition(int playerEntityId, Vector3Int? target) =>
-        _movementPool.TryUpdate(playerEntityId, target, static (ref MovementComponent movement, Vector3Int? next) => movement.NextMapPosition = next);
+        _movementPool.TryUpdate(playerEntityId, new SetNextMapPositionUpdate(target));
 }

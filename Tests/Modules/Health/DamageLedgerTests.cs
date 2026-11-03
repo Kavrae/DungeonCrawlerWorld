@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using Engine.ECS.Systems;
@@ -19,6 +20,11 @@ public sealed class DamageLedgerTests
     private const int VictimEntityId = 0;
     private const int FirstAttackerEntityId = 1;
     private const int SecondAttackerEntityId = 2;
+
+    private readonly struct SourceMatcher(EntityKey sourceEntityKey) : IComponentMatcher<DamageContributionComponent>
+    {
+        public bool Matches(in DamageContributionComponent contribution) => contribution.Source.Key == sourceEntityKey;
+    }
 
     private sealed class LedgerFixture
     {
@@ -47,8 +53,7 @@ public sealed class DamageLedgerTests
         }
 
         public float TotalFrom(int attackerEntityId) =>
-            Contributions.TryGetFirst(VictimEntityId, TestSources.KeyOf(attackerEntityId),
-                static (ref readonly DamageContributionComponent contribution, EntityKey key) => contribution.Source.Key == key, out var contribution)
+            Contributions.TryGetFirst(VictimEntityId, new SourceMatcher(TestSources.KeyOf(attackerEntityId)), out var contribution)
                 ? contribution.TotalDamageDealt
                 : 0f;
 

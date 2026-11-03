@@ -89,7 +89,7 @@ public sealed class BurningEffectsTests
     {
         var componentManager = CreateComponentManager();
         BurningEffects.ApplyStack(componentManager, 0, ActionSource.Admin, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
-        componentManager.GetPackedPool<BurningTimerComponent>().TryUpdate(0, static (ref BurningTimerComponent t) => t.NextTickFrame = 5);
+        componentManager.GetPackedPool<BurningTimerComponent>().TrySet(0, componentManager.GetPackedPool<BurningTimerComponent>().GetReadonly(0) with { NextTickFrame = 5 });
 
         BurningEffects.ApplyStack(componentManager, 0, ActionSource.Admin, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
 

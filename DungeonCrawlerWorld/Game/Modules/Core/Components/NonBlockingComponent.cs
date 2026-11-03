@@ -15,9 +15,9 @@ public enum NonBlockingKind : byte
     Phasing = 1 << 1,
 }
 
-public struct NonBlockingComponent(NonBlockingKind kind = NonBlockingKind.None)
+public readonly struct NonBlockingComponent(NonBlockingKind kind = NonBlockingKind.None)
 {
-    public NonBlockingKind Kind = kind;
+    public NonBlockingKind Kind { get; } = kind;
 
-    public override readonly string ToString() => $"Kind : {Kind}";
+    public override string ToString() => $"Kind : {Kind}";
 }

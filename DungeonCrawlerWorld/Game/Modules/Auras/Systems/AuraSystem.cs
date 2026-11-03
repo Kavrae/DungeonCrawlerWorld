@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -183,7 +184,7 @@ public sealed class AuraSystem : ISystem
         {
             if (_exposures.GetReadonlyByDenseIndex(denseIndex).NextTickFrame <= now)
             {
-                _exposures.UpdateByDenseIndex(denseIndex, now, static (ref AuraExposureComponent e, long frame) => e.SkipOwedPeriods(AuraEffects.TickIntervalFrames, frame));
+                _exposures.UpdateByDenseIndex(denseIndex, new SkipOwedPeriodsUpdate<AuraExposureComponent>(AuraEffects.TickIntervalFrames, now));
             }
         }
     }
@@ -503,13 +504,7 @@ public sealed class AuraSystem : ISystem
 
         var refused = EffectSequence.Apply(definition.Effects, in context) == EffectOutcome.Refused;
 
-        _exposures.TryUpdateFirst(entityId, (auraId, refused),
-            static (ref readonly AuraExposureComponent e, (byte AuraId, bool Refused) state) => e.AuraId == state.AuraId,
-            static (ref AuraExposureComponent e, (byte AuraId, bool Refused) state) =>
-            {
-                e.Refused = state.Refused;
-                e.RepeatEvery(AuraEffects.TickIntervalFrames);
-            });
+        _exposures.TryUpdateFirst(entityId, new TimerKeyMatcher<AuraExposureComponent>(auraId), new RearmExposureUpdate(refused));
 
         return false;
     }
@@ -599,10 +594,19 @@ public sealed class AuraSystem : ISystem
 
                     foreach (var staleAuraId in _staleExposureAuraIdsScratch)
                     {
-                        _exposures.RemoveFirst(occupantId, staleAuraId, static (ref readonly AuraExposureComponent e, byte auraId) => e.AuraId == auraId);
+                        _exposures.RemoveFirst(occupantId, new TimerKeyMatcher<AuraExposureComponent>(staleAuraId));
                     }
                 }
             }
+        }
+    }
+
+    private readonly struct RearmExposureUpdate(bool refused) : IComponentUpdater<AuraExposureComponent>
+    {
+        public void Update(ref AuraExposureComponent exposure)
+        {
+            exposure.Refused = refused;
+            exposure.RepeatEvery(AuraEffects.TickIntervalFrames);
         }
     }
 }

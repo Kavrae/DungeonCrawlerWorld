@@ -11,6 +11,11 @@ public sealed class DirectComponentPoolTests
         public int Value;
     }
 
+    private readonly struct AddUpdate(int amount) : IComponentUpdater<TestComponent>
+    {
+        public void Update(ref TestComponent component) => component.Value += amount;
+    }
+
     private static MergeAction<TestComponent> AverageMerge => (ref existing, incoming) =>
     {
         existing.Value = (existing.Value + incoming.Value) / 2;
@@ -90,7 +95,7 @@ public sealed class DirectComponentPoolTests
         var pool = new DirectComponentPool<TestComponent>(5, AverageMerge);
         pool.Add(0, new TestComponent { Value = 1 });
 
-        var updated = pool.TryUpdate(0, static (ref c) => c.Value += 10);
+        var updated = pool.TryUpdate(0, new AddUpdate(10));
 
         Assert.IsTrue(updated);
         Assert.AreEqual(11, pool.GetReadonly(0).Value);
@@ -102,7 +107,7 @@ public sealed class DirectComponentPoolTests
     {
         var pool = new DirectComponentPool<TestComponent>(5, AverageMerge);
 
-        var updated = pool.TryUpdate(0, static (ref c) => c.Value += 10);
+        var updated = pool.TryUpdate(0, new AddUpdate(10));
 
         Assert.IsFalse(updated);
     }

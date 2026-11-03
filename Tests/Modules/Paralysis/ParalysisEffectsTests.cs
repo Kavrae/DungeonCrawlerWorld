@@ -102,7 +102,7 @@ public sealed class ParalysisEffectsTests
     {
         var componentManager = CreateComponentManager();
         ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
-        componentManager.GetPackedPool<ParalysisTimerComponent>().TryUpdate(0, static (ref ParalysisTimerComponent t) => t.ExpiresAtFrame = 5);
+        componentManager.GetPackedPool<ParalysisTimerComponent>().TrySet(0, componentManager.GetPackedPool<ParalysisTimerComponent>().GetReadonly(0) with { ExpiresAtFrame = 5 });
 
         ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
 
@@ -114,7 +114,7 @@ public sealed class ParalysisEffectsTests
     {
         var componentManager = CreateComponentManager();
         ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
-        componentManager.GetPackedPool<ActionLockComponent>().TryUpdate(0, static (ref ActionLockComponent a) => a.UnlockedAtFrame = 5);
+        componentManager.GetPackedPool<ActionLockComponent>().TrySet(0, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(0) with { UnlockedAtFrame = 5 });
 
         ParalysisEffects.Apply(componentManager, 0, ActionSource.Admin, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
 

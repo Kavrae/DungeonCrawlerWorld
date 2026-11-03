@@ -110,7 +110,8 @@ public static class HealthHeal
         string healType,
         bool appliesHealingModifiers)
     {
-        if (!health.Has(entityId))
+        var healthDenseIndex = health.GetDenseIndex(entityId);
+        if (healthDenseIndex < 0)
         {
             if (bodyParts.Has(entityId))
             {
@@ -127,19 +128,13 @@ public static class HealthHeal
             return;
         }
 
-        if (!HealthQueries.TryGetEffectiveMaximum(health, bodyParts, statModifiers, entityId, out var effectiveMaximumHealth))
-        {
-            return;
-        }
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, health.GetReadonlyByDenseIndex(healthDenseIndex).MaximumHealth);
 
         var amount = ComputeAmount(statModifiers, sourceEntityId, entityId, activatorTags, percentOfMaxHealth, flatAmount, effectiveMaximumHealth, appliesHealingModifiers);
 
-        health.TryUpdate(entityId, (amount, effectiveMaximumHealth), static (ref SimpleHealthComponent healthComponent, (float Amount, float EffectiveMaximumHealth) state) =>
-        {
-            healthComponent.CurrentHealth = MathHelper.Clamp(healthComponent.CurrentHealth + state.Amount, 0f, state.EffectiveMaximumHealth);
-        });
+        health.UpdateByDenseIndex(healthDenseIndex, new ShiftCurrentHealthUpdate(amount, effectiveMaximumHealth));
 
-        PublishHealEvent(eventBus, playerQuery, entityId, sourceEntityId, amount, healType, health.GetReadonly(entityId).CurrentHealth, effectiveMaximumHealth);
+        PublishHealEvent(eventBus, playerQuery, entityId, sourceEntityId, amount, healType, health.GetReadonlyByDenseIndex(healthDenseIndex).CurrentHealth, effectiveMaximumHealth);
     }
 
     /// <summary>flat + percent*effectiveMaxHealth, then OutgoingHealing (sourceEntityId, if known) then IncomingHealing (targetEntityId) unless appliesHealingModifiers is false -- shared by the Simple path above and every ComplexHealthHeal path, so a body-parts entity gets the exact same modifier chain as a Simple one.</summary>

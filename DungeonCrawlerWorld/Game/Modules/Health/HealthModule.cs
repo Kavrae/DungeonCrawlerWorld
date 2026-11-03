@@ -11,7 +11,7 @@ using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Race;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
-using Microsoft.Xna.Framework;
+using Engine.Math;
 
 namespace Game.Modules.Health;
 
@@ -38,8 +38,8 @@ public sealed class HealthModule : IGameModule
             // Floored at 0: a negative MaximumHealth here would make the Clamp below throw
             // (min > max), and "negative max health" isn't a meaningful state regardless of how
             // it arose (e.g. merging in a component that never validated Maximum* >= 0).
-            existing.MaximumHealth = MathHelper.Clamp((existing.MaximumHealth + incoming.MaximumHealth) / 2f, 0f, float.MaxValue);
-            existing.CurrentHealth = MathHelper.Clamp((existing.CurrentHealth + incoming.CurrentHealth) / 2f, 0f, existing.MaximumHealth);
+            existing.MaximumHealth = MathUtility.Clamp((existing.MaximumHealth + incoming.MaximumHealth) / 2f, 0f, float.MaxValue);
+            existing.CurrentHealth = MathUtility.Clamp((existing.CurrentHealth + incoming.CurrentHealth) / 2f, 0f, existing.MaximumHealth);
         });
 
         // Only an entity something has actually happened to holds one -- see BodyPartStateComponent.

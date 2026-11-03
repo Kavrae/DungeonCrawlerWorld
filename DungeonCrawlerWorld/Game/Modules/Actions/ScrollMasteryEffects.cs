@@ -34,11 +34,7 @@ public static class ScrollMasteryEffects
     {
         var pool = componentManager.GetMultiPool<ScrollMasteryComponent>();
 
-        var updated = pool.TryUpdateFirst(
-            entityId,
-            spellId,
-            static (ref readonly ScrollMasteryComponent c, Guid state) => c.SpellId == state,
-            static (ref ScrollMasteryComponent c, Guid _) => c.UsageCount++);
+        var updated = pool.TryUpdateFirst(entityId, new SpellMatcher(spellId), new CountUsageUpdate());
 
         if (!updated)
         {
@@ -76,17 +72,18 @@ public static class ScrollMasteryEffects
 
     private static bool TryGetUsageCount(MultiComponentPool<ScrollMasteryComponent> pool, int entityId, Guid spellId, out int usageCount)
     {
-        for (var denseIndex = pool.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = pool.GetNextDenseIndex(denseIndex))
-        {
-            var candidate = pool.GetReadonlyByDenseIndex(denseIndex);
-            if (candidate.SpellId == spellId)
-            {
-                usageCount = candidate.UsageCount;
-                return true;
-            }
-        }
+        var found = pool.TryGetFirst(entityId, new SpellMatcher(spellId), out var mastery);
+        usageCount = found ? mastery.UsageCount : 0;
+        return found;
+    }
 
-        usageCount = 0;
-        return false;
+    private readonly struct SpellMatcher(Guid spellId) : IComponentMatcher<ScrollMasteryComponent>
+    {
+        public bool Matches(in ScrollMasteryComponent mastery) => mastery.SpellId == spellId;
+    }
+
+    private readonly struct CountUsageUpdate : IComponentUpdater<ScrollMasteryComponent>
+    {
+        public void Update(ref ScrollMasteryComponent mastery) => mastery.UsageCount++;
     }
 }

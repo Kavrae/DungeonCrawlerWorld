@@ -37,7 +37,7 @@ public sealed class ManaGrantTests
         var manager = CreateRegisteredManager();
         AbilityScoreEffects.Grant(manager, 0, AbilityScoreType.Intelligence, baseValue: 42);
         ManaGrant.EnsureManaComponentExists(manager, 0);
-        manager.GetPackedPool<ManaComponent>().TryUpdate(0, static (ref ManaComponent mana) => mana.CurrentMana = 5);
+        manager.GetPackedPool<ManaComponent>().TrySet(0, manager.GetPackedPool<ManaComponent>().GetReadonly(0) with { CurrentMana = 5 });
 
         ManaGrant.EnsureManaComponentExists(manager, 0);
 

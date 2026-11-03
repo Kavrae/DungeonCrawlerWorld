@@ -3230,3 +3230,83 @@ and UIEngine only, added to the game's IDE by its App after Map (`--tab=Sprites`
   (spans and misfits) moved into SpriteFormat; the tool's `EntryRules` keeps its editing gestures and calls them. `EntryPart`,
   `SlotFiller` and its GDI+ painters stay with the tool until "Workshop: edit sprites and retire SpriteManifestBuilder"
   (TODO.md) moves editing into the tab and deletes it.
+
+### Component updates are unmanaged struct updaters (2026-11-03)
+
+- **Shape.** A pool's in-place write takes a struct: `TryUpdate`/`UpdateByDenseIndex<TUpdater>` with
+  `where TUpdater : unmanaged, IComponentUpdater<T>` (`void Update(ref T component)`). Multi's operations by match
+  (`TryGetFirst`, `RemoveFirst`, `CountMatching`, and `TryUpdateFirst(id, matcher, updater)`) take an `unmanaged`
+  `IComponentMatcher<T>` (`Matches(in T)`), so one matcher picks out an instance for every operation and is never
+  restated inside an updater. The updater or matcher carries its own inputs; there are no delegate overloads and no state
+  tuples. Updates are called on the pool, where both type arguments are inferred: `ComponentManager` has no `TryUpdate`
+  (it couldn't infer the component type, and each call paid a lookup and a type test). One that several files share sits
+  beside its component (`MovementComponentUpdates`, `ShiftCurrentHealthUpdate`, `ShiftCurrentManaUpdate`,
+  `ShopStockPreferenceForItemMatcher`, all `internal`); the rest are private nested structs in the type that uses them.
+  Timers share the engine's (`Engine.ECS.Systems.ScheduledTimerUpdates`): `RepeatEveryUpdate<T>`, `SkipOwedPeriodsUpdate<T>`,
+  `SetNextTickUpdate<T>` and, for a Multi pool, `TimerKeyMatcher<T>` by `IKeyedScheduledTimer.TimerKey`. An unconditional
+  "remove any one" is `RemoveByDenseIndex(GetFirstDenseIndex(id))`, not a matcher that accepts everything.
+- **Reference-typed fields** (an override definition) can't be carried by an `unmanaged` updater: write the whole
+  component (`TrySet`/`SetByDenseIndex`, or in a Multi pool assign through `GetByDenseIndex` and call
+  `IncrementVersionByDenseIndex`), which versions and notifies like any other write.
+- **Why, measured.** Field, auto-property and `record struct` writes through a `ref` compile to identical Tier1 machine
+  code, so a component's shape costs nothing; the update path does. Over 60k entities, sequential: struct updater about
+  1.6 ns per update, a raw `ref` 1.7, the old static-lambda delegate 1.85-1.9; `with` plus a set of the whole struct about
+  25% more than an in-place write.
+- **Why not a `ref struct` writer** (`using (var write = pool.TryWrite(id))`): it is as easy to call and nearly as fast,
+  but it can't be stored or queued, holds a `ref` into the dense array for its whole block (a resize under it writes to
+  the old array), and a block can do anything. A struct updater is a plain value a worker can record and the main thread
+  apply in a fixed order, and `unmanaged` stops it holding a pool, the bus or any reference, so its result depends only
+  on the component and its own fields. Anything else an update needs is read before the updater is built: `HealthDamage`
+  and `ManaCost`/`ManaRestore` resolve the effective maximum first.
+- **Tests** set up state with `pool.TrySet(id, pool.GetReadonly(id) with { ... })` rather than an updater; only the tests
+  of the update path itself define updaters.
+
+### Change observation is declared per pool (2026-11-03)
+
+- **Shape.** `RegisterPackedPool`/`RegisterMultiPool` (and the pool constructors) take a `ComponentChangeObservation`,
+  `Unobserved` by default and fixed for the build. `ComponentChanged` and `ComponentRemoving` have guarded `add`
+  accessors: subscribing to an unobserved pool throws, naming the component. A pool of an `IScheduledTimer` component is
+  always `Observed` (the timer wheels schedule from it), and `RegisterRelationship` registers its link pool `Observed`.
+  The game declares three: `AuraSourceComponent` (AuraSystem), `InventoryItemStackComponent` (ToggleItemHolderSync) and
+  `StatModifierComponent` (StatModifierExpirySystem), each in the module that registers and observes it. A module (or
+  mod) that observes a pool another module owns asks for it in its own `RegisterComponents` with
+  `ComponentManager.ObserveChanges<T>()`, before or after the owner registers it, rather than replacing the owner. A Direct
+  pool can't be observed (it raises no change events). `EcsBuilder` closes requests once every module has registered its
+  components: a later request, or one for a type nobody registered, fails the build. A replacement only has to keep the
+  observation its replaced module registered; another module's request applies to whichever module registers the pool.
+- **Why per pool, not per write.** Automatic timer scheduling, relationship consistency and lit-item toggles all hold
+  only because no writer can skip the notification. Declaring it once per pool keeps that and tells a future scheduler,
+  before the build runs, which pools need their changes collected and which can be written in parallel with no
+  bookkeeping.
+- **Cost.** None per write: the mode is checked only when subscribing; a write still pays the null check on the backing
+  delegate it always did.
+- **The contract** (on `ComponentChangeObservation`): a change reaches an observer no later than the end of the system that
+  made it. Every delivery is still immediate. Checked against today's observers, for when writes move to workers:
+  - Every observer reads the written component by the dense index it is handed, and a dense index is only valid until
+    the next removal from that pool. A deferred change list has to carry the written value (or a stable instance key),
+    not `(entityId, denseIndex)`.
+  - `Relationship` needs immediate delivery: it checks a link when it is written (a refused one is removed and throws),
+    and `TryGetTargetEntityId` reads the target side it keeps. Link pools stay main-thread only.
+  - `ToggleItemHolderSync` needs immediate delivery as written: `ComponentRemoving` reads the stack before it goes,
+    `SwitchOff` passes which toggle it is ending through a field set around the write, and the `IsDestroying` check
+    reads the moment of delivery.
+  - The timer wheels, `StatModifierExpirySystem` and `AuraSystem` fit, once the value travels with the change.
+
+### Component shape (2026-11-03)
+
+- **Shape doesn't cost; choose it for what it allows.** Field, auto-property and `record struct` writes through a `ref`
+  compile to identical Tier1 machine code (see "Component updates are unmanaged struct updaters").
+- **Mutable components use auto-properties**, which the interfaces they implement (`IScheduledTimer`,
+  `IRelationshipLink`, `IHotkeySlotBinding`) need anyway. A public field only where a member must be passed by `ref` or
+  a nested struct changed in place; no component has one today.
+- **`readonly` struct or record only for a component never changed after it is added** (markers, snapshots, spawn
+  records). Replacing a whole struct (`with` plus a set) costs about 25% more per write than changing it in place, so a
+  component written on a hot path is mutable: `DamageContributionComponent` went from a `readonly record struct`
+  rewritten with `with` on every hit to a struct whose `TotalDamageDealt` the ledger adds to in place.
+  `ProcessingTierComponent` (on a tier change) and `SpawnRecordComponent` (its crawler flag, once) are rewritten whole,
+  and stay readonly: both are a few bytes, so a whole write costs what an in-place one does.
+- **Any non-auto member of a mutable component is `readonly`**, so reading it through `ref readonly` (every
+  `GetReadonly`) never copies the struct. Auto-property getters are readonly already.
+- **The other conventions this pass settled:** a `*State` class is a bag of public fields for one or two collaborators
+  (`ElementGeometryState`'s doc comment, with `PointerState`'s single-writer exception), and UIEngine's options bags
+  (`ElementOptions` and its parts) are `init`-only.

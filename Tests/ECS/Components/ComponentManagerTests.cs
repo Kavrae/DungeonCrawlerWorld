@@ -207,65 +207,55 @@ public sealed class ComponentManagerTests
         Assert.ThrowsExactly<InvalidOperationException>(() => manager.Merge(0, new DirectTestComponent { Value = 1 }));
     }
 
-    /// <summary>
-    /// TryUpdate&lt;T&gt; mirrors Merge&lt;T&gt;'s "caller doesn't need to know the pool kind"
-    /// dispatch for Direct and Packed pools. Multi pools are deliberately unsupported (an
-    /// entity may have 0..N components of that type, so there's no single "the" component to
-    /// update in place) -- see the last test below.
-    /// </summary>
     [TestMethod]
-    public void TryUpdate_DirectPool_ExistingComponent_MutatesInPlaceAndReturnsTrue()
+    public void ObserveChanges_BeforeThePoolIsRegistered_RegistersItObserved()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
-        manager.Merge(0, new DirectTestComponent { Value = 5 });
 
-        var updated = manager.TryUpdate(0, (ref DirectTestComponent c) => c.Value += 10);
+        manager.ObserveChanges<MultiTestComponent>();
+        manager.RegisterMultiPool<MultiTestComponent>();
 
-        Assert.IsTrue(updated);
-        Assert.AreEqual(15, manager.GetDirectPool<DirectTestComponent>().GetReadonly(0).Value);
+        var pool = manager.GetMultiPool<MultiTestComponent>();
+        var changes = 0;
+        pool.ComponentChanged += (_, _) => changes++;
+        pool.Add(0, new MultiTestComponent { Value = 1 });
+        Assert.AreEqual(ComponentChangeObservation.Observed, pool.Observation);
+        Assert.AreEqual(1, changes);
     }
 
     [TestMethod]
-    public void TryUpdate_DirectPool_AbsentComponent_ReturnsFalse()
-    {
-        var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
-
-        var updated = manager.TryUpdate(0, (ref DirectTestComponent c) => c.Value += 10);
-
-        Assert.IsFalse(updated);
-    }
-
-    [TestMethod]
-    public void TryUpdate_PackedPool_ExistingComponent_MutatesInPlaceAndReturnsTrue()
+    public void ObserveChanges_AfterThePoolIsRegistered_MakesItObserved()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
         manager.RegisterPackedPool<PackedTestComponent>((ref existing, incoming) => existing = incoming);
-        manager.Merge(0, new PackedTestComponent { Value = 5 });
 
-        var updated = manager.TryUpdate(0, (ref PackedTestComponent c) => c.Value += 10);
+        manager.ObserveChanges<PackedTestComponent>();
 
-        Assert.IsTrue(updated);
-        Assert.AreEqual(15, manager.GetPackedPool<PackedTestComponent>().GetReadonly(0).Value);
+        var pool = manager.GetPackedPool<PackedTestComponent>();
+        var changes = 0;
+        pool.ComponentChanged += (_, _) => changes++;
+        pool.Add(0, new PackedTestComponent { Value = 1 });
+        Assert.AreEqual(ComponentChangeObservation.Observed, pool.Observation);
+        Assert.AreEqual(1, changes);
     }
 
     [TestMethod]
-    public void TryUpdate_MultiPool_Throws()
+    public void ObserveChanges_DirectPool_Throws()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
-        manager.RegisterMultiPool<MultiTestComponent>();
-        manager.Merge(0, new MultiTestComponent { Value = 5 });
+        manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => manager.TryUpdate(0, (ref MultiTestComponent c) => c.Value += 10));
+        Assert.ThrowsExactly<InvalidOperationException>(manager.ObserveChanges<DirectTestComponent>);
     }
 
     [TestMethod]
-    public void TryUpdate_UnregisteredType_Throws()
+    public void ObserveChanges_ThenRegisteringADirectPool_Throws()
     {
         var manager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 4);
+        manager.ObserveChanges<DirectTestComponent>();
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => manager.TryUpdate(0, (ref DirectTestComponent c) => c.Value += 1));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            manager.RegisterDirectPool<DirectTestComponent>((ref existing, incoming) => existing = incoming));
     }
 
     [TestMethod]

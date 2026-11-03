@@ -15,6 +15,8 @@ public sealed class ComponentManager
     private readonly Dictionary<Type, IComponentPool> _componentPools = [];
     private readonly List<IComponentPool> _poolsInRegistrationOrder = [];
     private readonly Dictionary<Type, object> _relationshipsByLinkType = [];
+    private readonly HashSet<Type> _pendingObservationRequests = [];
+    private bool _observationRequestsClosed;
 
     /// <summary>Initializes a new instance of the <see cref="ComponentManager"/> class.</summary>
     /// <param name="initialEntityCapacity">The initial capacity for indexing component pools based on the estimated number of entities with the component.</param>
@@ -53,23 +55,25 @@ public sealed class ComponentManager
     /// Packed component pools are suitable for components that are expected to be present on a subset of entities.
     /// Its entity index is paged, so it costs only the id ranges its holders fall in. initialCapacity is the dense
     /// storage it starts with (the manager's default when null); it grows geometrically from there, so a component
-    /// known to be common can start larger to skip the early growth steps.
+    /// known to be common can start larger to skip the early growth steps. observation says whether anything may
+    /// subscribe to the pool's changes (see ComponentChangeObservation); an IScheduledTimer component's pool is
+    /// always observed.
     /// </remarks>
-    public void RegisterPackedPool<T>(MergeAction<T> mergeAction, int? initialCapacity = null) where T : struct
+    public void RegisterPackedPool<T>(MergeAction<T> mergeAction, int? initialCapacity = null, ComponentChangeObservation observation = ComponentChangeObservation.Unobserved) where T : struct
     {
         ThrowIfAlreadyRegistered(typeof(T));
-        AddPool(typeof(T), new PackedComponentPool<T>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity, mergeAction));
+        AddPool(typeof(T), new PackedComponentPool<T>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity, mergeAction, observation));
     }
 
     /// <summary>Registers a multi component pool for the specified component type.</summary>
     /// <remarks>
     /// Multi component pools are suitable for components that can be added multiple times to the same entity.
-    /// See RegisterPackedPool's own remarks for initialCapacity.
+    /// See RegisterPackedPool's own remarks for initialCapacity and observation.
     /// </remarks>
-    public void RegisterMultiPool<T>(int? initialCapacity = null) where T : struct
+    public void RegisterMultiPool<T>(int? initialCapacity = null, ComponentChangeObservation observation = ComponentChangeObservation.Unobserved) where T : struct
     {
         ThrowIfAlreadyRegistered(typeof(T));
-        AddPool(typeof(T), new MultiComponentPool<T>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity));
+        AddPool(typeof(T), new MultiComponentPool<T>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity, observation));
     }
 
     /// <summary>Registers a relationship type: a Packed pool of TLink (the links) and a Multi pool of RelatedSourceComponent&lt;TLink&gt; (each target's sources), kept in step by a Relationship.</summary>
@@ -84,7 +88,7 @@ public sealed class ComponentManager
         ThrowIfAlreadyRegistered(typeof(TLink));
         ThrowIfAlreadyRegistered(typeof(RelatedSourceComponent<TLink>));
 
-        var links = new PackedComponentPool<TLink>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity, static (ref existing, incoming) => existing = incoming);
+        var links = new PackedComponentPool<TLink>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity, static (ref existing, incoming) => existing = incoming, ComponentChangeObservation.Observed);
         var relatedSources = new MultiComponentPool<RelatedSourceComponent<TLink>>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity);
         AddPool(typeof(TLink), links);
         AddPool(typeof(RelatedSourceComponent<TLink>), relatedSources);
@@ -109,10 +113,61 @@ public sealed class ComponentManager
         }
     }
 
+    /// <summary>Makes T's Packed or Multi pool Observed, whichever module registers it, so the caller can subscribe to its ComponentChanged and ComponentRemoving.</summary>
+    /// <remarks>
+    /// For a module that observes a pool another module owns: call it in RegisterComponents, before or after the owner registers the
+    /// pool. The build closes requests once every module has registered its components; a request for a type no module registered
+    /// then fails the build.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Component registration has closed, or T is registered as a Direct pool, which raises no change events.</exception>
+    public void ObserveChanges<T>() where T : struct
+    {
+        if (_observationRequestsClosed)
+        {
+            throw new InvalidOperationException($"Observation of {typeof(T).Name} was requested after component registration closed; request it in RegisterComponents.");
+        }
+
+        if (_componentPools.TryGetValue(typeof(T), out var pool))
+        {
+            MarkObserved(typeof(T), pool);
+            return;
+        }
+
+        _pendingObservationRequests.Add(typeof(T));
+    }
+
+    /// <summary>Ends ObserveChanges requests: every module has registered its components.</summary>
+    /// <exception cref="InvalidOperationException">A requested type was never registered.</exception>
+    internal void CloseObservationRequests()
+    {
+        _observationRequestsClosed = true;
+        if (_pendingObservationRequests.Count > 0)
+        {
+            throw new InvalidOperationException($"Observation was requested for component types no module registered: {string.Join(", ", _pendingObservationRequests.Select(type => type.Name))}.");
+        }
+    }
+
     private void AddPool(Type componentType, IComponentPool pool)
     {
         _componentPools.Add(componentType, pool);
         _poolsInRegistrationOrder.Add(pool);
+
+        if (_pendingObservationRequests.Remove(componentType))
+        {
+            MarkObserved(componentType, pool);
+        }
+    }
+
+    private static void MarkObserved(Type componentType, IComponentPool pool)
+    {
+        switch (pool)
+        {
+            case IObservableComponentPool observable:
+                observable.MarkObserved();
+                break;
+            default:
+                throw new InvalidOperationException($"{componentType.Name} is registered as a {pool.GetType().Name[..pool.GetType().Name.IndexOf('`')]}, which raises no change events; it can't be observed.");
+        }
     }
 
     private void ThrowIfAlreadyRegistered(Type componentType)
@@ -215,27 +270,6 @@ public sealed class ComponentManager
             default:
                 throw new InvalidOperationException($"Component type {typeof(T).Name} is registered as an unsupported pool type for Merge.");
         }
-    }
-
-    /// <summary>
-    /// Mutates an existing component without the caller needing to know which pool type T was registered as. </summary> 
-    /// <remarks>
-    /// Returns false if the entity has no component of type T. 
-    /// Multi pools have no single existing value to update (an entity may have 0..N) and are not supported here -- use GetMultiPool&lt;T&gt;().TryUpdateFirst directly.
-    /// </remarks>
-    public bool TryUpdate<T>(int entityId, ComponentUpdater<T> updater) where T : struct
-    {
-        if (!_componentPools.TryGetValue(typeof(T), out var pool))
-        {
-            throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered.");
-        }
-
-        return pool switch
-        {
-            DirectComponentPool<T> direct => direct.TryUpdate(entityId, updater),
-            PackedComponentPool<T> packed => packed.TryUpdate(entityId, updater),
-            _ => throw new InvalidOperationException($"Component type {typeof(T).Name} is registered as an unsupported pool type for TryUpdate."),
-        };
     }
 
     /// <summary>Every registered pool, in registration order: the order RemoveAllComponents removes in.</summary>

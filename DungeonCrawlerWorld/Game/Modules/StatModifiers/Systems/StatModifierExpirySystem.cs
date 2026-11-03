@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -99,7 +100,7 @@ public sealed class StatModifierExpirySystem : ISystem
             _eventBus.Publish(new StatModifierExpiringEvent(entityId));
         }
 
-        while (_statModifiers.RemoveFirst(entityId, now, static (ref readonly StatModifierComponent modifier, long frame) => IsDue(modifier.ExpiresAtFrame, frame)))
+        while (_statModifiers.RemoveFirst(entityId, new DueMatcher(now)))
         {
         }
 
@@ -119,7 +120,7 @@ public sealed class StatModifierExpirySystem : ISystem
         // written from inside a firing, this one included, and sweeps a reached one on the next
         // frame (late, never lost), so there is nothing to round up to here and the component
         // carries the deadline it actually has.
-        _expiries.TryUpdate(entityId, nextDeadline, static (ref ExpiringStatModifierComponent e, uint deadline) => e.NextTickFrame = deadline);
+        _expiries.TryUpdate(entityId, new SetNextTickUpdate<ExpiringStatModifierComponent>(nextDeadline));
         return false;
     }
 
@@ -135,5 +136,10 @@ public sealed class StatModifierExpirySystem : ISystem
         }
 
         return earliest;
+    }
+
+    private readonly struct DueMatcher(long now) : IComponentMatcher<StatModifierComponent>
+    {
+        public bool Matches(in StatModifierComponent modifier) => IsDue(modifier.ExpiresAtFrame, now);
     }
 }

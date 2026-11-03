@@ -130,7 +130,7 @@ public sealed class PoisonEffectsTests
     {
         var componentManager = CreateComponentManager();
         PoisonEffects.ApplyStack(componentManager, new EntityKeys(), 0, ActionSource.Admin, durationInTicks: 5, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
-        componentManager.GetPackedPool<PoisonTimerComponent>().TryUpdate(0, static (ref PoisonTimerComponent t) => t.NextTickFrame = 5);
+        componentManager.GetPackedPool<PoisonTimerComponent>().TrySet(0, componentManager.GetPackedPool<PoisonTimerComponent>().GetReadonly(0) with { NextTickFrame = 5 });
 
         PoisonEffects.ApplyStack(componentManager, new EntityKeys(), 0, ActionSource.Admin, durationInTicks: 5, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
 

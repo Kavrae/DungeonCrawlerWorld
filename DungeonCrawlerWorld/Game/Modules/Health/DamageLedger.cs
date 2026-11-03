@@ -42,10 +42,7 @@ public sealed class DamageLedger(
         var frame = (uint)now;
         RecordLastDamagedFrame(victimEntityId, frame, now);
 
-        var updated = contributions.TryUpdateFirst(victimEntityId, (SourceEntityKey: sourceEntityKey, Amount: healthRemoved),
-            static (ref readonly DamageContributionComponent contribution, (EntityKey SourceEntityKey, float Amount) state) => contribution.Source.Key == state.SourceEntityKey,
-            static (ref DamageContributionComponent contribution, (EntityKey SourceEntityKey, float Amount) state) =>
-                contribution = contribution with { TotalDamageDealt = contribution.TotalDamageDealt + state.Amount });
+        var updated = contributions.TryUpdateFirst(victimEntityId, new SourceMatcher(sourceEntityKey), new AddContributionUpdate(healthRemoved));
 
         if (!updated)
         {
@@ -95,7 +92,7 @@ public sealed class DamageLedger(
         var resetFrame = FrameDeadline.After(expiry.LastDamagedFrame, ResetAfterFrames);
         if (resetFrame > now)
         {
-            expiries.TryUpdate(victimEntityId, resetFrame, static (ref DamageLedgerExpiryComponent component, uint deadline) => component.ExpiresAtFrame = deadline);
+            expiries.TryUpdate(victimEntityId, new SetExpiryUpdate(resetFrame));
             return false;
         }
 
@@ -117,6 +114,26 @@ public sealed class DamageLedger(
             contributions.Remove(victimEntityId);
         }
 
-        expiries.TryUpdate(victimEntityId, frame, static (ref DamageLedgerExpiryComponent component, uint lastDamagedFrame) => component.LastDamagedFrame = lastDamagedFrame);
+        expiries.TryUpdate(victimEntityId, new SetLastDamagedUpdate(frame));
+    }
+
+    private readonly struct SourceMatcher(EntityKey sourceEntityKey) : IComponentMatcher<DamageContributionComponent>
+    {
+        public bool Matches(in DamageContributionComponent contribution) => contribution.Source.Key == sourceEntityKey;
+    }
+
+    private readonly struct AddContributionUpdate(float amount) : IComponentUpdater<DamageContributionComponent>
+    {
+        public void Update(ref DamageContributionComponent contribution) => contribution.TotalDamageDealt += amount;
+    }
+
+    private readonly struct SetExpiryUpdate(uint expiresAtFrame) : IComponentUpdater<DamageLedgerExpiryComponent>
+    {
+        public void Update(ref DamageLedgerExpiryComponent expiry) => expiry.ExpiresAtFrame = expiresAtFrame;
+    }
+
+    private readonly struct SetLastDamagedUpdate(uint lastDamagedFrame) : IComponentUpdater<DamageLedgerExpiryComponent>
+    {
+        public void Update(ref DamageLedgerExpiryComponent expiry) => expiry.LastDamagedFrame = lastDamagedFrame;
     }
 }

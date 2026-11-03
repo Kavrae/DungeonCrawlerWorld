@@ -5,7 +5,7 @@ namespace Engine.ECS.Components.Stores;
 /// <summary> Sparse-set component storage for rare components, where a direct pool would waste index space. </summary>
 /// <remarks> The entity index is paged (see EntityPages), so a pool costs the id ranges its holders fall in rather than the world's entity capacity; dense storage grows geometrically (see DenseCapacityGrowth). </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool where T : struct
+public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool, IObservableComponentPool where T : struct
 {
     private readonly EntityPages<int> _denseIndexByEntity;
     private int[] _denseIndexToEntityIdMap;
@@ -52,9 +52,6 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <summary> A read-only span of the version for each component in <see cref="Components"/>, at the same dense index. </summary>
     public ReadOnlySpan<uint> Versions => new(_denseVersions, 0, _count);
 
-    /// <summary> A delegate that defines a method for updating a component to a given state. </summary>
-    public delegate void ComponentUpdater<TState>(ref T component, TState state);
-
     /// <summary> Fired at the end of Add (including Merge's fallback-to-Add path) and Remove. </summary>
     /// <remarks>
     /// Lets consumers (e.g. EntityStripeSet) maintain an entityId-keyed view of this pool's
@@ -68,9 +65,10 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     public event Action<int>? EntityRemoved;
 
     /// <summary>
-    /// Opt-in: fired after every write to a component -- (entityId, denseIndex) -- at exactly the
+    /// Fired after every write to a component -- (entityId, denseIndex) -- at exactly the
     /// points the pool bumps that component's version: Add, Merge, TrySet, TryUpdate,
     /// SetByDenseIndex, UpdateByDenseIndex and IncrementVersionByDenseIndex. Not fired by Remove.
+    /// Subscribing throws unless the pool is Observed (see ComponentChangeObservation).
     /// </summary>
     /// <remarks>
     /// Lets a consumer react to *every* change without each writer having to remember to tell it
@@ -80,17 +78,43 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// without the IncrementVersionByDenseIndex that method's contract already requires.
     /// The handler must not add to or remove from this pool.
     /// </remarks>
-    public event Action<int, int>? ComponentChanged;
+    public event Action<int, int>? ComponentChanged
+    {
+        add
+        {
+            ThrowIfUnobserved();
+            _componentChanged += value;
+        }
+        remove => _componentChanged -= value;
+    }
 
-    /// <summary>Opt-in: fired before a component is removed -- (entityId, denseIndex) -- while it can still be read.</summary>
+    /// <summary>Fired before a component is removed -- (entityId, denseIndex) -- while it can still be read. Subscribing throws unless the pool is Observed.</summary>
     /// <remarks>Raised by Remove, including RemoveAllComponents'. A handler may read the component and write other pools, but must not add to or remove from this one.</remarks>
-    public event Action<int, int>? ComponentRemoving;
+    public event Action<int, int>? ComponentRemoving
+    {
+        add
+        {
+            ThrowIfUnobserved();
+            _componentRemoving += value;
+        }
+        remove => _componentRemoving -= value;
+    }
+
+    /// <summary>Whether ComponentChanged and ComponentRemoving can be subscribed to, fixed while the build registers components.</summary>
+    public ComponentChangeObservation Observation { get; private set; }
+
+    /// <summary>Makes the pool Observed: ComponentManager.ObserveChanges, while components are being registered.</summary>
+    void IObservableComponentPool.MarkObserved() => Observation = ComponentChangeObservation.Observed;
+
+    private Action<int, int>? _componentChanged;
+    private Action<int, int>? _componentRemoving;
 
     /// <summary> Initializes a new instance of the <see cref="PackedComponentPool{T}"/> class with the specified capacities and merge implementation. </summary>
     /// <param name="entityCapacity">The entity id space the entity index's page table starts out covering; ids beyond it grow it on demand.</param>
     /// <param name="initialCapacity">The initial dense storage size.</param>
     /// <param name="mergeImplementation">Determines how two instances of a component should be merged together.</param>
-    public PackedComponentPool(int entityCapacity, int initialCapacity, MergeAction<T> mergeImplementation)
+    /// <param name="observation">Whether the pool's changes can be observed; always Observed for an IScheduledTimer component.</param>
+    public PackedComponentPool(int entityCapacity, int initialCapacity, MergeAction<T> mergeImplementation, ComponentChangeObservation observation = ComponentChangeObservation.Unobserved)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(entityCapacity);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(initialCapacity);
@@ -105,6 +129,17 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
         _mergeImplementation = mergeImplementation;
         _count = 0;
+        Observation = typeof(IScheduledTimer).IsAssignableFrom(typeof(T))
+            ? ComponentChangeObservation.Observed
+            : observation;
+    }
+
+    private void ThrowIfUnobserved()
+    {
+        if (Observation != ComponentChangeObservation.Observed)
+        {
+            ComponentPoolThrows.Unobserved<T>();
+        }
     }
 
     /// <summary> Grows the entity index's page table to cover the new entity capacity. Allocates no pages. </summary>
@@ -136,7 +171,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         _count++;
 
         EntityAdded?.Invoke(entityId);
-        ComponentChanged?.Invoke(entityId, _count - 1);
+        _componentChanged?.Invoke(entityId, _count - 1);
     }
 
     /// <summary> Merges a component with the existing component for the specified entity. </summary>
@@ -251,42 +286,19 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         return true;
     }
 
-    /// <summary>Attempts to update the component for the specified entity using a custom update function if it already has one.</summary>
+    /// <summary>Applies updater to the entity's component in place, if it has one.</summary>
     /// <param name="entityId">The ID of the entity to check.</param>
-    /// <param name="updater">The function to update the component.</param>
+    /// <param name="updater">The change to apply.</param>
     /// <returns>True if the component was updated, false otherwise.</returns>
-    public bool TryUpdate(int entityId, Engine.ECS.Components.ComponentUpdater<T> updater)
+    public bool TryUpdate<TUpdater>(int entityId, TUpdater updater) where TUpdater : unmanaged, IComponentUpdater<T>
     {
-        ArgumentNullException.ThrowIfNull(updater);
-
         var denseIndex = DenseIndexOf(entityId);
         if (denseIndex < 0)
         {
             return false;
         }
 
-        updater(ref _denseComponents[denseIndex]);
-        MarkChanged(denseIndex);
-        return true;
-    }
-
-    /// <summary>Attempts to update the component for the specified entity using a custom update function and state if it already has one.</summary>
-    /// <typeparam name="TState">The type of the state parameter.</typeparam>
-    /// <param name="entityId">The ID of the entity to check.</param>
-    /// <param name="state">The state to pass to the update function.</param>
-    /// <param name="updater">The function to update the component.</param>
-    /// <returns>True if the component was updated, false otherwise.</returns>
-    public bool TryUpdate<TState>(int entityId, TState state, ComponentUpdater<TState> updater)
-    {
-        ArgumentNullException.ThrowIfNull(updater);
-
-        var denseIndex = DenseIndexOf(entityId);
-        if (denseIndex < 0)
-        {
-            return false;
-        }
-
-        updater(ref _denseComponents[denseIndex], state);
+        updater.Update(ref _denseComponents[denseIndex]);
         MarkChanged(denseIndex);
         return true;
     }
@@ -321,27 +333,12 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         MarkChanged(denseIndex);
     }
 
-    /// <summary> Updates the component at the given dense index using a custom update function. </summary>
+    /// <summary> Applies updater to the component at the given dense index, in place. </summary>
     /// <param name="denseIndex">The dense index of the component.</param>
-    /// <param name="updater">The function to update the component.</param>
-    public void UpdateByDenseIndex(int denseIndex, Engine.ECS.Components.ComponentUpdater<T> updater)
+    /// <param name="updater">The change to apply.</param>
+    public void UpdateByDenseIndex<TUpdater>(int denseIndex, TUpdater updater) where TUpdater : unmanaged, IComponentUpdater<T>
     {
-        ArgumentNullException.ThrowIfNull(updater);
-
-        updater(ref _denseComponents[denseIndex]);
-        MarkChanged(denseIndex);
-    }
-
-    /// <summary> Updates the component at the given dense index using a custom update function and state. </summary>
-    /// <typeparam name="TState">The type of the state parameter.</typeparam>
-    /// <param name="denseIndex">The dense index of the component.</param>
-    /// <param name="state">The state to pass to the update function.</param>
-    /// <param name="updater">The function to update the component.</param>
-    public void UpdateByDenseIndex<TState>(int denseIndex, TState state, ComponentUpdater<TState> updater)
-    {
-        ArgumentNullException.ThrowIfNull(updater);
-
-        updater(ref _denseComponents[denseIndex], state);
+        updater.Update(ref _denseComponents[denseIndex]);
         MarkChanged(denseIndex);
     }
 
@@ -355,7 +352,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     private void MarkChanged(int denseIndex)
     {
         _denseVersions[denseIndex]++;
-        ComponentChanged?.Invoke(_denseIndexToEntityIdMap[denseIndex], denseIndex);
+        _componentChanged?.Invoke(_denseIndexToEntityIdMap[denseIndex], denseIndex);
     }
 
     /// <summary>Removes the component for the specified entity if it exists.</summary>
@@ -370,7 +367,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
             return false;
         }
 
-        ComponentRemoving?.Invoke(entityId, denseIndex);
+        _componentRemoving?.Invoke(entityId, denseIndex);
 
         var lastDenseIndex = _count - 1;
 

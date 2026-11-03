@@ -1,3 +1,4 @@
+using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
 using Game.Modules.Inventory.Components;
 
@@ -26,7 +27,7 @@ public static class InventoryQueries
     /// <param name="stack">When this method returns, contains the stack if found; otherwise, the default value.</param>
     /// <returns><c>true</c> if the stack was found; otherwise, <c>false</c>.</returns>
     public static bool TryGetStack(MultiComponentPool<InventoryItemStackComponent> stacks, int entityId, Guid itemDefinitionId, out InventoryItemStackComponent stack) =>
-        stacks.TryGetFirst(entityId, itemDefinitionId, static (ref readonly InventoryItemStackComponent candidate, Guid id) => candidate.ItemDefinitionId == id, out stack);
+        stacks.TryGetFirst(entityId, new ItemDefinitionMatcher(itemDefinitionId), out stack);
 
     /// <summary>
     /// Resolves the effective ItemDefinition for a stack -- its own Override if diverged, else the
@@ -65,5 +66,10 @@ public static class InventoryQueries
 
         stack = default;
         return false;
+    }
+
+    internal readonly struct ItemDefinitionMatcher(Guid itemDefinitionId) : IComponentMatcher<InventoryItemStackComponent>
+    {
+        public bool Matches(in InventoryItemStackComponent stack) => stack.ItemDefinitionId == itemDefinitionId;
     }
 }
