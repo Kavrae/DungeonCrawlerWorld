@@ -78,8 +78,8 @@ public sealed class AuraGlowBlendTests
     public void GlowOpacityMultiplier_IsAveragedByEachAurasPower()
     {
         var (field, auras, blend) = Build();
-        auras.Register(OrangeAura with { GlowOpacityMultiplier = 0.9f });
-        field.AddSource(SourcePosition, new AuraSourceComponent(OrangeAuraId, power: 6, size: 0));
+        var brightAuraId = auras.Register(OrangeAura with { Id = new Guid("00000000-0000-0000-0000-0000000000b9"), GlowOpacityMultiplier = 0.9f });
+        field.AddSource(SourcePosition, new AuraSourceComponent(brightAuraId, power: 6, size: 0));
         field.AddSource(SourcePosition, new AuraSourceComponent(RedAuraId, power: 2, size: 0));
 
         blend.BeginPass();
@@ -88,19 +88,6 @@ public sealed class AuraGlowBlendTests
         Assert.AreEqual((0.9f * 6 + 0.5f * 2) / 8, glowOpacityMultiplier, 0.0001f);
     }
 
-    [TestMethod]
-    public void AuraDefinitionReplaced_TheNextPassTakesItsNewColour()
-    {
-        var (field, auras, blend) = Build();
-        field.AddSource(SourcePosition, new AuraSourceComponent(OrangeAuraId, power: 8, size: 3));
-        blend.BeginPass();
-
-        auras.Register(new AuraDefinition(OrangeAuraGuid, "Orange", Color.Purple));
-        blend.BeginPass();
-
-        Assert.IsTrue(blend.TryGetGlow(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, out var glowColor, out _, out _));
-        Assert.AreEqual(Color.Purple, glowColor);
-    }
 
     /// <summary>Terrain auras laid down at population glow from the first frame, before any system has built the field.</summary>
     [TestMethod]
@@ -108,7 +95,7 @@ public sealed class AuraGlowBlendTests
     {
         var terrain = new TerrainRegistry();
         var world = TestWorlds.Create(new Map(MapSize));
-        var glowing = terrain.Register(new TerrainDefinition("test:glowing", "Glowing", "", "~", default, Aura: new TerrainAura(OrangeAura, 8, 3)));
+        var glowing = terrain.Register(new TerrainDefinition("test:glowing", "Glowing", "", "~", default, Aura: new TerrainAura(OrangeAuraGuid, 8, 3)));
         world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(glowing));
         var (_, _, blend) = Build(world, terrain);
 

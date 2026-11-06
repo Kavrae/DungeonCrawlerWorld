@@ -24,8 +24,11 @@ public sealed class BlueprintAdminCommands(EntityFactory factory, BlueprintRegis
     public IReadOnlyList<BlueprintChoice> Applicable() => Choices(IsApplicable);
 
     /// <summary>Spawns blueprintId at position, on position's layer; false when it landed off the map.</summary>
-    public bool Spawn(ushort blueprintId, Vector3Int position) =>
-        factory.Spawn(SpawnRequest.At(blueprintId, position)) != EntityFactory.NoEntity;
+    public bool Spawn(ushort blueprintId, Vector3Int position)
+    {
+        factory.LoadContentFor(blueprintId);
+        return factory.Spawn(SpawnRequest.At(blueprintId, position)) != EntityFactory.NoEntity;
+    }
 
     /// <inheritdoc cref="EntityFactory.Apply"/>
     public void Apply(int entityId, ushort blueprintId) => factory.Apply(entityId, blueprintId);

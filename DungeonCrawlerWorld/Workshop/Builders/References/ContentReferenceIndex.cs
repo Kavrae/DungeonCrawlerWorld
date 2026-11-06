@@ -91,7 +91,7 @@ public sealed class ContentReferenceIndex
             var from = new ContentRecord(ContentRecordKind.Terrain, Guid.Empty, terrainDefinition.Name);
             if (terrainDefinition.Aura is { } terrainAura)
             {
-                Add(new ContentReference(from, AuraRecord(terrainAura.Aura), ContentReferenceKind.RadiatesAura));
+                Add(new ContentReference(from, AuraRecord(catalogs.Auras, terrainAura.AuraId), ContentReferenceKind.RadiatesAura));
             }
 
             if (terrainDefinition.Contact is { } contact)
@@ -111,7 +111,7 @@ public sealed class ContentReferenceIndex
             var from = new ContentRecord(ContentRecordKind.Blueprint, blueprint.Id, blueprint.Name);
             foreach (var auraGrant in blueprint.Auras)
             {
-                Add(new ContentReference(from, AuraRecord(auraGrant.Aura), ContentReferenceKind.RadiatesAura));
+                Add(new ContentReference(from, AuraRecord(catalogs.Auras, auraGrant.AuraId), ContentReferenceKind.RadiatesAura));
             }
         }
 
@@ -127,6 +127,10 @@ public sealed class ContentReferenceIndex
         _usedByByRecord.TryGetValue((kind, id), out var references) ? references : [];
 
     private static ContentRecord AuraRecord(AuraDefinition aura) => new(ContentRecordKind.Aura, aura.Id, aura.Name);
+
+    /// <summary>The record of the aura auraId names; its name is the catalog's, or its Guid when a build left it out.</summary>
+    private static ContentRecord AuraRecord(Game.Modules.Auras.AuraCatalog auras, Guid auraId) =>
+        auras.TryGetId(auraId, out var id) ? AuraRecord(auras.Get(id)) : new ContentRecord(ContentRecordKind.Aura, auraId, auraId.ToString());
 
     /// <summary>What each palette and area lays and spawns, the palettes each area takes symbols from, and the area each fixed placement places.</summary>
     private void AddAreaReferences(GameCatalogs catalogs)

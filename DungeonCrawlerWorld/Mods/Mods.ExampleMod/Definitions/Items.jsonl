@@ -1,0 +1,3 @@
+{"fmt":1,"table":"Items"}
+{"id":"HZo-fG9LKk6NHAAAAAAAAQ","n":"Health Potion","sp":"HealthPotion","g":"h","gc":4278222848,"t":["Effect.Healing","Targeting.Self"],"fx":[{"e":[{"$":"DirectHeal","pct":0.75}]}],"ac":{"$":"Potion","tg":{"sh":"Circle","r":3,"a":1,"ta":"MarkedOnly"},"tm":{}},"gv":5,"d":"Increases your health by at least 75% -- ExampleMod brewed it stronger. Still doesn't cure poison.","su":"Heal target(s) by 75%."}
+{"id":"F6Dy5j1LHkqccgAAAAABAQ","n":"Example Tonic","sp":"HealthPotion","g":"e","gc":4278255360,"t":["Effect.Healing","Targeting.Self"],"fx":[{"e":[{"$":"DirectHeal","pct":0.25}]}],"ac":{"$":"Potion","tg":{"sh":"Circle","r":3,"a":1,"ta":"MarkedOnly"},"tm":{}},"gv":3,"d":"A mild tonic ExampleMod adds to the game.","su":"Heal target(s) by 25%."}

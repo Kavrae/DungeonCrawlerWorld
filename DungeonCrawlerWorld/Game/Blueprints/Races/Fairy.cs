@@ -77,6 +77,7 @@ public static class Fairy
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
         Build = Build,
+        UsesItems = NPCs.TemporaryNpcLootGrant.AllCoreItemIds,
         Appearance = Appearance,
         Race = new RaceFacet(),
         Actions = ActionGrants,

@@ -25,7 +25,7 @@ public sealed class EntityFactoryTests
     {
         var map = new Map(new Vector3Int(20, 20, 3));
         var crawlerNumbers = withCrawlerNumbers ? new UniqueNumberAllocator(1, 1, crawlerNumberBits) : null;
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, TestContent.Layers, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
         return (result, result.World);
     }
 

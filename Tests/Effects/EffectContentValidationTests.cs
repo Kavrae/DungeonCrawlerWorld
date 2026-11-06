@@ -40,8 +40,17 @@ public sealed class EffectContentValidationTests
     /// <summary>An aura nothing registers: only an effect entry names it, and its own effects use an undeclared tag.</summary>
     private static readonly AuraDefinition AuraWithAnUndeclaredTagInside = new(NamedOnlyByAnEffectAuraGuid, "Hidden Blight", Color.Purple, [ModifierConditionedOn(UndeclaredTag)]);
 
-    private static InvalidOperationException BuildWith(Action<GameModuleContext> configure) =>
-        Assert.ThrowsExactly<InvalidOperationException>(() => BuiltInTestModules.BuildModules([new RegisteringModule(configure)]));
+    private static InvalidOperationException BuildWith(Action<GameModuleContext> configure, Engine.Content.ContentLayers? content = null) =>
+        Assert.ThrowsExactly<InvalidOperationException>(() => BuiltInTestModules.BuildModules([new RegisteringModule(configure)], content: content));
+
+    /// <summary>Builds every built-in module and a terrain radiating the aura HolderAuraGuid names, with auras -- that one among them -- in the content: an aura's effects can name another aura, which only AurasModule's codec reads.</summary>
+    private static InvalidOperationException BuildWithBogRadiating(params AuraDefinition[] auras)
+    {
+        var bog = new RegisteringModule(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", "~", default, Aura: new TerrainAura(HolderAuraGuid, 4, 2))));
+        return Assert.ThrowsExactly<InvalidOperationException>(() => Game.Bootstrap.GameBuildPass.BuildModules(
+            [.. Game.Bootstrap.GameBootstrapper.BuiltInModules(), .. BuiltInTestModules.Factories<GameModuleContext>([bog])], [], Game.Bootstrap.GameBuildPass.CreatePlaceholderMap(),
+            TestContent.WithAuras(auras), sessionSeed: 0, [], initialEntityCapacity: 10, initialComponentCapacity: 10));
+    }
 
     [TestMethod]
     public void TerrainContact_WhoseEffectNamesAnUndeclaredTag_ThrowsNamingTheTerrainAndTag()
@@ -56,8 +65,7 @@ public sealed class EffectContentValidationTests
     [TestMethod]
     public void Aura_WhoseOwnTagIsUndeclared_ThrowsNamingTheAuraAndTag()
     {
-        var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", "~", default,
-            Aura: new TerrainAura(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, Tags: [UndeclaredTag]), 4, 2))));
+        var exception = BuildWithBogRadiating(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, Tags: [UndeclaredTag]));
 
         Assert.Contains("Aura 'Miasma'", exception.Message);
         Assert.Contains(UndeclaredTag.Name, exception.Message);
@@ -66,8 +74,7 @@ public sealed class EffectContentValidationTests
     [TestMethod]
     public void Aura_WhoseEffectNamesAnUndeclaredTag_ThrowsNamingTheAuraAndTag()
     {
-        var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", "~", default,
-            Aura: new TerrainAura(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, [ModifierConditionedOn(UndeclaredTag)]), 4, 2))));
+        var exception = BuildWithBogRadiating(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, [ModifierConditionedOn(UndeclaredTag)]));
 
         Assert.Contains("Aura 'Miasma'", exception.Message);
         Assert.Contains(UndeclaredTag.Name, exception.Message);
@@ -86,7 +93,7 @@ public sealed class EffectContentValidationTests
         Assert.AreSame(harmless, build.Context.Auras.Get(auraId));
     }
 
-    /// <summary>Two different auras sharing a Guid would replace each other in the catalog every time either radiated.</summary>
+    /// <summary>Two different auras sharing a Guid: the catalog would keep the first, and the other would radiate effects and a colour it doesn't declare.</summary>
     [TestMethod]
     public void TwoDifferentAurasSharingAGuid_FailTheBuild_NamingBoth()
     {
@@ -132,8 +139,7 @@ public sealed class EffectContentValidationTests
     [TestMethod]
     public void AuraNamedOnlyByAnotherAurasEffects_HasItsOwnEffectsChecked()
     {
-        var exception = BuildWith(context => context.Terrain.Register(new TerrainDefinition("test:bog", "Bog", "", "~", default,
-            Aura: new TerrainAura(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, [GrantOf(AuraWithAnUndeclaredTagInside)]), 4, 2))));
+        var exception = BuildWithBogRadiating(new AuraDefinition(HolderAuraGuid, "Miasma", Color.Green, [GrantOf(AuraWithAnUndeclaredTagInside)]), AuraWithAnUndeclaredTagInside);
 
         Assert.Contains("Aura 'Hidden Blight'", exception.Message);
     }

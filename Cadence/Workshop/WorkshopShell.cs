@@ -51,7 +51,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
     private readonly WorkshopTabContext[] _tabContexts;
     private readonly TabNavigator _tabNavigator;
     private readonly List<GameOutputLine> _drainedOutput = [];
-    private readonly StreamWriter? _gameOutputLog;
+    private readonly Engine.Diagnostics.RollingLogFile? _gameOutputLog;
     private readonly WorkshopBottomPanel _bottomPanel;
     private readonly WorkshopDebugging _debugging;
 
@@ -213,16 +213,8 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
         _bottomPanel.SetProblems([.. _loadProblems, .. launchProblems, .. leakProblems]);
     }
 
-    private static StreamWriter? OpenGameOutputLog(string? path)
-    {
-        if (path is null)
-        {
-            return null;
-        }
-
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        return new StreamWriter(path, append: true) { AutoFlush = true };
-    }
+    private static Engine.Diagnostics.RollingLogFile? OpenGameOutputLog(string? path) =>
+        path is null ? null : new Engine.Diagnostics.RollingLogFile(path);
 
     private void ForwardGameOutput()
     {

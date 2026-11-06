@@ -108,19 +108,6 @@ public sealed class ActionSourceNamingTests
         Assert.AreEqual("Hallowed Ground", naming.Describe(source, PlayerEntityId));
     }
 
-    [TestMethod]
-    public void Describe_AuraRegisteredAgainUnderTheSameGuid_IsTheNewName()
-    {
-        var auras = new AuraCatalog();
-        var auraId = auras.Register(new AuraDefinition(AuraGuid, "Toxic Idol", Color.Green));
-        var naming = TestActionSources.Naming(auras: auras);
-        var source = ActionSource.FromAura(auraId);
-
-        auras.Register(new AuraDefinition(AuraGuid, "Venom Idol", Color.Green));
-
-        Assert.AreEqual("Venom Idol", naming.Describe(source, PlayerEntityId));
-    }
-
     private static (ActionSourceNaming Naming, ActionSource Source) GoblinSource(SourceCause cause = default)
     {
         var (naming, source, _) = GoblinSourceWithKeys(cause);

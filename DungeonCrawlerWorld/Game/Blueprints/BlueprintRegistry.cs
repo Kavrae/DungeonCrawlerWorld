@@ -179,6 +179,8 @@ public sealed class BlueprintRegistry
         var actions = new List<ActionGrant>();
         var auras = new List<AuraGrant>();
         var nonBlocking = new List<NonBlockingKind>();
+        var contentActionIds = new HashSet<Guid>();
+        var contentItemIds = new HashSet<Guid>();
         var appearance = new AppearanceBuilder();
         MapLayer? layer = null;
         Vector2Byte? size = null;
@@ -226,7 +228,7 @@ public sealed class BlueprintRegistry
 
             foreach (var grant in part.Auras)
             {
-                var existing = auras.FindIndex(held => held.Aura.Id == grant.Aura.Id);
+                var existing = auras.FindIndex(held => held.AuraId == grant.AuraId);
                 if (existing >= 0)
                 {
                     auras[existing] = grant;
@@ -241,12 +243,16 @@ public sealed class BlueprintRegistry
             {
                 nonBlocking.Add(kind);
             }
+
+            contentActionIds.UnionWith(part.Actions.Select(grant => grant.ActionId));
+            contentActionIds.UnionWith(part.UsesActions);
+            contentItemIds.UnionWith(part.UsesItems);
         }
 
         var resolvedSize = size ?? new Vector2Byte(1, 1);
         ResolvedBlueprint.RequireFootprintWithinCap(resolvedSize, $"Blueprint '{Get(id).Name}'");
 
-        return new ResolvedBlueprint(Get(id), [.. buildOrder], [.. races], [.. classes], [.. actions], [.. auras], [.. nonBlocking], appearance.Build(), layer ?? MapLayer.Ground, resolvedSize, lootbox);
+        return new ResolvedBlueprint(Get(id), [.. buildOrder], [.. races], [.. classes], [.. actions], [.. auras], [.. nonBlocking], appearance.Build(), layer ?? MapLayer.Ground, resolvedSize, lootbox, [.. contentActionIds], [.. contentItemIds]);
     }
 
     /// <summary>Appends id's includes depth-first, then id itself, skipping any already appended.</summary>

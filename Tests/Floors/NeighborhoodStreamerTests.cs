@@ -30,7 +30,7 @@ public sealed class NeighborhoodStreamerTests
     {
         var map = new Map(new MapBounds(0, 0, 2 * Neighborhoods.SizeTiles, Rows, 3));
         var crawlerNumbers = new UniqueNumberAllocator(1, 1, 24);
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, TestContent.Layers, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
         var world = result.World;
         var ecs = result.EcsContext;
         result.Internals.ProcessingTierResolver.SetReferencePosition(Reference);
@@ -280,7 +280,7 @@ public sealed class NeighborhoodStreamerTests
         }
 
         var crawlerNumbers = new UniqueNumberAllocator(1, 1, 24);
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, TestContent.Layers, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
         var world = result.World;
         var ecs = result.EcsContext;
         result.Internals.ProcessingTierResolver.SetReferencePosition(Reference);

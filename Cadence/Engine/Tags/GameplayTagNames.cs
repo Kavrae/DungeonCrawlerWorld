@@ -86,7 +86,7 @@ internal static class GameplayTagNames
         return id;
     }
 
-    private static string? ValidateName(string name)
+    internal static string? ValidateName(string name)
     {
         if (name.Length == 0)
         {

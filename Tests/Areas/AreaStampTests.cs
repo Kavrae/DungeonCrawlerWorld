@@ -163,7 +163,7 @@ public sealed class AreaStampTests
         {
             var plan = builder.Plan(pass.World.Map, record, populationSeed: 7);
             var uniqueIndex = plan.UniqueSpawns.Single().Key;
-            foreach (var _ in builder.Spawn(new NeighborhoodPlan(plan.Layout, plan.AuraCellsByRow, plan.Spawns.Take(uniqueIndex + 1).ToList(), [uniqueIndex + 1], plan.Areas, plan.UniqueSpawns)))
+            foreach (var _ in builder.Spawn(new NeighborhoodPlan(plan.Layout, plan.AuraCellsByRow, plan.Spawns.Take(uniqueIndex + 1).ToList(), [uniqueIndex + 1], plan.Areas, plan.UniqueSpawns, plan.Content)))
             {
             }
 
@@ -225,17 +225,17 @@ public sealed class AreaStampTests
     public void TheShippedAreaFiles_AreCanonical()
     {
         var types = Build(new MapBounds(0, 0, 40, 30, 3)).Context.ContentTypes;
-        var paths = Directory.GetFiles(Path.Combine(MasterContent.DefaultDirectory, MasterContent.AreasDirectoryName), MasterContent.AreaFilePattern);
+        var paths = Directory.GetFiles(Path.Combine(GameContent.DefaultMasterDirectory, GameContent.AreasDirectoryName), "*" + GameContent.AreaFileExtension);
         Assert.IsNotEmpty(paths);
 
         foreach (var path in paths)
         {
             var text = File.ReadAllText(path, Encoding.UTF8);
             var failures = new List<ContentFailure>();
-            var record = ContentDocument.Read<AreaDefinition>(text, path, MasterContent.AreasTable, types, NoContentReferences.Instance, failures);
+            var record = ContentDocument.Read<AreaDefinition>(text, path, GameContent.AreasTable, types, NoContentReferences.Instance, failures);
 
             Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
-            Assert.AreEqual(text, ContentDocument.Write(MasterContent.AreasTable, record!.Value!, types), $"{Path.GetFileName(path)} isn't written as the writer writes it.");
+            Assert.AreEqual(text, ContentDocument.Write(GameContent.AreasTable, record!.Value!, types), $"{Path.GetFileName(path)} isn't written as the writer writes it.");
         }
     }
 }

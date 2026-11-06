@@ -14,4 +14,9 @@
     <ProjectReference Include="..\..\Game\Game.csproj" Private="false" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Content-only mods that fail: one record that won't load, one area holding an undefined symbol. Copied as a folder into a mods directory, each must be dropped, naming its file and line (and the area's column). -->
+    <None Include="BrokenContentMod\**\*.jsonl;BrokenAreaMod\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -17,13 +17,22 @@ internal static class TerrainReferenceValidation
         var terrain = context.Terrain;
         EffectContent.ForEachEntry(context, (entry, heldBy) =>
         {
-            foreach (var terrainKey in entry.ReferencedTerrainKeys)
+            foreach (var problem in ProblemsOf(terrain, entry, heldBy))
             {
-                if (!terrain.TryGetId(terrainKey, out _))
-                {
-                    throw new InvalidOperationException($"{heldBy} has an effect that names terrain '{terrainKey}', which no module in this build registers.");
-                }
+                throw new InvalidOperationException(problem);
             }
         });
+    }
+
+    /// <summary>Every terrain key entry names that terrain doesn't register, as a sentence naming heldBy -- the per-record form, for a definition made at runtime.</summary>
+    public static IEnumerable<string> ProblemsOf(TerrainRegistry terrain, IEffectEntry entry, string heldBy)
+    {
+        foreach (var terrainKey in entry.ReferencedTerrainKeys)
+        {
+            if (!terrain.TryGetId(terrainKey, out _))
+            {
+                yield return $"{heldBy} has an effect that names terrain '{terrainKey}', which no module in this build registers.";
+            }
+        }
     }
 }

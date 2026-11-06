@@ -1,4 +1,5 @@
 using Engine.Bootstrap;
+using Engine.Content;
 using Engine.Diagnostics;
 using Engine.ECS.Context;
 using Engine.Math;
@@ -31,21 +32,25 @@ public static class GameBuildPass
     public static Map CreatePlaceholderMap() => new(new Vector3Int(1, 1, Enum.GetValues<MapLayer>().Length));
 
     /// <summary>Builds builtInModules with mods combined into them (a mod replaces the built-in sharing its Id), over map, with everything a game session reads.</summary>
+    /// <param name="content">The content layers the build reads -- master, then mods, then a save (GameModuleContext.Content).</param>
     /// <param name="sessionSeed">The seed every random stream of the build is derived from (GameModuleContext.RandomStreams); a build that is never played passes 0.</param>
     /// <param name="crawlerNumbers">The numbers a crawler draws when first built; null for a build that never builds one.</param>
     /// <param name="collectsContentFailures">A tool's build: content that fails is left out and reported in GameModuleContext.ContentFailures instead of stopping the build.</param>
+    /// <param name="loadsContentById">Actions and items are loaded as they are asked for (GameModuleContext.LoadsContentById) -- a game's session.</param>
     public static GameBuildPassResult Run(
         IReadOnlyList<ModuleFactory<GameModuleContext>> builtInModules,
         IReadOnlyList<ModuleFactory<GameModuleContext>> mods,
         Map map,
+        ContentLayers content,
         int sessionSeed,
         IReadOnlyList<ISettingsSource> settingsSources,
         int initialEntityCapacity,
         int initialComponentCapacity,
         UniqueNumberAllocator? crawlerNumbers = null,
-        bool collectsContentFailures = false)
+        bool collectsContentFailures = false,
+        bool loadsContentById = false)
     {
-        var build = BuildModules(builtInModules, mods, map, sessionSeed, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, collectsContentFailures: collectsContentFailures);
+        var build = BuildModules(builtInModules, mods, map, content, sessionSeed, settingsSources, initialEntityCapacity, initialComponentCapacity, crawlerNumbers, collectsContentFailures: collectsContentFailures, loadsContentById: loadsContentById);
         var ecsContext = build.EcsContext;
         var context = build.Context;
         var componentManager = ecsContext.ComponentManager;
@@ -53,6 +58,10 @@ public static class GameBuildPass
         var localTierRoster = new LocalTierRoster(componentManager.GetPackedPool<MovementComponent>(), componentManager.GetDirectPool<ProcessingTierComponent>(), context.ProcessingTierEvents);
 
         RegisterDiagnostics(ecsContext, context.EntityFactory.Skeletons, localTierRoster, context.ProcessingTierResolver, context.AuraField);
+        if (loadsContentById)
+        {
+            RegisterContentGauges(ecsContext, context.Content, context.ContentCatalogLoader);
+        }
 
         return new GameBuildPassResult(ecsContext, build.World, context, build.Modules, build.Declarations, localTierRoster);
     }
@@ -64,19 +73,23 @@ public static class GameBuildPass
     /// the game, and every build that is never simulated: a mod's trial and the staging world (purpose). modules must
     /// still contain every one of GameModuleContext.FoundationModuleIds.
     /// </remarks>
+    /// <param name="content">The content layers the build reads (GameModuleContext.Content).</param>
     /// <param name="purpose">What the build is for; a Trial or Staging build can never begin a session.</param>
+    /// <param name="loadsContentById">Actions and items are loaded as they are asked for (GameModuleContext.LoadsContentById).</param>
     /// <exception cref="InvalidOperationException">modules lacks a foundation module, or fails EcsBuilder's own checks or the content checks.</exception>
     public static GameModuleBuild BuildModules(
         IReadOnlyList<ModuleFactory<GameModuleContext>> modules,
         IReadOnlyList<ModuleFactory<GameModuleContext>> mods,
         Map map,
+        ContentLayers content,
         int sessionSeed,
         IReadOnlyList<ISettingsSource> settingsSources,
         int initialEntityCapacity,
         int initialComponentCapacity,
         UniqueNumberAllocator? crawlerNumbers = null,
         EcsBuildPurpose purpose = EcsBuildPurpose.Session,
-        bool collectsContentFailures = false)
+        bool collectsContentFailures = false,
+        bool loadsContentById = false)
     {
         World.World? world = null;
 
@@ -94,7 +107,7 @@ public static class GameBuildPass
             CreateContext = services =>
             {
                 world = CreateWorld(services, map);
-                return new GameModuleContext(services, world, sessionSeed, crawlerNumbers, collectsContentFailures);
+                return new GameModuleContext(services, world, content, sessionSeed, crawlerNumbers, collectsContentFailures, loadsContentById);
             },
             AfterConfigure = CheckConfiguredContent,
             AfterBehavior = (context, ecsContext) => WireBuild(context, ecsContext, world!),
@@ -115,7 +128,7 @@ public static class GameBuildPass
             new TerrainRegistry());
     }
 
-    /// <summary>Resolves the blueprint definitions the modules registered, registers the auras their content names, and checks that content's tags are declared, its toggles can be switched off, its melee is Ground-only and its areas are sound.</summary>
+    /// <summary>Resolves the blueprint definitions the modules registered, registers the auras their content names, and checks that content's tags are declared, its toggles can be switched off, its melee is Ground-only, its areas are sound and its Redirects table reads (kept, not yet applied)./summary>
     private static void CheckConfiguredContent(GameModuleContext context)
     {
         // Resolved now, so a broken include fails the load (or a mod's dry run) rather than its first spawn.
@@ -124,12 +137,18 @@ public static class GameBuildPass
             context.Definitions.ResolveAll();
         }
 
+        if (context.LoadsContentById)
+        {
+            context.ContentCatalogLoader.LoadSaveLayers();
+        }
+
         AuraContentRegistration.RegisterAll(context);
         ContentTagValidation.EnsureDeclared(context);
         ToggleContentValidation.EnsureValid(context);
         TargetingContentValidation.EnsureValid(context);
         TerrainReferenceValidation.EnsureRegistered(context);
         AreaContentValidation.EnsureValid(context);
+        _ = context.Content.Redirects;
     }
 
     /// <summary>The game's own systems and handlers, once every module's are registered.</summary>
@@ -158,6 +177,15 @@ public static class GameBuildPass
         ecsContext.Gauges.Register("ProcessingTier", "PendingTransitionNeighborhoods", GaugeKind.Level, () => tierResolver.Transitions.PendingNeighborhoodCount);
         ecsContext.Gauges.Register("Auras", "TotalsChunks", GaugeKind.Level, () => auraField.TotalsChunkCount);
         ecsContext.Gauges.Register("Auras", "TotalsBytes", GaugeKind.Level, () => auraField.TotalsAllocatedBytes);
+    }
+
+    /// <summary>Gives diagnostics how many actions, items and auras a by-id session has decoded, and how many loads missed the plan -- decoded on the spot because no plan or startup kit named them.</summary>
+    private static void RegisterContentGauges(EcsContext ecsContext, Content.GameContent content, Content.ContentCatalogLoader loader)
+    {
+        ecsContext.Gauges.Register("Content", "ActionsLoaded", GaugeKind.Level, () => content.LoadedCounts.Actions);
+        ecsContext.Gauges.Register("Content", "ItemsLoaded", GaugeKind.Level, () => content.LoadedCounts.Items);
+        ecsContext.Gauges.Register("Content", "AurasLoaded", GaugeKind.Level, () => content.LoadedCounts.Auras);
+        ecsContext.Gauges.Register("Content", "MissedPlanLoads", GaugeKind.Cumulative, () => loader.MissedPlanLoads);
     }
 
     /// <summary>Whatever destroys an entity, the state Game keeps about it outside the component pools lets go: its map footprint, its tier bookkeeping and, for a unique, its place in the roster (which also hears of its death).</summary>

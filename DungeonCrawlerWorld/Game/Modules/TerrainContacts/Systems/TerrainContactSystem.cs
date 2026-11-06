@@ -29,8 +29,7 @@ namespace Game.Modules.TerrainContacts.Systems;
 /// the ones due this frame are touched, on their exact frame at every processing tier.
 /// </para>
 /// <para>
-/// Terrain that changes under an entity counts as stepping onto the new terrain
-/// (TerrainChangedEvent, and TerrainRegistry.DefinitionChanged for a terrain that gains a contact),
+/// Terrain that changes under an entity counts as stepping onto the new terrain (TerrainChangedEvent),
 /// and every repeat reads the terrain where the entity stands rather than trusting what it stood on
 /// last time, so no exposure outlives the terrain that caused it.
 /// </para>
@@ -82,7 +81,6 @@ public sealed class TerrainContactSystem : ISystem
 
         simulationScope.EntityResumed += OnEntityResumed;
         effectServices.EventBus.Subscribe<TerrainChangedEvent>(OnTerrainChanged);
-        terrain.DefinitionChanged += OnTerrainDefinitionChanged;
     }
 
     /// <summary>
@@ -179,26 +177,6 @@ public sealed class TerrainContactSystem : ISystem
     /// <summary>A cell's terrain changed: whoever stands on it has just stepped onto the new terrain.</summary>
     private void OnTerrainChanged(TerrainChangedEvent changed) =>
         StepOccupantsOnto(new Vector3Int(changed.X, changed.Y, (int)changed.TerrainLayer), _clock.CurrentFrame);
-
-    /// <summary>A terrain gained a contact, or its contact started repeating: whoever stands on that terrain holds no exposure to it yet, so each steps onto it now.</summary>
-    /// <remarks>Any other change needs nothing here: a contact's effects, interval and tags are read from the definition at every application, and an exposure to a contact that went away ends on its next repeat.</remarks>
-    private void OnTerrainDefinitionChanged(ushort terrainTypeId, TerrainDefinition previous, TerrainDefinition current)
-    {
-        if (current.Contact is null)
-        {
-            return;
-        }
-
-        var gainedContact = previous.Contact is null;
-        var startedRepeating = previous.Contact is { RepeatEveryFrames: null } && current.Contact.RepeatEveryFrames is not null;
-        if (!gainedContact && !startedRepeating)
-        {
-            return;
-        }
-
-        var now = _clock.CurrentFrame;
-        TerrainCells.ForEachOfType(_mapQuery, terrainTypeId, position => StepOccupantsOnto(position, now));
-    }
 
     private void StepOccupantsOnto(Vector3Int position, long now)
     {

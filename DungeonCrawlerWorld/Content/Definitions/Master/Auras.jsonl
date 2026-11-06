@@ -3,3 +3,8 @@
 {"id":"xKH22S6LOk-cHQAAAAADCQ","n":"Lantern","gc":4292016890}
 {"id":"xKH22S6LOk-cHQAAAAADAg","n":"Poison","gc":4278215680,"fx":[{"e":[{"$":"StatusEffectGrant","ty":"Poison","md":"TopUpTo"}]}]}
 {"id":"xKH22S6LOk-cHQAAAAADAw","n":"Light"}
+{"id":"xKH22S6LOk-cHQAAAAADAQ","n":"Lava","gc":4278226175,"fx":[{"e":[{"$":"StatusEffectGrant","md":"TopUpTo","bp":{"k":"Random"}}]}],"go":0.75}
+{"id":"xKH22S6LOk-cHQAAAAADBQ","n":"Holy Ground","fx":[{"e":[{"$":"DirectHeal","fl":1,"bm":"LowestPercentage"}]}]}
+{"id":"xKH22S6LOk-cHQAAAAADBA","n":"Healing","fx":[{"e":[{"$":"DirectHeal","fl":1,"bm":"LowestPercentage"}]}]}
+{"id":"xKH22S6LOk-cHQAAAAADBw","n":"Radiant Steady","gc":4278245375,"fo":"None"}
+{"id":"xKH22S6LOk-cHQAAAAADCA","n":"Radiant Fading","gc":4294967040}

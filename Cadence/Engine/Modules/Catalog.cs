@@ -14,17 +14,33 @@ public class Catalog<T>(Func<T, Guid> idSelector)
     /// <summary>How many definitions are registered.</summary>
     public int Count => _definitionsById.Count;
 
+    /// <summary>Changes whenever a definition is registered or removed, for anything that caches what it built from Definitions.</summary>
+    public int Version { get; private set; }
+
     /// <summary>Every registered definition, in registration order.</summary>
     /// <remarks>Re-registering an id replaces its definition in place, keeping its position.</remarks>
     public IEnumerable<T> Definitions => _definitionsById.Values;
 
     /// <summary>Registers a definition in the catalog.</summary>
     /// <param name="definition">The definition to register.</param>
-    public void Register(T definition) => _definitionsById[idSelector(definition)] = definition;
+    public void Register(T definition)
+    {
+        _definitionsById[idSelector(definition)] = definition;
+        Version++;
+    }
 
     /// <summary>Removes the definition registered under id; false when there is none.</summary>
     /// <remarks>Redirects are left as they are: id and every redirect to it then resolve as if id had never been registered -- to nothing, or onward through a redirect of id's own.</remarks>
-    public bool Remove(Guid id) => _definitionsById.Remove(id);
+    public bool Remove(Guid id)
+    {
+        var removed = _definitionsById.Remove(id);
+        if (removed)
+        {
+            Version++;
+        }
+
+        return removed;
+    }
 
     /// <summary>Makes from resolve to whatever to resolves to, whenever nothing is registered under from.</summary>
     public void AddRedirect(Guid from, Guid to) => _redirects[from] = to;

@@ -30,7 +30,7 @@ public enum AuraMagnitude : byte
 /// StatusEffectGrant with TopUpTo, StatModifierGrant with RefreshFromSameSource.
 /// </para>
 /// </remarks>
-/// <param name="Id">Stable, mod-safe identity. Registering it again replaces the definition.</param>
+/// <param name="Id">Stable, mod-safe identity: a later content layer's record with it replaces this one when a session loads, and within a session its first registration stands (AuraCatalog).</param>
 /// <param name="Effects">What the aura does each tick to an entity in range; none for an aura that only glows.</param>
 /// <param name="Tags">What kind of aura this is, for modifiers conditioned on a tag.</param>
 /// <param name="Falloff">How each source's value changes from its power at the source to the edge of its size.</param>

@@ -51,6 +51,7 @@ public static class Ghost
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
         Build = Build,
+        UsesItems = NPCs.TemporaryNpcLootGrant.AllCoreItemIds,
         Appearance = Appearance,
         Race = new RaceFacet(),
         NonBlocking = NonBlockingKind.Phasing,

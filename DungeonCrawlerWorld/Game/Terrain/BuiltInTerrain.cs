@@ -25,12 +25,6 @@ public static class BuiltInTerrain
 
     private const byte LavaAuraSize = 3;
 
-    /// <summary>Lava's own aura: each tick tops one body part, picked at random, up to the aura's power at the entity in Burning stacks.</summary>
-    /// <remarks>A different part each tick, each burning on its own, so the longer an entity stays the more of it is alight. An entity without body parts burns as a whole. Its glow is half again as opaque as the default, so the danger reads from a distance across the smooth falloff.</remarks>
-    public static readonly AuraDefinition LavaAura = new(new Guid("d9f6a1c4-8b2e-4f3a-9c1d-000000000301"), "Lava", Color.DarkOrange,
-        [new Effect([new StatusEffectGrant(StatusEffectType.Burning, StackCount: 1, StatusEffectGrantMode.TopUpTo, BodyPartTargeting.Random)])],
-        GlowOpacityMultiplier: 0.75f);
-
     /// <summary>The Burning stacks standing in lava holds on the part touching it.</summary>
     private const int LavaContactBurningStacks = 8;
 
@@ -53,7 +47,7 @@ public static class BuiltInTerrain
             ])],
             Tags: [GameTags.DamageFire],
             RepeatEveryFrames: GameFrameRate.FramesPerSecond),
-        Aura: new TerrainAura(LavaAura, LavaAuraPower, LavaAuraSize));
+        Aura: new TerrainAura(BuiltInAuraIds.Lava, LavaAuraPower, LavaAuraSize));
 
     /// <summary>Holy Ground's healing aura power: 8 standing on it, then 6, 4 and 2 a tile further each (Linear over HolyGroundAuraSize).</summary>
     private const ushort HolyGroundAuraPower = 8;
@@ -66,17 +60,13 @@ public static class BuiltInTerrain
     /// <summary>How long the blessing lasts after an entity leaves Holy Ground: five minutes. It is renewed every second while the entity stands there.</summary>
     private static readonly ushort HolyGroundBlessingFrames = GameTiming.FramesForSeconds(5 * 60);
 
-    /// <summary>Holy Ground's own aura: each tick heals one point of health per point of power at the entity, to the body part its healing priority picks.</summary>
-    public static readonly AuraDefinition HolyGroundAura = new(new Guid("d9f6a1c4-8b2e-4f3a-9c1d-000000000305"), "Holy Ground", Color.White,
-        [new Effect([new DirectHeal(PercentOfMaxHealth: 0f, FlatAmount: 1f, BodyPartTargetMode: BodyPartTargetMode.LowestPercentage)])]);
-
     public static readonly TerrainDefinition HolyGround = new(
         HolyGroundKey, "Holy Ground", "Hallowed earth. Standing on it mends wounds and turns blows aside for a while after.", "*", Color.White,
         Contact: new TerrainContact(
             [new Effect([new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, CanModify: true, -HolyGroundDamageReduction, HolyGroundBlessingFrames,
                 Stacking: StatModifierStacking.RefreshFromSameSource)])],
             RepeatEveryFrames: GameFrameRate.FramesPerSecond),
-        Aura: new TerrainAura(HolyGroundAura, HolyGroundAuraPower, HolyGroundAuraSize));
+        Aura: new TerrainAura(BuiltInAuraIds.HolyGround, HolyGroundAuraPower, HolyGroundAuraSize));
 
     /// <summary>A structure: it stands on a MapLayer over stone floor, so it keeps the floor's background.</summary>
     public static readonly TerrainDefinition StoneWall = new(

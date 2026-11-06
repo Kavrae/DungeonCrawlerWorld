@@ -14,7 +14,7 @@ namespace Tests.Diagnostics;
 [TestClass]
 public sealed class PlayerActivityLogTests
 {
-    private static string CreateTempLogPath() => Path.Combine(Path.GetTempPath(), $"player-activity-{Guid.NewGuid():N}.log");
+    private static string CreateTempLogPath() => Path.Combine(Directory.CreateTempSubdirectory().FullName, "player-activity.log");
 
     /// <summary>Issues entity ids 0-9 their keys in order, so every EntityKeys built this way agrees on each id's key.</summary>
     private static EntityKeys IssueKeys(EntityKeys keys)
@@ -51,13 +51,13 @@ public sealed class PlayerActivityLogTests
             eventBus.Publish(new EntityMovedEvent(0, new Vector3Int(1, 1, 0), new Vector3Int(2, 1, 0), new Vector2Byte(1, 1)));
             log.Dispose();
 
-            var contents = File.ReadAllText(logPath);
+            var contents = File.ReadAllText(log.FilePath);
             StringAssert.Contains(contents, "MOVE");
             StringAssert.Contains(contents, "Frame 5");
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -75,11 +75,11 @@ public sealed class PlayerActivityLogTests
 
             eventBus.Publish(new EntityMovedEvent(1, new Vector3Int(1, 1, 0), new Vector3Int(2, 1, 0), new Vector2Byte(1, 1)));
 
-            Assert.AreEqual(0L, new FileInfo(logPath).Length);
+            Assert.AreEqual(0L, new FileInfo(log.FilePath).Length);
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -98,7 +98,7 @@ public sealed class PlayerActivityLogTests
             eventBus.Publish(new EntityDamagedEvent(0, 7, ActionSource.Admin, 93, 100, "Status Effect (Burning)"));
             log.Dispose();
 
-            var contents = File.ReadAllText(logPath);
+            var contents = File.ReadAllText(log.FilePath);
             StringAssert.Contains(contents, "DAMAGE");
             StringAssert.Contains(contents, "amount=7");
             StringAssert.Contains(contents, "Status Effect (Burning)");
@@ -106,7 +106,7 @@ public sealed class PlayerActivityLogTests
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -124,11 +124,11 @@ public sealed class PlayerActivityLogTests
 
             eventBus.Publish(new EntityDamagedEvent(1, 7, ActionSource.Admin, 93, 100, "Status Effect (Burning)"));
 
-            Assert.AreEqual(0L, new FileInfo(logPath).Length);
+            Assert.AreEqual(0L, new FileInfo(log.FilePath).Length);
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -148,14 +148,14 @@ public sealed class PlayerActivityLogTests
             eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0, creatures: new BlueprintRegistry()), 88, 100, "Default Attack"));
             log.Dispose();
 
-            var contents = File.ReadAllText(logPath);
+            var contents = File.ReadAllText(log.FilePath);
             StringAssert.Contains(contents, "DAMAGE");
             StringAssert.Contains(contents, "amount=12");
             StringAssert.Contains(contents, "target=5");
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -176,12 +176,12 @@ public sealed class PlayerActivityLogTests
             eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0, creatures: new BlueprintRegistry()), 88, 100, "Default Attack"));
             log.Dispose();
 
-            var contents = File.ReadAllText(logPath);
+            var contents = File.ReadAllText(log.FilePath);
             StringAssert.Contains(contents, "target=Goblin1 (#5)");
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -202,12 +202,12 @@ public sealed class PlayerActivityLogTests
             eventBus.Publish(new EntityDamagedEvent(5, 12, ActionSource.FromEntity(componentManager, IssueKeys(new EntityKeys()), 0, creatures: new BlueprintRegistry()), 88, 100, "Default Attack"));
             log.Dispose();
 
-            var contents = File.ReadAllText(logPath);
+            var contents = File.ReadAllText(log.FilePath);
             StringAssert.Contains(contents, "source=PlayerOne");
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -228,13 +228,13 @@ public sealed class PlayerActivityLogTests
             eventBus.Publish(new EntityDamagedEvent(0, 12, ActionSource.FromEntity(componentManager, entityKeys, 0, creatures: new BlueprintRegistry()), 88, 100, "Default Attack"));
             log.Dispose();
 
-            var contents = File.ReadAllText(logPath);
+            var contents = File.ReadAllText(log.FilePath);
             StringAssert.Contains(contents, "source=Self");
             StringAssert.Contains(contents, "target=PlayerOne (#0)");
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -256,11 +256,11 @@ public sealed class PlayerActivityLogTests
             eventBus.Publish(new EntityDamagedEvent(0, 12, source, 88, 100, "Toxic Strike"));
             log.Dispose();
 
-            StringAssert.Contains(File.ReadAllText(logPath), "source=Toxic Strike (Goblin)");
+            StringAssert.Contains(File.ReadAllText(log.FilePath), "source=Toxic Strike (Goblin)");
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -278,11 +278,11 @@ public sealed class PlayerActivityLogTests
             eventBus.Publish(new EntityHealedEvent(0, 12f, 0, 93f, 100f, "Healing Potion"));
             log.Dispose();
 
-            StringAssert.Contains(File.ReadAllText(logPath), "source=Self");
+            StringAssert.Contains(File.ReadAllText(log.FilePath), "source=Self");
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -301,7 +301,7 @@ public sealed class PlayerActivityLogTests
             eventBus.Publish(new EntityHealedEvent(0, 12f, null, 93f, 100f, "Regeneration"));
             log.Dispose();
 
-            var contents = File.ReadAllText(logPath);
+            var contents = File.ReadAllText(log.FilePath);
             StringAssert.Contains(contents, "HEAL");
             StringAssert.Contains(contents, "amount=12");
             StringAssert.Contains(contents, "Regeneration");
@@ -309,7 +309,7 @@ public sealed class PlayerActivityLogTests
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -327,11 +327,11 @@ public sealed class PlayerActivityLogTests
 
             eventBus.Publish(new EntityHealedEvent(1, 12f, null, 93f, 100f, "Regeneration"));
 
-            Assert.AreEqual(0L, new FileInfo(logPath).Length);
+            Assert.AreEqual(0L, new FileInfo(log.FilePath).Length);
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -351,14 +351,14 @@ public sealed class PlayerActivityLogTests
             eventBus.Publish(new EntityHealedEvent(5, 20f, 0, 88f, 100f, "Heal"));
             log.Dispose();
 
-            var contents = File.ReadAllText(logPath);
+            var contents = File.ReadAllText(log.FilePath);
             StringAssert.Contains(contents, "HEAL");
             StringAssert.Contains(contents, "amount=20");
             StringAssert.Contains(contents, "target=5");
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -377,14 +377,14 @@ public sealed class PlayerActivityLogTests
             eventBus.Publish(new StatusEffectImmunityBlockedEvent(0, StatusEffectType.Burning, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 7, creatures: new BlueprintRegistry())));
             log.Dispose();
 
-            var contents = File.ReadAllText(logPath);
+            var contents = File.ReadAllText(log.FilePath);
             StringAssert.Contains(contents, "BLOCKED");
             StringAssert.Contains(contents, "Burning");
             StringAssert.Contains(contents, "target=0");
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -402,11 +402,11 @@ public sealed class PlayerActivityLogTests
 
             eventBus.Publish(new StatusEffectImmunityBlockedEvent(1, StatusEffectType.Poison, ActionSource.Admin));
 
-            Assert.AreEqual(0L, new FileInfo(logPath).Length);
+            Assert.AreEqual(0L, new FileInfo(log.FilePath).Length);
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 
@@ -426,13 +426,13 @@ public sealed class PlayerActivityLogTests
             eventBus.Publish(new StatusEffectImmunityBlockedEvent(5, StatusEffectType.Poison, ActionSource.FromEntity(CreateComponentManager(), IssueKeys(new EntityKeys()), 0, creatures: new BlueprintRegistry())));
             log.Dispose();
 
-            var contents = File.ReadAllText(logPath);
+            var contents = File.ReadAllText(log.FilePath);
             StringAssert.Contains(contents, "BLOCKED");
             StringAssert.Contains(contents, "target=5");
         }
         finally
         {
-            File.Delete(logPath);
+            Directory.Delete(Path.GetDirectoryName(logPath)!, recursive: true);
         }
     }
 }

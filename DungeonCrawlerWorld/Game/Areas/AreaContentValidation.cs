@@ -14,7 +14,8 @@ namespace Game.Areas;
 /// <remarks>
 /// Run once every module is configured, beside ContentTagValidation, so a broken area fails the load (or a mod's dry
 /// run) rather than the neighborhood it is first stamped into. Validate collects every failure, for a tool to list;
-/// EnsureValid throws with all of them. A symbol that is undefined, or a floor on Flying, is reported once per symbol
+/// EnsureValid throws with all of them -- except a fixed placement overlapping an earlier layer's, which is refused and
+/// reported in every build (RefuseOverlappingPlacements). A symbol that is undefined, or a floor on Flying, is reported once per symbol
 /// and layer, at its first cell, with how many cells share it.
 /// </remarks>
 public static class AreaContentValidation
@@ -27,6 +28,12 @@ public static class AreaContentValidation
     /// <exception cref="InvalidOperationException">An area, palette or placement has a problem, listing every one.</exception>
     public static void EnsureValid(GameModuleContext context)
     {
+        var refusals = RefuseOverlappingPlacements(context.Areas);
+        if (refusals.Count > 0)
+        {
+            context.ReportContentFailures(refusals);
+        }
+
         var failures = Validate(context.Areas, context.Terrain, context.Definitions, context.GameplayTags);
         if (failures.Count == 0)
         {
@@ -54,6 +61,40 @@ public static class AreaContentValidation
 
             failures = Validate(context.Areas, context.Terrain, context.Definitions, context.GameplayTags);
         }
+    }
+
+    /// <summary>Takes out of areas every fixed placement that overlaps one placed in the same neighborhood by an earlier layer -- master's, or a mod earlier in load order -- and returns a failure for each, in every build.</summary>
+    /// <remarks>
+    /// A later layer may not stamp an area over an earlier one's: it is refused, and the earlier stands, rather than the build
+    /// stopping or the mod being dropped for it. Two placements of one layer that overlap are that layer's own mistake, left
+    /// for Validate to fail.
+    /// </remarks>
+    public static IReadOnlyList<ContentFailure> RefuseOverlappingPlacements(AreaCatalog areas)
+    {
+        var failures = new List<ContentFailure>();
+        var kept = new List<(AreaPlacement Placement, AreaDefinition Area, ContentLayer? Layer)>();
+        foreach (var placement in areas.Placements.Definitions.ToList())
+        {
+            if (!areas.Areas.TryGet(placement.Area, out var area))
+            {
+                continue;
+            }
+
+            var location = areas.LocationOfPlacement(placement.Id);
+            var layer = location?.Layer;
+            var earlier = kept.FirstOrDefault(other => !ReferenceEquals(other.Layer, layer) && Overlaps(placement, area, other.Placement, other.Area));
+            if (earlier.Placement is not null)
+            {
+                new FailureReport(failures, location, "Area placement", placement.Id).Add(string.Empty,
+                    $"'{area.Name}' is refused: it overlaps '{earlier.Area.Name}', placed in the same neighborhood by {earlier.Layer?.Name ?? "code"} ({ContentGuid.Format(earlier.Placement.Id)}), which keeps its place.");
+                areas.Remove(placement.Id);
+                continue;
+            }
+
+            kept.Add((placement, area, layer));
+        }
+
+        return failures;
     }
 
     /// <summary>Every problem with areas' areas, palettes and placements, in catalog order.</summary>
@@ -395,9 +436,7 @@ public static class AreaContentValidation
 
             foreach (var (other, otherArea, _) in placed)
             {
-                if (other.NeighborhoodX == placement.NeighborhoodX && other.NeighborhoodY == placement.NeighborhoodY
-                    && placement.OffsetX < other.OffsetX + otherArea.Width && other.OffsetX < placement.OffsetX + area.Width
-                    && placement.OffsetY < other.OffsetY + otherArea.Height && other.OffsetY < placement.OffsetY + area.Height)
+                if (Overlaps(placement, area, other, otherArea))
                 {
                     report.Add(string.Empty, $"'{area.Name}' overlaps '{otherArea.Name}', placed in the same neighborhood by {ContentGuid.Format(other.Id)}.");
                 }
@@ -419,6 +458,11 @@ public static class AreaContentValidation
 
         placed[0].Report.Add(string.Empty, $"The placed areas hold {playerSpawns} {nameof(AreaMarkerKind.PlayerSpawn)} markers; exactly one is needed.");
     }
+
+    private static bool Overlaps(AreaPlacement placement, AreaDefinition area, AreaPlacement other, AreaDefinition otherArea) =>
+        other.NeighborhoodX == placement.NeighborhoodX && other.NeighborhoodY == placement.NeighborhoodY
+        && placement.OffsetX < other.OffsetX + otherArea.Width && other.OffsetX < placement.OffsetX + area.Width
+        && placement.OffsetY < other.OffsetY + otherArea.Height && other.OffsetY < placement.OffsetY + area.Height;
 
     /// <summary>False, with a failure, when blueprint isn't registered or can't be spawned.</summary>
     private static bool CheckBlueprint(Guid blueprint, string subject, string path, BlueprintRegistry blueprints, FailureReport report)
@@ -488,7 +532,7 @@ public static class AreaContentValidation
                 column += 1 + x;
             }
 
-            failures.Add(new ContentFailure(location.File, line, recordId, reason, column));
+            failures.Add(new ContentFailure(location.File, line, recordId, reason, column, location.Layer.Name));
         }
     }
 

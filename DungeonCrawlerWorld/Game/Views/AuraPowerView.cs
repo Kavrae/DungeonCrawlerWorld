@@ -12,7 +12,7 @@ namespace Game.Views;
 /// </remarks>
 public sealed class AuraPowerView(AuraField auraField, AuraCatalog auras)
 {
-    /// <summary>Changes whenever any aura source is added, removed or moved, or an aura's definition is replaced: a cached rendering of the field is stale once this differs from the value it was made at.</summary>
+    /// <summary>Changes whenever any aura source is added, removed or moved: a cached rendering of the field is stale once this differs from the value it was made at.</summary>
     public int Version => auraField.Version;
 
     /// <summary>Every aura the field has held a source of -- the only auras that can reach anything.</summary>

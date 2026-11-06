@@ -19,8 +19,7 @@ namespace Game.Modules.Auras;
 /// <para>
 /// Terrain auras are the field's own: terrain cells are not entities, so it scans the loaded terrain
 /// once (EnsureBuilt, on first use -- startup population loads its neighborhoods without announcing
-/// them) and then follows TerrainChangedEvent, TerrainLoadedEvent, TerrainUnloadingEvent and a
-/// terrain definition being replaced (TerrainRegistry.DefinitionChanged). Entity
+/// them) and then follows TerrainChangedEvent, TerrainLoadedEvent and TerrainUnloadingEvent. Entity
 /// sources are added and removed by AuraSystem, which knows where each one is.
 /// </para>
 /// </remarks>
@@ -32,11 +31,9 @@ public sealed class AuraField
     private readonly AuraGrid _auraGrid;
     private readonly HashSet<byte> _auraIdsEverInField = [];
     private readonly List<byte> _auraIdsInField = [];
-    private readonly AuraFalloff[] _falloffInFieldByAuraId = new AuraFalloff[byte.MaxValue + 1];
-    private readonly int[] _sourceCountByAuraId = new int[byte.MaxValue + 1];
     private readonly AuraSourceIndex _entitySources;
 
-    /// <summary>For each aura id, the one terrain type radiating it (RadiatingTerrainTypeOf); null until first asked and after any terrain or aura definition changes.</summary>
+    /// <summary>For each aura id, the one terrain type radiating it (RadiatingTerrainTypeOf); null until first asked.</summary>
     private ushort[]? _radiatingTerrainTypeByAuraId;
 
     /// <summary>How many terrain types were registered when _radiatingTerrainTypeByAuraId was built: a type registered since rebuilds it.</summary>
@@ -57,15 +54,9 @@ public sealed class AuraField
         eventBus.Subscribe<TerrainChangedEvent>(OnTerrainChanged);
         eventBus.Subscribe<TerrainLoadedEvent>(OnTerrainLoaded);
         eventBus.Subscribe<TerrainUnloadingEvent>(OnTerrainUnloading);
-        terrain.DefinitionChanged += OnTerrainDefinitionChanged;
-        auras.DefinitionChanged += _ =>
-        {
-            Version++;
-            _radiatingTerrainTypeByAuraId = null;
-        };
     }
 
-    /// <summary>Bumped every time a source is added or removed or an aura's definition is replaced, so a cached rendering of the glow can tell whether anything changed since it was made.</summary>
+    /// <summary>Bumped every time a source is added or removed, so a cached rendering of the glow can tell whether anything changed since it was made.</summary>
     public int Version { get; private set; }
 
     /// <summary>How many tiles from itself a source reaches: its size.</summary>
@@ -96,16 +87,6 @@ public sealed class AuraField
         }
     }
 
-    /// <summary>Calls visit with the position and source of every loaded terrain cell radiating auraId.</summary>
-    public void ForEachTerrainSource(byte auraId, Action<Vector3Int, AuraSourceComponent> visit) =>
-        TerrainAuraSources.ForEach(_map, _terrain, _auras, (position, source) =>
-        {
-            if (source.AuraId == auraId)
-            {
-                visit(position, source);
-            }
-        });
-
     /// <summary>Chunks of per-cell totals in use, across every aura.</summary>
     public int TotalsChunkCount => _auraGrid.TotalsChunkCount;
 
@@ -119,12 +100,6 @@ public sealed class AuraField
     public int GetTotalPowerAt(Vector3Int position, byte auraId) => _auraGrid.GetTotalPowerAt(position, auraId);
 
     /// <summary>Adds one source's reach around sourcePosition.</summary>
-    /// <remarks>
-    /// The first source of an aura in the field fixes the falloff its sources are written with, and
-    /// it holds until the field has no source of that aura left: every source is taken out with the
-    /// falloff it was put in with, so a definition replaced with a different falloff while sources of
-    /// it are out takes effect when they have all gone.
-    /// </remarks>
     public void AddSource(Vector3Int sourcePosition, AuraSourceComponent source)
     {
         if (_auraIdsEverInField.Add(source.AuraId))
@@ -132,28 +107,25 @@ public sealed class AuraField
             _auraIdsInField.Add(source.AuraId);
         }
 
-        if (_sourceCountByAuraId[source.AuraId]++ == 0)
-        {
-            _falloffInFieldByAuraId[source.AuraId] = _auras.Get(source.AuraId).Falloff;
-        }
-
-        _auraGrid.AddSource(sourcePosition, source.Power, source.Size, _falloffInFieldByAuraId[source.AuraId], source.AuraId);
+        _auraGrid.AddSource(sourcePosition, source.Power, source.Size, FalloffOf(source.AuraId), source.AuraId);
         Version++;
     }
 
     /// <summary>Removes one source's reach from around sourcePosition, which must be where it was added.</summary>
     public void RemoveSource(Vector3Int sourcePosition, AuraSourceComponent source)
     {
-        _auraGrid.RemoveSource(sourcePosition, source.Power, source.Size, _falloffInFieldByAuraId[source.AuraId], source.AuraId);
-        _sourceCountByAuraId[source.AuraId]--;
+        _auraGrid.RemoveSource(sourcePosition, source.Power, source.Size, FalloffOf(source.AuraId), source.AuraId);
         Version++;
     }
+
+    /// <summary>The aura's falloff: its definition's, fixed for the session like the rest of it.</summary>
+    private AuraFalloff FalloffOf(byte auraId) => _auras.Get(auraId).Falloff;
 
     /// <summary>Moves one source's reach from previousPosition, where it was added, to currentPosition.</summary>
     /// <remarks>Writes only the cells that changed sides for a None aura (see AuraGrid.MoveSource).</remarks>
     public void MoveSource(Vector3Int previousPosition, Vector3Int currentPosition, AuraSourceComponent source)
     {
-        _auraGrid.MoveSource(previousPosition, currentPosition, source.Power, source.Size, _falloffInFieldByAuraId[source.AuraId], source.AuraId);
+        _auraGrid.MoveSource(previousPosition, currentPosition, source.Power, source.Size, FalloffOf(source.AuraId), source.AuraId);
         Version++;
     }
 
@@ -188,7 +160,7 @@ public sealed class AuraField
             return Math.Max(0, total);
         }
 
-        _entitySources.TryFindStrongest(auraId, position, entityId, _falloffInFieldByAuraId[auraId], out _, out _, out _, out var ownTotal);
+        _entitySources.TryFindStrongest(auraId, position, entityId, FalloffOf(auraId), out _, out _, out _, out var ownTotal);
         return Math.Max(0, total - ownTotal);
     }
 
@@ -211,7 +183,7 @@ public sealed class AuraField
     public int PowerReaching(Vector3Int position, byte auraId, int entityId, out ActionSource credit)
     {
         var total = GetTotalPowerAt(position, auraId);
-        var hasEntityContributor = _entitySources.TryFindStrongest(auraId, position, entityId, _falloffInFieldByAuraId[auraId], out var strongest, out var strongestValue, out var entityTotal, out var ownTotal);
+        var hasEntityContributor = _entitySources.TryFindStrongest(auraId, position, entityId, FalloffOf(auraId), out var strongest, out var strongestValue, out var entityTotal, out var ownTotal);
         credit = CreditOf(auraId, total - entityTotal, hasEntityContributor, strongest, strongestValue);
         return Math.Max(0, total - ownTotal);
     }
@@ -271,34 +243,6 @@ public sealed class AuraField
             AddSource(position, aura);
             TerrainAuraAdded?.Invoke(position, aura);
         }
-    }
-
-    /// <summary>A terrain's definition was replaced: if the aura it radiates changed, every loaded cell of that terrain swaps the old one for the new.</summary>
-    private void OnTerrainDefinitionChanged(ushort terrainTypeId, TerrainDefinition previous, TerrainDefinition current)
-    {
-        _radiatingTerrainTypeByAuraId = null;
-
-        if (!_terrainScanned || previous.Aura == current.Aura)
-        {
-            return;
-        }
-
-        TerrainCells.ForEachOfType(_map, terrainTypeId, position =>
-        {
-            if (previous.Aura is { } previousAura)
-            {
-                var previousSource = new AuraSourceComponent(_auras.Register(previousAura.Aura), previousAura.Power, previousAura.Size);
-                RemoveSource(position, previousSource);
-                TerrainAuraRemoved?.Invoke(position, previousSource);
-            }
-
-            if (current.Aura is { } currentAura)
-            {
-                var currentSource = new AuraSourceComponent(_auras.Register(currentAura.Aura), currentAura.Power, currentAura.Size);
-                AddSource(position, currentSource);
-                TerrainAuraAdded?.Invoke(position, currentSource);
-            }
-        });
     }
 
     /// <summary>Adds a newly loaded area's terrain auras, from the list made when the neighborhood was planned.</summary>

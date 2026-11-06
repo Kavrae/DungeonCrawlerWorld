@@ -22,7 +22,7 @@ public sealed record WorkshopHostOptions(
     /// <summary>Shell commands shown after Play (and Build and Play, when the launch target can build).</summary>
     public IReadOnlyList<WorkshopCommand> Commands { get; init; } = [];
 
-    /// <summary>Where the game's captured output is appended while it runs; null keeps it in the IDE's own standard output only.</summary>
+    /// <summary>The log the game's captured output is appended to while it runs, a file per day beside it (RollingLogFile); null keeps it in the IDE's own standard output only.</summary>
     public string? GameOutputLogPath { get; init; }
 
     /// <summary>Where the Debug tab keeps this user's launch options -- outside the repository.</summary>

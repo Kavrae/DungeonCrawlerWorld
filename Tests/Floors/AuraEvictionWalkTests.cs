@@ -35,7 +35,7 @@ public sealed class AuraEvictionWalkTests
             map.UnloadNeighborhood(cellX, 0);
         }
 
-        var result = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24));
+        var result = GameBootstrapper.Build(ValidatedMods.None, map, TestContent.Layers, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: new UniqueNumberAllocator(1, 1, 24));
         var world = result.World;
         var ecs = result.EcsContext;
         var resolver = result.Internals.ProcessingTierResolver;
@@ -131,7 +131,7 @@ public sealed class AuraEvictionWalkTests
         session.Result.Internals.Factory.Spawn(HealingShrine.Id, borderShrineCell.X, borderShrineCell.Y);
         RunUntilSettled(session);
 
-        var healingAuraId = session.Result.Catalogs.Auras.GetId(HealingShrine.Aura.Id);
+        var healingAuraId = session.Result.Catalogs.Auras.GetId(BuiltInAuraIds.HealingShrine);
         var probeAcrossTheBorder = new Vector3Int(0, borderShrineCell.Y, borderShrineCell.Z);
         var powerAtProbeBefore = liveField.GetTotalPowerAt(probeAcrossTheBorder, healingAuraId);
         var borderShrinePowerAtProbe = AuraFalloff.Linear.ValueAt(power: 16, size: 4, -borderShrineCell.X);

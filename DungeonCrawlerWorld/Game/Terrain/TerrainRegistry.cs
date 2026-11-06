@@ -24,26 +24,21 @@ public sealed class TerrainRegistry
     /// <summary>Each id's BlocksMovement, flattened out of its definition for the movement hot path.</summary>
     private readonly List<bool> _blocksMovement = [false];
 
-    /// <summary>A registered key was registered again: its id, the definition it held, and the one that replaced it.</summary>
-    /// <remarks>For what is derived from a definition and held outside it -- the aura field's reach, an entity's exposure to a contact -- to follow a definition replaced during a session. Nothing subscribes during Configure, when a mod overriding a built-in is the usual cause.</remarks>
-    public event Action<ushort, TerrainDefinition, TerrainDefinition>? DefinitionChanged;
-
-    /// <summary>Changes whenever a registered definition is replaced (DefinitionChanged), so what a type blocks may have changed; only ever goes up.</summary>
+    /// <summary>Changes whenever a registered definition is replaced, so what a type blocks may have changed; only ever goes up.</summary>
     public int Version { get; private set; }
 
-    /// <summary>Registers definition and returns its runtime id. Registering a key again replaces that definition in place and keeps its id, so a mod can override a built-in, and raises DefinitionChanged.</summary>
+    /// <summary>Registers definition and returns its runtime id. Registering a key again replaces that definition in place and keeps its id, so a mod can override a built-in.</summary>
+    /// <remarks>Terrain is registered while modules configure, before anything uses it: like every definition, a terrain's is fixed once the session is built, so nothing follows a replacement.</remarks>
     public ushort Register(TerrainDefinition definition)
     {
         ArgumentNullException.ThrowIfNull(definition);
 
         if (_idsByKey.TryGetValue(definition.Key, out var existingId))
         {
-            var previous = _definitions[existingId]!;
             _definitions[existingId] = definition;
             _linkGroups[existingId] = 0;
             _blocksMovement[existingId] = definition.BlocksMovement;
             Version++;
-            DefinitionChanged?.Invoke(existingId, previous, definition);
             return existingId;
         }
 

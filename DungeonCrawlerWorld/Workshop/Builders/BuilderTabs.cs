@@ -1,4 +1,5 @@
 using Builders.Actions;
+using Builders.Browsing;
 using Builders.Auras;
 using Builders.Items;
 using Builders.MapAreas;
@@ -25,12 +26,13 @@ public static class BuilderTabs
         RegisterElementFactories(uiEngine, gameSession, new AreaPreviewCache(buildPreviewSession));
         var catalogs = gameSession.Catalogs;
         var references = new ContentReferenceIndex(catalogs);
+        var origins = new ContentOrigins(gameSession.Content);
         return
         [
-            new ItemsTab(catalogs.ItemCatalog, references, catalogs.GameplayTags, gameSession.World.PlayerEntityId),
-            new ActionsTab(catalogs.ActionCatalog, references, catalogs.GameplayTags),
-            new AurasTab(catalogs.Auras, references, catalogs.GameplayTags),
-            new MapTab(catalogs.Areas, references, catalogs.GameplayTags),
+            new ItemsTab(catalogs.ItemCatalog, references, catalogs.GameplayTags, origins, gameSession.World.PlayerEntityId),
+            new ActionsTab(catalogs.ActionCatalog, references, catalogs.GameplayTags, origins),
+            new AurasTab(catalogs.Auras, references, catalogs.GameplayTags, origins),
+            new MapTab(catalogs.Areas, references, catalogs.GameplayTags, origins),
         ];
     }
 

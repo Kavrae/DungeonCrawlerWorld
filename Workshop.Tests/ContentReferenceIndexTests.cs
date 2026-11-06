@@ -9,7 +9,7 @@ namespace Workshop.Tests;
 [TestClass]
 public sealed class ContentReferenceIndexTests
 {
-    private static readonly Lazy<GameSession> Session = new(() => ContentSession.Build(ContentSession.ValidateMods(Path.Combine(AppContext.BaseDirectory, "NoMods"), []), [], TextWriter.Null));
+    private static readonly Lazy<GameSession> Session = new(() => ContentSession.Build(ContentSession.ValidateMods(Path.Combine(AppContext.BaseDirectory, "NoMods"), WorkshopTestContent.Master, []), WorkshopTestContent.Master, [], TextWriter.Null));
     private static readonly Lazy<ContentReferenceIndex> Index = new(() => new ContentReferenceIndex(Session.Value.Catalogs));
 
     private static GameCatalogs Catalogs => Session.Value.Catalogs;
@@ -89,7 +89,7 @@ public sealed class ContentReferenceIndexTests
             }
 
             checkedAny = true;
-            Assert.IsTrue(Index.Value.UsedBy(ContentRecordKind.Aura, terrainAura.Aura.Id).Any(reference =>
+            Assert.IsTrue(Index.Value.UsedBy(ContentRecordKind.Aura, terrainAura.AuraId).Any(reference =>
                 reference.From.Kind == ContentRecordKind.Terrain && reference.From.Name == definition.Name && reference.Kind == ContentReferenceKind.RadiatesAura), $"{definition.Name} doesn't radiate its aura.");
         }
 
@@ -111,7 +111,7 @@ public sealed class ContentReferenceIndexTests
             foreach (var grant in blueprint.Auras)
             {
                 checkedAny = true;
-                Assert.IsTrue(Index.Value.Uses(ContentRecordKind.Blueprint, blueprint.Id).Any(reference => reference.To.Id == grant.Aura.Id && reference.Kind == ContentReferenceKind.RadiatesAura), $"{blueprint.Name} doesn't radiate its aura.");
+                Assert.IsTrue(Index.Value.Uses(ContentRecordKind.Blueprint, blueprint.Id).Any(reference => reference.To.Id == grant.AuraId && reference.Kind == ContentReferenceKind.RadiatesAura), $"{blueprint.Name} doesn't radiate its aura.");
             }
         }
 

@@ -36,7 +36,7 @@ public sealed class AurasModule : IGameModule
     /// <summary>Registers the content codecs for the serialized types this module owns.</summary>
     public void DeclareContentTypes(ContentTypeDeclarations contentTypes)
     {
-        AuraContentCodecs.Register(contentTypes);
+        AuraContentCodecs.RegisterEntries(contentTypes);
     }
 
     public void RegisterComponents(ComponentRegistration registration)

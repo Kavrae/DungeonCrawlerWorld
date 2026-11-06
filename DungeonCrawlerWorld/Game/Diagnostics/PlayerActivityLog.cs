@@ -1,3 +1,4 @@
+using Engine.Diagnostics;
 using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
@@ -18,10 +19,11 @@ public sealed class PlayerActivityLog : IDisposable
 {
     private readonly Game.World.World _world;
     private readonly EntityNaming _naming;
-    private readonly StreamWriter _writer;
+    private readonly RollingLogFile _writer;
     private readonly SimulationClock _simulationClock;
     private readonly ActionSourceNaming _actionSourceNaming;
 
+    /// <param name="logFilePath">The log's name and folder: lines go to a file per day beside it (RollingLogFile).</param>
     /// <param name="simulationClock">The frame each line is stamped with.</param>
     /// <param name="actionSourceNaming">Names the source of each damage and blocked-effect line.</param>
     public PlayerActivityLog(Game.World.World world, ComponentManager componentManager, EventBus eventBus, SimulationClock simulationClock, string logFilePath, BlueprintRegistry creatures, ActionSourceNaming actionSourceNaming)
@@ -31,13 +33,7 @@ public sealed class PlayerActivityLog : IDisposable
         _actionSourceNaming = actionSourceNaming;
         _naming = EntityNaming.For(componentManager, creatures);
 
-        var logDirectory = Path.GetDirectoryName(logFilePath);
-        if (!string.IsNullOrEmpty(logDirectory))
-        {
-            Directory.CreateDirectory(logDirectory);
-        }
-
-        _writer = new StreamWriter(logFilePath, append: true) { AutoFlush = true };
+        _writer = new RollingLogFile(logFilePath);
 
         eventBus.Subscribe<EntityMovedEvent>(OnEntityMoved);
         eventBus.Subscribe<EntityDamagedEvent>(OnEntityDamaged);
@@ -45,6 +41,9 @@ public sealed class PlayerActivityLog : IDisposable
         eventBus.Subscribe<StatusEffectImmunityBlockedEvent>(OnStatusEffectImmunityBlocked);
         eventBus.Subscribe<ToggleEndedEvent>(OnToggleEnded);
     }
+
+    /// <summary>The file lines are written to now.</summary>
+    public string FilePath => _writer.CurrentPath;
 
     private void OnEntityMoved(EntityMovedEvent moved)
     {

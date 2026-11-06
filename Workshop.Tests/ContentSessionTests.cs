@@ -1,4 +1,5 @@
 using DungeonCrawlerWorld.Workshop;
+using Engine.Content;
 using Game.Bootstrap;
 using Game.Content;
 
@@ -45,7 +46,10 @@ public sealed class ContentSessionTests
         }
     }
 
-    private static (GameSession Session, string FailureLog) BuildWithMods(params string[] modProjectNames)
+    private static (GameSession Session, string FailureLog) BuildWithMods(params string[] modProjectNames) =>
+        BuildOver(WorkshopTestContent.Master, modProjectNames);
+
+    private static (GameSession Session, string FailureLog) BuildOver(ContentLayers content, params string[] modProjectNames)
     {
         var modsDirectory = Directory.CreateTempSubdirectory();
         try
@@ -56,7 +60,7 @@ public sealed class ContentSessionTests
             }
 
             var failureLog = new StringWriter();
-            var session = ContentSession.Build(ContentSession.ValidateMods(modsDirectory.FullName, []), [], failureLog);
+            var session = ContentSession.Build(ContentSession.ValidateMods(modsDirectory.FullName, content, []), content, [], failureLog);
             return (session, failureLog.ToString());
         }
         finally
@@ -108,9 +112,9 @@ public sealed class ContentSessionTests
     [TestMethod]
     public void LoadProblems_ForACleanSessionAndTheShippedManifest_IsEmpty()
     {
-        var (session, _) = BuildWithMods();
+        var (session, _) = BuildOver(GameContent.MasterOnly(MasterManifestDirectory()));
 
-        Assert.IsEmpty(ContentSession.LoadProblems(session, MasterManifestDirectory()));
+        Assert.IsEmpty(ContentSession.LoadProblems(session));
     }
 
     [TestMethod]
@@ -118,7 +122,7 @@ public sealed class ContentSessionTests
     {
         var (session, _) = BuildWithMods("Mods.TestFixtures");
 
-        var problems = ContentSession.LoadProblems(session, MasterManifestDirectory());
+        var problems = ContentSession.LoadProblems(session);
 
         Assert.IsNotEmpty(problems);
         CollectionAssert.AreEqual(session.ModuleFailures.Select(failure => Path.GetFileName(failure.Source)).ToArray(), problems.Select(problem => problem.Source).ToArray());
@@ -128,18 +132,17 @@ public sealed class ContentSessionTests
     [TestMethod]
     public void LoadProblems_ListEachManifestRecordThatDoesNotLoad_ByFileAndLine()
     {
-        var (session, _) = BuildWithMods();
         var masterDirectory = Directory.CreateTempSubdirectory();
         try
         {
             CopyManifest(masterDirectory.FullName);
 
-            File.AppendAllText(Path.Combine(masterDirectory.FullName, MasterContent.ItemsFileName), "{ not json\n");
+            File.AppendAllText(Path.Combine(masterDirectory.FullName, GameContent.ItemsFileName), "{ not json\n");
 
-            var problem = ContentSession.LoadProblems(session, masterDirectory.FullName).Single();
+            var problem = ContentSession.LoadProblems(BuildOver(GameContent.MasterOnly(masterDirectory.FullName)).Session).Single();
 
             Assert.AreEqual(WorkshopProblemSeverity.Error, problem.Severity);
-            StringAssert.StartsWith(problem.Source, MasterContent.ItemsFileName + ":");
+            StringAssert.StartsWith(problem.Source, GameContent.ItemsFileName + ":");
         }
         finally
         {
@@ -162,24 +165,25 @@ public sealed class ContentSessionTests
     [TestMethod]
     public void LoadProblems_AnUndefinedSymbolInAnArea_IsListedAtItsRowAndColumn_ForTheMapTab()
     {
-        var (session, _) = BuildWithMods();
         var masterDirectory = Directory.CreateTempSubdirectory();
         try
         {
             CopyManifest(masterDirectory.FullName);
-            var areaPath = Path.Combine(masterDirectory.FullName, MasterContent.AreasDirectoryName, "starting-area.json");
+            var areaPath = Path.Combine(masterDirectory.FullName, GameContent.AreasDirectoryName, "starting-area.json");
             var lines = File.ReadAllLines(areaPath);
             var groundLine = Array.FindIndex(lines, line => line.Contains("\"Ground\"", StringComparison.Ordinal)) + 1;
             var quote = lines[groundLine].IndexOf('"');
             lines[groundLine] = lines[groundLine][..(quote + 4)] + "q" + lines[groundLine][(quote + 5)..];
             File.WriteAllLines(areaPath, lines);
 
-            var problem = ContentSession.LoadProblems(session, masterDirectory.FullName).Single();
+            var problems = ContentSession.LoadProblems(BuildOver(GameContent.MasterOnly(masterDirectory.FullName)).Session);
 
-            Assert.AreEqual($"{MasterContent.AreasDirectoryName}/starting-area.json:{groundLine + 1}:{quote + 5}", problem.Source);
+            var problem = problems[0];
+            Assert.AreEqual($"{GameContent.AreasDirectoryName}/starting-area.json:{groundLine + 1}:{quote + 5}", problem.Source);
             StringAssert.Contains(problem.Description, "Symbol 'q'");
-            Assert.AreEqual(Builders.MapAreas.MapTab.TabTitle, problem.TabTitle);
             Assert.IsNotNull(problem.RecordId);
+            Assert.IsTrue(problems.All(each => each.TabTitle == Builders.MapAreas.MapTab.TabTitle), string.Join(Environment.NewLine, problems));
+            Assert.IsTrue(problems.Skip(1).All(each => each.Source.StartsWith(GameContent.AreaPlacementsFileName, StringComparison.Ordinal)), string.Join(Environment.NewLine, problems));
         }
         finally
         {
@@ -188,6 +192,33 @@ public sealed class ContentSessionTests
     }
 
     private static string MasterManifestDirectory() => Path.Combine(FindRepositoryRoot(), "DungeonCrawlerWorld", "Content", "Definitions", "Master");
+
+    [TestMethod]
+    public void AModsRecords_AreLabelledWithTheMod_AndMastersAreNot()
+    {
+        var modsDirectory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var output = Path.GetDirectoryName(Directory.EnumerateFiles(Path.Combine(FindRepositoryRoot(), "DungeonCrawlerWorld", "Mods", "Mods.ExampleMod", "bin"), "Mods.ExampleMod.dll", SearchOption.AllDirectories).First())!;
+            foreach (var file in Directory.EnumerateFiles(output, "*", SearchOption.AllDirectories))
+            {
+                var target = Path.Combine(modsDirectory.FullName, "ExampleMod", Path.GetRelativePath(output, file));
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Copy(file, target);
+            }
+
+            var content = WorkshopTestContent.Master;
+            var session = ContentSession.Build(ContentSession.ValidateMods(modsDirectory.FullName, content, []), content, [], new StringWriter());
+            var origins = new Builders.Browsing.ContentOrigins(session.Content);
+
+            Assert.AreEqual("Health Potion [ExampleMod]", origins.Label(GameContent.ItemsTable, Game.Modules.Inventory.BuiltInItemIds.HealthPotion, "Health Potion"));
+            Assert.AreEqual("Mana Potion", origins.Label(GameContent.ItemsTable, Game.Modules.Inventory.BuiltInItemIds.ManaPotion, "Mana Potion"));
+        }
+        finally
+        {
+            TryDeleteDirectory(modsDirectory.FullName);
+        }
+    }
 
     [TestMethod]
     public void Build_HasNoPlayer()

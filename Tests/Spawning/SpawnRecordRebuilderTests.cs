@@ -29,7 +29,7 @@ public sealed class SpawnRecordRebuilderTests
     private sealed record Creature(List<string> Components, List<string> Stacks, List<string> Modifiers);
 
     private static GameSession Bootstrap(Map map, UniqueNumberAllocator? crawlerNumbers = null) =>
-        GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
+        GameBootstrapper.Build(ValidatedMods.None, map, TestContent.Layers, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, crawlerNumbers: crawlerNumbers);
 
     private static Creature Read(ComponentManager componentManager, int entityId, params Type[] excluded)
     {
@@ -84,7 +84,7 @@ public sealed class SpawnRecordRebuilderTests
     [TestMethod]
     public void ASessionThatDefersItsStagingWorld_BuildsItOnTheFirstRebuild_AndRebuildsTheSame()
     {
-        var deferred = GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, buildsStagingWorldOnFirstRebuild: true);
+        var deferred = GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), TestContent.Layers, sessionSeed: 1, initialEntityCapacity: 1_000, initialComponentCapacity: 100, buildsStagingWorldOnFirstRebuild: true);
         Assert.IsFalse(deferred.Internals.SpawnRecordRebuilder.IsStagingWorldBuilt);
         var ecs = deferred.EcsContext;
         var blueprintId = Blueprint(deferred, Goblin.Id);

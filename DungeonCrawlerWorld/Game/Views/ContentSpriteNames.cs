@@ -12,7 +12,8 @@ public readonly record struct DeclaredSpriteName(string SpriteName, string Decla
 /// <summary>Every sprite name the session's content declares: blueprints, terrain, actions, items and loot box types.</summary>
 /// <remarks>
 /// Game only names sprites; whether the manifest has a sprite by each name is Presentation's to check (and a missing one draws its
-/// glyph). Read from the catalogs when asked, so content registered after the build is included. A blueprint's
+/// glyph). Read from the catalogs when asked, so content registered after the build is included, and actions and items from
+/// their summaries (every one the content holds, loaded or not), in Guid order. A blueprint's
 /// AppearanceFacet.NoSprite is a deliberate "glyph only", not a name, and is left out.
 /// </remarks>
 public sealed class ContentSpriteNames(BlueprintRegistry blueprints, TerrainRegistry terrain, ActionCatalog actions, ItemCatalog items, LootboxCatalog lootboxes)
@@ -47,12 +48,12 @@ public sealed class ContentSpriteNames(BlueprintRegistry blueprints, TerrainRegi
             }
         }
 
-        foreach (var action in actions.Definitions)
+        foreach (var action in actions.Summaries)
         {
             Add(action.SpriteName, $"action {action.Name}");
         }
 
-        foreach (var item in items.Definitions)
+        foreach (var item in items.Summaries)
         {
             Add(item.SpriteName, $"item {item.Name}");
         }

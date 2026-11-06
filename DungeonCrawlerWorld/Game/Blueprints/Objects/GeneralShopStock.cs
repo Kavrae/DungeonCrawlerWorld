@@ -38,7 +38,8 @@ public static class GeneralShopStock
 
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
-        Build = Build
+        Build = Build,
+        UsesItems = [.. Stock.Select(entry => entry.ItemId)],
     };
 
     private static void Build(BlueprintContext context)

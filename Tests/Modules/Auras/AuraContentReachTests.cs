@@ -16,13 +16,13 @@ public sealed class AuraContentReachTests
     [TestMethod]
     public void Lava_PowerEightSizeThree()
     {
-        Assert.AreEqual(new TerrainAura(BuiltInTerrain.LavaAura, 8, 3), BuiltInTerrain.Lava.Aura);
+        Assert.AreEqual(new TerrainAura(BuiltInAuraIds.Lava, 8, 3), BuiltInTerrain.Lava.Aura);
     }
 
     [TestMethod]
     public void HolyGround_PowerEightSizeThree()
     {
-        Assert.AreEqual(new TerrainAura(BuiltInTerrain.HolyGroundAura, 8, 3), BuiltInTerrain.HolyGround.Aura);
+        Assert.AreEqual(new TerrainAura(BuiltInAuraIds.HolyGround, 8, 3), BuiltInTerrain.HolyGround.Aura);
     }
 
     [TestMethod]
@@ -54,7 +54,7 @@ public sealed class AuraContentReachTests
     [TestMethod]
     public void EveryBuiltInAura_FallsOffLinearly()
     {
-        AuraDefinition[] auras = [BuiltInTerrain.LavaAura, BuiltInTerrain.HolyGroundAura, HealingShrine.Aura, TestContent.Aura(BuiltInAuraIds.ToxicIdolPoison), TestContent.Aura(BuiltInAuraIds.ToxicAura), TestContent.Aura(BuiltInAuraIds.TorchLight)];
+        AuraDefinition[] auras = [TestContent.Aura(BuiltInAuraIds.Lava), TestContent.Aura(BuiltInAuraIds.HolyGround), TestContent.Aura(BuiltInAuraIds.HealingShrine), TestContent.Aura(BuiltInAuraIds.ToxicIdolPoison), TestContent.Aura(BuiltInAuraIds.ToxicAura), TestContent.Aura(BuiltInAuraIds.TorchLight)];
 
         Assert.IsTrue(auras.All(aura => aura.Falloff == Engine.Tiles.AuraFalloff.Linear));
     }

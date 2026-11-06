@@ -17,7 +17,7 @@ namespace Presentation.MapRendering;
 /// </para>
 /// <para>
 /// What each terrain type looks like is held per type id (its sprites, glyph and link group), resolved the first time the id is seen and
-/// dropped when its definition is replaced (TerrainRegistry.DefinitionChanged), so no tile costs a string lookup.
+/// kept, since a terrain's definition is fixed for the session, so no tile costs a string lookup.
 /// </para>
 /// <para>
 /// Joining is a display rule, decided here: a neighbour joins a wall when it is a structure in the same link group (the definition's,
@@ -41,7 +41,6 @@ public sealed class MapTerrainCells
     {
         _mapView = mapView;
         _sprites = sprites;
-        _mapView.Terrain.DefinitionChanged += (typeId, _, _) => ForgetLook(typeId);
     }
 
     /// <summary>What every cell of one terrain type looks like.</summary>
@@ -170,13 +169,5 @@ public sealed class MapTerrainCells
 
         TerrainSpriteSet? sprites = definition.SpriteName is { } spriteName && _sprites.TryGetTerrainSprites(spriteName, out var found) ? found : null;
         return _looksByTypeId[typeId] = new TerrainLook(sprites, definition.Glyph, definition.GlyphColor, _mapView.Terrain.GetLinkGroup(typeId));
-    }
-
-    private void ForgetLook(ushort typeId)
-    {
-        if (typeId < _looksByTypeId.Length)
-        {
-            _looksByTypeId[typeId] = null;
-        }
     }
 }

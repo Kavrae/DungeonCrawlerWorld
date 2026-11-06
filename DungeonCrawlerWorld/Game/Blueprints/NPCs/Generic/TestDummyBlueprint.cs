@@ -42,6 +42,7 @@ public static class TestDummyBlueprint
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
         Build = Build,
+        UsesActions = [BuiltInActionIds.PowerAttack],
         Appearance = new() { Name = Name, Description = Description, Glyph = Glyph, GlyphColor = Color.Purple, SpriteName = AppearanceFacet.NoSprite }
     };
 

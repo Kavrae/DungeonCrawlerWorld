@@ -15,13 +15,15 @@ namespace Game.Floors;
 /// <param name="auraCellsByRow">Layout's aura-radiating terrain cells, one list per row from Layout.MinY -- see TerrainAuraSources.ByRow.</param>
 /// <param name="spawnRowEnds">For each batch of spawns -- the shrines in batches first, then the areas' spawns, then each population row -- the index in spawns one past its last request, so spawning can stop between batches.</param>
 /// <param name="uniqueSpawns">The spawns, by index, that a unique placement planned: each spawns only if the roster still allows it when its turn comes, and its fallback otherwise.</param>
+/// <param name="content">The actions and items its spawns' builds read (EntityFactory.ContentOf), decoded on the worker that planned it and registered when it spawns.</param>
 public sealed class NeighborhoodPlan(
     NeighborhoodLayout layout,
     IReadOnlyList<IReadOnlyList<TerrainAuraCell>> auraCellsByRow,
     IReadOnlyList<SpawnRequest> spawns,
     IReadOnlyList<int> spawnRowEnds,
     AreaStampResult areas,
-    IReadOnlyDictionary<int, AreaPlannedSpawn> uniqueSpawns)
+    IReadOnlyDictionary<int, AreaPlannedSpawn> uniqueSpawns,
+    PlannedContent content)
 {
     public NeighborhoodLayout Layout { get; } = layout;
 
@@ -35,4 +37,7 @@ public sealed class NeighborhoodPlan(
     public AreaStampResult Areas { get; } = areas;
 
     public IReadOnlyDictionary<int, AreaPlannedSpawn> UniqueSpawns { get; } = uniqueSpawns;
+
+    /// <summary>The actions and items its spawns' builds read, already decoded when the plan is made.</summary>
+    public PlannedContent Content { get; } = content;
 }

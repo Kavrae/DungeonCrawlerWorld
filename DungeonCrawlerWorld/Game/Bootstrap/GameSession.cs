@@ -17,7 +17,7 @@ public sealed class GameSession
 {
     private readonly Modules.GameModuleContext _context;
 
-    public GameSession(GameBuildPassResult buildPass, IReadOnlyList<ModuleFailure> moduleFailures, SpawnRecordRebuilder spawnRecordRebuilder, EntityTeleporter teleporter)
+    public GameSession(GameBuildPassResult buildPass, IReadOnlyList<ModuleFailure> moduleFailures, SpawnRecordRebuilder spawnRecordRebuilder, EntityTeleporter teleporter, Content.ContentStore? contentStore = null)
     {
         var context = buildPass.Context;
         _context = context;
@@ -28,10 +28,12 @@ public sealed class GameSession
         SimulationClock = context.SimulationClock;
         Views = new GameViews(buildPass.World, context, buildPass.LocalTierRoster);
         Commands = new GameCommands(buildPass.World, context);
-        Internals = new GameSessionInternals(buildPass.Factory, spawnRecordRebuilder, teleporter, context.ProcessingTierResolver, buildPass.LocalTierRoster, context.MovedEntities, context.AuraField, context.UniqueEntities);
+        Internals = new GameSessionInternals(buildPass.Factory, spawnRecordRebuilder, teleporter, context.ProcessingTierResolver, buildPass.LocalTierRoster, context.MovedEntities, context.AuraField, context.UniqueEntities, context.ContentCatalogLoader);
         ModuleFailures = moduleFailures;
         Settings = buildPass.Declarations.Settings;
         SettingsFailures = buildPass.Declarations.SettingsFailures;
+        ContentStore = contentStore;
+        Content = context.Content;
     }
 
     public EcsContext EcsContext { get; }
@@ -55,7 +57,13 @@ public sealed class GameSession
     /// <summary>Every setting the session's modules declared, resolved.</summary>
     public SettingValues Settings { get; }
 
-    /// <summary>What a build made with collectsContentFailures left out of its content, and why; empty otherwise.</summary>
+    /// <summary>Where the session creates and overrides definitions: its save's; null for a session with no save.</summary>
+    public Content.ContentStore? ContentStore { get; }
+
+    /// <summary>The content the session was built from, across its layers, and where each record came from.</summary>
+    public Content.GameContent Content { get; }
+
+    /// <summary>What the session's content left out, and why: every failing record of a build made with collectsContentFailures, and otherwise a save's failing records, which never stop a game.</summary>
     public IReadOnlyList<Engine.Content.ContentFailure> ContentFailures => _context.ContentFailures;
 
     /// <summary>Every setting override that was rejected.</summary>

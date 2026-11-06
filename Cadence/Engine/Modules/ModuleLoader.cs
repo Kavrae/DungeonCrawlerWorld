@@ -42,6 +42,56 @@ public static class ModuleLoader
         return new ModuleLoadResult<TContext>(moduleFactories, failures);
     }
 
+    /// <summary>The folder inside a mod's folder that holds its content tables, a Mod content layer.</summary>
+    public const string DefinitionsDirectoryName = "Definitions";
+
+    /// <summary>What a mod's content layer is named before the mod's own name ("Mod ExampleMod").</summary>
+    public const string ContentLayerNamePrefix = "Mod ";
+
+    /// <summary>Every mod in modsDirectory, in name order: each subfolder is one mod -- the modules of every DLL directly in it, and its Definitions folder as a content layer named "Mod " and the folder's name -- and each module in a DLL directly in modsDirectory is a mod of its own with no content.</summary>
+    /// <remarks>
+    /// A mod's modules and content are kept and dropped together, so content that needs its own mod's codecs is never
+    /// read without them: a folder in which any DLL or module fails to load or construct is left out whole, its failures
+    /// reported as LoadFromDirectory reports them and one more naming the mod. A folder with neither a DLL nor a
+    /// Definitions folder isn't a mod.
+    /// </remarks>
+    public static ModLoadResult<TContext> LoadMods<TContext>(string modsDirectory)
+    {
+        var packages = new List<ModPackage<TContext>>();
+        var failures = new List<ModuleFailure>();
+        if (!Directory.Exists(modsDirectory))
+        {
+            return new ModLoadResult<TContext>(packages, failures);
+        }
+
+        var looseModules = LoadFromDirectory<TContext>(modsDirectory);
+        failures.AddRange(looseModules.Failures);
+        packages.AddRange(looseModules.ModuleFactories.Select(factory => new ModPackage<TContext>(factory.ModuleType.Name, factory.ModuleType.FullName ?? factory.ModuleType.Name, [factory], Content: null)));
+
+        var folders = Directory.GetDirectories(modsDirectory);
+        Array.Sort(folders, StringComparer.Ordinal);
+        foreach (var folder in folders)
+        {
+            var name = Path.GetFileName(folder);
+            var modules = LoadFromDirectory<TContext>(folder);
+            failures.AddRange(modules.Failures);
+            if (modules.Failures.Count > 0)
+            {
+                failures.Add(new ModuleFailure(folder, new InvalidOperationException($"Mod {name} is left out, its modules and content together: {modules.Failures.Count} of its DLLs or modules failed to load.")));
+                continue;
+            }
+
+            var definitions = Path.Combine(folder, DefinitionsDirectoryName);
+            var content = Directory.Exists(definitions) ? Content.ContentLayer.FromDirectory(ContentLayerNamePrefix + name, Content.ContentLayerKind.Mod, definitions) : null;
+            if (modules.ModuleFactories.Count > 0 || content is not null)
+            {
+                packages.Add(new ModPackage<TContext>(name, folder, modules.ModuleFactories, content));
+            }
+        }
+
+        return new ModLoadResult<TContext>(packages, failures);
+    }
+
     private static void LoadModulesFromAssembly<TContext>(string dllPath, List<ModuleFactory<TContext>> moduleFactories, List<ModuleFailure> failures)
     {
         Assembly assembly;

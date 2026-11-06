@@ -5,7 +5,7 @@ namespace Game.Effects;
 
 /// <summary>Walks every effect entry a build's registered content holds, whatever holds it.</summary>
 /// <remarks>
-/// The one enumeration the content checks share (ContentTagValidation, AuraContentRegistration), over
+/// The one enumeration the whole-build content checks share (AuraContentRegistration, TerrainReferenceValidation), over
 /// EffectEntries (the walk inside one holder, which code outside Game uses too), so a
 /// new kind of effect holder is added here once and every check covers it: actions and items (their
 /// activation effects and a toggle's periodic effects included), terrain contacts and aura definitions, and

@@ -40,28 +40,28 @@ internal static class HeadlessBenchmark
 
     /// <param name="diagnosticsFeatures">Memory adds a PoolMemoryReport and Gauges a GaugeSeriesReport over the same frame range; the other features have nothing to report headless.</param>
     /// <param name="diagnosticsLink">Where an IDE listens for this run's frame records and benchmark completion, or null.</param>
-    public static int Run(int randomSeed, BenchmarkFrameRange frameRange, IReadOnlyList<Engine.Settings.ISettingsSource> settingsSources, int? mapSizeOverride = null, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, System.Net.IPEndPoint? diagnosticsLink = null)
+    /// <param name="saveName">The save to read definitions from, or null for none: unlike a windowed game, a run with no "--save=" makes no save of its own, so benchmarks never fill the saves folder.</param>
+    /// <remarks>Loads no mods: a mod installed in PlayerFolders.Mods would change the world a seed builds, so a benchmark measures the game alone.</remarks>
+    public static int Run(int randomSeed, BenchmarkFrameRange frameRange, IReadOnlyList<Engine.Settings.ISettingsSource> settingsSources, int? mapSizeOverride = null, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, System.Net.IPEndPoint? diagnosticsLink = null, string? saveName = null)
     {
         using var timerResolution = WindowsTimerResolution.Request(milliseconds: 1);
         using var diagnostics = new DiagnosticsEngine(diagnosticsFeatures & (DiagnosticsFeatures.Memory | DiagnosticsFeatures.Gauges), randomSeed, frameRange, writesPeriodicReports: false, diagnosticsLink);
         diagnostics.Start();
-        var modsDirectory = Path.Combine(AppContext.BaseDirectory, "Mods");
-
         // Its own file, so benchmark runs never append to the real Log/player-activity.log.
-        var activityLogPath = Path.Combine(GameLoop.FindProjectRoot(), "Log", "diagnostics", $"headless-activity-{Environment.ProcessId}.log");
-        Directory.CreateDirectory(Path.GetDirectoryName(activityLogPath)!);
+        var activityLogTarget = new RollingLogTarget(Path.Combine(GameLoop.FindProjectRoot(), "Log", "diagnostics", "headless-activity.log"));
 
         var session = WorldSessionBootstrapper.Build(
             GameLoop.FloorNumber,
-            modsDirectory,
+            modsDirectory: null,
             GameLoop.InitialEntityCapacity,
             GameLoop.InitialComponentCapacity,
             GameLoop.MinCrawlerNumber,
             GameLoop.CrawlerNumberBits,
-            activityLogPath,
+            activityLogTarget,
             randomSeed,
             settingsSources,
-            mapSizeOverride);
+            mapSizeOverride,
+            saveName is null ? null : WorldSessionBootstrapper.SaveNameFor(saveName, randomSeed));
 
         try
         {
@@ -77,8 +77,9 @@ internal static class HeadlessBenchmark
         }
         finally
         {
+            var activityLogFilePath = session.PlayerActivityLog.FilePath;
             session.Dispose();
-            File.Delete(activityLogPath);
+            File.Delete(activityLogFilePath);
         }
     }
 

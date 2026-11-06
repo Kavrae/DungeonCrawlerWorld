@@ -7,13 +7,13 @@ namespace Workshop.Debug;
 /// <summary>Keeps the Debug tab's launch options for this user between Workshop runs, in a file of the user's own -- never in the repository or a content file.</summary>
 /// <remarks>
 /// A missing or unreadable file reads as DebugLaunchOptions.Default; a failed write is reported on the error output and the
-/// options stay as set for this run. The file holds a version (2); a field it lacks reads as its default, so a version-1 file
-/// (the diagnostics features alone) loads as those features. While the file doesn't exist, the legacy file -- the one every
+/// options stay as set for this run. The file holds a version (3); a field it lacks reads as its default, so an older file (a
+/// version 1 holds the diagnostics features alone, a version 2 no save name) loads as what it holds. While the file doesn't exist, the legacy file -- the one every
 /// game shared before each had its own -- is read in its place and left as it is.
 /// </remarks>
 public sealed class DebugLaunchOptionsStore(string filePath, string? legacyFilePath = null)
 {
-    public const int Version = 2;
+    public const int Version = 3;
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, Converters = { new JsonStringEnumConverter() } };
 
@@ -69,6 +69,8 @@ public sealed class DebugLaunchOptionsStore(string filePath, string? legacyFileP
 
         public int Seed { get; init; } = DebugLaunchOptions.Default.Seed;
 
+        public string SaveName { get; init; } = DebugLaunchOptions.Default.SaveName;
+
         public bool RunsBenchmark { get; init; } = DebugLaunchOptions.Default.RunsBenchmark;
 
         public long BenchmarkStartFrame { get; init; } = DebugLaunchOptions.DefaultBenchmarkFrames.StartFrame;
@@ -85,6 +87,7 @@ public sealed class DebugLaunchOptionsStore(string filePath, string? legacyFileP
             DiagnosticsFeatures = options.DiagnosticsFeatures,
             UsesRandomSeed = options.UsesRandomSeed,
             Seed = options.Seed,
+            SaveName = options.SaveName,
             RunsBenchmark = options.RunsBenchmark,
             BenchmarkStartFrame = options.BenchmarkFrames.StartFrame,
             BenchmarkEndFrame = options.BenchmarkFrames.EndFrame,
@@ -98,6 +101,7 @@ public sealed class DebugLaunchOptionsStore(string filePath, string? legacyFileP
             DiagnosticsFeatures = DiagnosticsFeatures & DiagnosticsFeatures.All,
             UsesRandomSeed = UsesRandomSeed,
             Seed = Seed,
+            SaveName = SaveName ?? string.Empty,
             RunsBenchmark = RunsBenchmark,
             BenchmarkFrames = BenchmarkStartFrame >= 0 && BenchmarkEndFrame > BenchmarkStartFrame
                 ? new BenchmarkFrameRange(BenchmarkStartFrame, BenchmarkEndFrame)

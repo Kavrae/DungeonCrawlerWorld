@@ -8,16 +8,20 @@ using Game.World;
 
 namespace Builders.MapAreas;
 
-/// <summary>One area as the game builds it: its own game session over a bounded map the area's size, the area stamped in by the game's own AreaStamp and its spawns spawned by the session's own factory -- never simulated.</summary>
+/// <summary>One area as the game builds it: its own game session over a bounded map the area's size plus a Margin of plain fill all round, the area stamped in by the game's own AreaStamp and its spawns spawned by the session's own factory -- never simulated.</summary>
 /// <remarks>
 /// Under the area is a plain fill (grass on Ground, dirt UnderGround), so a transparent cell shows what generation
-/// would leave there. Uniques are spawned as in a session where none has lived yet. Nothing is simulated, so an
+/// would leave there. The margin is there for the walls: off the map counts as a wall (MapWallPlan), so an area's
+/// bottom wall on the map's last row would show no face, where the game, which always has ground around an area, shows one. Uniques are spawned as in a session where none has lived yet. Nothing is simulated, so an
 /// entity's own aura (a shrine's glow) isn't in the aura field; terrain's is.
 /// </remarks>
 public sealed class AreaPreviewBuild : IMapPreviewScene
 {
     public const string GroundFillKey = BuiltInTerrain.GrassKey;
     public const string UnderGroundFillKey = BuiltInTerrain.DirtKey;
+
+    /// <summary>The tiles of plain fill around the area on every side, the area stamped at (Margin, Margin).</summary>
+    public const int Margin = 1;
 
     private const int LayerCount = 3;
 
@@ -41,14 +45,14 @@ public sealed class AreaPreviewBuild : IMapPreviewScene
     /// <param name="seed">The instance's seed: what its Chance and OneOf roll from.</param>
     public static AreaPreviewBuild Build(AreaDefinition area, ulong seed, Func<Map, GameSession> buildSession)
     {
-        var map = new Map(new MapBounds(0, 0, System.Math.Max(area.Width, 1), System.Math.Max(area.Height, 1), LayerCount));
+        var map = new Map(new MapBounds(0, 0, System.Math.Max(area.Width, 1) + 2 * Margin, System.Math.Max(area.Height, 1) + 2 * Margin, LayerCount));
         var session = buildSession(map);
         var catalogs = session.Catalogs;
 
         var layout = map.CreateLayout(0, 0, layoutSeed: 0);
         Fill(layout, catalogs.Terrain);
 
-        var instance = new AreaInstance(new AreaInstanceKey(area.Id), area, seed, OriginX: 0, OriginY: 0);
+        var instance = new AreaInstance(new AreaInstanceKey(area.Id), area, seed, OriginX: Margin, OriginY: Margin);
         var stamp = new AreaStampResult();
         new AreaStamp(catalogs.Areas, catalogs.Terrain, catalogs.Definitions).Apply(layout, instance, stamp);
         map.LoadNeighborhood(layout);

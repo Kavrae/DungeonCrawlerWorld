@@ -186,7 +186,7 @@ public sealed class EntityBuilder
         var sources = componentManager.GetMultiPool<AuraSourceComponent>();
         for (var index = 0; index < grants.Count; index++)
         {
-            var auraId = _auras.Register(grants[index].Aura);
+            var auraId = _auras.GetId(grants[index].AuraId);
             if (!Radiates(sources, entityId, auraId))
             {
                 sources.Add(entityId, new AuraSourceComponent(auraId, grants[index].Power, grants[index].Size));

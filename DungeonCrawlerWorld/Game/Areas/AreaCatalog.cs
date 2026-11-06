@@ -40,7 +40,7 @@ public sealed class AreaCatalog
     }
 
     /// <summary>Registers content's palettes, areas and placements in file order, with where each was read from, and each disabled one's replacement as its redirect.</summary>
-    public void RegisterAll(MasterContent content)
+    public void RegisterAll(GameContent content)
     {
         foreach (var palette in content.AreaPalettes)
         {

@@ -614,9 +614,11 @@ Choices made while building:
 - `NeighborhoodBits` and `AuraTotals` keep freed bitmaps, chunks and neighborhoods for reuse: freeing
   and reallocating a 131 KB-per-layer bitmap on every step across a seam cost 54 MB over the test walk.
   Found by the zero-allocation test.
-- The field fixes an aura's falloff while it holds any source of it; a replaced falloff takes effect
-  once they have gone. Rewriting on `AuraCatalog.DefinitionChanged` didn't hold: a terrain still holding
-  the old definition re-registers it during the rewrite.
+- The field used to fix an aura's falloff while it held any source of it, so a definition replaced
+  mid-session couldn't strand totals. Since 2026-11-05 no definition changes during a session (a Guid's
+  first registration stands; see the data-driven plan's Phase 4 note), so the field reads the falloff
+  from the catalog, and the terrain redefinition handlers (`TerrainRegistry.DefinitionChanged`,
+  `TerrainCells`) are gone too.
 - A Ground windup is resolved from its aimed tile when it ends, like a Target one: the same tiles unless
   the caster moved. A Target selection with nothing on the tile marks nothing and resolves as Ground.
 - An emptied anchor is destroyed by `AuraAnchorEndingSystem` the next frame: removals happen inside

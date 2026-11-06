@@ -9,7 +9,7 @@ namespace Workshop.Tests;
 [TestClass]
 public sealed class AuraBrowserSectionsTests
 {
-    private static readonly Lazy<GameSession> Session = new(() => ContentSession.Build(ContentSession.ValidateMods(Path.Combine(AppContext.BaseDirectory, "NoMods"), []), [], TextWriter.Null));
+    private static readonly Lazy<GameSession> Session = new(() => ContentSession.Build(ContentSession.ValidateMods(Path.Combine(AppContext.BaseDirectory, "NoMods"), WorkshopTestContent.Master, []), WorkshopTestContent.Master, [], TextWriter.Null));
     private static readonly Lazy<ContentReferenceIndex> Index = new(() => new ContentReferenceIndex(Session.Value.Catalogs));
 
     private static List<AuraDefinition> AllAuras()
@@ -40,7 +40,7 @@ public sealed class AuraBrowserSectionsTests
         {
             if (terrain.TryGet((ushort)typeId, out var definition) && definition.Aura is { } terrainAura)
             {
-                Assert.IsTrue(terrainSection.Records.Any(aura => aura.Id == terrainAura.Aura.Id), $"{definition.Name}'s aura isn't under Terrain.");
+                Assert.IsTrue(terrainSection.Records.Any(aura => aura.Id == terrainAura.AuraId), $"{definition.Name}'s aura isn't under Terrain.");
             }
         }
     }

@@ -2,7 +2,7 @@
   "profiles": {
     "DungeonCrawlerWorld": {
       "commandName": "Project",
-      "commandLineArgs": "--diagnostics=none"
+      "commandLineArgs": "--diagnostics=none --save=20261104-073007-seed757931587"
     }
   }
 }

@@ -2,7 +2,6 @@ using Builders.MapAreas;
 using Engine.Content;
 using Engine.Math;
 using Engine.Settings;
-using Game.Areas;
 using Game.Bootstrap;
 using Game.Content;
 using Game.World;
@@ -13,8 +12,9 @@ namespace DungeonCrawlerWorld.Workshop;
 /// <summary>The game build the IDE reads its catalogs and views from: every built-in module and every valid mod, over a placeholder map, with no population and no player, never simulated.</summary>
 /// <remarks>
 /// The IDE never rebuilds a spawn record, so the session's staging world is left until one is rebuilt -- never, today.
-/// Every build here collects content failures rather than stopping: a broken record is left out and listed, so the IDE
-/// still opens on content that wouldn't load in the game.
+/// Every build here reads the content layers it is given -- the source tree's master, the copy the IDE edits -- and
+/// collects content failures rather than stopping: a broken record is left out and listed, so the IDE still opens on
+/// content that wouldn't load in the game.
 /// </remarks>
 public static class ContentSession
 {
@@ -27,12 +27,12 @@ public static class ContentSession
     private const int PreviewCrawlerNumberBits = 24;
 
     /// <param name="modsDirectory">The mods the game itself would load -- GameShell's own Mods folder.</param>
-    public static ValidatedMods ValidateMods(string modsDirectory, IReadOnlyList<ISettingsSource> settingsSources) =>
-        ModValidation.Validate(modsDirectory, settingsSources);
+    public static ValidatedMods ValidateMods(string modsDirectory, ContentLayers content, IReadOnlyList<ISettingsSource> settingsSources) =>
+        ModValidation.Validate(modsDirectory, content, settingsSources, collectsContentFailures: true);
 
-    public static GameSession Build(ValidatedMods validatedMods, IReadOnlyList<ISettingsSource> settingsSources, TextWriter failureLog)
+    public static GameSession Build(ValidatedMods validatedMods, ContentLayers content, IReadOnlyList<ISettingsSource> settingsSources, TextWriter failureLog)
     {
-        var gameSession = GameBootstrapper.Build(validatedMods, GameBuildPass.CreatePlaceholderMap(), sessionSeed: 0, InitialEntityCapacity, InitialComponentCapacity, settingsSources: settingsSources, buildsStagingWorldOnFirstRebuild: true, collectsContentFailures: true);
+        var gameSession = GameBootstrapper.Build(validatedMods, GameBuildPass.CreatePlaceholderMap(), content, sessionSeed: 0, InitialEntityCapacity, InitialComponentCapacity, settingsSources: settingsSources, buildsStagingWorldOnFirstRebuild: true, collectsContentFailures: true, loadsContentById: false);
 
         foreach (var failure in gameSession.ModuleFailures)
         {
@@ -52,13 +52,13 @@ public static class ContentSession
         return gameSession;
     }
 
-    /// <summary>A session over map with the same mods and settings as the IDE's own, for a preview built on it (an area, or a neighborhood, as the game builds it) -- with crawler numbers, since generation spawns crawlers.</summary>
-    public static GameSession BuildPreview(ValidatedMods validatedMods, Map map, IReadOnlyList<ISettingsSource> settingsSources) =>
-        GameBootstrapper.Build(validatedMods, map, sessionSeed: 0, PreviewEntityCapacity, PreviewComponentCapacity, new UniqueNumberAllocator(PreviewCrawlerNumberSeed, MinimumPreviewCrawlerNumber, PreviewCrawlerNumberBits), settingsSources: settingsSources, buildsStagingWorldOnFirstRebuild: true, collectsContentFailures: true);
+    /// <summary>A session over map with the same mods, content and settings as the IDE's own, for a preview built on it (an area, or a neighborhood, as the game builds it) -- with crawler numbers, since generation spawns crawlers.</summary>
+    public static GameSession BuildPreview(ValidatedMods validatedMods, ContentLayers content, Map map, IReadOnlyList<ISettingsSource> settingsSources) =>
+        GameBootstrapper.Build(validatedMods, map, content, sessionSeed: 0, PreviewEntityCapacity, PreviewComponentCapacity, new UniqueNumberAllocator(PreviewCrawlerNumberSeed, MinimumPreviewCrawlerNumber, PreviewCrawlerNumberBits), settingsSources: settingsSources, buildsStagingWorldOnFirstRebuild: true, collectsContentFailures: true, loadsContentById: false);
 
-    /// <summary>The Error List's lines for a session: each mod dropped, each setting override refused, each record of the master manifest under masterDirectory that doesn't load, and each problem the build's area checks find in it.</summary>
-    /// <remarks>The manifest is read again from masterDirectory -- the source tree's copy, the one the IDE edits -- through the session's own codecs, collecting every failure rather than stopping at the first; its areas are checked against the session's terrain, blueprints and tags.</remarks>
-    public static IReadOnlyList<WorkshopProblem> LoadProblems(GameSession gameSession, string masterDirectory)
+    /// <summary>The Error List's lines for a session: each mod dropped, each setting override refused, and each content record the session's build left out -- one that didn't load, or that its area checks refused.</summary>
+    /// <remarks>A failure in an area, palette or placement file is the Map tab's, and names its record when it has one.</remarks>
+    public static IReadOnlyList<WorkshopProblem> LoadProblems(GameSession gameSession)
     {
         var problems = new List<WorkshopProblem>();
 
@@ -72,24 +72,19 @@ public static class ContentSession
             problems.Add(new WorkshopProblem(WorkshopProblemSeverity.Warning, $"{failure.Setting}: {failure.Message}", failure.Source));
         }
 
-        var catalogs = gameSession.Catalogs;
-        var content = MasterContent.Load(masterDirectory, catalogs.ContentTypes);
-        foreach (var failure in content.Failures)
+        foreach (var failure in gameSession.ContentFailures)
         {
-            problems.Add(ProblemFor(failure));
-        }
-
-        var sourceAreas = new AreaCatalog();
-        sourceAreas.RegisterAll(content);
-        foreach (var failure in AreaContentValidation.Validate(sourceAreas, catalogs.Terrain, catalogs.Definitions, catalogs.GameplayTags))
-        {
-            problems.Add(ProblemFor(failure) with { TabTitle = MapTab.TabTitle, RecordId = failure.RecordId });
+            var problem = new WorkshopProblem(WorkshopProblemSeverity.Error, failure.Reason, failure.Location);
+            problems.Add(IsAreaFile(failure.File) ? problem with { TabTitle = MapTab.TabTitle, RecordId = failure.RecordId } : problem);
         }
 
         return problems;
     }
 
-    private static WorkshopProblem ProblemFor(ContentFailure failure) => new(WorkshopProblemSeverity.Error, failure.Reason, failure.Location);
+    private static bool IsAreaFile(string file) =>
+        file.StartsWith($"{GameContent.AreasDirectoryName}/", StringComparison.Ordinal)
+        || file == GameContent.AreaPalettesFileName
+        || file == GameContent.AreaPlacementsFileName;
 
     private static string FirstLineOf(string text) => text.Split('\n', 2)[0].TrimEnd('\r');
 }

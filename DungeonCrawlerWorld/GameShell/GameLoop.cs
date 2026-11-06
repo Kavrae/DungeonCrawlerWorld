@@ -47,6 +47,9 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
     private readonly int? _mapSizeOverride;
 
+    /// <summary>The save this game continues, from "--save="; null for a new game, which makes its own (WorldSessionBootstrapper.SaveNameFor).</summary>
+    private readonly string? _saveName;
+
     private readonly IReadOnlyList<ISettingsSource> _settingsSources;
 
     /// <summary>FNA/SDL's own default window title is empty at the point Initialize() runs (nothing else in this codebase sets one), so the OS title bar is set explicitly here rather than captured. See _lastAdminModeOn.</summary>
@@ -61,10 +64,12 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     /// <param name="benchmarkFrameRange">Simulation frames to benchmark, or null -- see FrameRangeBenchmark (Program.cs passes --benchmark-frames= here).</param>
     /// <param name="mapSizeOverride">Square map width and height, or null for the default -- see MapSizeArgument (Program.cs passes --map-size= here).</param>
     /// <param name="diagnosticsLink">Where an IDE listens for this run's diagnostics, or null -- see DiagnosticsLinkArgument (Program.cs passes --diagnostics-link= here).</param>
-    public GameLoop(IReadOnlyList<ISettingsSource> settingsSources, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, int? randomSeed = null, BenchmarkFrameRange? benchmarkFrameRange = null, int? mapSizeOverride = null, IPEndPoint? diagnosticsLink = null)
+    /// <param name="saveName">The save to continue, or null for a new game's own -- see SaveArgument (Program.cs passes --save= here).</param>
+    public GameLoop(IReadOnlyList<ISettingsSource> settingsSources, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, int? randomSeed = null, BenchmarkFrameRange? benchmarkFrameRange = null, int? mapSizeOverride = null, IPEndPoint? diagnosticsLink = null, string? saveName = null)
     {
         _randomSeed = randomSeed ?? RandomSeed.Generate();
         _mapSizeOverride = mapSizeOverride;
+        _saveName = saveName;
         _settingsSources = settingsSources;
 
         // Constructed and started here, not in Initialize(), so its FrameBudget/Startup trackers'
@@ -87,11 +92,13 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
     protected override void Initialize()
     {
-        var modsDirectory = Path.Combine(AppContext.BaseDirectory, "Mods");
-        var playerActivityLogFilePath = Path.Combine(FindProjectRoot(), "Log", "player-activity.log");
+        var modsDirectory = Game.Bootstrap.PlayerFolders.Mods;
+        Directory.CreateDirectory(modsDirectory);
+        Console.WriteLine($"[Mods] Loading every mod folder in {modsDirectory}");
+        var playerActivityLogTarget = new RollingLogTarget(Path.Combine(FindProjectRoot(), "Log", "player-activity.log"));
         using (EngineHooks.DiagnosticScope("World Session Setup"))
         {
-            _worldSession = WorldSessionBootstrapper.Build(FloorNumber, modsDirectory, InitialEntityCapacity, InitialComponentCapacity, MinCrawlerNumber, CrawlerNumberBits, playerActivityLogFilePath, _randomSeed, _settingsSources, _mapSizeOverride);
+            _worldSession = WorldSessionBootstrapper.Build(FloorNumber, modsDirectory, InitialEntityCapacity, InitialComponentCapacity, MinCrawlerNumber, CrawlerNumberBits, playerActivityLogTarget, _randomSeed, _settingsSources, _mapSizeOverride, WorldSessionBootstrapper.SaveNameFor(_saveName, _randomSeed));
         }
 
         using (EngineHooks.DiagnosticScope("Presentation Bootstrap"))

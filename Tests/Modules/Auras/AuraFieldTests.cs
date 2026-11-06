@@ -25,7 +25,7 @@ public sealed class AuraFieldTests
 
     private static readonly TerrainDefinition GlowingTerrain = new(
         "test:glowing", "Glowing", "", "~", default,
-        Aura: new TerrainAura(OrangeAura, 8, 3));
+        Aura: new TerrainAura(OrangeAuraGuid, 8, 3));
 
     private static AuraCatalog BuildAuras()
     {
@@ -319,46 +319,6 @@ public sealed class AuraFieldTests
         return (world, field, eventBus, glowing, aura);
     }
 
-    /// <summary>Replacing a terrain's definition with one that radiates a different power and size, or nothing, swaps the reach of every loaded cell of that terrain.</summary>
-    [TestMethod]
-    public void TerrainDefinitionReplaced_ItsCellsRadiateWhatTheNewDefinitionSays()
-    {
-        var eventBus = new EventBus();
-        var terrain = new TerrainRegistry();
-        var glowing = terrain.Register(GlowingTerrain);
-        var world = TestWorlds.Create(new Map(MapSize), eventBus: eventBus);
-        world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(glowing));
-        var field = BuildField(world, terrain, eventBus);
-        field.EnsureBuilt();
-        var announced = new List<string>();
-        field.TerrainAuraAdded += (position, source) => announced.Add($"added {position.X},{position.Y} power {source.Power} size {source.Size}");
-        field.TerrainAuraRemoved += (position, source) => announced.Add($"removed {position.X},{position.Y} power {source.Power} size {source.Size}");
-
-        terrain.Register(GlowingTerrain with { Aura = new TerrainAura(OrangeAura, 2, 1) });
-
-        Assert.AreEqual(2, field.GetTotalPowerAt(SourcePosition, OrangeAuraId));
-        CollectionAssert.AreEqual(new[] { "removed 10,10 power 8 size 3", "added 10,10 power 2 size 1" }, announced);
-
-        terrain.Register(GlowingTerrain with { Aura = null });
-
-        Assert.IsFalse(field.AnyAuraReaches(SourcePosition));
-    }
-
-    /// <summary>The colour is read from the aura's definition when it is asked for, so a replaced definition recolours what is already in the field and says the field changed.</summary>
-    [TestMethod]
-    public void AuraDefinitionReplaced_TheViewGivesItsNewColourAndTheVersionMoves()
-    {
-        var auras = BuildAuras();
-        var field = new AuraField(TestWorlds.Create(new Map(MapSize)), new TerrainRegistry(), auras, new EventBus());
-        var powerView = new AuraPowerView(field, auras);
-        field.AddSource(SourcePosition, new AuraSourceComponent(OrangeAuraId, power: 8, size: 3));
-        var versionBefore = powerView.Version;
-
-        auras.Register(new AuraDefinition(OrangeAuraGuid, "Orange", Color.Purple));
-
-        Assert.AreEqual(Color.Purple, powerView.GlowColorOf(OrangeAuraId));
-        Assert.AreNotEqual(versionBefore, powerView.Version);
-    }
 
     private static readonly AuraDefinition SteadyAura = new(new Guid("00000000-0000-0000-0000-0000000000a9"), "Steady", Color.Blue, Falloff: AuraFalloff.None);
 
@@ -427,28 +387,6 @@ public sealed class AuraFieldTests
         AssertMatchesFreshField(field, orangeAuraId, source, new Vector3Int(32, 31, 0), radius: 10, new Vector3Int(32, 31, 0));
     }
 
-    /// <summary>An aura replaced with a different falloff while its sources are in the field: they keep the falloff they went in with, so taking them out leaves nothing behind, and the next source after they have gone takes the new one.</summary>
-    [TestMethod]
-    public void FalloffReplacedWhileSourcesAreIn_TakesEffectOnceTheyHaveGone()
-    {
-        var auras = BuildAuras();
-        var field = new AuraField(TestWorlds.Create(new Map(MapSize)), new TerrainRegistry(), auras, new EventBus());
-        var source = new AuraSourceComponent(OrangeAuraId, power: 8, size: 3);
-        var threeAway = new Vector3Int(SourcePosition.X + 3, SourcePosition.Y, SourcePosition.Z);
-        field.AddSource(SourcePosition, source);
-
-        auras.Register(OrangeAura with { Falloff = AuraFalloff.None });
-        field.AddSource(SourcePosition, source);
-
-        Assert.AreEqual(4, field.GetTotalPowerAt(threeAway, OrangeAuraId), "Both written Linear: 2 each at the edge.");
-
-        field.RemoveSource(SourcePosition, source);
-        field.RemoveSource(SourcePosition, source);
-        Assert.AreEqual(0, field.TotalsChunkCount, "Each taken out with the falloff it went in with.");
-
-        field.AddSource(SourcePosition, source);
-        Assert.AreEqual(8, field.GetTotalPowerAt(threeAway, OrangeAuraId), "The first source after they had gone takes the new falloff.");
-    }
 
     private static ActionSource EntitySource(int entityId)
     {

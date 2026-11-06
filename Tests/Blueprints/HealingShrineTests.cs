@@ -4,6 +4,7 @@ using Engine.Math;
 using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
 using Game.Bootstrap;
+using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
 using Game.Modules.Burning.Components;
 using Game.Modules.Core.Components;
@@ -87,7 +88,7 @@ public sealed class HealingShrineTests
         var sources = session.Components.GetMultiPool<AuraSourceComponent>();
         Assert.AreEqual(1, sources.CountForEntity(shrineId));
         var source = sources.GetReadonlyByDenseIndex(sources.GetFirstDenseIndex(shrineId));
-        Assert.AreEqual(session.Build.Context.Auras.GetId(HealingShrine.Aura.Id), source.AuraId);
+        Assert.AreEqual(session.Build.Context.Auras.GetId(BuiltInAuraIds.HealingShrine), source.AuraId);
         Assert.AreEqual(16, source.Power);
         Assert.AreEqual(4, source.Size);
     }
@@ -245,7 +246,7 @@ public sealed class HealingShrineTests
     public void Destroyed_ItsAuraEnds()
     {
         var session = BuildSession();
-        var healingAuraId = session.Build.Context.Auras.GetId(HealingShrine.Aura.Id);
+        var healingAuraId = session.Build.Context.Auras.GetId(BuiltInAuraIds.HealingShrine);
         var shrineId = session.Spawn(HealingShrine.Id, ShrinePosition);
         var beside = Beside(ShrinePosition, 1);
         session.RunFrames(2);
@@ -264,7 +265,7 @@ public sealed class HealingShrineTests
     public void AppliedToALiveEntity_ThatEntityRadiatesTheAura()
     {
         var session = BuildSession();
-        var healingAuraId = session.Build.Context.Auras.GetId(HealingShrine.Aura.Id);
+        var healingAuraId = session.Build.Context.Auras.GetId(BuiltInAuraIds.HealingShrine);
         var chestId = session.Spawn(TreasureChest.Id, ShrinePosition);
         session.RunFrames(2);
 

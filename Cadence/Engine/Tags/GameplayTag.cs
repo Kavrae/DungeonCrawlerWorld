@@ -33,6 +33,13 @@ public readonly struct GameplayTag : IEquatable<GameplayTag>
     /// <exception cref="ArgumentException">name is not one or more dot-separated segments of letters, digits and underscores.</exception>
     public static GameplayTag Get(string name) => new(GameplayTagNames.Intern(name));
 
+    /// <summary>The tag named name; false, with None, when name isn't a valid tag name.</summary>
+    public static bool TryGet(string name, out GameplayTag tag)
+    {
+        tag = GameplayTagNames.ValidateName(name) is null ? Get(name) : None;
+        return tag != None;
+    }
+
     /// <summary>Whether this tag is ancestor or one of its descendants ("Damage.Fire.Lava" is "Damage.Fire").</summary>
     /// <remarks>False when either tag is None.</remarks>
     public bool IsSelfOrDescendantOf(GameplayTag ancestor) => GameplayTagNames.IsSelfOrDescendantOf(Id, ancestor.Id);

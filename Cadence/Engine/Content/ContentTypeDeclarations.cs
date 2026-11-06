@@ -12,6 +12,14 @@ public sealed class ContentTypeDeclarations
         _moduleName = moduleName;
     }
 
+    /// <summary>The version of this module's content, written in the header of every table its codecs write (ContentTable.VersionsKey); ContentTypeRegistry.DefaultContentVersion until set.</summary>
+    /// <remarks>Raised when a change to the module's codecs means an older file needs migrating.</remarks>
+    public int ContentVersion
+    {
+        get => _registry.ContentVersionOf(_moduleName);
+        set => _registry.SetContentVersion(_moduleName, value);
+    }
+
     /// <summary>Registers the codec for a plain (non-polymorphic) value type, such as a definition or a spec it holds.</summary>
     public void RegisterValue<T>(ContentCodec<T> codec)
         where T : notnull =>

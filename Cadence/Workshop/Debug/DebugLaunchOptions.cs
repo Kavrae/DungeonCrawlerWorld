@@ -1,9 +1,10 @@
 using Engine.Diagnostics;
 using Engine.Math;
+using Engine.Persistence;
 
 namespace Workshop.Debug;
 
-/// <summary>How Play starts a debug run: the diagnostics features, the seed, the benchmark range, headless, and any extra arguments.</summary>
+/// <summary>How Play starts a debug run: the diagnostics features, the seed, the save, the benchmark range, headless, and any extra arguments.</summary>
 /// <remarks>
 /// A switched-off option keeps its value (a random seed keeps the number typed, a run with no benchmark keeps its range),
 /// so switching it back on restores it. Headless takes effect only with the benchmark range on, as the game refuses it
@@ -15,6 +16,9 @@ public sealed record DebugLaunchOptions
     /// <summary>The option a problem with the extra arguments names.</summary>
     public const string ExtraArgumentsOption = "Extra arguments";
 
+    /// <summary>The option a problem with the save name names.</summary>
+    public const string SaveOption = "Save";
+
     public static readonly BenchmarkFrameRange DefaultBenchmarkFrames = new(600, 3600);
 
     /// <summary>Frame budget and gauges, a random seed, no benchmark.</summary>
@@ -25,6 +29,7 @@ public sealed record DebugLaunchOptions
         (DiagnosticsLinkArgument.ArgumentPrefix, "the Workshop"),
         (DiagnosticsFeaturesParser.ArgumentPrefix, "Diagnostics features"),
         (RandomSeed.ArgumentPrefix, "Seed"),
+        (SaveArgument.ArgumentPrefix, SaveOption),
         (BenchmarkFrameRange.ArgumentPrefix, "Benchmark frames"),
         (HeadlessArgument.Argument, "Headless"),
     ];
@@ -35,6 +40,9 @@ public sealed record DebugLaunchOptions
     public bool UsesRandomSeed { get; init; } = true;
 
     public int Seed { get; init; }
+
+    /// <summary>The save the game continues; empty for a new game, which makes its own.</summary>
+    public string SaveName { get; init; } = string.Empty;
 
     /// <summary>Whether the game measures BenchmarkFrames.</summary>
     public bool RunsBenchmark { get; init; }
@@ -49,7 +57,7 @@ public sealed record DebugLaunchOptions
 
     public bool RunsHeadless => RunsBenchmark && Headless;
 
-    /// <summary>The options' own arguments, in order: diagnostics, seed, benchmark range, headless.</summary>
+    /// <summary>The options' own arguments, in order: diagnostics, seed, save, benchmark range, headless.</summary>
     public IReadOnlyList<string> OptionArguments
     {
         get
@@ -58,6 +66,11 @@ public sealed record DebugLaunchOptions
             if (!UsesRandomSeed)
             {
                 arguments.Add(RandomSeed.FormatArgument(Seed));
+            }
+
+            if (SaveName.Trim().Length > 0)
+            {
+                arguments.Add(SaveArgument.FormatArgument(SaveName.Trim()));
             }
 
             if (RunsBenchmark)
@@ -110,6 +123,11 @@ public sealed record DebugLaunchOptions
                 var firstOwner = isInTarget ? "the launch target" : owner;
                 problems.Add(new DebugLaunchProblem(ExtraArgumentsOption, $"Extra arguments repeat {prefix}, which {firstOwner} sets; the game reads the first, {firstOwner}'s.", RefusesLaunch: false));
             }
+        }
+
+        if (SaveName.Trim().Length > 0 && !SaveFolder.IsValidName(SaveName.Trim()))
+        {
+            problems.Add(new DebugLaunchProblem(SaveOption, $"'{SaveName.Trim()}' can't be a save's name, so the game will make a new save instead.", RefusesLaunch: false));
         }
 
         if (HeadlessArgument.IsRefused([.. targetArguments, .. optionArguments, .. extraArguments]))

@@ -54,7 +54,7 @@ public static class AreaCellReadout
 
         return
         [
-            $"({x}, {y}) on {layer}: {placeText}",
+            scene.Area is { } area ? $"({x - area.OriginX}, {y - area.OriginY}) on {layer}: {placeText}" : $"({x}, {y}) on {layer}: {placeText}",
             $"Floor: {floorText}    Wall: {wallText}",
             $"Entities: {entitiesText}",
             $"Placements: {(placementIds.Count == 0 ? NoneText : string.Join(", ", placementIds))}",

@@ -64,7 +64,7 @@ internal static class AreaContentCodecs
             ContentField.TagSet("tg", "Tags"),
             new ContentField("w", "Width", ContentFieldKind.Integer, IsRequired: true, Minimum: 1, Maximum: ushort.MaxValue),
             new ContentField("h", "Height", ContentFieldKind.Integer, IsRequired: true, Minimum: 1, Maximum: ushort.MaxValue),
-            new ContentField("pal", "Palettes", ContentFieldKind.List, typeof(Guid), ContentFieldKind.Reference, ReferencedTable: MasterContent.AreaPalettesTable),
+            new ContentField("pal", "Palettes", ContentFieldKind.List, typeof(Guid), ContentFieldKind.Reference, ReferencedTable: GameContent.AreaPalettesTable),
             ContentField.ListOf<AreaCell>("leg", "Legend", ContentFieldKind.Object),
             ContentField.Object<AreaLayers>("lay", "Layers", isRequired: true),
             ContentField.ListOf<AreaEntityPlacement>("ent", "Entities", ContentFieldKind.Object),
@@ -314,7 +314,7 @@ internal static class AreaContentCodecs
         public override ContentSchema Schema { get; } = new(nameof(AreaPlacement),
         [
             ContentField.Guid(ContentTable.IdKey, "Id", isRequired: true),
-            ContentField.Reference("ar", "Area", MasterContent.AreasTable, isRequired: true),
+            ContentField.Reference("ar", "Area", GameContent.AreasTable, isRequired: true),
             ContentField.Integer("nx", "Neighborhood x"),
             ContentField.Integer("ny", "Neighborhood y"),
             ContentField.Integer("ox", "Offset x", 0, Game.World.Neighborhoods.SizeTiles - 1),

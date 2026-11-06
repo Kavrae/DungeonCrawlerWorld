@@ -10,7 +10,9 @@ namespace Game.Modules.Actions.Definitions;
 /// Registers the built-in actions -- race/class-agnostic actions any entity can be granted -- from the master manifest's
 /// Actions table, in file order. A flat catalog rather than one module per tag, since tags are multi-valued (e.g. Punch
 /// is Melee+Unarmed+Attack, with no single tag-module it would belong to) -- see PlayerKit and the race blueprints for
-/// where these are granted, by their BuiltInActionIds. A disabled action's replacement is registered as its redirect.
+/// where these are granted, by their BuiltInActionIds. A disabled action's replacement is registered as its redirect. A build
+/// that loads content by id registers none up front: the catalog loads each the first time it is asked for
+/// (ContentCatalogLoader).
 /// </summary>
 public sealed class CoreActionsModule : IGameModule
 {
@@ -23,6 +25,12 @@ public sealed class CoreActionsModule : IGameModule
 
     public void Configure(GameModuleContext context)
     {
+        if (context.LoadsContentById)
+        {
+            context.ContentCatalogLoader.ServeActions();
+            return;
+        }
+
         var content = context.Content;
         foreach (var action in content.Actions)
         {

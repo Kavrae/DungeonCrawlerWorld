@@ -125,7 +125,7 @@ public sealed class ContentCodecTests
         var broken = ActionLine(actions[0]).Replace("\"$\":\"Direct\"", "\"$\":\"NoSuchActivator\"").Replace("\"$\":\"Spell\"", "\"$\":\"NoSuchActivator\"");
         var failures = new List<ContentFailure>();
 
-        var records = ContentTable.Read<ActionDefinition>(TableText("Actions", broken, ActionLine(actions[1])), "Actions.jsonl", "Actions", Types, References, failures);
+        var records = ContentTable.Read<ActionDefinition>(TableText("Actions", broken, ActionLine(actions[1])), "Actions.jsonl", "Actions", Types, References, failures).Records;
 
         Assert.HasCount(1, records);
         Assert.AreEqual(actions[1].Id, records[0].Id);
@@ -141,7 +141,7 @@ public sealed class ContentCodecTests
         var withUnknownKey = ActionLine(action).TrimEnd('}') + ",\"zz\":1}";
         var failures = new List<ContentFailure>();
 
-        var records = ContentTable.Read<ActionDefinition>(TableText("Actions", withUnknownKey), "Actions.jsonl", "Actions", Types, References, failures);
+        var records = ContentTable.Read<ActionDefinition>(TableText("Actions", withUnknownKey), "Actions.jsonl", "Actions", Types, References, failures).Records;
 
         Assert.IsEmpty(records);
         Assert.HasCount(1, failures);
@@ -156,12 +156,12 @@ public sealed class ContentCodecTests
         var cut = ActionLine(actions[1])[..20];
 
         var lastLineFailures = new List<ContentFailure>();
-        var lastLineRecords = ContentTable.Read<ActionDefinition>(ContentTable.Header("Actions") + "\n" + whole + "\n" + cut, "Actions.jsonl", "Actions", Types, References, lastLineFailures);
+        var lastLineRecords = ContentTable.Read<ActionDefinition>(ContentTable.Header("Actions") + "\n" + whole + "\n" + cut, "Actions.jsonl", "Actions", Types, References, lastLineFailures).Records;
         Assert.HasCount(1, lastLineRecords);
         Assert.IsEmpty(lastLineFailures);
 
         var middleLineFailures = new List<ContentFailure>();
-        var middleLineRecords = ContentTable.Read<ActionDefinition>(TableText("Actions", cut, whole), "Actions.jsonl", "Actions", Types, References, middleLineFailures);
+        var middleLineRecords = ContentTable.Read<ActionDefinition>(TableText("Actions", cut, whole), "Actions.jsonl", "Actions", Types, References, middleLineFailures).Records;
         Assert.HasCount(1, middleLineRecords);
         Assert.HasCount(1, middleLineFailures);
         Assert.AreEqual(2, middleLineFailures[0].Line);
@@ -181,7 +181,7 @@ public sealed class ContentCodecTests
     {
         var failures = new List<ContentFailure>();
 
-        var records = ContentTable.Read<ActionDefinition>(TableText("Items", ActionLine(Build.Value.Context.Actions.Definitions.First())), "Actions.jsonl", "Actions", Types, References, failures);
+        var records = ContentTable.Read<ActionDefinition>(TableText("Items", ActionLine(Build.Value.Context.Actions.Definitions.First())), "Actions.jsonl", "Actions", Types, References, failures).Records;
 
         Assert.IsEmpty(records);
         Assert.HasCount(1, failures);
@@ -194,7 +194,7 @@ public sealed class ContentCodecTests
         var disabledLine = ContentTable.WriteDisabled(actions[0], actions[1].Id, Types);
         var failures = new List<ContentFailure>();
 
-        var records = ContentTable.Read<ActionDefinition>(TableText("Actions", disabledLine), "Actions.jsonl", "Actions", Types, References, failures);
+        var records = ContentTable.Read<ActionDefinition>(TableText("Actions", disabledLine), "Actions.jsonl", "Actions", Types, References, failures).Records;
 
         Assert.IsEmpty(failures);
         Assert.HasCount(1, records);

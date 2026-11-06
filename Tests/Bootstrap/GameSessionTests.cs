@@ -8,7 +8,7 @@ namespace Tests.Bootstrap;
 public sealed class GameSessionTests
 {
     private static GameSession Build() =>
-        GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(5, 5, 1)), sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 50);
+        GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(5, 5, 1)), TestContent.Layers, sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 50);
 
     [TestMethod]
     public void SimulationClock_IsTheClockTheSystemManagerAdvances()

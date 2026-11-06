@@ -38,13 +38,13 @@ internal static class TestAuras
     public static readonly AuraDefinition Poison = new(new Guid("00000000-0000-0000-0000-00000000a003"), "Poison", Color.DarkGreen,
         [new Effect([new StatusEffectGrant(StatusEffectType.Poison, StackCount: 1, StatusEffectGrantMode.TopUpTo)])]);
 
-    /// <summary>Burning's Guid and colour with no effects.</summary>
-    public static readonly AuraDefinition BurningGlowOnly = new(Burning.Id, Burning.Name, Burning.GlowColor);
+    /// <summary>Burning's colour with no effects: an aura of its own, since one Guid is one definition.</summary>
+    public static readonly AuraDefinition BurningGlowOnly = new(new Guid("00000000-0000-0000-0000-00000000a012"), "Burning glow", Burning.GlowColor);
 
-    /// <summary>Poison's Guid and colour with no effects.</summary>
-    public static readonly AuraDefinition PoisonGlowOnly = new(Poison.Id, Poison.Name, Poison.GlowColor);
+    /// <summary>Poison's colour with no effects: an aura of its own, since one Guid is one definition.</summary>
+    public static readonly AuraDefinition PoisonGlowOnly = new(new Guid("00000000-0000-0000-0000-00000000a013"), "Poison glow", Poison.GlowColor);
 
-    /// <summary>Light, Burning and Poison, none with an effect: for a test about sources, the grid or the glow.</summary>
+    /// <summary>Light and the glow-only Burning and Poison, none with an effect, at the same ids Catalog gives Light, Burning and Poison: for a test about sources, the grid or the glow.</summary>
     public static AuraCatalog GlowOnlyCatalog()
     {
         var auras = new AuraCatalog();

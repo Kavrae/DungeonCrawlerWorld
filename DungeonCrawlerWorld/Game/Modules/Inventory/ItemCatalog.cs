@@ -1,4 +1,5 @@
 using Engine.Modules;
+using Game.Content;
 
 namespace Game.Modules.Inventory;
 
@@ -17,6 +18,8 @@ public sealed class ItemCatalog() : Catalog<ItemDefinition>(static definition =>
 {
     private readonly List<IItemDefinitionSource> _itemDefinitionSources = [];
     private readonly Dictionary<(string Kind, int Variant), ItemDefinition> _derivedDefinitions = [];
+    private readonly CachedDefinitionSummaries _summaries = new();
+    private Func<IReadOnlyList<DefinitionSummary>>? _summarySource;
 
     /// <summary>The definition (kind, variant) names, made from this catalog by create the first time it's asked for and the same instance every time after.</summary>
     /// <remarks>
@@ -38,6 +41,17 @@ public sealed class ItemCatalog() : Catalog<ItemDefinition>(static definition =>
 
     /// <summary>Adds a source asked for any id this catalog doesn't hold.</summary>
     public void AddDefinitionSource(IItemDefinitionSource itemDefinitionSource) => _itemDefinitionSources.Add(itemDefinitionSource);
+
+    /// <summary>Makes Summaries read summaries from source -- every item the content holds, loaded or not -- as well as from what is registered.</summary>
+    public void UseSummaries(Func<IReadOnlyList<DefinitionSummary>> source)
+    {
+        _summarySource = source;
+        _summaries.Clear();
+    }
+
+    /// <summary>Every item this session can name, by Guid: the content's summaries, if the catalog has a source of them, and every registered definition beside them (one made during the session, a loot box).</summary>
+    /// <remarks>For a whole-catalog question (RandomSingleStackContents), which must never depend on what happens to have been loaded.</remarks>
+    public IReadOnlyList<DefinitionSummary> Summaries => _summaries.Get(Version, () => DefinitionSummaries.Of(_summarySource, Definitions, static item => DefinitionSummaries.Of(item)));
 
     public override bool TryGet(Guid id, out ItemDefinition definition)
     {

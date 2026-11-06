@@ -228,7 +228,10 @@ public sealed class TestMapBuilder
             spawnRowEnds.Add(population.Spawns.Count);
         }
 
-        return new NeighborhoodPlan(neighborhoodLayout, TerrainAuraSources.ByRow(neighborhoodLayout, _terrain, _auras), population.Spawns, spawnRowEnds, areas, uniqueSpawns);
+        var content = _factory.ContentOf(population.Spawns.Select(spawn => spawn.BlueprintId).Concat(uniqueSpawns.Values.Where(unique => unique.Fallback is not null).Select(unique => unique.Fallback!.Value.BlueprintId)).Distinct());
+        _factory.PrefetchContent(content);
+
+        return new NeighborhoodPlan(neighborhoodLayout, TerrainAuraSources.ByRow(neighborhoodLayout, _terrain, _auras), population.Spawns, spawnRowEnds, areas, uniqueSpawns, content);
     }
 
     /// <summary>Spawns neighborhoodPlan's shrines, areas' residents and creatures in order, a batch at a time, once its layout is loaded. Main thread only.</summary>
@@ -240,6 +243,7 @@ public sealed class TestMapBuilder
     /// </remarks>
     public IEnumerable<int> Spawn(NeighborhoodPlan neighborhoodPlan)
     {
+        _factory.RegisterContent(neighborhoodPlan.Content);
         var nextSpawnIndex = 0;
         foreach (var spawnRowEnd in neighborhoodPlan.SpawnRowEnds)
         {

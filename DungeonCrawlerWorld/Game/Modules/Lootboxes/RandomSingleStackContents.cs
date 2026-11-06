@@ -7,8 +7,9 @@ namespace Game.Modules.Lootboxes;
 /// <summary>Placeholder loot box contents: one stack of 1-10 of a single item, picked uniformly from every tradeable item that isn't itself opened.</summary>
 /// <remarks>
 /// Every loot box uses this until TODO.md's "Lootbox drop tables" gives each type and rarity its own.
-/// Candidates are ordered by Id before the pick, so the result depends only on the rolls and on which
-/// items are registered, never on registration order.
+/// Candidates are read from the catalog's summaries (ItemCatalog.Summaries: every item the content holds, loaded or
+/// not, and any registered beside it) and ordered by Id before the pick, so the result depends only on the rolls and on
+/// which items exist, never on what has been loaded or in what order.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed record RandomSingleStackContents : IItemContents
@@ -21,11 +22,11 @@ public sealed record RandomSingleStackContents : IItemContents
     public IReadOnlyList<ItemContentsEntry> Roll(SeededRandom rolls, ItemCatalog itemCatalog)
     {
         var candidateItemIds = new List<Guid>();
-        foreach (var definition in itemCatalog.Definitions)
+        foreach (var summary in itemCatalog.Summaries)
         {
-            if (definition.Contents is null && definition.CanTrade && !definition.Tags.Has(GameTags.ItemLootbox))
+            if (!summary.HasContents && summary.CanTrade && !summary.DeclaredTags.Has(GameTags.ItemLootbox))
             {
-                candidateItemIds.Add(definition.Id);
+                candidateItemIds.Add(summary.Id);
             }
         }
 

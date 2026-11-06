@@ -66,6 +66,7 @@ public static class Goblin
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
         Build = Build,
+        UsesItems = NPCs.TemporaryNpcLootGrant.AllCoreItemIds,
         Appearance = Appearance,
         Race = new RaceFacet(BodyParts),
         Actions = ActionGrants

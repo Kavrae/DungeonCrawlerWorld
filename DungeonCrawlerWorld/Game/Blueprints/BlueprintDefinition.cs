@@ -50,6 +50,13 @@ public sealed record BlueprintDefinition(Guid Id, string Name)
     /// <summary>The actions every entity built with this definition can use, held here rather than per entity -- see ActionGrant.</summary>
     public IReadOnlyList<ActionGrant> Actions { get; init; } = [];
 
+    /// <summary>The actions its Build reads from the catalog beyond what Actions grants, by Guid.</summary>
+    /// <remarks>Declared rather than found by building, so a plan that spawns it can load them ahead of the build (ResolvedBlueprint.ContentActionIds); BlueprintContentDeclarationTests holds every built-in to what its build reads.</remarks>
+    public IReadOnlyList<Guid> UsesActions { get; init; } = [];
+
+    /// <summary>The items its Build reads from the catalog, by Guid -- what it gives, stocks or rolls from -- declared for the same reason as UsesActions.</summary>
+    public IReadOnlyList<Guid> UsesItems { get; init; } = [];
+
     /// <summary>The auras every entity built with this definition radiates.</summary>
     /// <remarks>Declared rather than written by Build: an aura is the same for every entity of the definition, and declaring it lets a build that names an unregistered aura fail when it is configured rather than at its first spawn.</remarks>
     public IReadOnlyList<AuraGrant> Auras { get; init; } = [];

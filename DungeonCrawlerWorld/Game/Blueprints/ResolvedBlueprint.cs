@@ -12,8 +12,10 @@ public sealed class ResolvedBlueprint
 {
     private readonly ActionGrant[] _actions;
 
-    internal ResolvedBlueprint(BlueprintDefinition definition, ushort[] buildOrder, ushort[] races, ushort[] classes, ActionGrant[] actions, AuraGrant[] auras, NonBlockingKind[] nonBlocking, EntityAppearance appearance, MapLayer layer, Vector2Byte size, LootboxReward? lootbox)
+    internal ResolvedBlueprint(BlueprintDefinition definition, ushort[] buildOrder, ushort[] races, ushort[] classes, ActionGrant[] actions, AuraGrant[] auras, NonBlockingKind[] nonBlocking, EntityAppearance appearance, MapLayer layer, Vector2Byte size, LootboxReward? lootbox, Guid[] contentActionIds, Guid[] contentItemIds)
     {
+        ContentActionIds = contentActionIds;
+        ContentItemIds = contentItemIds;
         Lootbox = lootbox;
         Layer = layer;
         Size = size;
@@ -28,6 +30,12 @@ public sealed class ResolvedBlueprint
     }
 
     public BlueprintDefinition Definition { get; }
+
+    /// <summary>Every action building an entity of it reads from the catalog: each part's grants and what its Build uses (BlueprintDefinition.UsesActions), each once.</summary>
+    public IReadOnlyList<Guid> ContentActionIds { get; }
+
+    /// <summary>Every item building an entity of it reads from the catalog (BlueprintDefinition.UsesItems), each once.</summary>
+    public IReadOnlyList<Guid> ContentItemIds { get; }
 
     /// <summary>Every definition this one builds, itself last, as registry ids.</summary>
     public IReadOnlyList<ushort> BuildOrder { get; }

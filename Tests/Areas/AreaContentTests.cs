@@ -55,12 +55,12 @@ public sealed class AreaContentTests
             entities ?? [],
             markers ?? []);
 
-    private static string Write(AreaDefinition area) => ContentDocument.Write(MasterContent.AreasTable, area, Types);
+    private static string Write(AreaDefinition area) => ContentDocument.Write(GameContent.AreasTable, area, Types);
 
     private static ContentDocumentRecord<AreaDefinition> Read(string text)
     {
         var failures = new List<ContentFailure>();
-        var record = ContentDocument.Read<AreaDefinition>(text, AreaFileName, MasterContent.AreasTable, Types, NoContentReferences.Instance, failures);
+        var record = ContentDocument.Read<AreaDefinition>(text, AreaFileName, GameContent.AreasTable, Types, NoContentReferences.Instance, failures);
         Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
         return record!;
     }
@@ -76,7 +76,7 @@ public sealed class AreaContentTests
             catalog.Register(palette);
         }
 
-        catalog.Register(record.Value!, new ContentRecordLocation(AreaFileName, 1, record.Source));
+        catalog.Register(record.Value!, new ContentRecordLocation(TestContent.MasterLayer, AreaFileName, 1, record.Source));
         foreach (var placement in placements)
         {
             catalog.Register(placement);
@@ -140,7 +140,7 @@ public sealed class AreaContentTests
         Assert.AreEqual(1, lines.Count(line => line.Contains("\"pid\":\"foreman\"", StringComparison.Ordinal)));
         Assert.AreEqual("{", lines[0]);
         Assert.AreEqual("  \"fmt\": 1,", lines[1]);
-        Assert.AreEqual($"  \"table\": \"{MasterContent.AreasTable}\",", lines[2]);
+        Assert.AreEqual($"  \"table\": \"{GameContent.AreasTable}\",", lines[2]);
     }
 
     [TestMethod]
@@ -149,14 +149,14 @@ public sealed class AreaContentTests
         var palette = new AreaPalette(StonePaletteId, "Stone", [Wall, Floor]);
         var placement = new AreaPlacement(PlacementId, AreaId, -1, 2, 10, 20);
 
-        var paletteText = ContentTable.Write(MasterContent.AreaPalettesTable, [palette], Types);
-        var placementText = ContentTable.Write(MasterContent.AreaPlacementsTable, [placement], Types);
+        var paletteText = ContentTable.Write(GameContent.AreaPalettesTable, [palette], Types);
+        var placementText = ContentTable.Write(GameContent.AreaPlacementsTable, [placement], Types);
         var failures = new List<ContentFailure>();
-        var paletteBack = ContentTable.Read<AreaPalette>(paletteText, "p", MasterContent.AreaPalettesTable, Types, NoContentReferences.Instance, failures).Single().Value!;
-        var placementBack = ContentTable.Read<AreaPlacement>(placementText, "q", MasterContent.AreaPlacementsTable, Types, NoContentReferences.Instance, failures).Single().Value!;
+        var paletteBack = ContentTable.Read<AreaPalette>(paletteText, "p", GameContent.AreaPalettesTable, Types, NoContentReferences.Instance, failures).Records.Single().Value!;
+        var placementBack = ContentTable.Read<AreaPlacement>(placementText, "q", GameContent.AreaPlacementsTable, Types, NoContentReferences.Instance, failures).Records.Single().Value!;
 
         Assert.IsEmpty(failures);
-        Assert.AreEqual(paletteText, ContentTable.Write(MasterContent.AreaPalettesTable, [paletteBack], Types));
+        Assert.AreEqual(paletteText, ContentTable.Write(GameContent.AreaPalettesTable, [paletteBack], Types));
         Assert.AreEqual(placement, placementBack);
     }
 
@@ -354,7 +354,7 @@ public sealed class AreaContentTests
         var text = Write(Area()).Replace("\"n\": \"Test area\",", "\"n\": \"Test area\",\n  \"colour\": 3,", StringComparison.Ordinal);
         var failures = new List<ContentFailure>();
 
-        var record = ContentDocument.Read<AreaDefinition>(text, AreaFileName, MasterContent.AreasTable, Types, NoContentReferences.Instance, failures);
+        var record = ContentDocument.Read<AreaDefinition>(text, AreaFileName, GameContent.AreasTable, Types, NoContentReferences.Instance, failures);
 
         Assert.IsNull(record);
         StringAssert.Contains(failures.Single().Reason, "\"colour\"");
@@ -364,13 +364,13 @@ public sealed class AreaContentTests
     public void TheManifest_ReadsEveryAreaFile_WithItsLocation()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"area-manifest-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(Path.Combine(directory, MasterContent.AreasDirectoryName));
+        Directory.CreateDirectory(Path.Combine(directory, GameContent.AreasDirectoryName));
         try
         {
-            File.WriteAllText(Path.Combine(directory, MasterContent.AreasDirectoryName, "test-area.json"), Write(Area()), new UTF8Encoding(false));
-            File.WriteAllText(Path.Combine(directory, MasterContent.AreaPlacementsFileName), ContentTable.Write(MasterContent.AreaPlacementsTable, [new AreaPlacement(PlacementId, AreaId, 0, 0, 0, 0)], Types));
+            File.WriteAllText(Path.Combine(directory, GameContent.AreasDirectoryName, "test-area.json"), Write(Area()), new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(directory, GameContent.AreaPlacementsFileName), ContentTable.Write(GameContent.AreaPlacementsTable, [new AreaPlacement(PlacementId, AreaId, 0, 0, 0, 0)], Types));
 
-            var content = MasterContent.Load(directory, Types);
+            var content = GameContent.Load(GameContent.MasterOnly(directory), Types);
 
             Assert.IsEmpty(content.Failures, string.Join(Environment.NewLine, content.Failures));
             Assert.AreEqual(AreaId, content.Areas.Single().Value.Id);

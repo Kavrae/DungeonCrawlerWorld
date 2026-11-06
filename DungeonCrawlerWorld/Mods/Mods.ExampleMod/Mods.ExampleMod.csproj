@@ -21,4 +21,27 @@
     <ProjectReference Include="..\..\Game\Game.csproj" Private="false" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The mod's content: a Mod content layer the game reads from Definitions beside the DLL (ModuleLoader.LoadMods). -->
+    <None Include="Definitions\**\*.jsonl;Definitions\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
+    dotnet build -p:DeployToGame=true installs the built mod, the DLL and its Definitions folder, as the player would:
+    into %LocalAppData%\DungeonCrawlerWorld\Mods\ExampleMod (Game.Bootstrap.PlayerFolders.Mods), which every build of the
+    game loads at start. The folder is emptied first, so it always holds exactly this build.
+  -->
+  <PropertyGroup>
+    <InstalledModDirectory>$([System.Environment]::GetFolderPath(SpecialFolder.LocalApplicationData))\DungeonCrawlerWorld\Mods\ExampleMod\</InstalledModDirectory>
+  </PropertyGroup>
+
+  <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(DeployToGame)' == 'true'">
+    <ItemGroup>
+      <ModOutputFiles Include="$(OutDir)**\*" />
+    </ItemGroup>
+    <RemoveDir Directories="$(InstalledModDirectory)" />
+    <Copy SourceFiles="@(ModOutputFiles)" DestinationFiles="@(ModOutputFiles->'$(InstalledModDirectory)%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Message Importance="high" Text="ExampleMod installed in $(InstalledModDirectory)" />
+  </Target>
+
 </Project>

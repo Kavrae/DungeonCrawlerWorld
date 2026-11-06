@@ -180,6 +180,7 @@ public static class FloorBuilder
         tierResolver?.PinLocalAndNotify(entityId);
 
         var spawnPosition = FindFreeGroundCellNear(world, spawnOrigin);
+        factory.LoadContentFor(definitions.GetId(Player.Id));
         factory.Spawn(SpawnRequest.At(definitions.GetId(Player.Id), spawnPosition) with { Seed = SpawnSeed(sessionSeed, PlayerSpawnSalt), Crawler = true, ReservedEntityId = entityId });
 
         for (var i = 0; i < TestPoisonStackCount; i++)

@@ -195,6 +195,33 @@ Each phase ends with the game running, a list of checks, and a stop for in-game 
     tree and restart -- expect one Error List row naming the file and line, and the rest of the Items tab intact.
   - Run the exporter -- expect master rewritten byte for byte.
 
+#### Phase 3 as built (2026-11-03)
+
+- Engine: `ContentLayerKind`, `ContentLayer` (`FromDirectory`, `FromText`), `ContentLayers` (`ReadTable`,
+  `ReadDocuments` -> `LayeredRecords<T>`: winning records in first-appearance order, redirects, each layer's module
+  versions). Areas are layered the same way as tables. `ContentFailure.Layer` names the layer, and `ToString` prefixes
+  it (`[Save] Items.jsonl:3: ...`). `ContentTable.Read` returns a `ContentTableFile<T>` (records plus header versions);
+  `ContentTable.WriteRemoval` writes an `rm` line.
+- Versions: `ContentTypeDeclarations.ContentVersion` (default 1); the registry knows which module registered each codec,
+  and `ContentTable.Write` names each module whose codecs wrote a record. **A module at version 1 is left out of the
+  header** (the format's defaults-omitted rule), so today's master gains no `"ver"` and the exporter stays byte for
+  byte; a file gains it once a module raises its version. Documents accept `"ver"` but don't expose it yet.
+- Game: `MasterContent` is renamed **`GameContent`** (it is no longer master alone): same tables and first-ask reading,
+  `Open`/`OpenCollectingFailures`/`Load` over a `ContentLayers`, `TryGetLocation(table, id)` for every record,
+  `WriteMaster` for the exporter. In throwing mode a master or mod failure stops the build; a save's is left out.
+  With no mod layers until Phase 6, a mod-layer failure throws in the game build for now; Phase 6 makes
+  `ModValidation` drop the mod instead.
+- `GameBootstrapper.Build`, `GameBuildPass.Run`/`BuildModules`, `ModValidation.Validate` and `GameModuleContext` take
+  the stack as a required argument. GameShell passes `GameContent.MasterOnly(GameContent.DefaultMasterDirectory)`,
+  tests `TestContent.Layers`, Workshop tests `WorkshopTestContent.Master`.
+- IDE: every build (session, mod trials, previews) reads the source tree's master; `ContentSession.LoadProblems` takes
+  only the session and lists its `ContentFailures`, an area, palette or placement file's going to the Map tab. Because
+  these are now the build's own failures, an area that fails also lists the placements its removal left out.
+- Exporter: builds over the output's master alone and writes only records whose winning layer is master.
+- Checked: all tests pass (3951 + 178); exporter rewrote master byte for byte; headless A/B against HEAD
+  (`baseline-build-debug-pre-content-layers`) simulated the same world (fingerprint `601DB1768BD5E114`), no
+  regressions.
+
 ### Phase 4 -- Save folders and runtime definitions
 
 - Engine (`Engine.Persistence`): `SaveFolder` -- create, open, `save.json` (Decision 15), its `Definitions/` tables as a
@@ -247,6 +274,49 @@ Each phase ends with the game running, a list of checks, and a stop for in-game 
   - Kill the process right after creating one -- expect the next launch to load every complete line.
   - Hand-break the save's line and relaunch -- expect a logged failure and a game that starts.
 
+#### Phase 4 as built (2026-11-03)
+
+- Engine (`Engine.Persistence`): `SaveFolder` (`OpenOrCreate`, `WriteHeader`, `DefinitionsLayer` -- a Save layer named
+  "Save <name>" -- `DefinitionsPathOf`/`DraftsPathOf`, `NewGameName`, `IsValidName`), `SaveHeader` (save.json; `DifferencesFrom`
+  counts format, master hash and module versions, never seed or time), `ContentTableAppender` (one queue on its own
+  thread: `Append` writes the header into a new file and a line break after a line cut short, `RemoveRecords`, `Flush`;
+  `Dispose` flushes). **`SaveArgument` lives here, not in GameShell**, beside `RandomSeed`, because the Workshop's Debug tab
+  (engine side) writes it. Engine.Content gained `ContentGuid.Derive` (now also `LootboxCatalog.ItemIdFor`, same ids),
+  `ContentTable.WriteLine`/`TryReadId`, `ContentTypeRegistry.ModuleContentVersions`, `ContentLayer.ComputeContentHash`.
+- GameShell: `--save=<name>` continues (or makes) that save; with none a windowed game makes one named for its start time
+  and seed. **A headless run makes no save without `--save=`**, so benchmarks never fill the saves folder. The save is a
+  `GameBootstrapper.Build(..., save:)` argument, which puts its layer on top of the stack it is given and makes
+  `GameSession.ContentStore`; `WorldSessionContext` disposes (flushes) it. Startup writes `[Save]` (new or continuing,
+  each header difference) and one `[Content]` line per layer (each table: loaded, left out, as drafts), then every
+  left-out record.
+- Game: the whole-build checks now run their per-record forms (`ContentTagValidation`, `ToggleContentValidation`,
+  `TargetingContentValidation`, `TerrainReferenceValidation.ProblemsOf`, and `AuraContentRegistration.ProblemsOf` -- an aura
+  whose Guid the catalog holds as another definition, or past the 256 the catalog holds), gathered by `ContentChecks`.
+- Game: `ContentStore` with `Actions`, `Items`, `Auras` (`ContentStoreTable<T>`): `CreatePersistent`, `Override`,
+  `RemoveOverride`, `SaveDraft`, `DraftIds`, `TryPublishDraft`, `PublishDrafts`, `TryGetLower`, `DerivedIdOf`; each returns a
+  `ContentStoreResult<T>` (`Saved`, `AlreadySaved`, `SavedAsDraft`, `KeptAsDraft`, `Removed`, `NothingToRemove`, `Refused`,
+  with every failed check). The lower layers are read again, lazily, for an override's target and what a removal restores.
+  **Superseded (2026-11-05): no definition changes during a session.** `Override`/`RemoveOverride` (and publishing an
+  override draft) only write the save and take effect when the next session loads it; `CreatePersistent` is an addition
+  and registers at once (crafted spells, items and their auras). Pinning, the aura catalog's replace-on-register and
+  `AuraCatalog.DefinitionChanged` are gone: a Guid's first registration is its definition for the session. The five
+  code-declared auras (Lava, Holy Ground, Healing Shrine, Radiant Steady and Fading) moved into `Auras.jsonl`, named by
+  Guid from terrain and blueprints, so a mod or save replaces them for every source. A by-id session checks its save
+  layer's records at startup (`ContentCatalogLoader.LoadSaveLayers`). A new definition that fails gets a random working Guid each
+  time it is made, so making it twice makes two drafts.
+  **Overriding again with the save's last override line for that Guid appends nothing** (found in testing): the removal
+  lines are taken out instead (`ContentTableAppender.RemoveRemovalLines`), and an override still in force is `AlreadySaved`.
+- TEMPORARY `RuntimeDefinitionAdminCommands` (Game.Admin) and the five options on the player in Admin Mode
+  (`AdminContextMenuOptions`), shown only with a save; Override/Remove are enabled by whether the save overrides Quick
+  Attack; a created or published action is granted and bound to the first free base or unlocked Expansion slot; a draft,
+  a refusal or a kept draft shows a System notification listing the problems. The incomplete action is Toxic Aura aimed
+  at a single target (`{"sh":"SingleTarget","r":4}`); setting its `tg` back to `{"sh":"Self","an":"Caster"}` fixes it.
+- Workshop: the Debug tab's Launch Settings has a Save box (`DebugLaunchOptions.SaveName`, passed as `--save=`, a name no
+  folder can have warned about); the options file is version 3.
+- Checked: all tests pass (3971 + 179; new `SaveFolderTests`, `ContentStoreTests`); seeded headless run with no save gave
+  Phase 3's fingerprint (`601DB1768BD5E114`); a headless run with `--save=` made the folder and save.json, and a second
+  continued it with no difference reported; the exporter rewrote master byte for byte.
+
 ### Phase 5 -- Load by id
 
 - The index (Decision 18), scanned on a worker during the session build over every layer.
@@ -273,6 +343,61 @@ Each phase ends with the game running, a list of checks, and a stop for in-game 
   - Open a fresh chest repeatedly -- expect items from the whole catalog, including ones nothing nearby has loaded.
   - Grant a save-created action by Admin Mode before anything has loaded it -- expect it found.
 
+#### Phase 5 as built (2026-11-04)
+
+- Engine: `ContentTable.ReadIndex` (every line's id, envelope, byte offset and length, and a caller's summary, without
+  decoding) and `ReadLine`; `ContentLayers.IndexTable` -> `ContentIndex<TSummary>` (winners in first-appearance order,
+  redirects, `TryResolve` following them) and `ContentLayers.Load` (one record from its bytes). `ReadTable` and
+  `IndexTable` share one merge, so layering can't differ between them. `ContentLayer.TryReadBytes`/`ReadBytes`,
+  `GameplayTag.TryGet`.
+- `GameContent` indexes actions, items and auras on a worker as it opens, in every mode, and decodes a record the first
+  time it is asked for (`TryLoadAction`/`TryLoadItem`/`TryLoadAura`, `Prefetch` from any thread; one instance per Guid; a
+  record's auras load with it). `Actions`/`Items`/`Auras` decode everything, for eager builds; areas are still read whole.
+  `ActionSummaries`/`ItemSummaries` (`DefinitionSummary`: Guid, name, sprite, declared tags, trades, has contents) in Guid
+  order. `CountIn` returns `ContentTableCounts` (records won, decoded so far, left out); the startup line shows
+  "N found, M loaded" when they differ.
+- `ActionCatalog` gained the definition-source hook (`IActionDefinitionSource`); both catalogs gained `Summaries` (the
+  content's, plus anything registered beside it). `ContentCatalogLoader` (Game.Content) is the source in a by-id build:
+  decode, per-record checks (`ContentChecks`; a save's failure reported and left out, a master's or mod's throws), register
+  its auras, register it; it counts `MissedPlanLoads`.
+- **By id is the default for `GameBootstrapper.Build`** (`loadsContentById: true`), so the game and every test session
+  load by id; `GameBuildPass.Run`/`BuildModules` default to eager, and the Workshop passes `loadsContentById: false`.
+  CoreActionsModule/CoreItemsModule register everything only in an eager build.
+- **Blueprints declare the content their builds read** (`BlueprintDefinition.UsesActions`/`UsesItems`, flattened into
+  `ResolvedBlueprint.ContentActionIds`/`ContentItemIds` with the action grants) -- the plan named only spawn lists, and
+  builds read items by Guid in code. Declared on PlayerKit, the three NPC races (their temporary loot), both shop stocks,
+  the treasure chest and the test dummy; `BlueprintContentDeclarationTests` builds every spawnable blueprint and fails on a
+  load it didn't declare.
+- `EntityFactory.ContentOf`/`PrefetchContent`/`RegisterContent`/`LoadContentFor`; `TestMapBuilder.Plan` names and
+  prefetches its spawns' content on the worker (`NeighborhoodPlan.Content`), and `Spawn` registers it on the main thread,
+  so startup and the streamer both go through it. The player's kit loads before the player spawns; Admin Mode's Spawn and
+  every `Apply` load what they need first.
+- Whole-catalog readers: `RandomSingleStackContents` and the startup missing-sprite list (`ContentSpriteNames`) read
+  summaries. `WholeCatalogReadsArchitectureTests` fails on game code (Game, Presentation, GameShell) enumerating an action
+  or item catalog's `Definitions`, except the four whole-build checks.
+- `ModValidation` trial-builds the built-ins alone over every record first (eager), so a broken master or mod record fails
+  before play; with `collectsContentFailures` (the Workshop) every trial collects instead and that one is skipped.
+- Gauges (`Content`): `ActionsLoaded`, `ItemsLoaded`, `AurasLoaded`, `MissedPlanLoads` (by-id sessions only).
+  NpcBehaviorModule reads Power Attack and the health potion while it builds, so two loads miss before the first frame.
+- `ContentStore` reads the lower layers by id too, and the save's overrides from the index.
+- Measured (`ContentLoadingMeasurementTests`, Performance category, a synthetic master of 5,000 actions and 5,000 items
+  beside the shipped ones, Debug):
+
+  | | Time | Allocated | Held |
+  |---|---|---|---|
+  | Eager: every record decoded | 540 ms | 107 MB | 14.6 MB |
+  | By id: index, then the player's kit (32 records) | 80 ms | 24.5 MB | 3.1 MB |
+  | Session build, eager | 587 ms | 134 MB | 23.7 MB |
+  | Session build, by id | 57 ms | 33 MB | 11.9 MB |
+
+  JSON parsing (`JsonDocument` alone over every line) is 6% of an eager load's time and 10% of its allocation, so
+  **no TODO entry for streaming reads or a binary encoding** (Decision 3). With a master that size the built-ins trial
+  in `ModValidation` would still pay the eager cost at every startup.
+- Checked: all tests pass (3982 + 179); headless A/B against `pre-content-layers` (the build before Phase 3): same
+  fingerprint `601DB1768BD5E114`, no row past the threshold, worst frame 7.7-8.2 ms (A 7.9-10.8); gauges over frames
+  600-3600: 13 actions, 15 items, 4 auras loaded, 0 missed-plan loads; memory A/B: pools and live heap unchanged, 9.6 MB
+  more allocated before the range (the built-ins trial).
+
 ### Phase 6 -- Mod manifests
 
 - A mod folder may hold `Definitions/*.jsonl`, a Mod layer in load order between master and save (Decision 7).
@@ -290,6 +415,31 @@ Each phase ends with the game running, a list of checks, and a stop for in-game 
     normal.
   - Open the Workshop -- expect the mod's records marked with the mod's name.
   - Right-click the player in Admin Mode -- expect none of Phase 4's temporary options.
+
+#### Phase 6 as built (2026-11-04)
+
+- **A mod is a folder**: each subfolder of the mods directory is one mod -- the modules of every DLL directly in it and its
+  `Definitions` folder as a content layer named "Mod <folder>" (`ModuleLoader.LoadMods` -> `ModPackage`). A DLL directly
+  in the mods directory is still a code-only mod per module, so existing drops keep working. A content-only folder is a
+  mod too.
+- `ModValidation` trial-builds each mod -- its modules and its layer together, over the given content and no other
+  mod's -- and drops the whole mod when anything fails, naming its layer, file and line (`[Mod X] Items.jsonl:2: ...`, on
+  `Console.Error` through the `[ModuleLoad]` line). Survivors' layers are `ValidatedMods.ContentLayers`, which
+  `GameBootstrapper.Build` puts on the stack between master and the save. With `collectsContentFailures` (the Workshop)
+  a mod's failing record is collected and listed, and the mod kept.
+- The `Redirects` table (`Redirects.jsonl`, `ContentRedirect`: id, `to`, `tb` the table; codec registered by Core) is read
+  across layers by every build's content checks and kept in `GameContent.Redirects`; nothing applies it yet.
+- Workshop: `ContentOrigins` labels a record whose winning line is in a mod's layer "Name [Mod]" in the Items, Actions and
+  Auras tabs.
+- `Mods.ExampleMod` ships `Definitions/Items.jsonl`: Example Tonic (its own Guid, 25% heal) and Health Potion replaced at
+  75%. `dotnet build ... -p:DeployToGame=true` copies its output into GameShell's `Mods/ExampleMod`. **The new item can't
+  reach a shop's stock** -- shop stock lists are code (`GeneralShopStock`, `PotionShopStock`) -- so it reaches the game
+  through loot boxes, which pick from every item's summary, and shows in the Workshop. `Mods.TestFixtures` ships
+  `BrokenContentMod/Definitions/Items.jsonl` (an undeclared key on line 2), a content-only mod folder.
+- The TEMPORARY Admin Mode runtime-definition options and `RuntimeDefinitionAdminCommands` are removed; `ContentStore`
+  stays.
+- Checked: all tests pass (3986 + 180; new `ModContentTests`, a Workshop label test); a headless run with ExampleMod
+  deployed listed its layer (`Items 2 found`) and master's Items at 15, Health Potion won by the mod.
 
 ### Phase 7 -- Mod area files
 
@@ -309,6 +459,117 @@ Map areas are content too: `Areas/*.json` and the `AreaPalettes`/`AreaPlacements
   - Add the broken fixture -- expect the mod dropped with its file, row and column reported.
   - Give ExampleMod's placement the starting area's position -- expect it refused and the starting area intact.
   - Open the Map tab -- expect the mod's area listed and marked.
+
+#### Phase 7 as built (2026-11-05)
+
+- Most of it was already there: areas and the area tables are read across layers (`ContentLayers.ReadDocuments`/
+  `ReadTable`, Phase 3), so a mod's `Definitions/Areas/*.json`, `AreaPalettes.jsonl` and `AreaPlacements.jsonl` add or
+  replace by Guid, and a mod's trial build runs `AreaContentValidation`, whose failures name the layer, file, line and
+  column (`[Mod BrokenAreaMod] Areas/broken-area.json:14:9`), dropping the mod.
+- New: `AreaContentValidation.RefuseOverlappingPlacements`, run first in every build: a fixed placement overlapping one
+  placed in the same neighborhood by an earlier layer (master, or a mod earlier in load order) is taken out and reported
+  as a `ContentFailure` -- never a thrown build and never a dropped mod; the earlier keeps its place. Two placements of
+  one layer that overlap are still that layer's error. Cross-mod overlap is only seen by the session's build (each trial
+  is master plus one mod), where it is refused the same way and listed at startup.
+- Workshop: the Map tab labels a mod's areas, palettes and placements "Name [Mod]" (`ContentOrigins`).
+- `Mods.ExampleMod` ships Example room (10x7, walled, door on the west, a treasure chest) placed in neighborhood (0, 0)
+  at (36, 10), beside the starting area; its project copies `*.json` as well as `*.jsonl`. `Mods.TestFixtures` ships
+  `BrokenAreaMod`, a content-only mod whose area's Ground row holds `q`.
+- Checked: all tests pass (3989 + 180); a headless run with ExampleMod deployed listed its `AreaPlacements 1 loaded;
+  Areas 1 loaded`.
+
+### Phase 8 -- Mods in the player's own folder
+
+Modding should be simple compared to other games: a player never navigates the game's install or build folders. Mods
+live in `%LocalAppData%\DungeonCrawlerWorld\Mods\`, beside `Saves\`, one folder per mod (Phase 6's layout).
+
+Settled 2026-11-05: **the game reads that folder directly, at every start, in every build** -- Debug, Release or
+published -- so a player drops a mod folder in and starts the game, with nothing to build. Nothing is copied into
+`bin`, so there is no second copy to go stale (the copy-mode question goes away). The mirror rule stays for installing a
+mod from its build: ExampleMod's deploy empties the mod's folder before copying.
+
+#### Phase 8 as built (2026-11-05)
+
+- `Game.Bootstrap.PlayerFolders` (`Root`, `Saves`, `Mods`): `%LocalAppData%\DungeonCrawlerWorld\{Saves,Mods}`, the one
+  place the game, the Workshop and its Play read. `WorldSessionBootstrapper.SavesDirectory` is gone in its favour.
+- GameShell creates the Mods folder if it is missing and writes `[Mods] Loading every mod folder in <path>` at start.
+  **A headless run loads no mods** (`ModValidation.Validate(modsDirectory: null, ...)` still trial-builds the
+  built-ins), so a mod installed for play never changes a benchmark's world.
+- The Workshop validates and builds its session over `PlayerFolders.Mods`, the same mods Play starts the game with.
+- `Mods.ExampleMod`'s `-p:DeployToGame=true` installs to `%LocalAppData%\DungeonCrawlerWorld\Mods\ExampleMod`,
+  emptying it first.
+- A loaded mod's DLL stays locked while the game runs (its load context is never unloaded), so replacing one means
+  closing the game first -- TODO.md "Reload mods without restarting".
+- Checked: all tests pass (3990 + 180); the deploy installed the DLL and its Definitions under LocalAppData (removed
+  again afterwards).
+- Checks:
+  - `dotnet build DungeonCrawlerWorld/Mods/Mods.ExampleMod/Mods.ExampleMod.csproj -p:DeployToGame=true`, then start the
+    game from Visual Studio, the Workshop's Play, or the Release exe -- expect `[Mods] Loading ...` and
+    `[Content] Mod ExampleMod ...`, Example room beside the starting area, and no `bin\...\Mods` folder involved.
+  - Delete `%LocalAppData%\DungeonCrawlerWorld\Mods\ExampleMod` and start again -- expect no Mod layer and master's
+    Health Potion back at 50%.
+  - Open the Workshop with it installed -- expect "[ExampleMod]" on its records.
+
+#### Later: mods chosen in a Mod menu, loaded per session (2026-11-05)
+
+The game will start into a Main Menu instead of loading everything at startup. Its Mod menu lists, adds, deletes,
+enables and disables mods; starting a game from the menu is what loads everything that loads at startup today, the
+enabled mods with it. Recommended (not yet decided), so the player's folder is never locked, a session never sees a
+file change under it, and it holds up at 100+ mods, large content libraries and large asset packs:
+- **DLLs load from their bytes** (`AssemblyLoadContext.LoadFromStream`), not their path, so
+  `%LocalAppData%\DungeonCrawlerWorld\Mods\` is never locked and the Mod menu can delete or replace a mod at any time.
+  Only what can't load from memory (a native library) is copied, into a per-session folder under
+  `%LocalAppData%\DungeonCrawlerWorld\`, never into `bin` (a published game's folder may not be writable, and two
+  running games would collide). DLLs are small, so holding their bytes costs little.
+- **Tables are snapshotted on disk, not in memory.** By-id loading (Phase 5) keeps byte offsets into each table and reads
+  records from them later, so an edited mod file would break a running session. When a session starts, each enabled
+  mod's table files are copied into a cache under `%LocalAppData%\DungeonCrawlerWorld\Cache\`, keyed by their hash, and
+  the session reads the copy; an unchanged mod reuses its copy, so nothing is copied again. Holding them in memory as
+  text instead would cost twice their size and undo what loading by id saves (a 50,000-item library). An in-memory
+  layer, where one is used, holds bytes (`ContentLayer.FromText` does since 2026-11-05).
+- **Assets are read once and released**, never snapshotted: a sprite sheet or sound is opened for reading (sharing read
+  and delete), loaded (uploaded as a texture) and closed, so nothing stays open, nothing is locked and nothing is
+  copied; a file changed during a session is seen by the next. Mods can't ship sprites yet (the manifest and sheets are
+  the game's own, all loaded when the window opens), so an asset pack also needs: mod sprite manifests layered like
+  content, and textures loaded the first time a sprite name is drawn, with a texture-memory gauge, so a 500 MB pack
+  doesn't load whole at startup.
+- **Validation is cached per mod -- a test load once, then a load that trusts it.** Today every start trial-builds every
+  mod (a whole module build each, reading all of master), which at 100 mods is seconds, and with a large master about a
+  minute. Validate a mod when it changes -- the Mod menu's "checking mods..." -- and keep the result keyed by its files'
+  hash, master's hash and the game's version; a start whose hashes match skips that mod's trial. The session then skips
+  the per-record checks (`ContentChecks` in `ContentCatalogLoader`) for records of a validated layer -- today it checks
+  every record it loads, master's included, though the trial already checked them all; a save's records are never
+  trial-built and are always checked. Master's records could skip them already (nothing changes master's files while the
+  game runs), but measure first: the checks are a small share of a record's decode.
+  - **Trusting it is safe only for the bytes that were validated**, which is why this goes with the hash-keyed table
+    cache above: the session reads the cached copy, and its hash is the one that passed. Without that cache a file
+    edited between validation and use would break the assumption, so the checks stay.
+  - **What is never skipped**: a file's existence, permission and emptiness checks, and a decode that turns any bad
+    line into a `ContentFailure`. They cost microseconds per table (Phase 5: JSON parsing alone is 6% of an eager load,
+    decoding most of the rest) and are what make a moved, deleted or half-written file a reported failure instead of a
+    crash mid-session.
+  - **One decoder, not a checked and an unchecked one**: a codec's `ContentSchema` is the one statement the reader, the
+    writer and the IDE's inspector share, and two decoders would drift. If decoding itself needs to be faster, profile
+    it (the undeclared-key check per object, allocation) and make the one path faster.
+- **Mods declare the mods they require**, and a trial includes them, so a mod using another's codecs or naming its records
+  validates; then **one check of the whole enabled set** runs before the session starts, for what one-mod trials can't
+  see (two mods replacing one module, overlapping placements, conflicting records).
+- **Session-local ids get headroom**: auras are byte ids (256 a session), which 100 mods could exhaust; blueprints,
+  tags and terrain are 16-bit. Widen auras before mods are common -- nothing persists one.
+- **The mod list is a file of its own** (e.g. `%LocalAppData%\DungeonCrawlerWorld\mod-list.json`: each mod's enabled
+  state and load order), as Factorio's `mod-list.json` and RimWorld's `ModsConfig.xml` are; a disabled mod stays in its
+  folder.
+- **Ending a session unloads its mods' load contexts** (already collectible), so another session can start with
+  another set with no restart -- unlike RimWorld or Minecraft, whose runtimes can't unload code. Needs a test that the
+  context is really collected after a session ends (a static, a cache or an event handler holding a mod's type keeps it
+  loaded).
+- How others do it: RimWorld, Minecraft (Forge/Fabric) and Stardew (SMAPI) change mods from a menu or launcher and
+  restart to apply them; Factorio manages them in its main menu and reloads its mod state before the next game; Mod
+  Organizer 2 overlays mods without touching or locking the originals; .NET loaders and ASP.NET shadow copying load
+  from bytes or from a private copy, never from the file the user edits.
+- Fixed already (2026-11-05): `ContentLayer.FromText` held strings and re-encoded a whole file for every record a by-id
+  read took from it; it holds each file's bytes now. `ActionCatalog`/`ItemCatalog.Summaries` rebuilt their merged list
+  on every call (every loot box roll); they rebuild it only when the catalog's registrations change.
 
 ## Dependencies on other work
 

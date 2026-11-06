@@ -6,8 +6,8 @@ namespace Presentation.MapRendering;
 /// <summary>The glow auras cast on a map cell: the colours of the auras reaching it, blended by each one's power there, and how opaque their glow is.</summary>
 /// <remarks>
 /// BeginPass reads the auras in the field, their colours and their glow opacity multipliers once, so a pass over many cells reads each
-/// aura's definition once rather than once per cell. A definition replaced since is picked up by the next pass, which
-/// AuraPowerView.Version changing is what starts.
+/// aura's definition once rather than once per cell. A pass starts whenever AuraPowerView.Version changes, so an aura
+/// whose first source has just gone in is in the next one.
 /// </remarks>
 public sealed class AuraGlowBlend(AuraPowerView auraPower)
 {

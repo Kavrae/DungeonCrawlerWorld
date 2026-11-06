@@ -23,7 +23,7 @@ public static class TemporaryNpcLootGrant
     private const string ChargedWandKind = "TemporaryNpcLootGrant.ChargedWand";
 
     /// <summary>The items an NPC can be granted, by their BuiltInItemIds Guid.</summary>
-    private static readonly Guid[] AllCoreItemIds =
+    public static readonly Guid[] AllCoreItemIds =
     [
         BuiltInItemIds.HealthPotion,
         BuiltInItemIds.ManaPotion,

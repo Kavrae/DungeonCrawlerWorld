@@ -62,7 +62,7 @@ public sealed class DiagnosticsLinkTests
                 continue;
             }
 
-            var gaugeValues = new double[16];
+            var gaugeValues = new double[64];
             var gaugeCount = DiagnosticsFrameRecord.Read(payload, out var record, gaugeValues);
             frames.Add((record, gaugeValues[..gaugeCount]));
         }
@@ -210,7 +210,7 @@ public sealed class DiagnosticsLinkTests
         engine?.Start();
 
         var map = new Map(new Vector3Int(40, 40, 3));
-        var session = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 5, initialEntityCapacity: 1_000, initialComponentCapacity: 100);
+        var session = GameBootstrapper.Build(ValidatedMods.None, map, TestContent.Layers, sessionSeed: 5, initialEntityCapacity: 1_000, initialComponentCapacity: 100);
         using var ecsContext = session.EcsContext;
         var factory = session.Internals.Factory;
         for (var index = 0; index < 6; index++)

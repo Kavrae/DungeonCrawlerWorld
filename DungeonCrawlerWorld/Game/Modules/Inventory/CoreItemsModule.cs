@@ -8,7 +8,8 @@ namespace Game.Modules.Inventory;
 /// <summary>
 /// Registers the built-in items -- race/class-agnostic items any entity can carry -- from the master manifest's Items
 /// table, in file order. See PlayerKit for where these are granted, by their BuiltInItemIds. A disabled item's
-/// replacement is registered as its redirect.
+/// replacement is registered as its redirect. A build that loads content by id registers none up front: the catalog
+/// loads each the first time it is asked for (ContentCatalogLoader).
 /// </summary>
 public sealed class CoreItemsModule : IGameModule
 {
@@ -21,6 +22,12 @@ public sealed class CoreItemsModule : IGameModule
 
     public void Configure(GameModuleContext context)
     {
+        if (context.LoadsContentById)
+        {
+            context.ContentCatalogLoader.ServeItems();
+            return;
+        }
+
         var content = context.Content;
         foreach (var item in content.Items)
         {

@@ -153,7 +153,7 @@ public sealed class HolyGroundTests
         var session = BuildSession();
 
         var context = session.Build.Context;
-        var holyGroundAuraId = context.Auras.GetId(BuiltInTerrain.HolyGroundAura.Id);
+        var holyGroundAuraId = context.Auras.GetId(Game.Modules.Auras.BuiltInAuraIds.HolyGround);
         var powerView = new Game.Views.AuraPowerView(context.AuraField, context.Auras);
 
         Assert.AreEqual(8, powerView.PowerAt(HolyGroundPosition.X, HolyGroundPosition.Y, HolyGroundPosition.Z, holyGroundAuraId));

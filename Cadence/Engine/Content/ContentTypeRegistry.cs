@@ -10,8 +10,13 @@ namespace Engine.Content;
 /// </remarks>
 public sealed class ContentTypeRegistry
 {
+    /// <summary>A module's content version until it declares another (ContentTypeDeclarations.ContentVersion).</summary>
+    public const int DefaultContentVersion = 1;
+
     private readonly Dictionary<Type, IContentCodec> _valueCodecsByType = [];
     private readonly Dictionary<Type, PolymorphicFamily> _familiesByBaseType = [];
+    private readonly Dictionary<IContentCodec, string> _moduleNamesByCodec = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<string, int> _contentVersionsByModuleName = new(StringComparer.Ordinal);
 
     /// <summary>Runs every module's DeclareContentTypes, in order.</summary>
     public static ContentTypeRegistry Declare(IEnumerable<IModule> modules)
@@ -60,12 +65,39 @@ public sealed class ContentTypeRegistry
         return _familiesByBaseType.TryGetValue(baseType, out var family) && family.CodecsByName.TryGetValue(name, out codec!);
     }
 
+    /// <summary>The name of the module that registered codec.</summary>
+    public string ModuleOf(IContentCodec codec) =>
+        _moduleNamesByCodec.TryGetValue(codec, out var moduleName)
+            ? moduleName
+            : throw new InvalidOperationException($"The {codec.ValueType.Name} codec isn't registered here.");
+
+    /// <summary>The content version moduleName declared: what a table written through its codecs records in its header.</summary>
+    public int ContentVersionOf(string moduleName) => _contentVersionsByModuleName.GetValueOrDefault(moduleName, DefaultContentVersion);
+
+    /// <summary>The content version of every module that registered a codec or declared a version, by module name in ordinal order.</summary>
+    public IReadOnlyDictionary<string, int> ModuleContentVersions =>
+        new SortedDictionary<string, int>(
+            _moduleNamesByCodec.Values.Concat(_contentVersionsByModuleName.Keys).Distinct(StringComparer.Ordinal).ToDictionary(moduleName => moduleName, ContentVersionOf, StringComparer.Ordinal),
+            StringComparer.Ordinal);
+
+    internal void SetContentVersion(string moduleName, int version)
+    {
+        if (version < DefaultContentVersion)
+        {
+            throw new ArgumentOutOfRangeException(nameof(version), version, $"{moduleName}'s content version must be at least {DefaultContentVersion}.");
+        }
+
+        _contentVersionsByModuleName[moduleName] = version;
+    }
+
     internal void AddValueCodec(IContentCodec codec, string moduleName)
     {
         if (!_valueCodecsByType.TryAdd(codec.ValueType, codec))
         {
             throw new InvalidOperationException($"{moduleName} registers a content codec for {codec.ValueType.Name}, which already has one.");
         }
+
+        _moduleNamesByCodec[codec] = moduleName;
     }
 
     internal void AddPolymorphicCodec(Type baseType, string name, IContentCodec codec, string moduleName)
@@ -87,6 +119,7 @@ public sealed class ContentTypeRegistry
         }
 
         family.Members.Add((name, codec));
+        _moduleNamesByCodec[codec] = moduleName;
     }
 
     private PolymorphicFamily GetFamily(Type baseType) =>

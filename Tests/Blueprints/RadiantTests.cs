@@ -4,6 +4,7 @@ using Game.Admin;
 using Game.Blueprints.Parts;
 using Game.Blueprints.Races;
 using Game.Bootstrap;
+using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Movement.Components;
@@ -51,8 +52,8 @@ public sealed class RadiantTests
         build.Factory.Apply(goblinId, build.Context.Definitions.GetId(Radiant.Id));
 
         var field = build.Context.AuraField;
-        var steadyId = build.Context.Auras.GetId(Radiant.SteadyAura.Id);
-        var fadingId = build.Context.Auras.GetId(Radiant.FadingAura.Id);
+        var steadyId = build.Context.Auras.GetId(BuiltInAuraIds.RadiantSteady);
+        var fadingId = build.Context.Auras.GetId(BuiltInAuraIds.RadiantFading);
         var edge = GoblinPosition with { X = GoblinPosition.X + 30 };
         Assert.AreEqual(2, build.EcsContext.ComponentManager.GetMultiPool<AuraSourceComponent>().CountForEntity(goblinId));
         Assert.AreEqual(8, field.GetTotalPowerAt(edge, steadyId));

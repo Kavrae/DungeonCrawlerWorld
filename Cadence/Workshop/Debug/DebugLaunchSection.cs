@@ -5,7 +5,7 @@ using UIEngine.UI.ColorPalettes;
 
 namespace Workshop.Debug;
 
-/// <summary>The Debug tab's Launch Settings section: the diagnostics features under All, the seed, the benchmark range and headless, extra arguments, what the game would refuse, then the whole command line Play starts the game with and where the settings are saved.</summary>
+/// <summary>The Debug tab's Launch Settings section: the diagnostics features under All, the seed, the save, the benchmark range and headless, extra arguments, what the game would refuse, then the whole command line Play starts the game with and where the settings are saved.</summary>
 /// <remarks>
 /// Every change is the debugging's Options at once, saved for the next Workshop run and used by the next Play. A switched-off
 /// option keeps its value: the seed field is disabled while Random is ticked, and Headless is disabled until Benchmark frames
@@ -38,6 +38,7 @@ public sealed class DebugLaunchSection(DebugTabServices services, WorkshopDebugg
     private const float RandomToggleWidth = 90f;
     private const float SeedFieldWidth = 130f;
     private const float UseLastSeedWidth = 120f;
+    private const float SaveNameWidth = 320f;
     private const float BenchmarkToggleWidth = 150f;
     private const float FrameLabelWidth = 40f;
     private const float FrameFieldWidth = 100f;
@@ -51,6 +52,7 @@ public sealed class DebugLaunchSection(DebugTabServices services, WorkshopDebugg
     private Button _copyOptionsFile = null!;
     private TextWindow _headlessNote = null!;
     private TextBox _extraArguments = null!;
+    private TextBox _saveName = null!;
     private TextWindow _problems = null!;
 
     public Window Window { get; private set; } = null!;
@@ -73,6 +75,9 @@ public sealed class DebugLaunchSection(DebugTabServices services, WorkshopDebugg
     public Toggle HeadlessToggle { get; private set; } = null!;
 
     public TextBox ExtraArgumentsBox => _extraArguments;
+
+    /// <summary>The save name, empty for a new game.</summary>
+    public TextBox SaveNameBox => _saveName;
 
     /// <summary>The headless note as shown; empty unless a run would be headless.</summary>
     public string HeadlessNoteText => _headlessNote.OriginalText;
@@ -125,6 +130,20 @@ public sealed class DebugLaunchSection(DebugTabServices services, WorkshopDebugg
         SeedField.Configure(options.Seed, int.MinValue, int.MaxValue);
         SeedField.ValueChanged += value => Change(debugging.Options with { Seed = (int)value });
         UseLastSeedButton = CreateButton(ref x, y, UseLastSeedWidth, "Use last seed", OnUseLastSeed);
+        y += DebugTabChrome.RowHeight + DebugTabChrome.RowGap;
+
+        CreateHeading(ref y, width, $"Save ({Engine.Persistence.SaveArgument.ArgumentPrefix}), empty for a new game:");
+        _saveName = services.Pool.CreateElement<TextBox>(Window, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, y), Size = new Vector2(SaveNameWidth, DebugTabChrome.RowHeight), MaximumSize = new Vector2(SaveNameWidth, DebugTabChrome.RowHeight), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = true },
+            Content = new ElementContentOptions { ContentColor = Color.White },
+            Text = new TextOptions { TextColor = WindowPalette.BodyTextColor },
+        });
+        _saveName.GhostText = "A new save named for its start time and seed";
+        Window.AddChild(_saveName);
+        _saveName.SetText(options.SaveName);
+        _saveName.TextChanged += _ => CommitSaveName();
         y += DebugTabChrome.RowHeight + DebugTabChrome.RowGap;
 
         CreateHeading(ref y, width, $"Benchmark ({BenchmarkFrameRange.ArgumentPrefix}START-END, {HeadlessArgument.Argument})");
@@ -306,6 +325,14 @@ public sealed class DebugLaunchSection(DebugTabServices services, WorkshopDebugg
         var startFrame = (long)StartFrameField.Value;
         var endFrame = System.Math.Max((long)EndFrameField.Value, startFrame + 1);
         Change(debugging.Options with { BenchmarkFrames = new BenchmarkFrameRange(startFrame, endFrame) });
+    }
+
+    private void CommitSaveName()
+    {
+        if (_saveName.OriginalText != debugging.Options.SaveName)
+        {
+            Change(debugging.Options with { SaveName = _saveName.OriginalText });
+        }
     }
 
     private void CommitExtraArguments()

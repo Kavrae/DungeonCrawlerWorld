@@ -42,15 +42,26 @@ public sealed class GameModuleContext
     /// <param name="services">What the engine created for this build.</param>
     /// <param name="world">The build's World, over the pools of services.ComponentManager.</param>
     /// <param name="crawlerNumbers">The session's crawler numbers; null for a build that spawns no crawlers.</param>
+    /// <param name="content">The content layers the build reads its actions, items, auras and areas from (Content).</param>
     /// <param name="sessionSeed">The seed every random stream of the build is derived from (RandomStreams).</param>
-    /// <param name="collectsContentFailures">For a tool's build (the IDE): content that fails to load or check is left out and kept in ContentFailures instead of stopping the build. Only the content checks that can leave a record out (the master manifest's records, areas) do; the rest still throw.</param>
+    /// <param name="collectsContentFailures">For a tool's build (the IDE): content that fails to load or check is left out and kept in ContentFailures instead of stopping the build. Only the content checks that can leave a record out (the content's records, areas) do; the rest still throw.</param>
+    /// <param name="loadsContentById">For a game's session: actions and items are loaded into the catalogs the first time they are asked for (ContentCatalogLoader), not all registered in Configure. Never with collectsContentFailures: a tool reads everything.</param>
     public GameModuleContext(
         EcsBuildServices services,
         World.World world,
+        ContentLayers content,
         int sessionSeed,
         UniqueNumberAllocator? crawlerNumbers = null,
-        bool collectsContentFailures = false)
+        bool collectsContentFailures = false,
+        bool loadsContentById = false)
     {
+        if (loadsContentById && collectsContentFailures)
+        {
+            throw new ArgumentException("A tool's build reads all of its content; it can't load it by id.", nameof(loadsContentById));
+        }
+
+        _contentLayers = content;
+        LoadsContentById = loadsContentById;
         var componentManager = services.ComponentManager;
         var entityManager = services.EntityManager;
         var eventBus = services.EventBus;
@@ -80,13 +91,15 @@ public sealed class GameModuleContext
         // catch-all behind ProcessingTierResolver.CreateEntityAt. See that class's own remarks.
         world.EntityPlaced += ProcessingTierResolver.EnsureTiered;
 
+        ContentCatalogLoader = new ContentCatalogLoader(() => Content, Actions, Items, Auras, () => new ContentChecks(GameplayTags, Auras, Terrain), failure => ReportContentFailures([failure]));
+
         Lootboxes = new LootboxCatalog(Items);
         Items.AddDefinitionSource(Lootboxes);
         LootboxOpener = new LootboxOpener(componentManager, Lootboxes, Items, RandomStreams.SeedFor(LootboxOpener.RandomStream));
 
         SimulationScope = new SimulationScope(new ProcessingTierQuery(tiers).IsSimulated);
         FloatingTextFeed = new FloatingTextFeed(eventBus, tiers, transforms);
-        EntityFactory = new EntityFactory(Definitions, Auras, Actions, Items, world, entityManager, componentManager, MovedEntities, SimulationClock, ProcessingTierEvents, ProcessingTierResolver, crawlerNumbers, RandomStreams.SeedFor(EntityFactory.RuntimeSeedStream));
+        EntityFactory = new EntityFactory(Definitions, Auras, Actions, Items, world, entityManager, componentManager, MovedEntities, SimulationClock, ProcessingTierEvents, ProcessingTierResolver, crawlerNumbers, RandomStreams.SeedFor(EntityFactory.RuntimeSeedStream), loadsContentById ? ContentCatalogLoader : null);
         _effectServices = new Lazy<EffectServices>(() => EffectServices.For(componentManager, EntityKeys, eventBus, RandomStreams.Get(EffectServices.RandomStream), PlayerQuery, Definitions, StatusEffectAppliers, Auras, FloatingTextFeed,
             entityManager, world, position => EntityFactory.Spawn(SpawnRequest.At(Definitions.GetId(AuraAnchor.Id), position))));
         _toggles = new Lazy<Toggles>(() => new Toggles(componentManager.GetMultiPool<ActiveToggleComponent>(), EffectServices));
@@ -122,20 +135,28 @@ public sealed class GameModuleContext
     /// <summary>Every content codec this build's modules registered -- what a manifest is read and written through.</summary>
     public ContentTypeRegistry ContentTypes { get; }
 
-    /// <summary>The master manifest's actions, items and auras, read through ContentTypes the first time a module asks (CoreActionsModule and CoreItemsModule, in Configure).</summary>
-    /// <remarks>Each table is read when first asked for, so a build that never asks for one never reads it. A record that fails to load stops the build: the shipped content must load whole -- unless the build CollectsContentFailures, when it is left out.</remarks>
-    public MasterContent Content => _content ??= CollectsContentFailures
-        ? MasterContent.OpenCollectingFailures(MasterContent.DefaultDirectory, ContentTypes)
-        : MasterContent.Open(MasterContent.DefaultDirectory, ContentTypes);
+    /// <summary>The build's actions, items, auras and areas across its content layers, read through ContentTypes the first time a module asks (CoreActionsModule, CoreItemsModule and AreasModule, in Configure).</summary>
+    /// <remarks>Each table is read when first asked for, so a build that never asks for one never reads it. A master or mod record that fails to load stops the build -- unless the build CollectsContentFailures, when it is left out -- and a save's is always left out.</remarks>
+    public GameContent Content => _content ??= CollectsContentFailures
+        ? GameContent.OpenCollectingFailures(_contentLayers, ContentTypes)
+        : GameContent.Open(_contentLayers, ContentTypes);
 
-    private MasterContent? _content;
+    private readonly ContentLayers _contentLayers;
+
+    private GameContent? _content;
 
     private readonly List<ContentFailure> _checkFailures = [];
+
+    /// <summary>Whether actions and items are loaded as they are asked for (ContentCatalogLoader) rather than all registered in Configure -- see the constructor.</summary>
+    public bool LoadsContentById { get; }
+
+    /// <summary>What loads actions and items into the catalogs in a build that LoadsContentById: CoreActionsModule and CoreItemsModule hand it the catalogs, the entity factory loads a plan's content ahead through it.</summary>
+    public ContentCatalogLoader ContentCatalogLoader { get; }
 
     /// <summary>Whether content that fails is left out and reported in ContentFailures rather than stopping the build -- see the constructor.</summary>
     public bool CollectsContentFailures { get; }
 
-    /// <summary>What a build that CollectsContentFailures left out: the manifest records that didn't load, then those its checks refused.</summary>
+    /// <summary>What the build left out of its content: in a build that CollectsContentFailures, the manifest records that didn't load, then those its checks refused; in any other, a save's records that didn't load.</summary>
     public IReadOnlyList<ContentFailure> ContentFailures => [.. _content?.Failures ?? [], .. _checkFailures];
 
     /// <summary>A content check refused a record it left out of a build that CollectsContentFailures.</summary>

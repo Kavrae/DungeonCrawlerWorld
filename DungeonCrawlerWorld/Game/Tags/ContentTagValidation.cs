@@ -1,5 +1,8 @@
+using Engine.Tags;
 using Game.Effects;
 using Game.Modules;
+using Game.Modules.Actions;
+using Game.Modules.Auras;
 
 namespace Game.Tags;
 
@@ -7,7 +10,9 @@ namespace Game.Tags;
 /// <remarks>
 /// Run once every module is configured, so a mod whose content names an undeclared tag (a typo, or one it forgot to
 /// declare) fails its dry run instead of silently never matching. Covers the tags of every action, item, terrain
-/// contact and aura registered by then, and every tag an effect entry any of them holds names (EffectContent).
+/// contact and aura registered by then, and every tag an effect entry any of them holds names. The per-record forms
+/// (ProblemsOf) are the same rules for one definition, which a definition made at runtime is checked with
+/// (Game.Content.ContentChecks).
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 internal static class ContentTagValidation
@@ -19,12 +24,12 @@ internal static class ContentTagValidation
 
         foreach (var action in context.Actions.Definitions)
         {
-            gameplayTags.EnsureDeclared(action.Tags, $"Action '{action.Name}'");
+            ThrowFirst(ProblemsOf(gameplayTags, action, $"Action '{action.Name}'"));
         }
 
         foreach (var item in context.Items.Definitions)
         {
-            gameplayTags.EnsureDeclared(item.Tags, $"Item '{item.Name}'");
+            ThrowFirst(ProblemsOf(gameplayTags, item, $"Item '{item.Name}'"));
         }
 
         var terrain = context.Terrain;
@@ -32,7 +37,8 @@ internal static class ContentTagValidation
         {
             if (terrain.TryGet((ushort)terrainTypeId, out var terrainDefinition) && terrainDefinition.Contact is { } contact)
             {
-                gameplayTags.EnsureDeclared(contact.Tags, $"Terrain '{terrainDefinition.Name}'");
+                var heldBy = $"Terrain '{terrainDefinition.Name}'";
+                ThrowFirst(ProblemsOf(gameplayTags, contact.Tags, contact.Effects, heldBy));
             }
         }
 
@@ -40,18 +46,58 @@ internal static class ContentTagValidation
         for (var auraId = 0; auraId < auras.Count; auraId++)
         {
             var aura = auras.Get((byte)auraId);
-            gameplayTags.EnsureDeclared(aura.Tags, $"Aura '{aura.Name}'");
+            ThrowFirst(ProblemsOf(gameplayTags, aura, $"Aura '{aura.Name}'"));
         }
+    }
 
-        EffectContent.ForEachEntry(context, (entry, heldBy) =>
+    /// <summary>Every tag definition or an entry it holds uses that no module declared, as a sentence naming heldBy.</summary>
+    public static IReadOnlyList<string> ProblemsOf(GameplayTagRegistry gameplayTags, ActivatableDefinition definition, string heldBy)
+    {
+        var problems = new List<string>();
+        AddUndeclared(gameplayTags, definition.Tags, heldBy, problems);
+        EffectEntries.ForEach(definition, entry => AddUndeclaredReferences(gameplayTags, entry, heldBy, problems));
+        return problems;
+    }
+
+    /// <summary>Every tag aura or an entry of its effects uses that no module declared, as a sentence naming heldBy.</summary>
+    public static IReadOnlyList<string> ProblemsOf(GameplayTagRegistry gameplayTags, AuraDefinition aura, string heldBy) =>
+        ProblemsOf(gameplayTags, aura.Tags, aura.Effects, heldBy);
+
+    private static IReadOnlyList<string> ProblemsOf(GameplayTagRegistry gameplayTags, GameplayTagSet tags, IReadOnlyList<Effect> effects, string heldBy)
+    {
+        var problems = new List<string>();
+        AddUndeclared(gameplayTags, tags, heldBy, problems);
+        EffectEntries.ForEach(effects, entry => AddUndeclaredReferences(gameplayTags, entry, heldBy, problems));
+        return problems;
+    }
+
+    private static void AddUndeclared(GameplayTagRegistry gameplayTags, GameplayTagSet tags, string heldBy, List<string> problems)
+    {
+        foreach (var tag in tags)
         {
-            foreach (var tag in entry.ReferencedTags)
+            if (!gameplayTags.IsDeclared(tag))
             {
-                if (!gameplayTags.IsDeclared(tag))
-                {
-                    throw new InvalidOperationException($"{heldBy} has an effect that names gameplay tag '{tag}', which no module in this build declares.");
-                }
+                problems.Add($"{heldBy} uses gameplay tag '{tag}', which no module in this build declares.");
             }
-        });
+        }
+    }
+
+    private static void AddUndeclaredReferences(GameplayTagRegistry gameplayTags, IEffectEntry entry, string heldBy, List<string> problems)
+    {
+        foreach (var tag in entry.ReferencedTags)
+        {
+            if (!gameplayTags.IsDeclared(tag))
+            {
+                problems.Add($"{heldBy} has an effect that names gameplay tag '{tag}', which no module in this build declares.");
+            }
+        }
+    }
+
+    private static void ThrowFirst(IReadOnlyList<string> problems)
+    {
+        if (problems.Count > 0)
+        {
+            throw new InvalidOperationException(problems[0]);
+        }
     }
 }

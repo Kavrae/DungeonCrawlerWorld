@@ -76,7 +76,7 @@ public sealed class ToggleItemPresentationTests
     private static InputHarness BuildInput()
     {
         var map = new Map(new Vector3Int(40, 40, 3));
-        var session = GameBootstrapper.Build(ValidatedMods.None, map, sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 50);
+        var session = GameBootstrapper.Build(ValidatedMods.None, map, TestContent.Layers, sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 50);
         var world = session.World;
         var ecs = session.EcsContext;
         var components = ecs.ComponentManager;

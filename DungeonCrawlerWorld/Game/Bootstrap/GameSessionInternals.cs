@@ -17,7 +17,8 @@ public sealed class GameSessionInternals(
     LocalTierRoster localTierRoster,
     FrameEventBuffer<EntityMovedEvent> movedEntities,
     AuraField auraField,
-    UniqueEntityRoster uniqueEntities)
+    UniqueEntityRoster uniqueEntities,
+    Content.ContentCatalogLoader contentCatalogLoader)
 {
     /// <summary>The session's one spawn path.</summary>
     public EntityFactory Factory { get; } = factory;
@@ -41,4 +42,7 @@ public sealed class GameSessionInternals(
 
     /// <summary>Which unique blueprints live or were killed this session -- see GameModuleContext.UniqueEntities.</summary>
     public UniqueEntityRoster UniqueEntities { get; } = uniqueEntities;
+
+    /// <summary>What loads a by-id session's actions and items into its catalogs, and counts the loads no plan named -- see GameModuleContext.ContentCatalogLoader.</summary>
+    public Content.ContentCatalogLoader ContentCatalogLoader { get; } = contentCatalogLoader;
 }

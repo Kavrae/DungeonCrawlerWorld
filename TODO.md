@@ -15,6 +15,88 @@ Global), each split High/Medium/Low priority. Landed work lives in `IMPLEMENTATI
 
 ### High Priority
 
+#### TOP PRIORITY: Component write scope -- `ref` writes that still notify
+
+Plan once `PLAN-data-driven-actions-and-items.md` and its code reviews are complete.
+
+Writing a component in place today takes an `unmanaged` `IComponentUpdater<T>` struct per kind of change, passed to
+`TryUpdate`/`UpdateByDenseIndex`/`TryUpdateFirst`. The escape hatch (`GetByDenseIndex`, then
+`IncrementVersionByDenseIndex`) silently skips `ComponentChanged` when the second call is forgotten, and a reference-typed
+field (an override definition, a string) can only be written as the whole component.
+- **A write scope:** a `ref struct` handed out by the pool (`pool.Write(entityId)`, a dense-index form, and a Multi pool's
+  matcher form) holding a `ref T` field. Its `Dispose` calls `MarkChanged`, so observers see the new value and every
+  write is still versioned and observed. Reference-typed fields assign through it like any other.
+- **Replaces the hatch:** the raw `ref` plus `IncrementVersionByDenseIndex` pair goes away and its callers move onto the
+  scope.
+- **Updaters stay** for writes that are reused or carry logic, and for the timer helpers (`RepeatEveryUpdate<T>`,
+  `SkipOwedPeriodsUpdate<T>`, `SetNextTickUpdate<T>`). The plan decides which one-off updater types move onto the scope.
+- **A forgotten `using`:** an analyzer flags a scope that isn't disposed, so a missed notification fails the build
+  instead of reading as a stale value.
+- **Cost:** expected neutral (the scope inlines to the same code as an updater). Confirm with the
+  `phase-performance-testing` skill on the hottest writers.
+
+**Unity reference:** DOTS hands out `RefRW<T>` (`SystemAPI.GetComponentRW<T>(entity).ValueRW.Field = ...`, or
+`SystemAPI.Query<RefRW<T>>()`), a write by `ref` that bumps the chunk's version when write access is requested -- per
+chunk and conservatively, whether or not anything changed. Here the bump happens when the scope ends and stays per
+component, so the timer wheels and relationships still see every write.
+
+#### Research multithreading: change detection, deferred structural changes and parallel systems as one design
+
+"Change detection" (Medium), "Deferred structural changes" (Medium) and "Parallel system execution" (Low) are pieces of
+one change, worth researching and planning together. What ties them: every write to an observed pool fires
+`ComponentChanged` synchronously inside the write, which can't happen from several threads at once, and systems running
+at the same time can't spawn, destroy, add or remove directly.
+- **Change notification across threads:** per-thread change queues drained at a sync point, polled versions (a
+  per-component tick, or a dirty bit set per `EntityPages` page), or both. Sort consumers by what they need: timer
+  wheels, relationships and `ToggleItemHolderSync` need every write, in order; HUD refresh and Presentation caches need
+  only "changed since I last looked". A version bumped on write access, as in DOTS, is enough for the second kind and
+  wrong for the first.
+- **Structural changes:** a command queue with ids reserved at once, applied at sync points in request order. Which
+  systems must see a change the frame it was queued (input, deaths, dodge windows), and where sync points go so they
+  still do.
+- **Scheduling:** declared pool access per system, a report of conflicting systems with no defined order, and parallel
+  loops inside a stripe when per-entity work writes only that entity's components.
+- **Determinism:** seeds and benchmarks reproduce regardless of thread timing. Random streams are already per key;
+  check what else appends to shared state in completion order (`FrameEventBuffer`, the event bus, the Debug
+  `SkeletonAccessGuard`).
+- **Where it pays:** profile which systems are heavy enough. Scheduling a job costs about 1-5 µs, so systems under about
+  50 µs a frame stay serial. Estimate before measuring: 2-6x on the heaviest independent systems on 8 cores. Deferral
+  taken alone is a regression: about 2x per structural change, applied a sync point late.
+- **Outcome:** one plan replacing the three items, which leave this file when it lands.
+
+**Unity reference:** DOTS jobs declare read or write access per component type, and a safety system refuses conflicting
+schedules. `EntityCommandBuffer` records structural changes for playback at a sync point. Change filters
+(`WithChangeFilter<T>`, `DidChange`) poll per-chunk versions; there are no change callbacks.
+**Unreal reference:** Mass processors ask an `FMassEntityQuery` for fragment views, the processing phases run them in
+parallel by declared requirements, and `Context.Defer()` queues structural changes. `UMassObserverProcessor` fires on
+fragment add and remove only, never on a value change. Bevy's equivalents are in the three items.
+
+#### Research generated component property access -- Workshop, saves and diagnostics
+
+Nothing reads or writes a runtime component's fields without knowing its type. Content has hand-written codecs and a
+`ContentSchema` the inspector is generated from; runtime components have nothing like that, so inspection
+(`InspectionWindowContent`), diagnostics, and any save of runtime state are each hand-built per type.
+- **Shape:** a Roslyn source generator over component structs, emitting per-type property tables (name, type, getter, and
+  a setter that writes through the pool -- `TrySet`, or the write scope above -- so observation still fires). No runtime
+  reflection.
+- **Consumers to design against:** a Workshop live component inspector that edits values; undo/redo; per-pool
+  serializers for "Data storage" and "Entity storage" (Global) and "Save and load Beyond neighborhoods"; diagnostics
+  showing any pool; "Debug drawing and an AI debugger" (Presentation).
+- **Relation to codecs:** whether the generator also writes `ContentCodec<T>` boilerplate, or the two stay apart
+  (content is authored, components are runtime state).
+- **Mods:** a mod's components get tables generated in its own assembly and join every consumer by registering them.
+- **Hot path:** zero as long as gameplay never calls it. An architecture test keeps systems off it, the way
+  `PresentationStoreAccessArchitectureTests` keeps Presentation off the store. Runtime-reflection access (about 50-500 ns
+  per access) is what this avoids.
+
+**Unity reference:** `SerializedObject`/`SerializedProperty` drive the inspector, undo, prefab overrides and multi-object
+editing through one reflected path.
+**Unreal reference:** `FProperty` reflection over `UPROPERTY` fields, with specifiers that opt fields into saves
+(`SaveGame`) or route reflected writes through code (`Setter`/`Getter`); the editor wraps writes in `Modify()` for undo
+and reports them with `PostEditChangeProperty`.
+**Godot reference:** `get_property_list` and `set(StringName)` serve the inspector, serialization and animation alike, and
+the editor records writes through `EditorUndoRedoManager`. Bevy's `Reflect` is in "Data storage".
+
 #### Investigate component pools with a high cost per holder
 
 Find out why a few pools take so many bytes for the few entities holding them, and cut what is avoidable. The Workshop
@@ -239,6 +321,56 @@ stale focused view, a hotkey letter while a ListView has focus, Escape with a co
 then an in-game and in-Workshop check of every hotkey and the TextBox/DropdownField/ListView keys.
 
 ### Medium Priority
+
+#### Investigate and benchmark contiguous Multi pool storage with a large stat modifier count
+
+A Multi pool chains an entity's components through linked dense indices (`GetFirstDenseIndex`/`GetNextDenseIndex`), so
+reading them walks the chain wherever it lies in the dense array. Every `StatModifierMath` read (`GetEffectiveValue`,
+`GetEffectiveValues`, `GetSums`) walks the entity's whole chain -- every modifier on every stat -- to sum one or two
+targets, on every damage, heal, duration, regen tick and cost through `EffectModifiers.Scale`. Today's counts are a few
+per entity. Expected counts are at least a dozen per stat, possibly two or three dozen, from equipment, spells and status
+effects together, so one read could walk hundreds of entries.
+- **Benchmark first:** a test world whose creatures hold a realistic large set -- equipment (permanent, many stats each),
+  spells and buffs (timed, refreshed), status effects (stacking, expiring), conditional modifiers (`ConditionTag`) --
+  at 12, 24 and 36 per stat over the stats in use. Measure the read paths above, plus adds, removes and expiry
+  (`StatModifierExpirySystem`) under churn, with the `phase-performance-testing` skill and an A/B against today's chain.
+- **Contiguous per-entity buffers** (the Multi pool option): an entity's components stored together, so a read is a
+  linear scan. Estimate before measuring: about the same at 3 or fewer per entity, 2-4x faster reads at 8 or more when
+  the chain is scattered. Adds that grow a buffer and removes that compact it cost more than relinking, and spare
+  capacity per entity costs memory. Check the effect on every other Multi pool (aura sources and exposures, active toggles,
+  applied blueprints, relationship sources), which mostly hold few entries.
+- **Alternatives in Game, possibly better than either:** group the chain by `StatModifierTarget` so a read walks only its
+  own stat; or cache each entity's additive and multiplicative sums per target (`StatModifierSums`), kept current by the
+  pool's `ComponentChanged`/`ComponentRemoving`, which the pool already observes -- a read becomes a lookup, and only
+  `ConditionTag` modifiers still need a walk.
+- **Outcome:** whichever wins at the expected counts, with the benchmark kept as a regression check.
+
+**Unity reference:** DOTS `DynamicBuffer<T>` stores an entity's elements inline in its chunk up to `InternalBufferCapacity`,
+then moves them to one heap block -- contiguous either way.
+**Unreal reference:** the Gameplay Ability System keeps active effects in a per-component container and aggregates each
+attribute through an `FAggregator` cached per attribute, re-evaluated when one of its modifiers changes, rather than
+summing every effect at each read.
+
+#### Main Menu and Mod menu: mods loaded per session, never locked
+
+The game starts into a Main Menu instead of loading everything at startup; a Mod menu views, adds, deletes, enables and
+disables the mods in `%LocalAppData%\DungeonCrawlerWorld\Mods\`, and starting a game from the menu loads everything that
+loads at startup today, with the enabled mods. The recommendation, and how other games do it, is in
+PLAN-data-driven-actions-and-items.md, "Later: mods chosen in a Mod menu, loaded per session":
+- Load each mod DLL from its bytes (`LoadFromStream`), so the player's files are never locked.
+- Snapshot each mod's tables into a hash-keyed cache on disk when the session starts: by-id loading reads offsets into
+  them later, and holding them in memory would cost twice their size.
+- Read assets once and release them, never copied. Mod sprites and lazily loaded textures are what an asset pack waits on.
+- Cache each mod's validation by its hash, master's and the game's version (every start trial-builds every mod today):
+  a matching start skips the trial, and the session skips per-record checks for validated layers -- safe only because
+  it reads the hash-checked table cache. Saves are always checked, file and decode checks are never skipped, and there
+  is one decoder, never a second unchecked one.
+- Let mods require other mods, and check the whole enabled set once before the session.
+- Widen aura ids (256 a session).
+- Keep enabled state and load order in a mod-list file.
+- Unload the mods' collectible load contexts when the session ends, with a test that they are collected.
+
+Supersedes "Reload mods without restarting" below once it lands.
 
 #### Complete the Engine and UIEngine hooks, used or not
 
@@ -671,6 +803,25 @@ The IDE's Error List shows severity, description, table, record, field and layer
 ## Game
 
 ### High Priority
+
+#### Inspection names the auras reaching a tile
+
+Inspecting a tile shows what stands on it and its floor, but not the auras that reach it. Add each aura reaching the tile
+to the inspection (`InspectionWindowContent`), with its name and a description, so a player can inspect a glowing orange
+tile and learn that it is heated by lava, which burns and damages whoever walks into it.
+- `AuraDefinition` has no description yet: add one (content, through its codec, defaults omitted), written for the
+  player -- what being in it does to you.
+- Read through `GameViews.AuraPower` (`AuraPowerView`: the auras covering a cell and each one's power there), never the
+  field directly; show the strongest first, and optionally its power at the tile.
+- Name where it comes from where that helps (the terrain, a shrine, a placed aura), from the same attribution the
+  aura's credit uses (`AuraField.PowerReaching`'s credit).
+
+#### Walls fade beside the player, not only over them
+
+A wall's face and top fade where they hide the player (`OverhangFade`, 0.7). They should also fade while the player stands
+directly beside the wall -- left, left and up, left and down, right, right and up, right and down -- so a one-tile
+entrance through a two-tile-tall wall shows where the floor is. Decide it in the same place the fade is decided now (the
+watched entities' rectangles in `MapRenderer`), widened by one column either side, and keep it to the player.
 
 #### Resolve highest performance costs
 
@@ -4020,6 +4171,14 @@ Settings it holds:
 - **Default Targeting Mode** -- Ground or Target (default Ground). `MapViewState.TargetingMode` is set to the
   selected value on startup; Left Alt (`TargetingModeSwitch`) still switches it for the rest of the session without
   changing the setting.
+- **Log File Expiration** -- how many days of each log's dated files are kept (default 31,
+  `RollingLogTarget.RetentionDays`, which every host passes today as `DefaultRetentionDays`). Read by `StartupCleanup` at the next start, which is the only
+  place old log files are deleted; writing a log (`RollingLogFile`) never deletes anything.
+- **Save Location** -- the parent folder of the log, mods and saves folders. Today logs live apart from the other two:
+  logs under the repository's `Log/` (`GameLoop.FindProjectRoot`, `RepositoryPaths.LogDirectory`), mods and saves under
+  `%LocalAppData%\DungeonCrawlerWorld` (`PlayerFolders.Mods`, `PlayerFolders.Saves`). All three are read before
+  anything else at startup (logs opened and pruned, mods loaded, the save opened and compacted), so a change takes
+  effect on the next start, and the setting itself has to be read from somewhere that doesn't move with it.
 
 #### Floating text settings on the options menu
 
@@ -4509,15 +4668,6 @@ order. The list carries the written value, not `(entityId, denseIndex)`: every o
 index, which a removal invalidates. `Relationship` and `ToggleItemHolderSync` need immediate delivery as
 written (IMPLEMENTATION-NOTES "Change observation is declared per pool"), so their pools stay on the main
 thread or they are reworked first.
-
-#### Solution-wide code style cleanup
-
-Conventions clarified while building the focus/keyboard-routing system, not retroactively applied
-elsewhere: comments explain WHY only when genuinely non-obvious; ternaries on three lines (condition,
-`?` branch, `:` branch); one return per method except leading guard clauses.
-`UiInputController.cs`/`Window.cs`/`MapWindow.cs` follow these only where actually touched by that work
--- pre-existing code in the same files, and everywhere else, predates them. Related to Field and
-property cleanup above -- possibly the same pass.
 
 #### Possible future UI gaps, likely out of scope
 

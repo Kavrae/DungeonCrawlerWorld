@@ -11,8 +11,7 @@ namespace Game.Views;
 /// recycled the moment its entity is destroyed, so a dead entity's source never reads as the own source of whoever
 /// reuses its id. An own source is named by the race, class, trait, action, spell or item it came through when one was
 /// recorded (ActionSource.Cause), and "Self" otherwise. A terrain's
-/// and an aura's name are read from their definition by id each time, so a definition replaced during the session
-/// shows its new name. Any other entity is named as it was when the source was created (ActionSource.Identity), which
+/// and an aura's name are read from their definition by id each time. Any other entity is named as it was when the source was created (ActionSource.Identity), which
 /// outlives the entity. ActionSource.ToString stays the debug form.
 /// </remarks>
 public sealed class ActionSourceNaming(TerrainRegistry terrain, AuraCatalog auras, EntityKeys entityKeys)

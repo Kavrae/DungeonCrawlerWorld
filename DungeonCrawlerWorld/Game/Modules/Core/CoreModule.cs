@@ -38,6 +38,8 @@ public sealed class CoreModule : IGameModule
     {
         EffectContentCodecs.Register(contentTypes);
         EffectEntryCodecs.Register(contentTypes);
+        Auras.AuraContentCodecs.RegisterDefinitions(contentTypes);
+        contentTypes.RegisterValue(new Content.ContentRedirectCodec());
     }
 
     /// <summary>Registers core components with their appropriate component pools.</summary>

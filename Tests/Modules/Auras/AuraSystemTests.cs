@@ -312,7 +312,7 @@ public sealed class AuraSystemTests
         var terrain = new TerrainRegistry();
         var typeId = terrain.Register(new TerrainDefinition(
             "test:glowing", "Glowing", "", "~", default,
-            Aura: new TerrainAura(TestAuras.Burning, 8, 3)));
+            Aura: new TerrainAura(TestAuras.Burning.Id, 8, 3)));
         return (terrain, typeId);
     }
 
@@ -394,7 +394,7 @@ public sealed class AuraSystemTests
         MoveObserverTo(system, movedEntities, new Vector3Int(0, 0, 0), new Vector3Int(30, 30, 0));
 
         mapQuery.SetTerrain(SourcePosition, glowingTypeId);
-        Assert.IsTrue(TerrainAuraSources.TryGetAura(terrain, TestAuras.GlowOnlyCatalog(), glowingTypeId, out var aura));
+        Assert.IsTrue(TerrainAuraSources.TryGetAura(terrain, TestAuras.Catalog(), glowingTypeId, out var aura));
         eventBus.Publish(new TerrainLoadedEvent(Neighborhoods.AreaOf(0, 0, 3), [new TerrainAuraCell(SourcePosition, aura)]));
         EnterAndTick(system, componentManager, movedEntities, new Vector3Int(30, 30, 0), new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z));
 
@@ -735,54 +735,6 @@ public sealed class AuraSystemTests
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
         Assert.AreEqual(1, statModifiers.CountForEntity(ObserverEntityId));
         Assert.AreEqual(ActionSourceKind.Entity, statModifiers.GetReadonlyByDenseIndex(statModifiers.GetFirstDenseIndex(ObserverEntityId)).Source.Kind, "Credited to the source entity.");
-    }
-
-    /// <summary>The effects are read from the definition at every tick, so replacing the definition changes what the next tick does to whoever is already exposed.</summary>
-    [TestMethod]
-    public void DefinitionReplacedWithDifferentEffects_TheNextTickAppliesTheNewOnes()
-    {
-        var (system, componentManager, _, movedEntities, _) = Build();
-        var auraId = _auras.Register(new AuraDefinition(CustomAuraGuid, "Scorch", Color.Red, [new Effect([new DirectDamage(1, 1)])], Magnitude: AuraMagnitude.Flat));
-        componentManager.GetPackedPool<SimpleHealthComponent>().Add(ObserverEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
-        AddSource(componentManager, SourceEntityId, SourcePosition, auraId, power: 8, size: 3);
-        EnterAndTick(system, componentManager, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
-
-        _auras.Register(new AuraDefinition(CustomAuraGuid, "Scorch", Color.Red, [new Effect([new DirectDamage(10, 10)])], Magnitude: AuraMagnitude.Flat));
-        RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
-
-        Assert.AreEqual(89, componentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(ObserverEntityId).CurrentHealth);
-    }
-
-    /// <summary>A glow-only aura exposes nothing. Once its definition gains effects, whoever already stands in its reach is exposed without having to move.</summary>
-    [TestMethod]
-    public void DefinitionGainsEffects_WhoeverStandsInReachIsExposed()
-    {
-        var (system, componentManager, mapQuery, movedEntities, _) = Build();
-        mapQuery.SetOccupant(SourcePosition, ObserverEntityId);
-        var auraId = _auras.Register(new AuraDefinition(CustomAuraGuid, "Scorch", Color.Red));
-        AddSource(componentManager, SourceEntityId, SourcePosition, auraId, power: 8, size: 3);
-        EnterAndTick(system, componentManager, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
-        Assert.IsFalse(HasExposure(componentManager, ObserverEntityId, auraId), "Precondition: nothing is exposed to an aura with no effects.");
-
-        _auras.Register(new AuraDefinition(CustomAuraGuid, "Scorch", Color.Red, [new Effect([new StatusEffectGrant(StatusEffectType.Poison, 1, StatusEffectGrantMode.TopUpTo)])]));
-
-        Assert.IsTrue(HasExposure(componentManager, ObserverEntityId, auraId));
-        RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
-        Assert.AreEqual(8, PoisonStackCountOf(componentManager, ObserverEntityId));
-    }
-
-    /// <summary>An aura whose definition loses its effects stops applying, and its exposures end on their next tick.</summary>
-    [TestMethod]
-    public void DefinitionLosesItsEffects_ExposuresEndOnTheirNextTick()
-    {
-        var (system, componentManager, _, movedEntities, _) = Build();
-        AddSource(componentManager, SourceEntityId, SourcePosition, TestAuras.PoisonId, power: 8, size: 3);
-        EnterAndTick(system, componentManager, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);
-
-        _auras.Register(TestAuras.PoisonGlowOnly);
-        RunFrames(system, movedEntities, AuraEffects.TickIntervalFrames);
-
-        Assert.IsFalse(HasExposure(componentManager, ObserverEntityId, TestAuras.PoisonId));
     }
 
     /// <summary>An aura with no effect is in the grid for its glow only: nothing is ever exposed to it.</summary>

@@ -1,5 +1,6 @@
 using Engine.Diagnostics;
 using Engine.Math;
+using Engine.Persistence;
 using Workshop.Debug;
 
 namespace Workshop.Tests;
@@ -29,18 +30,32 @@ public sealed class DebugLaunchOptionsTests
         {
             UsesRandomSeed = false,
             Seed = -42,
+            SaveName = "My Save",
             RunsBenchmark = true,
             BenchmarkFrames = new BenchmarkFrameRange(100, 900),
             Headless = true,
             ExtraArguments = " --map-size=512 ",
         };
 
-        Assert.AreEqual("--diagnostics=frame,gauges --seed=-42 --benchmark-frames=100-900 --headless --map-size=512", options.Arguments);
+        Assert.AreEqual("--diagnostics=frame,gauges --seed=-42 \"--save=My Save\" --benchmark-frames=100-900 --headless --map-size=512", options.Arguments);
         var arguments = CommandLineArguments.Split(options.Arguments);
         Assert.AreEqual(-42, RandomSeed.Parse(arguments));
+        Assert.AreEqual("My Save", SaveArgument.Parse(arguments));
         Assert.AreEqual(new BenchmarkFrameRange(100, 900), BenchmarkFrameRange.Parse(arguments));
         Assert.IsTrue(HeadlessArgument.IsPresent(arguments));
         Assert.IsFalse(HeadlessArgument.IsRefused(arguments));
+    }
+
+    [TestMethod]
+    public void ASaveNameNoFolderCanHave_IsWarnedAbout_AndAnEmptyOnePassesNothing()
+    {
+        var options = DebugLaunchOptions.Default with { SaveName = "a/b" };
+
+        var problem = options.ProblemsWith([]).Single();
+
+        Assert.AreEqual(DebugLaunchOptions.SaveOption, problem.Option);
+        Assert.IsFalse(problem.RefusesLaunch);
+        Assert.AreEqual("--diagnostics=frame,gauges", (DebugLaunchOptions.Default with { SaveName = "  " }).Arguments);
     }
 
     [TestMethod]
@@ -148,6 +163,7 @@ public sealed class DebugLaunchOptionsTests
             DiagnosticsFeatures = DiagnosticsFeatures.Memory,
             UsesRandomSeed = false,
             Seed = int.MinValue,
+            SaveName = "My Save",
             RunsBenchmark = true,
             BenchmarkFrames = new BenchmarkFrameRange(10, 20),
             Headless = true,
@@ -157,7 +173,7 @@ public sealed class DebugLaunchOptionsTests
         store.Save(options);
 
         Assert.AreEqual(options, store.Load());
-        StringAssert.Contains(File.ReadAllText(store.FilePath), "\"Version\": 2");
+        StringAssert.Contains(File.ReadAllText(store.FilePath), "\"Version\": 3");
     }
 
     [TestMethod]

@@ -1,7 +1,10 @@
+using Engine.Content;
 using Engine.Diagnostics;
 using Engine.Math;
+using Engine.Persistence;
 using Engine.Settings;
 using Game.Bootstrap;
+using Game.Content;
 using Game.Diagnostics;
 using Game.Floors;
 using Game.World;
@@ -20,28 +23,83 @@ namespace DungeonCrawlerWorld;
 /// </summary>
 public static class WorldSessionBootstrapper
 {
+    /// <summary>The save a game uses: requested, the one "--save=" named, or a new game's own (SaveFolder.NewGameName) when it named none or a name a folder can't have, which is reported.</summary>
+    public static string SaveNameFor(string? requested, int randomSeed)
+    {
+        if (requested is not null && SaveFolder.IsValidName(requested))
+        {
+            return requested;
+        }
+
+        if (requested is not null)
+        {
+            Console.Error.WriteLine($"[Save] '{requested}' can't be a save's name, so this game makes a new save.");
+        }
+
+        return SaveFolder.NewGameName(DateTime.Now, randomSeed);
+    }
+
+    /// <param name="playerActivityLogTarget">Where PlayerActivityLog writes, and how long StartupCleanup keeps its files before anything is built.</param>
+    /// <param name="modsDirectory">The mods to load -- PlayerFolders.Mods for a game -- or null for none.</param>
     /// <param name="randomSeed">The session seed: neighborhood seeds are derived from it (NeighborhoodSeeds) and every gameplay roll draws from a stream derived from it (GameModuleContext.RandomStreams) -- see RandomSeed.</param>
     /// <param name="settingsSources">Where setting overrides come from, in order.</param>
     /// <param name="mapSizeOverride">Square map width and height from "--map-size=", or null for FloorBuilder's default -- see MapSizeArgument.</param>
+    /// <param name="saveName">The save under PlayerFolders.Saves the session reads its definitions from and creates them in, made if it doesn't exist; null for a session with no save.</param>
     public static WorldSessionContext Build(
         int floorNumber,
-        string modsDirectory,
+        string? modsDirectory,
         int initialEntityCapacity,
         int initialComponentCapacity,
         int minCrawlerNumber,
         int crawlerNumberBits,
-        string playerActivityLogFilePath,
+        RollingLogTarget playerActivityLogTarget,
         int randomSeed,
         IReadOnlyList<ISettingsSource> settingsSources,
-        int? mapSizeOverride = null)
+        int? mapSizeOverride = null,
+        string? saveName = null)
     {
+        var save = saveName is null ? null : SaveFolder.OpenOrCreate(PlayerFolders.Saves, saveName);
+        try
+        {
+            return BuildSession(floorNumber, modsDirectory, initialEntityCapacity, initialComponentCapacity, minCrawlerNumber, crawlerNumberBits, playerActivityLogTarget, randomSeed, settingsSources, mapSizeOverride, save);
+        }
+        catch
+        {
+            save?.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>Build, over save once it is open: the caller disposes save when this throws.</summary>
+    private static WorldSessionContext BuildSession(
+        int floorNumber,
+        string? modsDirectory,
+        int initialEntityCapacity,
+        int initialComponentCapacity,
+        int minCrawlerNumber,
+        int crawlerNumberBits,
+        RollingLogTarget playerActivityLogTarget,
+        int randomSeed,
+        IReadOnlyList<ISettingsSource> settingsSources,
+        int? mapSizeOverride,
+        SaveFolder? save)
+    {
+        using (EngineHooks.DiagnosticScope("Startup Cleanup"))
+        {
+            foreach (var line in StartupCleanup.Run([playerActivityLogTarget], save).ReportLines())
+            {
+                Console.WriteLine(line);
+            }
+        }
+
         var crawlerNumberAllocator = new UniqueNumberAllocator(RandomStreams.SeedFor(randomSeed, Game.Spawning.EntityFactory.CrawlerNumberStream), minCrawlerNumber, crawlerNumberBits);
         var neighborhoodRecords = new NeighborhoodRecords(randomSeed, floorNumber);
+        var content = GameContent.MasterOnly(GameContent.DefaultMasterDirectory);
 
         ValidatedMods validatedMods;
         using (EngineHooks.DiagnosticScope("Mod Validation"))
         {
-            validatedMods = ModValidation.Validate(modsDirectory, settingsSources);
+            validatedMods = ModValidation.Validate(modsDirectory, content, settingsSources);
         }
 
         Map map;
@@ -53,7 +111,7 @@ public static class WorldSessionBootstrapper
         GameSession gameSession;
         using (EngineHooks.DiagnosticScope("Module Load"))
         {
-            gameSession = GameBootstrapper.Build(validatedMods, map, randomSeed, initialEntityCapacity, initialComponentCapacity, crawlerNumberAllocator, settingsSources: settingsSources);
+            gameSession = GameBootstrapper.Build(validatedMods, map, content, randomSeed, initialEntityCapacity, initialComponentCapacity, crawlerNumberAllocator, settingsSources: settingsSources, save: save);
         }
 
         var ecsContext = gameSession.EcsContext;
@@ -73,14 +131,25 @@ public static class WorldSessionBootstrapper
             Console.Error.WriteLine($"[Settings] {failure.Source}: {failure.Setting}: {failure.Message}");
         }
 
+        if (save is not null)
+        {
+            CheckSaveHeader(save, gameSession, content.Layers[0], randomSeed);
+        }
+
+        ReportContentLayers(gameSession, save);
+        foreach (var failure in gameSession.ContentFailures)
+        {
+            Console.Error.WriteLine($"[Content] {failure}");
+        }
+
         // Must subscribe (in its own constructor) before CreatePlayer below publishes the
         // player's spawn EntityMovedEvent -- PlayerActivityLog's own spawn-time log line depends
         // on that immediate EventBus.Publish, not the buffered movedEntities.Record alongside it
         // (see FloorBuilder.CreatePlayer's own comment on why both exist). Population itself
         // (PopulateFloor, just below) never publishes EntityMovedEvent this way -- only the
         // buffered path -- so subscribing this early doesn't log anything spurious.
-        var playerActivityLog = new PlayerActivityLog(world, ecsContext.ComponentManager, ecsContext.EventBus, ecsContext.Clock, playerActivityLogFilePath, gameSession.Catalogs.Definitions, gameSession.Views.ActionSourceNaming);
-        Console.WriteLine($"[PlayerActivityLog] Writing to {playerActivityLogFilePath}");
+        var playerActivityLog = new PlayerActivityLog(world, ecsContext.ComponentManager, ecsContext.EventBus, ecsContext.Clock, playerActivityLogTarget.BasePath, gameSession.Catalogs.Definitions, gameSession.Views.ActionSourceNaming);
+        Console.WriteLine($"[PlayerActivityLog] Writing to {playerActivityLog.FilePath}");
 
         // The tier reference is set to where the player is aimed at spawning BEFORE population, so
         // terrain and NPCs are born with their processing tier as their first component instead of
@@ -156,7 +225,53 @@ public static class WorldSessionBootstrapper
 
         ecsContext.BeginSession();
 
-        return new WorldSessionContext(gameSession, playerActivityLog, new Game.Admin.AdminTools(gameSession, neighborhoodStreamer), reservedEntityIds);
+        return new WorldSessionContext(gameSession, playerActivityLog, new Game.Admin.AdminTools(gameSession, neighborhoodStreamer), reservedEntityIds, save);
+    }
+
+    /// <summary>Writes a new save's save.json; for one that has it, reports each way this game differs from the one that made it (another master, a module at another content version), and nothing more.</summary>
+    private static void CheckSaveHeader(SaveFolder save, GameSession gameSession, ContentLayer masterLayer, int randomSeed)
+    {
+        var current = new SaveHeader(SaveHeader.CurrentFormatVersion, DateTimeOffset.UtcNow, randomSeed, masterLayer.ComputeContentHash(), gameSession.Catalogs.ContentTypes.ModuleContentVersions);
+        if (save.HeaderProblem is { } problem)
+        {
+            Console.Error.WriteLine($"[Save] {save.HeaderPath} can't be read, so it is left as it is: {problem}");
+            return;
+        }
+
+        if (save.Header is not { } saved)
+        {
+            save.WriteHeader(current);
+            Console.WriteLine($"[Save] New save {save.Name} at {save.Directory}");
+            return;
+        }
+
+        Console.WriteLine($"[Save] Continuing save {save.Name} at {save.Directory}");
+        foreach (var difference in saved.DifferencesFrom(current))
+        {
+            Console.Error.WriteLine($"[Save] {save.Name} differs from this game: {difference}");
+        }
+    }
+
+    /// <summary>One line per content layer: its kind and path, then for each table how many records it won and how many of those are loaded yet, left out, and -- for the save -- holds as drafts.</summary>
+    private static void ReportContentLayers(GameSession gameSession, SaveFolder? save)
+    {
+        var content = gameSession.Content;
+        foreach (var layer in content.Layers.Layers)
+        {
+            var tables = new List<string>();
+            foreach (var tableName in GameContent.TableNames)
+            {
+                var (records, loaded, leftOut) = content.CountIn(layer, tableName);
+                var drafts = save is not null && layer.Kind == ContentLayerKind.Save && tableName is not GameContent.AreasTable ? Game.Content.ContentStore.DraftCountIn(save, GameContent.FileNameOf(tableName)) : 0;
+                var counts = records == loaded ? $"{tableName} {records} loaded" : $"{tableName} {records} found, {loaded} loaded";
+                counts += leftOut > 0 ? $", {leftOut} left out" : string.Empty;
+                counts += drafts > 0 ? $", {drafts} as drafts" : string.Empty;
+                tables.Add(counts);
+            }
+
+            var label = layer.Name.StartsWith(layer.Kind.ToString(), StringComparison.Ordinal) ? layer.Name : $"{layer.Kind} {layer.Name}";
+            Console.WriteLine($"[Content] {label} ({layer.Directory}): {string.Join("; ", tables)}");
+        }
     }
 
     private static void RegisterStreamerGauges(GaugeRegistry gauges, NeighborhoodStreamer neighborhoodStreamer)

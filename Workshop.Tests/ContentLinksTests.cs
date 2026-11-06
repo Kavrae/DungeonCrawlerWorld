@@ -12,7 +12,7 @@ namespace Workshop.Tests;
 [TestClass]
 public sealed class ContentLinksTests
 {
-    private static readonly Lazy<GameSession> Session = new(() => ContentSession.Build(ContentSession.ValidateMods(Path.Combine(AppContext.BaseDirectory, "NoMods"), []), [], TextWriter.Null));
+    private static readonly Lazy<GameSession> Session = new(() => ContentSession.Build(ContentSession.ValidateMods(Path.Combine(AppContext.BaseDirectory, "NoMods"), WorkshopTestContent.Master, []), WorkshopTestContent.Master, [], TextWriter.Null));
     private static readonly Lazy<ContentReferenceIndex> Index = new(() => new ContentReferenceIndex(Session.Value.Catalogs));
 
     [TestMethod]
@@ -68,9 +68,9 @@ public sealed class ContentLinksTests
     [TestMethod]
     public void AnAurasDependents_IncludeWhatNoTabShows_WithNothingToOpen()
     {
-        var terrainReference = Index.Value.UsedBy(ContentRecordKind.Aura, BuiltInTerrain.LavaAura.Id).First(reference => reference.From.Kind == ContentRecordKind.Terrain);
+        var terrainReference = Index.Value.UsedBy(ContentRecordKind.Aura, Game.Modules.Auras.BuiltInAuraIds.Lava).First(reference => reference.From.Kind == ContentRecordKind.Terrain);
 
-        var dependent = ContentLinks.DependentsOf(Index.Value, ContentRecordKind.Aura, BuiltInTerrain.LavaAura.Id).Single(dependent => dependent.Name == terrainReference.From.Name);
+        var dependent = ContentLinks.DependentsOf(Index.Value, ContentRecordKind.Aura, Game.Modules.Auras.BuiltInAuraIds.Lava).Single(dependent => dependent.Name == terrainReference.From.Name);
 
         Assert.AreEqual("radiates it", dependent.Relationship);
         Assert.IsNull(dependent.TabTitle);

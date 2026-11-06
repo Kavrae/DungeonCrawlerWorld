@@ -32,16 +32,10 @@ public sealed class LootboxCatalog(ItemCatalog itemCatalog) : Catalog<LootboxTyp
     /// <summary>The item id of kind's box, whether or not its definition has been created.</summary>
     public static Guid ItemIdFor(LootboxKind kind)
     {
-        Span<byte> bytes = stackalloc byte[33];
-        ItemIdNamespace.TryWriteBytes(bytes, bigEndian: true, out _);
-        kind.TypeId.TryWriteBytes(bytes[16..], bigEndian: true, out _);
-        bytes[32] = (byte)kind.Rarity;
-
-        Span<byte> hash = stackalloc byte[32];
-        System.Security.Cryptography.SHA256.HashData(bytes, hash);
-        hash[6] = (byte)((hash[6] & 0x0F) | 0x80);
-        hash[8] = (byte)((hash[8] & 0x3F) | 0x80);
-        return new Guid(hash[..16], bigEndian: true);
+        Span<byte> bytes = stackalloc byte[17];
+        kind.TypeId.TryWriteBytes(bytes, bigEndian: true, out _);
+        bytes[16] = (byte)kind.Rarity;
+        return Engine.Content.ContentGuid.Derive(ItemIdNamespace, bytes);
     }
 
     /// <summary>The sprite a box of type and rarity shows: the type's base name and the rarity, "Lootbox-Bronze".</summary>

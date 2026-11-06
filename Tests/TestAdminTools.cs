@@ -13,7 +13,7 @@ internal static class TestAdminTools
 {
     public static AdminTools Create(GameSession? gameSession = null)
     {
-        gameSession ??= GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 50);
+        gameSession ??= GameBootstrapper.Build(ValidatedMods.None, new Map(new Vector3Int(20, 20, 3)), TestContent.Layers, sessionSeed: 1, initialEntityCapacity: 100, initialComponentCapacity: 50);
 
         var ecsContext = gameSession.EcsContext;
         var internals = gameSession.Internals;

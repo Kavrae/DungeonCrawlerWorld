@@ -27,63 +27,32 @@ public sealed class AuraCatalogTests
         Assert.AreEqual("Second", auras.Get(secondAuraId).Name);
     }
 
-    /// <summary>Registering is how a definition becomes an id, so content registers the same one over and over: that must change nothing and announce nothing.</summary>
+    /// <summary>Registering is how a definition becomes an id, so content registers the same one over and over: that must change nothing.</summary>
     [TestMethod]
-    public void Register_TheSameDefinitionAgain_ReturnsItsIdAndAnnouncesNothing()
+    public void Register_TheSameDefinitionAgain_ReturnsItsId()
     {
         var auras = new AuraCatalog();
-        var definition = new AuraDefinition(FirstAuraGuid, "First", Color.Red);
+        var definition = new AuraDefinition(FirstAuraGuid, "First", Color.Red, [new Effect([new DirectHeal(0f, FlatAmount: 1f)])]);
         var auraId = auras.Register(definition);
-        var changes = 0;
-        auras.DefinitionChanged += _ => changes++;
 
         Assert.AreEqual(auraId, auras.Register(definition));
-        Assert.AreEqual(auraId, auras.Register(new AuraDefinition(FirstAuraGuid, "First", Color.Red) { Effects = definition.Effects }));
-
-        Assert.AreEqual(1, auras.Count);
-        Assert.AreEqual(0, changes);
-    }
-
-    [TestMethod]
-    public void Register_AnEqualDefinitionWithEffectsBuiltSeparately_ReturnsItsIdAndAnnouncesNothing()
-    {
-        var auras = new AuraCatalog();
-        var auraId = auras.Register(new AuraDefinition(FirstAuraGuid, "First", Color.Red, [new Effect([new DirectHeal(0f, FlatAmount: 1f)])]));
-        var changes = 0;
-        auras.DefinitionChanged += _ => changes++;
-
         Assert.AreEqual(auraId, auras.Register(new AuraDefinition(FirstAuraGuid, "First", Color.Red, [new Effect([new DirectHeal(0f, FlatAmount: 1f)])])));
-
-        Assert.AreEqual(0, changes);
-    }
-
-    [TestMethod]
-    public void Register_TheSameGuidWithDifferentEffects_AnnouncesIt()
-    {
-        var auras = new AuraCatalog();
-        var auraId = auras.Register(new AuraDefinition(FirstAuraGuid, "First", Color.Red, [new Effect([new DirectHeal(0f, FlatAmount: 1f)])]));
-        var changedAuraIds = new List<byte>();
-        auras.DefinitionChanged += changedAuraIds.Add;
-
-        auras.Register(new AuraDefinition(FirstAuraGuid, "First", Color.Red, [new Effect([new DirectHeal(0f, FlatAmount: 2f)])]));
-
-        CollectionAssert.AreEqual(new[] { auraId }, changedAuraIds);
-    }
-
-    [TestMethod]
-    public void Register_ADifferentDefinitionUnderTheSameGuid_ReplacesItKeepsItsIdAndAnnouncesIt()
-    {
-        var auras = new AuraCatalog();
-        var originalAuraId = auras.Register(new AuraDefinition(FirstAuraGuid, "Original", Color.Red));
-        var changedAuraIds = new List<byte>();
-        auras.DefinitionChanged += changedAuraIds.Add;
-
-        var replacementAuraId = auras.Register(new AuraDefinition(FirstAuraGuid, "Replacement", Color.Blue));
-
-        Assert.AreEqual(originalAuraId, replacementAuraId);
         Assert.AreEqual(1, auras.Count);
-        Assert.AreEqual(Color.Blue, auras.Get(originalAuraId).GlowColor);
-        CollectionAssert.AreEqual(new[] { originalAuraId }, changedAuraIds);
+    }
+
+    /// <summary>A Guid means what it was first registered as for the whole session: nothing replaces a definition once it is in use.</summary>
+    [TestMethod]
+    public void Register_ADifferentDefinitionUnderTheSameGuid_KeepsTheFirst()
+    {
+        var auras = new AuraCatalog();
+        var original = new AuraDefinition(FirstAuraGuid, "Original", Color.Red);
+        var originalAuraId = auras.Register(original);
+
+        var laterAuraId = auras.Register(new AuraDefinition(FirstAuraGuid, "Later", Color.Blue));
+
+        Assert.AreEqual(originalAuraId, laterAuraId);
+        Assert.AreEqual(1, auras.Count);
+        Assert.AreSame(original, auras.Get(originalAuraId));
     }
 
     [TestMethod]

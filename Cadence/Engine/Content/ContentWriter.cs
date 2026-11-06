@@ -1,6 +1,6 @@
 using System.Buffers;
-using System.Text.Encodings.Web;
 using System.Text.Json;
+using Engine.Json;
 using Engine.Tags;
 
 namespace Engine.Content;
@@ -18,29 +18,29 @@ public sealed class ContentWriter
     /// <summary>The key a polymorphic value's discriminator is written under, before its properties.</summary>
     public const string DiscriminatorKey = "$";
 
-    private static readonly JsonWriterOptions CompactOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, Indented = false };
-    private static readonly JsonWriterOptions IndentedOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, Indented = true };
-
     private readonly Utf8JsonWriter _json;
     private readonly ContentTypeRegistry _types;
     private readonly Stack<ContentSchema> _schemas = new();
+    private readonly ISet<string>? _modulesUsed;
 
-    private ContentWriter(Utf8JsonWriter json, ContentTypeRegistry types)
+    private ContentWriter(Utf8JsonWriter json, ContentTypeRegistry types, ISet<string>? modulesUsed)
     {
         _json = json;
         _types = types;
+        _modulesUsed = modulesUsed;
     }
 
     /// <summary>One value written as a single JSON object (one manifest line when compact), through T's registered codec.</summary>
     /// <param name="envelope">Writes table-level fields (a disabled record's flag and replacement) after the value's own; null for none.</param>
     /// <param name="header">Writes document-level fields (a one-record file's format and table) before the value's own; null for none.</param>
-    public static byte[] WriteRecord<T>(ContentTypeRegistry types, T value, bool indented = false, Action<Utf8JsonWriter>? envelope = null, Action<Utf8JsonWriter>? header = null)
+    /// <param name="modulesUsed">Gains the name of each module whose codec wrote part of the value; null when nobody asks.</param>
+    public static byte[] WriteRecord<T>(ContentTypeRegistry types, T value, bool indented = false, Action<Utf8JsonWriter>? envelope = null, Action<Utf8JsonWriter>? header = null, ISet<string>? modulesUsed = null)
         where T : notnull
     {
         var buffer = new ArrayBufferWriter<byte>();
-        using (var json = new Utf8JsonWriter(buffer, indented ? IndentedOptions : CompactOptions))
+        using (var json = new Utf8JsonWriter(buffer, indented ? JsonWriting.Indented : JsonWriting.Compact))
         {
-            var writer = new ContentWriter(json, types);
+            var writer = new ContentWriter(json, types, modulesUsed);
             writer.WriteObject(types.GetValueCodec(typeof(T)), value, discriminator: null, envelope, header);
         }
 
@@ -291,6 +291,7 @@ public sealed class ContentWriter
             _json.WriteString(DiscriminatorKey, discriminator);
         }
 
+        _modulesUsed?.Add(_types.ModuleOf(codec));
         _schemas.Push(codec.Schema);
         codec.WriteProperties(this, value);
         _schemas.Pop();

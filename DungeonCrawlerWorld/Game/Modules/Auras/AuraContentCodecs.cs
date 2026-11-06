@@ -5,16 +5,20 @@ using Game.Effects;
 
 namespace Game.Modules.Auras;
 
-/// <summary>Codecs for AuraDefinition (its own table) and AuraSourceGrant, which names its aura by Guid; registered by AurasModule.</summary>
+/// <summary>Codecs for AuraDefinition (its own table) and AuraSourceGrant, which names its aura by Guid.</summary>
+/// <remarks>
+/// AuraDefinition's is registered by CoreModule: every build reads the Auras table, since terrain and blueprints name
+/// their auras in it and the catalog they resolve through is the build's own, whatever modules it holds.
+/// AuraSourceGrant's is AurasModule's, the module that applies it.
+/// </remarks>
 internal static class AuraContentCodecs
 {
     public const string AurasTable = "Auras";
 
-    public static void Register(ContentTypeDeclarations contentTypes)
-    {
-        contentTypes.RegisterValue(new AuraDefinitionCodec());
+    public static void RegisterDefinitions(ContentTypeDeclarations contentTypes) => contentTypes.RegisterValue(new AuraDefinitionCodec());
+
+    public static void RegisterEntries(ContentTypeDeclarations contentTypes) =>
         contentTypes.RegisterPolymorphic<IEffectEntry, AuraSourceGrant>(nameof(AuraSourceGrant), new AuraSourceGrantCodec());
-    }
 
     private sealed class AuraDefinitionCodec : ContentCodec<AuraDefinition>
     {

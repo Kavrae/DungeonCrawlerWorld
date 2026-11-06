@@ -16,8 +16,8 @@ namespace Workshop.Tests;
 [TestClass]
 public sealed class MapTabTests
 {
-    private static readonly Lazy<ValidatedMods> Mods = new(() => ContentSession.ValidateMods(Path.Combine(AppContext.BaseDirectory, "NoMods"), []));
-    private static readonly Lazy<GameSession> Session = new(() => ContentSession.Build(Mods.Value, [], TextWriter.Null));
+    private static readonly Lazy<ValidatedMods> Mods = new(() => ContentSession.ValidateMods(Path.Combine(AppContext.BaseDirectory, "NoMods"), WorkshopTestContent.Master, []));
+    private static readonly Lazy<GameSession> Session = new(() => ContentSession.Build(Mods.Value, WorkshopTestContent.Master, [], TextWriter.Null));
     private static readonly Lazy<ContentReferenceIndex> Index = new(() => new ContentReferenceIndex(Session.Value.Catalogs));
 
     private static GameCatalogs Catalogs => Session.Value.Catalogs;
@@ -32,7 +32,7 @@ public sealed class MapTabTests
 
         foreach (var area in areas)
         {
-            var preview = AreaPreviewBuild.Build(area, seed: 3, map => ContentSession.BuildPreview(Mods.Value, map, []));
+            var preview = AreaPreviewBuild.Build(area, seed: 3, map => ContentSession.BuildPreview(Mods.Value, WorkshopTestContent.Master, map, []));
 
             var expectedMap = new Map(new MapBounds(0, 0, area.Width, area.Height, 3));
             var layout = expectedMap.CreateLayout(0, 0, layoutSeed: 0);
@@ -49,13 +49,13 @@ public sealed class MapTabTests
                 {
                     foreach (var terrainLayer in Enum.GetValues<TerrainLayer>())
                     {
-                        Assert.AreEqual(KeyOf(Catalogs.Terrain, expectedMap.GetTerrain(x, y, terrainLayer).TypeId), KeyOf(previewTerrain, world.Map.GetTerrain(x, y, terrainLayer).TypeId), $"{area.Name} floor at ({x}, {y}) on {terrainLayer}.");
+                        Assert.AreEqual(KeyOf(Catalogs.Terrain, expectedMap.GetTerrain(x, y, terrainLayer).TypeId), KeyOf(previewTerrain, world.Map.GetTerrain(x + AreaPreviewBuild.Margin, y + AreaPreviewBuild.Margin, terrainLayer).TypeId), $"{area.Name} floor at ({x}, {y}) on {terrainLayer}.");
                     }
 
                     foreach (var layer in Enum.GetValues<MapLayer>())
                     {
                         var position = new Vector3Int(x, y, (int)layer);
-                        Assert.AreEqual(KeyOf(Catalogs.Terrain, expectedMap.GetStructure(position).TypeId), KeyOf(previewTerrain, world.GetStructureAt(position).TypeId), $"{area.Name} wall at ({x}, {y}) on {layer}.");
+                        Assert.AreEqual(KeyOf(Catalogs.Terrain, expectedMap.GetStructure(position).TypeId), KeyOf(previewTerrain, world.GetStructureAt(position + new Vector3Int(AreaPreviewBuild.Margin, AreaPreviewBuild.Margin, 0)).TypeId), $"{area.Name} wall at ({x}, {y}) on {layer}.");
                     }
                 }
             }
@@ -116,15 +116,15 @@ public sealed class MapTabTests
     [TestMethod]
     public void TheHoverReadout_NamesTheCellsSymbolFloorAndMarker()
     {
-        var preview = AreaPreviewBuild.Build(StartingArea, seed: 0, map => ContentSession.BuildPreview(Mods.Value, map, []));
+        var preview = AreaPreviewBuild.Build(StartingArea, seed: 0, map => ContentSession.BuildPreview(Mods.Value, WorkshopTestContent.Master, map, []));
 
-        var lines = AreaCellReadout.Describe(preview, 17, 13, MapLayer.Ground);
+        var lines = AreaCellReadout.Describe(preview, 17 + AreaPreviewBuild.Margin, 13 + AreaPreviewBuild.Margin, MapLayer.Ground);
 
         Assert.HasCount(AreaCellReadout.LineCount, lines);
         StringAssert.Contains(lines[0], "(17, 13) on Ground: symbol ','");
         StringAssert.Contains(lines[4], "player-spawn");
-        StringAssert.Contains(AreaCellReadout.Describe(preview, 14, 13, MapLayer.Ground)[1], HolyGroundName);
-        StringAssert.Contains(AreaCellReadout.Describe(preview, 13, 5, MapLayer.Ground)[3], "goblin-foreman");
+        StringAssert.Contains(AreaCellReadout.Describe(preview, 14 + AreaPreviewBuild.Margin, 13 + AreaPreviewBuild.Margin, MapLayer.Ground)[1], HolyGroundName);
+        StringAssert.Contains(AreaCellReadout.Describe(preview, 13 + AreaPreviewBuild.Margin, 5 + AreaPreviewBuild.Margin, MapLayer.Ground)[3], "goblin-foreman");
     }
 
     private static string HolyGroundName => Catalogs.Terrain.TryGet(Catalogs.Terrain.GetId(BuiltInTerrain.HolyGroundKey), out var holyGround) ? holyGround.Name : string.Empty;
@@ -133,7 +133,7 @@ public sealed class MapTabTests
     public void TheNeighborhoodPreview_IsTheGamesOwnPlanForTheRecordTheSeedGives_WithTheStartingAreaStamped()
     {
         const int worldSeed = 7;
-        var preview = NeighborhoodPreviewBuild.Build(worldSeed, 0, 0, map => ContentSession.BuildPreview(Mods.Value, map, []));
+        var preview = NeighborhoodPreviewBuild.Build(worldSeed, 0, 0, map => ContentSession.BuildPreview(Mods.Value, WorkshopTestContent.Master, map, []));
 
         var (record, populationSeed) = Game.Floors.FloorBuilder.StartingNeighborhoodRecords(worldSeed, Game.Floors.FloorBuilder.FirstFloorNumber).Single(entry => entry.Record.CellX == 0 && entry.Record.CellY == 0);
         Assert.AreEqual(record.Seed, preview.Record.Seed);
@@ -151,7 +151,7 @@ public sealed class MapTabTests
     [TestMethod]
     public void ANeighborhoodBuild_RunsOnAWorker_OnceForEachKey_AndIsKeptWhenHandedBack()
     {
-        var cache = new AreaPreviewCache(map => ContentSession.BuildPreview(Mods.Value, map, []));
+        var cache = new AreaPreviewCache(map => ContentSession.BuildPreview(Mods.Value, WorkshopTestContent.Master, map, []));
         var key = new NeighborhoodPreviewKey(7, 1, 0);
 
         var first = cache.BuildNeighborhoodAsync(key);

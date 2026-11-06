@@ -58,6 +58,7 @@ public static class TreasureChest
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
         Build = Build,
+        UsesItems = LootTable,
         Appearance = new() { Name = Name, Description = Description, Glyph = "T", GlyphColor = Color.Gold, SpriteName = "Inventory" }
     };
 

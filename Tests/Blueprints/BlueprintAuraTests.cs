@@ -1,14 +1,12 @@
 using Game.Blueprints;
-using Game.Modules.Auras;
-using Microsoft.Xna.Framework;
 
 namespace Tests.Blueprints;
 
 [TestClass]
 public sealed class BlueprintAuraTests
 {
-    private static readonly AuraDefinition FirstAura = new(new Guid("00000000-0000-0000-0000-0000000000c1"), "First", Color.Red);
-    private static readonly AuraDefinition SecondAura = new(new Guid("00000000-0000-0000-0000-0000000000c2"), "Second", Color.Blue);
+    private static readonly Guid FirstAura = new("00000000-0000-0000-0000-0000000000c1");
+    private static readonly Guid SecondAura = new("00000000-0000-0000-0000-0000000000c2");
 
     [TestMethod]
     public void Resolve_CollectsEveryPartsAurasInBuildOrder()

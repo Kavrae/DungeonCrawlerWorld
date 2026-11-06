@@ -4,6 +4,7 @@ using Engine.ECS.Entities;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints;
+using Game.Content;
 using Game.Modules.Actions;
 using Game.Modules.Auras;
 using Game.Modules.Class.Components;
@@ -60,6 +61,7 @@ public sealed class EntityFactory
     private readonly SimulationClock _clock;
     private readonly UniqueNumberAllocator? _crawlerNumbers;
     private readonly MathUtility _runtimeSeeds;
+    private readonly ContentCatalogLoader? _contentLoader;
     private readonly DirectComponentPool<ProcessingTierComponent> _tiers;
     private readonly DirectComponentPool<TransformComponent> _transforms;
 
@@ -82,9 +84,11 @@ public sealed class EntityFactory
         ProcessingTierEvents processingTierEvents,
         ProcessingTierResolver tierResolver,
         UniqueNumberAllocator? crawlerNumbers = null,
-        ulong runtimeSeed = 0)
+        ulong runtimeSeed = 0,
+        ContentCatalogLoader? contentLoader = null)
     {
         _definitions = definitions;
+        _contentLoader = contentLoader;
         _builder = new EntityBuilder(definitions, auras, actions, items, entityManager.Keys);
         _world = world;
         _entityManager = entityManager;
@@ -108,6 +112,38 @@ public sealed class EntityFactory
     /// <summary>The skeletons an entity born into an unsimulated tier is spawned as, built only once simulated (see CreatureSkeletons).</summary>
     /// <remarks>Created by the factory itself, since CreatureSkeletons is built around it. Forgets an entity as it is destroyed, ahead of any destruction handler registered after the factory, and builds one promoted into a simulated tier.</remarks>
     public CreatureSkeletons Skeletons { get; }
+
+    /// <summary>The actions and items building an entity of any of blueprintIds reads (ResolvedBlueprint.ContentActionIds, ContentItemIds), each once. Safe from a worker: it reads only resolved blueprints.</summary>
+    public PlannedContent ContentOf(IEnumerable<ushort> blueprintIds)
+    {
+        var actionIds = new HashSet<Guid>();
+        var itemIds = new HashSet<Guid>();
+        foreach (var blueprintId in blueprintIds)
+        {
+            var resolved = _definitions.Resolve(blueprintId);
+            actionIds.UnionWith(resolved.ContentActionIds);
+            itemIds.UnionWith(resolved.ContentItemIds);
+        }
+
+        return new PlannedContent(actionIds, itemIds);
+    }
+
+    /// <summary>Decodes content ahead of its use, registering nothing; nothing in a build that registers all its content up front. Safe from a worker.</summary>
+    public void PrefetchContent(PlannedContent content) => _contentLoader?.Prefetch(content.ActionIds, content.ItemIds);
+
+    /// <summary>Registers content in the catalogs, decoding whatever wasn't prefetched; nothing in a build that registers all its content up front. Main thread only.</summary>
+    public void RegisterContent(PlannedContent content) => _contentLoader?.Register(content.ActionIds, content.ItemIds);
+
+    /// <summary>Prefetches and registers what building an entity of blueprintId reads, for a spawn no plan named (the player, an admin spawn). Main thread only.</summary>
+    public void LoadContentFor(ushort blueprintId)
+    {
+        if (_contentLoader is not null)
+        {
+            var content = ContentOf([blueprintId]);
+            PrefetchContent(content);
+            RegisterContent(content);
+        }
+    }
 
     /// <summary>Spawns one entity of blueprint at (x, y), everything else defaulting as <see cref="SpawnRequest"/> describes.</summary>
     /// <inheritdoc cref="Spawn(in SpawnRequest)"/>
@@ -200,6 +236,7 @@ public sealed class EntityFactory
     /// </remarks>
     public void Apply(int entityId, ushort blueprintId, ClassGrantKind classGrantedBy = ClassGrantKind.Spawn)
     {
+        LoadContentFor(blueprintId);
         Skeletons.EnsureBuilt(entityId);
         _builder.Apply(_componentManager, entityId, blueprintId, classGrantedBy);
     }
@@ -275,4 +312,10 @@ public sealed class EntityFactory
     /// <summary>Whether entityId was born into a simulated tier. An entity born without a tier (one created on a reserved id) counts as simulated.</summary>
     private bool IsBornSimulated(int entityId) =>
         !_tiers.TryGetReadonly(entityId, out var tier) || ProcessingTierQuery.IsSimulatedTier(tier.Tier);
+}
+
+/// <summary>The actions and items a plan's spawns, or one spawn, will read from the catalogs, by Guid.</summary>
+public sealed record PlannedContent(IReadOnlyCollection<Guid> ActionIds, IReadOnlyCollection<Guid> ItemIds)
+{
+    public static PlannedContent None { get; } = new([], []);
 }

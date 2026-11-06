@@ -12,17 +12,18 @@ internal static class BuiltInTestModules
 {
     /// <summary>Every built-in module, as a complete, self-contained build over map with no mods and default settings.</summary>
     public static GameBuildPassResult Build(Map map, int sessionSeed = 0, int initialEntityCapacity = 100, int initialComponentCapacity = 50, UniqueNumberAllocator? crawlerNumbers = null) =>
-        GameBuildPass.Run(GameBootstrapper.BuiltInModules(), [], map, sessionSeed, [], initialEntityCapacity, initialComponentCapacity, crawlerNumbers: crawlerNumbers);
+        GameBuildPass.Run(GameBootstrapper.BuiltInModules(), [], map, TestContent.Layers, sessionSeed, [], initialEntityCapacity, initialComponentCapacity, crawlerNumbers: crawlerNumbers);
 
     /// <summary>Builds modules alone -- the module build without what only a whole game session reads -- over map with default settings.</summary>
     /// <remarks>Any of GameModuleContext.FoundationModuleIds modules lacks is added ahead of them: every build needs the pools the context is built from. Each module is handed to the build through a factory that returns it.</remarks>
-    public static GameModuleBuild BuildModules(IReadOnlyList<IModule<GameModuleContext>> modules, Map? map = null, int sessionSeed = 0, int initialEntityCapacity = 10, int initialComponentCapacity = 10)
+    /// <param name="content">The content layers the build reads; the master manifest alone when null.</param>
+    public static GameModuleBuild BuildModules(IReadOnlyList<IModule<GameModuleContext>> modules, Map? map = null, int sessionSeed = 0, int initialEntityCapacity = 10, int initialComponentCapacity = 10, Engine.Content.ContentLayers? content = null)
     {
         var missingFoundation = GameBootstrapper.BuiltInModules().CreateAll()
             .Where(builtIn => GameModuleContext.FoundationModuleIds.Contains(builtIn.Id) && modules.All(module => module.Id != builtIn.Id));
         List<IModule<GameModuleContext>> buildModules = [.. missingFoundation, .. modules];
 
-        return GameBuildPass.BuildModules(Factories(buildModules), [], map ?? new Map(new Vector3Int(5, 5, 1)), sessionSeed, [], initialEntityCapacity, initialComponentCapacity);
+        return GameBuildPass.BuildModules(Factories(buildModules), [], map ?? new Map(new Vector3Int(5, 5, 1)), content ?? TestContent.Layers, sessionSeed, [], initialEntityCapacity, initialComponentCapacity);
     }
 
     /// <summary>A factory for each module that hands back that same instance.</summary>

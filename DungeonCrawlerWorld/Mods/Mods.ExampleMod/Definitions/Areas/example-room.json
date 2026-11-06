@@ -1,0 +1,26 @@
+{
+  "fmt": 1,
+  "table": "Areas",
+  "id": "F6Dy5j1LHkqccgAAAAACAg",
+  "n": "Example room",
+  "d": "ExampleMod's area: a walled room beside the starting area, its door on the west, a treasure chest inside.",
+  "w": 10,
+  "h": 7,
+  "pal": [
+    "QSx-WtiTDk-LJhw9ng9KAg"
+  ],
+  "lay": {
+    "Ground": [
+      "##########",
+      "#,,,,,,,,#",
+      "#,,,,,,,,#",
+      ",,,,,,,,,#",
+      "#,,,,,,,,#",
+      "#,,,,,,,,#",
+      "##########"
+    ]
+  },
+  "ent": [
+    {"pid":"chest","x":5,"y":3,"bp":"xKH22S6LOk-cHQAAAAABAg","d":"The room's reason to visit."}
+  ]
+}

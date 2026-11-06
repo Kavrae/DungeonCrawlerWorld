@@ -596,36 +596,6 @@ public sealed class TerrainContactSystemTests
         Assert.AreEqual(65, fixture.Health.GetReadonly(MoverEntityId).CurrentHealth);
     }
 
-    [TestMethod]
-    public void DefinitionGainsAContact_WhoeverStandsOnThatTerrainStepsOntoIt()
-    {
-        var fixture = BuildForChanges();
-        var terrainTypeId = fixture.Terrain.Register(new TerrainDefinition("test:hazard", "Test hazard", "", "~", default));
-        fixture.MapQuery.SetTerrain(OnHazard, terrainTypeId);
-        fixture.Stand(OnHazard);
-        fixture.Harness.Step();
-
-        fixture.Terrain.Register(HazardTerrain("test:hazard"));
-
-        Assert.AreEqual(90, fixture.Health.GetReadonly(MoverEntityId).CurrentHealth);
-        Assert.AreEqual(terrainTypeId, fixture.Exposures.GetReadonly(MoverEntityId).TerrainTypeId);
-    }
-
-    [TestMethod]
-    public void DefinitionLosesItsContact_TheExposureEndsOnItsNextRepeat()
-    {
-        var fixture = BuildForChanges();
-        fixture.MapQuery.SetTerrain(OnHazard, fixture.Terrain.Register(HazardTerrain("test:hazard")));
-        fixture.Harness.Move(OffHazard, OnHazard);
-        fixture.Harness.Step();
-
-        fixture.Terrain.Register(new TerrainDefinition("test:hazard", "Test hazard", "", "~", default));
-        fixture.Harness.StepThrough(fixture.Harness.Frame + 2 * TickIntervalFrames);
-
-        Assert.IsFalse(fixture.Exposures.Has(MoverEntityId));
-        Assert.AreEqual(90, fixture.Health.GetReadonly(MoverEntityId).CurrentHealth);
-    }
-
     /// <summary>A contact can hold any effect an action can: here a status effect, which an immune entity refuses -- reported once for the stay, not on every repeat.</summary>
     [TestMethod]
     public void ContactGrantingAStatusEffectToAnImmuneEntity_ReportsTheRefusalOncePerStay()

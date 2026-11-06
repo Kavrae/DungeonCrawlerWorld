@@ -2,6 +2,7 @@ using Builders.Browsing;
 using Builders.References;
 using Engine.Tags;
 using Game.Areas;
+using Game.Content;
 using Microsoft.Xna.Framework;
 using UIEngine.Input;
 using UIEngine.UI;
@@ -17,7 +18,7 @@ namespace Builders.MapAreas;
 /// column, shown while the record has a map; the pointer is followed by an input handler registered while the tab is
 /// open, for its readout.
 /// </remarks>
-public sealed class MapTab(AreaCatalog areas, ContentReferenceIndex references, GameplayTagRegistry gameplayTags) : RecordBrowserTab<MapContentRecord, MapPreviewWindow>
+public sealed class MapTab(AreaCatalog areas, ContentReferenceIndex references, GameplayTagRegistry gameplayTags, ContentOrigins origins) : RecordBrowserTab<MapContentRecord, MapPreviewWindow>
 {
     public const string TabTitle = "Map";
     public const string CellDetailsTitle = "Cell Details";
@@ -49,9 +50,9 @@ public sealed class MapTab(AreaCatalog areas, ContentReferenceIndex references, 
 
     protected override RecordRowAppearance AppearanceOf(MapContentRecord record) => record.Kind switch
     {
-        ContentRecordKind.Area => new(record.Name, null, "#", Color.LightGray),
-        ContentRecordKind.AreaPalette => new(record.Name, null, "%", Color.LightGray),
-        _ => new(record.Name, null, "+", Color.LightGray),
+        ContentRecordKind.Area => new(origins.Label(GameContent.AreasTable, record.Id, record.Name), null, "#", Color.LightGray),
+        ContentRecordKind.AreaPalette => new(origins.Label(GameContent.AreaPalettesTable, record.Id, record.Name), null, "%", Color.LightGray),
+        _ => new(origins.Label(GameContent.AreaPlacementsTable, record.Id, record.Name), null, "+", Color.LightGray),
     };
 
     protected override string PreviewTitleFor(MapContentRecord record) => record.Kind switch

@@ -16,14 +16,9 @@ public static class Radiant
 
     private const byte AuraSize = 30;
 
-    /// <summary>Full power to its edge: a move rewrites only the cells that changed sides.</summary>
-    public static readonly AuraDefinition SteadyAura = new(new Guid("d9f6a1c4-8b2e-4f3a-9c1d-000000000307"), "Radiant Steady", Color.Gold, Falloff: AuraFalloff.None);
-
-    /// <summary>Fades to its edge: a move rewrites both diamonds.</summary>
-    public static readonly AuraDefinition FadingAura = new(new Guid("d9f6a1c4-8b2e-4f3a-9c1d-000000000308"), "Radiant Fading", Color.Cyan);
-
+    /// <remarks>Radiant Steady is full power to its edge (a move rewrites only the cells that changed sides); Radiant Fading fades to its edge (a move rewrites both diamonds).</remarks>
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
-        Auras = [new AuraGrant(SteadyAura, AuraPower, AuraSize), new AuraGrant(FadingAura, AuraPower, AuraSize)],
+        Auras = [new AuraGrant(BuiltInAuraIds.RadiantSteady, AuraPower, AuraSize), new AuraGrant(BuiltInAuraIds.RadiantFading, AuraPower, AuraSize)],
     };
 }

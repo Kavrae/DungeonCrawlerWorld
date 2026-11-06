@@ -16,7 +16,7 @@ namespace Game.Blueprints.Objects;
 /// <summary>A stationary shrine that heals whatever stands near it.</summary>
 /// <remarks>
 /// A prop like TreasureChest: simple health, no race, no movement, so it never moves once spawned
-/// and is always built at spawn. It declares its own healing aura (Aura) and radiates it (Auras). It takes
+/// and is always built at spawn. It radiates a healing aura (Auras). It takes
 /// half damage from everything, none from fire -- so it can stand in lava -- and is immune to
 /// Burning, Poison and Paralysis. It can be destroyed, and DeathSystem ends its aura when it is.
 /// </remarks>
@@ -37,20 +37,16 @@ public static class HealingShrine
 
     private const float DamageResistance = 0.5f;
 
-    /// <summary>The shrine's aura: each tick heals one point of health per point of power at the entity.</summary>
     /// <remarks>
-    /// As a flat amount, so overlapping shrines add. On a creature with body parts the whole amount
-    /// follows its healing priority -- the part missing the largest share of its health, the rule
-    /// passive regeneration uses -- rather than being split evenly: an even split gives most of it to
-    /// parts that are already full, where it is lost.
+    /// Its aura (BuiltInAuraIds.HealingShrine, in the Auras table) heals a flat amount per point of power, so
+    /// overlapping shrines add. On a creature with body parts the whole amount follows its healing priority -- the
+    /// part missing the largest share of its health, the rule passive regeneration uses -- rather than being split
+    /// evenly: an even split gives most of it to parts that are already full, where it is lost.
     /// </remarks>
-    public static readonly AuraDefinition Aura = new(new Guid("d9f6a1c4-8b2e-4f3a-9c1d-000000000304"), "Healing", Color.White,
-        [new Effect([new DirectHeal(PercentOfMaxHealth: 0f, FlatAmount: 1f, BodyPartTargetMode: BodyPartTargetMode.LowestPercentage)])]);
-
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
         Build = Build,
-        Auras = [new AuraGrant(Aura, HealingAuraPower, HealingAuraSize)],
+        Auras = [new AuraGrant(BuiltInAuraIds.HealingShrine, HealingAuraPower, HealingAuraSize)],
         Appearance = new() { Name = Name, Description = Description, Glyph = "+", GlyphColor = Color.White, SpriteName = "Shrine" }
     };
 

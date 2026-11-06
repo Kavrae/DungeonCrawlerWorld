@@ -29,8 +29,8 @@ namespace Game.Modules.Auras.Systems;
 /// item holds, applied with no source entity and credited to the strongest contributor at the cell
 /// (AuraField.Attribute: an entity source's entity or anchor placer, a terrain, or the aura) -- so a kill
 /// by a lit idol is its holder's; this system knows no
-/// particular effect. They are read from the definition at every tick, so a definition replaced
-/// during a session is what the next tick applies. An aura with no effects only glows: it is in the
+/// particular effect. They are read from the catalog's definition at every tick, the one the session
+/// fixed for the aura's Guid, whatever copy a source holds. An aura with no effects only glows: it is in the
 /// grid, and nothing holds an exposure to it. The magnitude the effects are scaled by is the grid's
 /// total for that aura at the entity's cell with the entity's own sources subtracted, so a source
 /// never affects itself.
@@ -153,7 +153,6 @@ public sealed class AuraSystem : ISystem
         eventBus.Subscribe<AuraSourceRemovedEvent>(OnSourceRemoved);
         auraField.TerrainAuraAdded += OnTerrainAuraAdded;
         auraField.TerrainAuraRemoved += OnTerrainAuraRemoved;
-        auras.DefinitionChanged += OnAuraDefinitionChanged;
 
         _tick = Tick;
         _simulationScope = simulationScope;
@@ -198,31 +197,6 @@ public sealed class AuraSystem : ISystem
 
     /// <summary>A terrain cell stopped radiating: exposures it no longer reaches are dropped at once.</summary>
     private void OnTerrainAuraRemoved(Vector3Int position, AuraSourceComponent source) => ReEvaluateExposuresNear(position, AuraField.ReachOf(source));
-
-    /// <summary>An aura's definition was replaced. If it has effects, whoever stands in reach of one of its sources is exposed -- before, with no effects, nothing held an exposure to it. One that lost its effects needs nothing: each exposure ends on its next tick.</summary>
-    /// <remarks>Walks every entity source and every loaded terrain cell for the ones radiating this aura: rare, and there is no index from an aura to its sources.</remarks>
-    private void OnAuraDefinitionChanged(byte auraId)
-    {
-        if (!_auras.Get(auraId).HasEffects)
-        {
-            return;
-        }
-
-        _now = _clock.CurrentFrame;
-        _auraField.EnsureBuilt();
-
-        var sourceEntityIds = _sources.EntityIds;
-        var sourceComponents = _sources.Components;
-        for (var index = 0; index < sourceEntityIds.Length; index++)
-        {
-            if (sourceComponents[index].AuraId == auraId && _sourcePlacementsInField.TryGetValue(sourceEntityIds[index], out var placementInField))
-            {
-                StartExposuresNear(placementInField.Position, AuraField.ReachOf(sourceComponents[index]));
-            }
-        }
-
-        _auraField.ForEachTerrainSource(auraId, (position, source) => StartExposuresNear(position, AuraField.ReachOf(source)));
-    }
 
     private void OnEntityMoved(EntityMovedEvent moved)
     {

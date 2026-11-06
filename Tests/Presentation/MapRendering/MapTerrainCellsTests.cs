@@ -177,21 +177,6 @@ public sealed class MapTerrainCellsTests
     }
 
     [TestMethod]
-    public void ReplacingADefinition_IsReadTheNextTime()
-    {
-        var map = new FakeMapView();
-        map.AddWall(4, 5, Plain);
-        var cells = Read(map);
-        Assert.IsNotNull(cells.TryGetFace(4, 5, out var before) ? before.Sprite : null);
-
-        map.Terrain.Register(map.Terrain.TryGet(map.Terrain.GetId($"test:{Plain}"), out var plain) ? plain with { SpriteName = null } : throw new AssertFailedException());
-        cells.Read(Scroll, 20, 20, mapLayer: 0);
-
-        Assert.IsTrue(cells.TryGetFace(4, 5, out var after));
-        Assert.IsNull(after.Sprite);
-    }
-
-    [TestMethod]
     public void HasStructure_AndIsOnMap_FollowTheCopiedCells()
     {
         var map = new FakeMapView();

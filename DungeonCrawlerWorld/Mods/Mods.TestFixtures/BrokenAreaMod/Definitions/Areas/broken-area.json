@@ -1,0 +1,17 @@
+{
+  "fmt": 1,
+  "table": "Areas",
+  "id": "F6Dy5j1LHkqccgAAAAADAQ",
+  "n": "Broken area",
+  "d": "A fixture: its Ground row holds 'q', which no legend or palette defines, so the mod holding it is dropped.",
+  "w": 3,
+  "h": 1,
+  "pal": [
+    "QSx-WtiTDk-LJhw9ng9KAg"
+  ],
+  "lay": {
+    "Ground": [
+      ",q,"
+    ]
+  }
+}
