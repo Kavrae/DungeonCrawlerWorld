@@ -26,7 +26,7 @@ public static class InventoryTagQueries
         var stackCategories = new HashSet<GameplayTag>();
         foreach (var stack in reusableStacks)
         {
-            if (!itemCatalog.TryGet(stack.ItemDefinitionId, out var definition))
+            if (!InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition))
             {
                 continue;
             }

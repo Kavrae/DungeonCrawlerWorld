@@ -26,6 +26,7 @@ public static class GameTags
     public static readonly GameplayTag ItemConsumable = GameplayTag.Get("Item.Consumable");
     public static readonly GameplayTag ItemConsumablePotion = GameplayTag.Get("Item.Consumable.Potion");
     public static readonly GameplayTag ItemConsumableScroll = GameplayTag.Get("Item.Consumable.Scroll");
+    public static readonly GameplayTag ItemConsumableTome = GameplayTag.Get("Item.Consumable.Tome");
     public static readonly GameplayTag ItemWand = GameplayTag.Get("Item.Wand");
     public static readonly GameplayTag ItemLootbox = GameplayTag.Get("Item.Lootbox");
     public static readonly GameplayTag ItemToggle = GameplayTag.Get("Item.Toggle");
@@ -59,7 +60,7 @@ public static class GameTags
         EffectHealing,
         DeliveryMelee, DeliveryMeleeUnarmed, DeliveryRanged,
         TargetingSelf,
-        Item, ItemConsumable, ItemConsumablePotion, ItemConsumableScroll, ItemWand, ItemLootbox, ItemToggle,
+        Item, ItemConsumable, ItemConsumablePotion, ItemConsumableScroll, ItemConsumableTome, ItemWand, ItemLootbox, ItemToggle,
         Damage, DamageFire, DamagePoison, DamageEnergy,
         Magic,
         Area, AreaTesting,

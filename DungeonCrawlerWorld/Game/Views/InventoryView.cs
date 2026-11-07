@@ -16,6 +16,13 @@ public sealed class InventoryView(ComponentManager componentManager, ItemCatalog
     public bool TryGetStack(int entityId, uint stackInstanceId, out InventoryItemStackComponent stack) =>
         InventoryQueries.TryFindByStackInstanceId(_stacks, entityId, stackInstanceId, out stack);
 
+    /// <summary>What a cell of itemDefinitionId in entityId's inventory shows: its first stack's effective item, else the catalog's.</summary>
+    /// <remarks>For a Merged Stack cell, which has no single stack: an item made at runtime (a tome) is in no catalog, so its look is read from a stack holding it.</remarks>
+    public bool TryGetItem(int entityId, Guid itemDefinitionId, out ItemDefinition definition) =>
+        InventoryQueries.TryGetStack(_stacks, entityId, itemDefinitionId, out var stack)
+            ? InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out definition)
+            : itemCatalog.TryGet(itemDefinitionId, out definition);
+
     /// <summary>Replaces destination's contents with every stack entityId holds.</summary>
     public void CopyStacks(int entityId, List<InventoryItemStackComponent> destination) =>
         InventoryQueries.CopyStacksForEntity(_stacks, entityId, destination);

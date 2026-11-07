@@ -26,9 +26,11 @@ internal static class ActionContentCodecs
         contentTypes.RegisterPolymorphic<IActionActivator, ScrollActivator>("Scroll", new ScrollActivatorCodec());
         contentTypes.RegisterPolymorphic<IActionActivator, WandActivator>("Wand", new WandActivatorCodec());
         contentTypes.RegisterPolymorphic<IActionActivator, ToggleItemActivator>("ToggleItem", new ToggleItemActivatorCodec());
+        contentTypes.RegisterPolymorphic<IActionActivator, ConsumableActivator>("Consumable", new ConsumableActivatorCodec());
 
         contentTypes.RegisterPolymorphic<IEffectEntry, DodgeActivation>(nameof(DodgeActivation), new DodgeActivationCodec());
         contentTypes.RegisterPolymorphic<IEffectEntry, HotkeyExpansionGrant>(nameof(HotkeyExpansionGrant), new HotkeyExpansionGrantCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, SpellGrant>(nameof(SpellGrant), new SpellGrantCodec());
     }
 
     private sealed class TargetingSpecCodec : ContentCodec<TargetingSpec>
@@ -254,6 +256,25 @@ internal static class ActionContentCodecs
         }
 
         public override ToggleItemActivator Read(ContentObject element) => new(ActivatorContent.Timing(element), element.Boolean("on"));
+    }
+
+    private sealed class ConsumableActivatorCodec : ContentCodec<ConsumableActivator>
+    {
+        public override ContentSchema Schema { get; } = ActivatorContent.TargetedSchema(nameof(ConsumableActivator));
+
+        public override void WriteProperties(ContentWriter writer, ConsumableActivator value) => ActivatorContent.WriteTargeted(writer, value.Targeting, value.Timing);
+
+        public override ConsumableActivator Read(ContentObject element) => new(ActivatorContent.Targeting(element), ActivatorContent.Timing(element));
+    }
+
+    /// <summary>The spell is written whole, not named by Guid: a spell made at runtime is in no table.</summary>
+    private sealed class SpellGrantCodec : ContentCodec<SpellGrant>
+    {
+        public override ContentSchema Schema { get; } = new(nameof(SpellGrant), [ContentField.Object<ActionDefinition>("sp", "Spell", isRequired: true)]);
+
+        public override void WriteProperties(ContentWriter writer, SpellGrant value) => writer.Object("sp", value.Spell);
+
+        public override SpellGrant Read(ContentObject element) => new(element.Object<ActionDefinition>("sp")!);
     }
 
     private sealed class DodgeActivationCodec : ContentCodec<DodgeActivation>

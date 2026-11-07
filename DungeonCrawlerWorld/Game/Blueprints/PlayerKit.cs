@@ -1,5 +1,7 @@
 using Engine.ECS.Systems;
 using Engine.Tiles;
+using Game.Effects;
+using Game.Effects.Entries;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
@@ -58,6 +60,24 @@ public static class PlayerKit
         UsesActions = [BuiltInActionIds.Heal, BuiltInActionIds.MagicMissile, BuiltInActionIds.ToxicStrike, BuiltInActionIds.ToxicAura, BuiltInActionIds.Lantern, BuiltInActionIds.Fireball, BuiltInActionIds.LightningBolt, BuiltInActionIds.FireFan, BuiltInActionIds.WallOfFire, BuiltInActionIds.RingOfLava, BuiltInActionIds.BattleFury, BuiltInActionIds.Dodge, BuiltInActionIds.PowerAttack, BuiltInActionIds.QuickAttack],
         UsesItems = [BuiltInItemIds.WandOfFireball, BuiltInItemIds.HealthPotion, BuiltInItemIds.ManaPotion, BuiltInItemIds.HotkeyExpansionPotion, BuiltInItemIds.DamagePotion, BuiltInItemIds.ToxicPotion, BuiltInItemIds.ToxicIdol, BuiltInItemIds.ScrollOfHealing, BuiltInItemIds.ScrollOfTorch, BuiltInItemIds.ImmunityTestPotion, BuiltInItemIds.ResistanceTestPotion, BuiltInItemIds.DraughtOfPlenty, BuiltInItemIds.DraughtOfThrift, BuiltInItemIds.DraughtOfVenom, BuiltInItemIds.DraughtOfRadiance],
         Appearance = new() { Name = PlayerName, Description = PlayerDescription, Glyph = "@", GlyphColor = Color.White, SpriteName = "Player" },
+    };
+
+    /// <summary>TEMPORARY -- see TestComposedSpell.</summary>
+    private static readonly Guid TestComposedSpellId = new("6b0e2f4c-91d3-4a7e-b5c8-3f1d9a2e7c40");
+
+    private const ushort TestComposedSpellManaCost = 8;
+
+    /// <summary>TEMPORARY: a spell made at runtime from an existing spell's effects -- Fireball's burst, thrown at once at one target -- to be held by a tome.</summary>
+    private static ActionDefinition TestComposedSpell(ActionDefinition fireball) => fireball with
+    {
+        Id = TestComposedSpellId,
+        Name = "Ember Lance",
+        Activator = new SpellActivator(
+            new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 6, Path: TargetPath.Projectile, ProjectileHitCount: 1, AimLineOfSight: LineOfSightRule.Required),
+            new ActionTiming(ActionTimingCategory.Immediate)),
+        Description = "A thin spear of flame thrown at a single foe, searing it and leaving it burning.",
+        Summary = "Fire damage to one target, inflicts Burning.",
+        ActivationEffects = [new Effect([new ManaDrain(TestComposedSpellManaCost)])],
     };
 
     private static void Build(BlueprintContext context)
@@ -158,6 +178,12 @@ public static class PlayerKit
         InventoryActions.AddItem(componentManager, entityId, BuiltInItemIds.ScrollOfTorch, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, BuiltInItemIds.ImmunityTestPotion, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, BuiltInItemIds.ResistanceTestPotion, quantity: 5);
+
+        // TEMPORARY test tomes: one of a spell the player already knows (refused, never used up), and two of a spell
+        // composed here from Fireball's effects, which the player learns from the first. Remove once tomes drop as loot.
+        var fireball = actions.Get(BuiltInActionIds.Fireball);
+        Tomes.Grant(componentManager, entityId, fireball);
+        Tomes.Grant(componentManager, entityId, TestComposedSpell(fireball), quantity: 2);
 
         // TEMPORARY test content for stat modifiers on every effect amount (ModifierTestPotions). Remove with them.
         foreach (var modifierTestPotionId in (Guid[])[BuiltInItemIds.DraughtOfPlenty, BuiltInItemIds.DraughtOfThrift, BuiltInItemIds.DraughtOfVenom, BuiltInItemIds.DraughtOfRadiance])

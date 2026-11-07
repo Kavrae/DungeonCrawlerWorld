@@ -17,4 +17,7 @@ public enum EffectRefusal : byte
 
     /// <summary>Taking what is asked would kill the target.</summary>
     NotEnoughHealth,
+
+    /// <summary>The target already has the spell it would be taught.</summary>
+    SpellAlreadyKnown,
 }

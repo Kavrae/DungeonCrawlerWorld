@@ -84,6 +84,10 @@ public sealed class ContentCodecTests
         AssertRoundTrips(AllAuras(), aura => aura.Name);
 
     [TestMethod]
+    public void ATomeOfEveryBuiltInAction_RoundTripsToTheSameBytes() =>
+        AssertRoundTrips(Build.Value.Context.Actions.Definitions.Select(Tomes.Create), tome => tome.Name);
+
+    [TestMethod]
     public void ReadingBack_KeepsDeclaredTags_AndAddsTheActivatorsImpliedTagsAgain()
     {
         foreach (var item in Build.Value.Context.Items.Definitions)

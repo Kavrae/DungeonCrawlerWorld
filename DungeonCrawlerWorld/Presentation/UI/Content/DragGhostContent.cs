@@ -57,7 +57,7 @@ public sealed class DragGhostContent(
         {
             (spriteName, glyph, glyphColor) = (item.SpriteName, item.Glyph, item.GlyphColor);
         }
-        else if (drag.MergedItemDefinitionId is { } mergedItemDefinitionId && itemCatalog.TryGet(mergedItemDefinitionId, out var mergedItem))
+        else if (drag.MergedItemDefinitionId is { } mergedItemDefinitionId && inventoryView.TryGetItem(drag.OriginEntityId ?? world.PlayerEntityId, mergedItemDefinitionId, out var mergedItem))
         {
             (spriteName, glyph, glyphColor) = (mergedItem.SpriteName, mergedItem.Glyph, mergedItem.GlyphColor);
         }

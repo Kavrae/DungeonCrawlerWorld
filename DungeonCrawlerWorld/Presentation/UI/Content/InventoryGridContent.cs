@@ -486,7 +486,7 @@ public sealed class InventoryGridContent(
         inventoryServices.ItemHoverDetails.Hover(this, target, _hoveredFrames, this);
     }
 
-    /// <summary>The cell's effective item, or for a merged cell (no single stack, see CellEntry) its catalog definition -- false when the stack is already gone.</summary>
+    /// <summary>The cell's effective item, or for a merged cell (no single stack, see CellEntry) what InventoryView.TryGetItem shows for it -- false when the stack is already gone.</summary>
     private bool TryResolveHoverTarget(InventoryItemStackCell cell, out ItemHoverTarget target)
     {
         ItemDefinition? definition = null;
@@ -499,7 +499,7 @@ public sealed class InventoryGridContent(
         }
         else
         {
-            _itemCatalog.TryGet(cell.ItemDefinitionId, out definition);
+            _inventoryView.TryGetItem(cell.EntityId, cell.ItemDefinitionId, out definition);
         }
 
         target = definition is null ? default : new ItemHoverTarget(cell.EntityId, cell.StackInstanceId, definition);

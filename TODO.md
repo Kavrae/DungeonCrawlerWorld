@@ -2634,11 +2634,6 @@ end state as the player's death ("Game flow -- start menu, session states, floor
 way out is entering a staircase before then ("EndOfLevelStairs"). See "Floors: an 18-floor run with steep
 difficulty by depth".
 
-#### Tomes
-
-Grant a spell outright on consumption (unlike Scrolls' 200-use mastery). Either a new `SpellGrant`
-effect entry, or reuse `ScrollMasteryEffects` with a threshold of exactly 1.
-
 #### Burning status effect from touching lava
 
 Damage over time, decreasing, stacking (multiplicatively worse), worse per movement while still in lava.

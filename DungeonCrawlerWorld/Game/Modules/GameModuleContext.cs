@@ -100,7 +100,7 @@ public sealed class GameModuleContext
         SimulationScope = new SimulationScope(new ProcessingTierQuery(tiers).IsSimulated);
         FloatingTextFeed = new FloatingTextFeed(eventBus, tiers, transforms);
         EntityFactory = new EntityFactory(Definitions, Auras, Actions, Items, world, entityManager, componentManager, MovedEntities, SimulationClock, ProcessingTierEvents, ProcessingTierResolver, crawlerNumbers, RandomStreams.SeedFor(EntityFactory.RuntimeSeedStream), loadsContentById ? ContentCatalogLoader : null);
-        _effectServices = new Lazy<EffectServices>(() => EffectServices.For(componentManager, EntityKeys, eventBus, RandomStreams.Get(EffectServices.RandomStream), PlayerQuery, Definitions, StatusEffectAppliers, Auras, FloatingTextFeed,
+        _effectServices = new Lazy<EffectServices>(() => EffectServices.For(componentManager, EntityKeys, eventBus, RandomStreams.Get(EffectServices.RandomStream), PlayerQuery, Definitions, Actions, StatusEffectAppliers, Auras, FloatingTextFeed,
             entityManager, world, position => EntityFactory.Spawn(SpawnRequest.At(Definitions.GetId(AuraAnchor.Id), position))));
         _toggles = new Lazy<Toggles>(() => new Toggles(componentManager.GetMultiPool<ActiveToggleComponent>(), EffectServices));
         _targetResolution = new Lazy<TargetResolution>(() => new TargetResolution(world, world, transforms, EntityKeys, EffectServices.DeadEntities, componentManager.GetMultiPool<NonBlockingComponent>(), EffectServices.AbilityScores));

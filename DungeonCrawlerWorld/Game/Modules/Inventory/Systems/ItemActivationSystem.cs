@@ -66,6 +66,9 @@ namespace Game.Modules.Inventory.Systems;
 /// mechanic, no Intelligence duration-scaling (that's scroll-specific) -- charges were already
 /// fixed once, at grant time (see Game.Modules.Inventory.WandGrantEffects).
 ///
+/// ConsumableActivator: one unit is used up, as for a potion or scroll, and its effects land on whoever the
+/// targeting reaches, as a wand's do -- no rule of its own (a tome is one, its effect a SpellGrant).
+///
 /// ToggleItemActivator: consumes nothing and applies no effects here. The activation flips one
 /// unit between lit and unlit (ToggleItemActions.TryToggle); what the item holds while lit follows
 /// from the stack change (ToggleItemHolderSync). Timed by the activator's own Timing, the one kind
@@ -230,8 +233,19 @@ public sealed class ItemActivationSystem : ISystem
 
                     ActivationEffectsApplier.Apply(_effectServices, entityId, item, _now);
                     PeelWandCharge(entityId, stack, item, wandActivator, request.ActivatedFromSlot);
-                    ActivateWand(item, entityId, request.Selection);
+                    ActivateOnTargets(item, entityId, request.Selection);
                     ActionLockGate.Lock(_actionLocks, entityId, _now, LockFramesFor(entityId, wandActivator.Timing));
+                    break;
+
+                case ConsumableActivator consumableActivator:
+                    if (!TryBeginActivation(entityId, request.StackInstanceId))
+                    {
+                        continue;
+                    }
+
+                    ActivationEffectsApplier.Apply(_effectServices, entityId, item, _now);
+                    ActivateOnTargets(item, entityId, request.Selection);
+                    ActionLockGate.Lock(_actionLocks, entityId, _now, LockFramesFor(entityId, consumableActivator.Timing));
                     break;
 
                 case ToggleItemActivator toggleActivator:
@@ -441,18 +455,19 @@ public sealed class ItemActivationSystem : ISystem
         EffectSequence.ApplyOnEachTarget(item.Effects, BuildContext(item, sourceEntityId, targetEntityId, durationScaleMultiplier));
     }
 
-    private void ActivateWand(ItemDefinition item, int sourceEntityId, TargetSelection selection)
+    /// <summary>A wand's or a consumable's effects on everyone selection reaches, then those placed once.</summary>
+    private void ActivateOnTargets(ItemDefinition item, int sourceEntityId, TargetSelection selection)
     {
         foreach (var targetEntityId in CollectTargets(item, sourceEntityId, selection))
         {
-            ApplyWandToTarget(item, sourceEntityId, targetEntityId);
+            ApplyToLivingTarget(item, sourceEntityId, targetEntityId);
         }
 
         ApplyOnce(item, sourceEntityId);
     }
 
     /// <summary>Same "immortal but affectable" treatment as ApplyScrollToTarget -- no hard SimpleHealthComponent requirement, each effect entry no-ops gracefully on its own missing pool. Skipped only for a dead target.</summary>
-    private void ApplyWandToTarget(ItemDefinition item, int sourceEntityId, int targetEntityId)
+    private void ApplyToLivingTarget(ItemDefinition item, int sourceEntityId, int targetEntityId)
     {
         if (_deadEntities.Has(targetEntityId))
         {

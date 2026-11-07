@@ -20,6 +20,7 @@ public static class ActivationBlockerText
         ActivationBlocker.NoManaPool => "Needs mana",
         ActivationBlocker.NoHealth => "Needs health",
         ActivationBlocker.NotEnoughHealth => "Not enough health",
+        ActivationBlocker.SpellAlreadyKnown => "Spell already known",
         _ => string.Empty,
     };
 

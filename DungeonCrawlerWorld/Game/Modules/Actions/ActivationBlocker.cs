@@ -15,4 +15,5 @@ public enum ActivationBlocker : byte
     NotEnoughMana,
     NoHealth,
     NotEnoughHealth,
+    SpellAlreadyKnown,
 }

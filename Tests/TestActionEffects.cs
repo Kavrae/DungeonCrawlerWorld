@@ -20,6 +20,7 @@ using Game.Modules.Auras;
 using Game.Modules.Auras.Components;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
+using Game.Spawning;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -108,16 +109,26 @@ internal static class TestActionEffects
         EntityBodyParts? bodyParts = null,
         BlueprintRegistry? definitions = null,
         FloatingTextFeed? floatingTextFeed = null,
-        Game.World.World? world = null)
+        Game.World.World? world = null,
+        ActionCatalog? actions = null)
     {
         var sources = TestAuras.Sources(auraSources, eventBus, auras);
+        var blueprints = definitions ?? new BlueprintRegistry();
+        var actionCatalog = actions ?? new ActionCatalog();
+        var entityActions = new EntityActions(
+            actionCatalog,
+            blueprints,
+            componentManager.IsRegistered<ActionInstanceComponent>() ? componentManager.GetMultiPool<ActionInstanceComponent>() : EmptyPools.Multi<ActionInstanceComponent>(),
+            EmptyPools.Multi<ActionCooldownComponent>(),
+            EmptyPools.Direct<SpawnRecordComponent>(),
+            EmptyPools.Multi<AppliedBlueprintComponent>());
         return new(
             componentManager,
             entityKeys,
             eventBus,
             mathUtility,
             playerQuery ?? TestPlayerQuery.NoPlayer,
-            definitions ?? new BlueprintRegistry(),
+            blueprints,
             health ?? EmptyPools.Packed<SimpleHealthComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
@@ -126,6 +137,8 @@ internal static class TestActionEffects
             abilityScores ?? EmptyPools.Packed<AbilityScoresComponent>(),
             mana ?? EmptyPools.Packed<ManaComponent>(),
             hotkeyExpansionUnlocks ?? EmptyPools.Packed<HotkeyExpansionUnlockComponent>(),
+            actionCatalog,
+            entityActions,
             statusEffectAppliers ?? new StatusEffectApplierRegistry(),
             componentManager.IsRegistered<StatusEffectImmunityComponent>() ? componentManager.GetMultiPool<StatusEffectImmunityComponent>() : EmptyPools.Multi<StatusEffectImmunityComponent>(),
             sources,

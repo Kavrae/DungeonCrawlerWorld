@@ -538,6 +538,55 @@ public sealed class ItemActivationSystemTests
         Assert.AreEqual(HotkeyExpansion.MaxUnlockedSlots, componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().GetReadonly(CasterEntityId).UnlockedSlotCount);
     }
 
+    private static ActionDefinition RuntimeSpell() => new(
+        Guid.NewGuid(), "Ember Lance", null, "e", Color.OrangeRed, Tags: [],
+        Effects: [new Effect([new DirectDamage(4, 6)])],
+        Activator: new SpellActivator(new TargetingSpec(TargetShape.SingleTarget, MaximumRange: 6), new ActionTiming(ActionTimingCategory.Immediate)),
+        Description: "A spear of flame.");
+
+    private static bool Knows(ComponentManager componentManager, int entityId, Guid spellId) =>
+        componentManager.GetMultiPool<ActionInstanceComponent>().CountMatching(entityId, new ActionIdMatcher(spellId)) > 0;
+
+    private readonly struct ActionIdMatcher(Guid actionId) : IComponentMatcher<ActionInstanceComponent>
+    {
+        public bool Matches(in ActionInstanceComponent instance) => instance.ActionId == actionId;
+    }
+
+    [TestMethod]
+    public void Tome_ReadByItsHolder_TeachesItsSpell_AndIsUsedUp()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(new Vector3Int(1, 1, 0), CasterEntityId);
+        var spell = RuntimeSpell();
+        var stackInstanceId = Tomes.Grant(componentManager, CasterEntityId, spell);
+        componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
+
+        system.Update(default, 0);
+
+        Assert.IsTrue(Knows(componentManager, CasterEntityId, spell.Id));
+        Assert.AreEqual(0, componentManager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(CasterEntityId));
+        Assert.IsTrue(componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).UnlockedAtFrame > 0);
+    }
+
+    [TestMethod]
+    public void Tome_OfASpellItsHolderKnows_IsRefused_AndNotUsedUp()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(new Vector3Int(1, 1, 0), CasterEntityId);
+        var spell = RuntimeSpell();
+        ActionGrantEffects.Grant(componentManager, new ActionCatalog(), CasterEntityId, spell.Id, spell);
+        var stackInstanceId = Tomes.Grant(componentManager, CasterEntityId, spell, quantity: 2);
+        componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(2, StackQuantity(componentManager, CasterEntityId, Tomes.ItemIdFor(spell.Id)));
+        Assert.AreEqual(0u, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).UnlockedAtFrame);
+        Assert.AreEqual(1, componentManager.GetMultiPool<ActionInstanceComponent>().CountMatching(CasterEntityId, new ActionIdMatcher(spell.Id)));
+    }
+
     [TestMethod]
     public void Wand_ChargesRemaining_AppliesDamageAndPeelsIntoANewDivergentStackWithOneFewerCharge()
     {

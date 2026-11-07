@@ -32,6 +32,7 @@ public static class EffectFormatting
         StatModifierGrant modifier => FormatStatModifierGrant(modifier),
         AuraSourceGrant aura => FormatAuraSourceGrant(aura),
         HotkeyExpansionGrant expansion => $"Unlocks {expansion.Slots} additional hotkey slot{(expansion.Slots == 1 ? "" : "s")}",
+        SpellGrant spell => $"Teaches {spell.Spell.Name}",
         ChainedEffect chained => FormatChainedEffect(chained, gameplayTags),
         _ => entry.GetType().Name,
     };

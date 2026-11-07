@@ -333,10 +333,10 @@ public sealed class BlueprintTests
         // ActionActivator plan's concrete test content. Plus a batch of 10 Wands of Fireball and
         // one TEMPORARY divergent Adjacent-targeting test wand -- two separate stacks sharing
         // BuiltInItemIds.WandOfFireball, since the divergent one carries its own Override -- see the per-slot
-        // item divergence work.
+        // item divergence work. Plus the TEMPORARY test tomes: one of Fireball, two of a composed spell.
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-        Assert.HasCount(16, stacks);
+        Assert.HasCount(18, stacks);
 
         var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.HealthPotion);
         Assert.AreEqual(5, healthPotionStack.Quantity);

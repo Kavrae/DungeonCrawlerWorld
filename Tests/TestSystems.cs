@@ -229,7 +229,7 @@ internal static class TestSystems
         ProcessingTierEvents? processingTierEvents = null,
         BlueprintRegistry? creatures = null,
         FloatingTextFeed? floatingTextFeed = null) =>
-        WithServices(TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, null, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed), services => new DelayedActionSystem(pendingActions, actions,
+        WithServices(TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, null, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed, actions: actionCatalog), services => new DelayedActionSystem(pendingActions, actions,
             services,
             actionCatalog, mapQuery,
             dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
@@ -264,7 +264,7 @@ internal static class TestSystems
         BlueprintRegistry? creatures = null,
         ProcessingTierQuery? processingTiers = null,
         FloatingTextFeed? floatingTextFeed = null) =>
-        WithServices(TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, mana, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed), services => new ItemActivationSystem(pendingActivations, actionLocks, potionCooldowns,
+        WithServices(TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, mana, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed, actions: actionCatalog), services => new ItemActivationSystem(pendingActivations, actionLocks, potionCooldowns,
             services,
             itemCatalog, actionCatalog, mapQuery,
             meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>(),
