@@ -55,7 +55,7 @@ public static class PlayerKit
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
         Build = Build,
-        UsesActions = [BuiltInActionIds.Heal, BuiltInActionIds.MagicMissile, BuiltInActionIds.ToxicStrike, BuiltInActionIds.ToxicAura, BuiltInActionIds.Lantern, BuiltInActionIds.Fireball, BuiltInActionIds.LightningBolt, BuiltInActionIds.FireFan, BuiltInActionIds.WallOfFire, BuiltInActionIds.RingOfLava, BuiltInActionIds.Dodge, BuiltInActionIds.PowerAttack, BuiltInActionIds.QuickAttack],
+        UsesActions = [BuiltInActionIds.Heal, BuiltInActionIds.MagicMissile, BuiltInActionIds.ToxicStrike, BuiltInActionIds.ToxicAura, BuiltInActionIds.Lantern, BuiltInActionIds.Fireball, BuiltInActionIds.LightningBolt, BuiltInActionIds.FireFan, BuiltInActionIds.WallOfFire, BuiltInActionIds.RingOfLava, BuiltInActionIds.BattleFury, BuiltInActionIds.Dodge, BuiltInActionIds.PowerAttack, BuiltInActionIds.QuickAttack],
         UsesItems = [BuiltInItemIds.WandOfFireball, BuiltInItemIds.HealthPotion, BuiltInItemIds.ManaPotion, BuiltInItemIds.HotkeyExpansionPotion, BuiltInItemIds.DamagePotion, BuiltInItemIds.ToxicPotion, BuiltInItemIds.ToxicIdol, BuiltInItemIds.ScrollOfHealing, BuiltInItemIds.ScrollOfTorch, BuiltInItemIds.ImmunityTestPotion, BuiltInItemIds.ResistanceTestPotion, BuiltInItemIds.DraughtOfPlenty, BuiltInItemIds.DraughtOfThrift, BuiltInItemIds.DraughtOfVenom, BuiltInItemIds.DraughtOfRadiance],
         Appearance = new() { Name = PlayerName, Description = PlayerDescription, Glyph = "@", GlyphColor = Color.White, SpriteName = "Player" },
     };
@@ -99,6 +99,7 @@ public static class PlayerKit
         ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.FireFan, overrideDefinition: null);
         ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.WallOfFire, overrideDefinition: null);
         ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.RingOfLava, overrideDefinition: null);
+        ActionGrantEffects.Grant(componentManager, actions, entityId, BuiltInActionIds.BattleFury, overrideDefinition: null);
 
         // TEMPORARY, for testing spells (Fireball costs 15): 30 mana whatever Intelligence would give. Remove once mana is balanced.
         var mana = componentManager.GetPackedPool<ManaComponent>();
@@ -137,6 +138,9 @@ public static class PlayerKit
         // Slot13, locked until Hotkey Expansion Potions unlock them, for testing the Wall and Ring shapes. Remove once a rebind UI exists.
         componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot12, BuiltInActionIds.WallOfFire));
         componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot13, BuiltInActionIds.RingOfLava));
+
+        // TEMPORARY, like the ones above: Battle Fury (a self-targeted outgoing damage buff) on Slot14. Remove once a rebind UI exists.
+        componentManager.Merge(entityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot14, BuiltInActionIds.BattleFury));
         componentManager.Merge(entityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: DefaultUnlockedExpansionSlots));
 
         StartingCurrencyGrant.GrantFixedStartingGold(componentManager, entityId);

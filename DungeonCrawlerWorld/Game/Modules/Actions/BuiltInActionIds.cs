@@ -17,6 +17,7 @@ public static class BuiltInActionIds
     public static readonly Guid FireFan = new("c3f81b6d-9a24-4e7c-8d15-6b2f9e4a7c18");
     public static readonly Guid WallOfFire = new("d8a69f55-0753-4e13-bf02-f52fd148b248");
     public static readonly Guid RingOfLava = new("bbb380e0-6a9b-4bd1-8414-d21a320e60ac");
+    public static readonly Guid BattleFury = new("7520fd2a-6d14-4053-9019-e4728c4b28cd");
 
     /// <summary>The spell the Scroll of Torch casts: a synthesised spell with no action of its own, so the catalog has nothing under it.</summary>
     public static readonly Guid TorchSpell = new("7c3e9a1d-4b6f-4e2a-8d1c-000000000022");
