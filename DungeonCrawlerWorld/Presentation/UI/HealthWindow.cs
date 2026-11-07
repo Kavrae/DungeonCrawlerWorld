@@ -21,7 +21,6 @@ using Presentation.UI.ColorPalettes;
 using UIEngine;
 using UIEngine.Fonts;
 using UIEngine.Input;
-using UIEngine.Rendering;
 using UIEngine.UI;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
@@ -52,9 +51,7 @@ namespace Presentation.UI;
 /// </summary>
 /// <param name="simulationClock">"CurrentFrame" for every remaining-duration line -- timers store absolute deadlines.</param>
 public sealed class HealthWindow(
-    FontService fontService,
-    ElementPoolService elementPoolService,
-    UiRenderService renderService,
+    ElementServices services,
     HealthView healthView,
     StatModifierView statModifierView,
     ActionStateView actionStateView,
@@ -65,7 +62,7 @@ public sealed class HealthWindow(
     SimulationClock simulationClock,
     ActionSourceNaming actionSourceNaming,
     TooltipController tooltipController)
-    : Window(fontService, elementPoolService, renderService)
+    : Window(services)
 {
     private static readonly Color BodyTextColor = Color.White;
 
@@ -98,7 +95,7 @@ public sealed class HealthWindow(
     private const float ColumnGap = 6f;
 
     /// <summary>TextWindow.ContentFont defaults to 12 only the first time a pooled instance is ever truly constructed -- a settable property, not reset by Build/Configure, so a recycled instance keeps whatever size its *previous* consumer last set (see Dropdown/GridControl/TabbedContent's own ".ContentFont = _font" call sites, each with the same "must match" comment). Cached once and assigned explicitly in AddTextRow so a row's size never depends on what the pool handed back.</summary>
-    private readonly SpriteFontBase _bodyFont = fontService.GetFont(FontChrome.DefaultFontSize);
+    private readonly SpriteFontBase _bodyFont = services.FontService.GetFont(FontChrome.DefaultFontSize);
 
     private readonly EntityBodyParts _bodyParts = bodyParts;
 

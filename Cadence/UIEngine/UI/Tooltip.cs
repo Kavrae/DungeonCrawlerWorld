@@ -1,5 +1,4 @@
 using Microsoft.Xna.Framework;
-using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI.ColorPalettes;
 
@@ -38,8 +37,8 @@ public readonly record struct TooltipRow(string LeftText, string RightText, Colo
 /// below User (see UiLayer's own doc comment), so this always draws over whatever window it's
 /// describing without needing to reorder itself against that window's own tier.
 /// </summary>
-public sealed class Tooltip(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : TextWindow(fontService, elementPoolService, renderService)
+public sealed class Tooltip(ElementServices services)
+    : TextWindow(services)
 {
     /// <summary>TextWindow's own default (WindowPalette.BodyTextColor, Black) reads fine against a light content background -- every Tooltip popup instead sits on WindowPalette.PanelBackgroundColor's dark fill, where black text is illegible. No caller currently opts out with its own explicit TextOptions.TextColor, but this still only overrides the fallback, not an explicit choice.</summary>
     public override void Build(Element? parent, ElementOptions options)

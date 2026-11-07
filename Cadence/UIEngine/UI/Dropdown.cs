@@ -1,7 +1,6 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
 
@@ -23,8 +22,8 @@ namespace UIEngine.UI;
 /// Up/Down moved to (see MoveHighlight) -- and Enter chooses it. A marked row (a DropdownField's current value) draws an
 /// accent at its left edge.
 /// </remarks>
-public sealed class Dropdown(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Window(fontService, elementPoolService, renderService)
+public sealed class Dropdown(ElementServices services)
+    : Window(services)
 {
     private const float RowHeight = 22f;
 
@@ -37,7 +36,7 @@ public sealed class Dropdown(FontService fontService, ElementPoolService element
     /// <summary>What an option that opens a submenu shows in its HotkeyText column.</summary>
     public const string SubmenuMarker = ">";
 
-    private readonly SpriteFontBase _font = fontService.GetFont(FontChrome.DefaultFontSize);
+    private readonly SpriteFontBase _font = services.FontService.GetFont(FontChrome.DefaultFontSize);
 
     /// <summary>A submenu chosen this frame, shown on the next Update rather than from inside the click that chose it -- showing rebuilds every row, including the one whose click is still being handled.</summary>
     private IReadOnlyList<DropdownOption>? _pendingSubmenu;

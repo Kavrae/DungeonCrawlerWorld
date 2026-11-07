@@ -21,16 +21,22 @@ namespace UIEngine.UI;
 /// single filled+bordered region with centered text, reusing Element's own geometry/border/
 /// content state directly rather than a parallel copy (see Button.cs).
 /// </summary>
-public class Element(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
+public class Element(ElementServices services)
 {
-    /// <summary>Internal, not protected: chrome behaviors (see IChromeBehavior) live outside the Element/Window hierarchy but still need a host window's FontService/ElementPoolService to build a title Button through the normal pooled ElementPoolService.CreateElement path.</summary>
-    public FontService FontService { get; } = fontService;
+    /// <summary>The services this element was built with.</summary>
+    public ElementServices Services { get; } = services;
 
-    /// <summary>See FontService's doc comment -- same reason this is exposed internally.</summary>
-    public ElementPoolService ElementPoolService { get; } = elementPoolService;
+    /// <summary>The fonts this element measures and draws text with.</summary>
+    /// <remarks>Public so chrome behaviors (IChromeBehavior), which live outside the element hierarchy, can build a title Button through the host's pool.</remarks>
+    public FontService FontService => Services.FontService;
 
-    /// <summary>What this element draws with: the device, the batches, the unit rectangle and the render-state stack. Public for the same reason as FontService: content an element hosts (IElementContent) draws through its host's.</summary>
-    public UiRenderService Render { get; } = renderService;
+    /// <summary>The pool this element creates its children through.</summary>
+    /// <remarks>Public for the same reason as FontService.</remarks>
+    public ElementPoolService ElementPoolService => Services.ElementPoolService;
+
+    /// <summary>What this element draws with: the device, the batch, the unit rectangle and the render-state stack.</summary>
+    /// <remarks>Public so content an element hosts (IElementContent) draws through its host's.</remarks>
+    public UiRenderService Render => Services.RenderService;
 
     public Guid ElementId { get; } = Guid.NewGuid();
 

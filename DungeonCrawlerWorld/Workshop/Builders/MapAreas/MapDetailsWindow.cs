@@ -5,19 +5,18 @@ using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 using Presentation.UI.Details;
 using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Builders.MapAreas;
 
 /// <summary>The Map tab's details pane: an area's size, layers, counts, placements, description and tags; a palette's legend and the areas using it; or a placement's neighborhood, offset and the world cells it covers.</summary>
 /// <remarks>The host is WrapContent and tiles its children vertically; every row is built against the width Configure is given.</remarks>
-public sealed class MapDetailsWindow(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, GameCatalogs catalogs)
-    : Window(fontService, elementPoolService, renderService)
+public sealed class MapDetailsWindow(ElementServices services, GameCatalogs catalogs)
+    : Window(services)
 {
     private const float RowHeight = ActivatableDetailsSections.RowHeight;
 
-    private readonly ActivatableDetailsSections _sections = new(elementPoolService, fontService, catalogs.ActionCatalog, catalogs.GameplayTags);
+    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, catalogs.ActionCatalog, catalogs.GameplayTags);
 
     private MapContentRecord? _record;
     private float _contentWidth;

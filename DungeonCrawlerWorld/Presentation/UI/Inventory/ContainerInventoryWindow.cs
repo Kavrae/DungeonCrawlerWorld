@@ -6,7 +6,6 @@ using Presentation.UI.Content;
 using Presentation.UI.Looting;
 using UIEngine;
 using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
 using UIEngine.UI.Chrome;
@@ -25,15 +24,13 @@ namespace Presentation.UI.Inventory;
 /// resize it; the subclass says what the summary reads and how the grid is shaped.
 /// </remarks>
 public abstract class ContainerInventoryWindow(
-    FontService fontService,
-    ElementPoolService elementPoolService,
-    UiRenderService renderService,
+    ElementServices services,
     InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
     SimulationClock simulationClock)
-    : Window(fontService, elementPoolService, renderService)
+    : Window(services)
 {
     private static readonly Vector2 IconSize = new(48, 48);
     private const float Padding = 8f;

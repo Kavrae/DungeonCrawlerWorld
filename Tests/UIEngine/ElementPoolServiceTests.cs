@@ -1,5 +1,4 @@
-using Microsoft.Xna.Framework;
-using UIEngine.Rendering;
+﻿using Microsoft.Xna.Framework;
 using UIEngine.UI;
 
 namespace Tests.UIEngine;
@@ -8,8 +7,8 @@ namespace Tests.UIEngine;
 [DoNotParallelize]
 public sealed class ElementPoolServiceTests
 {
-    private sealed class DerivedTextWindow(global::UIEngine.Fonts.FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-        : TextWindow(fontService, elementPoolService, renderService);
+    private sealed class DerivedTextWindow(ElementServices services)
+        : TextWindow(services);
 
     private static ElementOptions FixedOptions() => new()
     {
@@ -27,7 +26,7 @@ public sealed class ElementPoolServiceTests
     {
         var pool = TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
-        var exception = Assert.ThrowsExactly<InvalidOperationException>(() => pool.RegisterFactory(() => new Window(TestFonts.Shared, pool, new UiRenderService())));
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() => pool.RegisterFactory(() => new Window(TestElementServices.For(pool))));
 
         Assert.Contains(nameof(Window), exception.Message);
     }
@@ -36,7 +35,7 @@ public sealed class ElementPoolServiceTests
     public void CreateElement_FactoryMakingASubclass_ThrowsNamingBoth()
     {
         var pool = new ElementPoolService();
-        pool.RegisterFactory<TextWindow>(() => new DerivedTextWindow(TestFonts.Shared, pool, new UiRenderService()));
+        pool.RegisterFactory<TextWindow>(() => new DerivedTextWindow(TestElementServices.For(pool)));
 
         var exception = Assert.ThrowsExactly<InvalidOperationException>(() => pool.CreateElement<TextWindow>(null, FixedOptions()));
 
@@ -47,7 +46,7 @@ public sealed class ElementPoolServiceTests
     public void CloseElement_TypeWithNoPool_IsTornDownAgainOnALaterClose()
     {
         var pool = TestElementPoolServiceFactory.Create(TestFonts.Shared);
-        var unpooledWindow = new DerivedTextWindow(TestFonts.Shared, pool, new UiRenderService());
+        var unpooledWindow = new DerivedTextWindow(TestElementServices.For(pool));
         unpooledWindow.Build(null, ContainerOptions());
         unpooledWindow.AddChild(pool.CreateElement<Window>(unpooledWindow, FixedOptions()));
         pool.CloseElement(unpooledWindow);

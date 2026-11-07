@@ -25,7 +25,7 @@ namespace UIEngine.UI;
 /// instead (replacing any active selection first), but only when Multiline -- a
 /// single-line box treats Shift+Enter the same as a plain Enter.
 /// </summary>
-public class TextBox(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null) : TextWindow(fontService, elementPoolService, renderService)
+public class TextBox(ElementServices services, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null) : TextWindow(services)
 {
     private static readonly Color FocusIndicatorColor = WindowPalette.FocusAccentColor;
     private static readonly BorderThickness FocusIndicatorThickness = BorderThickness.Uniform(new Vector2(2, 2));

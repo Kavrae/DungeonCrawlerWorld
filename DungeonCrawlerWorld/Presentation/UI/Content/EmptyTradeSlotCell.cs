@@ -1,6 +1,4 @@
 using Microsoft.Xna.Framework;
-using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Presentation.UI.Content;
@@ -16,8 +14,8 @@ namespace Presentation.UI.Content;
 /// glow call, nothing else -- created with ShowBorder false and ContentColor Transparent (the same
 /// options every real cell already uses), so there is no border or background to suppress either.
 /// </summary>
-public sealed class EmptyTradeSlotCell(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class EmptyTradeSlotCell(ElementServices services)
+    : Element(services)
 {
     protected override bool IsHitTestable => false;
 

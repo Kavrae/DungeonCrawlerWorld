@@ -91,7 +91,7 @@ public sealed class UiInputControllerTests
     }
 
     /// <summary>Records HandleRightDragStart/HandleRightDrag calls, so UiInputController's right-button wiring (hit-test on press, total-delta-since-start on every held frame) can be verified end-to-end without a real MapWindow.</summary>
-    private sealed class RightDragSpyWindow(FontService fontService, ElementPoolService windowService, UiRenderService renderService) : Window(fontService, windowService, renderService)
+    private sealed class RightDragSpyWindow(ElementServices services) : Window(services)
     {
         public int DragStartCallCount { get; private set; }
         public int DragEndCallCount { get; private set; }
@@ -112,7 +112,7 @@ public sealed class UiInputControllerTests
 
     private static RightDragSpyWindow CreateRightDragSpyWindow(ElementPoolService windowService, FontService fontService, Vector2 relativePosition)
     {
-        windowService.RegisterFactory<RightDragSpyWindow>(() => new RightDragSpyWindow(fontService, windowService, new UiRenderService()));
+        windowService.RegisterFactory<RightDragSpyWindow>(() => new RightDragSpyWindow(TestElementServices.For(windowService, fontService)));
         var window = windowService.CreateElement<RightDragSpyWindow>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions { RelativePosition = relativePosition, Size = new Vector2(200, 100), DisplayMode = ElementDisplayMode.Fixed },
@@ -1174,7 +1174,7 @@ public sealed class UiInputControllerTests
     {
         var fontService = TestFonts.Shared;
         ContextMenuController contextMenuController = null!;
-        var windowService = TestElementPoolServiceFactory.Create(fontService, createTextBox: pool => new TextBox(fontService, pool, new UiRenderService(), null, contextMenuController));
+        var windowService = TestElementPoolServiceFactory.Create(fontService, createTextBox: pool => new TextBox(TestElementServices.For(pool, fontService), null, contextMenuController));
         var layers = new UiLayerStack();
 
         contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, layers);
@@ -1263,7 +1263,7 @@ public sealed class UiInputControllerTests
     {
         var fontService = TestFonts.Shared;
         ContextMenuController contextMenuController = null!;
-        var windowService = TestElementPoolServiceFactory.Create(fontService, createTextBox: pool => new TextBox(fontService, pool, new UiRenderService(), null, contextMenuController));
+        var windowService = TestElementPoolServiceFactory.Create(fontService, createTextBox: pool => new TextBox(TestElementServices.For(pool, fontService), null, contextMenuController));
         var layers = new UiLayerStack();
 
         contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, layers);
@@ -2309,8 +2309,7 @@ public sealed class UiInputControllerTests
 
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
-            fontService, windowService, new UiRenderService(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(TestElementServices.For(windowService, fontService), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
 
         var cell = windowService.CreateElement<InventoryItemStackCell>(null, new ElementOptions
         {
@@ -2351,8 +2350,7 @@ public sealed class UiInputControllerTests
 
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(
-            fontService, windowService, new UiRenderService(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(TestElementServices.For(windowService, fontService), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
 
         var cell = windowService.CreateElement<InventoryItemStackCell>(null, new ElementOptions
         {
@@ -2580,8 +2578,8 @@ public sealed class UiInputControllerTests
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, new UiRenderService()));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(windowService, fontService)));
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
@@ -2626,8 +2624,8 @@ public sealed class UiInputControllerTests
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, new UiRenderService()));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(windowService, fontService)));
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
@@ -2866,9 +2864,9 @@ public sealed class UiInputControllerTests
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
-        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, new UiRenderService()));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
+        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(windowService, fontService)));
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
@@ -3010,11 +3008,11 @@ public sealed class UiInputControllerTests
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
-        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
-        windowService.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
-        windowService.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(fontService, windowService, new UiRenderService()));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, new UiRenderService()));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
+        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
+        windowService.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
+        windowService.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(TestElementServices.For(windowService, fontService)));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(windowService, fontService)));
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
@@ -3391,7 +3389,7 @@ public sealed class UiInputControllerTests
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, new UiRenderService(), spriteSheetService));
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(TestElementServices.For(windowService, fontService), spriteSheetService));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: playerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
@@ -3583,18 +3581,17 @@ public sealed class UiInputControllerTests
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
-        windowService.RegisterFactory<GridControl>(() => new GridControl(fontService, windowService, new UiRenderService()));
-        windowService.RegisterFactory<Toggle>(() => new Toggle(fontService, windowService, new UiRenderService()));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, new UiRenderService()));
-        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, new UiRenderService(), spriteSheetService));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
+        windowService.RegisterFactory<GridControl>(() => new GridControl(TestElementServices.For(windowService, fontService)));
+        windowService.RegisterFactory<Toggle>(() => new Toggle(TestElementServices.For(windowService, fontService)));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(windowService, fontService)));
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(TestElementServices.For(windowService, fontService), spriteSheetService));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)));
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
         var mapViewState = new MapViewState();
 
-        windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            fontService, windowService, new UiRenderService(), TestInventoryServices.Over(componentManager, itemCatalog, world, new EventBus()), world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
+        windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(TestElementServices.For(windowService, fontService), TestInventoryServices.Over(componentManager, itemCatalog, world, new EventBus()), world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());

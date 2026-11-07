@@ -10,9 +10,6 @@ using Presentation.UI.Looting;
 using Presentation.UI.Shops;
 using Presentation.UI.Trade;
 using UIEngine.Bootstrap;
-using UIEngine.Fonts;
-using UIEngine.Rendering;
-using UIEngine.UI;
 
 namespace DungeonCrawlerWorld;
 
@@ -46,27 +43,18 @@ public static class ElementFactoryRegistry
 
         uiEngineContext.RegisterFrameworkElementFactories(contextMenuController, cursorTextContent);
 
-        // Supplies the fontService/elementPool/renderService trio every plain registration repeats, so
-        // each call site below only has to spell out its own type-specific extras.
-        void Register<TElement>(Func<FontService, ElementPoolService, UiRenderService, TElement> factory)
-            where TElement : Element
-            => elementPool.RegisterFactory(() => factory(uiEngineContext.FontService, elementPool, uiEngineContext.RenderService));
-
-        // MapWindow's dependencies (the map view query, renderers) come from Game and Presentation
-        // both, plus the map-specific services built alongside it -- too many type-specific extras
-        // for the Register helper above to pull its weight.
+        var services = uiEngineContext.ElementServices;
+        var sprites = uiEngineContext.SpriteSheetService;
         var floatingTextController = new FloatingTextController(ecsContext.EventBus, gameSession.SimulationClock);
         var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, uiEngineContext.FontService, statusEffectDisplays, uiEngineContext.SpriteSheetService);
         var mapRenderer = new MapRenderer(mapView, views.AuraPower, camera, uiEngineContext.RenderService, uiEngineContext.FontService, uiEngineContext.SpriteSheetService);
         var mapGameOverlay = new MapGameOverlay(mapView, mapViewState, camera, actionTargetingController, uiEngineContext.FontService);
-        elementPool.RegisterFactory<MapWindow>(() => new MapWindow(
-            uiEngineContext.FontService,
-            elementPool,
+        elementPool.RegisterFactory(() => new MapWindow(
+            services,
             mapView,
             views.PlayerActionGate,
             mapViewState,
             ecsContext.EventBus,
-            uiEngineContext.RenderService,
             camera,
             mapRenderer,
             mapGameOverlay,
@@ -78,39 +66,36 @@ public static class ElementFactoryRegistry
             new AdminContextMenuOptions(adminTools),
             shellServices.PointerState));
 
+        elementPool.RegisterFactory(() => new InventoryManagementWindow(
+            services, inventoryServices, world, contextMenuController, mapViewState, simulationClock: gameSession.SimulationClock));
+        elementPool.RegisterFactory(() => new InventoryItemStackCell(services, sprites));
+        elementPool.RegisterFactory(() => new HotbarSlotElement(services));
+        elementPool.RegisterFactory(() => new ShopItemStackCell(services, sprites));
+        elementPool.RegisterFactory(() => new TradeItemStackCell(services, sprites));
+        elementPool.RegisterFactory(() => new EmptyTradeSlotCell(services));
 
-        elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(
-            uiEngineContext.FontService, elementPool, uiEngineContext.RenderService,
-            inventoryServices, world, contextMenuController, mapViewState, simulationClock: gameSession.SimulationClock));
-        Register<InventoryItemStackCell>((font, elements, render) => new InventoryItemStackCell(font, elements, render, uiEngineContext.SpriteSheetService));
-        Register<HotbarSlotElement>((font, elements, render) => new HotbarSlotElement(font, elements, render));
-        Register<ShopItemStackCell>((font, elements, render) => new ShopItemStackCell(font, elements, render, uiEngineContext.SpriteSheetService));
-        Register<TradeItemStackCell>((font, elements, render) => new TradeItemStackCell(font, elements, render, uiEngineContext.SpriteSheetService));
-        Register<EmptyTradeSlotCell>((font, elements, render) => new EmptyTradeSlotCell(font, elements, render));
-
-        elementPool.RegisterFactory<AbilityScoreWindow>(() => new AbilityScoreWindow(
-            uiEngineContext.FontService, elementPool, uiEngineContext.RenderService, views.AbilityScoreView, views.StatModifierView, views.ActionSourceNaming, gameSession.SimulationClock));
-        elementPool.RegisterFactory<HealthWindow>(() => new HealthWindow(
-            uiEngineContext.FontService, elementPool, uiEngineContext.RenderService, views.HealthView, views.StatModifierView, views.ActionStateView, views.EntityBodyParts, statusEffectDisplays, itemCatalog, catalogs.GameplayTags, gameSession.SimulationClock,
+        elementPool.RegisterFactory(() => new AbilityScoreWindow(
+            services, views.AbilityScoreView, views.StatModifierView, views.ActionSourceNaming, gameSession.SimulationClock));
+        elementPool.RegisterFactory(() => new HealthWindow(
+            services, views.HealthView, views.StatModifierView, views.ActionStateView, views.EntityBodyParts, statusEffectDisplays, itemCatalog, catalogs.GameplayTags, gameSession.SimulationClock,
             views.ActionSourceNaming, shellServices.TooltipController));
-        Register<AbilityScoreColumnHeader>((font, elements, render) => new AbilityScoreColumnHeader(font, elements, render));
-        Register<AbilityScoreModifierRow>((font, elements, render) => new AbilityScoreModifierRow(font, elements, render));
+        elementPool.RegisterFactory(() => new AbilityScoreColumnHeader(services));
+        elementPool.RegisterFactory(() => new AbilityScoreModifierRow(services));
 
-        elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(
-            uiEngineContext.FontService, elementPool, uiEngineContext.RenderService, inventoryServices, world, contextMenuController, mapViewState,
+        elementPool.RegisterFactory(() => new SecondaryInventoryWindow(
+            services, inventoryServices, world, contextMenuController, mapViewState,
             simulationClock: gameSession.SimulationClock, entityNaming: views.EntityNaming, healthView: views.HealthView, actionSourceNaming: views.ActionSourceNaming));
-        elementPool.RegisterFactory<ShopWindow>(() => new ShopWindow(
-            uiEngineContext.FontService, elementPool, uiEngineContext.RenderService, inventoryServices, world, contextMenuController, mapViewState,
+        elementPool.RegisterFactory(() => new ShopWindow(
+            services, inventoryServices, world, contextMenuController, mapViewState,
             simulationClock: gameSession.SimulationClock, entityNaming: views.EntityNaming));
-        elementPool.RegisterFactory<TradeWindow>(() => new TradeWindow(
-            uiEngineContext.FontService, elementPool, uiEngineContext.RenderService, inventoryServices, world, contextMenuController, mapViewState, simulationClock: gameSession.SimulationClock));
-        Register<EntityIconElement>((font, elements, render) => new EntityIconElement(font, elements, render, uiEngineContext.SpriteSheetService,
-            mapView));
+        elementPool.RegisterFactory(() => new TradeWindow(
+            services, inventoryServices, world, contextMenuController, mapViewState, simulationClock: gameSession.SimulationClock));
+        elementPool.RegisterFactory(() => new EntityIconElement(services, sprites, mapView));
 
-        Register<InspectionWindow>((font, elements, render) => new InspectionWindow(font, elements, render, mapViewState));
-        Register<ItemDetailsWindow>((font, elements, render) => new ItemDetailsWindow(font, elements, render, actionCatalog, catalogs.GameplayTags, views.ActionStateView, world));
-        Register<ItemIconElement>((font, elements, render) => new ItemIconElement(font, elements, render, uiEngineContext.SpriteSheetService));
-        Register<CurrencyElement>((font, elements, render) => new CurrencyElement(font, elements, render, uiEngineContext.SpriteSheetService));
-        Register<TargetShapePreviewElement>((font, elements, render) => new TargetShapePreviewElement(font, elements, render));
+        elementPool.RegisterFactory(() => new InspectionWindow(services, mapViewState));
+        elementPool.RegisterFactory(() => new ItemDetailsWindow(services, actionCatalog, catalogs.GameplayTags, views.ActionStateView, world));
+        elementPool.RegisterFactory(() => new ItemIconElement(services, sprites));
+        elementPool.RegisterFactory(() => new CurrencyElement(services, sprites));
+        elementPool.RegisterFactory(() => new TargetShapePreviewElement(services));
     }
 }

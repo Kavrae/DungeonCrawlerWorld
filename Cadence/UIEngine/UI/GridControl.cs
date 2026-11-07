@@ -2,7 +2,6 @@ using Engine.Utilities;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
 
@@ -19,8 +18,8 @@ namespace UIEngine.UI;
 /// subclass, since it composes several children and owns its own event/update logic. The sort
 /// control is click-to-cycle.
 /// </summary>
-public sealed class GridControl(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Window(fontService, elementPoolService, renderService)
+public sealed class GridControl(ElementServices services)
+    : Window(services)
 {
     public const float RowHeight = 24f;
 

@@ -1,6 +1,4 @@
 using System.Globalization;
-using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI.Content;
 
 namespace UIEngine.UI;
@@ -12,8 +10,8 @@ namespace UIEngine.UI;
 /// the box steps the value by its step, one step per notch.
 /// </summary>
 /// <remarks>Configure before Initialize, the usual contract; SetValue changes it afterwards without raising ValueChanged.</remarks>
-public sealed class NumericField(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null)
-    : TextBox(fontService, elementPoolService, renderService, cursorTextContent, contextMenuController)
+public sealed class NumericField(ElementServices services, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null)
+    : TextBox(services, cursorTextContent, contextMenuController)
 {
     private double _minimum;
     private double _maximum;

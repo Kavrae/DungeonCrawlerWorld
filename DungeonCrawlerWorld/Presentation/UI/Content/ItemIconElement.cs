@@ -17,8 +17,8 @@ namespace Presentation.UI.Content;
 /// sprite/glyph directly rather than resolving them from an entity's own component pools -- an
 /// item has no entity id of its own to look up.
 /// </summary>
-public sealed class ItemIconElement(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService spriteSheetService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class ItemIconElement(ElementServices services, SpriteSheetService spriteSheetService)
+    : Element(services)
 {
     private SpriteView? _sprite;
     private string _glyph = string.Empty;

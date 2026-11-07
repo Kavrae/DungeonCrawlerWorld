@@ -27,8 +27,8 @@ namespace Presentation.UI.Content;
 /// name+price row), reusing Configure/SetPrice/SetStockStatus/the favorable-price coloring via its
 /// own DrawContent override. See that class's own doc comment.
 /// </summary>
-public class ShopItemStackCell(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService spriteSheetService)
-    : InventoryItemStackCell(fontService, elementPoolService, renderService, spriteSheetService)
+public class ShopItemStackCell(ElementServices services, SpriteSheetService spriteSheetService)
+    : InventoryItemStackCell(services, spriteSheetService)
 {
     private const float TextPadding = 4f;
 

@@ -1,6 +1,5 @@
 using Microsoft.Xna.Framework;
 using SpriteFormat;
-using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI;
 
@@ -8,8 +7,8 @@ namespace Workshop.Sprites;
 
 /// <summary>One spritesheet, zoomed, with the selected entry's grid and cells marked on it: a wall's face and top in their own colours.</summary>
 /// <remarks>The wheel zooms (whole multiples, 1x to 16x) about the view's centre; a right-drag pans. The sheet is drawn as it is on disk -- a cell's turn, flip and tint are the previews'.</remarks>
-public sealed class SpriteSheetView(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class SpriteSheetView(ElementServices services)
+    : Element(services)
 {
     private const int MaximumZoom = 16;
     private const int CellOutlineThickness = 2;

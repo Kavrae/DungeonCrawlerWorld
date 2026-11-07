@@ -28,8 +28,8 @@ public sealed record ListViewRow(IReadOnlyList<string> Cells, string? IconGlyph 
 /// cells as numbers when both read as one, and as text otherwise; rows that compare equal keep the order SetRows gave.
 /// The selection is the row itself, so it survives a sort, and SetRows keeps it when the new rows still hold it.
 /// </remarks>
-public sealed class ListView(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class ListView(ElementServices services)
+    : Element(services)
 {
     public const float RowHeight = 20f;
     public const float HeaderHeight = 22f;
@@ -42,9 +42,9 @@ public sealed class ListView(FontService fontService, ElementPoolService element
     private static readonly Color SelectedRowColor = WindowPalette.HighlightColor;
     private static readonly Color AlternateRowColor = Color.Black * 0.04f;
 
-    private readonly SpriteFontBase _font = fontService.GetFont(FontChrome.DefaultFontSize);
+    private readonly SpriteFontBase _font = services.FontService.GetFont(FontChrome.DefaultFontSize);
 
-    private readonly FontStashTextMeasurer _textMeasurer = fontService.GetTextMeasurer(fontService.GetFont(FontChrome.DefaultFontSize));
+    private readonly FontStashTextMeasurer _textMeasurer = services.FontService.GetTextMeasurer(services.FontService.GetFont(FontChrome.DefaultFontSize));
 
     private IReadOnlyList<ListViewColumn> _columns = [];
     private bool _showIconColumn;

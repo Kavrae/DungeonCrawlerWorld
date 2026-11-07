@@ -16,8 +16,8 @@ namespace UIEngine.UI;
 /// left edge). No default widthFraction/textPosition -- every caller states both explicitly via
 /// Configure, since different call sites want different values (section headers at 90%/25%, say).
 /// </summary>
-public sealed class TextDivider(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class TextDivider(ElementServices services)
+    : Element(services)
 {
     private const float LineHeight = 1f;
 

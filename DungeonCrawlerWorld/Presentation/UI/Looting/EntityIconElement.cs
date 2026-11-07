@@ -16,12 +16,10 @@ namespace Presentation.UI.Looting;
 /// itself). Distinct from InventoryItemStackCell, which draws an item's icon, not an entity's.
 /// </summary>
 public sealed class EntityIconElement(
-    FontService fontService,
-    ElementPoolService elementPoolService,
-    UiRenderService renderService,
+    ElementServices services,
     SpriteSheetService spriteSheetService,
     IMapViewQuery mapView)
-    : Element(fontService, elementPoolService, renderService)
+    : Element(services)
 {
     private int _entityId;
     private MapVisual? _fixedVisual;

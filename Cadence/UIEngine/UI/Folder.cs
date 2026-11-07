@@ -28,8 +28,8 @@ public sealed class Folder : Element
     private FontStashTextMeasurer _fallbackGlyphFontMeasurer = null!;
     private Color _backgroundColor;
 
-    public Folder(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService spriteSheetService)
-        : base(fontService, elementPoolService, renderService)
+    public Folder(ElementServices services, SpriteSheetService spriteSheetService)
+        : base(services)
     {
         _spriteSheetService = spriteSheetService;
     }

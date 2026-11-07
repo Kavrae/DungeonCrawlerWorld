@@ -1,6 +1,5 @@
 using Microsoft.Xna.Framework;
 using SpriteFormat;
-using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI;
 
@@ -13,8 +12,8 @@ namespace Workshop.Sprites;
 /// face, so thick walls read as tops with one row of faces. An empty slot draws its set's fallback piece, as the game does. The first
 /// variant set is shown. An entry with no linked part shows nothing.
 /// </remarks>
-public sealed class SpriteLinkPreview(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class SpriteLinkPreview(ElementServices services)
+    : Element(services)
 {
     /// <summary>A horizontal run, a vertical run, a 3x3 block, an L, a T, a + junction and a lone pillar, with room above and beside for anything to reach.</summary>
     private static readonly string[] TestLayout =

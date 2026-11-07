@@ -18,8 +18,8 @@ namespace Builders.MapAreas;
 /// symbol is a space, or when the area has no rows for that layer at all. While LoadingText is set, a spinner is drawn
 /// over whatever is shown.
 /// </remarks>
-public sealed class AreaMapView(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService spriteSheetService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class AreaMapView(ElementServices services, SpriteSheetService spriteSheetService)
+    : Element(services)
 {
     private const int MarkerLabelFontSize = 11;
     private const int AreaLabelFontSize = 14;
@@ -44,8 +44,8 @@ public sealed class AreaMapView(FontService fontService, ElementPoolService elem
     private static readonly IReadOnlyList<int> NoWatchedEntities = [];
     private static readonly IReadOnlyList<MapGroundMark> NoGroundMarks = [];
 
-    private readonly SpriteFontBase _markerFont = fontService.GetFont(MarkerLabelFontSize);
-    private readonly SpriteFontBase _areaLabelFont = fontService.GetFont(AreaLabelFontSize);
+    private readonly SpriteFontBase _markerFont = services.FontService.GetFont(MarkerLabelFontSize);
+    private readonly SpriteFontBase _areaLabelFont = services.FontService.GetFont(AreaLabelFontSize);
 
     private IMapPreviewScene? _scene;
     private MapCamera? _camera;

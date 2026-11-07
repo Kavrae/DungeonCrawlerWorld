@@ -34,10 +34,10 @@ public sealed class CurrencyRowContentTests
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, new UiRenderService(), spriteSheetService));
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(TestElementServices.For(windowService, fontService), spriteSheetService));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)));
-        var contextMenuController = new ContextMenuController(new DropdownController(windowService, new UiRenderService()));
+        var contextMenuController = new ContextMenuController(new DropdownController(windowService, TestElementServices.RenderFor(windowService)));
         contextMenuController.Dropdowns.Initialize(new UiLayerStack());
 
         var content = new CurrencyRowContent(EntityId, TestInventoryServices.Over(componentManager, new ItemCatalog(), world, new EventBus()), world, contextMenuController, windowService, static () => null);
@@ -109,7 +109,7 @@ public sealed class CurrencyRowContentTests
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, new UiRenderService(), spriteSheetService));
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(TestElementServices.For(windowService, fontService), spriteSheetService));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());

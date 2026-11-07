@@ -1,6 +1,5 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
-using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI.ColorPalettes;
 
@@ -26,8 +25,8 @@ public enum SplitSizedPane : byte
 /// sized pane, never past either pane's minimum. The owner fills FirstPane and SecondPane like any window.
 /// </summary>
 /// <remarks>Configure before Initialize, the usual contract.</remarks>
-public sealed class SplitPane(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class SplitPane(ElementServices services)
+    : Element(services)
 {
     public const float SplitterThickness = 5f;
 

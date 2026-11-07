@@ -11,9 +11,9 @@ namespace Workshop.Debug;
 public sealed record DebugTabServices(ElementPoolService Pool, FontService Fonts, UiRenderService Render, UiLayerStack Layers, Action<IUiInputHandler> AddInputHandler, IWorkshopStatus Status, Action<string> CopyToClipboard, ContextMenuController ContextMenus)
 {
     /// <summary>Registers the Debug tab's own elements with the pool -- once per pool.</summary>
-    public static void RegisterElementFactories(ElementPoolService pool, FontService fonts, UiRenderService render)
+    public static void RegisterElementFactories(ElementServices services)
     {
-        pool.RegisterFactory(() => new DiagnosticsTimelineView(fonts, pool, render));
-        pool.RegisterFactory(() => new DiagnosticsGaugeList(fonts, pool, render));
+        services.ElementPoolService.RegisterFactory(() => new DiagnosticsTimelineView(services));
+        services.ElementPoolService.RegisterFactory(() => new DiagnosticsGaugeList(services));
     }
 }

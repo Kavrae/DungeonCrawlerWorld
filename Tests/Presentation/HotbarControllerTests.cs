@@ -93,7 +93,7 @@ public sealed class HotbarControllerTests
         var fontService = TestFonts.Shared;
         var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());
         var tooltipPool = TestElementPoolServiceFactory.Create(fontService);
-        tooltipPool.RegisterFactory<Tooltip>(() => new Tooltip(fontService, tooltipPool, new UiRenderService()));
+        tooltipPool.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(tooltipPool, fontService)));
         var tooltipController = new TooltipController { ScreenBoundsOverrideForTests = new Rectangle(0, 0, 2000, 2000) };
         tooltipController.Initialize(tooltipPool, new UiLayerStack());
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(tooltipPool, new UiLayerStack());

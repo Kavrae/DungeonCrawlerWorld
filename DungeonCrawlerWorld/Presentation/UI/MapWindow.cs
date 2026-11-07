@@ -9,9 +9,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.MapRendering;
 using Presentation.UI.FloatingText;
-using UIEngine.Fonts;
 using UIEngine.Input;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Presentation.UI;
@@ -94,13 +92,11 @@ public sealed class MapWindow : Window, IContentDropTarget
 
     /// <summary>Constructs the map viewport, wired to the world/camera/targeting/movement collaborators it renders and delegates input to.</summary>
     public MapWindow(
-        FontService fontService,
-        ElementPoolService elementPoolService,
+        ElementServices services,
         IMapViewQuery mapView,
         PlayerActionGate playerActionGate,
         MapViewState mapViewState,
         EventBus eventBus,
-        UiRenderService renderService,
         MapCamera camera,
         MapRenderer renderer,
         MapGameOverlay overlay,
@@ -110,7 +106,7 @@ public sealed class MapWindow : Window, IContentDropTarget
         FloatingTextController floatingTextController,
         FloatingTextRenderer floatingTextRenderer,
         AdminContextMenuOptions adminContextMenuOptions,
-        PointerState pointerState) : base(fontService, elementPoolService, renderService)
+        PointerState pointerState) : base(services)
     {
         _mapView = mapView;
         _playerActionGate = playerActionGate;

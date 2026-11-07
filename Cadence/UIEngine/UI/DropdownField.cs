@@ -14,8 +14,8 @@ namespace UIEngine.UI;
 /// list is open closes it. Focused, Space, Enter or Down opens it too, and the dropdown's own Up/Down/Enter choose.
 /// </summary>
 /// <remarks>Its choices are set with SetOptions, before or after Initialize.</remarks>
-public sealed class DropdownField(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, DropdownController dropdowns)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class DropdownField(ElementServices services, DropdownController dropdowns)
+    : Element(services)
 {
     /// <summary>How tall the open list may grow before it scrolls.</summary>
     public const float ListMaximumHeight = 300f;
@@ -24,7 +24,7 @@ public sealed class DropdownField(FontService fontService, ElementPoolService el
     private const int ArrowWidth = 9;
     private const int ArrowRightInset = 6;
 
-    private readonly SpriteFontBase _font = fontService.GetFont(FontChrome.DefaultFontSize);
+    private readonly SpriteFontBase _font = services.FontService.GetFont(FontChrome.DefaultFontSize);
 
     private IReadOnlyList<string> _labels = [];
     private DropdownOption[] _options = [];

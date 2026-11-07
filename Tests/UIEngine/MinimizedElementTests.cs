@@ -1,6 +1,4 @@
 using Microsoft.Xna.Framework;
-using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Tests.UIEngine;
@@ -9,8 +7,8 @@ namespace Tests.UIEngine;
 [DoNotParallelize]
 public sealed class MinimizedElementTests
 {
-    private sealed class UpdateCountingElement(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-        : Element(fontService, elementPoolService, renderService)
+    private sealed class UpdateCountingElement(ElementServices services)
+        : Element(services)
     {
         public int UpdateCount { get; private set; }
 
@@ -24,7 +22,7 @@ public sealed class MinimizedElementTests
     private static ElementPoolService CreatePool()
     {
         var pool = TestElementPoolServiceFactory.Create(TestFonts.Shared);
-        pool.RegisterFactory(() => new UpdateCountingElement(TestFonts.Shared, pool, new UiRenderService()));
+        pool.RegisterFactory(() => new UpdateCountingElement(TestElementServices.For(pool)));
         return pool;
     }
 

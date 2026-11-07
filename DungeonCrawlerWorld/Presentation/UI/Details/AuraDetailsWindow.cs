@@ -4,7 +4,6 @@ using Game.Modules.Actions;
 using Game.Modules.Auras;
 using Microsoft.Xna.Framework;
 using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Presentation.UI.Details;
@@ -17,16 +16,14 @@ namespace Presentation.UI.Details;
 /// every row is built against the width Configure is given.
 /// </remarks>
 public sealed class AuraDetailsWindow(
-    FontService fontService,
-    ElementPoolService elementPoolService,
-    UiRenderService renderService,
+    ElementServices services,
     ActionCatalog actionCatalog,
     GameplayTagRegistry gameplayTags)
-    : Window(fontService, elementPoolService, renderService)
+    : Window(services)
 {
     private const string GlowSwatchGlyph = "●";
 
-    private readonly ActivatableDetailsSections _sections = new(elementPoolService, fontService, actionCatalog, gameplayTags);
+    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, actionCatalog, gameplayTags);
 
     private AuraDefinition? _definition;
     private float _contentWidth;

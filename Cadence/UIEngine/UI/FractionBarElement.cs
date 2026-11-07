@@ -10,8 +10,8 @@ namespace UIEngine.UI;
 /// Draws whatever fraction/colors Configure was last given, for callers that already
 /// have the number in hand.
 /// </remarks>
-public sealed class FractionBarElement(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class FractionBarElement(ElementServices services)
+    : Element(services)
 {
     private float _fraction;
     private bool _hasResource;

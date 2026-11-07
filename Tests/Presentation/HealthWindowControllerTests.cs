@@ -27,7 +27,6 @@ using Presentation.UI.Chrome;
 using System.Linq;
 using Tests.UIEngine;
 using UIEngine.Input;
-using UIEngine.Rendering;
 using UIEngine.UI;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
@@ -86,14 +85,14 @@ public sealed class HealthWindowControllerTests
         var auras = new AuraCatalog();
         var pointerState = new PointerState();
 
-        pool.RegisterFactory<Tooltip>(() => new Tooltip(fontService, pool, new UiRenderService()));
+        pool.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(pool, fontService)));
         var tooltipController = new TooltipController { ScreenBoundsOverrideForTests = new Rectangle(0, 0, 2000, 2000) };
         tooltipController.Initialize(pool, layers);
 
-        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(fontService, pool, new UiRenderService(), new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), new StatModifierView(componentManager), TestActionStateViews.Over(componentManager), BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog, TestGameplayTags.BuiltIn, simulationClock: new SimulationClock(),
+        pool.RegisterFactory<HealthWindow>(() => new HealthWindow(TestElementServices.For(pool, fontService), new HealthView(componentManager, BodyPartTestWorld.PartsOf(componentManager)), new StatModifierView(componentManager), TestActionStateViews.Over(componentManager), BodyPartTestWorld.PartsOf(componentManager), statusEffectDisplays, itemCatalog, TestGameplayTags.BuiltIn, simulationClock: new SimulationClock(),
             TestActionSources.Naming(terrain, auras, componentManager.Keys), tooltipController));
-        pool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, pool, new UiRenderService()));
-        pool.RegisterFactory<FractionBarElement>(() => new FractionBarElement(fontService, pool, new UiRenderService()));
+        pool.RegisterFactory<TextDivider>(() => new TextDivider(TestElementServices.For(pool, fontService)));
+        pool.RegisterFactory<FractionBarElement>(() => new FractionBarElement(TestElementServices.For(pool, fontService)));
 
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(pool, layers);
         var health = new HealthWindowController(pool, world, contextMenuController);

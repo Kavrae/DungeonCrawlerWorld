@@ -29,12 +29,12 @@ public sealed class DetailsWindowsTests
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
         var actionStateView = TestActionStateViews.Over(Build.Value.EcsContext.ComponentManager, context.Actions, context.Items);
 
-        elementPool.RegisterFactory(() => new TextDivider(fontService, elementPool, new UiRenderService()));
-        elementPool.RegisterFactory(() => new ItemIconElement(fontService, elementPool, new UiRenderService(), spriteSheetService));
-        elementPool.RegisterFactory(() => new TargetShapePreviewElement(fontService, elementPool, new UiRenderService()));
-        elementPool.RegisterFactory(() => new ItemDetailsWindow(fontService, elementPool, new UiRenderService(), context.Actions, context.GameplayTags, actionStateView, TestPlayerQuery.NoPlayer));
-        elementPool.RegisterFactory(() => new ActionDetailsWindow(fontService, elementPool, new UiRenderService(), context.Actions, context.GameplayTags));
-        elementPool.RegisterFactory(() => new AuraDetailsWindow(fontService, elementPool, new UiRenderService(), context.Actions, context.GameplayTags));
+        elementPool.RegisterFactory(() => new TextDivider(TestElementServices.For(elementPool, fontService)));
+        elementPool.RegisterFactory(() => new ItemIconElement(TestElementServices.For(elementPool, fontService), spriteSheetService));
+        elementPool.RegisterFactory(() => new TargetShapePreviewElement(TestElementServices.For(elementPool, fontService)));
+        elementPool.RegisterFactory(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, context.GameplayTags, actionStateView, TestPlayerQuery.NoPlayer));
+        elementPool.RegisterFactory(() => new ActionDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, context.GameplayTags));
+        elementPool.RegisterFactory(() => new AuraDetailsWindow(TestElementServices.For(elementPool, fontService), context.Actions, context.GameplayTags));
         return elementPool;
     }
 

@@ -4,8 +4,6 @@ using Game.Views;
 using Game.World;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
-using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Presentation.UI.Looting;
@@ -16,9 +14,7 @@ namespace Presentation.UI.Looting;
 /// which the header counts against and the grid's four rows fit (ContainerInventoryWindow has the shared layout rules).
 /// </remarks>
 public sealed class SecondaryInventoryWindow(
-    FontService fontService,
-    ElementPoolService elementPoolService,
-    UiRenderService renderService,
+    ElementServices services,
     InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
@@ -27,7 +23,7 @@ public sealed class SecondaryInventoryWindow(
     EntityNaming entityNaming,
     HealthView healthView,
     ActionSourceNaming actionSourceNaming)
-    : ContainerInventoryWindow(fontService, elementPoolService, renderService, inventoryServices, world, contextMenuController, mapViewState, simulationClock)
+    : ContainerInventoryWindow(services, inventoryServices, world, contextMenuController, mapViewState, simulationClock)
 {
     /// <summary>Five plain cells, the "2x5" shape a ten-item corpse reads as.</summary>
     protected override int GridColumns => 5;

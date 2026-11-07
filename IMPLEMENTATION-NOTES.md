@@ -3170,6 +3170,11 @@ own, in one pass; nothing in the UI uses `SpriteBatch`, and nothing ends the pas
   exposes it as `Render` for the `IElementContent` it hosts), as does every factory; it is not handed on through the pool,
   which would hold a dependency it never uses and hide the one every element has. `DropdownController`, `MapRenderer`,
   `UiLayerHost` and the hosts' frame reset, which used the pool only to draw, take it directly.
+- **Elements take `ElementServices`** (2026-11-07). The font service, the pool and the render service travel together as
+  an element's one first constructor argument (`ElementServices`, one per host on `UiEngineContext`; `Element.Services`
+  hands it on), replacing three arguments every element and factory repeated. A registration helper was considered and
+  rejected: C# can't partially apply a constructor, so a helper's lambda still named all three. The pool still holds
+  neither fonts nor rendering, and a non-element (`DropdownController`, `MapRenderer`) still takes only what it uses.
 - **The drawing helpers hold nothing** (2026-10-23). `LabelRenderer` was the one helper built as an instance and handed to
   every element, and only for its cache of each glyph's ink centre -- a fact about a font, not about drawing. The cache is
   the font's `FontStashTextMeasurer`'s (`GetInkCenterAtOrigin`, beside its widths), so `LabelRenderer` is static like

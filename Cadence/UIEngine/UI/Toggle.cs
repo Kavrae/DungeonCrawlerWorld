@@ -23,8 +23,8 @@ namespace UIEngine.UI;
 /// hit-target checkbox convention -- only the checkbox square itself gets the Inset/Outset+color
 /// treatment; the label is plain text, no background of its own.
 /// </summary>
-public sealed class Toggle(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class Toggle(ElementServices services)
+    : Element(services)
 {
     /// <summary>Side length of the checkbox square -- public so a caller (e.g. GridControl, sizing its own row layout before this element's ContentSize exists yet) can compute how much total width a given label needs without duplicating the number.</summary>
     public const float CheckboxSize = 14f;

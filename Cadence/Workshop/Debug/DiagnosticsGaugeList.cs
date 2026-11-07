@@ -15,13 +15,13 @@ namespace Workshop.Debug;
 /// text and sparkline values (SetWindow) whenever it rebuilds them; nothing here formats per frame. With no gauges it
 /// shows Message instead -- why there are none.
 /// </remarks>
-public sealed class DiagnosticsGaugeList(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class DiagnosticsGaugeList(ElementServices services)
+    : Element(services)
 {
     private static readonly string[] ColumnHeadings = ["Gauge", "Value", "Min", "Max", "Avg"];
     private static readonly float[] ColumnX = [DebugTabChrome.GaugeNameIndent, DebugTabChrome.GaugeValueColumnX, DebugTabChrome.GaugeMinimumColumnX, DebugTabChrome.GaugeMaximumColumnX, DebugTabChrome.GaugeAverageColumnX];
 
-    private readonly SpriteFontBase _font = fontService.GetFont(FontChrome.DefaultFontSize);
+    private readonly SpriteFontBase _font = services.FontService.GetFont(FontChrome.DefaultFontSize);
     private readonly List<int> _selectedGaugeIndexes = [];
 
     /// <summary>A row: a group's heading (GaugeIndex -1, its name in GroupName) or a gauge.</summary>

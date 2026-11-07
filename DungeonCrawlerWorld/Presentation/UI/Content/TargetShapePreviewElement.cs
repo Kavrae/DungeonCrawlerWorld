@@ -24,8 +24,8 @@ namespace Presentation.UI.Content;
 /// abstract stat either. The caster's own cell and the mirrored left side are left blank -- the
 /// left side would just repeat the same distance values already visible on the right.
 /// </summary>
-public sealed class TargetShapePreviewElement(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class TargetShapePreviewElement(ElementServices services)
+    : Element(services)
 {
     private const float CellGap = 1f;
     private const float CellBorderThickness = 1f;

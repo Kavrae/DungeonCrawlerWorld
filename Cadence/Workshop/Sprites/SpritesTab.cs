@@ -86,9 +86,10 @@ public sealed class SpritesTab : IIdeTab
     public static SpritesTab Create(UiEngineContext uiEngine, string manifestPath, string spritesheetsDirectory)
     {
         var pool = uiEngine.ElementPoolService;
-        pool.RegisterFactory(() => new SpriteSheetView(uiEngine.FontService, pool, uiEngine.RenderService));
-        pool.RegisterFactory(() => new SpritePlacementPreview(uiEngine.FontService, pool, uiEngine.RenderService));
-        pool.RegisterFactory(() => new SpriteLinkPreview(uiEngine.FontService, pool, uiEngine.RenderService));
+        var services = uiEngine.ElementServices;
+        pool.RegisterFactory(() => new SpriteSheetView(services));
+        pool.RegisterFactory(() => new SpritePlacementPreview(services));
+        pool.RegisterFactory(() => new SpriteLinkPreview(services));
 
         var spritesheetsFolder = Path.Combine(AppContext.BaseDirectory, spritesheetsDirectory);
         Func<string, bool> sheetExists = sheetPath => File.Exists(Path.Combine(spritesheetsFolder, sheetPath));

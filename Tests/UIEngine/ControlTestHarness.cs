@@ -1,7 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using UIEngine.Input;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Tests.UIEngine;
@@ -21,13 +20,13 @@ internal sealed class ControlTestHarness
         Layers = new UiLayerStack();
         Dropdowns = TestElementPoolServiceFactory.CreateDropdownController(Pool, Layers);
         var contextMenus = new ContextMenuController(Dropdowns);
-        Pool.RegisterFactory(() => new NumericField(fontService, Pool, new UiRenderService(), null, contextMenus));
-        Pool.RegisterFactory(() => new ColorField(fontService, Pool, new UiRenderService(), null, contextMenus));
-        Pool.RegisterFactory(() => new DropdownField(fontService, Pool, new UiRenderService(), Dropdowns));
-        Pool.RegisterFactory(() => new ListView(fontService, Pool, new UiRenderService()));
-        Pool.RegisterFactory(() => new ListEditor(fontService, Pool, new UiRenderService()));
-        Pool.RegisterFactory(() => new SplitPane(fontService, Pool, new UiRenderService()));
-        Pool.RegisterFactory(() => new ModalDialog(fontService, Pool, new UiRenderService()));
+        Pool.RegisterFactory(() => new NumericField(TestElementServices.For(Pool, fontService), null, contextMenus));
+        Pool.RegisterFactory(() => new ColorField(TestElementServices.For(Pool, fontService), null, contextMenus));
+        Pool.RegisterFactory(() => new DropdownField(TestElementServices.For(Pool, fontService), Dropdowns));
+        Pool.RegisterFactory(() => new ListView(TestElementServices.For(Pool, fontService)));
+        Pool.RegisterFactory(() => new ListEditor(TestElementServices.For(Pool, fontService)));
+        Pool.RegisterFactory(() => new SplitPane(TestElementServices.For(Pool, fontService)));
+        Pool.RegisterFactory(() => new ModalDialog(TestElementServices.For(Pool, fontService)));
         Input = new UiInputController(Layers, ScreenSize, new PointerState(), [], [], Dropdowns) { StartTextInput = static () => { }, StopTextInput = static () => { } };
     }
 

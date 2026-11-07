@@ -2,7 +2,6 @@ using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
@@ -22,8 +21,8 @@ public enum WorkshopBottomPanelTab : byte
 /// tab shows opens it there. Its top edge drags to make it taller or shorter.
 /// </summary>
 /// <remarks>Configure before Initialize, the usual contract. Created and laid out by WorkshopShell.</remarks>
-public sealed class WorkshopBottomPanel(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Window(fontService, elementPoolService, renderService)
+public sealed class WorkshopBottomPanel(ElementServices services)
+    : Window(services)
 {
     public const float MinimumHeight = 80f;
     public const float GripHeight = 5f;
@@ -42,7 +41,7 @@ public sealed class WorkshopBottomPanel(FontService fontService, ElementPoolServ
     private static readonly Color SelectedTileColor = WindowPalette.ControlBackground;
     private static readonly Color SelectedTileTextColor = Color.White;
 
-    private readonly SpriteFontBase _tileFont = fontService.GetFont(FontChrome.DefaultFontSize);
+    private readonly SpriteFontBase _tileFont = services.FontService.GetFont(FontChrome.DefaultFontSize);
 
     private TabNavigator _navigator = null!;
     private TextWindow _errorListTile = null!;

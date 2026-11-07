@@ -346,8 +346,8 @@ public static class ShellBootstrapper
         UiEngineContext uiEngine, EcsContext ecsContext, DiagnosticsEngine? diagnostics, UiLayerStack layers)
     {
         var elementPool = uiEngine.ElementPoolService;
-        elementPool.RegisterFactory<DiagnosticsWindow>(() => new DiagnosticsWindow(
-            uiEngine.FontService, elementPool, uiEngine.RenderService, ecsContext.EntityManager, ecsContext.ComponentManager.GetPackedPool<MovementComponent>(), ecsContext.SystemManager.Clock, diagnostics));
+        elementPool.RegisterFactory(() => new DiagnosticsWindow(
+            uiEngine.ElementServices, ecsContext.EntityManager, ecsContext.ComponentManager.GetPackedPool<MovementComponent>(), ecsContext.SystemManager.Clock, diagnostics));
         return new DiagnosticsWindowController(elementPool, layers);
     }
 

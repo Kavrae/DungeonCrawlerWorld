@@ -4,9 +4,7 @@ using Microsoft.Xna.Framework;
 using Presentation.Input.DragDrop;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
-using UIEngine.Fonts;
 using UIEngine.Input;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Presentation.UI.Shops;
@@ -20,16 +18,14 @@ namespace Presentation.UI.Shops;
 /// lands in the shop's inventory.
 /// </remarks>
 public sealed class ShopWindow(
-    FontService fontService,
-    ElementPoolService elementPoolService,
-    UiRenderService renderService,
+    ElementServices services,
     InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
     Engine.ECS.Systems.SimulationClock simulationClock,
     EntityNaming entityNaming)
-    : ContainerInventoryWindow(fontService, elementPoolService, renderService, inventoryServices, world, contextMenuController, mapViewState, simulationClock), IContentDropTarget
+    : ContainerInventoryWindow(services, inventoryServices, world, contextMenuController, mapViewState, simulationClock), IContentDropTarget
 {
     private InventoryDropTarget? _dropTarget;
 

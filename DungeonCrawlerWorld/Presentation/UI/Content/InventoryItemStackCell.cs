@@ -48,8 +48,8 @@ public enum CellCompareState
 /// slot mid-drag.
 /// </summary>
 /// <summary>Not sealed -- ShopItemStackCell subclasses this for the shop-mode grid (sprite+name+price layout instead of icon+quantity-badge), reusing Configure/the base fill+hover/selected/eligible-glow drawing via its own DrawContent override. See that class's own doc comment.</summary>
-public class InventoryItemStackCell(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService spriteSheetService)
-    : Element(fontService, elementPoolService, renderService), IContentDragSource
+public class InventoryItemStackCell(ElementServices services, SpriteSheetService spriteSheetService)
+    : Element(services), IContentDragSource
 {
     private static readonly Color GroupBorderColor = Color.Black;
     private const float GroupBorderThickness = 2f;

@@ -1,5 +1,4 @@
 using Microsoft.Xna.Framework;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Tests.UIEngine;
@@ -11,8 +10,8 @@ public sealed class ToggleListTests
     private static (ControlTestHarness Harness, ToggleList List) BuildList(string? allLabel, params bool[] states)
     {
         var harness = new ControlTestHarness();
-        harness.Pool.RegisterFactory(() => new Toggle(TestFonts.Shared, harness.Pool, new UiRenderService()));
-        harness.Pool.RegisterFactory(() => new ToggleList(TestFonts.Shared, harness.Pool, new UiRenderService()));
+        harness.Pool.RegisterFactory(() => new Toggle(TestElementServices.For(harness.Pool)));
+        harness.Pool.RegisterFactory(() => new ToggleList(TestElementServices.For(harness.Pool)));
         var items = states.Select((isOn, index) => new ToggleListItem($"Item {index}", isOn)).ToArray();
         var list = harness.AddRoot<ToggleList>(
             new Vector2(100, 100),

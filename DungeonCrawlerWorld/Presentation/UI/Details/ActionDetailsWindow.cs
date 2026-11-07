@@ -2,7 +2,6 @@ using Engine.Tags;
 using Game.Modules.Actions;
 using Microsoft.Xna.Framework;
 using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Presentation.UI.Details;
@@ -15,14 +14,12 @@ namespace Presentation.UI.Details;
 /// width Configure is given.
 /// </remarks>
 public sealed class ActionDetailsWindow(
-    FontService fontService,
-    ElementPoolService elementPoolService,
-    UiRenderService renderService,
+    ElementServices services,
     ActionCatalog actionCatalog,
     GameplayTagRegistry gameplayTags)
-    : Window(fontService, elementPoolService, renderService)
+    : Window(services)
 {
-    private readonly ActivatableDetailsSections _sections = new(elementPoolService, fontService, actionCatalog, gameplayTags);
+    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, actionCatalog, gameplayTags);
 
     private ActionDefinition? _definition;
     private float _contentWidth;

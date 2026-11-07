@@ -3448,6 +3448,38 @@ leaving overrides only for what is truly the element's own content:
 - Content, not chrome, and staying as it is: `Toggle`'s checkbox, `ColorField`'s swatch, `SplitPane`'s
   splitter, `DropdownField`'s arrow.
 
+#### Element behaviors as composed features
+
+`Element` (`Cadence/UIEngine/UI/Element.cs`, ~2200 lines) holds every behavior any element might want, and
+grows with each one: the glow pulse just added two `GlowAnimation`s, two `GlowPulseClock`s, restart methods
+and strength queries to every element, glowing or not. Move each behavior into a self-contained feature
+that an element gets by composition, so `Element` keeps only what every element needs (hierarchy,
+geometry, measure/arrange, the draw and input pipeline) and doesn't become a "do everything" class.
+- **Candidates:** every `/*========Name========*/` section in `Element.cs` -- Hierarchy, Focus, Header,
+  Footer, Border, Content, Viewport, User Controls, Scroll, Scrollbars -- plus the unheaded glow and
+  overlay glow (with their animation and pulse clocks), transparency and the display mode. Each needs
+  judging on its own: Hierarchy and Content are probably the core and stay; Glow, Border, Header, Footer,
+  Scrollbars and Focus look like the first features.
+- **A feature owns** its state, its options (today's `ElementChromeOptions`/`ElementLayoutOptions`
+  pieces), its pooling reset (each one resets itself, replacing `Build`'s hand-kept list of fields to
+  clear -- the stale-glow and stale-focus bugs that list exists for), and the hooks it uses: a draw step
+  at a named place in `Element.Draw`'s order (ties to "Separate the drawing of backgrounds, borders,
+  content and titles" above, which settles that order), update, input (hit-testing a scrollbar or a
+  drag handle), and measure (a header or footer adds size).
+- **Glow first:** it is the newest and the best-contained, and "More than one glow" above wants it anyway
+  -- one glow feature holding a list of layers (colour, mode, animation, pulse clock) serves the border
+  glow, the overlay glow and the cells' stacked glows.
+- **Cost:** no allocation per frame, and an element without a feature pays nothing for it (no virtual
+  call, no empty list walk per frame for features it doesn't have). Features are pooled with their
+  element. Benchmark the UI draw before and after.
+- **Access:** callers ask for a feature by type (`element.Glow.Set(...)`, or `GetFeature<GlowFeature>()`
+  for optional ones); decide which are always present and which are attached by options.
+
+**Unreal reference:** `UActorComponent` -- an actor is a container of components, each with its own
+tick and lifetime. UMG widgets don't compose this way; their chrome is a fixed set of slots and styles.
+**Godot reference:** behavior is child nodes; a `Control`'s theme overrides and `StyleBox`es are
+separate resources the control draws through, not code in `Control` itself.
+
 #### Clean up item and action tooltips
 
 Items and actions are described in several places, each assembled its own way:
@@ -4001,12 +4033,6 @@ hovered, respecting `Pickable { should_block_lower, is_hoverable }`. It then emi
 `Pointer<DragDrop>` and friends as entity-targeted events that bubble up `ChildOf` to parents through
 observers, where a handler can stop propagation. Map entities and UI elements go through the same
 events, so a drag from the inventory onto a map tile is one drag, not two systems handing off.
-
-#### Abstract element pool factory registration
-
-Every `RegisterFactory<T>` call hand-writes the same `FontService`/`ElementPoolService`/`UiRenderService`
-triple with only a few type-specific extras varying. Worth a helper taking just the extras. Boilerplate,
-not error-prone -- low priority.
 
 #### Blood pool under dead entities
 
@@ -4714,6 +4740,48 @@ engine can't be taken to another game together with its tests.
 
 ## Accessibility
 
+### Medium Priority
+
+#### Effect Intensity setting
+
+A user setting on the Options menu ("Options menu", Presentation; saved in the user layer of "Layered
+config files", Global) that reduces visual effect intensity for photosensitive players: **Normal** and
+**Low**. Name it after what it does -- "Effect Intensity" -- and never "epilepsy safe": no game can promise
+that (Game Accessibility Guidelines), and the name would claim it.
+- **Low removes pulsing from every glow.** Every pulse goes through `GlowAnimation.StrengthAt`, so Low
+  makes it return full strength there and each pulse becomes its steady glow. Nothing else needs to know.
+- **What Low should also cover** (common in other games' effect intensity / photosensitivity settings):
+  - **Flashes:** hit flashes, damage flashes, full-screen fades to white and bright spell bursts, softened
+    or removed (Blizzard's Photosensitivity Mode, NALE's "Screen Flashes", Alan Wake II's flash intensity).
+  - **Strobing and flicker:** anything that alternates quickly -- a blinking telegraph, flickering torch
+    or lava light, a rapidly cycling aura glow -- held steady.
+  - **Brightness and contrast of effects:** cap glow and aura brightness and the contrast of large
+    effects, since the risk grows with how bright, how large and how fast a flash is (Xbox Accessibility
+    Guideline 118: reduce flash contrast, frequency and size).
+  - **Large areas of motion:** screen-filling effects and high-contrast repeating patterns, made smaller or
+    static.
+  - **Screen shake:** often its own setting with None / Reduced / Full or a slider (Blizzard, Throne and
+    Liberty, Cult of the Lamb's "Screenshake Sensitivity"). The game has none yet; add it under this
+    setting or beside it when it arrives.
+  - **Particle density:** fewer particles in big effects. None yet.
+  - **Camera motion and motion blur:** usually a separate motion-sickness setting (Blizzard's Motion
+    Sickness, Cult of the Lamb's "Reduce Camera Motion"); keep it apart, but Low and it should share how a
+    value is read so an effect checks one place.
+  - **Floating text:** fast-scrolling or flashing numbers slowed or steadied ("Floating text settings on
+    the options menu", Presentation).
+  - **Animation primitives** (tweens, flipbooks; "Animation primitives", Presentation), once they exist:
+    a looping or flashing one names its Low form.
+- **The OS setting:** start in Low when Windows' "Show animations in Windows" (reduced motion) is off,
+  until the player picks; Playdate's "Reduce Flashing" is the model of a system flag any game reads.
+- **One place to ask:** an effect reads the setting through one service (Presentation, or UIEngine for
+  the glow), never its own copy, so a new effect can't forget it. A new effect states what it does at Low
+  as part of being added.
+- **Test for triggers whatever the setting:** XAG 118 asks that every game be checked for photosensitive
+  triggers, intended or not; a Harding-style flash and pattern check on recorded play is the industry
+  tool.
+- Replaces nothing in Normal: Low changes how effects look, never what they tell the player (an
+  unread notification still glows; a telegraph still shows where a hit lands).
+
 ### Low Priority
 
 #### UI scale option, and screen reader support later
@@ -4732,12 +4800,6 @@ settings) scales the whole UI by one factor, with fonts re-rendered at the scale
 exposes it at runtime so games offer it as a setting. Godot 4.5 added screen reader support through
 AccessKit: `Control`s report a role, name and description to the OS accessibility API. AccessKit has
 C bindings, so the same library is an option here when the time comes.
-
-#### Reduced motion option
-
-A player setting that stops UI motion for anyone it bothers. Every glow pulse goes through
-`GlowAnimation.StrengthAt`, so the setting makes it return full strength there and every pulse becomes a
-steady glow. Animation primitives (tweens, flipbooks), once they exist, should honour the same setting.
 
 ### MEDIUM PRIORITY : Unsimulated-tier time -- research alternatives to freezing
 

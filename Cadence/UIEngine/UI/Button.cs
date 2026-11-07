@@ -25,13 +25,13 @@ namespace UIEngine.UI;
 /// factory, so a button that wants an icon (Folder's sprite-or-glyph treatment) opts in through
 /// ElementOptions.Button.SpriteName without every other consumer threading a service it never uses.
 /// </summary>
-public sealed class Button(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService? spriteSheetService = null)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class Button(ElementServices services, SpriteSheetService? spriteSheetService = null)
+    : Element(services)
 {
     /// <summary>What ContentFont is reset to on every Build, so a pooled button never keeps a font a previous user set.</summary>
-    private readonly SpriteFontBase _defaultContentFont = fontService.GetFont(FontChrome.DefaultFontSize);
+    private readonly SpriteFontBase _defaultContentFont = services.FontService.GetFont(FontChrome.DefaultFontSize);
 
-    public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(FontChrome.DefaultFontSize);
+    public SpriteFontBase ContentFont { get; set; } = services.FontService.GetFont(FontChrome.DefaultFontSize);
 
     public string LeftText { get; set; } = string.Empty;
 

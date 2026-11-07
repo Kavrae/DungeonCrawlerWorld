@@ -8,11 +8,11 @@ using UIEngine.UI.ColorPalettes;
 
 namespace UIEngine.UI;
 
-public class TextWindow(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService) : Window(fontService, elementPoolService, renderService)
+public class TextWindow(ElementServices services) : Window(services)
 {
     public string OriginalText { get; set; } = string.Empty;
     public DisplayText DisplayText { get; set; }
-    public SpriteFontBase ContentFont { get; set; } = fontService.GetFont(FontChrome.DefaultFontSize);
+    public SpriteFontBase ContentFont { get; set; } = services.FontService.GetFont(FontChrome.DefaultFontSize);
     public Color TextColor { get; set; }
 
     /// <summary>No bold font asset exists in this codebase (see FontService -- DroidSans regular only), so Bold renders as a cheap 1px-offset double-draw instead of a real bold weight -- close enough for a UI label (e.g. Dropdown's own header rows) without needing a second font file.</summary>

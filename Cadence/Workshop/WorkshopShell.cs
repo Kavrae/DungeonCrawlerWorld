@@ -289,7 +289,7 @@ public sealed class WorkshopShell : IWorkshopStatus, IDisposable
     private WorkshopBottomPanel BuildBottomPanel(IReadOnlyList<WorkshopProblem> loadProblems)
     {
         var elementPool = _uiEngine.ElementPoolService;
-        elementPool.RegisterFactory(() => new WorkshopBottomPanel(_uiEngine.FontService, elementPool, _uiEngine.RenderService));
+        elementPool.RegisterFactory(() => new WorkshopBottomPanel(_uiEngine.ElementServices));
         var panel = elementPool.CreateElement<WorkshopBottomPanel>(null, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },

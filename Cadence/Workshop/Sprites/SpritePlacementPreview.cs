@@ -1,7 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using SpriteFormat;
-using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI;
 
@@ -13,8 +12,8 @@ namespace Workshop.Sprites;
 /// SpritePlacementTiles' -- the game's -- at the chosen footprint; a piece breaking out of the reach box is outlined in red,
 /// which only the 1x1 footprint can show (a larger one shrinks the sprite to fit, as the game does).
 /// </remarks>
-public sealed class SpritePlacementPreview(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class SpritePlacementPreview(ElementServices services)
+    : Element(services)
 {
     private const int TilesLeftOfAnchor = 3;
     private const int TilesRightOfAnchor = 3;

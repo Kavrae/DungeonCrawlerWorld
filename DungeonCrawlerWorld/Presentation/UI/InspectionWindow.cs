@@ -1,5 +1,3 @@
-using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Presentation.UI;
@@ -15,8 +13,8 @@ namespace Presentation.UI;
 /// this panel's width must always match PlayerHealthBarContent.Size.X (see
 /// ShellBootstrapper), restored or not.
 /// </summary>
-public sealed class InspectionWindow(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, MapViewState mapViewState)
-    : Window(fontService, elementPoolService, renderService)
+public sealed class InspectionWindow(ElementServices services, MapViewState mapViewState)
+    : Window(services)
 {
     /// <summary>Starts minimized -- a HUD-persistent panel with nothing to inspect yet defaults to its collapsed, title-only footprint, the same convention Folder.Initialize already follows.</summary>
     public override void Initialize()

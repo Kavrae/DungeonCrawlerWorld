@@ -37,15 +37,13 @@ namespace Presentation.UI.Trade;
 /// for this window family.
 /// </summary>
 public sealed class TradeWindow(
-    FontService fontService,
-    ElementPoolService elementPoolService,
-    UiRenderService renderService,
+    ElementServices services,
     InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
     Engine.ECS.Systems.SimulationClock simulationClock)
-    : Window(fontService, elementPoolService, renderService), IContentDropTarget
+    : Window(services), IContentDropTarget
 {
     private readonly ItemCatalog _itemCatalog = inventoryServices.ItemCatalog;
     private readonly InventoryView _inventoryView = inventoryServices.InventoryView;

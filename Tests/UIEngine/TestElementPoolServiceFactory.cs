@@ -17,13 +17,14 @@ internal static class TestElementPoolServiceFactory
     public static ElementPoolService Create(FontService fontService, Func<ElementPoolService, TextWindow>? createTextWindow = null, Func<ElementPoolService, TextBox>? createTextBox = null)
     {
         var pool = new ElementPoolService();
-        pool.RegisterFactory<Window>(() => new Window(fontService, pool, new UiRenderService()));
-        pool.RegisterFactory<Button>(() => new Button(fontService, pool, new UiRenderService()));
-        pool.RegisterFactory<Dropdown>(() => new Dropdown(fontService, pool, new UiRenderService()));
-        pool.RegisterFactory<TextWindow>(() => createTextWindow?.Invoke(pool) ?? new TextWindow(fontService, pool, new UiRenderService()));
-        pool.RegisterFactory<TextBox>(() => createTextBox?.Invoke(pool) ?? new TextBox(fontService, pool, new UiRenderService()));
-        pool.RegisterFactory<HotbarSlotElement>(() => new HotbarSlotElement(fontService, pool, new UiRenderService()));
-        pool.RegisterFactory<TooltipRowsElement>(() => new TooltipRowsElement(fontService, pool, new UiRenderService()));
+        var services = TestElementServices.For(pool, fontService);
+        pool.RegisterFactory(() => new Window(services));
+        pool.RegisterFactory(() => new Button(services));
+        pool.RegisterFactory(() => new Dropdown(services));
+        pool.RegisterFactory(() => createTextWindow?.Invoke(pool) ?? new TextWindow(services));
+        pool.RegisterFactory(() => createTextBox?.Invoke(pool) ?? new TextBox(services));
+        pool.RegisterFactory(() => new HotbarSlotElement(services));
+        pool.RegisterFactory(() => new TooltipRowsElement(services));
         return pool;
     }
 
@@ -36,7 +37,7 @@ internal static class TestElementPoolServiceFactory
     /// <summary>A DropdownController initialized into layers, clamped to a stand-in screen.</summary>
     public static DropdownController CreateDropdownController(ElementPoolService elementPoolService, UiLayerStack layers)
     {
-        var dropdownController = new DropdownController(elementPoolService, new UiRenderService()) { ScreenBoundsOverrideForTests = ScreenBounds };
+        var dropdownController = new DropdownController(elementPoolService, TestElementServices.RenderFor(elementPoolService)) { ScreenBoundsOverrideForTests = ScreenBounds };
         dropdownController.Initialize(layers);
         return dropdownController;
     }

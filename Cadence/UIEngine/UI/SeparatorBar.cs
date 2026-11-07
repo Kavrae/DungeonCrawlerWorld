@@ -1,5 +1,4 @@
 using Microsoft.Xna.Framework;
-using UIEngine.Fonts;
 using UIEngine.Rendering;
 
 namespace UIEngine.UI;
@@ -12,8 +11,8 @@ namespace UIEngine.UI;
 /// the narrower bar is purely a DrawContent detail; the element's own bounds stay full width/
 /// height to avoid disturbing that chain.
 /// </summary>
-public sealed class SeparatorBar(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class SeparatorBar(ElementServices services)
+    : Element(services)
 {
     private const float WidthFraction = 0.75f;
 

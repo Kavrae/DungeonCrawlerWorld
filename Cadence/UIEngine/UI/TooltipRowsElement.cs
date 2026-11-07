@@ -1,15 +1,14 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI.Chrome;
 
 namespace UIEngine.UI;
 
 /// <summary>A block of TooltipRow lines on its own, one font line each -- a table inside a window rather than under a tooltip's text.</summary>
 /// <remarks>Sized by its caller: HeightFor gives the height a set of rows needs. Configure measures; drawing measures nothing.</remarks>
-public sealed class TooltipRowsElement(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class TooltipRowsElement(ElementServices services)
+    : Element(services)
 {
     private readonly List<TooltipRow> _rows = [];
     private readonly List<float> _rightTextWidths = [];

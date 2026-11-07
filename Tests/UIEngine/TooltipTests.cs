@@ -1,5 +1,4 @@
 using Microsoft.Xna.Framework;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Tests.UIEngine;
@@ -16,7 +15,7 @@ public sealed class TooltipTests
     {
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, new UiRenderService()));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(windowService, fontService)));
 
         var tooltip = windowService.CreateElement<Tooltip>(null, new ElementOptions
         {

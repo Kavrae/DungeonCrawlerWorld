@@ -5,7 +5,6 @@ using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 using Presentation.UI.Details;
 using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Builders.MapAreas;
@@ -28,8 +27,8 @@ namespace Builders.MapAreas;
 /// is given.
 /// </para>
 /// </remarks>
-public sealed class MapPreviewWindow(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, AreaPreviewCache previews, GameCatalogs catalogs)
-    : Window(fontService, elementPoolService, renderService)
+public sealed class MapPreviewWindow(ElementServices services, AreaPreviewCache previews, GameCatalogs catalogs)
+    : Window(services)
 {
     public const int DefaultWorldSeed = 1;
 
@@ -52,7 +51,7 @@ public sealed class MapPreviewWindow(FontService fontService, ElementPoolService
         (-1, 1, "↙"), (0, 1, "↓"), (1, 1, "↘"),
     ];
 
-    private readonly ActivatableDetailsSections _sections = new(elementPoolService, fontService, catalogs.ActionCatalog, catalogs.GameplayTags);
+    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, catalogs.ActionCatalog, catalogs.GameplayTags);
     private readonly Dictionary<Guid, ulong> _seedsByArea = [];
     private readonly List<(MapLayer Layer, Button Button)> _layerButtons = [];
     private readonly List<(int DeltaX, int DeltaY, Button Button)> _arrowButtons = [];

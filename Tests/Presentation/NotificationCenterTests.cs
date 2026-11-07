@@ -31,14 +31,13 @@ public sealed class NotificationCenterTests
     {
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
-        windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, new UiRenderService(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
+        windowService.RegisterFactory<Folder>(() => new Folder(TestElementServices.For(windowService, fontService), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
         return windowService;
     }
 
     private static NotificationCenter CreateNotificationCenter(ElementPoolService windowService, UiLayerStack layers, EventBus? eventBus = null)
     {
-        var contextMenuController = new ContextMenuController(new DropdownController(windowService, new UiRenderService()));
+        var contextMenuController = new ContextMenuController(new DropdownController(windowService, TestElementServices.RenderFor(windowService)));
         contextMenuController.Dropdowns.Initialize(layers);
 
         var notificationCenter = new NotificationCenter(windowService, eventBus ?? new EventBus(), layers, contextMenuController);
@@ -135,7 +134,7 @@ public sealed class NotificationCenterTests
         Folder? capturedFolder = null;
         windowService.RegisterFactory<Folder>(() =>
         {
-            capturedFolder = new Folder(fontService, windowService, new UiRenderService(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
+            capturedFolder = new Folder(TestElementServices.For(windowService, fontService), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
             return capturedFolder;
         });
         return (windowService, () => capturedFolder ?? throw new InvalidOperationException("Folder not created yet."));
@@ -383,12 +382,11 @@ public sealed class NotificationCenterTests
         // Window's internal layout math in the test.
         var windowService = TestElementPoolServiceFactory.Create(fontService, createTextWindow: pool =>
         {
-            var window = new TextWindow(fontService, pool, new UiRenderService());
+            var window = new TextWindow(TestElementServices.For(pool, fontService));
             capturedPopups.Add(window);
             return window;
         });
-        windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, new UiRenderService(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
+        windowService.RegisterFactory<Folder>(() => new Folder(TestElementServices.For(windowService, fontService), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
 
         var layers = new UiLayerStack();
         var notificationCenter = CreateNotificationCenter(windowService, layers);
@@ -422,12 +420,11 @@ public sealed class NotificationCenterTests
         var capturedPopups = new List<TextWindow>();
         var windowService = TestElementPoolServiceFactory.Create(fontService, createTextWindow: pool =>
         {
-            var window = new TextWindow(fontService, pool, new UiRenderService());
+            var window = new TextWindow(TestElementServices.For(pool, fontService));
             capturedPopups.Add(window);
             return window;
         });
-        windowService.RegisterFactory<Folder>(() => new Folder(
-            fontService, windowService, new UiRenderService(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
+        windowService.RegisterFactory<Folder>(() => new Folder(TestElementServices.For(windowService, fontService), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver)));
         return (windowService, capturedPopups);
     }
 
@@ -475,7 +472,7 @@ public sealed class NotificationCenterTests
         var eventBus = new EventBus();
         var layers = new UiLayerStack();
         var windowService = CreateWindowService();
-        var contextMenuController = new ContextMenuController(new DropdownController(windowService, new UiRenderService()));
+        var contextMenuController = new ContextMenuController(new DropdownController(windowService, TestElementServices.RenderFor(windowService)));
         contextMenuController.Dropdowns.Initialize(layers);
         var notificationCenter = new NotificationCenter(windowService, eventBus, layers, contextMenuController);
         notificationCenter.Initialize();
@@ -638,14 +635,14 @@ public sealed class NotificationCenterTests
         var capturedTextWindows = new List<TextWindow>();
         var windowService = TestElementPoolServiceFactory.Create(fontService, createTextWindow: pool =>
         {
-            var window = new TextWindow(fontService, pool, new UiRenderService());
+            var window = new TextWindow(TestElementServices.For(pool, fontService));
             capturedTextWindows.Add(window);
             return window;
         });
         Folder? capturedFolder = null;
         windowService.RegisterFactory<Folder>(() =>
         {
-            capturedFolder = new Folder(fontService, windowService, new UiRenderService(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
+            capturedFolder = new Folder(TestElementServices.For(windowService, fontService), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
             return capturedFolder;
         });
         return (windowService, () => capturedFolder ?? throw new InvalidOperationException("Folder not created yet."), capturedTextWindows);

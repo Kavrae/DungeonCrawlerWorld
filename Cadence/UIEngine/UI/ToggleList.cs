@@ -1,7 +1,6 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI.Chrome;
 
 namespace UIEngine.UI;
@@ -15,8 +14,8 @@ public sealed record ToggleListItem(string Label, bool IsOn);
 /// an item ticks or unticks All to match. Changed is raised once per click, after every checkbox shows the result; a caller
 /// reads the items' states with IsItemOn, and shows states of its own with SetItemStates, which raises nothing.
 /// </remarks>
-public sealed class ToggleList(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Window(fontService, elementPoolService, renderService)
+public sealed class ToggleList(ElementServices services)
+    : Window(services)
 {
     public const float DefaultRowHeight = 24f;
 

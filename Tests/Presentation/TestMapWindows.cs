@@ -102,12 +102,12 @@ internal static class TestMapWindows
         var floatingTextController = new FloatingTextController(eventBus, new SimulationClock());
         var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, fontService, new Game.Modules.StatusEffects.StatusEffectDisplayRegistry(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
 
-        var renderService = new UiRenderService();
-        var mapRenderer = new MapRenderer(mapView, auraPower, camera, renderService, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
+        var services = TestElementServices.For(windowService, fontService);
+        var mapRenderer = new MapRenderer(mapView, auraPower, camera, services.RenderService, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
         var mapGameOverlay = new MapGameOverlay(mapView, mapViewState, camera, actionTargeting, fontService);
 
-        windowService.RegisterFactory<MapWindow>(() => new MapWindow(
-            fontService, windowService, mapView, playerActionGate, mapViewState, eventBus, renderService,
+        windowService.RegisterFactory(() => new MapWindow(
+            services, mapView, playerActionGate, mapViewState, eventBus,
             camera, mapRenderer, mapGameOverlay, actionTargeting, playerMovement, contextMenuController, floatingTextController, floatingTextRenderer, new AdminContextMenuOptions(TestAdminTools.Create()), new PointerState()));
 
         var mapWindow = windowService.CreateElement<MapWindow>(null, new ElementOptions

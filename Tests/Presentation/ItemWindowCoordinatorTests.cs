@@ -97,23 +97,23 @@ public sealed class ItemWindowCoordinatorTests
         var mapView = new MapViewQuery(world, componentManager, new ActionCatalog(), terrain, definitions, new SimulationClock());
         var contextMenuController = shellServices.ContextMenuController;
 
-        elementPool.RegisterFactory<Tooltip>(() => new Tooltip(fontService, elementPool, new UiRenderService()));
-        elementPool.RegisterFactory<GridControl>(() => new GridControl(fontService, elementPool, new UiRenderService()));
-        elementPool.RegisterFactory<Toggle>(() => new Toggle(fontService, elementPool, new UiRenderService()));
-        elementPool.RegisterFactory<TextDivider>(() => new TextDivider(fontService, elementPool, new UiRenderService()));
-        elementPool.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, elementPool, new UiRenderService(), spriteSheetService));
-        elementPool.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, elementPool, new UiRenderService(), spriteSheetService));
-        elementPool.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(fontService, elementPool, new UiRenderService(), spriteSheetService));
-        elementPool.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(fontService, elementPool, new UiRenderService()));
-        elementPool.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, elementPool, new UiRenderService(), spriteSheetService));
-        elementPool.RegisterFactory<ItemIconElement>(() => new ItemIconElement(fontService, elementPool, new UiRenderService(), spriteSheetService));
-        elementPool.RegisterFactory<TargetShapePreviewElement>(() => new TargetShapePreviewElement(fontService, elementPool, new UiRenderService()));
-        elementPool.RegisterFactory<EntityIconElement>(() => new EntityIconElement(fontService, elementPool, new UiRenderService(), spriteSheetService, mapView));
-        elementPool.RegisterFactory<ItemDetailsWindow>(() => new ItemDetailsWindow(fontService, elementPool, new UiRenderService(), new ActionCatalog(), TestGameplayTags.BuiltIn, inventoryServices.ActionStateView, world));
-        elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(fontService, elementPool, new UiRenderService(), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
-        elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(fontService, elementPool, new UiRenderService(), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming, healthView: healthView, actionSourceNaming: TestActionSources.Naming(terrain, entityKeys: componentManager.Keys)));
-        elementPool.RegisterFactory<ShopWindow>(() => new ShopWindow(fontService, elementPool, new UiRenderService(), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming));
-        elementPool.RegisterFactory<TradeWindow>(() => new TradeWindow(fontService, elementPool, new UiRenderService(), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
+        elementPool.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(elementPool, fontService)));
+        elementPool.RegisterFactory<GridControl>(() => new GridControl(TestElementServices.For(elementPool, fontService)));
+        elementPool.RegisterFactory<Toggle>(() => new Toggle(TestElementServices.For(elementPool, fontService)));
+        elementPool.RegisterFactory<TextDivider>(() => new TextDivider(TestElementServices.For(elementPool, fontService)));
+        elementPool.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(TestElementServices.For(elementPool, fontService), spriteSheetService));
+        elementPool.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(TestElementServices.For(elementPool, fontService), spriteSheetService));
+        elementPool.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(TestElementServices.For(elementPool, fontService), spriteSheetService));
+        elementPool.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(TestElementServices.For(elementPool, fontService)));
+        elementPool.RegisterFactory<CurrencyElement>(() => new CurrencyElement(TestElementServices.For(elementPool, fontService), spriteSheetService));
+        elementPool.RegisterFactory<ItemIconElement>(() => new ItemIconElement(TestElementServices.For(elementPool, fontService), spriteSheetService));
+        elementPool.RegisterFactory<TargetShapePreviewElement>(() => new TargetShapePreviewElement(TestElementServices.For(elementPool, fontService)));
+        elementPool.RegisterFactory<EntityIconElement>(() => new EntityIconElement(TestElementServices.For(elementPool, fontService), spriteSheetService, mapView));
+        elementPool.RegisterFactory<ItemDetailsWindow>(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), new ActionCatalog(), TestGameplayTags.BuiltIn, inventoryServices.ActionStateView, world));
+        elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
+        elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming, healthView: healthView, actionSourceNaming: TestActionSources.Naming(terrain, entityKeys: componentManager.Keys)));
+        elementPool.RegisterFactory<ShopWindow>(() => new ShopWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming));
+        elementPool.RegisterFactory<TradeWindow>(() => new TradeWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
 
         tooltipController.Initialize(elementPool, layers);
 

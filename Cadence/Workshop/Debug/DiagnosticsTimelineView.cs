@@ -17,10 +17,10 @@ namespace Workshop.Debug;
 /// moves with its frames while the window advances. Everything it draws is copied out of the history by Show, once a frame,
 /// into buffers sized for the longest window.
 /// </remarks>
-public sealed class DiagnosticsTimelineView(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class DiagnosticsTimelineView(ElementServices services)
+    : Element(services)
 {
-    private readonly SpriteFontBase _font = fontService.GetFont(FontChrome.DefaultFontSize);
+    private readonly SpriteFontBase _font = services.FontService.GetFont(FontChrome.DefaultFontSize);
     private double[] _updateMilliseconds = [];
     private double[][] _gaugeValues = [];
     private long[] _frames = [];

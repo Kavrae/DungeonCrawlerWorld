@@ -21,8 +21,8 @@ namespace Presentation.UI.Content;
 /// IsPointerOver, OnRightClicked inherited free from Element). No
 /// IsSelected/click-to-inspect concept -- hover + drag + right-click only, matching what was asked.
 /// </summary>
-public sealed class CurrencyElement(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService spriteSheetService)
-    : Element(fontService, elementPoolService, renderService), IContentDragSource
+public sealed class CurrencyElement(ElementServices services, SpriteSheetService spriteSheetService)
+    : Element(services), IContentDragSource
 {
     private const float IconGap = 4f;
 

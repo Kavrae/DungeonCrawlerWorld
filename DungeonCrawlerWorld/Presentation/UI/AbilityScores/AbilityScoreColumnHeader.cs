@@ -16,8 +16,8 @@ namespace Presentation.UI.AbilityScores;
 /// draw-only reasoning as InventoryItemStackCell: no title/chrome needed, just draws itself.
 /// IsPointerOver drives a translucent highlight overlay -- immediate, unlike the hover-popup delay, since a highlight is instant feedback.
 /// </summary>
-public sealed class AbilityScoreColumnHeader(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class AbilityScoreColumnHeader(ElementServices services)
+    : Element(services)
 {
     private static readonly Color TextColor = WindowPalette.TitleTextColor;
 

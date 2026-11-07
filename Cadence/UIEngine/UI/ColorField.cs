@@ -1,6 +1,5 @@
 using System.Globalization;
 using Microsoft.Xna.Framework;
-using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI.ColorPalettes;
 using UIEngine.UI.Content;
@@ -12,8 +11,8 @@ namespace UIEngine.UI;
 /// text is read when Enter submits it or the box loses focus; text that isn't a colour puts the last one back.
 /// </summary>
 /// <remarks>Configure before Initialize, the usual contract; SetValue changes it afterwards without raising ValueChanged.</remarks>
-public sealed class ColorField(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null)
-    : TextBox(fontService, elementPoolService, renderService, cursorTextContent, contextMenuController)
+public sealed class ColorField(ElementServices services, CursorTextContent? cursorTextContent = null, ContextMenuController? contextMenuController = null)
+    : TextBox(services, cursorTextContent, contextMenuController)
 {
     private const int SwatchInset = 2;
 

@@ -23,7 +23,7 @@ public sealed class DebugTab : IIdeTab
     {
         _uiEngine = uiEngine;
         _debugging = debugging;
-        DebugTabServices.RegisterElementFactories(uiEngine.ElementPoolService, uiEngine.FontService, uiEngine.RenderService);
+        DebugTabServices.RegisterElementFactories(uiEngine.ElementServices);
     }
 
     public string Title => TabTitle;

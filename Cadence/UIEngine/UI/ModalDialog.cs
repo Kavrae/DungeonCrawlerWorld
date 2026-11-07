@@ -1,7 +1,6 @@
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
 
@@ -30,8 +29,8 @@ public sealed record ModalDialogRequest(string Title, IReadOnlyList<DialogButton
 /// cancel button's when the dialog is closed with Escape or its close button.
 /// </summary>
 /// <remarks>Opened only through Show. A chosen button closes the dialog on the update after the click, then runs.</remarks>
-public sealed class ModalDialog(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Window(fontService, elementPoolService, renderService)
+public sealed class ModalDialog(ElementServices services)
+    : Window(services)
 {
     public const float ButtonHeight = 26f;
     private const float ButtonMinimumWidth = 80f;
@@ -39,7 +38,7 @@ public sealed class ModalDialog(FontService fontService, ElementPoolService elem
     private const float ButtonTextPadding = 16f;
     private const float BodyGap = 8f;
 
-    private readonly SpriteFontBase _font = fontService.GetFont(FontChrome.DefaultFontSize);
+    private readonly SpriteFontBase _font = services.FontService.GetFont(FontChrome.DefaultFontSize);
 
     private ModalDialogRequest _request = null!;
     private bool _answered;

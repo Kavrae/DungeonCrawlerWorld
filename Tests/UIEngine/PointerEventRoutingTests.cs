@@ -34,7 +34,7 @@ public sealed class PointerEventRoutingTests
         public object? DropTargetFor(object payload, Point position) => target;
     }
 
-    private sealed class DragSourceWindow(ElementPoolService pool) : Window(TestFonts.Shared, pool, new global::UIEngine.Rendering.UiRenderService()), IContentDragSource
+    private sealed class DragSourceWindow(ElementPoolService pool) : Window(TestElementServices.For(pool)), IContentDragSource
     {
         public bool TryBeginContentDrag(Point pressPosition, out ContentDragStart start)
         {

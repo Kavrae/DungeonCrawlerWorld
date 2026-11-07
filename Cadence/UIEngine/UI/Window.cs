@@ -116,11 +116,11 @@ public class Window : Element
 
     public bool CanUserMinimize { get; set; }
 
-    public Window(FontService fontService, ElementPoolService windowService, UiRenderService renderService)
-        : base(fontService, windowService, renderService)
+    public Window(ElementServices services)
+        : base(services)
     {
-        TitleFont = fontService.GetFont(FontChrome.WindowTitleFontSize);
-        _titleFontMeasurer = fontService.GetTextMeasurer(TitleFont);
+        TitleFont = services.FontService.GetFont(FontChrome.WindowTitleFontSize);
+        _titleFontMeasurer = services.FontService.GetTextMeasurer(TitleFont);
     }
 
     public override void Build(Element? parent, ElementOptions options)

@@ -8,7 +8,6 @@ using Microsoft.Xna.Framework;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Details;
 using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
 
@@ -53,14 +52,12 @@ namespace Presentation.UI.Inventory;
 /// host safely can.
 /// </summary>
 public sealed class ItemDetailsWindow(
-    FontService fontService,
-    ElementPoolService elementPoolService,
-    UiRenderService renderService,
+    ElementServices services,
     ActionCatalog actionCatalog,
     GameplayTagRegistry gameplayTags,
     ActionStateView actionStateView,
     IPlayerQuery playerQuery)
-    : Window(fontService, elementPoolService, renderService)
+    : Window(services)
 {
     /// <summary>The stack id Configure is given for an item shown from its definition alone (a loot box reward whose stack is gone) -- there's no stack to compare, so Compare does nothing.</summary>
     public const uint NoStackInstanceId = 0;
@@ -73,7 +70,7 @@ public sealed class ItemDetailsWindow(
     /// <summary>LightCoral, not IndianRed -- confirmed live that IndianRed's (205,92,92) read too dark/muted against the near-black panel background, hard to distinguish from BodyTextColor at a glance. LightCoral pairs naturally with BetterColor's own "Light" prefix and is meaningfully brighter (perceived luminance ~162 vs. ~126).</summary>
     private static readonly Color WorseColor = Color.LightCoral;
 
-    private readonly ActivatableDetailsSections _sections = new(elementPoolService, fontService, actionCatalog, gameplayTags);
+    private readonly ActivatableDetailsSections _sections = new(services.ElementPoolService, services.FontService, actionCatalog, gameplayTags);
 
     private ItemDefinition? _definition;
     private float _contentWidth;

@@ -24,6 +24,9 @@ public sealed class UiEngineContext(
     public SpriteSheetService SpriteSheetService { get; } = spriteSheetService;
     public ElementPoolService ElementPoolService { get; } = elementPoolService;
 
+    /// <summary>The services every element is built with; what each factory hands its element.</summary>
+    public ElementServices ElementServices { get; } = new(fontService, elementPoolService, renderService);
+
     /// <summary>
     /// Fills RenderService with the device and what draws with it -- called once, from the host's LoadContent, after
     /// GraphicsDevice/unitRectangle both exist. Hands it this context's sprite effect batch, so a host crosses into the
@@ -40,30 +43,29 @@ public sealed class UiEngineContext(
     public void RegisterFrameworkElementFactories(ContextMenuController contextMenuController, CursorTextContent? cursorTextContent = null)
     {
         var pool = ElementPoolService;
-        var fonts = FontService;
+        var services = ElementServices;
         var sprites = SpriteSheetService;
-        var render = RenderService;
 
-        pool.RegisterFactory(() => new Window(fonts, pool, render));
-        pool.RegisterFactory(() => new TextWindow(fonts, pool, render));
-        pool.RegisterFactory(() => new Button(fonts, pool, render, sprites));
-        pool.RegisterFactory(() => new TextBox(fonts, pool, render, cursorTextContent, contextMenuController));
-        pool.RegisterFactory(() => new NumericField(fonts, pool, render, cursorTextContent, contextMenuController));
-        pool.RegisterFactory(() => new ColorField(fonts, pool, render, cursorTextContent, contextMenuController));
-        pool.RegisterFactory(() => new Dropdown(fonts, pool, render));
-        pool.RegisterFactory(() => new DropdownField(fonts, pool, render, contextMenuController.Dropdowns));
-        pool.RegisterFactory(() => new ListView(fonts, pool, render));
-        pool.RegisterFactory(() => new ListEditor(fonts, pool, render));
-        pool.RegisterFactory(() => new SplitPane(fonts, pool, render));
-        pool.RegisterFactory(() => new ModalDialog(fonts, pool, render));
-        pool.RegisterFactory(() => new Tooltip(fonts, pool, render));
-        pool.RegisterFactory(() => new TooltipRowsElement(fonts, pool, render));
-        pool.RegisterFactory(() => new Folder(fonts, pool, render, sprites));
-        pool.RegisterFactory(() => new GridControl(fonts, pool, render));
-        pool.RegisterFactory(() => new Toggle(fonts, pool, render));
-        pool.RegisterFactory(() => new ToggleList(fonts, pool, render));
-        pool.RegisterFactory(() => new TextDivider(fonts, pool, render));
-        pool.RegisterFactory(() => new SeparatorBar(fonts, pool, render));
-        pool.RegisterFactory(() => new FractionBarElement(fonts, pool, render));
+        pool.RegisterFactory(() => new Window(services));
+        pool.RegisterFactory(() => new TextWindow(services));
+        pool.RegisterFactory(() => new Button(services, sprites));
+        pool.RegisterFactory(() => new TextBox(services, cursorTextContent, contextMenuController));
+        pool.RegisterFactory(() => new NumericField(services, cursorTextContent, contextMenuController));
+        pool.RegisterFactory(() => new ColorField(services, cursorTextContent, contextMenuController));
+        pool.RegisterFactory(() => new Dropdown(services));
+        pool.RegisterFactory(() => new DropdownField(services, contextMenuController.Dropdowns));
+        pool.RegisterFactory(() => new ListView(services));
+        pool.RegisterFactory(() => new ListEditor(services));
+        pool.RegisterFactory(() => new SplitPane(services));
+        pool.RegisterFactory(() => new ModalDialog(services));
+        pool.RegisterFactory(() => new Tooltip(services));
+        pool.RegisterFactory(() => new TooltipRowsElement(services));
+        pool.RegisterFactory(() => new Folder(services, sprites));
+        pool.RegisterFactory(() => new GridControl(services));
+        pool.RegisterFactory(() => new Toggle(services));
+        pool.RegisterFactory(() => new ToggleList(services));
+        pool.RegisterFactory(() => new TextDivider(services));
+        pool.RegisterFactory(() => new SeparatorBar(services));
+        pool.RegisterFactory(() => new FractionBarElement(services));
     }
 }

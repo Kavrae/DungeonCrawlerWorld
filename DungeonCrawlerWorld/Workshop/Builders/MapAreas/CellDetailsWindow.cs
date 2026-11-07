@@ -1,15 +1,14 @@
 using Microsoft.Xna.Framework;
 using Presentation.UI.Details;
 using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Builders.MapAreas;
 
 /// <summary>The Map tab's "Cell Details" panel: what AreaCellReadout says about the tile under the pointer in the preview map.</summary>
 /// <remarks>Always AreaCellReadout.LineCount lines, built once and given new text as the pointer moves, so the panel never changes height. The host is WrapContent and tiles its children vertically.</remarks>
-public sealed class CellDetailsWindow(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Window(fontService, elementPoolService, renderService)
+public sealed class CellDetailsWindow(ElementServices services)
+    : Window(services)
 {
     private const float RowHeight = ActivatableDetailsSections.RowHeight;
 

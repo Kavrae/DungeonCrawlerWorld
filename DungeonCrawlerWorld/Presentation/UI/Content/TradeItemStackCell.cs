@@ -28,8 +28,8 @@ namespace Presentation.UI.Content;
 /// ShopItemStackCell's own wide layout entirely, the same way that class's own DrawContent already
 /// replaces InventoryItemStackCell's.
 /// </summary>
-public sealed class TradeItemStackCell(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, SpriteSheetService spriteSheetService)
-    : ShopItemStackCell(fontService, elementPoolService, renderService, spriteSheetService)
+public sealed class TradeItemStackCell(ElementServices services, SpriteSheetService spriteSheetService)
+    : ShopItemStackCell(services, spriteSheetService)
 {
     private readonly TextSizeCache _quantityTextSize = new();
 

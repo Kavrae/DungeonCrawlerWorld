@@ -1,7 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using UIEngine.Input;
-using UIEngine.Rendering;
 using UIEngine.UI;
 using UIEngine.UI.Chrome;
 
@@ -22,7 +21,7 @@ public sealed class ElementTooltipTests
     public void Initialize()
     {
         _pool = TestElementPoolServiceFactory.Create(TestFonts.Shared);
-        _pool.RegisterFactory(() => new Tooltip(TestFonts.Shared, _pool, new UiRenderService()));
+        _pool.RegisterFactory(() => new Tooltip(TestElementServices.For(_pool)));
         _layers = new UiLayerStack();
         var tooltipController = new TooltipController { ScreenBoundsOverrideForTests = new Rectangle(0, 0, (int)ScreenSize.X, (int)ScreenSize.Y) };
         tooltipController.Initialize(_pool, _layers);

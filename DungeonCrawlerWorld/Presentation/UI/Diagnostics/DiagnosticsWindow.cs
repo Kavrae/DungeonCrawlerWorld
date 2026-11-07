@@ -23,13 +23,11 @@ namespace Presentation.UI.Diagnostics;
 /// skipped.
 /// </remarks>
 public sealed class DiagnosticsWindow(
-    FontService fontService,
-    ElementPoolService elementPoolService,
-    UiRenderService renderService,
+    ElementServices services,
     EntityManager entityManager,
     PackedComponentPool<MovementComponent> movementPool,
     SimulationClock simulationClock,
-    DiagnosticsEngine? diagnostics) : Window(fontService, elementPoolService, renderService)
+    DiagnosticsEngine? diagnostics) : Window(services)
 {
     private const string GaugesOffHint = "Run with --diagnostics=gauges for live gauges.";
     private const string LeakDetectionHeading = "Leak findings";

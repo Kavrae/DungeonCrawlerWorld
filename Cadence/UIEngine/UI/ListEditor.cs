@@ -1,6 +1,4 @@
 using Microsoft.Xna.Framework;
-using UIEngine.Fonts;
-using UIEngine.Rendering;
 using UIEngine.UI.Chrome;
 
 namespace UIEngine.UI;
@@ -15,8 +13,8 @@ namespace UIEngine.UI;
 /// -- including the button whose click is still being handled. Scrolls when the rows outgrow it. Configure before
 /// Initialize, the usual contract.
 /// </remarks>
-public sealed class ListEditor(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService)
+public sealed class ListEditor(ElementServices services)
+    : Element(services)
 {
     public const float RowButtonWidth = 20f;
     private const float RowGap = 2f;

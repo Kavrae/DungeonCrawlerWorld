@@ -64,10 +64,10 @@ public sealed class TradeWindowTests
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
-        windowService.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(fontService, windowService, new UiRenderService()));
-        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(fontService, windowService, new UiRenderService(), spriteSheetService));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, new UiRenderService()));
+        windowService.RegisterFactory<TradeItemStackCell>(() => new TradeItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
+        windowService.RegisterFactory<EmptyTradeSlotCell>(() => new EmptyTradeSlotCell(TestElementServices.For(windowService, fontService)));
+        windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(TestElementServices.For(windowService, fontService), spriteSheetService));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(windowService, fontService)));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
@@ -79,7 +79,7 @@ public sealed class TradeWindowTests
         itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], GoldValue: 10));
         itemCatalog.Register(new ItemDefinition(GadgetItemId, "Test Gadget", null, "g", Color.White, Tags: [], Effects: [], GoldValue: 10));
 
-        windowService.RegisterFactory<TradeWindow>(() => new TradeWindow(fontService, windowService, new UiRenderService(), TestInventoryServices.Over(componentManager, itemCatalog, world, eventBus ?? new EventBus()), world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
+        windowService.RegisterFactory<TradeWindow>(() => new TradeWindow(TestElementServices.For(windowService, fontService), TestInventoryServices.Over(componentManager, itemCatalog, world, eventBus ?? new EventBus()), world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
@@ -494,11 +494,11 @@ public sealed class TradeWindowTests
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
         // ShopItemStackCell too -- mapViewState.OpenShopEntityId is already set (from Build()'s own
         // harness), which puts every InventoryGridContent into shop mode, this player grid included.
-        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, new UiRenderService()));
+        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(windowService, fontService)));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());
@@ -561,9 +561,9 @@ public sealed class TradeWindowTests
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
         var spriteSheetService = new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver);
-        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
-        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(fontService, windowService, new UiRenderService(), spriteSheetService));
-        windowService.RegisterFactory<Tooltip>(() => new Tooltip(fontService, windowService, new UiRenderService()));
+        windowService.RegisterFactory<InventoryItemStackCell>(() => new InventoryItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
+        windowService.RegisterFactory<ShopItemStackCell>(() => new ShopItemStackCell(TestElementServices.For(windowService, fontService), spriteSheetService));
+        windowService.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(windowService, fontService)));
 
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: PlayerEntityId);
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());

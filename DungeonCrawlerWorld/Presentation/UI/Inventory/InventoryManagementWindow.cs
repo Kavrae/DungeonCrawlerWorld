@@ -7,7 +7,6 @@ using Presentation.UI.Content;
 using UIEngine;
 using UIEngine.Fonts;
 using UIEngine.Input;
-using UIEngine.Rendering;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
 using UIEngine.UI.Content;
@@ -40,14 +39,12 @@ namespace Presentation.UI.Inventory;
 /// hand-built nested window (see Element.FooterHeight/Window.SetFooterContent).
 /// </summary>
 public sealed class InventoryManagementWindow(
-    FontService fontService,
-    ElementPoolService elementPoolService,
-    UiRenderService renderService,
+    ElementServices services,
     InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    Engine.ECS.Systems.SimulationClock simulationClock) : Window(fontService, elementPoolService, renderService), IContentDropTarget
+    Engine.ECS.Systems.SimulationClock simulationClock) : Window(services), IContentDropTarget
 {
     private TabbedContent _tabbedContent = null!;
     private CurrencyRowContent _currencyRowContent = null!;

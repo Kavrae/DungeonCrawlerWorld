@@ -1,9 +1,7 @@
 using Game.Modules.Actions;
 using Microsoft.Xna.Framework;
 using Presentation.Input.DragDrop;
-using UIEngine.Fonts;
 using UIEngine.Input;
-using UIEngine.Rendering;
 using UIEngine.UI;
 
 namespace Presentation.UI.Content;
@@ -14,8 +12,8 @@ namespace Presentation.UI.Content;
 /// its drawing -- so every slot reads the same per-frame state. A click is a tap on the slot (the controller has already
 /// told a tap from a drag); dragging picks up what the slot holds; a drop lands on HotbarSlotDropTarget.
 /// </remarks>
-public sealed class HotbarSlotElement(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService)
-    : Element(fontService, elementPoolService, renderService), IContentDragSource, IContentDropTarget
+public sealed class HotbarSlotElement(ElementServices services)
+    : Element(services), IContentDragSource, IContentDropTarget
 {
     private HotbarContent _hotbar = null!;
     private HotbarSlotDropTarget _dropTarget = null!;

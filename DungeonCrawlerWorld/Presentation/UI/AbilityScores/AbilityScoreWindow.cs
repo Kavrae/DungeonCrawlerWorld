@@ -9,10 +9,8 @@ using Microsoft.Xna.Framework;
 using Presentation.UI.Chrome;
 using Presentation.UI.ColorPalettes;
 using UIEngine;
-using UIEngine.Fonts;
 using UIEngine.Geometry;
 using UIEngine.Input;
-using UIEngine.Rendering;
 using UIEngine.UI;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
@@ -31,8 +29,8 @@ namespace Presentation.UI.AbilityScores;
 /// follows the element UiInputController finds under the pointer (Element.IsPointerOver), shown/
 /// hidden through the shared TooltipController (see its own doc comment).
 /// </summary>
-public sealed class AbilityScoreWindow(FontService fontService, ElementPoolService elementPoolService, UiRenderService renderService, AbilityScoreView abilityScoreView, StatModifierView statModifierView, ActionSourceNaming actionSourceNaming, SimulationClock simulationClock)
-    : Window(fontService, elementPoolService, renderService)
+public sealed class AbilityScoreWindow(ElementServices services, AbilityScoreView abilityScoreView, StatModifierView statModifierView, ActionSourceNaming actionSourceNaming, SimulationClock simulationClock)
+    : Window(services)
 {
     private const float HeaderHeight = 50f;
     private const float RowHeight = 20f;
