@@ -47,12 +47,16 @@ public static class StatModifierEffects
     {
         var modifier = new StatModifierComponent(target, operation, polarity, canModify, magnitude, expiresAtFrame, source, conditionTag);
 
-        var refreshed = statModifiers.TryUpdateFirst(entityId, new SameGrantMatcher(modifier), new SetExpiryUpdate(expiresAtFrame));
-
-        if (!refreshed)
+        using (var heldModifier = statModifiers.TryWriteFirst(entityId, new SameGrantMatcher(modifier)))
         {
-            statModifiers.Add(entityId, modifier);
+            if (heldModifier.Found)
+            {
+                heldModifier.Value.ExpiresAtFrame = expiresAtFrame;
+                return;
+            }
         }
+
+        statModifiers.Add(entityId, modifier);
     }
 
     private readonly struct SameGrantMatcher(StatModifierComponent granted) : IComponentMatcher<StatModifierComponent>
@@ -64,10 +68,5 @@ public static class StatModifierEffects
             && held.Magnitude == granted.Magnitude
             && held.ConditionTag == granted.ConditionTag
             && held.Source == granted.Source;
-    }
-
-    private readonly struct SetExpiryUpdate(uint expiresAtFrame) : IComponentUpdater<StatModifierComponent>
-    {
-        public void Update(ref StatModifierComponent held) => held.ExpiresAtFrame = expiresAtFrame;
     }
 }

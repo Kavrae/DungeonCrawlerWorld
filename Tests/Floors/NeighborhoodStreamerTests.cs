@@ -207,7 +207,7 @@ public sealed class NeighborhoodStreamerTests
                 var position = new Vector3Int(x, 5, (int)MapLayer.Ground);
                 var entityId = session.Resolver.CreateEntityAt(session.Ecs.EntityManager, position);
                 session.Ecs.ComponentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
-                session.World.PlaceEntityOnMap(entityId, position, ref transforms.Get(entityId));
+                TestTransforms.PlaceOnMap(session.World, session.Ecs.ComponentManager, entityId, position);
                 if (session.World.IsOnMap(transforms.GetReadonly(entityId).Position))
                 {
                     arrivalEntityId = entityId;
@@ -496,7 +496,7 @@ public sealed class NeighborhoodStreamerTests
             var position = new Vector3Int(Neighborhoods.SizeTiles - 2, row, (int)MapLayer.Ground);
             var entityId = session.Resolver.CreateEntityAt(session.Ecs.EntityManager, position);
             session.Ecs.ComponentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(3, 3)));
-            session.World.PlaceEntityOnMap(entityId, position, ref transforms.Get(entityId));
+            TestTransforms.PlaceOnMap(session.World, session.Ecs.ComponentManager, entityId, position);
             if (session.World.IsOnMap(transforms.GetReadonly(entityId).Position))
             {
                 straddlerEntityId = entityId;

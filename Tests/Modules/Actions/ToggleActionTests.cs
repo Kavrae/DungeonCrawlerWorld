@@ -117,7 +117,7 @@ public sealed class ToggleActionTests
         {
             var entityId = Session.Internals.ProcessingTierResolver.CreateEntityAt(Ecs.EntityManager, position);
             Components.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
-            Session.World.PlaceEntityOnMap(entityId, position, ref Components.GetDirectPool<TransformComponent>().Get(entityId));
+            TestTransforms.PlaceOnMap(Session.World, Components, entityId, position);
             return entityId;
         }
 

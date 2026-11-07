@@ -70,7 +70,7 @@ public sealed class MultiTimerWheel<T> where T : struct, IKeyedScheduledTimer
                 }
 
                 // Released before the callback runs, not after -- see PackedTimerWheel.Tick.
-                ref var timer = ref _pool.GetByDenseIndex(denseIndex);
+                ref var timer = ref _pool.GetByDenseIndexUnobserved(denseIndex);
                 ScheduledTimerMark.Release(ref timer);
 
                 if (!_scope.IsSimulated(entry.EntityId))
@@ -123,7 +123,7 @@ public sealed class MultiTimerWheel<T> where T : struct, IKeyedScheduledTimer
     /// <inheritdoc cref="PackedTimerWheel{T}.Schedule"/>
     private void Schedule(int entityId, int denseIndex)
     {
-        ref var timer = ref _pool.GetByDenseIndex(denseIndex);
+        ref var timer = ref _pool.GetByDenseIndexUnobserved(denseIndex);
         if (ScheduledTimerMark.TryClaim(ref timer, out var deadline))
         {
             _wheel.Schedule(entityId, timer.TimerKey, deadline);

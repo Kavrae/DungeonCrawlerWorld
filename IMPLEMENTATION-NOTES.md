@@ -3233,35 +3233,59 @@ and UIEngine only, added to the game's IDE by its App after Map (`--tab=Sprites`
   `SlotFiller` and its GDI+ painters stay with the tool until "Workshop: edit sprites and retire SpriteManifestBuilder"
   (TODO.md) moves editing into the tab and deletes it.
 
-### Component updates are unmanaged struct updaters (2026-11-03)
+### Component writes: write scopes and struct updaters (2026-11-03, scopes 2026-11-06)
 
-- **Shape.** A pool's in-place write takes a struct: `TryUpdate`/`UpdateByDenseIndex<TUpdater>` with
-  `where TUpdater : unmanaged, IComponentUpdater<T>` (`void Update(ref T component)`). Multi's operations by match
-  (`TryGetFirst`, `RemoveFirst`, `CountMatching`, and `TryUpdateFirst(id, matcher, updater)`) take an `unmanaged`
-  `IComponentMatcher<T>` (`Matches(in T)`), so one matcher picks out an instance for every operation and is never
-  restated inside an updater. The updater or matcher carries its own inputs; there are no delegate overloads and no state
-  tuples. Updates are called on the pool, where both type arguments are inferred: `ComponentManager` has no `TryUpdate`
-  (it couldn't infer the component type, and each call paid a lookup and a type test). One that several files share sits
-  beside its component (`MovementComponentUpdates`, `ShiftCurrentHealthUpdate`, `ShiftCurrentManaUpdate`,
-  `ShopStockPreferenceForItemMatcher`, all `internal`); the rest are private nested structs in the type that uses them.
-  Timers share the engine's (`Engine.ECS.Systems.ScheduledTimerUpdates`): `RepeatEveryUpdate<T>`, `SkipOwedPeriodsUpdate<T>`,
-  `SetNextTickUpdate<T>` and, for a Multi pool, `TimerKeyMatcher<T>` by `IKeyedScheduledTimer.TimerKey`. An unconditional
-  "remove any one" is `RemoveByDenseIndex(GetFirstDenseIndex(id))`, not a matcher that accepts everything.
-- **Reference-typed fields** (an override definition) can't be carried by an `unmanaged` updater: write the whole
-  component (`TrySet`/`SetByDenseIndex`, or in a Multi pool assign through `GetByDenseIndex` and call
-  `IncrementVersionByDenseIndex`), which versions and notifies like any other write.
+- **Two forms, one notification.** Every in-place write is versioned and observed, whichever form makes it.
+  - **A write scope** (`PackedComponentWrite<T>`, `MultiComponentWrite<T>`, `DirectComponentWrite<T>` in Engine's
+    `Stores`): a `ref struct` from `Write(id)` (throws when the entity has none), `TryWrite(id)` (check `.Found`),
+    `WriteByDenseIndex(index)`, or a Multi pool's `TryWriteFirst(id, matcher)`. `.Value` is a `ref T`; `Dispose` marks
+    the write changed and fires `ComponentChanged` once, after the write, as an updater does. It is always the variable
+    of a `using`: the `CAD0001` analyzer (`Cadence/Analyzers`, on `[MustBeDisposedByUsing]`) fails the build otherwise,
+    a discarded result or a chained `pool.Write(id).Value.X = 1` included.
+  - **A struct updater**: `TryUpdate`/`UpdateByDenseIndex<TUpdater>` with `where TUpdater : unmanaged,
+    IComponentUpdater<T>` (`void Update(ref T component)`), and Multi's `TryUpdateFirst(id, matcher, updater)`. No
+    delegate overloads and no state tuples.
+- **Which one.** An updater stays when it is shared by several call sites (`MovementComponentUpdates`,
+  `ShiftCurrentHealthUpdate`, `ShiftCurrentManaUpdate`, `AddQuantityUpdate`, ...), carries logic (a clamp, a check, a
+  condition: `TakeHealthUpdate` clamps at 0, `ShiftedHealthUpdate` floors at 1), or is an engine timer helper
+  (`Engine.ECS.Systems.ScheduledTimerUpdates`: `SkipOwedPeriodsUpdate<T>`, `SetNextTickUpdate<T>`). A periodic timer's
+  re-arm is `timer.AdvanceOnePeriod(period)` on the `ref` either form hands it. A single-site write that only assigns fields is a scope at its call site, with no struct. A
+  shared updater sits beside its component (`internal`); the rest are private nested structs in the type that uses them.
+- **Matchers.** Multi's operations by match (`TryGetFirst`, `RemoveFirst`, `CountMatching`, `TryUpdateFirst`,
+  `TryWriteFirst`) take an `unmanaged` `IComponentMatcher<T>` (`Matches(in T)`), so one matcher picks out an instance
+  for every operation; a timer's is `TimerKeyMatcher<T>` by `IKeyedScheduledTimer.TimerKey`. An unconditional "remove
+  any one" is `RemoveByDenseIndex(GetFirstDenseIndex(id))`. Writes and updates are called on the pool, where the type
+  arguments are inferred: `ComponentManager` has neither (it couldn't infer the component type, and each call paid a
+  lookup and a type test).
+- **Find-or-add** writes inside the scope and returns when found; the `Add` goes after the block. **No structural
+  change to a pool while one of its scopes is open**: in Debug a pool counts its open scopes, and `Add`, every removal,
+  `Clear`, `ReserveDenseCapacity` and `Resize` throw while the count isn't zero (a resize would leave the scope writing
+  to the old array, a removal would swap another entity into its slot). A Direct pool's `Add` moves nothing and isn't
+  guarded. Release checks nothing and pays nothing. The observers `Dispose` fires run after the scope's last use of its
+  `ref`, so they may change the pool.
+- **No raw mutable `ref`.** There is no public mutable `GetByDenseIndex`, no `IncrementVersion*` and no mutable
+  `DirectComponentPool.Get`: each let a caller write without notifying. Only the timer wheels claim and release a
+  deadline without notifying, through Engine's `internal` `GetByDenseIndexUnobserved`, because their own
+  `ComponentChanged` handler schedules from that pool and a notifying claim would schedule itself again.
+- **Scopes are main-thread only.** A scope is a write made now, on the thread running the system. A write recorded on a
+  worker and applied later by the main thread in a fixed order would be an updater: a plain value, and `unmanaged`, so
+  it holds no pool, bus or reference and its result depends only on the component and its own fields. Nothing records
+  one yet (TODO.md "Research multithreading").
+- **Reference-typed fields** (an override definition) are written through a scope; an `unmanaged` updater can't carry
+  one. Anything else an updater needs is read before it is built: `HealthDamage` and `ManaCost`/`ManaRestore` resolve
+  the effective maximum first.
+- **Why the 2026-11-03 "no `ref struct` writer" was reversed.** It gave three reasons. "It can't be stored or queued":
+  still true, which is why updaters stay for anything that ever will be. "It holds a `ref` across a resize": the Debug
+  structural-change check. "A block can do anything": accepted for an immediate write, since the block is code the
+  system could run anyway, and an updater's purity matters only for a write recorded and replayed later.
 - **Why, measured.** Field, auto-property and `record struct` writes through a `ref` compile to identical Tier1 machine
   code, so a component's shape costs nothing; the update path does. Over 60k entities, sequential: struct updater about
   1.6 ns per update, a raw `ref` 1.7, the old static-lambda delegate 1.85-1.9; `with` plus a set of the whole struct about
-  25% more than an in-place write.
-- **Why not a `ref struct` writer** (`using (var write = pool.TryWrite(id))`): it is as easy to call and nearly as fast,
-  but it can't be stored or queued, holds a `ref` into the dense array for its whole block (a resize under it writes to
-  the old array), and a block can do anything. A struct updater is a plain value a worker can record and the main thread
-  apply in a fixed order, and `unmanaged` stops it holding a pool, the bus or any reference, so its result depends only
-  on the component and its own fields. Anything else an update needs is read before the updater is built: `HealthDamage`
-  and `ManaCost`/`ManaRestore` resolve the effective maximum first.
-- **Tests** set up state with `pool.TrySet(id, pool.GetReadonly(id) with { ... })` rather than an updater; only the tests
-  of the update path itself define updaters.
+  25% more than an in-place write. Moving 18 single-site updaters onto scopes was neutral in a headless Release A/B
+  (2026-11-06, seed 1, frames 600-3600, 5 runs a side, same world fingerprint): `EcsContext.Update` 1.143 -> 1.131
+  ms/frame, every system within its own run-to-run spread.
+- **Tests** set up state with `pool.TrySet(id, pool.GetReadonly(id) with { ... })` or a scope; only the tests of the
+  update path itself define updaters.
 
 ### Change observation is declared per pool (2026-11-03)
 
@@ -3297,7 +3321,7 @@ and UIEngine only, added to the game's IDE by its App after Map (`--tab=Sprites`
 ### Component shape (2026-11-03)
 
 - **Shape doesn't cost; choose it for what it allows.** Field, auto-property and `record struct` writes through a `ref`
-  compile to identical Tier1 machine code (see "Component updates are unmanaged struct updaters").
+  compile to identical Tier1 machine code (see "Component writes: write scopes and struct updaters").
 - **Mutable components use auto-properties**, which the interfaces they implement (`IScheduledTimer`,
   `IRelationshipLink`, `IHotkeySlotBinding`) need anyway. A public field only where a member must be passed by `ref` or
   a nested struct changed in place; no component has one today.

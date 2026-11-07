@@ -203,9 +203,12 @@ public static class GameBuildPass
         ecsContext.EventBus.Subscribe<EntityDiedEvent>(died => uniqueEntities.EntityDied(died.EntityId));
         ecsContext.EntityManager.EntityDestroying += entityId =>
         {
-            if (transforms.Has(entityId))
+            using (var transform = transforms.TryWrite(entityId))
             {
-                world.RemoveEntityFromMap(entityId, ref transforms.Get(entityId));
+                if (transform.Found)
+                {
+                    world.RemoveEntityFromMap(entityId, ref transform.Value);
+                }
             }
 
             processingTierResolver.Forget(entityId);

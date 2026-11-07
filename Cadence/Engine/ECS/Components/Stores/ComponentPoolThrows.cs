@@ -19,6 +19,11 @@ internal static class ComponentPoolThrows
 
     [DoesNotReturn]
     [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void StructuralChangeDuringWrite<T>() =>
+        throw new InvalidOperationException($"The {typeof(T).Name} pool was added to, removed from or resized while a write scope on it was open: end the scope first.");
+
+    [DoesNotReturn]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void Unobserved<T>() =>
         throw new InvalidOperationException($"The {typeof(T).Name} pool is not observed: register it with {nameof(ComponentChangeObservation)}.{nameof(ComponentChangeObservation.Observed)} to subscribe to its changes.");
 }

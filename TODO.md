@@ -15,31 +15,6 @@ Global), each split High/Medium/Low priority. Landed work lives in `IMPLEMENTATI
 
 ### High Priority
 
-#### TOP PRIORITY: Component write scope -- `ref` writes that still notify
-
-Plan once `PLAN-data-driven-actions-and-items.md` and its code reviews are complete.
-
-Writing a component in place today takes an `unmanaged` `IComponentUpdater<T>` struct per kind of change, passed to
-`TryUpdate`/`UpdateByDenseIndex`/`TryUpdateFirst`. The escape hatch (`GetByDenseIndex`, then
-`IncrementVersionByDenseIndex`) silently skips `ComponentChanged` when the second call is forgotten, and a reference-typed
-field (an override definition, a string) can only be written as the whole component.
-- **A write scope:** a `ref struct` handed out by the pool (`pool.Write(entityId)`, a dense-index form, and a Multi pool's
-  matcher form) holding a `ref T` field. Its `Dispose` calls `MarkChanged`, so observers see the new value and every
-  write is still versioned and observed. Reference-typed fields assign through it like any other.
-- **Replaces the hatch:** the raw `ref` plus `IncrementVersionByDenseIndex` pair goes away and its callers move onto the
-  scope.
-- **Updaters stay** for writes that are reused or carry logic, and for the timer helpers (`RepeatEveryUpdate<T>`,
-  `SkipOwedPeriodsUpdate<T>`, `SetNextTickUpdate<T>`). The plan decides which one-off updater types move onto the scope.
-- **A forgotten `using`:** an analyzer flags a scope that isn't disposed, so a missed notification fails the build
-  instead of reading as a stale value.
-- **Cost:** expected neutral (the scope inlines to the same code as an updater). Confirm with the
-  `phase-performance-testing` skill on the hottest writers.
-
-**Unity reference:** DOTS hands out `RefRW<T>` (`SystemAPI.GetComponentRW<T>(entity).ValueRW.Field = ...`, or
-`SystemAPI.Query<RefRW<T>>()`), a write by `ref` that bumps the chunk's version when write access is requested -- per
-chunk and conservatively, whether or not anything changed. Here the bump happens when the scope ends and stays per
-component, so the timer wheels and relationships still see every write.
-
 #### Research multithreading: change detection, deferred structural changes and parallel systems as one design
 
 "Change detection" (Medium), "Deferred structural changes" (Medium) and "Parallel system execution" (Low) are pieces of
@@ -56,6 +31,10 @@ at the same time can't spawn, destroy, add or remove directly.
   still do.
 - **Scheduling:** declared pool access per system, a report of conflicting systems with no defined order, and parallel
   loops inside a stripe when per-entity work writes only that entity's components.
+- **Write scopes are main-thread only:** a `using var write = pool.Write(id)` scope writes and notifies at once, and its
+  Debug open-scope count is a plain field. A worker's in-place write would be a recorded `unmanaged` struct updater,
+  applied by the main thread in a fixed order (IMPLEMENTATION-NOTES "Component writes: write scopes and struct
+  updaters").
 - **Determinism:** seeds and benchmarks reproduce regardless of thread timing. Random streams are already per key;
   check what else appends to shared state in completion order (`FrameEventBuffer`, the event bus, the Debug
   `SkeletonAccessGuard`).
@@ -77,7 +56,7 @@ Nothing reads or writes a runtime component's fields without knowing its type. C
 `ContentSchema` the inspector is generated from; runtime components have nothing like that, so inspection
 (`InspectionWindowContent`), diagnostics, and any save of runtime state are each hand-built per type.
 - **Shape:** a Roslyn source generator over component structs, emitting per-type property tables (name, type, getter, and
-  a setter that writes through the pool -- `TrySet`, or the write scope above -- so observation still fires). No runtime
+  a setter that writes through the pool -- `TrySet`, or a write scope -- so observation still fires). No runtime
   reflection.
 - **Consumers to design against:** a Workshop live component inspector that edits values; undo/redo; per-pool
   serializers for "Data storage" and "Entity storage" (Global) and "Save and load Beyond neighborhoods"; diagnostics

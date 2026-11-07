@@ -88,7 +88,7 @@ public sealed class PackedComponentPoolTests
 
         pool.UpdateByDenseIndex(0, new AddUpdate(100));
 
-        Assert.AreEqual(101, pool.GetByDenseIndex(0).Value);
+        Assert.AreEqual(101, pool.GetReadonlyByDenseIndex(0).Value);
         Assert.AreEqual(2u, pool.GetVersionByDenseIndex(0));
     }
 

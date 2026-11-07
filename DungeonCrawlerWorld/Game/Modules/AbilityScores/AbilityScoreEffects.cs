@@ -124,7 +124,8 @@ public static class AbilityScoreEffects
         }
 
         var newTotal = AbilityScoreMath.ComputeTotal(StatModifiersOf(componentManager), entityId, type, score.BaseValue);
-        abilityScores.UpdateByDenseIndex(denseIndex, new SetTotalUpdate(type, newTotal));
+        using var recomputedScores = abilityScores.WriteByDenseIndex(denseIndex);
+        recomputedScores.Value.SetTotal(type, newTotal);
     }
 
     private static MultiComponentPool<StatModifierComponent> StatModifiersOf(ComponentManager componentManager) =>
@@ -146,10 +147,5 @@ public static class AbilityScoreEffects
     private readonly struct SetScoreUpdate(AbilityScoreType type, ushort baseValue, ushort total) : IComponentUpdater<AbilityScoresComponent>
     {
         public void Update(ref AbilityScoresComponent scores) => scores.Set(type, baseValue, total);
-    }
-
-    private readonly struct SetTotalUpdate(AbilityScoreType type, ushort total) : IComponentUpdater<AbilityScoresComponent>
-    {
-        public void Update(ref AbilityScoresComponent scores) => scores.SetTotal(type, total);
     }
 }

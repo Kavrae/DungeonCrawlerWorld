@@ -8,7 +8,7 @@ namespace Engine.ECS.Systems;
 /// To fire again, write a new NextTickFrame through any normal componentPool write -- the wheel picks it up
 /// on its own, and the deadline may be anything, including the one that just fired or one already
 /// behind <paramref name="now"/> (it fires on the next frame: late, never lost). A periodic timer
-/// re-arms with <see cref="ScheduledTimerExtensions.RepeatEvery{T}"/> on the ref a componentPool updater
+/// re-arms with <see cref="ScheduledTimerExtensions.AdvanceOnePeriod{T}"/> on the ref a componentPool updater
 /// hands it -- naming only the period, so the cadence stays exact after a late firing and there is
 /// no <c>now</c> to get wrong. Returning false without re-arming leaves the timer resting: it won't
 /// fire again until something writes a new deadline.
@@ -114,7 +114,7 @@ public sealed class PackedTimerWheel<T> where T : struct, IScheduledTimer
                 // below and scheduled afresh. Releasing afterwards instead clobbered the second
                 // case, leaving a live deadline with nothing scheduled for it, and every consumer
                 // re-arming from a computed deadline had to dodge that itself.
-                ref var timer = ref _pool.GetByDenseIndex(denseIndex);
+                ref var timer = ref _pool.GetByDenseIndexUnobserved(denseIndex);
                 ScheduledTimerMark.Release(ref timer);
 
                 if (!_scope.IsSimulated(entry.EntityId))
@@ -170,7 +170,7 @@ public sealed class PackedTimerWheel<T> where T : struct, IScheduledTimer
     /// <summary>Claims the component's current deadline and puts an entry on the wheel, unless it already holds one for that same deadline.</summary>
     private void Schedule(int entityId, int denseIndex)
     {
-        ref var timer = ref _pool.GetByDenseIndex(denseIndex);
+        ref var timer = ref _pool.GetByDenseIndexUnobserved(denseIndex);
         if (ScheduledTimerMark.TryClaim(ref timer, out var deadline))
         {
             _wheel.Schedule(entityId, 0, deadline);

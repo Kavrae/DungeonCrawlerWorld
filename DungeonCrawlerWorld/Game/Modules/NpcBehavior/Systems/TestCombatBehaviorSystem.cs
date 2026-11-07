@@ -426,6 +426,12 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     private void ClearStep(int entityId) =>
         _movementPool.TryUpdate(entityId, new SetNextMapPositionUpdate(null));
 
-    private void SetIdle(int entityId, long now) =>
-        _movementPool.TryUpdate(entityId, new SetWaitUntilFrameUpdate(FrameDeadline.After(now, MovementCandidates.FramesToWaitIfNoOptions)));
+    private void SetIdle(int entityId, long now)
+    {
+        using var idleMovement = _movementPool.TryWrite(entityId);
+        if (idleMovement.Found)
+        {
+            idleMovement.Value.WaitUntilFrame = FrameDeadline.After(now, MovementCandidates.FramesToWaitIfNoOptions);
+        }
+    }
 }

@@ -3283,9 +3283,11 @@ public sealed class UiInputControllerTests
         // doc comment) up to 5, as if the player had staged a whole 5-unit stack pulled from the
         // shop -- the reported repro's own "5 scrolls of torch" scenario.
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
-        var denseIndex = stacks.GetFirstDenseIndex(tradeShopEntityId);
-        stacks.GetByDenseIndex(denseIndex).Quantity = 5;
-        stacks.IncrementVersionByDenseIndex(denseIndex);
+        using (var stack = stacks.WriteByDenseIndex(stacks.GetFirstDenseIndex(tradeShopEntityId)))
+        {
+            stack.Value.Quantity = 5;
+        }
+
         ((InventoryGridContent)tradeShopGridWindow.DropTarget!).Update(new GameTime());
 
         var cell = (TradeItemStackCell)tradeShopGridWindow.ChildElements.OfType<InventoryItemStackCell>().Single();

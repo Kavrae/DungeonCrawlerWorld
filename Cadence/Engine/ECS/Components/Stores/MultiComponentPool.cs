@@ -29,6 +29,9 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <summary>Held by the single timer wheel driving this pool, if any -- see TimerWheelClaim for why there can only be one.</summary>
     private TimerWheelClaim _timerWheelClaim;
 
+    /// <summary>How many write scopes on this pool are open; counted in Debug only, where a structural change while any is open throws.</summary>
+    private int _openWriteScopes;
+
     /// <summary> The type of component stored in this pool. </summary>
     public Type ComponentType => typeof(T);
 
@@ -78,8 +81,8 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <summary>
     /// Fired after every write to a component *instance* -- (entityId, denseIndex) -- at
     /// exactly the points the pool bumps that instance's version: every Add (not just an entity's
-    /// first, unlike EntityAdded), UpdateByDenseIndex, TryUpdateFirst and
-    /// IncrementVersionByDenseIndex. Not fired by removals. Subscribing throws unless the pool is
+    /// first, unlike EntityAdded), UpdateByDenseIndex, TryUpdateFirst and the end of every
+    /// write scope. Not fired by removals. Subscribing throws unless the pool is
     /// Observed (see ComponentChangeObservation).
     /// </summary>
     /// <remarks>
@@ -150,6 +153,21 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
             : observation;
     }
 
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void BeginWriteScope() => _openWriteScopes++;
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void EndWriteScope() => _openWriteScopes--;
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void ThrowIfWriteScopeOpen()
+    {
+        if (_openWriteScopes != 0)
+        {
+            ComponentPoolThrows.StructuralChangeDuringWrite<T>();
+        }
+    }
+
     private void ThrowIfUnobserved()
     {
         if (Observation != ComponentChangeObservation.Observed)
@@ -160,7 +178,11 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
     /// <summary> Grows the chain index's page table to cover the new entity capacity. Allocates no pages. </summary>
     /// <param name="newMaximumEntityCount">The new entity capacity.</param>
-    public void Resize(int newMaximumEntityCount) => _chains.EnsureCapacity(newMaximumEntityCount);
+    public void Resize(int newMaximumEntityCount)
+    {
+        ThrowIfWriteScopeOpen();
+        _chains.EnsureCapacity(newMaximumEntityCount);
+    }
 
     /// <summary>Claims this pool as the source for one MultiTimerWheel, throwing if a wheel already drives it.</summary>
     /// <remarks>Called by the wheel's constructor. See TimerWheelClaim.</remarks>
@@ -188,6 +210,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     public void Add(int entityId, T component)
     {
         Guard(entityId);
+        ThrowIfWriteScopeOpen();
         ref var chain = ref _chains.GetWritable(entityId);
 
         EnsureDenseCapacityForOneMore();
@@ -284,11 +307,42 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <returns>The dense index of the next instance, or -1 if denseIndex was the chain's last.</returns>
     public int GetNextDenseIndex(int denseIndex) => _denseNext[denseIndex];
 
-    /// <summary> Hot-path mutable access to a component instance by its dense index. </summary>
-    /// <remarks> WARNING: Caller must manually increment the version (see IncrementVersionByDenseIndex) after mutation. Prefer UpdateByDenseIndex/TryUpdateFirst unless you are in a tight loop. </remarks>
+    /// <summary>Opens a write to the component instance at the given dense index; disposing it versions and observes the write.</summary>
     /// <param name="denseIndex">The dense index of the component instance.</param>
-    /// <returns>A mutable reference to the component.</returns>
-    public ref T GetByDenseIndex(int denseIndex) => ref _denseComponents[denseIndex];
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public MultiComponentWrite<T> WriteByDenseIndex(int denseIndex)
+    {
+        BeginWriteScope();
+        return new MultiComponentWrite<T>(this, ref _denseComponents[denseIndex], denseIndex);
+    }
+
+    /// <summary>Opens a write to the first of entityId's components matcher accepts; the scope is not Found, and its Dispose does nothing, if none does.</summary>
+    /// <remarks>Walks the dense per-entity chain in insertion order, same as every other matcher-based lookup on this type -- see TryUpdateFirst.</remarks>
+    /// <param name="entityId">The ID of the entity whose component is written.</param>
+    /// <param name="matcher">Which component to write.</param>
+    public MultiComponentWrite<T> TryWriteFirst<TMatcher>(int entityId, TMatcher matcher) where TMatcher : unmanaged, IComponentMatcher<T>
+    {
+        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseNext[denseIndex])
+        {
+            if (matcher.Matches(in _denseComponents[denseIndex]))
+            {
+                return WriteByDenseIndex(denseIndex);
+            }
+        }
+
+        return default;
+    }
+
+    /// <summary>A write scope's end: the scope closes before observers hear of the write, so they may change the pool.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void EndWrite(int denseIndex)
+    {
+        EndWriteScope();
+        MarkChanged(_denseIndexToEntityIdMap[denseIndex], denseIndex);
+    }
+
+    /// <summary>Mutable access that neither versions nor observes the write: for a timer wheel's own claim marks, which its ComponentChanged handler must not see.</summary>
+    internal ref T GetByDenseIndexUnobserved(int denseIndex) => ref _denseComponents[denseIndex];
 
     /// <summary> Gets a readonly reference to a component instance by its dense index. </summary>
     /// <param name="denseIndex">The dense index of the component instance.</param>
@@ -346,10 +400,6 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
 
         return groups.Count;
     }
-
-    /// <summary> Increments the version of a component instance, and its owning entity, by dense index. </summary>
-    /// <param name="denseIndex">The dense index of the component instance.</param>
-    public void IncrementVersionByDenseIndex(int denseIndex) => MarkChanged(_denseIndexToEntityIdMap[denseIndex], denseIndex);
 
     /// <summary>Every in-place write's single exit: bumps the instance's and its entity's versions and tells ComponentChanged observers.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -443,6 +493,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <summary>Clears all components from the pool.</summary>
     public void Clear()
     {
+        ThrowIfWriteScopeOpen();
         Array.Clear(_denseComponents, 0, _count);
         Array.Fill(_denseIndexToEntityIdMap, -1, 0, _count);
         Array.Fill(_denseVersions, (uint)0, 0, _count);
@@ -458,6 +509,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <remarks>Swaps the last dense slot into the freed one (so dense storage stays contiguous) and re-patches whichever chain the moved entry belonged to, mirroring PackedComponentPool.Remove's own swap-with-last approach but with an extra chain-relink step for the doubly-linked list.</remarks>
     private void RemoveDenseIndexInternal(int denseIndex)
     {
+        ThrowIfWriteScopeOpen();
         var ownerEntityId = _denseIndexToEntityIdMap[denseIndex];
         _componentRemoving?.Invoke(ownerEntityId, denseIndex);
 
@@ -539,6 +591,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <inheritdoc/>
     public void ReserveDenseCapacity(int minimumCount)
     {
+        ThrowIfWriteScopeOpen();
         if (minimumCount > _denseComponents.Length)
         {
             GrowDenseTo(minimumCount);

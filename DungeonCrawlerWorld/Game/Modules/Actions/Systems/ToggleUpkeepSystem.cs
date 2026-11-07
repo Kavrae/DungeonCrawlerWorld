@@ -99,7 +99,7 @@ public sealed class ToggleUpkeepSystem : ISystem
 
         if (_toggles.TryApplyPeriodicEffects(entityId, definition, periodic, now))
         {
-            Rearm(entityId, toggle.Key, FrameDeadline.Repeat(toggle.NextTickFrame, periodic.IntervalFrames));
+            Rearm(entityId, toggle.Key, FrameDeadline.NextPeriodAfter(toggle.NextTickFrame, periodic.IntervalFrames));
             return false;
         }
 

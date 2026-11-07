@@ -2,12 +2,6 @@ using Engine.ECS.Components;
 
 namespace Engine.ECS.Systems;
 
-/// <summary>Re-arms a periodic timer one period on from the deadline that just fired, as a pool updater (see ScheduledTimerExtensions.RepeatEvery).</summary>
-public readonly struct RepeatEveryUpdate<T>(int periodFrames) : IComponentUpdater<T> where T : struct, IScheduledTimer
-{
-    public void Update(ref T timer) => timer.RepeatEvery(periodFrames);
-}
-
 /// <summary>Moves a periodic timer past every period owed up to now without firing them, as a pool updater (see ScheduledTimerExtensions.SkipOwedPeriods).</summary>
 public readonly struct SkipOwedPeriodsUpdate<T>(int periodFrames, long now) : IComponentUpdater<T> where T : struct, IScheduledTimer
 {

@@ -18,6 +18,9 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <summary>Held by the single timer wheel driving this pool, if any -- see TimerWheelClaim for why there can only be one.</summary>
     private TimerWheelClaim _timerWheelClaim;
 
+    /// <summary>How many write scopes on this pool are open; counted in Debug only, where a structural change while any is open throws.</summary>
+    private int _openWriteScopes;
+
     /// <summary> The type of component stored in this pool. </summary>
     public Type ComponentType => typeof(T);
 
@@ -67,15 +70,13 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <summary>
     /// Fired after every write to a component -- (entityId, denseIndex) -- at exactly the
     /// points the pool bumps that component's version: Add, Merge, TrySet, TryUpdate,
-    /// SetByDenseIndex, UpdateByDenseIndex and IncrementVersionByDenseIndex. Not fired by Remove.
+    /// SetByDenseIndex, UpdateByDenseIndex and the end of every write scope. Not fired by Remove.
     /// Subscribing throws unless the pool is Observed (see ComponentChangeObservation).
     /// </summary>
     /// <remarks>
     /// Lets a consumer react to *every* change without each writer having to remember to tell it
     /// -- the TimerWheel uses this to schedule a ticking countdown whenever its deadline is written,
-    /// wherever that write happens. A pool nobody observes pays one
-    /// null check per write. The one write this can't see is a raw GetByDenseIndex ref mutation
-    /// without the IncrementVersionByDenseIndex that method's contract already requires.
+    /// wherever that write happens. A pool nobody observes pays one null check per write.
     /// The handler must not add to or remove from this pool.
     /// </remarks>
     public event Action<int, int>? ComponentChanged
@@ -134,6 +135,21 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
             : observation;
     }
 
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void BeginWriteScope() => _openWriteScopes++;
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void EndWriteScope() => _openWriteScopes--;
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void ThrowIfWriteScopeOpen()
+    {
+        if (_openWriteScopes != 0)
+        {
+            ComponentPoolThrows.StructuralChangeDuringWrite<T>();
+        }
+    }
+
     private void ThrowIfUnobserved()
     {
         if (Observation != ComponentChangeObservation.Observed)
@@ -144,7 +160,11 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
     /// <summary> Grows the entity index's page table to cover the new entity capacity. Allocates no pages. </summary>
     /// <param name="newMaximumEntityCount">The new entity capacity.</param>
-    public void Resize(int newMaximumEntityCount) => _denseIndexByEntity.EnsureCapacity(newMaximumEntityCount);
+    public void Resize(int newMaximumEntityCount)
+    {
+        ThrowIfWriteScopeOpen();
+        _denseIndexByEntity.EnsureCapacity(newMaximumEntityCount);
+    }
 
     /// <summary>Claims this pool as the source for one PackedTimerWheel, throwing if a wheel already drives it.</summary>
     /// <remarks>Called by the wheel's constructor. See TimerWheelClaim.</remarks>
@@ -156,6 +176,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     public void Add(int entityId, T newComponent)
     {
         Guard(entityId);
+        ThrowIfWriteScopeOpen();
         ref var denseIndex = ref _denseIndexByEntity.GetWritable(entityId);
         if (denseIndex >= 0)
         {
@@ -303,11 +324,48 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         return true;
     }
 
-    /// <summary> Hot-path mutable access to the component by its dense index. </summary>
-    /// <remarks> WARNING: Caller must manually increment version (see IncrementVersionByDenseIndex) after mutation. Prefer UpdateByDenseIndex/TryUpdate unless you are in a tight loop. </remarks>
+    /// <summary>Opens a write to the entity's component, which must exist; disposing it versions and observes the write.</summary>
+    /// <param name="entityId">The ID of the entity whose component is written.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public PackedComponentWrite<T> Write(int entityId)
+    {
+        var denseIndex = DenseIndexOf(entityId);
+        if (denseIndex < 0)
+        {
+            ComponentPoolThrows.MissingComponent<T>(entityId);
+        }
+
+        return WriteByDenseIndex(denseIndex);
+    }
+
+    /// <summary>Opens a write to the entity's component if it has one; the scope is not Found, and its Dispose does nothing, if it hasn't.</summary>
+    /// <param name="entityId">The ID of the entity whose component is written.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public PackedComponentWrite<T> TryWrite(int entityId)
+    {
+        var denseIndex = DenseIndexOf(entityId);
+        return denseIndex < 0 ? default : WriteByDenseIndex(denseIndex);
+    }
+
+    /// <summary>Opens a write to the component at the given dense index; disposing it versions and observes the write.</summary>
     /// <param name="denseIndex">The dense index of the component.</param>
-    /// <returns>A mutable reference to the component.</returns>
-    public ref T GetByDenseIndex(int denseIndex) => ref _denseComponents[denseIndex];
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public PackedComponentWrite<T> WriteByDenseIndex(int denseIndex)
+    {
+        BeginWriteScope();
+        return new PackedComponentWrite<T>(this, ref _denseComponents[denseIndex], denseIndex);
+    }
+
+    /// <summary>A write scope's end: the scope closes before observers hear of the write, so they may change the pool.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void EndWrite(int denseIndex)
+    {
+        EndWriteScope();
+        MarkChanged(denseIndex);
+    }
+
+    /// <summary>Mutable access that neither versions nor observes the write: for a timer wheel's own claim marks, which its ComponentChanged handler must not see.</summary>
+    internal ref T GetByDenseIndexUnobserved(int denseIndex) => ref _denseComponents[denseIndex];
 
     /// <summary> Gets a readonly reference to the component by its dense index. </summary>
     /// <param name="denseIndex">The dense index of the component.</param>
@@ -342,11 +400,6 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         MarkChanged(denseIndex);
     }
 
-    /// <summary> Increments the version of the component at the given dense index. </summary>
-    /// <remarks>Also what a raw GetByDenseIndex mutation must call afterward -- it's how ComponentChanged observers see that write.</remarks>
-    /// <param name="denseIndex">The dense index of the component.</param>
-    public void IncrementVersionByDenseIndex(int denseIndex) => MarkChanged(denseIndex);
-
     /// <summary>Every write's single exit: bumps the version and tells ComponentChanged observers. Add sets version 1 itself and fires ComponentChanged directly.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void MarkChanged(int denseIndex)
@@ -361,6 +414,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <returns>True if the component was removed, false otherwise.</returns>
     public bool Remove(int entityId)
     {
+        ThrowIfWriteScopeOpen();
         var denseIndex = _denseIndexByEntity.Get(entityId);
         if (denseIndex < 0)
         {
@@ -401,6 +455,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <inheritdoc/>
     public void ReserveDenseCapacity(int minimumCount)
     {
+        ThrowIfWriteScopeOpen();
         if (minimumCount > _denseComponents.Length)
         {
             GrowDenseTo(minimumCount);

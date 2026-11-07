@@ -28,7 +28,7 @@ public sealed class EntityDestructionTests
         var position = new Vector3Int(10, 10, (int)MapLayer.Ground);
         var entityId = resolver.CreateEntityAt(ecs.EntityManager, position);
         ecs.ComponentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(2, 2)));
-        world.PlaceEntityOnMap(entityId, position, ref ecs.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId));
+        TestTransforms.PlaceOnMap(world, ecs.ComponentManager, entityId, position);
         var sources = ecs.ComponentManager.GetMultiPool<AuraSourceComponent>();
         TestAuras.ToggleSource(sources, ecs.EventBus, entityId, TestAuras.BurningId, power: 8, size: 3);
         var removedSources = 0;

@@ -44,7 +44,7 @@ public sealed class EntityKeyWiringTests
     {
         var entityId = result.Internals.ProcessingTierResolver.CreateEntityAt(ecs.EntityManager, position);
         ecs.ComponentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(MapLayer.Ground), new Vector2Byte(1, 1)));
-        world.PlaceEntityOnMap(entityId, position, ref ecs.ComponentManager.GetDirectPool<TransformComponent>().Get(entityId));
+        TestTransforms.PlaceOnMap(world, ecs.ComponentManager, entityId, position);
         return entityId;
     }
 }

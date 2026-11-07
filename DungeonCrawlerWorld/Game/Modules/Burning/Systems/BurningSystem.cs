@@ -106,7 +106,7 @@ public sealed class BurningSystem : ISystem
         public void Update(ref BurningTimerComponent timer)
         {
             timer.StackCount = remainingStacks;
-            timer.RepeatEvery(BurningEffects.TickIntervalFrames);
+            timer.AdvanceOnePeriod(BurningEffects.TickIntervalFrames);
         }
     }
 }

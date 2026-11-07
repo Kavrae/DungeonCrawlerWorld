@@ -266,7 +266,11 @@ public sealed class MapWindowTests
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState(Keys.D));
         Assert.AreEqual(new Vector3Int(101, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition, "A held key must not replace a step that hasn't landed yet.");
 
-        transformPool.Get(PlayerEntityId).Position = new Vector3Int(101, 100, 0);
+        using (var transform = transformPool.Write(PlayerEntityId))
+        {
+            transform.Value.Position = new Vector3Int(101, 100, 0);
+        }
+
         mapWindow.HandleHotkeys(new KeyboardState(Keys.D), new KeyboardState(Keys.D));
 
         Assert.AreEqual(new Vector3Int(102, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition);

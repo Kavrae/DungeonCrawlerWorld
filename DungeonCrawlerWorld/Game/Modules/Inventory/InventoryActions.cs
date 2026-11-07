@@ -257,7 +257,11 @@ public static class InventoryActions
     /// <summary>Disables/enables one specific stack (e.g. an item withheld until some later trigger) -- distinct from SetInventoryDisabled below, which disables the whole inventory.</summary>
     public static void SetStackDisabled(ComponentManager componentManager, int entityId, Guid itemDefinitionId, bool disabled)
     {
-        componentManager.GetMultiPool<InventoryItemStackComponent>().TryUpdateFirst(entityId, new InventoryQueries.ItemDefinitionMatcher(itemDefinitionId), new SetStackDisabledUpdate(disabled));
+        using var heldStack = componentManager.GetMultiPool<InventoryItemStackComponent>().TryWriteFirst(entityId, new InventoryQueries.ItemDefinitionMatcher(itemDefinitionId));
+        if (heldStack.Found)
+        {
+            heldStack.Value.IsDisabled = disabled;
+        }
     }
 
     /// <summary>Disables/enables an entity's whole inventory -- items still exist and can still be granted while disabled, but the management window can't be opened (see InventoryWindowController).</summary>
@@ -403,7 +407,8 @@ public static class InventoryActions
             return false;
         }
 
-        stacks.UpdateByDenseIndex(sourceDenseIndex, new SetQuantityUpdate(remaining));
+        using var lootedStack = stacks.WriteByDenseIndex(sourceDenseIndex);
+        lootedStack.Value.Quantity = remaining;
         return true;
     }
 
@@ -487,15 +492,5 @@ public static class InventoryActions
     private readonly struct RemoveQuantityUpdate(ushort removed) : IComponentUpdater<InventoryItemStackComponent>
     {
         public void Update(ref InventoryItemStackComponent stack) => stack.Quantity -= removed;
-    }
-
-    private readonly struct SetQuantityUpdate(ushort quantity) : IComponentUpdater<InventoryItemStackComponent>
-    {
-        public void Update(ref InventoryItemStackComponent stack) => stack.Quantity = quantity;
-    }
-
-    private readonly struct SetStackDisabledUpdate(bool disabled) : IComponentUpdater<InventoryItemStackComponent>
-    {
-        public void Update(ref InventoryItemStackComponent stack) => stack.IsDisabled = disabled;
     }
 }

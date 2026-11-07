@@ -34,9 +34,17 @@ public static class ScrollMasteryEffects
     {
         var pool = componentManager.GetMultiPool<ScrollMasteryComponent>();
 
-        var updated = pool.TryUpdateFirst(entityId, new SpellMatcher(spellId), new CountUsageUpdate());
+        bool counted;
+        using (var heldMastery = pool.TryWriteFirst(entityId, new SpellMatcher(spellId)))
+        {
+            counted = heldMastery.Found;
+            if (counted)
+            {
+                heldMastery.Value.UsageCount++;
+            }
+        }
 
-        if (!updated)
+        if (!counted)
         {
             pool.Add(entityId, new ScrollMasteryComponent(spellId, 1));
         }
@@ -80,10 +88,5 @@ public static class ScrollMasteryEffects
     private readonly struct SpellMatcher(Guid spellId) : IComponentMatcher<ScrollMasteryComponent>
     {
         public bool Matches(in ScrollMasteryComponent mastery) => mastery.SpellId == spellId;
-    }
-
-    private readonly struct CountUsageUpdate : IComponentUpdater<ScrollMasteryComponent>
-    {
-        public void Update(ref ScrollMasteryComponent mastery) => mastery.UsageCount++;
     }
 }

@@ -478,7 +478,12 @@ public sealed class AuraSystem : ISystem
 
         var refused = EffectSequence.Apply(definition.Effects, in context) == EffectOutcome.Refused;
 
-        _exposures.TryUpdateFirst(entityId, new TimerKeyMatcher<AuraExposureComponent>(auraId), new RearmExposureUpdate(refused));
+        using var rearmedExposure = _exposures.TryWriteFirst(entityId, new TimerKeyMatcher<AuraExposureComponent>(auraId));
+        if (rearmedExposure.Found)
+        {
+            rearmedExposure.Value.Refused = refused;
+            rearmedExposure.Value.AdvanceOnePeriod(AuraEffects.TickIntervalFrames);
+        }
 
         return false;
     }
@@ -572,15 +577,6 @@ public sealed class AuraSystem : ISystem
                     }
                 }
             }
-        }
-    }
-
-    private readonly struct RearmExposureUpdate(bool refused) : IComponentUpdater<AuraExposureComponent>
-    {
-        public void Update(ref AuraExposureComponent exposure)
-        {
-            exposure.Refused = refused;
-            exposure.RepeatEvery(AuraEffects.TickIntervalFrames);
         }
     }
 }

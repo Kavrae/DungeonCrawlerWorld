@@ -236,17 +236,18 @@ public sealed class PackedTimerWheelTests
         Assert.IsEmpty(Run(wheel, pool, 0, 100));
     }
 
-    /// <summary>The raw-ref contract the observer depends on: a GetByDenseIndex write is seen only once IncrementVersionByDenseIndex reports it.</summary>
+    /// <summary>A write scope's deadline is scheduled when the scope ends.</summary>
     [TestMethod]
-    public void RawRefWrite_IsScheduledOnceItsVersionIsIncremented()
+    public void WriteScope_IsScheduledWhenItEnds()
     {
         var pool = CreatePool();
         var wheel = new PackedTimerWheel<Burn>(pool, SimulationScope.Unscoped);
         pool.Add(3, new Burn { NextTickFrame = 50, Stacks = 1 });
-        var denseIndex = pool.GetDenseIndex(3);
 
-        pool.GetByDenseIndex(denseIndex).NextTickFrame = 7;
-        pool.IncrementVersionByDenseIndex(denseIndex);
+        using (var write = pool.Write(3))
+        {
+            write.Value.NextTickFrame = 7;
+        }
 
         CollectionAssert.AreEqual(new[] { (7L, 3) }, Run(wheel, pool, 0, 60));
     }

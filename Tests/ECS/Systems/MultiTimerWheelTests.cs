@@ -277,17 +277,18 @@ public sealed class MultiTimerWheelTests
         Assert.AreEqual(0, pool.Count, "Frame 15's own firing removed what was left.");
     }
 
-    /// <summary>The raw-ref contract the observer depends on: a GetByDenseIndex write is seen only once IncrementVersionByDenseIndex reports it.</summary>
+    /// <inheritdoc cref="PackedTimerWheelTests.WriteScope_IsScheduledWhenItEnds"/>
     [TestMethod]
-    public void RawRefWrite_IsScheduledOnceItsVersionIsIncremented()
+    public void WriteScope_IsScheduledWhenItEnds()
     {
         var pool = CreatePool();
         var wheel = new MultiTimerWheel<Exposure>(pool, SimulationScope.Unscoped);
         pool.Add(2, new Exposure(1, 50));
-        var denseIndex = pool.GetFirstDenseIndex(2);
 
-        pool.GetByDenseIndex(denseIndex).NextTickFrame = 7;
-        pool.IncrementVersionByDenseIndex(denseIndex);
+        using (var write = pool.WriteByDenseIndex(pool.GetFirstDenseIndex(2)))
+        {
+            write.Value.NextTickFrame = 7;
+        }
 
         CollectionAssert.AreEqual(new[] { (7L, 2, 1) }, Run(wheel, 0, 60));
     }

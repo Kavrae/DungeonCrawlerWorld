@@ -78,9 +78,13 @@ public sealed class EntityActions(
     {
         var readyAtFrame = FrameDeadline.After(now, cooldownFrames);
 
-        if (cooldowns.TryUpdateFirst(entityId, new CooldownMatcher(actionId), new SetReadyAtUpdate(readyAtFrame)))
+        using (var heldCooldown = cooldowns.TryWriteFirst(entityId, new CooldownMatcher(actionId)))
         {
-            return;
+            if (heldCooldown.Found)
+            {
+                heldCooldown.Value.ReadyAtFrame = readyAtFrame;
+                return;
+            }
         }
 
         cooldowns.Add(entityId, new ActionCooldownComponent(actionId, readyAtFrame));
@@ -164,10 +168,5 @@ public sealed class EntityActions(
     private readonly struct CooldownMatcher(Guid actionId) : IComponentMatcher<ActionCooldownComponent>
     {
         public bool Matches(in ActionCooldownComponent cooldown) => cooldown.ActionId == actionId;
-    }
-
-    private readonly struct SetReadyAtUpdate(uint readyAtFrame) : IComponentUpdater<ActionCooldownComponent>
-    {
-        public void Update(ref ActionCooldownComponent cooldown) => cooldown.ReadyAtFrame = readyAtFrame;
     }
 }

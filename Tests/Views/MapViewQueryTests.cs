@@ -49,7 +49,7 @@ public sealed class MapViewQueryTests
         public void Place(int entityId, Vector3Int position)
         {
             TestTransforms.Set(Components, entityId, new TransformComponent(position, new Vector2Byte(1, 1)));
-            World.PlaceEntityOnMap(entityId, position, ref Components.GetDirectPool<TransformComponent>().Get(entityId));
+            TestTransforms.PlaceOnMap(World, Components, entityId, position);
         }
 
         public void PlaceTerrain(int x, int y, TerrainLayer layer, string glyph = "~", Color glyphColor = default)

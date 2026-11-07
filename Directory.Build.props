@@ -8,4 +8,12 @@
     <WarningsAsErrors>$(WarningsAsErrors);nullable</WarningsAsErrors>
   </PropertyGroup>
 
+  <!--
+    The engine's analyzers (Cadence/Analyzers) run in every project but themselves and their tests, which load them as a
+    library instead. CAD0001: a component write scope must be held in a using.
+  -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Analyzers' and '$(MSBuildProjectName)' != 'Analyzers.Tests'">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Cadence\Analyzers\Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
 </Project>

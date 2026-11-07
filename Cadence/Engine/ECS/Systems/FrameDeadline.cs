@@ -56,7 +56,7 @@ public static class FrameDeadline
     /// firings the gap covered are lost, while this keeps the original cadence and lets the wheel
     /// catch the owed firings up, one per frame. A parked timer (<see cref="Never"/>) stays parked.
     /// </remarks>
-    public static uint Repeat(uint previousDeadline, int frames) =>
+    public static uint NextPeriodAfter(uint previousDeadline, int frames) =>
         previousDeadline == Never ? Never : After(previousDeadline, frames);
 
     /// <summary>The first deadline on <paramref name="deadline"/>'s cadence that is later than <paramref name="now"/> -- every period owed up to now skipped, none of them fired. A deadline already later than now, or parked, is returned unchanged.</summary>

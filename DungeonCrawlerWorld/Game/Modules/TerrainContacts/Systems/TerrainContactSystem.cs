@@ -126,14 +126,18 @@ public sealed class TerrainContactSystem : ISystem
             Refused = outcome == EffectOutcome.Refused,
         };
 
-        if (_exposures.Has(entityId))
+        using (var heldExposure = _exposures.TryWrite(entityId))
         {
-            _exposures.TryUpdate(entityId, new RestartExposureUpdate(exposure));
+            if (heldExposure.Found)
+            {
+                heldExposure.Value.NextTickFrame = exposure.NextTickFrame;
+                heldExposure.Value.TerrainTypeId = exposure.TerrainTypeId;
+                heldExposure.Value.Refused = exposure.Refused;
+                return;
+            }
         }
-        else
-        {
-            _exposures.Add(entityId, exposure);
-        }
+
+        _exposures.Add(entityId, exposure);
     }
 
     private EffectOutcome ApplyContact(int entityId, ushort terrainTypeId, TerrainDefinition definition, TerrainContact contact, long now, bool announcesRefusal)
@@ -169,7 +173,13 @@ public sealed class TerrainContactSystem : ISystem
         var alreadyRefused = exposure.Refused && terrainTypeId == exposure.TerrainTypeId;
         var outcome = ApplyContact(entityId, terrainTypeId, definition, contact, now, announcesRefusal: !alreadyRefused);
 
-        _exposures.TryUpdate(entityId, new ContactTickUpdate(terrainTypeId, repeatEveryFrames, outcome == EffectOutcome.Refused));
+        using var heldExposure = _exposures.TryWrite(entityId);
+        if (heldExposure.Found)
+        {
+            heldExposure.Value.TerrainTypeId = terrainTypeId;
+            heldExposure.Value.Refused = outcome == EffectOutcome.Refused;
+            heldExposure.Value.AdvanceOnePeriod(repeatEveryFrames);
+        }
 
         return false;
     }
@@ -232,25 +242,5 @@ public sealed class TerrainContactSystem : ISystem
         }
 
         _exposures.TryUpdate(entityId, new SkipOwedPeriodsUpdate<TerrainContactExposureComponent>(repeatEveryFrames, now));
-    }
-
-    private readonly struct RestartExposureUpdate(TerrainContactExposureComponent started) : IComponentUpdater<TerrainContactExposureComponent>
-    {
-        public void Update(ref TerrainContactExposureComponent held)
-        {
-            held.NextTickFrame = started.NextTickFrame;
-            held.TerrainTypeId = started.TerrainTypeId;
-            held.Refused = started.Refused;
-        }
-    }
-
-    private readonly struct ContactTickUpdate(ushort terrainTypeId, ushort periodFrames, bool refused) : IComponentUpdater<TerrainContactExposureComponent>
-    {
-        public void Update(ref TerrainContactExposureComponent held)
-        {
-            held.TerrainTypeId = terrainTypeId;
-            held.Refused = refused;
-            held.RepeatEvery(periodFrames);
-        }
     }
 }

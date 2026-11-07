@@ -7,8 +7,8 @@ namespace Engine.ECS.Components;
 /// building the updater.
 ///
 /// Because it is unmanaged, an updater can't carry a new value for a reference-typed field (an override definition, a string).
-/// Write such a field as the whole component instead: TrySet or SetByDenseIndex on a Direct or Packed pool, or, in a Multi pool,
-/// assign through GetByDenseIndex and then call IncrementVersionByDenseIndex so the write is versioned and observed like any other.
+/// Write such a field through a pool's write scope (Write, TryWrite, WriteByDenseIndex, TryWriteFirst), which is versioned and
+/// observed like any other write. A scope is for a write made at once; an updater is also a value that can be recorded and applied later.
 /// </remarks>
 public interface IComponentUpdater<T> where T : struct
 {

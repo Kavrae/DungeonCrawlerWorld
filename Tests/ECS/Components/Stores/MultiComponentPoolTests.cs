@@ -219,7 +219,9 @@ public sealed class MultiComponentPoolTests
         var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
         pool.Add(0, new TestComponent { Value = 5 }); // dense index 0, version 1
         pool.Add(0, new TestComponent { Value = 5 }); // dense index 1, version 1
-        pool.IncrementVersionByDenseIndex(pool.GetFirstDenseIndex(0)); // bumps whichever instance is first in the chain to version 2
+        using (pool.WriteByDenseIndex(pool.GetFirstDenseIndex(0)))
+        {
+        }
         var destination = new List<Engine.ECS.Components.InspectedComponentEntry>();
 
         pool.CopyInspectionDataForEntity(0, destination);

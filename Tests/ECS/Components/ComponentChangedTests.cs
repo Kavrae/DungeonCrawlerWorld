@@ -56,12 +56,25 @@ public sealed class ComponentChangedTests
         var denseIndex = pool.GetDenseIndex(3);
         pool.SetByDenseIndex(denseIndex, new Value { Number = 1 });
         pool.UpdateByDenseIndex(denseIndex, new AddUpdate(1));
-        pool.IncrementVersionByDenseIndex(denseIndex);
+        using (var write = pool.Write(3))
+        {
+            write.Value.Number = 4;
+        }
+
+        using (var write = pool.TryWrite(3))
+        {
+            write.Value.Number = 5;
+        }
+
+        using (var write = pool.WriteByDenseIndex(denseIndex))
+        {
+            write.Value.Number = 6;
+        }
 
         CollectionAssert.AreEqual(
-            new[] { (3, 0), (3, 0), (5, 1), (3, 0), (3, 0), (3, 0), (3, 0), (3, 0) },
+            new[] { (3, 0), (3, 0), (5, 1), (3, 0), (3, 0), (3, 0), (3, 0), (3, 0), (3, 0), (3, 0) },
             changes,
-            "Add, Merge, Merge-as-Add, TrySet, TryUpdate, SetByDenseIndex, UpdateByDenseIndex, IncrementVersionByDenseIndex.");
+            "Add, Merge, Merge-as-Add, TrySet, TryUpdate, SetByDenseIndex, UpdateByDenseIndex, Write, TryWrite, WriteByDenseIndex.");
     }
 
     [TestMethod]
@@ -73,6 +86,11 @@ public sealed class ComponentChangedTests
 
         pool.TrySet(4, new Value());
         pool.TryUpdate(4, new AddUpdate(1));
+        using (var write = pool.TryWrite(4))
+        {
+            Assert.IsFalse(write.Found);
+        }
+
         pool.Remove(3);
 
         Assert.IsEmpty(changes);
@@ -88,9 +106,22 @@ public sealed class ComponentChangedTests
         pool.TryUpdateFirst(2, new NumberMatcher(1), new SetUpdate(10));
         var first = pool.GetFirstDenseIndex(2);
         pool.UpdateByDenseIndex(first, new AddUpdate(1));
-        pool.IncrementVersionByDenseIndex(first);
+        using (var write = pool.WriteByDenseIndex(first))
+        {
+            write.Value.Number = 20;
+        }
 
-        Assert.HasCount(5, changes, "Both Adds (not just the entity's first), TryUpdateFirst, UpdateByDenseIndex, IncrementVersionByDenseIndex.");
+        using (var write = pool.TryWriteFirst(2, new NumberMatcher(10)))
+        {
+            write.Value.Number = 30;
+        }
+
+        using (var write = pool.TryWriteFirst(2, new NumberMatcher(99)))
+        {
+            Assert.IsFalse(write.Found);
+        }
+
+        Assert.HasCount(6, changes, "Both Adds (not just the entity's first), TryUpdateFirst, UpdateByDenseIndex, WriteByDenseIndex, the matched TryWriteFirst.");
         Assert.IsTrue(changes.All(static c => c.EntityId == 2));
         Assert.AreEqual(1, changes[1].DenseIndex, "The second Add reports its own instance's dense index.");
     }

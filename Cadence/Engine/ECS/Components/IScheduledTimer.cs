@@ -4,7 +4,7 @@ namespace Engine.ECS.Components;
 /// <remarks>
 /// Game code writes only <see cref="NextTickFrame"/> -- an absolute deadline (see
 /// Engine.ECS.Systems.FrameDeadline), set when the timer is created (FrameDeadline.After(now,
-/// duration)) and re-armed by the owning system's tick callback (RepeatEvery(period), which needs
+/// duration)) and re-armed by the owning system's tick callback (AdvanceOnePeriod(period), which needs
 /// no `now` at all -- see Engine.ECS.Systems.ScheduledTimerExtensions). Writing it through any
 /// normal pool write (Add, Merge, TryUpdate, ...) is enough: the pool's ComponentChanged observer
 /// schedules it on the wheel. Nothing else has to be remembered. A deadline of FrameDeadline.Never

@@ -49,15 +49,28 @@ public sealed class EntityTeleporter(World world, DirectComponentPool<TransformC
 
         skeletons.EnsureBuilt(entityId);
 
-        ref var liveTransform = ref transforms.Get(entityId);
-        var originPosition = liveTransform.Position;
-        world.MoveEntity(entityId, destination, liveTransform);
-        liveTransform.Position = destination;
+        Vector3Int originPosition;
+        Vector2Byte size;
+        using (var liveTransform = transforms.Write(entityId))
+        {
+            originPosition = liveTransform.Value.Position;
+            world.MoveEntity(entityId, destination, liveTransform.Value);
+            liveTransform.Value.Position = destination;
+            size = liveTransform.Value.Size;
+        }
 
-        movements.TryUpdate(entityId, new ClearMovementTargetsUpdate());
+        using (var teleportedMovement = movements.TryWrite(entityId))
+        {
+            if (teleportedMovement.Found)
+            {
+                teleportedMovement.Value.TargetMapPosition = null;
+                teleportedMovement.Value.NextMapPosition = null;
+            }
+        }
+
         pendingActions.Remove(entityId);
 
-        var teleportMove = new EntityMovedEvent(entityId, originPosition, destination, liveTransform.Size);
+        var teleportMove = new EntityMovedEvent(entityId, originPosition, destination, size);
         moves.Record(teleportMove);
         eventBus.Publish(teleportMove);
         return true;

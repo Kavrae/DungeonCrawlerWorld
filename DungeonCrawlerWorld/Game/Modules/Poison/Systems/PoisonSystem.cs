@@ -94,17 +94,13 @@ public sealed class PoisonSystem : ISystem
             return true;
         }
 
-        _timers.TryUpdate(entityId, new PoisonTickUpdate(remainingDuration));
+        using var tickedTimer = _timers.TryWrite(entityId);
+        if (tickedTimer.Found)
+        {
+            tickedTimer.Value.RemainingDurationTicks = remainingDuration;
+            tickedTimer.Value.AdvanceOnePeriod(PoisonEffects.TickIntervalFrames);
+        }
 
         return false;
-    }
-
-    private readonly struct PoisonTickUpdate(ushort remainingDurationTicks) : IComponentUpdater<PoisonTimerComponent>
-    {
-        public void Update(ref PoisonTimerComponent timer)
-        {
-            timer.RemainingDurationTicks = remainingDurationTicks;
-            timer.RepeatEvery(PoisonEffects.TickIntervalFrames);
-        }
     }
 }

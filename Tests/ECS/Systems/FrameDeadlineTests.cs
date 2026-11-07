@@ -13,41 +13,41 @@ public sealed class FrameDeadlineTests
     }
 
     /// <summary>
-    /// The property RepeatEvery exists to guarantee: the period counts from the deadline that fired,
+    /// The property AdvanceOnePeriod exists to guarantee: the period counts from the deadline that fired,
     /// not the frame it was handled on. A firing that ran 4 frames late still leaves the schedule on
     /// its original cadence -- After(now, period) would have slid the whole series by those 4 frames.
     /// </summary>
     [TestMethod]
-    public void RepeatEvery_CountsFromTheFiredDeadline_NotTheFrameItWasHandledOn()
+    public void AdvanceOnePeriod_CountsFromTheFiredDeadline_NotTheFrameItWasHandledOn()
     {
         var timer = new Tick { NextTickFrame = 100 };
 
-        timer.RepeatEvery(30);
+        timer.AdvanceOnePeriod(30);
 
         Assert.AreEqual(130u, timer.NextTickFrame, "Handled on frame 104, but the cadence is 100, 130, 160 -- not 104, 134.");
 
-        timer.RepeatEvery(30);
+        timer.AdvanceOnePeriod(30);
 
         Assert.AreEqual(160u, timer.NextTickFrame);
     }
 
     /// <summary>Owed firings are caught up one per frame rather than skipped: a deadline far enough behind stays behind until the wheel walks it forward.</summary>
     [TestMethod]
-    public void RepeatEvery_AfterALongGap_DoesNotSkipTheFiringsTheGapCovered()
+    public void AdvanceOnePeriod_AfterALongGap_DoesNotSkipTheFiringsTheGapCovered()
     {
         var timer = new Tick { NextTickFrame = 100 };
 
-        timer.RepeatEvery(30);
+        timer.AdvanceOnePeriod(30);
 
         Assert.IsTrue(FrameDeadline.IsReached(timer.NextTickFrame, now: 500), "Still owed, and still due -- the gap didn't erase it.");
     }
 
     [TestMethod]
-    public void RepeatEvery_ParkedTimer_StaysParked()
+    public void AdvanceOnePeriod_ParkedTimer_StaysParked()
     {
         var timer = new Tick { NextTickFrame = FrameDeadline.Never };
 
-        timer.RepeatEvery(30);
+        timer.AdvanceOnePeriod(30);
 
         Assert.AreEqual(FrameDeadline.Never, timer.NextTickFrame);
     }

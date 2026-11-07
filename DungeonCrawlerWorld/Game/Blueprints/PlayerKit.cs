@@ -65,7 +65,13 @@ public static class PlayerKit
         var componentManager = context.ComponentManager;
         var entityId = context.EntityId;
 
-        componentManager.GetPackedPool<MovementComponent>().TryUpdate(entityId, new SetMovementModeUpdate(MovementMode.PlayerControlled));
+        using (var playerMovement = componentManager.GetPackedPool<MovementComponent>().TryWrite(entityId))
+        {
+            if (playerMovement.Found)
+            {
+                playerMovement.Value.MovementMode = MovementMode.PlayerControlled;
+            }
+        }
 
         ItemGrants.Grant(componentManager, entityId, context.Items.Get(BuiltInItemIds.WandOfFireball), quantity: WandOfFireballStartingQuantity);
 

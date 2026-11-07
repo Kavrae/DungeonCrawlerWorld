@@ -13,6 +13,9 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     private readonly MergeAction<T> _mergeImplementation;
     private int _count;
 
+    /// <summary>How many write scopes on this pool are open; counted in Debug only, where a Remove, Clear or Resize while any is open throws.</summary>
+    private int _openWriteScopes;
+
     /// <summary> The type of component stored in this pool. </summary>
     public Type ComponentType => typeof(T);
 
@@ -65,6 +68,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     public void Resize(int newMaximumEntityCount)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(newMaximumEntityCount, _components.Length);
+        ThrowIfWriteScopeOpen();
 
         Array.Resize(ref _components, newMaximumEntityCount);
         Array.Resize(ref _present, newMaximumEntityCount);
@@ -150,10 +154,10 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         return ref _components[entityId];
     }
 
-    /// <summary> Hot-path mutable access to the component.</summary>
-    /// <remarks> WARNING : Caller must manually increment version after mutation. Prefer TryUpdate/TrySet unless you are in a tight loop. </remarks>
+    /// <summary>Opens a write to the entity's component, which must exist; disposing it versions the write.</summary>
+    /// <param name="entityId">The ID of the entity whose component is written.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ref T Get(int entityId)
+    public DirectComponentWrite<T> Write(int entityId)
     {
         Guard(entityId);
         if (_present[entityId] == 0)
@@ -161,7 +165,46 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
             ComponentPoolThrows.MissingComponent<T>(entityId);
         }
 
-        return ref _components[entityId];
+        BeginWriteScope();
+        return new DirectComponentWrite<T>(this, ref _components[entityId], entityId);
+    }
+
+    /// <summary>Opens a write to the entity's component if it has one; the scope is not Found, and its Dispose does nothing, if it hasn't.</summary>
+    /// <param name="entityId">The ID of the entity whose component is written.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public DirectComponentWrite<T> TryWrite(int entityId)
+    {
+        Guard(entityId);
+        if (!IsInBounds(entityId) || _present[entityId] == 0)
+        {
+            return default;
+        }
+
+        BeginWriteScope();
+        return new DirectComponentWrite<T>(this, ref _components[entityId], entityId);
+    }
+
+    /// <summary>A write scope's end: bumps the version.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void EndWrite(int entityId)
+    {
+        EndWriteScope();
+        _versions[entityId]++;
+    }
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void BeginWriteScope() => _openWriteScopes++;
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void EndWriteScope() => _openWriteScopes--;
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void ThrowIfWriteScopeOpen()
+    {
+        if (_openWriteScopes != 0)
+        {
+            ComponentPoolThrows.StructuralChangeDuringWrite<T>();
+        }
     }
 
     /// <summary>Returns the string representation of the component for the specified entity.</summary>
@@ -231,24 +274,12 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         return true;
     }
 
-    /// <summary>Increments the version of the component for the specified entity.</summary>
-    /// <param name="entityId">The ID of the entity to check.</param>
-    public void IncrementVersion(int entityId)
-    {
-        Guard(entityId);
-        if (_present[entityId] == 0)
-        {
-            ComponentPoolThrows.MissingComponent<T>(entityId);
-        }
-
-        _versions[entityId]++;
-    }
-
     /// <summary>Removes the component for the specified entity if it exists.</summary>
     /// <param name="entityId">The ID of the entity to check.</param>
     /// <returns>True if the component was removed, false otherwise.</returns>
     public bool Remove(int entityId)
     {
+        ThrowIfWriteScopeOpen();
         if (!IsInBounds(entityId) || _present[entityId] == 0)
         {
             return false;
@@ -268,6 +299,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     /// <summary>Clears all components from the pool.</summary>
     public void Clear()
     {
+        ThrowIfWriteScopeOpen();
         Array.Clear(_components);
         Array.Clear(_present);
         Array.Clear(_versions);

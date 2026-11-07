@@ -182,12 +182,15 @@ public sealed class EntityFactory
             BuildComplete(componentManager, entityId, request.BlueprintId, seed, _clock.CurrentFrame);
         }
 
-        ref var transform = ref _transforms.Get(entityId);
-        transform.Size = size;
+        Vector3Int placedPosition;
+        using (var transform = _transforms.Write(entityId))
+        {
+            transform.Value.Size = size;
+            world.PlaceEntityOnMap(entityId, position, ref transform.Value);
+            placedPosition = transform.Value.Position;
+        }
 
-        world.PlaceEntityOnMap(entityId, position, ref transform);
-
-        if (!world.IsOnMap(transform.Position))
+        if (!world.IsOnMap(placedPosition))
         {
             entityManager.DestroyEntity(entityId);
             return NoEntity;
@@ -206,7 +209,7 @@ public sealed class EntityFactory
             // drain, not published on the bus -- this is bulk population-time placement (tens of
             // thousands of entities per floor), not the rare player-move frequency PlayerActivityLog
             // is built around.
-            SpawnMoves.Record(new EntityMovedEvent(entityId, position, position, transform.Size));
+            SpawnMoves.Record(new EntityMovedEvent(entityId, position, position, size));
         }
 
         return entityId;

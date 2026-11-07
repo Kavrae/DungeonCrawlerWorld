@@ -125,7 +125,7 @@ public sealed class BodyPartBurningSystem : ISystem
         public void Update(ref BodyPartBurningTimerComponent timer)
         {
             timer.StackCount = remainingStacks;
-            timer.RepeatEvery(BurningEffects.TickIntervalFrames);
+            timer.AdvanceOnePeriod(BurningEffects.TickIntervalFrames);
         }
     }
 }

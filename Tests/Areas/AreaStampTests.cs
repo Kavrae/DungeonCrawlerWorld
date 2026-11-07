@@ -174,7 +174,7 @@ public sealed class AreaStampTests
         var first = SpawnedAtTheUniquesCell();
         Assert.AreEqual(foreman, spawnRecords.GetReadonly(first).BlueprintId);
 
-        pass.World.RemoveEntityFromMap(first, ref pass.EcsContext.ComponentManager.GetDirectPool<TransformComponent>().Get(first));
+        TestTransforms.RemoveFromMap(pass.World, pass.EcsContext.ComponentManager, first);
         var second = SpawnedAtTheUniquesCell();
         Assert.AreEqual(goblin, spawnRecords.GetReadonly(second).BlueprintId, "One lives already, so the fallback spawns.");
 

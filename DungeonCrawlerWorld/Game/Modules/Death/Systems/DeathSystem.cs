@@ -77,9 +77,9 @@ public sealed class DeathSystem : ISystem
         // its death position, just no longer physically blocking -- unlike a full despawn.
         if (_mapQuery.IsBlocking(died.EntityId))
         {
-            ref var transform = ref _transforms.Get(died.EntityId);
             _nonBlockingEntities.Add(died.EntityId, new NonBlockingComponent());
-            _entityMoveSync.ConvertToNonBlocking(died.EntityId, ref transform);
+            using var transform = _transforms.Write(died.EntityId);
+            _entityMoveSync.ConvertToNonBlocking(died.EntityId, ref transform.Value);
         }
 
         _damageLedger.TryGetTopContributor(died.EntityId, out var lootOwnerEntityKey);

@@ -1399,7 +1399,11 @@ public sealed class AuraSystemTests
         var time = new EngineTime(default, default, false, FrameCount: _clock.CurrentFrame);
 
         var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
-        transforms.Get(SourceEntityId) = movedTransform;
+        using (var transform = transforms.Write(SourceEntityId))
+        {
+            transform.Value = movedTransform;
+        }
+
         movedEntities.Record(movedEvent);
         system.Update(time, 0);
         var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;

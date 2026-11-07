@@ -189,28 +189,30 @@ public sealed class MovementSystem : ITieredSystem
             return;
         }
 
-        if (_transformComponents.TryUpdate(entityId, new SetPositionUpdate(newPosition)))
+        using (var movedTransform = _transformComponents.TryWrite(entityId))
         {
-            var standardLockFrames = StandardActionLockFrames.ResolveMovementForEntity(_abilityScores, _statModifiers, entityId);
-            var lockFrames = isDiagonal
-                ? (ushort)MathF.Round(standardLockFrames * DiagonalActionLockMultiplier)
-                : standardLockFrames;
-
-            ActionLockGate.Lock(_actionLocks, entityId, now, lockFrames);
-
-            var entityMovedEvent = new EntityMovedEvent(entityId, oldPosition, newPosition, transformComponent.Size);
-            _entityMoveSync.SyncMove(entityMovedEvent, isBlocking);
-            _movedEntitiesEventBuffer.Record(entityMovedEvent);
-
-            if (entityId == _playerQuery.PlayerEntityId)
+            if (!movedTransform.Found)
             {
-                _eventBus.Publish(entityMovedEvent);
+                return;
             }
-        }
-    }
 
-    private readonly struct SetPositionUpdate(Vector3Int position) : IComponentUpdater<TransformComponent>
-    {
-        public void Update(ref TransformComponent transform) => transform.Position = position;
+            movedTransform.Value.Position = newPosition;
+        }
+
+        var standardLockFrames = StandardActionLockFrames.ResolveMovementForEntity(_abilityScores, _statModifiers, entityId);
+        var lockFrames = isDiagonal
+            ? (ushort)MathF.Round(standardLockFrames * DiagonalActionLockMultiplier)
+            : standardLockFrames;
+
+        ActionLockGate.Lock(_actionLocks, entityId, now, lockFrames);
+
+        var entityMovedEvent = new EntityMovedEvent(entityId, oldPosition, newPosition, transformComponent.Size);
+        _entityMoveSync.SyncMove(entityMovedEvent, isBlocking);
+        _movedEntitiesEventBuffer.Record(entityMovedEvent);
+
+        if (entityId == _playerQuery.PlayerEntityId)
+        {
+            _eventBus.Publish(entityMovedEvent);
+        }
     }
 }
