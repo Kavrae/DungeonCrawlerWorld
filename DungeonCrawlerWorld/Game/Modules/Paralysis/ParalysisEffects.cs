@@ -33,7 +33,7 @@ public static class ParalysisEffects
     /// No-ops entirely if entityId is currently immune to Paralysis (StatusEffectImmunity).
     /// Otherwise not a stacking effect -- reapplying while already active pushes the expiry out to
     /// the later of what it already was and DurationFrames from now (never additive, same rule
-    /// PoisonEffects.ApplyStack uses for its own duration).
+    /// TimedStatusEffectStacks uses for Poison's duration).
     /// </summary>
     /// <param name="now">The simulation frame Paralysis is applied on.</param>
     /// <param name="announcesRefusal">False to leave an immunity's blocked event unpublished.</param>

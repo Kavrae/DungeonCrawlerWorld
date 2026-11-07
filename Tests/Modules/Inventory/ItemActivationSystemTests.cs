@@ -45,12 +45,21 @@ public sealed class ItemActivationSystemTests
     private static StatusEffectDisplayRegistry CreateStatusEffectDisplays(ComponentManager componentManager)
     {
         var displays = new StatusEffectDisplayRegistry();
-        displays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph, componentManager.GetPackedPool<PoisonTimerComponent>(),
-            (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames));
+        displays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph, PoisonEffects.MaxStacks, componentManager.GetPackedPool<PoisonTimerComponent>(),
+            (poison, now) => TimedStatusEffectStacks.RemainingFrames(poison, now, PoisonEffects.TickIntervalFrames)));
         return displays;
     }
 
-    /// <summary>Catalog placeholder only -- Charges/MaxCharges always come from the specific Override each test's own AddItemWithOverride call constructs, mirroring how WandGrantEffects.Grant never grants the bare catalog entry directly. DirectDamage only (no StatusEffectGrant) -- StatusEffectAppliers isn't wired in this fixture, and these tests are about charge/peel/repoint mechanics, not status effects, which DirectDamage/HealthOf already exercises well enough on its own.</summary>
+    /// <summary>Mirrors PoisonModule.Configure's own registration -- the abuse poison is a StatusEffectGrant, so it reaches Poison through the registry.</summary>
+    private static StatusEffectApplierRegistry CreatePoisonAppliers(ComponentManager componentManager, EventBus eventBus)
+    {
+        var appliers = new StatusEffectApplierRegistry();
+        appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, componentManager.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks, takesDuration: true,
+            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked, durationTicks) => PoisonEffects.ApplyStacks(componentManager, entityId, count, source, durationTicks, now, eventBus, TestPlayerQuery.NoPlayer, announcesRefusal, immunityAlreadyChecked)));
+        return appliers;
+    }
+
+    /// <summary>Catalog placeholder only -- Charges/MaxCharges always come from the specific Override each test's own AddItemWithOverride call constructs, mirroring how WandGrantEffects.Grant never grants the bare catalog entry directly. DirectDamage only (no StatusEffectGrant) -- only Poison's applier is wired in this fixture (for the abuse poison), and these tests are about charge/peel/repoint mechanics, not status effects, which DirectDamage/HealthOf already exercises well enough on its own.</summary>
     private static ItemDefinition CreateWandDefinition(ushort charges, ushort maxCharges) =>
         new(WandId, "Test Wand", null, "w", Color.OrangeRed, Tags: [],
             Effects: [new Effect([new DirectDamage(10, 10)])],
@@ -126,7 +135,7 @@ public sealed class ItemActivationSystemTests
             mana: componentManager.GetPackedPool<ManaComponent>(),
             hotkeyExpansionUnlocks: componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>(),
             abilityScores: null,
-            statusEffectAppliers: null,
+            statusEffectAppliers: CreatePoisonAppliers(componentManager, eventBus),
             playerQuery: null,
             auraSources: null,
             itemHotkeyBindings: componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),

@@ -88,7 +88,7 @@ public sealed class BurningSystem : ISystem
             return true;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, _damageLedger, _floatingTextFeed, ResourceLossCategory.StatusEffect, damageTags: BurningDamageTags);
+        HealthDamage.Apply(_health, _eventBus, entityId, stackCount, timer.Source, _playerQuery, StatusEffectLabel.Describe(StatusEffectType.Burning), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, _damageLedger, _floatingTextFeed, ResourceLossCategory.StatusEffect, damageTags: BurningDamageTags);
 
         var remainingStacks = (byte)(stackCount - 1);
         if (remainingStacks == 0)

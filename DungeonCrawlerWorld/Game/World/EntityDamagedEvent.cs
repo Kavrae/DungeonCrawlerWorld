@@ -8,7 +8,7 @@ namespace Game.World;
 /// </summary>
 /// <param name="DamageType">
 /// Human-readable description of what kind of damage this was, e.g. "Status Effect (Burning)"
-/// -- see StatusEffectDamageType.Describe for the status-effect case. Free text rather than an
+/// -- see StatusEffectLabel.Describe for the status-effect case. Free text rather than an
 /// enum since damage sources are expected to vary widely (status effects, eventually melee/
 /// spells) and this exists purely for logging, not for any gameplay branching.
 /// </param>

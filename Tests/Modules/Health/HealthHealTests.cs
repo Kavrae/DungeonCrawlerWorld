@@ -1,5 +1,6 @@
 using Engine.ECS.Components.Stores;
 using Engine.Events;
+using Game.Modules.Death.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Resources;
@@ -82,7 +83,43 @@ public sealed class HealthHealTests
 
         static bool Heal(PackedComponentPool<SimpleHealthComponent> health, int entityId, EntityBodyParts bodyParts) =>
             HealthHeal.Apply(health, entityId, percentOfMaxHealth: 0.1f, now: 0, EmptyPools.Multi<Game.Modules.StatModifiers.Components.StatModifierComponent>(), bodyParts,
-                new EventBus(), TestPlayerQuery.NoPlayer, EmptyPools.FloatingTextFeed(), ResourceGainCategory.Direct);
+                EmptyPools.Packed<DeadComponent>(), new EventBus(), TestPlayerQuery.NoPlayer, EmptyPools.FloatingTextFeed(), ResourceGainCategory.Direct);
+    }
+
+    [TestMethod]
+    public void Apply_SimpleCorpse_HealsNothingAndPublishesNothing()
+    {
+        var pool = CreatePool();
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 100));
+        var deadEntities = EmptyPools.Packed<DeadComponent>();
+        deadEntities.Add(0, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
+        var eventBus = new EventBus();
+        var published = false;
+        eventBus.Subscribe<EntityHealedEvent>(_ => published = true);
+
+        var healed = HealthHeal.Apply(pool, 0, percentOfMaxHealth: 0.5f, now: 0, EmptyPools.Multi<Game.Modules.StatModifiers.Components.StatModifierComponent>(), EmptyPools.BodyParts(),
+            deadEntities, eventBus, new TestPlayerQuery(0), EmptyPools.FloatingTextFeed(), ResourceGainCategory.Direct);
+
+        Assert.IsFalse(healed);
+        Assert.IsFalse(published);
+        Assert.AreEqual(0, pool.GetReadonly(0).CurrentHealth);
+    }
+
+    [TestMethod]
+    public void Apply_ComplexCorpse_HealsNoPart()
+    {
+        var world = BodyPartTestWorld.WithParts(0, ("Torso", BodyPartType.Torso, 10, 100, true));
+        var deadEntities = EmptyPools.Packed<DeadComponent>();
+        deadEntities.Add(0, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
+
+        var healed = HealthHeal.Apply(CreatePool(), 0, percentOfMaxHealth: 0.5f, now: 0, EmptyPools.Multi<Game.Modules.StatModifiers.Components.StatModifierComponent>(), world.BodyParts,
+            deadEntities, new EventBus(), TestPlayerQuery.NoPlayer, EmptyPools.FloatingTextFeed(), ResourceGainCategory.Direct);
+
+        Assert.IsFalse(healed);
+        foreach (var part in world.BodyParts.Parts(0))
+        {
+            Assert.AreEqual(10, part.CurrentHealth);
+        }
     }
 
     [TestMethod]

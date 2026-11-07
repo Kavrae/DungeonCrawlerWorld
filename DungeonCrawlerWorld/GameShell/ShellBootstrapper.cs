@@ -85,7 +85,7 @@ public static class ShellBootstrapper
         tooltipController.Initialize(uiEngine.ElementPoolService, uiLayers);
 
         var mapWindow = BuildBaseWindows(uiEngine, uiLayers);
-        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(uiEngine, gameSession, screenSize, mapViewState, uiLayers);
+        var (questTriggerWindow, hotbarContent, inspectionWindow) = BuildStaticHudWindows(uiEngine, gameSession, screenSize, mapViewState, uiLayers, tooltipController, pointerState);
         mapWindow.OnInspectionOpened = () => inspectionWindow.SetDisplayMode(ElementDisplayMode.Fixed);
         var (notificationCenter, healthController) = BuildDynamicHudWindows(uiEngine, world, ecsContext.EventBus, contextMenuController, uiLayers);
         var itemWindows = new ItemWindowCoordinator(uiEngine.ElementPoolService, shellServices, world, mapWindow, actionTargetingController, views.InventoryView, catalogs.ItemCatalog, catalogs.LootboxCatalog, commands.LootCommands, commands.LootboxCommands, worldSession.ReservedEntityIds);
@@ -182,7 +182,7 @@ public static class ShellBootstrapper
 
     /// <summary>StaticHUD tier: the player health bar, action lock, status effects, InspectionWindow, the hotbar, and the quest trigger -- see UiInputController's own doc comment for what each of the four tiers means. questTriggerWindow is returned for Build, which wires its Clicked event once the DynamicHUD tier (needed by OpenQuestComposer) also exists. hotbarContent and inspectionWindow are returned too, for BuildHotbarController and Build's own OnInspectionOpened wiring respectively.</summary>
     private static (TextWindow QuestTriggerWindow, HotbarContent HotbarContent, InspectionWindow InspectionWindow) BuildStaticHudWindows(
-        UiEngineContext uiEngine, GameSession gameSession, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers)
+        UiEngineContext uiEngine, GameSession gameSession, Vector2 screenSize, MapViewState mapViewState, UiLayerStack layers, TooltipController tooltipController, PointerState pointerState)
     {
         var world = gameSession.World;
         var ecsContext = gameSession.EcsContext;
@@ -247,7 +247,7 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = false, CanUserFocus = false },
         });
-        playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, gameSession.Views.ActionStateView, catalogs.ItemCatalog, uiEngine.FontService, catalogs.StatusEffectDisplays, simulationClock));
+        playerStatusEffectsWindow.SetContent(new PlayerStatusEffectsContent(world, gameSession.Views.ActionStateView, catalogs.ItemCatalog, uiEngine.FontService, catalogs.StatusEffectDisplays, simulationClock, gameSession.Views.ActionSourceNaming, tooltipController, pointerState));
         playerStatusEffectsWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerStatusEffectsWindow);
 

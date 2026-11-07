@@ -20,6 +20,8 @@ public sealed class BurningDisplay(
 
     public string Glyph => BurningEffects.Glyph;
 
+    public int MaxStacks => BurningEffects.MaxStacks;
+
     public int? GetRemainingDurationFrames(int entityId, long now)
     {
         int? longestRemainingFrames = entityTimers.TryGetReadonly(entityId, out var entityTimer)

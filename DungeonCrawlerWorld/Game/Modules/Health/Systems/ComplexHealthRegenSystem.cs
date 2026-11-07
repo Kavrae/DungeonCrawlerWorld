@@ -105,6 +105,6 @@ public sealed class ComplexHealthRegenSystem : ITieredSystem
             return;
         }
 
-        HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, eventBus: _eventBus, playerQuery: _playerQuery, floatingTextFeed: _floatingTextFeed, healCategory: ResourceGainCategory.Regeneration, healType: "Regeneration", appliesHealingModifiers: false);
+        HealthHeal.Apply(_health, entityId, percentOfMaxHealth: 0f, now, _statModifiers, _bodyParts, _deadEntities, flatAmount: effectiveRegen, sourceEntityId: entityId, targetMode: BodyPartTargetMode.LowestPercentage, eventBus: _eventBus, playerQuery: _playerQuery, floatingTextFeed: _floatingTextFeed, healCategory: ResourceGainCategory.Regeneration, healType: "Regeneration", appliesHealingModifiers: false);
     }
 }

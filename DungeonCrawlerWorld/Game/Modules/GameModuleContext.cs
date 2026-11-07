@@ -91,7 +91,7 @@ public sealed class GameModuleContext
         // catch-all behind ProcessingTierResolver.CreateEntityAt. See that class's own remarks.
         world.EntityPlaced += ProcessingTierResolver.EnsureTiered;
 
-        ContentCatalogLoader = new ContentCatalogLoader(() => Content, Actions, Items, Auras, () => new ContentChecks(GameplayTags, Auras, Terrain), failure => ReportContentFailures([failure]));
+        ContentCatalogLoader = new ContentCatalogLoader(() => Content, Actions, Items, Auras, () => new ContentChecks(GameplayTags, Auras, Terrain, StatusEffectAppliers), failure => ReportContentFailures([failure]));
 
         Lootboxes = new LootboxCatalog(Items);
         Items.AddDefinitionSource(Lootboxes);

@@ -19,8 +19,8 @@ public sealed class TimerBasedStatusEffectDisplayTests
     }
 
     private static TimerBasedStatusEffectDisplay<PoisonTimerComponent> CreatePoisonDisplay(ComponentManager componentManager) =>
-        new(StatusEffectType.Poison, PoisonEffects.Glyph, componentManager.GetPackedPool<PoisonTimerComponent>(),
-            (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames);
+        new(StatusEffectType.Poison, PoisonEffects.Glyph, PoisonEffects.MaxStacks, componentManager.GetPackedPool<PoisonTimerComponent>(),
+            (poison, now) => TimedStatusEffectStacks.RemainingFrames(poison, now, PoisonEffects.TickIntervalFrames));
 
     [TestMethod]
     public void GetRemainingDurationFrames_TimerNotPresent_ReturnsNull()

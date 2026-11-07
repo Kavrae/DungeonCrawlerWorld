@@ -9,7 +9,7 @@ namespace Game.Modules.Poison.Components;
 /// 0-to-1 stack transition, removed only when RemainingDurationTicks reaches 0.
 /// </summary>
 /// <remarks>A timer-wheel timer (IScheduledTimer): writing NextTickFrame is all it takes to schedule it.</remarks>
-public struct PoisonTimerComponent(uint nextTickFrame, byte stackCount, ushort remainingDurationTicks, ActionSource source) : IScheduledTimer, IStatusEffectStackCount
+public struct PoisonTimerComponent(uint nextTickFrame, byte stackCount, ushort remainingDurationTicks, ActionSource source) : ITimedStatusEffectTimer<PoisonTimerComponent>
 {
     private uint _timerWheelMark;
 
@@ -24,6 +24,9 @@ public struct PoisonTimerComponent(uint nextTickFrame, byte stackCount, ushort r
     public ActionSource Source { get; set; } = source;
 
     uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
+
+    public static PoisonTimerComponent Create(uint nextTickFrame, byte stackCount, ushort remainingDurationTicks, ActionSource source) =>
+        new(nextTickFrame, stackCount, remainingDurationTicks, source);
 
     public override readonly string ToString() => $"NextTickFrame : {NextTickFrame}\nStackCount : {StackCount}\nRemainingDurationTicks : {RemainingDurationTicks}\nSource : {Source}";
 }

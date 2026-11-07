@@ -41,16 +41,36 @@ public enum StatusEffectGrantMode : byte
 /// even when the target already holds every stack it could. A grant that goes ahead tells the applier
 /// the check is done, so it makes one write and no second check.
 /// </para>
+/// <para>
+/// DurationTicks is how many of the effect's own ticks it lasts, for an effect that takes a duration
+/// (IStatusEffectApplier.TakesDuration; StatusEffectContentValidation refuses one for any other). It is
+/// scaled by EffectDurations.Scale with the effect's polarity (StatusEffectTypeFacts.PolarityOf), never by
+/// context.Magnitude. Null leaves the effect's own default. A TopUpTo grant whose target already holds its
+/// stacks still refreshes the duration -- its own, or the effect's default -- so a top-up re-granted while it runs
+/// (an aura's, every second) keeps it running. A duration
+/// scaled to no ticks starts nothing.
+/// </para>
 /// </remarks>
 public sealed record StatusEffectGrant(
     StatusEffectType Type,
     int StackCount = 1,
     StatusEffectGrantMode Mode = StatusEffectGrantMode.Add,
-    BodyPartTargeting BodyPart = default) : IEffectEntry
+    BodyPartTargeting BodyPart = default,
+    ushort? DurationTicks = null) : IEffectEntry
 {
-    private static readonly (StatModifierTarget, StatModifierTarget)[] Modifiers = [(StatModifierTarget.OutgoingStatusStacks, StatModifierTarget.IncomingStatusStacks)];
+    private static readonly (StatModifierTarget, StatModifierTarget) StackModifiers = (StatModifierTarget.OutgoingStatusStacks, StatModifierTarget.IncomingStatusStacks);
 
-    public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => Modifiers;
+    private static readonly (StatModifierTarget, StatModifierTarget)[] UntimedModifiers = [StackModifiers];
+
+    private static readonly (StatModifierTarget, StatModifierTarget)[] TimedBuffModifiers = [StackModifiers, .. EffectDurations.ModifiersFor(StatModifierPolarity.Buff)];
+
+    private static readonly (StatModifierTarget, StatModifierTarget)[] TimedDebuffModifiers = [StackModifiers, .. EffectDurations.ModifiersFor(StatModifierPolarity.Debuff)];
+
+    /// <remarks>The stacks, and a duration the grant names by the effect's polarity.</remarks>
+    public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers =>
+        DurationTicks is null ? UntimedModifiers
+        : StatusEffectTypeFacts.PolarityOf(Type) == StatModifierPolarity.Buff ? TimedBuffModifiers
+        : TimedDebuffModifiers;
 
     public EffectOutcome Apply(in EffectContext context)
     {
@@ -76,12 +96,19 @@ public sealed record StatusEffectGrant(
             stacksToGrant -= applier.GetCurrentStackCount(targetEntityId, bodyPartId);
         }
 
+        var durationTicks = EffectDurations.Scale(in context, DurationTicks, StatusEffectTypeFacts.PolarityOf(Type));
+
         if (stacksToGrant <= 0)
         {
+            if (Mode == StatusEffectGrantMode.TopUpTo && applier.TakesDuration)
+            {
+                applier.ApplyStacks(targetEntityId, 0, context.Source, context.Now, context.AnnouncesRefusal, bodyPartId, immunityAlreadyChecked: true, durationTicks);
+            }
+
             return EffectOutcome.NoEffect;
         }
 
-        var applied = applier.ApplyStacks(targetEntityId, stacksToGrant, context.Source, context.Now, context.AnnouncesRefusal, bodyPartId, immunityAlreadyChecked: true);
+        var applied = applier.ApplyStacks(targetEntityId, stacksToGrant, context.Source, context.Now, context.AnnouncesRefusal, bodyPartId, immunityAlreadyChecked: true, durationTicks);
         StatusEffectGrantFloatingText.Publish(services.FloatingTextFeed, Type, targetEntityId, applied, context.AnnouncesRefusal);
 
         if (applied.StacksLanded > 0)

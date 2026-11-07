@@ -1,5 +1,7 @@
 using Engine.ECS.Components;
 using Game.Effects;
+using Game.Effects.Entries;
+using Game.Modules.StatusEffects;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using Engine.ECS.Systems;
@@ -411,7 +413,7 @@ public sealed class ItemActivationSystem : ISystem
 
         if (_potionCooldowns.TryGetReadonly(targetEntityId, out var cooldown) && PotionCooldownEffects.FramesRemaining(cooldown, _now) > 0)
         {
-            PoisonEffects.ApplyStack(_componentManager, _entityKeys, targetEntityId, ActionSource.FromEntity(_componentManager, _entityKeys, sourceEntityId, _creatures, SourceCause.Of(item)), PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames), _now, _eventBus, _playerQuery);
+            new StatusEffectGrant(StatusEffectType.Poison, DurationTicks: PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames)).Apply(BuildContext(item, sourceEntityId, targetEntityId));
             _eventBus.Publish(new PotionCooldownAbusedEvent(targetEntityId));
         }
 

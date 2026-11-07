@@ -63,7 +63,7 @@ public sealed record DirectHeal(
             : baseHeal;
 
         var targetRule = BodyPart.ResolveRule(in context);
-        var healed = HealthHeal.Apply(context.Services.Health, context.TargetEntityId, percentOfMaxHealth: 0f, context.Now, context.Services.StatModifiers, context.Services.BodyParts, flatAmount: healWithAbilityScoreScaling, sourceEntityId: context.SourceEntityId, activatorTags: context.ActivatorTags, targetMode: BodyPartTargetMode, targetRule: targetRule, mathUtility: context.Services.MathUtility, eventBus: context.Services.EventBus, playerQuery: context.Services.PlayerQuery, floatingTextFeed: context.Services.FloatingTextFeed, healCategory: ResourceGainCategory.Direct, healType: context.ActivatorName);
+        var healed = HealthHeal.Apply(context.Services.Health, context.TargetEntityId, percentOfMaxHealth: 0f, context.Now, context.Services.StatModifiers, context.Services.BodyParts, context.Services.DeadEntities, flatAmount: healWithAbilityScoreScaling, sourceEntityId: context.SourceEntityId, activatorTags: context.ActivatorTags, targetMode: BodyPartTargetMode, targetRule: targetRule, mathUtility: context.Services.MathUtility, eventBus: context.Services.EventBus, playerQuery: context.Services.PlayerQuery, floatingTextFeed: context.Services.FloatingTextFeed, healCategory: ResourceGainCategory.Direct, healType: context.ActivatorName);
         return healed ? EffectOutcome.Applied : EffectOutcome.NoEffect;
     }
 }

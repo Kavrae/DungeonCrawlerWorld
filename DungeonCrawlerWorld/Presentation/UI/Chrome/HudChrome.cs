@@ -13,6 +13,9 @@ public static class HudChrome
     private const float ManaBarGap = 3f;
     private const float InspectionWindowGap = 8f;
 
+    /// <summary>Room above InspectionWindow for the stack counts PlayerStatusEffectsContent draws below its icons, which hang past its own height.</summary>
+    private const float StatusEffectCountClearance = 10f;
+
     /// <summary>Empty headroom left between InspectionWindow's bottom edge and the hotbar's worst-case (fully expanded) top edge -- no minimap exists yet, this just keeps the corner free for one, per the Inspection V2 request.</summary>
     private const float MinimapReserve = 140f;
 
@@ -43,7 +46,7 @@ public static class HudChrome
         ActionLockPosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - Margin.X - ActionLockContent.Size.X - ActionLockGap, Margin.Y);
         PlayerStatusEffectsPosition = new Vector2(screenSize.X - PlayerHealthBarContent.Size.X - Margin.X, Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap + PlayerManaBarContent.Size.Y);
 
-        var inspectionWindowTop = Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap + PlayerManaBarContent.Size.Y + PlayerStatusEffectsContent.Size.Y + InspectionWindowGap;
+        var inspectionWindowTop = Margin.Y + PlayerHealthBarContent.Size.Y + ManaBarGap + PlayerManaBarContent.Size.Y + PlayerStatusEffectsContent.Size.Y + StatusEffectCountClearance + InspectionWindowGap;
         var hotbarClearanceTop = screenSize.Y - HotbarContent.MaximumSize.Y - Margin.Y * 1.5f;
         var inspectionWindowBottom = hotbarClearanceTop - InspectionWindowGap - MinimapReserve;
         InspectionWindowSize = new Vector2(PlayerHealthBarContent.Size.X, System.Math.Max(0f, inspectionWindowBottom - inspectionWindowTop));

@@ -40,10 +40,10 @@ public enum StatModifierTarget : byte
     /// <summary>Scales a newly-granted Buff-polarity StatModifierComponent's own DurationFrames, consumed at StatModifierGrant.Apply against the target (context.TargetEntityId) -- e.g. "buffs you receive last longer". Also scales a StatusEffectImmunityGrant's own DurationFrames.</summary>
     IncomingBuffDuration,
 
-    /// <summary>Scales a newly-granted Debuff-polarity StatModifierComponent's own DurationFrames, consumed at StatModifierGrant.Apply against the caster (context.SourceEntityId) -- e.g. "debuffs you inflict last longer". Also scales Poison's own durationInTicks (PoisonEffects.ApplyStack) against the entity that applied it -- unconditionally there, since an aura-refreshed grant has no real activator to scope a ConditionTag against.</summary>
+    /// <summary>Scales a newly-granted Debuff-polarity StatModifierComponent's own DurationFrames, consumed at StatModifierGrant.Apply against the caster (context.SourceEntityId) -- e.g. "debuffs you inflict last longer". Also scales the duration a StatusEffectGrant names for a Debuff status effect (EffectDurations.Scale), against the source entity and conditional on the activator's tags; a grant naming none (an aura's Poison) keeps the effect's own default, unscaled.</summary>
     OutgoingDebuffDuration,
 
-    /// <summary>Scales a newly-granted Debuff-polarity StatModifierComponent's own DurationFrames, consumed at StatModifierGrant.Apply against the target (context.TargetEntityId) -- e.g. "debuffs against you expire faster". Also scales Poison's own durationInTicks (PoisonEffects.ApplyStack) against the entity it's landing on, unconditionally. Burning has no independent duration to scale (a stack's own decay -- 1 removed per tick -- is its only duration signal, and that same StackCount also drives its damage), so this never applies to Burning.</summary>
+    /// <summary>Scales a newly-granted Debuff-polarity StatModifierComponent's own DurationFrames, consumed at StatModifierGrant.Apply against the target (context.TargetEntityId) -- e.g. "debuffs against you expire faster". Also scales the duration a StatusEffectGrant names for a Debuff status effect (EffectDurations.Scale), against the entity it lands on. Burning has no independent duration to scale (a stack's own decay -- 1 removed per tick -- is its only duration signal, and that same StackCount also drives its damage), so this never applies to Burning.</summary>
     IncomingDebuffDuration,
 
     // AbilityScoreType's 7 members, mirrored 1:1 -- lets equipment/class/buffs grant a

@@ -47,7 +47,9 @@ public sealed class ActionEffectResolverTests
 
         public int MaxStacks => int.MaxValue;
 
-        public StatusEffectStacksApplied ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null, bool immunityAlreadyChecked = false)
+        public bool TakesDuration => false;
+
+        public StatusEffectStacksApplied ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null, bool immunityAlreadyChecked = false, ushort? durationTicks = null)
         {
             for (var stack = 0; stack < count; stack++)
             {

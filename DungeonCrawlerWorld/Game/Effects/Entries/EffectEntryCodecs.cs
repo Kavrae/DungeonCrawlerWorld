@@ -158,6 +158,7 @@ internal static class EffectEntryCodecs
             ContentField.Integer("c", "Stacks", 0),
             ContentField.Enum<StatusEffectGrantMode>("md", "Mode"),
             BodyPartTargetingContent.Field,
+            ContentField.Integer("d", "Duration in the effect's ticks (none: the effect's own)", 1, ushort.MaxValue),
         ]);
 
         public override void WriteProperties(ContentWriter writer, StatusEffectGrant value)
@@ -166,13 +167,15 @@ internal static class EffectEntryCodecs
             writer.Integer("c", value.StackCount, defaultValue: 1);
             writer.Enum("md", value.Mode, StatusEffectGrantMode.Add);
             BodyPartTargetingContent.Write(writer, value.BodyPart);
+            writer.OptionalInteger("d", value.DurationTicks);
         }
 
         public override StatusEffectGrant Read(ContentObject element) => new(
             element.Enum<StatusEffectType>("ty"),
             ContentNumbers.Int32(element.Integer("c", 1), "c"),
             element.Enum("md", StatusEffectGrantMode.Add),
-            BodyPartTargetingContent.Read(element));
+            BodyPartTargetingContent.Read(element),
+            ContentNumbers.UInt16(element.OptionalInteger("d"), "d"));
     }
 
     private sealed class StatusEffectImmunityGrantCodec : ContentCodec<StatusEffectImmunityGrant>

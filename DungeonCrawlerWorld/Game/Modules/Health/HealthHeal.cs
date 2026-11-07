@@ -2,6 +2,7 @@ using Engine.ECS.Components.Stores;
 using Engine.Events;
 using Engine.Math;
 using Engine.Tags;
+using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -26,8 +27,9 @@ namespace Game.Modules.Health;
 /// StatModifierMath's own doc comment for why). A BodyPartComponent-owning entity with no
 /// SimpleHealthComponent delegates to ComplexHealthHeal (targetMode All vs a single part -- see
 /// its own doc comment). Neither pool having entityId is a no-op, same as HealthDamage.Apply.
-/// An entity with nothing to restore (HealthQueries.HasMissingHealth) is a no-op too, for either
-/// shape and before anything else is read: no amount is computed and nothing is published.
+/// A dead entity, and an entity with nothing to restore (HealthQueries.HasMissingHealth), is a no-op too, for either
+/// shape and before anything else is read: no amount is computed and nothing is published. A corpse is
+/// never healed, whatever heals it -- a heal over time still running on it spends its ticks on nothing.
 /// Publishes EntityHealedEvent (mirroring HealthDamage.Apply's EntityDamagedEvent) only when the
 /// player is involved as either source or target.
 ///
@@ -38,7 +40,7 @@ namespace Game.Modules.Health;
 public static class HealthHeal
 {
     /// <param name="appliesHealingModifiers">False when the amount already carries Outgoing/IncomingHealing -- a regen tick, whose per-second rate HealthRegeneration.LandedPerSecond scales once so the rate does not depend on how often the entity is visited.</param>
-    /// <returns>Whether entityId had health to restore, so the heal was applied; false leaves everything untouched.</returns>
+    /// <returns>Whether entityId was alive and had health to restore, so the heal was applied; false leaves everything untouched.</returns>
     public static bool Apply(
         PackedComponentPool<SimpleHealthComponent> health,
         int entityId,
@@ -46,6 +48,7 @@ public static class HealthHeal
         long now,
         MultiComponentPool<StatModifierComponent> statModifiers,
         EntityBodyParts bodyParts,
+        PackedComponentPool<DeadComponent> deadEntities,
         EventBus eventBus,
         IPlayerQuery playerQuery,
         FloatingTextFeed floatingTextFeed,
@@ -59,7 +62,7 @@ public static class HealthHeal
         string healType = "Heal",
         bool appliesHealingModifiers = true)
     {
-        if (!HealthQueries.HasMissingHealth(health, bodyParts, statModifiers, entityId))
+        if (deadEntities.Has(entityId) || !HealthQueries.HasMissingHealth(health, bodyParts, statModifiers, entityId))
         {
             return false;
         }

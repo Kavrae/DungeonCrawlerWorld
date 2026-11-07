@@ -43,13 +43,9 @@ public sealed record StatModifierGrant(
     GameplayTag ConditionTag = default,
     StatModifierStacking Stacking = StatModifierStacking.Add) : IEffectEntry
 {
-    private static readonly (StatModifierTarget, StatModifierTarget)[] BuffDurationModifiers = [(StatModifierTarget.OutgoingBuffDuration, StatModifierTarget.IncomingBuffDuration)];
-
-    private static readonly (StatModifierTarget, StatModifierTarget)[] DebuffDurationModifiers = [(StatModifierTarget.OutgoingDebuffDuration, StatModifierTarget.IncomingDebuffDuration)];
-
     /// <remarks>The duration of a timed modifier, by polarity. The magnitude is not scaled.</remarks>
     public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers =>
-        DurationFrames is null ? [] : Polarity == StatModifierPolarity.Buff ? BuffDurationModifiers : DebuffDurationModifiers;
+        DurationFrames is null ? [] : EffectDurations.ModifiersFor(Polarity);
 
     public IEnumerable<GameplayTag> ReferencedTags => ConditionTag.IsNone ? [] : [ConditionTag];
 
@@ -57,7 +53,7 @@ public sealed record StatModifierGrant(
 
     public EffectOutcome Apply(in EffectContext context)
     {
-        var durationFrames = ScaleDurationFrames(in context, DurationFrames, Polarity);
+        var durationFrames = EffectDurations.Scale(in context, DurationFrames, Polarity);
         var expiresAtFrame = durationFrames is { } frames ? FrameDeadline.After(context.Now, frames) : FrameDeadline.Never;
 
         if (Stacking == StatModifierStacking.RefreshFromSameSource)
@@ -72,21 +68,5 @@ public sealed record StatModifierGrant(
         }
 
         return EffectOutcome.Applied;
-    }
-
-    /// <summary>Shared by StatModifierGrant and StatusEffectImmunityGrant (granting immunity is unambiguously a Buff) -- context.DurationScaleMultiplier first, then Outgoing/IncomingBuffDuration or Outgoing/IncomingDebuffDuration (picked by polarity), both tag-conditional via context.ActivatorTags. A null or already-permanent (<= 0) durationFrames is returned unscaled, same guard as before.</summary>
-    internal static ushort? ScaleDurationFrames(in EffectContext context, ushort? durationFrames, StatModifierPolarity polarity)
-    {
-        if (durationFrames is not { } value || value <= 0)
-        {
-            return durationFrames;
-        }
-
-        var scaled = value * context.DurationScaleMultiplier;
-
-        var outgoingTarget = polarity == StatModifierPolarity.Buff ? StatModifierTarget.OutgoingBuffDuration : StatModifierTarget.OutgoingDebuffDuration;
-        var incomingTarget = polarity == StatModifierPolarity.Buff ? StatModifierTarget.IncomingBuffDuration : StatModifierTarget.IncomingDebuffDuration;
-
-        return EffectModifiers.ScaleToUShort(in context, scaled, outgoingTarget, incomingTarget);
     }
 }

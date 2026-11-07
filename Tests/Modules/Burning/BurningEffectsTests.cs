@@ -22,7 +22,7 @@ public sealed class BurningEffectsTests
     private static StatusEffectDisplayRegistry CreateStatusEffectDisplays(ComponentManager componentManager)
     {
         var displays = new StatusEffectDisplayRegistry();
-        displays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph, componentManager.GetPackedPool<BurningTimerComponent>(),
+        displays.Register(new TimerBasedStatusEffectDisplay<BurningTimerComponent>(StatusEffectType.Burning, BurningEffects.Glyph, BurningEffects.MaxStacks, componentManager.GetPackedPool<BurningTimerComponent>(),
             (burning, now) => FrameDeadline.Remaining(burning.NextTickFrame, now) + (burning.StackCount - 1) * BurningEffects.TickIntervalFrames));
         return displays;
     }
@@ -100,7 +100,7 @@ public sealed class BurningEffectsTests
     /// <summary>
     /// BurningTimerComponent.Source is set once, on the 0-to-1 transition, and never overwritten
     /// by a later top-off -- whoever started the burn is attributed for its whole duration, the
-    /// same "first applier wins" rule PoisonEffects.ApplyStack already uses for its own Source.
+    /// same "first applier wins" rule TimedStatusEffectStacks already uses for Poison's Source.
     /// </summary>
     [TestMethod]
     public void ApplyStack_SecondApplicationFromDifferentSource_DoesNotChangeSource()

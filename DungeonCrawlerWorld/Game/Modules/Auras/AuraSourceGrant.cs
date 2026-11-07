@@ -55,7 +55,7 @@ public sealed record AuraSourceGrant(
 
     public EffectPlacement Placement => EffectPlacement.OncePerActivation;
 
-    /// <remarks>Power and size, and a timed grant's duration as a Buff's (StatModifierGrant.ScaleDurationFrames). Incoming is skipped for an anchor, which has no target entity.</remarks>
+    /// <remarks>Power and size, and a timed grant's duration as a Buff's (EffectDurations.Scale). Incoming is skipped for an anchor, which has no target entity.</remarks>
     public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => DurationFrames is null ? PermanentModifiers : TimedModifiers;
 
     public bool GrantsUntilRevoked => DurationFrames is null;
@@ -65,7 +65,7 @@ public sealed record AuraSourceGrant(
         var power = EffectModifiers.ScaleToUShort(in context, Power, StatModifierTarget.OutgoingAuraPower, StatModifierTarget.IncomingAuraPower);
         var size = EffectModifiers.ScaleToByte(in context, Size, StatModifierTarget.OutgoingAuraSize, StatModifierTarget.IncomingAuraSize);
 
-        var expiresAtFrame = StatModifierGrant.ScaleDurationFrames(in context, DurationFrames, StatModifierPolarity.Buff) is { } durationFrames
+        var expiresAtFrame = EffectDurations.Scale(in context, DurationFrames, StatModifierPolarity.Buff) is { } durationFrames
             ? FrameDeadline.After(context.Now, durationFrames)
             : (uint?)null;
         var heldGrantKey = DurationFrames is null ? context.HeldGrantKey : null;

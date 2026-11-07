@@ -15,6 +15,9 @@ public interface IStatusEffectApplier
     /// <summary>The most stacks of EffectType an entity can hold; 1 for an effect that doesn't stack.</summary>
     int MaxStacks { get; }
 
+    /// <summary>Whether a grant may say how long the effect lasts (StatusEffectGrant.DurationTicks); false for one whose duration is its own (Burning's stacks, Paralysis's fixed span).</summary>
+    bool TakesDuration { get; }
+
     /// <summary>This entity's current stack count for EffectType, or 0 if it has none.</summary>
     /// <param name="bodyPartId">The one body part to count the stacks of, or null for the stacks the entity holds as a whole. An effect that isn't held per body part ignores it.</param>
     int GetCurrentStackCount(int entityId, byte? bodyPartId = null);
@@ -30,7 +33,8 @@ public interface IStatusEffectApplier
     /// <param name="announcesRefusal">False to leave an immunity's blocked event unpublished: the caller already reported this refusal.</param>
     /// <param name="bodyPartId">The one body part to hold the stacks on, or null for the entity as a whole. Named by whatever grants the stacks, never worked out here. An effect that isn't held per body part ignores it.</param>
     /// <param name="immunityAlreadyChecked">True when the caller has just found the entity not immune (StatusEffectGrant): the stacks are added with no second check.</param>
-    StatusEffectStacksApplied ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null, bool immunityAlreadyChecked = false);
+    /// <param name="durationTicks">How many ticks the effect lasts, already scaled, or null for the effect's own default. Ignored by an effect that doesn't TakesDuration.</param>
+    StatusEffectStacksApplied ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null, bool immunityAlreadyChecked = false, ushort? durationTicks = null);
 
     /// <summary>Removes every stack of EffectType from entityId, ending the effect wherever it is held -- on the entity as a whole and on every body part. Returns whether there was anything to remove.</summary>
     bool RemoveAllStacks(int entityId);

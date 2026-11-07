@@ -28,6 +28,9 @@ public sealed class BurningApplier(ComponentManager componentManager, BlueprintR
 
     public int MaxStacks => BurningEffects.MaxStacks;
 
+    /// <remarks>A burn's stacks are its duration: one burns off each tick.</remarks>
+    public bool TakesDuration => false;
+
     public int GetCurrentStackCount(int entityId, byte? bodyPartId = null)
     {
         if (bodyPartId is { } partId && _bodyParts.Has(entityId))
@@ -39,7 +42,7 @@ public sealed class BurningApplier(ComponentManager componentManager, BlueprintR
         return _entityTimers.TryGetReadonly(entityId, out var timer) ? timer.StackCount : 0;
     }
 
-    public StatusEffectStacksApplied ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null, bool immunityAlreadyChecked = false) =>
+    public StatusEffectStacksApplied ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null, bool immunityAlreadyChecked = false, ushort? durationTicks = null) =>
         bodyPartId is { } partId && _bodyParts.Has(entityId)
             ? ApplyBodyPartScopedStacks(entityId, partId, count, source, now, announcesRefusal, immunityAlreadyChecked)
             : BurningEffects.ApplyStacks(componentManager, entityId, count, source, now, eventBus, playerQuery, announcesRefusal, immunityAlreadyChecked);

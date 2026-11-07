@@ -122,7 +122,7 @@ public static class FloorBuilder
     // *greater* of the remaining and new duration (not additive), the end result is 10 stacks
     // with a duration of exactly 5 ticks, not 50.
     private const int TestPoisonStackCount = 10;
-    private const int TestPoisonDurationTicks = 5;
+    private const ushort TestPoisonDurationTicks = 5;
 
     // TEMPORARY: exercises the Ability Score window's ordering/formatting (flat before
     // multiplicative, positive before negative) and its right-aligned scrolling list with real
@@ -183,10 +183,7 @@ public static class FloorBuilder
         factory.LoadContentFor(definitions.GetId(Player.Id));
         factory.Spawn(SpawnRequest.At(definitions.GetId(Player.Id), spawnPosition) with { Seed = SpawnSeed(sessionSeed, PlayerSpawnSalt), Crawler = true, ReservedEntityId = entityId });
 
-        for (var i = 0; i < TestPoisonStackCount; i++)
-        {
-            PoisonEffects.ApplyStack(ecsContext.ComponentManager, ecsContext.EntityManager.Keys, entityId, ActionSource.Admin, TestPoisonDurationTicks, ecsContext.SystemManager.Clock.CurrentFrame, ecsContext.EventBus, world);
-        }
+        PoisonEffects.ApplyStacks(ecsContext.ComponentManager, entityId, TestPoisonStackCount, ActionSource.Admin, TestPoisonDurationTicks, ecsContext.SystemManager.Clock.CurrentFrame, ecsContext.EventBus, world);
 
         foreach (var seed in TestAbilityScoreModifierSeeds)
         {

@@ -603,8 +603,8 @@ public sealed class TerrainContactSystemTests
         var appliers = new StatusEffectApplierRegistry();
         var fixture = BuildForChanges(appliers);
         var components = fixture.Components;
-        appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, components.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks,
-            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked) => PoisonEffects.ApplyStacks(components, new EntityKeys(), entityId, count, source, durationInTicks: 5, now, fixture.EventBus, new TestPlayerQuery(MoverEntityId), announcesRefusal, immunityAlreadyChecked)));
+        appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, components.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks, takesDuration: true,
+            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked, durationTicks) => PoisonEffects.ApplyStacks(components, entityId, count, source, durationTicks ?? (ushort)5, now, fixture.EventBus, new TestPlayerQuery(MoverEntityId), announcesRefusal, immunityAlreadyChecked)));
         StatusEffectImmunityEffects.GrantPermanent(components.GetMultiPool<StatusEffectImmunityComponent>(), MoverEntityId, StatusEffectType.Poison);
         fixture.MapQuery.SetTerrain(OnHazard, fixture.Terrain.Register(new TerrainDefinition("test:swamp", "Swamp", "", "~", default,
             Contact: new TerrainContact([new Effect([new StatusEffectGrant(StatusEffectType.Poison, StackCount: 3)])], RepeatEveryFrames: TickIntervalFrames))));
@@ -626,8 +626,8 @@ public sealed class TerrainContactSystemTests
         var appliers = new StatusEffectApplierRegistry();
         var fixture = BuildForChanges(appliers);
         var components = fixture.Components;
-        appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, components.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks,
-            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked) => PoisonEffects.ApplyStacks(components, new EntityKeys(), entityId, count, source, durationInTicks: 5, now, fixture.EventBus, TestPlayerQuery.NoPlayer, announcesRefusal, immunityAlreadyChecked)));
+        appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, components.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks, takesDuration: true,
+            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked, durationTicks) => PoisonEffects.ApplyStacks(components, entityId, count, source, durationTicks ?? (ushort)5, now, fixture.EventBus, TestPlayerQuery.NoPlayer, announcesRefusal, immunityAlreadyChecked)));
         var swamp = fixture.Terrain.Register(new TerrainDefinition("test:swamp", "Swamp", "", "~", default,
             Contact: new TerrainContact([new Effect([new StatusEffectGrant(StatusEffectType.Poison, StackCount: 3, StatusEffectGrantMode.TopUpTo)])], RepeatEveryFrames: TickIntervalFrames)));
         fixture.MapQuery.SetTerrain(OnHazard, swamp);

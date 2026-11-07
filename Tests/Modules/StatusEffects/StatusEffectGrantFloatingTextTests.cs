@@ -28,7 +28,9 @@ public sealed class StatusEffectGrantFloatingTextTests
 
         public int MaxStacks => maxStacks;
 
-        public StatusEffectStacksApplied ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null, bool immunityAlreadyChecked = false)
+        public bool TakesDuration => false;
+
+        public StatusEffectStacksApplied ApplyStacks(int entityId, int count, ActionSource source, long now, bool announcesRefusal = true, byte? bodyPartId = null, bool immunityAlreadyChecked = false, ushort? durationTicks = null)
         {
             if (StatusEffectImmunity.HasImmunity(componentManager, entityId, EffectType))
             {

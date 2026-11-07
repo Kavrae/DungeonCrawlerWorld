@@ -33,8 +33,9 @@ namespace Presentation.UI;
 /// sub-window, own ChildElementTileMode.Vertical" way AbilityScoreWindow.BuildColumns builds its
 /// own 5): the first is one section per body part (a resource bar below each part's own TextDivider
 /// header), with no header of its own since the window's title already says Health; Buffs is the buff
-/// modifiers and immunities; Debuffs is the status effects, then the potion cooldown, then the debuff
-/// modifiers. Color and section-divider
+/// status effects, then the buff modifiers and immunities; Debuffs is the debuff status effects, then the
+/// potion cooldown, then the debuff modifiers -- a status effect's column is its polarity
+/// (StatusEffectTypeFacts.PolarityOf). Color and section-divider
 /// style borrowed from ItemDetailsWindow (dark PanelBackgroundColor background, white body text,
 /// TitleColor-labeled TextDivider headers), the same template every future detail window in this
 /// codebase should reach for. The Debuffs column's status effects are the entity-scoped effects
@@ -108,13 +109,15 @@ public sealed class HealthWindow(
     private readonly List<StatusEffectImmunityComponent> _statusEffectImmunitiesScratch = [];
 
     private readonly List<BodyPartRow> _bodyPartRows = [];
-    private readonly List<StatusEffectRow> _statusEffectRows = [];
+    private readonly List<StatusEffectRow> _buffStatusEffectRows = [];
+    private readonly List<StatusEffectRow> _debuffStatusEffectRows = [];
     private readonly List<ModifierRow> _buffRows = [];
     private readonly List<ModifierRow> _debuffRows = [];
     private readonly List<ImmunityRow> _immunityRows = [];
     private readonly List<StatusEffectType> _activeEffectTypesScratch = [];
     private readonly List<FractionBarElement> _bodyPartBars = [];
-    private readonly List<TextWindow> _statusEffectRowWindows = [];
+    private readonly List<TextWindow> _buffStatusEffectRowWindows = [];
+    private readonly List<TextWindow> _debuffStatusEffectRowWindows = [];
     private readonly List<TextWindow> _buffRowWindows = [];
     private readonly List<TextWindow> _debuffRowWindows = [];
     private readonly List<TextWindow> _immunityRowWindows = [];
@@ -145,7 +148,8 @@ public sealed class HealthWindow(
     /// <summary>Which list a hovered row is in.</summary>
     private enum HoveredRowKind
     {
-        StatusEffect,
+        BuffStatusEffect,
+        DebuffStatusEffect,
         BodyPartBurning,
         Buff,
         Debuff,
@@ -369,7 +373,6 @@ public sealed class HealthWindow(
             return;
         }
 
-        sourcePopupKey = sourcePopupKey with { IsOwnSource = actionSourceNaming.IsOwnSource(sourcePopupKey.Source, _entityId) };
         var (body, rows) = _sourcePopup.Get(sourcePopupKey, this, static (key, window) => window.BuildSourcePopup(key));
         tooltipController.Show(this, rowRectangle, PopupAnchor.East, PopupChrome.AbilityScorePopupGap, ModifierDisplayFormatting.SourcePopupMaximumSize, body, rows: rows, useFixedWidth: true);
     }
@@ -386,6 +389,11 @@ public sealed class HealthWindow(
         }
         else if (_buffColumn.IsPointerOver)
         {
+            if (FindRowAt(_buffStatusEffectRowWindows, out rowWindow) is { } buffStatusEffectIndex)
+            {
+                return new HoveredRow(HoveredRowKind.BuffStatusEffect, buffStatusEffectIndex);
+            }
+
             if (FindRowAt(_buffRowWindows, out rowWindow) is { } buffIndex)
             {
                 return new HoveredRow(HoveredRowKind.Buff, buffIndex);
@@ -398,9 +406,9 @@ public sealed class HealthWindow(
         }
         else if (_debuffColumn.IsPointerOver)
         {
-            if (FindRowAt(_statusEffectRowWindows, out rowWindow) is { } statusEffectIndex)
+            if (FindRowAt(_debuffStatusEffectRowWindows, out rowWindow) is { } debuffStatusEffectIndex)
             {
-                return new HoveredRow(HoveredRowKind.StatusEffect, statusEffectIndex);
+                return new HoveredRow(HoveredRowKind.DebuffStatusEffect, debuffStatusEffectIndex);
             }
 
             if (_potionCooldownRowWindow is { } potionCooldownRow && potionCooldownRow.IsPointerOver)
@@ -435,16 +443,21 @@ public sealed class HealthWindow(
         return null;
     }
 
-    /// <summary>Everything the source popup for a row is built from: its source, whether that source is this window's entity itself, the effect with no duration (a modifier row or a status effect row), and the remaining duration as shown -- the cache key for that popup, so it's rebuilt once a second, not every frame.</summary>
-    private readonly record struct SourcePopupKey(ActionSource Source, ModifierRow? Modifier, StatusEffectRow? StatusEffect, int? RemainingSeconds, bool IsOwnSource = false);
+    /// <summary>Everything the source popup for a row is built from: the entity the window shows, the row's source, whether that source is the entity itself, the effect with no duration (a modifier row or a status effect row), and the remaining duration as shown -- the cache key for that popup, so it's rebuilt once a second, not every frame.</summary>
+    private readonly record struct SourcePopupKey(int EntityId, ActionSource Source, ModifierRow? Modifier, StatusEffectRow? StatusEffect, int? RemainingSeconds, bool IsOwnSource);
 
     private (string Body, IReadOnlyList<TooltipRow> Rows) BuildSourcePopup(SourcePopupKey key)
     {
-        var effectText = key.Modifier is { } modifierRow
-            ? FormatModifierRow(modifierRow, gameplayTags)
-            : FormatStatusEffectRow(key.StatusEffect!.Value);
-        return ModifierDisplayFormatting.SourcePopupShowingSeconds(actionSourceNaming, key.Source, _entityId, effectText, key.RemainingSeconds);
+        if (key.Modifier is not { } modifierRow)
+        {
+            return StatusEffectSourcePopup.Build(new StatusEffectSourcePopup.Key(key.EntityId, key.Source, key.StatusEffect!.Value, key.RemainingSeconds, key.IsOwnSource), statusEffectDisplays, actionSourceNaming);
+        }
+
+        return ModifierDisplayFormatting.SourcePopupShowingSeconds(actionSourceNaming, key.Source, key.EntityId, FormatModifierRow(modifierRow, gameplayTags), key.RemainingSeconds);
     }
+
+    private SourcePopupKey SourcePopupKeyFor(ActionSource source, ModifierRow? Modifier, StatusEffectRow? StatusEffect, int? remainingSeconds) =>
+        new(_entityId, source, Modifier, StatusEffect, remainingSeconds, actionSourceNaming.IsOwnSource(source, _entityId));
 
     /// <summary>The hovered row's source popup -- see SourcePopupKey.</summary>
     private readonly KeyedCache<SourcePopupKey, (string Body, IReadOnlyList<TooltipRow> Rows)> _sourcePopup = new();
@@ -467,7 +480,7 @@ public sealed class HealthWindow(
                     }
 
                     var modifierRow = modifierRows[row.Index];
-                    key = new SourcePopupKey(
+                    key = SourcePopupKeyFor(
                         modifierRow.Source,
                         modifierRow with { RemainingSeconds = null, RemainingDurationFrames = null },
                         StatusEffect: null,
@@ -475,21 +488,19 @@ public sealed class HealthWindow(
                     return true;
                 }
 
-            case HoveredRowKind.StatusEffect:
+            case HoveredRowKind.BuffStatusEffect:
+            case HoveredRowKind.DebuffStatusEffect:
                 {
-                    BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, CurrentFrame);
-                    if (row.Index >= _statusEffectRows.Count
-                        || !statusEffectDisplays.TryGet(_statusEffectRows[row.Index].Type, out var display)
-                        || display.GetSource(_entityId) is not { } statusEffectSource)
+                    var polarity = row.Kind == HoveredRowKind.BuffStatusEffect ? StatModifierPolarity.Buff : StatModifierPolarity.Debuff;
+                    var statusEffectRows = polarity == StatModifierPolarity.Buff ? _buffStatusEffectRows : _debuffStatusEffectRows;
+                    BuildStatusEffectRows(statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, CurrentFrame, polarity);
+                    if (row.Index >= statusEffectRows.Count
+                        || !StatusEffectSourcePopup.TryDescribe(statusEffectDisplays, actionSourceNaming, _entityId, statusEffectRows[row.Index].Type, CurrentFrame, out var statusEffectKey))
                     {
                         return false;
                     }
 
-                    key = new SourcePopupKey(
-                        statusEffectSource,
-                        Modifier: null,
-                        _statusEffectRows[row.Index] with { RemainingSeconds = null },
-                        ModifierDisplayFormatting.RemainingSecondsShown(display.GetRemainingDurationFrames(_entityId, CurrentFrame)));
+                    key = new SourcePopupKey(statusEffectKey.EntityId, statusEffectKey.Source, Modifier: null, statusEffectKey.Effect, statusEffectKey.RemainingSeconds, statusEffectKey.IsOwnSource);
                     return true;
                 }
 
@@ -508,7 +519,7 @@ public sealed class HealthWindow(
                             continue;
                         }
 
-                        key = new SourcePopupKey(
+                        key = SourcePopupKeyFor(
                             timer.Source,
                             Modifier: null,
                             new StatusEffectRow(StatusEffectType.Burning, RemainingSeconds: null, timer.StackCount),
@@ -530,7 +541,8 @@ public sealed class HealthWindow(
         ElementPoolService.CloseAllChildren(_healthColumn);
         ElementPoolService.CloseAllChildren(_buffColumn);
         ElementPoolService.CloseAllChildren(_debuffColumn);
-        _statusEffectRowWindows.Clear();
+        _buffStatusEffectRowWindows.Clear();
+        _debuffStatusEffectRowWindows.Clear();
         _buffRowWindows.Clear();
         _debuffRowWindows.Clear();
         _immunityRowWindows.Clear();
@@ -542,10 +554,12 @@ public sealed class HealthWindow(
         BuildBodyPartSection(_healthColumn);
 
         BuildDivider(_buffColumn, _buffColumn.ContentSize.X, "Buffs");
+        BuildStatusEffectSection(_buffColumn, StatModifierPolarity.Buff, _buffStatusEffectRows, _buffStatusEffectRowWindows);
         BuildBuffSection(_buffColumn);
 
         BuildDivider(_debuffColumn, _debuffColumn.ContentSize.X, "Debuffs");
-        BuildStatusEffectSection(_debuffColumn);
+        BuildStatusEffectSection(_debuffColumn, StatModifierPolarity.Debuff, _debuffStatusEffectRows, _debuffStatusEffectRowWindows);
+        BuildPotionCooldownRow(_debuffColumn);
         BuildDebuffSection(_debuffColumn);
     }
 
@@ -618,16 +632,20 @@ public sealed class HealthWindow(
         }
     }
 
-    private void BuildStatusEffectSection(Window parent)
+    /// <summary>A column's status effect rows: the active effects of its polarity (StatusEffectTypeFacts.PolarityOf), first in the column.</summary>
+    private void BuildStatusEffectSection(Window parent, StatModifierPolarity polarity, List<StatusEffectRow> rows, List<TextWindow> rowWindows)
     {
-        BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, CurrentFrame);
-        var hasPotionCooldown = TryGetPotionCooldownLine(ReadPotionCooldown(), itemCatalog, CurrentFrame, out var potionCooldownText, out var potionCooldownColor);
+        BuildStatusEffectRows(rows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, CurrentFrame, polarity);
 
-        foreach (var row in _statusEffectRows)
+        foreach (var row in rows)
         {
-            _statusEffectRowWindows.Add(AddTextRow(parent, FormatStatusEffectRow(row), GetColor(row.Type)));
+            rowWindows.Add(AddTextRow(parent, FormatStatusEffectRow(row), GetColor(row.Type)));
         }
+    }
 
+    private void BuildPotionCooldownRow(Window parent)
+    {
+        var hasPotionCooldown = TryGetPotionCooldownLine(ReadPotionCooldown(), itemCatalog, CurrentFrame, out var potionCooldownText, out var potionCooldownColor);
         _potionCooldownRowWindow = hasPotionCooldown ? AddTextRow(parent, potionCooldownText, potionCooldownColor) : null;
     }
 
@@ -665,12 +683,8 @@ public sealed class HealthWindow(
             }
         }
 
-        BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, CurrentFrame);
-        var statusEffectCount = System.Math.Min(_statusEffectRows.Count, _statusEffectRowWindows.Count);
-        for (var index = 0; index < statusEffectCount; index++)
-        {
-            _statusEffectRowWindows[index].UpdateText(FormatStatusEffectRow(_statusEffectRows[index]));
-        }
+        RefreshStatusEffectRows(StatModifierPolarity.Buff, _buffStatusEffectRows, _buffStatusEffectRowWindows);
+        RefreshStatusEffectRows(StatModifierPolarity.Debuff, _debuffStatusEffectRows, _debuffStatusEffectRowWindows);
 
         if (_potionCooldownRowWindow is { } potionCooldownRow && TryGetPotionCooldownLine(ReadPotionCooldown(), itemCatalog, CurrentFrame, out var potionCooldownText, out _))
         {
@@ -796,9 +810,19 @@ public sealed class HealthWindow(
     /// </summary>
     private string FormatStatusEffectRow(StatusEffectRow row) => FormatStatusEffectRow(row, statusEffectDisplays);
 
+    private void RefreshStatusEffectRows(StatModifierPolarity polarity, List<StatusEffectRow> rows, List<TextWindow> rowWindows)
+    {
+        BuildStatusEffectRows(rows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, CurrentFrame, polarity);
+        var count = System.Math.Min(rows.Count, rowWindows.Count);
+        for (var index = 0; index < count; index++)
+        {
+            rowWindows[index].UpdateText(FormatStatusEffectRow(rows[index]));
+        }
+    }
+
     internal static string FormatStatusEffectRow(StatusEffectRow row, StatusEffectDisplayRegistry statusEffectDisplays)
     {
-        var name = $"{GetGlyph(row.Type, statusEffectDisplays)} {row.Type}";
+        var name = $"{GetGlyph(row.Type, statusEffectDisplays)} {StatusEffectTypeFacts.DisplayNameOf(row.Type)}";
         var seconds = row.Type == StatusEffectType.Burning ? null : row.RemainingSeconds;
 
         if (row.StackCount <= 1)
@@ -1070,25 +1094,35 @@ public sealed class HealthWindow(
         return true;
     }
 
-    /// <summary>Pure data assembly, no rendering -- see BuildBodyPartRows' own doc comment for why. One row per StatusEffectQueries.GetActiveEffectTypes entry, each with its own remaining duration in real seconds (null if the active type has no registered IStatusEffectDisplay -- a future effect type with no display registered yet) and current stack count (0 likewise).</summary>
+    /// <summary>Pure data assembly, no rendering -- see BuildBodyPartRows' own doc comment for why. One row per StatusEffectQueries.GetActiveEffectTypes entry of polarity, each with its own remaining duration in real seconds (null if the active type has no registered IStatusEffectDisplay -- a future effect type with no display registered yet) and current stack count (0 likewise).</summary>
     internal static void BuildStatusEffectRows(
         List<StatusEffectRow> destination,
         List<StatusEffectType> activeTypesScratch,
         int entityId,
         StatusEffectDisplayRegistry statusEffectDisplays,
-        long now)
+        long now,
+        StatModifierPolarity polarity)
     {
         StatusEffectQueries.GetActiveEffectTypes(statusEffectDisplays, entityId, activeTypesScratch);
 
         destination.Clear();
         foreach (var effectType in activeTypesScratch)
         {
-            var display = statusEffectDisplays.TryGet(effectType, out var foundDisplay) ? foundDisplay : null;
-            var remainingFrames = display?.GetRemainingDurationFrames(entityId, now);
-            var remainingSeconds = remainingFrames is { } frames ? (int)System.Math.Ceiling(frames / (float)GameFrameRate.FramesPerSecond) : (int?)null;
-            var stackCount = display?.GetStackCount(entityId) ?? 0;
-            destination.Add(new StatusEffectRow(effectType, remainingSeconds, stackCount));
+            if (StatusEffectTypeFacts.PolarityOf(effectType) != polarity)
+            {
+                continue;
+            }
+
+            destination.Add(StatusEffectRowOf(statusEffectDisplays.TryGet(effectType, out var display) ? display : null, effectType, entityId, now));
         }
+    }
+
+    /// <summary>One status effect as a row shows it: its remaining duration in real seconds and its stack count, null and 0 when it has no registered display.</summary>
+    internal static StatusEffectRow StatusEffectRowOf(IStatusEffectDisplay? display, StatusEffectType effectType, int entityId, long now)
+    {
+        var remainingFrames = display?.GetRemainingDurationFrames(entityId, now);
+        var remainingSeconds = remainingFrames is { } frames ? (int)System.Math.Ceiling(frames / (float)GameFrameRate.FramesPerSecond) : (int?)null;
+        return new StatusEffectRow(effectType, remainingSeconds, display?.GetStackCount(entityId) ?? 0);
     }
 
     /// <summary>Pure data assembly, no rendering -- see BuildBodyPartRows' own doc comment for why. One row per active StatModifierComponent instance matching polarity (not grouped by Target the way Status Effects groups by type). Excludes any modifier targeting an ability score -- AbilityScoreMath.FromStatModifierTarget returning non-null is exactly AbilityScoreWindow's own test for "this is one of the 7 ability score targets" (see AbilityScoreModifierFormatter), which already shows these; duplicating them here would be redundant.</summary>

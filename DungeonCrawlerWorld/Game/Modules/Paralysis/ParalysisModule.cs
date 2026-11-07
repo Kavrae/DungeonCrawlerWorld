@@ -35,7 +35,8 @@ public sealed class ParalysisModule : IGameModule
             StatusEffectType.Paralysis,
             timers,
             maxStacks: 1,
-            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked) =>
+            takesDuration: false,
+            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked, durationTicks) =>
             {
                 if (count <= 0)
                 {
@@ -47,7 +48,7 @@ public sealed class ParalysisModule : IGameModule
                     ? StatusEffectStacksApplied.Landed(wasParalyzed ? 0 : 1)
                     : StatusEffectStacksApplied.Refused;
             }));
-        context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph,
+        context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph, maxStacks: 1,
             timers,
             static (paralysis, now) => FrameDeadline.Remaining(paralysis.ExpiresAtFrame, now)));
     }

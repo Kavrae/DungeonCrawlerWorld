@@ -60,10 +60,12 @@ internal static class TestHealth
         IPlayerQuery? playerQuery = null,
         string healType = "Heal",
         FloatingTextFeed? floatingTextFeed = null,
-        ResourceGainCategory healCategory = ResourceGainCategory.Direct) =>
+        ResourceGainCategory healCategory = ResourceGainCategory.Direct,
+        PackedComponentPool<DeadComponent>? deadEntities = null) =>
         HealthHeal.Apply(health, entityId, percentOfMaxHealth, now,
             statModifiers ?? EmptyPools.Multi<StatModifierComponent>(),
             bodyParts ?? EmptyPools.BodyParts(),
+            deadEntities ?? EmptyPools.Packed<DeadComponent>(),
             eventBus ?? new EventBus(), playerQuery ?? TestPlayerQuery.NoPlayer,
             floatingTextFeed ?? EmptyPools.FloatingTextFeed(), healCategory,
             flatAmount, sourceEntityId, activatorTags, targetMode, targetRule, mathUtility, healType);

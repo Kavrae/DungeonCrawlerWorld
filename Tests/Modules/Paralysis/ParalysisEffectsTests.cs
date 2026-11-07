@@ -24,7 +24,7 @@ public sealed class ParalysisEffectsTests
     private static StatusEffectDisplayRegistry CreateStatusEffectDisplays(ComponentManager componentManager)
     {
         var displays = new StatusEffectDisplayRegistry();
-        displays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph, componentManager.GetPackedPool<ParalysisTimerComponent>(),
+        displays.Register(new TimerBasedStatusEffectDisplay<ParalysisTimerComponent>(StatusEffectType.Paralysis, ParalysisEffects.Glyph, maxStacks: 1, componentManager.GetPackedPool<ParalysisTimerComponent>(),
             (paralysis, now) => FrameDeadline.Remaining(paralysis.ExpiresAtFrame, now)));
         return displays;
     }
@@ -96,7 +96,7 @@ public sealed class ParalysisEffectsTests
         Assert.AreEqual(1, StatusEffectQueries.CountStacks(CreateStatusEffectDisplays(componentManager), 0, StatusEffectType.Paralysis));
     }
 
-    /// <summary>Refreshes to the greater of what remained and DurationFrames -- never additive, mirroring PoisonEffects.ApplyStack's own duration rule.</summary>
+    /// <summary>Refreshes to the greater of what remained and DurationFrames -- never additive, mirroring TimedStatusEffectStacks' own duration rule.</summary>
     [TestMethod]
     public void Apply_WhileAlreadyParalyzedWithLessTimeRemaining_RefreshesToDurationFrames()
     {

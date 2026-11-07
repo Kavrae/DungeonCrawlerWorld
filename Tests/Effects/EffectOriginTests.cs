@@ -54,10 +54,9 @@ public sealed class EffectOriginTests
         public Fixture()
         {
             var componentManager = ComponentManager;
-            var entityKeys = new EntityKeys();
             Appliers.Register(new BurningApplier(componentManager, BodyPartTestWorld.CreaturesOf(componentManager), EventBus, new TestPlayerQuery(TargetEntityId)));
-            Appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, componentManager.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks,
-                (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked) => PoisonEffects.ApplyStacks(componentManager, entityKeys, entityId, count, source, durationInTicks: 5, now, EventBus, new TestPlayerQuery(TargetEntityId), announcesRefusal, immunityAlreadyChecked)));
+            Appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, componentManager.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks, takesDuration: true,
+                (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked, durationTicks) => PoisonEffects.ApplyStacks(componentManager, entityId, count, source, durationTicks ?? (ushort)5, now, EventBus, new TestPlayerQuery(TargetEntityId), announcesRefusal, immunityAlreadyChecked)));
         }
 
         public PackedComponentPool<SimpleHealthComponent> Health => ComponentManager.GetPackedPool<SimpleHealthComponent>();
@@ -521,10 +520,9 @@ public sealed class EffectOriginTests
     public void PoisonApplyStacks_AddsSeveralAtOnceAndStopsAtTheCap()
     {
         var fixture = WithSimpleHealth();
-        var entityKeys = new EntityKeys();
 
-        var first = PoisonEffects.ApplyStacks(fixture.ComponentManager, entityKeys, TargetEntityId, count: 250, ActionSource.Admin, durationInTicks: 5, now: 0, fixture.EventBus, TestPlayerQuery.NoPlayer);
-        var second = PoisonEffects.ApplyStacks(fixture.ComponentManager, entityKeys, TargetEntityId, count: 250, ActionSource.Admin, durationInTicks: 5, now: 0, fixture.EventBus, TestPlayerQuery.NoPlayer);
+        var first = PoisonEffects.ApplyStacks(fixture.ComponentManager, TargetEntityId, count: 250, ActionSource.Admin, durationTicks: 5, now: 0, fixture.EventBus, TestPlayerQuery.NoPlayer);
+        var second = PoisonEffects.ApplyStacks(fixture.ComponentManager, TargetEntityId, count: 250, ActionSource.Admin, durationTicks: 5, now: 0, fixture.EventBus, TestPlayerQuery.NoPlayer);
 
         Assert.AreEqual(250, first.StacksLanded);
         Assert.AreEqual(PoisonEffects.MaxStacks - 250, second.StacksLanded);

@@ -13,6 +13,7 @@ using Game.Modules.Movement.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.Auras;
+using Game.Modules.StatusEffects;
 using Game.Spawning;
 using Game.Tags;
 using Game.Terrain;
@@ -147,6 +148,7 @@ public static class GameBuildPass
         ToggleContentValidation.EnsureValid(context);
         TargetingContentValidation.EnsureValid(context);
         TerrainReferenceValidation.EnsureRegistered(context);
+        StatusEffectContentValidation.EnsureValid(context);
         AreaContentValidation.EnsureValid(context);
         _ = context.Content.Redirects;
     }

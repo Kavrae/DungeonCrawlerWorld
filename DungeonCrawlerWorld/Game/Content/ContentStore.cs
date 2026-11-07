@@ -33,7 +33,7 @@ public sealed class ContentStore
         var types = context.ContentTypes;
         var lowerLayers = new ContentLayers([.. content.Layers.Layers.Where(layer => layer.Kind is ContentLayerKind.Master or ContentLayerKind.Mod)]);
         _lowerContent = new Lazy<GameContent>(() => GameContent.OpenCollectingFailures(lowerLayers, types));
-        Checks = new ContentChecks(context.GameplayTags, context.Auras, context.Terrain);
+        Checks = new ContentChecks(context.GameplayTags, context.Auras, context.Terrain, context.StatusEffectAppliers);
         var references = new CatalogAuraReferences(context.Auras, content);
 
         var actionCatalog = context.Actions;

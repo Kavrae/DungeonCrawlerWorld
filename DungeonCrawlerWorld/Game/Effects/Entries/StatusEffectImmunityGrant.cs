@@ -6,10 +6,10 @@ namespace Game.Effects.Entries;
 
 /// <summary>
 /// Grants immunity to Type on context.TargetEntityId -- a hard on/off gate (StatusEffectImmunity.
-/// IsImmune, checked by PoisonEffects.ApplyStack/BurningEffects.ApplyStack/BurningApplier
+/// IsImmune, checked by PoisonEffects.ApplyStacks/BurningEffects.ApplyStack/BurningApplier
 /// before any stack is added), not a StatModifierComponent scale. DurationFrames (null = permanent)
 /// is scaled the same way StatModifierGrant's own is -- context.DurationScaleMultiplier, then
-/// Outgoing/IncomingBuffDuration (StatModifierGrant.ScaleDurationFrames, reused directly: granting
+/// Outgoing/IncomingBuffDuration (EffectDurations.Scale, reused directly: granting
 /// immunity is unambiguously a Buff from the target's perspective) -- and the scaled result is
 /// turned into an absolute deadline from context.Now. Granted through
 /// StatusEffectImmunityEffects.Grant, so immunity to a type the target already has is extended
@@ -18,10 +18,8 @@ namespace Game.Effects.Entries;
 /// <remarks>Permanent (DurationFrames null) and held by a toggle (context.HeldGrantKey set), it is an immunity of the toggle's own, taken back by Revert when the toggle goes off; any other immunity to the type stays.</remarks>
 public sealed record StatusEffectImmunityGrant(StatusEffectType Type, ushort? DurationFrames = null) : IReversibleEffectEntry
 {
-    private static readonly (StatModifierTarget, StatModifierTarget)[] Modifiers = [(StatModifierTarget.OutgoingBuffDuration, StatModifierTarget.IncomingBuffDuration)];
-
     /// <remarks>The duration of a timed immunity.</remarks>
-    public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => DurationFrames is null ? [] : Modifiers;
+    public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers => DurationFrames is null ? [] : EffectDurations.ModifiersFor(StatModifierPolarity.Buff);
 
     public bool GrantsUntilRevoked => DurationFrames is null;
 
@@ -34,7 +32,7 @@ public sealed record StatusEffectImmunityGrant(StatusEffectType Type, ushort? Du
             return EffectOutcome.Applied;
         }
 
-        var durationFrames = StatModifierGrant.ScaleDurationFrames(in context, DurationFrames, StatModifierPolarity.Buff);
+        var durationFrames = EffectDurations.Scale(in context, DurationFrames, StatModifierPolarity.Buff);
         var expiresAtFrame = durationFrames is { } frames ? FrameDeadline.After(context.Now, frames) : FrameDeadline.Never;
 
         StatusEffectImmunityEffects.Grant(immunities, context.TargetEntityId, Type, expiresAtFrame);

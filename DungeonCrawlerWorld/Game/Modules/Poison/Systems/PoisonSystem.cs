@@ -80,27 +80,14 @@ public sealed class PoisonSystem : ISystem
     /// <summary>Returns whether the timer should be removed entirely (duration expired) -- see TimerFired's contract. Removing the timer component alone is enough to end the effect (StackCount lives on it, not a separate pool).</summary>
     private bool Tick(int entityId, PoisonTimerComponent timer, long now)
     {
-        if (timer.RemainingDurationTicks == 0)
+        if (TimedStatusEffectStacks.IsSpent(timer))
         {
             return true;
         }
 
-        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Poison), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, _damageLedger, _floatingTextFeed, ResourceLossCategory.StatusEffect,
+        HealthDamage.Apply(_health, _eventBus, entityId, timer.StackCount, timer.Source, _playerQuery, StatusEffectLabel.Describe(StatusEffectType.Poison), now, _statModifiers, _bodyParts, _mathUtility, _deadEntities, _damageLedger, _floatingTextFeed, ResourceLossCategory.StatusEffect,
             targetRule: new BodyPartTargetRule(BodyPartType.Internal, BodyPartFallback.Random), damageTags: PoisonDamageTags);
 
-        var remainingDuration = (ushort)(timer.RemainingDurationTicks - 1);
-        if (remainingDuration == 0)
-        {
-            return true;
-        }
-
-        using var tickedTimer = _timers.TryWrite(entityId);
-        if (tickedTimer.Found)
-        {
-            tickedTimer.Value.RemainingDurationTicks = remainingDuration;
-            tickedTimer.Value.AdvanceOnePeriod(PoisonEffects.TickIntervalFrames);
-        }
-
-        return false;
+        return TimedStatusEffectStacks.CountDownAfterTick(_timers, entityId, timer, PoisonEffects.TickIntervalFrames);
     }
 }

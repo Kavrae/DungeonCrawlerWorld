@@ -32,21 +32,9 @@ public sealed class PoisonModule : IGameModule
 
     public IReadOnlyList<Guid> Requires { get; } = [StatusEffectsModule.ModuleId, HealthModule.ModuleId, StatModifiersModule.ModuleId, RaceModule.ModuleId, DeathModule.ModuleId];
 
-    // How long each aura-granted stack refreshes Poison's duration to, in the same "ticks"
-    // unit PoisonSystem itself counts down (once per its own PoisonEffects.TickIntervalFrames
-    // cycle, not per frame). Deliberately tiny (1), not some longer fixed window: ApplyStack
-    // refreshes RemainingDurationTicks to Max(existing, durationInTicks) rather than adding,
-    // so as long as the entity stays exposed, the aura's own re-grant cadence
-    // (AuraEffects.TickIntervalFrames, the same 60 frames) keeps refreshing the duration back
-    // up to at least 1 before it would otherwise hit 0 -- and once out of range, the duration
-    // simply counts down and expires normally. A longer fixed duration here would let poison
-    // outlive having left the aura by that many extra ticks for no reason.
-    private const int AuraDurationTicks = 1;
-
     public void Configure(GameModuleContext context)
     {
         var componentManager = context.ComponentManager;
-        var entityKeys = context.EntityKeys;
         var eventBus = context.EventBus;
         var playerQuery = context.PlayerQuery;
         var timers = componentManager.GetPackedPool<PoisonTimerComponent>();
@@ -55,10 +43,11 @@ public sealed class PoisonModule : IGameModule
             StatusEffectType.Poison,
             timers,
             PoisonEffects.MaxStacks,
-            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked) => PoisonEffects.ApplyStacks(componentManager, entityKeys, entityId, count, source, AuraDurationTicks, now, eventBus, playerQuery, announcesRefusal, immunityAlreadyChecked)));
-        context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph,
+            takesDuration: true,
+            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked, durationTicks) => PoisonEffects.ApplyStacks(componentManager, entityId, count, source, durationTicks, now, eventBus, playerQuery, announcesRefusal, immunityAlreadyChecked)));
+        context.StatusEffectDisplays.Register(new TimerBasedStatusEffectDisplay<PoisonTimerComponent>(StatusEffectType.Poison, PoisonEffects.Glyph, PoisonEffects.MaxStacks,
             timers,
-            static (poison, now) => FrameDeadline.Remaining(poison.NextTickFrame, now) + (poison.RemainingDurationTicks - 1) * PoisonEffects.TickIntervalFrames,
+            static (poison, now) => TimedStatusEffectStacks.RemainingFrames(poison, now, PoisonEffects.TickIntervalFrames),
             static poison => poison.Source));
     }
 

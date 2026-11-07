@@ -101,7 +101,7 @@ public sealed class BodyPartBurningSystem : ISystem
             // stacks run out, since BodyPartSelection.PickLowestPercentage's separate "is
             // currently burning" exclusion stops applying the instant the last stack ticks off.
             BodyPartDamageEffects.ResetRegenLockout(_bodyParts, entityId, timer.PartId, now);
-            BodyPartDamageEffects.PublishDamageEvents(_health, _bodyParts, _eventBus, entityId, timer.PartId, effectiveAmount, source, _playerQuery, StatusEffectDamageType.Describe(StatusEffectType.Burning), _statModifiers, _deadEntities);
+            BodyPartDamageEffects.PublishDamageEvents(_health, _bodyParts, _eventBus, entityId, timer.PartId, effectiveAmount, source, _playerQuery, StatusEffectLabel.Describe(StatusEffectType.Burning), _statModifiers, _deadEntities);
 
             if (!wasDead)
             {

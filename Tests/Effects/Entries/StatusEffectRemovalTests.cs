@@ -45,10 +45,7 @@ public sealed class StatusEffectRemovalTests
 
         public void Poison(int stacks)
         {
-            for (var stack = 0; stack < stacks; stack++)
-            {
-                PoisonEffects.ApplyStack(ComponentManager, EntityKeys, TargetEntityId, ActionSource.Admin, durationInTicks: 10, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
-            }
+            PoisonEffects.ApplyStacks(ComponentManager, TargetEntityId, stacks, ActionSource.Admin, durationTicks: 10, now: 0, new EventBus(), TestPlayerQuery.NoPlayer);
         }
 
         public int PoisonStacks => ComponentManager.GetPackedPool<PoisonTimerComponent>().TryGetReadonly(TargetEntityId, out var timer) ? timer.StackCount : 0;
@@ -59,8 +56,8 @@ public sealed class StatusEffectRemovalTests
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
         var entityKeys = new EntityKeys();
         var appliers = new StatusEffectApplierRegistry();
-        appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, componentManager.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks,
-            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked) => PoisonEffects.ApplyStacks(componentManager, entityKeys, entityId, count, source, 10, now, new EventBus(), TestPlayerQuery.NoPlayer, announcesRefusal, immunityAlreadyChecked)));
+        appliers.Register(new TimerBasedStatusEffectApplier<PoisonTimerComponent>(StatusEffectType.Poison, componentManager.GetPackedPool<PoisonTimerComponent>(), PoisonEffects.MaxStacks, takesDuration: true,
+            (entityId, count, source, now, announcesRefusal, immunityAlreadyChecked, durationTicks) => PoisonEffects.ApplyStacks(componentManager, entityId, count, source, durationTicks ?? (ushort)10, now, new EventBus(), TestPlayerQuery.NoPlayer, announcesRefusal, immunityAlreadyChecked)));
         return new Setup(componentManager, appliers, entityKeys);
     }
 

@@ -11,8 +11,10 @@ using Microsoft.Xna.Framework.Graphics;
 using Presentation.UI.Chrome;
 using UIEngine;
 using UIEngine.Fonts;
+using UIEngine.Input;
 using UIEngine.Rendering;
 using UIEngine.UI;
+using UIEngine.UI.Chrome;
 
 namespace Presentation.UI.Content;
 
@@ -28,10 +30,11 @@ namespace Presentation.UI.Content;
 /// revisit this fixed glyph/color choice if that ever reads as misleading for a non-Health
 /// potion) with the remaining seconds in green below the icon
 /// (not overlaid on top of it -- that read as visual clutter against the glyph) instead of a
-/// stack count.
+/// stack count. Hovering a status effect's icon for PopupChrome.HoverTooltipDelayFrames shows the
+/// popup the Health window shows for that effect's row (StatusEffectSourcePopup).
 /// </summary>
 /// <param name="simulationClock">"CurrentFrame" for the potion cooldown's remaining seconds -- it stores an absolute deadline.</param>
-public sealed class PlayerStatusEffectsContent(World world, ActionStateView actionStateView, ItemCatalog itemCatalog, FontService fontService, StatusEffectDisplayRegistry statusEffectDisplays, SimulationClock simulationClock) : IElementContent
+public sealed class PlayerStatusEffectsContent(World world, ActionStateView actionStateView, ItemCatalog itemCatalog, FontService fontService, StatusEffectDisplayRegistry statusEffectDisplays, SimulationClock simulationClock, ActionSourceNaming actionSourceNaming, TooltipController tooltipController, PointerState pointerState) : IElementContent
 {
 
     public static readonly Vector2 Size = new(PlayerHealthBarContent.Size.X, HudChrome.EntrySize.Y / 2f * 1.5f);
@@ -64,6 +67,12 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
     private readonly Dictionary<StatusEffectType, BelowIconNumber> _stackCountNumbers = [];
     private readonly BelowIconNumber _potionCooldownNumber = new();
 
+    private StatusEffectType? _hoveredEffectType;
+    private int _hoveredFrames;
+
+    /// <summary>The hovered icon's popup -- see StatusEffectSourcePopup.Key.</summary>
+    private readonly KeyedCache<StatusEffectSourcePopup.Key, (string Body, IReadOnlyList<TooltipRow> Rows)> _sourcePopup = new();
+
     private Window _hostWindow = null!;
     private FontStashTextMeasurer _glyphFontMeasurer = null!;
     private SpriteFontBase _countdownFont = null!;
@@ -87,6 +96,7 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
             _activeEffectTypes.Clear();
             _stackCountsByType.Clear();
             _hasPotionCooldown = false;
+            UpdateHover(playerEntityId);
             return;
         }
 
@@ -95,7 +105,7 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
         _stackCountsByType.Clear();
         foreach (var effectType in _activeEffectTypes)
         {
-            if (effectType is StatusEffectType.Poison or StatusEffectType.Burning)
+            if (statusEffectDisplays.TryGet(effectType, out var display) && display.MaxStacks > 1)
             {
                 _stackCountsByType[effectType] = StatusEffectQueries.CountStacks(statusEffectDisplays, playerEntityId, effectType);
             }
@@ -105,6 +115,66 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
             ? PotionCooldownEffects.FramesRemaining(potionCooldown, simulationClock.CurrentFrame)
             : 0;
         _hasPotionCooldown = _potionCooldownFramesRemaining > 0;
+
+        UpdateHover(playerEntityId);
+    }
+
+    /// <summary>Shows the hovered status effect icon's popup once it has been hovered for PopupChrome.HoverTooltipDelayFrames, and hides it as soon as the cursor leaves or the effect is gone.</summary>
+    private void UpdateHover(int playerEntityId)
+    {
+        var hoveredIconIndex = HoveredIconIndex() is { } index && index < _activeEffectTypes.Count ? index : -1;
+        StatusEffectType? hoveredEffectType = hoveredIconIndex >= 0 ? _activeEffectTypes[hoveredIconIndex] : null;
+
+        if (hoveredEffectType == _hoveredEffectType)
+        {
+            _hoveredFrames++;
+        }
+        else
+        {
+            _hoveredEffectType = hoveredEffectType;
+            _hoveredFrames = hoveredEffectType is null ? 0 : 1;
+        }
+
+        if (hoveredEffectType is not { } effectType
+            || _hoveredFrames < PopupChrome.HoverTooltipDelayFrames
+            || !StatusEffectSourcePopup.TryDescribe(statusEffectDisplays, actionSourceNaming, playerEntityId, effectType, simulationClock.CurrentFrame, out var popupKey))
+        {
+            tooltipController.Hide(this);
+            return;
+        }
+
+        var (body, rows) = _sourcePopup.Get(popupKey, this, static (key, content) => content.BuildSourcePopup(key));
+        tooltipController.Show(this, IconScreenRectangle(hoveredIconIndex), PopupAnchor.South, PopupChrome.AbilityScorePopupGap, ModifierDisplayFormatting.SourcePopupMaximumSize, body, rows: rows, useFixedWidth: true);
+    }
+
+    /// <summary>The index of the icon under the cursor, counting from the left, or null when the cursor is over none (between icons, below them, or off this window).</summary>
+    private int? HoveredIconIndex()
+    {
+        if (!_hostWindow.IsPointerOver)
+        {
+            return null;
+        }
+
+        var iconSize = _hostWindow.ContentSize.Y;
+        var cursor = _hostWindow.ToContentLocal(new Vector2(pointerState.CursorPosition.X, pointerState.CursorPosition.Y));
+        if (cursor.X < 0 || cursor.Y < 0 || cursor.Y >= iconSize)
+        {
+            return null;
+        }
+
+        var stride = iconSize + IconSpacing;
+        var index = (int)(cursor.X / stride);
+        return cursor.X - index * stride < iconSize ? index : null;
+    }
+
+    private (string Body, IReadOnlyList<TooltipRow> Rows) BuildSourcePopup(StatusEffectSourcePopup.Key key) =>
+        StatusEffectSourcePopup.Build(key, statusEffectDisplays, actionSourceNaming);
+
+    private Rectangle IconScreenRectangle(int index)
+    {
+        var iconSize = _hostWindow.ContentSize.Y;
+        var origin = _hostWindow.ContentDrawOrigin + new Vector2((iconSize + IconSpacing) * index, 0);
+        return new Rectangle((int)origin.X, (int)origin.Y, (int)iconSize, (int)iconSize);
     }
 
     public void DrawContent(GameTime gameTime)
