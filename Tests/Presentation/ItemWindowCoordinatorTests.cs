@@ -21,6 +21,7 @@ using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using Presentation.Input.DragDrop;
 using Presentation.UI;
 using Presentation.UI.Content;
 using Presentation.UI.Inventory;
@@ -48,7 +49,7 @@ public sealed class ItemWindowCoordinatorTests
 
     private static readonly Guid PotionItemId = Guid.NewGuid();
 
-    private sealed record Harness(ItemWindowCoordinator Coordinator, MapWindow MapWindow, MapViewState MapViewState, Engine.ECS.Components.ComponentManager ComponentManager, UiLayerStack Layers, ItemCatalog ItemCatalog, ContextMenuController ContextMenuController, Game.Terrain.TerrainRegistry Terrain, PointerState PointerState);
+    private sealed record Harness(ItemWindowCoordinator Coordinator, MapWindow MapWindow, MapViewState MapViewState, Engine.ECS.Components.ComponentManager ComponentManager, UiLayerStack Layers, ItemCatalog ItemCatalog, ContextMenuController ContextMenuController, Game.Terrain.TerrainRegistry Terrain, PointerState PointerState, ItemHoverDetails HoverDetails);
 
     private static Harness Build()
     {
@@ -131,7 +132,7 @@ public sealed class ItemWindowCoordinatorTests
             new LootboxCommands(new LootboxOpener(componentManager, lootboxCatalog, itemCatalog, seed: 1)),
             mapViewState.ReservedEntityIds);
 
-        return new Harness(coordinator, mapHarness.MapWindow, mapViewState, componentManager, layers, itemCatalog, contextMenuController, terrain, pointerState);
+        return new Harness(coordinator, mapHarness.MapWindow, mapViewState, componentManager, layers, itemCatalog, contextMenuController, terrain, pointerState, shellServices.ItemHoverDetails);
     }
 
     private static int? OpenSecondaryTarget(Harness harness) => harness.Coordinator.Inventory.GetSecondaryTargetEntityId!();
@@ -606,6 +607,79 @@ public sealed class ItemWindowCoordinatorTests
         Assert.IsFalse(harness.Coordinator.ItemDetails.IsOpen, "Stopping closes Item Details too.");
     }
 
+
+    private static ItemDragDetailsDismissal DragDismissal(Harness harness) => new(harness.Coordinator, harness.HoverDetails);
+
+    private static int ItemDetailsWindowsOpen(Harness harness) => harness.Layers[UiLayer.DynamicHud].OfType<ItemDetailsWindow>().Count();
+
+    [TestMethod]
+    public void StartingToDragAnItem_WhileComparing_EndsTheComparison_AndClosesBothItemDetailsWindows()
+    {
+        var (harness, _, otherStackId) = BuildComparingTwoPotions();
+        HoverOtherPotion(harness, otherStackId);
+        Assert.AreEqual(2, ItemDetailsWindowsOpen(harness), "Sanity check: the anchor and the comparison popup are open.");
+
+        DragDismissal(harness).OnDragStarted(new DragPayload(DragPayloadOrigin.InventoryCell, ItemStackInstanceId: otherStackId, OriginEntityId: PlayerEntityId));
+
+        Assert.IsFalse(harness.Coordinator.ItemComparison.IsComparing);
+        Assert.AreEqual(0, ItemDetailsWindowsOpen(harness));
+        Assert.IsNull(harness.MapViewState.CompareRequiredActivatorType);
+    }
+
+    [TestMethod]
+    public void StartingToDragAnItem_ClosesItemDetails()
+    {
+        var harness = Build();
+        OpenItemDetailsOnAPlayerPotion(harness, out var stackInstanceId);
+
+        DragDismissal(harness).OnDragStarted(new DragPayload(DragPayloadOrigin.InventoryCell, ItemStackInstanceId: stackInstanceId, OriginEntityId: PlayerEntityId));
+
+        Assert.IsFalse(harness.Coordinator.ItemDetails.IsOpen);
+    }
+
+    [TestMethod]
+    public void StartingToDragAMergedStack_ClosesItemDetails()
+    {
+        var harness = Build();
+        OpenItemDetailsOnAPlayerPotion(harness, out _);
+
+        DragDismissal(harness).OnDragStarted(new DragPayload(DragPayloadOrigin.InventoryCell, MergedItemDefinitionId: PotionItemId, OriginEntityId: PlayerEntityId));
+
+        Assert.IsFalse(harness.Coordinator.ItemDetails.IsOpen);
+    }
+
+    [TestMethod]
+    public void StartingToDragCurrencyOrAnAction_LeavesItemDetailsAndTheComparisonAlone()
+    {
+        var (harness, _, _) = BuildComparingTwoPotions();
+        var dismissal = DragDismissal(harness);
+
+        dismissal.OnDragStarted(new DragPayload(DragPayloadOrigin.Currency, CurrencyType: Game.Modules.Currency.CurrencyType.Gold, OriginEntityId: PlayerEntityId));
+        dismissal.OnDragStarted(new DragPayload(DragPayloadOrigin.HotbarSlot, ActionId: BuiltInActionIds.Heal));
+
+        Assert.IsTrue(harness.Coordinator.ItemComparison.IsComparing);
+        Assert.IsTrue(harness.Coordinator.ItemDetails.IsOpen);
+        Assert.IsFalse(harness.HoverDetails.IsPopupHeldBack);
+    }
+
+    [TestMethod]
+    public void WhileAnItemIsDragged_AHoverOpensNoItemDetails_UntilTheDragEnds()
+    {
+        var harness = Build();
+        var stackInstanceId = InventoryActions.AddItem(harness.ComponentManager, PlayerEntityId, PotionItemId, quantity: 1);
+        harness.Coordinator.Inventory.OpenInventoryWindow();
+        var payload = new DragPayload(DragPayloadOrigin.InventoryCell, ItemStackInstanceId: stackInstanceId, OriginEntityId: PlayerEntityId);
+        var target = new ItemHoverTarget(PlayerEntityId, stackInstanceId, harness.ItemCatalog.Get(PotionItemId));
+        var dismissal = DragDismissal(harness);
+
+        dismissal.OnDragStarted(payload);
+        harness.HoverDetails.Hover(this, target, ItemHoverDetails.DetailsDelayFrames, new NoShopPricing());
+        Assert.IsFalse(harness.Coordinator.ItemDetails.IsOpen);
+
+        dismissal.OnDragEnded(payload);
+        harness.HoverDetails.Hover(this, target, ItemHoverDetails.DetailsDelayFrames * 2, new NoShopPricing());
+        Assert.IsTrue(harness.Coordinator.ItemDetails.IsOpen);
+    }
 
     [TestMethod]
     public void ItemDetails_PointerOverItsOwnContent_StaysOpen()

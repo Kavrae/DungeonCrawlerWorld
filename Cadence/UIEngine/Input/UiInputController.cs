@@ -114,6 +114,9 @@ public sealed class UiInputController
     /// <summary>Frames since the current content-drag payload was captured (see TryStartContentDrag) -- reset there, incremented once per Update while a payload is held. Gates ContentDragGhostVisible below.</summary>
     private int _contentDragHeldFrames;
 
+    /// <summary>Whether the current content drag's OnDragStarted has been announced -- reset with the payload.</summary>
+    private bool _contentDragStartAnnounced;
+
     private static readonly int ContentDragGhostDelayFrames = GameTiming.FramesForSeconds(0.15f);
 
     /// <summary>The application's own raw-input rules, called in this order at fixed points of every Update -- see IUiInputHandler. An array, so the per-frame loops over it allocate no enumerator.</summary>
@@ -411,6 +414,7 @@ public sealed class UiInputController
 
         if (_contentDrag is { } contentDrag)
         {
+            AnnounceContentDragStartIfPastTapThreshold(contentDrag);
             _contentDragHeldFrames++;
 
             // Announced with the ghost, not on press: a plain press-then-release on a slot isn't a drag, and
@@ -758,8 +762,9 @@ public sealed class UiInputController
     {
         _contentDrag = null;
         _contentDragHeldFrames = 0;
+        _contentDragStartAnnounced = false;
 
-        var source = _activeInteraction.Element as IContentDragSource ?? (_activeInteraction.Element as Window)?.Content as IContentDragSource;
+        var source =_activeInteraction.Element as IContentDragSource ?? (_activeInteraction.Element as Window)?.Content as IContentDragSource;
         if (source is null || !source.TryBeginContentDrag(clickPosition, out var start))
         {
             return;
@@ -967,6 +972,7 @@ public sealed class UiInputController
                 return false;
             }
 
+            AnnounceContentDragStartIfPastTapThreshold(contentDrag);
             var dropTarget = FindDropTarget(DropElementAt(releasedElement, releasePosition), contentDrag.Payload, releasePosition);
             if (IsDropRefused(contentDrag.Payload, dropTarget, releasePosition))
             {
@@ -987,11 +993,27 @@ public sealed class UiInputController
         {
             _contentDrag = null;
             _contentDragHeldFrames = 0;
+            _contentDragStartAnnounced = false;
 
             foreach (var handler in _contentDropHandlers)
             {
                 handler.OnDragEnded(contentDrag.Payload);
             }
+        }
+    }
+
+    /// <summary>Tells the drop handlers, once per drag, that the press holding contentDrag has become a drag -- checked every update and again on release, so one that crosses the threshold and is released in the same update is still announced before it drops.</summary>
+    private void AnnounceContentDragStartIfPastTapThreshold(ContentDragStart contentDrag)
+    {
+        if (_contentDragStartAnnounced || !IsContentDragPastTapThreshold)
+        {
+            return;
+        }
+
+        _contentDragStartAnnounced = true;
+        foreach (var handler in _contentDropHandlers)
+        {
+            handler.OnDragStarted(contentDrag.Payload);
         }
     }
 

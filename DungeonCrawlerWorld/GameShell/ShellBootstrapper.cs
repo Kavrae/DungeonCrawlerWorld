@@ -123,6 +123,7 @@ public static class ShellBootstrapper
         var inventoryTransferDropHandler = new InventoryTransferDropHandler(mapViewState, views.ShopView, views.InventoryView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, world);
         IContentDropHandler[] contentDropHandlers =
         [
+            new ItemDragDetailsDismissal(itemWindows, shellServices.ItemHoverDetails),
             new HotbarBindingDropHandler(hotbarContent, world),
             inventoryTransferDropHandler,
             new MapDropHandler(views.MapView, views.ShopView, mapViewState, inventoryTransferDropHandler),

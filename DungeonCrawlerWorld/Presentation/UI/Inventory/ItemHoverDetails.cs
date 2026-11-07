@@ -43,7 +43,8 @@ public interface IItemDetailsPopup
 /// Every grid reports its hovered cell each update, with how long it has been hovered; the label is owner-checked, so
 /// one grid's routine end of hover never hides another's. The popup is wired after construction (ItemWindowCoordinator),
 /// since the grids are built before Item Details. A hover opens the popup once: closed while the cell is still hovered
-/// (Escape, Stop Comparison), it stays closed until the hover ends or starts over.
+/// (Escape, Stop Comparison), it stays closed until the hover ends or starts over. Updates hovered while the popup is held
+/// back don't count toward the delay, so a hover still on its cell when a drag ends waits the whole delay again.
 /// </remarks>
 public sealed class ItemHoverDetails(CursorLabelContent cursorLabel)
 {
@@ -52,11 +53,18 @@ public sealed class ItemHoverDetails(CursorLabelContent cursorLabel)
     /// <summary>The owner and cell whose current hover has already opened the popup.</summary>
     private (object Owner, ItemHoverTarget Target)? _openedHover;
 
+    /// <summary>The owner whose hover went on while the popup was held back, and its hovered frames at the last such update.</summary>
+    private (object Owner, int HoveredFrames)? _heldBackHover;
+
     public IItemDetailsPopup? Popup { get; set; }
+
+    /// <summary>True while an item is being dragged: a hover shows only the name, never the popup.</summary>
+    public bool IsPopupHeldBack { get; set; }
 
     /// <summary>owner's hovered cell this update, hovered for hoveredFrames updates so far (1 on the first).</summary>
     public void Hover(object owner, in ItemHoverTarget target, int hoveredFrames, IItemShopPricingSource shopPricing)
     {
+        hoveredFrames = FramesCountingTowardDetails(owner, hoveredFrames);
         if (hoveredFrames < DetailsDelayFrames)
         {
             ForgetOpenedHover(owner);
@@ -86,7 +94,30 @@ public sealed class ItemHoverDetails(CursorLabelContent cursorLabel)
     public void EndHover(object owner)
     {
         ForgetOpenedHover(owner);
+        if (_heldBackHover is { } heldBack && ReferenceEquals(heldBack.Owner, owner))
+        {
+            _heldBackHover = null;
+        }
+
         cursorLabel.Hide(owner);
+    }
+
+    /// <summary>hoveredFrames less the updates owner's hover spent with the popup held back -- 0 while it is held back.</summary>
+    private int FramesCountingTowardDetails(object owner, int hoveredFrames)
+    {
+        if (IsPopupHeldBack)
+        {
+            _heldBackHover = (owner, hoveredFrames);
+            return 0;
+        }
+
+        if (_heldBackHover is { } heldBack && ReferenceEquals(heldBack.Owner, owner) && hoveredFrames >= heldBack.HoveredFrames)
+        {
+            return hoveredFrames - heldBack.HoveredFrames;
+        }
+
+        _heldBackHover = null;
+        return hoveredFrames;
     }
 
     private bool HasOpened(object owner, in ItemHoverTarget target) =>

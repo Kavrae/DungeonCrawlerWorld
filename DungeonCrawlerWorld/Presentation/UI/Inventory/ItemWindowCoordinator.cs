@@ -27,6 +27,8 @@ namespace Presentation.UI.Inventory;
 ///   on the stack it landed in while that still exists, otherwise read-only from its definition.
 /// - A destroyed entity's id is reused straight away, so every window open for it closes (see ReleaseEntity).
 /// - Every item window joins one ElementGroup while open; a press on any of them leaves Item Details open.
+/// - Dragging an item closes Item Details and the comparison popup and ends compare mode as the drag starts, and no
+///   hover opens Item Details until it ends (ItemDragDetailsDismissal).
 /// </remarks>
 public sealed class ItemWindowCoordinator
 {
@@ -138,6 +140,14 @@ public sealed class ItemWindowCoordinator
     {
         _secondaryInventory.CloseIfOpen();
         _shop.OpenShop(entityId);
+    }
+
+    /// <summary>An item drag has started: ends compare mode and closes Item Details and the comparison popup.</summary>
+    public void CloseItemDetailsForDrag()
+    {
+        ItemComparison.ClearComparison();
+        _comparisonPopup.Close();
+        ItemDetails.Close();
     }
 
     /// <summary>Lets go of entityId before its id is reused: closes whichever item window is open for it.</summary>

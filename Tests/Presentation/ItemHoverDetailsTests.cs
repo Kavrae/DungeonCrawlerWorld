@@ -96,6 +96,47 @@ public sealed class ItemHoverDetailsTests
     }
 
     [TestMethod]
+    public void WhileHeldBack_OnlyNamesTheItem()
+    {
+        var (hover, label, popup) = Build();
+        hover.IsPopupHeldBack = true;
+
+        hover.Hover(this, Potion, ItemHoverDetails.DetailsDelayFrames * 2, new NoShopPricing());
+
+        Assert.IsNull(popup.Shown);
+        Assert.AreEqual("Test Potion", label.ShownText);
+    }
+
+    [TestMethod]
+    public void AHoverThatOutlastsTheHoldingBack_WaitsTheWholeDelayAfterIt()
+    {
+        var (hover, _, popup) = Build();
+        hover.IsPopupHeldBack = true;
+        hover.Hover(this, Potion, ItemHoverDetails.DetailsDelayFrames * 2, new NoShopPricing());
+        hover.IsPopupHeldBack = false;
+
+        hover.Hover(this, Potion, ItemHoverDetails.DetailsDelayFrames * 3 - 1, new NoShopPricing());
+        Assert.IsNull(popup.Shown, "Released with the pointer already past the delay on the cell.");
+
+        hover.Hover(this, Potion, ItemHoverDetails.DetailsDelayFrames * 3, new NoShopPricing());
+        Assert.AreEqual(Potion, popup.Shown);
+    }
+
+    [TestMethod]
+    public void AHoverThatStartsOverAfterTheHoldingBack_CountsFromItsOwnStart()
+    {
+        var (hover, _, popup) = Build();
+        hover.IsPopupHeldBack = true;
+        hover.Hover(this, Potion, ItemHoverDetails.DetailsDelayFrames * 2, new NoShopPricing());
+        hover.IsPopupHeldBack = false;
+        hover.EndHover(this);
+
+        hover.Hover(this, Potion, ItemHoverDetails.DetailsDelayFrames, new NoShopPricing());
+
+        Assert.AreEqual(Potion, popup.Shown);
+    }
+
+    [TestMethod]
     public void AnotherOwnersEndOfHover_LeavesTheNameShown()
     {
         var (hover, label, _) = Build();

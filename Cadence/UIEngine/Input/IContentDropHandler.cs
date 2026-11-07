@@ -14,6 +14,9 @@ public interface IContentDropHandler
     /// <summary>False refuses the drag before it starts: nothing is picked up and the press is an ordinary click.</summary>
     bool AllowsDragStart(object payload) => true;
 
+    /// <summary>The press holding payload has moved past the tap threshold: it is a drag, not a click. Announced once per drag, before any drop.</summary>
+    void OnDragStarted(object payload) { }
+
     /// <summary>The drag has been held long enough to show its ghost -- a drop target may start inviting a drop.</summary>
     void OnDragGhostShown(object payload) { }
 

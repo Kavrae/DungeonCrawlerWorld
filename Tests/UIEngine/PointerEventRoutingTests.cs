@@ -142,6 +142,77 @@ public sealed class PointerEventRoutingTests
         Assert.AreEqual(0, parentTaps);
     }
 
+    private sealed class LifecycleRecordingDropHandler : IContentDropHandler
+    {
+        public List<string> Calls { get; } = [];
+
+        public void OnDragStarted(object payload) => Calls.Add("started");
+
+        public void OnDragEnded(object payload) => Calls.Add("ended");
+
+        public bool TryDrop(object payload, object? dropTarget, Point position)
+        {
+            Calls.Add("dropped");
+            return true;
+        }
+    }
+
+    private static (DragSourceWindow Source, LifecycleRecordingDropHandler Handler, UiInputController Controller) DragSourceWithLifecycleHandler()
+    {
+        var pool = TestElementPoolServiceFactory.Create(TestFonts.Shared);
+        pool.RegisterFactory<DragSourceWindow>(() => new DragSourceWindow(pool));
+        var source = pool.CreateElement<DragSourceWindow>(null, new ElementOptions
+        {
+            Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 0), Size = new Vector2(50, 50), DisplayMode = ElementDisplayMode.Fixed },
+        });
+        source.Initialize();
+        var handler = new LifecycleRecordingDropHandler();
+        return (source, handler, Controller([handler], source));
+    }
+
+    [TestMethod]
+    public void ADrag_IsAnnouncedAsStartedOnce_AsItPassesTheTapThreshold_BeforeItDrops()
+    {
+        var (source, handler, controller) = DragSourceWithLifecycleHandler();
+        var start = source.Rectangle.Center;
+        var away = new Point(start.X + 200, start.Y + 200);
+
+        controller.Update(NoKeys, Mouse(start));
+        controller.Update(NoKeys, Mouse(start, ButtonState.Pressed));
+        Assert.IsEmpty(handler.Calls, "A press alone is not yet a drag.");
+
+        controller.Update(NoKeys, Mouse(away, ButtonState.Pressed));
+        CollectionAssert.AreEqual(new[] { "started" }, handler.Calls);
+
+        controller.Update(NoKeys, Mouse(new Point(away.X + 10, away.Y), ButtonState.Pressed));
+        controller.Update(NoKeys, Mouse(away));
+
+        CollectionAssert.AreEqual(new[] { "started", "dropped", "ended" }, handler.Calls);
+    }
+
+    [TestMethod]
+    public void ADragReleasedTheUpdateItPassesTheTapThreshold_IsStillAnnouncedBeforeItDrops()
+    {
+        var (source, handler, controller) = DragSourceWithLifecycleHandler();
+        var start = source.Rectangle.Center;
+
+        controller.Update(NoKeys, Mouse(start));
+        controller.Update(NoKeys, Mouse(start, ButtonState.Pressed));
+        controller.Update(NoKeys, Mouse(new Point(start.X + 200, start.Y + 200)));
+
+        CollectionAssert.AreEqual(new[] { "started", "dropped", "ended" }, handler.Calls);
+    }
+
+    [TestMethod]
+    public void AClickOnADragSource_IsNeverAnnouncedAsAStartedDrag()
+    {
+        var (source, handler, controller) = DragSourceWithLifecycleHandler();
+
+        Click(controller, source.Rectangle.Center);
+
+        Assert.DoesNotContain("started", handler.Calls);
+    }
+
     [TestMethod]
     public void ADrop_LandsOnTheNearestDropTargetAboveWhatIsUnderThePointer()
     {
