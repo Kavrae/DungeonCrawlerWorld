@@ -31,7 +31,7 @@ public sealed class AuraGlowBlendTests
         auras.Register(new AuraDefinition(new Guid("00000000-0000-0000-0000-0000000000b3"), "Red", Color.Red));
         auras.Register(new AuraDefinition(new Guid("00000000-0000-0000-0000-0000000000b4"), "Green", Color.Green));
         var field = new AuraField(world ?? TestWorlds.Create(new Map(MapSize)), terrain ?? new TerrainRegistry(), auras, new EventBus());
-        return (field, auras, new AuraGlowBlend(new AuraPowerView(field, auras)));
+        return (field, auras, new AuraGlowBlend(new AuraView(field, auras)));
     }
 
     [TestMethod]

@@ -265,7 +265,7 @@ Make an aura read clearly as an area with an effect, and split plain light off f
 - **Where the edge comes from.** The glow texture is one texel per tile, already blended across auras (`AuraGlowBlend`),
   so an edge taken from its coverage marks where glow starts and stops, not where one aura meets another. Decide whether
   that is enough, or whether it needs per-aura coverage (a coverage bit per aura in the field, or a second per-tile texture
-  for edges) -- and keep `AuraPowerView` as the only thing Presentation reads.
+  for edges) -- and keep `AuraView` as the only thing Presentation reads.
 - **Cost.** Every lit floor pixel pays for this, so measure GPU frame time windowed at a busy zoom before and after (the
   headless benchmark draws nothing); read the neighbouring texels once, not per effect, and the light effect only where a
   light reaches. Pairs with "Sprite effect: overlap the glow's two texture reads" (Medium), which changes the same reads.
@@ -782,18 +782,6 @@ The IDE's Error List shows severity, description, table, record, field and layer
 ## Game
 
 ### High Priority
-
-#### Inspection names the auras reaching a tile
-
-Inspecting a tile shows what stands on it and its floor, but not the auras that reach it. Add each aura reaching the tile
-to the inspection (`InspectionWindowContent`), with its name and a description, so a player can inspect a glowing orange
-tile and learn that it is heated by lava, which burns and damages whoever walks into it.
-- `AuraDefinition` has no description yet: add one (content, through its codec, defaults omitted), written for the
-  player -- what being in it does to you.
-- Read through `GameViews.AuraPower` (`AuraPowerView`: the auras covering a cell and each one's power there), never the
-  field directly; show the strongest first, and optionally its power at the tile.
-- Name where it comes from where that helps (the terrain, a shrine, a placed aura), from the same attribution the
-  aura's credit uses (`AuraField.PowerReaching`'s credit).
 
 #### Resolve highest performance costs
 
@@ -4265,7 +4253,7 @@ through a palette texture, one palette row per variant, selected per sprite.
 #### Aura glows pulse outward from the source
 
 An aura's glow is a static tint today: `AuraGlowBlend` gives `MapRenderer` one colour per cell
-(the aura colours there, weighted by strength, from `GameViews.AuraPower`). Animate it instead as a
+(the aura colours there, weighted by strength, from `GameViews.AuraView`). Animate it instead as a
 pulse that travels outward from the source, drawn as a gradient within each tile rather than one flat
 colour per tile, so the wave reads as continuous across tile edges.
 
@@ -4274,7 +4262,7 @@ colour per tile, so the wave reads as continuous across tile edges.
 - Each aura has its own pulse interval, so several auras on one entity pulse out of step with each
   other. The interval belongs on the `AuraDefinition` beside the glow colour, never on the source.
 - That needs the glow per aura at a cell, not the single blended colour `AuraGlowBlend` returns today --
-  each aura's contribution has to be drawn (or blended) at its own phase. `AuraPowerView` already reports
+  each aura's contribution has to be drawn (or blended) at its own phase. `AuraView` already reports
   power per aura per cell, so this is a Presentation change only.
 - Purely visual: it is driven by render time and changes nothing about when an exposure ticks.
 
@@ -4345,7 +4333,7 @@ in one place. Today `Game.csproj` and `Presentation.csproj` both reference the `
   - appearances (`AppearanceFacet`, `AppearanceBuilder`, `EntityAppearance`, `GlyphComponent`) and the
     blueprints that set them;
   - the content codec (`ContentColors`, which packs to a `uint`);
-  - the views that hand colours out (`AuraPowerView`, `MapViews`).
+  - the views that hand colours out (`AuraView`, `MapViews`).
 
   The game's `MathHelper.Clamp` calls already go through `Engine.Math.MathUtility.Clamp`.
 - **The wrapper:** an engine-owned colour value in Engine (no FNA), packed RGBA like XNA's so a definition stays

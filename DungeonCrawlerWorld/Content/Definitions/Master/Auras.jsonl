@@ -1,10 +1,10 @@
 {"fmt":1,"table":"Auras"}
-{"id":"xKH22S6LOk-cHQAAAAADBg","n":"Toxic Aura","gc":4278215680,"fx":[{"e":[{"$":"StatusEffectGrant","ty":"Poison","md":"TopUpTo"}]}]}
-{"id":"xKH22S6LOk-cHQAAAAADCQ","n":"Lantern","gc":4292016890}
-{"id":"xKH22S6LOk-cHQAAAAADAg","n":"Poison","gc":4278215680,"fx":[{"e":[{"$":"StatusEffectGrant","ty":"Poison","md":"TopUpTo"}]}]}
-{"id":"xKH22S6LOk-cHQAAAAADAw","n":"Light"}
-{"id":"xKH22S6LOk-cHQAAAAADAQ","n":"Lava","gc":4278226175,"fx":[{"e":[{"$":"StatusEffectGrant","md":"TopUpTo","bp":{"k":"Random"}}]}],"go":0.75}
-{"id":"xKH22S6LOk-cHQAAAAADBQ","n":"Holy Ground","fx":[{"e":[{"$":"DirectHeal","fl":1,"bm":"LowestPercentage"}]}]}
-{"id":"xKH22S6LOk-cHQAAAAADBA","n":"Healing","fx":[{"e":[{"$":"DirectHeal","fl":1,"bm":"LowestPercentage"}]}]}
-{"id":"xKH22S6LOk-cHQAAAAADBw","n":"Radiant Steady","gc":4278245375,"fo":"None"}
-{"id":"xKH22S6LOk-cHQAAAAADCA","n":"Radiant Fading","gc":4294967040}
+{"id":"xKH22S6LOk-cHQAAAAADBg","n":"Toxic Aura","d":"A cloud of toxins. Every second you stand in it poisons you, keeping your poison topped up while you stay.","gc":4278215680,"fx":[{"e":[{"$":"StatusEffectGrant","ty":"Poison","md":"TopUpTo"}]}]}
+{"id":"xKH22S6LOk-cHQAAAAADCQ","n":"Lantern","d":"Light cast by a lantern. It does nothing to whoever stands in it.","gc":4292016890}
+{"id":"xKH22S6LOk-cHQAAAAADAg","n":"Poison","d":"Toxic fumes. Every second you stand in them poisons you, keeping your poison topped up while you stay; the nearer their source, the stronger the poison.","gc":4278215680,"fx":[{"e":[{"$":"StatusEffectGrant","ty":"Poison","md":"TopUpTo"}]}]}
+{"id":"xKH22S6LOk-cHQAAAAADAw","n":"Light","d":"Light cast by a torch. It does nothing to whoever stands in it."}
+{"id":"xKH22S6LOk-cHQAAAAADAQ","n":"Lava","d":"Heat rising from lava. Every second you stand in it sets one of your body parts burning; the nearer the lava, the hotter it burns.","gc":4278226175,"fx":[{"e":[{"$":"StatusEffectGrant","md":"TopUpTo","bp":{"k":"Random"}}]}],"go":0.75}
+{"id":"xKH22S6LOk-cHQAAAAADBQ","n":"Holy Ground","d":"The blessing of holy ground. Every second you stand in it heals your most wounded body part; the nearer its heart, the more it heals.","fx":[{"e":[{"$":"DirectHeal","fl":1,"bm":"LowestPercentage"}]}]}
+{"id":"xKH22S6LOk-cHQAAAAADBA","n":"Healing","d":"The warmth of a healing shrine. Every second you stand in it heals your most wounded body part; the nearer the shrine, the more it heals.","fx":[{"e":[{"$":"DirectHeal","fl":1,"bm":"LowestPercentage"}]}]}
+{"id":"xKH22S6LOk-cHQAAAAADBw","n":"Radiant Steady","d":"Radiant light, as bright at its edge as at its heart. It does nothing to whoever stands in it.","gc":4278245375,"fo":"None"}
+{"id":"xKH22S6LOk-cHQAAAAADCA","n":"Radiant Fading","d":"Radiant light that fades with distance. It does nothing to whoever stands in it.","gc":4294967040}

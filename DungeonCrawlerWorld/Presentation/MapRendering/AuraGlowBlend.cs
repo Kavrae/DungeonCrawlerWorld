@@ -6,10 +6,10 @@ namespace Presentation.MapRendering;
 /// <summary>The glow auras cast on a map cell: the colours of the auras reaching it, blended by each one's power there, and how opaque their glow is.</summary>
 /// <remarks>
 /// BeginPass reads the auras in the field, their colours and their glow opacity multipliers once, so a pass over many cells reads each
-/// aura's definition once rather than once per cell. A pass starts whenever AuraPowerView.Version changes, so an aura
+/// aura's definition once rather than once per cell. A pass starts whenever AuraView.Version changes, so an aura
 /// whose first source has just gone in is in the next one.
 /// </remarks>
-public sealed class AuraGlowBlend(AuraPowerView auraPower)
+public sealed class AuraGlowBlend(AuraView auraView)
 {
     private readonly List<(byte AuraId, Color GlowColor, float GlowOpacityMultiplier)> _aurasInPass = [];
 
@@ -18,9 +18,9 @@ public sealed class AuraGlowBlend(AuraPowerView auraPower)
     {
         _aurasInPass.Clear();
 
-        foreach (var auraId in auraPower.AuraIdsInField)
+        foreach (var auraId in auraView.AuraIdsInField)
         {
-            _aurasInPass.Add((auraId, auraPower.GlowColorOf(auraId), Math.Clamp(auraPower.GlowOpacityMultiplierOf(auraId), 0f, 1f)));
+            _aurasInPass.Add((auraId, auraView.GlowColorOf(auraId), Math.Clamp(auraView.GlowOpacityMultiplierOf(auraId), 0f, 1f)));
         }
     }
 
@@ -32,7 +32,7 @@ public sealed class AuraGlowBlend(AuraPowerView auraPower)
         totalPower = 0;
         glowOpacityMultiplier = 0f;
 
-        if (!auraPower.AnyAuraReaches(x, y, mapLayer))
+        if (!auraView.AnyAuraReaches(x, y, mapLayer))
         {
             return false;
         }
@@ -44,7 +44,7 @@ public sealed class AuraGlowBlend(AuraPowerView auraPower)
 
         foreach (var (auraId, auraGlowColor, auraGlowOpacityMultiplier) in _aurasInPass)
         {
-            var power = auraPower.PowerAt(x, y, mapLayer, auraId);
+            var power = auraView.PowerAt(x, y, mapLayer, auraId);
             if (power <= 0)
             {
                 continue;

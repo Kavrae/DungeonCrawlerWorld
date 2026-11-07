@@ -3,7 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Presentation.MapRendering;
 
 /// <summary>MapGlowTexels as the texture the sprite effect reads, rebuilt when the grid or the auras change since it was last built.</summary>
-/// <remarks>Stale when the grid differs from what it was built for (MapImageKey), when AuraPowerView.Version has moved, or when told (Invalidate) -- see MapBuildStamp.</remarks>
+/// <remarks>Stale when the grid differs from what it was built for (MapImageKey), when AuraView.Version has moved, or when told (Invalidate) -- see MapBuildStamp.</remarks>
 public sealed class MapGlowTexture(MapGlowTexels texels) : IDisposable
 {
     private readonly MapBuildStamp _built = new();

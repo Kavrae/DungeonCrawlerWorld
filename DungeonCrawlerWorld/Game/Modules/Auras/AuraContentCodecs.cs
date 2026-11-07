@@ -26,6 +26,7 @@ internal static class AuraContentCodecs
         [
             ContentField.Guid(ContentTable.IdKey, "Id", isRequired: true),
             ContentField.Text("n", "Name", isRequired: true),
+            ContentField.Text("d", "Description"),
             ContentField.Color("gc", "Glow colour"),
             ContentField.ListOf<Effect>("fx", "Effects each tick", ContentFieldKind.Object),
             ContentField.TagSet("t", "Tags"),
@@ -38,6 +39,7 @@ internal static class AuraContentCodecs
         {
             writer.Guid(ContentTable.IdKey, value.Id);
             writer.String("n", value.Name);
+            writer.String("d", value.Description);
             writer.Color("gc", value.GlowColor);
             writer.List("fx", value.Effects);
             writer.Tags("t", value.Tags);
@@ -54,7 +56,8 @@ internal static class AuraContentCodecs
             element.Tags("t"),
             element.Enum("mg", AuraMagnitude.Power),
             element.Enum("fo", AuraFalloff.Linear),
-            element.Number("go", 0.5f));
+            element.Number("go", 0.5f),
+            element.String("d"));
     }
 
     /// <summary>The aura is its Guid in the Auras table, resolved when the record is read -- the table is loaded before anything that grants one.</summary>

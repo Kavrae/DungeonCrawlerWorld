@@ -2048,6 +2048,12 @@ types, so a future Magic Menu gets them free. Frame counts always shown as secon
 cooldown, always appends the old raw `ComponentInspector` dump as an Admin section. Skill-gated content
 depth still open (blocked on Skills).
 
+Basic mode ends with one block per aura reaching the tile (2026-11-07), strongest first: "Aura: name", its
+strength there, "From:" the aura's credit (`AuraView.CopyAurasAt`, the same `AuraField.PowerReaching` credit
+kill credit uses, with no entity left out; omitted when the credit is the aura itself), then the definition's
+`Description` (content key `d`, written for the player). The list is re-read only when the tile or
+`AuraView.Version` changes, and the window rebuilds only when it differs.
+
 ### HealthWindow
 
 Red-heart `Button` (`HealthWindowController`) opens
@@ -2277,7 +2283,7 @@ so creatures kept their looks when it moved out of Game.
 **Where the map is drawn** (`PLAN-map-renderer-out-of-map-window.md`, `Presentation.MapRendering`).
 - `MapRenderer` draws the world through a `MapCamera`: the flat fill, the cached terrain image, the row walk
   (with health bars, loot and charging badges and the dodge glow, drawn in the entity's turn so a later row
-  covers them), the cached glow. It reads only `IMapViewQuery`, `AuraPowerView`, the camera and the manifest --
+  covers them), the cached glow. It reads only `IMapViewQuery`, `AuraView`, the camera and the manifest --
   not the World, the store or the bus (`MapWindowArchitectureTests`) -- so the map tab can hand it an authored
   layout. Which entities overhangs fade over is its host's input.
 - `MapGameOverlay` draws the player's intent over it (targeting, windup fills and telegraphs, Dodge's hints,
@@ -2287,7 +2293,7 @@ so creatures kept their looks when it moved out of Game.
   frame), so no camera move has to invalidate anything; the call-site invalidation it replaced had to be repeated
   at every way of moving the camera. Terrain and aura changes are told: `InvalidateTerrain`/`InvalidateTerrainIn`
   (MapWindow forwards the four terrain events, and drops both images when the map's bounds change) and
-  `AuraPowerView.Version`.
+  `AuraView.Version`.
 - `MapCamera` reads `IMapViewQuery` (bounds, on-map), refreshes its own scroll limits, and owns tile rectangles;
   following the player is MapWindow's.
 - Known, not fixed: map fonts are fixed sizes tuned for 36 px tiles, so at Borough zoom (9 px) a glyph overflows
@@ -2833,7 +2839,7 @@ Decisions:
 1. **Glow colour belongs to the aura, not the source.** It is what lets the glow be read from the
    gameplay grid: a cell's tint is the auras' colours weighted by their strength there. One source may
    carry several auras, each with its own reach and colour. Since 2026-10-13 (epic child 2) the blend is
-   Presentation's: Game reports power per aura per cell through `AuraPowerView` (`GameViews.AuraPower`),
+   Presentation's: Game reports power per aura per cell through `AuraView` (`GameViews.AuraView`),
    with each aura's colour as content, and `AuraGlowBlend` mixes them; `AuraField.TryGetGlow` is gone.
    `AuraGlowBlend.BeginPass` reads each aura's colour once per render of the glow cache, so a replaced
    definition shows on the next render, which the field's `Version` moving starts.
@@ -3197,7 +3203,7 @@ own, in one pass; nothing in the UI uses `SpriteBatch`, and nothing ends the pas
   partial or darkened; the looted loot bag badge desaturates the same way.
 - **The glow is light, not an overlay.** `MapGlowTexels` builds one texel per tile (premultiplied, transparent where no aura
   reaches or off the map) over the grid plus a 3-tile margin (the walk's overscan of 2, plus 1 for filtering), into a texture
-  `MapRenderer` rebuilds when the grid or `AuraPowerView.Version` changes. `SpriteEffectGlow` maps draw space to texels so a
+  `MapRenderer` rebuilds when the grid or `AuraView.Version` changes. `SpriteEffectGlow` maps draw space to texels so a
   tile's centre is its texel's centre; the effect reads it with linear filtering (its own `sampler_state`), so light shades
   smoothly, and lights nothing where the read point's own tile is unlit, so the gradient stops in a hard line at an aura's
   last tile, on purpose. Floors and wall faces (the ground image as blitted, the fill, and live face overhangs, so a face

@@ -18,7 +18,7 @@ namespace Presentation.MapRendering;
 /// <summary>Draws the map as the world looks through a camera: the flat fill, terrain and walls, and everything standing on them, lit by the auras' glow.</summary>
 /// <remarks>
 /// <para>
-/// Reads the world only through IMapViewQuery and AuraPowerView, so the game feeds it a live session and a map editor an
+/// Reads the world only through IMapViewQuery and AuraView, so the game feeds it a live session and a map editor an
 /// authored layout. Reads nothing about what the player is doing: its host draws targeting over it, and hands it the selection
 /// as ground marks (MapGroundMark), which belong under what stands on them.
 /// </para>
@@ -27,7 +27,7 @@ namespace Presentation.MapRendering;
 /// stale; Draw rebuilds the glow texture when it is stale and blits the images under the row walk. Each is stale when the
 /// camera shows something other than what it was built for (MapImageKey), so no camera move has to announce itself. What
 /// the key can't see is told: terrain changes through InvalidateTerrain/InvalidateTerrainIn, and aura changes through
-/// AuraPowerView.Version, read here.
+/// AuraView.Version, read here.
 /// </para>
 /// <para>
 /// Draw order is significant, not incidental -- each pass lands on top of the previous one with no depth buffer
@@ -75,7 +75,7 @@ public sealed class MapRenderer : IDisposable
     private static readonly Color OffMapColor = Color.Black;
 
     private readonly IMapViewQuery _mapView;
-    private readonly AuraPowerView _auraPower;
+    private readonly AuraView _auraView;
     private readonly MapCamera _camera;
     private readonly UiRenderService _renderService;
     private readonly SpriteSheetService _spriteSheetService;
@@ -127,18 +127,18 @@ public sealed class MapRenderer : IDisposable
 
     public MapRenderer(
         IMapViewQuery mapView,
-        AuraPowerView auraPower,
+        AuraView auraView,
         MapCamera camera,
         UiRenderService renderService,
         FontService fontService,
         SpriteSheetService spriteSheetService)
     {
         _mapView = mapView;
-        _auraPower = auraPower;
+        _auraView = auraView;
         _camera = camera;
         _renderService = renderService;
         _spriteSheetService = spriteSheetService;
-        _glowTexture = new MapGlowTexture(new MapGlowTexels(mapView, new AuraGlowBlend(auraPower)));
+        _glowTexture = new MapGlowTexture(new MapGlowTexels(mapView, new AuraGlowBlend(auraView)));
         _terrainCells = new MapTerrainCells(mapView, spriteSheetService.Sprites);
 
         _mediumFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont(GameFontChrome.MapMediumFontSize));
@@ -229,7 +229,7 @@ public sealed class MapRenderer : IDisposable
     public void Draw(int mapLayer, IReadOnlyList<int> watchedEntityIds, IReadOnlyList<MapGroundMark> groundMarks)
     {
         var key = MapImageKey.Of(_camera, mapLayer);
-        var glowTexture = _glowTexture.Ensure(_renderService.GraphicsDevice, key, _auraPower.Version);
+        var glowTexture = _glowTexture.Ensure(_renderService.GraphicsDevice, key, _auraView.Version);
         var batch = _renderService.Batch;
         batch.Glow = SpriteEffectGlow.OverTileGrid(glowTexture, key.TileSize, _camera.TileOrigin(0, 0), MapGlowTexels.MarginTiles);
         try

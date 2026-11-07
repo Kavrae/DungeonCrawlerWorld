@@ -84,7 +84,7 @@ public sealed class AreaMapView(ElementServices services, SpriteSheetService spr
         var views = scene.Session.Views;
         _camera = new MapCamera(views.MapView);
         _camera.Initialize(ContentSize);
-        _renderer = new MapRenderer(views.MapView, views.AuraPower, _camera, Render, FontService, spriteSheetService);
+        _renderer = new MapRenderer(views.MapView, views.AuraView, _camera, Render, FontService, spriteSheetService);
 
         if (scene.Area is { } instance)
         {

@@ -27,8 +27,9 @@ namespace Presentation.UI.Content;
 /// InspectionWindow's content, driven entirely by MapViewState.InspectionMode:
 /// <list type="bullet">
 /// <item>Basic -- one padded block per subject on the currently selected map tile
-/// (SelectedMapNodePosition/CurrentMapLayer), structure then terrain last. Rebuilt wholesale whenever the
-/// tile's own subject-id set actually changes (tile clicked elsewhere, or an entity walked
+/// (SelectedMapNodePosition/CurrentMapLayer), then the structure, the terrain and every aura reaching the tile, strongest
+/// first (AuraView.CopyAurasAt). Rebuilt wholesale whenever the
+/// tile's own subject-id set or the auras reaching it actually change (tile clicked elsewhere, or an entity walked
 /// on/off the still-selected tile) -- cheap, since one tile's occupant count is always small,
 /// unlike SelectionWindowContent's incremental add/remove diffing (built for a very different
 /// perf profile -- see its own doc comment, now retired in favor of this and Detail below).</item>
@@ -65,7 +66,9 @@ public sealed class InspectionWindowContent(
     ElementPoolService elementPoolService,
     BlueprintRegistry creatures,
     SpawnRecordRebuilder spawnRecordRebuilder,
-    CreatureSkeletons skeletons) : IElementContent
+    CreatureSkeletons skeletons,
+    AuraView auraView,
+    ActionSourceNaming actionSourceNaming) : IElementContent
 {
     private const string UnsimulatedLabel = "Unsimulated -- spawn defaults";
 
@@ -92,6 +95,11 @@ public sealed class InspectionWindowContent(
     private readonly List<int> _scratchSubjectIds = [];
     private TerrainView? _lastStructure;
     private TerrainView? _lastTerrain;
+    private readonly List<AuraAtCell> _scratchAuras = [];
+    private readonly List<AuraAtCell> _lastAuras = [];
+    private Point? _scratchAurasPosition;
+    private int _scratchAurasMapLayer = -1;
+    private int _scratchAurasVersion;
     private readonly List<TextWindow> _adminDumpWindows = [];
     private readonly List<InspectedComponentEntry> _reusableInspectionList = [];
 
@@ -150,8 +158,10 @@ public sealed class InspectionWindowContent(
         TerrainView? structure = mapView.TryGetStructure(selected.X, selected.Y, currentMapLayer, out var foundStructure) ? foundStructure : null;
         TerrainView? terrain = mapView.TryGetTerrain(selected.X, selected.Y, currentMapLayer, out var foundTerrain) ? foundTerrain : null;
 
+        CopyAurasAt(selected, currentMapLayer);
+
         var skeletonCount = _scratchSubjectIds.Count(IsSkeleton);
-        if (_hasContent && selected == _lastBasicPosition && currentMapLayer == _lastBasicMapLayer && _scratchSubjectIds.SequenceEqual(_lastSubjectIds) && skeletonCount == _lastSkeletonCount && structure == _lastStructure && terrain == _lastTerrain)
+        if (_hasContent && selected == _lastBasicPosition && currentMapLayer == _lastBasicMapLayer && _scratchSubjectIds.SequenceEqual(_lastSubjectIds) && skeletonCount == _lastSkeletonCount && structure == _lastStructure && terrain == _lastTerrain && _scratchAuras.SequenceEqual(_lastAuras))
         {
             return;
         }
@@ -163,13 +173,15 @@ public sealed class InspectionWindowContent(
         _lastSubjectIds.AddRange(_scratchSubjectIds);
         _lastStructure = structure;
         _lastTerrain = terrain;
+        _lastAuras.Clear();
+        _lastAuras.AddRange(_scratchAuras);
         _lastDetailEntityId = -1; // Invalidates Detail's own cache so it rebuilds fresh if Detail mode resumes later.
 
         _hostWindow.TitleText = $"Tile ({selected.X}, {selected.Y})";
 
         elementPoolService.CloseAllChildren(_hostWindow);
         _adminDumpWindows.Clear();
-        _hasContent = _scratchSubjectIds.Count > 0 || structure is not null || terrain is not null;
+        _hasContent = _scratchSubjectIds.Count > 0 || structure is not null || terrain is not null || _scratchAuras.Count > 0;
 
         var blockWidth = _hostWindow.ContentSize.X;
         foreach (var entityId in _scratchSubjectIds)
@@ -186,6 +198,26 @@ public sealed class InspectionWindowContent(
         {
             BuildTerrainBlock(terrainView, blockWidth);
         }
+
+        foreach (var aura in _scratchAuras)
+        {
+            BuildAuraBlock(aura, blockWidth);
+        }
+    }
+
+    /// <summary>Fills _scratchAuras with the auras reaching the tile, read again only when the tile or the aura field has changed since it was last read.</summary>
+    private void CopyAurasAt(Point selected, int mapLayer)
+    {
+        var version = auraView.Version;
+        if (selected == _scratchAurasPosition && mapLayer == _scratchAurasMapLayer && version == _scratchAurasVersion)
+        {
+            return;
+        }
+
+        _scratchAurasPosition = selected;
+        _scratchAurasMapLayer = mapLayer;
+        _scratchAurasVersion = version;
+        auraView.CopyAurasAt(selected.X, selected.Y, mapLayer, _scratchAuras);
     }
 
     private void UpdateDetail()
@@ -207,6 +239,7 @@ public sealed class InspectionWindowContent(
             _lastSubjectIds.Clear();
             _lastStructure = null;
             _lastTerrain = null;
+            _lastAuras.Clear();
             _updatesSinceLastAdminRefresh = 0;
 
             var subject = ReadSubject(entityId);
@@ -243,6 +276,7 @@ public sealed class InspectionWindowContent(
         _lastSubjectIds.Clear();
         _lastStructure = null;
         _lastTerrain = null;
+        _lastAuras.Clear();
         _lastDetailEntityId = -1;
         _adminDumpWindows.Clear();
         elementPoolService.CloseAllChildren(_hostWindow);
@@ -329,6 +363,25 @@ public sealed class InspectionWindowContent(
 
         AddTextRow(header, IconSize + RowTextGap, 0, HeaderTextWidth(blockWidth), terrain.Name);
         AddDescriptionRow(terrain.Description, blockWidth);
+        BuildSpacer(blockWidth);
+    }
+
+    /// <summary>An aura reaching the tile, after the floor: its name, its strength there and -- unless no one contributor can be named -- where it comes from, then its description.</summary>
+    private void BuildAuraBlock(AuraAtCell aura, float blockWidth)
+    {
+        var namesItsSource = aura.Credit.Kind != ActionSourceKind.Aura;
+        var header = CreateHeaderWindow(blockWidth, rowCount: namesItsSource ? 3 : 2);
+        var textWidth = System.Math.Max(0f, blockWidth - WindowChrome.Padding * 2);
+        var rowIndex = 0;
+
+        AddTextRow(header, 0, rowIndex++, textWidth, $"Aura: {auraView.NameOf(aura.AuraId)}");
+        AddTextRow(header, 0, rowIndex++, textWidth, $"Strength: {aura.Power}");
+        if (namesItsSource)
+        {
+            AddTextRow(header, 0, rowIndex, textWidth, $"From: {actionSourceNaming.Describe(aura.Credit)}");
+        }
+
+        AddDescriptionRow(auraView.DescriptionOf(aura.AuraId), blockWidth);
         BuildSpacer(blockWidth);
     }
 

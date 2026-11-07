@@ -23,7 +23,7 @@ public sealed class MapGlowTexelsTests
         auras.Register(OrangeAura with { GlowOpacityMultiplier = glowOpacityMultiplier });
         var world = TestWorlds.Create(new Map(new Vector3Int(100, 100, 1)));
         var field = new AuraField(world, new TerrainRegistry(), auras, new EventBus());
-        return (field, new MapGlowTexels(new FakeMapView(), new AuraGlowBlend(new AuraPowerView(field, auras))));
+        return (field, new MapGlowTexels(new FakeMapView(), new AuraGlowBlend(new AuraView(field, auras))));
     }
 
     [TestMethod]

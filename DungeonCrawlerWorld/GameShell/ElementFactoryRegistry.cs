@@ -47,7 +47,7 @@ public static class ElementFactoryRegistry
         var sprites = uiEngineContext.SpriteSheetService;
         var floatingTextController = new FloatingTextController(ecsContext.EventBus, gameSession.SimulationClock);
         var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, uiEngineContext.FontService, statusEffectDisplays, uiEngineContext.SpriteSheetService);
-        var mapRenderer = new MapRenderer(mapView, views.AuraPower, camera, uiEngineContext.RenderService, uiEngineContext.FontService, uiEngineContext.SpriteSheetService);
+        var mapRenderer = new MapRenderer(mapView, views.AuraView, camera, uiEngineContext.RenderService, uiEngineContext.FontService, uiEngineContext.SpriteSheetService);
         var mapGameOverlay = new MapGameOverlay(mapView, mapViewState, camera, actionTargetingController, uiEngineContext.FontService);
         elementPool.RegisterFactory(() => new MapWindow(
             services,

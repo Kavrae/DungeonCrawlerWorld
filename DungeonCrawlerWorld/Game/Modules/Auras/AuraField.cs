@@ -13,7 +13,7 @@ namespace Game.Modules.Auras;
 /// <remarks>
 /// <para>
 /// The one structure that holds aura reach. Gameplay (AuraSystem) reads a cell's power for an
-/// aura from it, and the map's glow (AuraPowerView, blended in Presentation) is derived from the same totals, so what is drawn
+/// aura from it, and the map's glow (AuraView, blended in Presentation) is derived from the same totals, so what is drawn
 /// is what applies by construction.
 /// </para>
 /// <para>

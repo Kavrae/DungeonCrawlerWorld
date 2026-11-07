@@ -97,13 +97,13 @@ internal static class TestMapWindows
 
         var playerActionGate = new PlayerActionGate(componentManager.GetPackedPool<ActionLockComponent>(), componentManager.GetPackedPool<AbilityScoresComponent>(), componentManager.GetMultiPool<StatModifierComponent>(), world, new SimulationClock());
         var auras = TestAuras.GlowOnlyCatalog();
-        var auraPower = new AuraPowerView(new AuraField(world, terrain, auras, eventBus), auras);
+        var auraView = new AuraView(new AuraField(world, terrain, auras, eventBus), auras);
 
         var floatingTextController = new FloatingTextController(eventBus, new SimulationClock());
         var floatingTextRenderer = new FloatingTextRenderer(floatingTextController, camera, fontService, new Game.Modules.StatusEffects.StatusEffectDisplayRegistry(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
 
         var services = TestElementServices.For(windowService, fontService);
-        var mapRenderer = new MapRenderer(mapView, auraPower, camera, services.RenderService, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
+        var mapRenderer = new MapRenderer(mapView, auraView, camera, services.RenderService, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
         var mapGameOverlay = new MapGameOverlay(mapView, mapViewState, camera, actionTargeting, fontService);
 
         windowService.RegisterFactory(() => new MapWindow(

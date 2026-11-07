@@ -26,6 +26,9 @@ public sealed class ActionSourceNaming(TerrainRegistry terrain, AuraCatalog aura
     public string Describe(ActionSource source, int describedEntityId) =>
         IsOwnSource(source, describedEntityId) ? OwnSourceName(source) : WithCause(source, DescribeOther(source));
 
+    /// <summary>The source as Describe names another entity's: for a line about something that is no entity's own, such as a tile.</summary>
+    public string Describe(ActionSource source) => WithCause(source, DescribeOther(source));
+
     /// <summary>Describe, but an entity by its name alone, without its crawler number -- for a line with little room.</summary>
     /// <remarks>An entity recorded with no name is still described by its crawler number.</remarks>
     public string DescribeByName(ActionSource source, int describedEntityId)

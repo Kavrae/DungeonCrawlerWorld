@@ -186,12 +186,12 @@ public sealed class AuraFieldTests
         var world = TestWorlds.Create(new Map(MapSize));
         world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(terrain.Register(GlowingTerrain)));
         var auras = BuildAuras();
-        var powerView = new AuraPowerView(new AuraField(world, terrain, auras, new EventBus()), auras);
+        var auraView = new AuraView(new AuraField(world, terrain, auras, new EventBus()), auras);
 
-        Assert.IsTrue(powerView.AnyAuraReaches(SourcePosition.X, SourcePosition.Y, SourcePosition.Z));
-        Assert.AreEqual(8, powerView.PowerAt(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, OrangeAuraId));
-        CollectionAssert.AreEqual(new[] { OrangeAuraId }, powerView.AuraIdsInField.ToArray());
-        Assert.AreEqual(Color.Orange, powerView.GlowColorOf(OrangeAuraId));
+        Assert.IsTrue(auraView.AnyAuraReaches(SourcePosition.X, SourcePosition.Y, SourcePosition.Z));
+        Assert.AreEqual(8, auraView.PowerAt(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, OrangeAuraId));
+        CollectionAssert.AreEqual(new[] { OrangeAuraId }, auraView.AuraIdsInField.ToArray());
+        Assert.AreEqual(Color.Orange, auraView.GlowColorOf(OrangeAuraId));
     }
 
     /// <summary>A runtime terrain change swaps the cell's aura and says where, so exposures around it can follow.</summary>
@@ -496,5 +496,46 @@ public sealed class AuraFieldTests
 
         Assert.AreEqual(8, field.PowerReaching(SourcePosition, OrangeAuraId, entityId: 5));
         Assert.AreEqual(placer, field.Attribute(SourcePosition, OrangeAuraId, entityId: 5));
+    }
+
+    [TestMethod]
+    public void PowerView_CopyAurasAt_ListsEveryAuraReachingTheCellStrongestFirstWithItsCredit()
+    {
+        var auras = BuildAuras();
+        var terrain = new TerrainRegistry();
+        var glowing = terrain.Register(GlowingTerrain);
+        var world = TestWorlds.Create(new Map(MapSize));
+        world.PopulateTerrain(SourcePosition.X, SourcePosition.Y, TerrainLayer.UnderGround, new TerrainCell(glowing));
+        var field = new AuraField(world, terrain, auras, new EventBus());
+        field.EnsureBuilt();
+        var shrine = EntitySource(5);
+        field.AddEntitySource(5, SourcePosition, new AuraSourceComponent(RedAuraId, power: 12, size: 3), shrine);
+        field.AddSource(SourcePosition, new AuraSourceComponent(GreenAuraId, power: 4, size: 3));
+        var auraView = new AuraView(field, auras);
+        var aurasAtCell = new List<AuraAtCell>();
+
+        auraView.CopyAurasAt(SourcePosition.X, SourcePosition.Y, SourcePosition.Z, aurasAtCell);
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                new AuraAtCell(RedAuraId, 12, shrine),
+                new AuraAtCell(OrangeAuraId, 8, ActionSource.FromTerrain(glowing)),
+                new AuraAtCell(GreenAuraId, 4, ActionSource.FromAura(GreenAuraId)),
+            },
+            aurasAtCell);
+    }
+
+    [TestMethod]
+    public void PowerView_CopyAurasAt_OutsideEveryReach_LeavesNothing()
+    {
+        var auras = BuildAuras();
+        var field = new AuraField(TestWorlds.Create(new Map(MapSize)), new TerrainRegistry(), auras, new EventBus());
+        field.AddSource(SourcePosition, new AuraSourceComponent(OrangeAuraId, power: 8, size: 3));
+        var aurasAtCell = new List<AuraAtCell> { new(RedAuraId, 1, ActionSource.FromAura(RedAuraId)) };
+
+        new AuraView(field, auras).CopyAurasAt(SourcePosition.X + 50, SourcePosition.Y, SourcePosition.Z, aurasAtCell);
+
+        Assert.IsEmpty(aurasAtCell);
     }
 }

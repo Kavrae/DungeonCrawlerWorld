@@ -69,6 +69,14 @@ public sealed class ActionSourceNamingTests
     }
 
     [TestMethod]
+    public void Describe_WithNoDescribedEntity_NamesTheCauseAndTheEntity()
+    {
+        var (naming, source) = GoblinSource(new SourceCause(SourceCauseKind.Spell, "Toxic Strike"));
+
+        Assert.AreEqual("Toxic Strike (Goblin Foreman)", naming.Describe(source));
+    }
+
+    [TestMethod]
     public void Describe_Terrain_IsTheTerrainsName()
     {
         var terrain = new TerrainRegistry();
