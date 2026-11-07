@@ -54,7 +54,7 @@ public sealed class NpcBehaviorModule : IGameModule
     {
         var componentManager = registration.ComponentManager;
 
-        componentManager.RegisterPackedPool<TestDummyComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<TestDummyComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 4);
         componentManager.RegisterPackedPool<CorpseLootRetryComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 64);
     }
 

@@ -59,20 +59,21 @@ internal sealed class EntityPages<TEntry> where TEntry : struct
         var pageIndex = entityId >> PageShift;
         if (pageIndex >= _pages.Length)
         {
-            EnsureCapacity(entityId + 1);
+            Array.Resize(ref _pages, System.Math.Max(pageIndex + 1, _pages.Length * 2));
         }
 
         var page = _pages[pageIndex] ??= AllocatePage();
         return ref page[entityId & PageMask];
     }
 
-    /// <summary>Grows the page table, where smaller, to cover entity ids below entityCapacity. Allocates no pages.</summary>
+    /// <summary>Grows the page table, where smaller, to exactly cover entity ids below entityCapacity. Allocates no pages.</summary>
+    /// <remarks>Sized exactly: the caller (EntityManager) already chose the capacity to grow to.</remarks>
     public void EnsureCapacity(int entityCapacity)
     {
         var pageCount = PageCountFor(entityCapacity);
         if (pageCount > _pages.Length)
         {
-            Array.Resize(ref _pages, System.Math.Max(pageCount, _pages.Length * 2));
+            Array.Resize(ref _pages, pageCount);
         }
     }
 

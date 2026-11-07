@@ -19,7 +19,7 @@ public sealed class ContainersModule : IGameModule
     {
         var componentManager = registration.ComponentManager;
 
-        componentManager.RegisterPackedPool<ContainerComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<ContainerComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 16);
     }
 
     public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)

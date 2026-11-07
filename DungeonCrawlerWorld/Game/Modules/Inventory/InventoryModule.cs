@@ -48,7 +48,7 @@ public sealed class InventoryModule : IGameModule
         componentManager.RegisterPackedPool<InventoryDisabledComponent>(
             static (ref existing, incoming) => existing.IsDisabled = incoming.IsDisabled, initialCapacity: 16);
 
-        componentManager.RegisterPackedPool<PendingItemActivationComponent>(static (ref existing, incoming) => existing = incoming);
+        componentManager.RegisterPackedPool<PendingItemActivationComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 64);
 
         // Player-only in practice (see MaxStackSizeComponent's own doc comment) -- Packed for the same reason InventoryDisabledComponent above is.
         componentManager.RegisterPackedPool<MaxStackSizeComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 2);

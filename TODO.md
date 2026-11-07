@@ -76,30 +76,6 @@ and reports them with `PostEditChangeProperty`.
 **Godot reference:** `get_property_list` and `set(StringName)` serve the inspector, serialization and animation alike, and
 the editor records writes through `EditorUndoRedoManager`. Bevy's `Reflect` is in "Data storage".
 
-#### Investigate component pools with a high cost per holder
-
-Find out why a few pools take so many bytes for the few entities holding them, and cut what is avoidable. The Workshop
-Debug tab's Live > Memory view (2026-10-24, sorted by Bytes/holder), all in the "Built" population:
-
-| Component | Holders | Bytes/holder |
-|---|---|---|
-| ActionCooldownComponent | 1 | 25,856 |
-| TestDummyComponent | 1 | 24,576 |
-| ShopComponent | 2 | 19,968 |
-| DisplayTextComponent | 1 | 16,896 |
-| HotkeyExpansionUnlockComponent | 1 | 15,396 |
-| ContainerComponent | 1 | 12,288 |
-| UnclaimedAchievementLootboxComponent | 2 | 12,156 |
-| AchievementUnlockedComponent | 3 | 8,104 |
-
-- **Where the bytes go:** for each, split the estimate (`IMemoryReportingComponentPool.EstimatedBytes`) into its parts --
-  the id-to-index pages (`EntityPages`, 1024 ids a page, one page for each id range a holder falls in), the dense storage's
-  starting capacity (`InitialComponentCapacity` or the registration's own `initialCapacity`), and the component's own size.
-- **What to change:** whatever is avoidable for a pool this sparse -- a smaller starting capacity for a rare pool, a cheaper
-  page for a range with one holder, or holding the data somewhere else (a singleton, a per-shop table) -- and check the
-  estimate itself is right.
-- **Measure** with `Invoke-MemoryReport.ps1 -Compare` against a baseline saved just before.
-
 #### Class exceptions: runtime class grants
 
 NPC classes come from spawn rules and fit two fixed class slots. The player's don't: a first class on
@@ -2622,10 +2598,6 @@ end state as the player's death ("Game flow -- start menu, session states, floor
 way out is entering a staircase before then ("EndOfLevelStairs"). See "Floors: an 18-floor run with steep
 difficulty by depth".
 
-#### Burning status effect from touching lava
-
-Damage over time, decreasing, stacking (multiplicatively worse), worse per movement while still in lava.
-
 #### Petrification status effect
 
 Beyond Paralysis: forces `ForceBlockingComponent`-blocking regardless of normal blocking state. Real
@@ -4051,15 +4023,12 @@ ever picked up.
 
 #### Hotbar insufficient-mana indicator
 
-A small blue fill bar on a hotbar slot for an action/spell whose `ManaCost` exceeds the player's
-current `ManaComponent` pool -- a glanceable "you can't afford this right now" without opening a
-tooltip. Precedent: `RadialFillRenderer`'s existing cooldown-sweep mask, already drawn on
-`HotbarContent`'s ability slots (`ActionLockContent`'s own HUD wheel is the other consumer today) --
-this would be a second, independent fill/tint on the same slot, not a replacement, since cooldown and
-affordability are two separate reasons a slot can't be used right now and both are worth signaling at
-once. Blocked on Mana costs actually being enforced on activation -- this file's own "Mana" entry
-(Game, Medium Priority) notes every `ManaCost` is unenforced today ("both free today"); this
-indicator has nothing real to check until that lands.
+A hotbar slot whose activation effects the player can't pay for is dimmed like any other blocked slot
+(`HotbarContent`, `DisabledSlotAlpha`, from its `ActivationBlocker`), and its cost badge shows the amount, but
+nothing says at a glance that the reason is the cost. Decide whether an unaffordable slot gets a signal of its own
+-- a blue fill on the slot, or the cost badge drawn in a warning colour -- independent of the cooldown sweep
+(`RadialFillRenderer`), since cooldown and affordability are separate reasons a slot can't be used and both are
+worth showing at once.
 
 #### Context menu amount picker
 
@@ -4687,12 +4656,6 @@ order. The list carries the written value, not `(entityId, denseIndex)`: every o
 index, which a removal invalidates. `Relationship` and `ToggleItemHolderSync` need immediate delivery as
 written (IMPLEMENTATION-NOTES "Change observation is declared per pool"), so their pools stay on the main
 thread or they are reworked first.
-
-#### Possible future UI gaps, likely out of scope
-
-Localization/IME, and accessibility (screen reader) hooks
-are standard in general GUI frameworks, but this is an admin/debug UI over a game world, not a general
-application shell. Noted for completeness, not expected soon.
 
 #### DungeonCrawlerWorldAdvertisement joke website + in-show ad
 

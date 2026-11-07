@@ -23,8 +23,8 @@ public sealed class ShopModule : IGameModule
     {
         var componentManager = registration.ComponentManager;
 
-        componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming);
-        componentManager.RegisterMultiPool<ShopStockPreferenceComponent>();
+        componentManager.RegisterPackedPool<ShopComponent>(static (ref existing, incoming) => existing = incoming, initialCapacity: 8);
+        componentManager.RegisterMultiPool<ShopStockPreferenceComponent>(initialCapacity: 32);
     }
 
     public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)

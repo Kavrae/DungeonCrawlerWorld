@@ -929,6 +929,15 @@ Landed 2026-09-18 as phases 0-1 of "Deferred-build NPCs and shared definition da
 - **Dense growth:** x1.5 (`DenseCapacityGrowth`, minimum 16) from `InitialComponentCapacity` (1024) or
   a registration's own `initialCapacity`, instead of a fixed 220k initial size and step.
 - `BackgroundComponent` moved from Direct to Packed (no writers today).
+- **A sparse pool's floor** (2026-11-07): a Packed or Multi pool costs its page table (8 B a page of the
+  entity capacity, about 7.5 KB at the 3072² reservation), one page per id range a holder falls in (4 KB
+  Packed, 12 KB Multi -- `EntityChain` is 12 B) and its starting dense capacity. That floor is why a pool
+  with one or two holders tops a Bytes/holder sort; every sparse pool together is under 2 MB. An explicit
+  `EnsureCapacity` sizes the table exactly (EntityManager already chose the growth step; only growth
+  through `GetWritable` doubles), and pools with a handful of holders pass a small `initialCapacity`
+  (shops, the test dummy, containers, pending activations): -409 KB, same world. Freeing a page when its
+  last holder leaves was rejected: the pending-activation pools (~90 pages each, empty most frames) are
+  added and removed on every activation, so each would become a 4 KB allocation.
 
 Measured (seed 1, 3072², Release, same world both sides): pools 1,498 -> 1,236 MB, live heap 2,424 ->
 2,162 MB, peak working set 5.34 -> 3.69 GB, allocated building the world 9.7 -> 5.0 GB. Frame cost

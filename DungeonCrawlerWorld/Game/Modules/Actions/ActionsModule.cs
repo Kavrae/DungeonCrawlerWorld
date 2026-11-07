@@ -68,7 +68,7 @@ public sealed class ActionsModule : IGameModule
         componentManager.RegisterPackedPool<DodgingComponent>(
             static (ref DodgingComponent existing, DodgingComponent incoming) => existing = incoming);
         componentManager.RegisterPackedPool<PendingActionActivationComponent>(
-            static (ref PendingActionActivationComponent existing, PendingActionActivationComponent incoming) => existing = incoming);
+            static (ref PendingActionActivationComponent existing, PendingActionActivationComponent incoming) => existing = incoming, initialCapacity: 64);
         // Player-only, 24 hotkey slots total -- dense capacity matches the slot count.
         componentManager.RegisterMultiPool<ActionHotkeyBindingComponent>(initialCapacity: 24);
         // Player-only, only 4 expansions exist.
