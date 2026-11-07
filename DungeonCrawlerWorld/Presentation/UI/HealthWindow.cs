@@ -29,13 +29,15 @@ namespace Presentation.UI;
 
 /// <summary>
 /// The click-opened detail counterpart to the player health bar's own hover popup
-/// (PlayerHealthHoverContent). Two independently-scrolling columns (built the same "fixed-size
+/// (PlayerHealthHoverContent). Three independently-scrolling columns (built the same "fixed-size
 /// sub-window, own ChildElementTileMode.Vertical" way AbilityScoreWindow.BuildColumns builds its
-/// own 5): left column is Status Effects then one section per body part (a resource bar below each
-/// part's own TextDivider header); right column is Buffs then Debuffs. Color and section-divider
+/// own 5): the first is one section per body part (a resource bar below each part's own TextDivider
+/// header), with no header of its own since the window's title already says Health; Buffs is the buff
+/// modifiers and immunities; Debuffs is the status effects, then the potion cooldown, then the debuff
+/// modifiers. Color and section-divider
 /// style borrowed from ItemDetailsWindow (dark PanelBackgroundColor background, white body text,
 /// TitleColor-labeled TextDivider headers), the same template every future detail window in this
-/// codebase should reach for. The Status Effects section shows entity-scoped effects
+/// codebase should reach for. The Debuffs column's status effects are the entity-scoped effects
 /// (StatusEffectQueries/StatusEffectDisplayRegistry -- Poison, Paralysis, entity-scoped Burning)
 /// plus, appended after them, an active potion cooldown (PotionCooldownComponent isn't a
 /// StatusEffectType/stacking status effect at all -- see PlayerStatusEffectsContent's own doc
@@ -45,8 +47,8 @@ namespace Presentation.UI;
 /// entity except one targeting an ability score -- those are AbilityScoreWindow's own territory
 /// (see AbilityScoreModifierFormatter), shown there instead of duplicated here. The Buffs section
 /// also lists every active StatusEffectImmunityComponent (immunity has no Debuffs-section
-/// counterpart -- it's unconditionally beneficial). Every section collapses to nothing when
-/// nothing is active. Hovering a stat-modifier row or a status-effect row (a body part's burning line
+/// counterpart -- it's unconditionally beneficial). The Buffs and Debuffs headers are always shown,
+/// even with nothing active under them. Hovering a stat-modifier row or a status-effect row (a body part's burning line
 /// included) shows where it came from, in the popup AbilityScoreWindow shows for a modifier.
 /// </summary>
 /// <param name="simulationClock">"CurrentFrame" for every remaining-duration line -- timers store absolute deadlines.</param>
@@ -91,8 +93,10 @@ public sealed class HealthWindow(
     /// <summary>Text-refresh cadence for live remaining-duration numbers and bar fractions -- same cadence InspectionWindowContent's own admin dump uses (AdminDumpRefreshInterval), since both refresh continuously-changing component values without needing to rebuild structure every frame.</summary>
     private const int TextRefreshInterval = 10;
 
-    /// <summary>Gap between the left (Status Effects/Body Parts) and right (Buffs/Debuffs) columns -- same role as AbilityScoreWindow.ColumnGap, just between 2 columns instead of 5.</summary>
+    /// <summary>Gap between neighbouring columns -- same role as AbilityScoreWindow.ColumnGap, just between 3 columns instead of 5.</summary>
     private const float ColumnGap = 6f;
+
+    private const int ColumnCount = 3;
 
     /// <summary>TextWindow.ContentFont defaults to 12 only the first time a pooled instance is ever truly constructed -- a settable property, not reset by Build/Configure, so a recycled instance keeps whatever size its *previous* consumer last set (see Dropdown/GridControl/TabbedContent's own ".ContentFont = _font" call sites, each with the same "must match" comment). Cached once and assigned explicitly in AddTextRow so a row's size never depends on what the pool handed back.</summary>
     private readonly SpriteFontBase _bodyFont = services.FontService.GetFont(FontChrome.DefaultFontSize);
@@ -128,8 +132,9 @@ public sealed class HealthWindow(
     private readonly List<StatusEffectType> _previousActiveImmunityTypes = [];
     private bool _previousHasPotionCooldown;
 
-    private Window _leftColumn = null!;
-    private Window _rightColumn = null!;
+    private Window _healthColumn = null!;
+    private Window _buffColumn = null!;
+    private Window _debuffColumn = null!;
 
     private int _entityId;
     private int _framesSinceLastTextRefresh;
@@ -203,66 +208,70 @@ public sealed class HealthWindow(
     }
 
     /// <summary>
-    /// Two fixed-size, independently-scrolling sub-windows sitting side by side -- built once,
+    /// Three fixed-size, independently-scrolling sub-windows sitting side by side -- built once,
     /// here, not re-created by RebuildContent (only their own children churn as content changes).
     /// Mirrors AbilityScoreWindow.BuildColumns' own reasoning for why this can't happen any
     /// earlier than OnChildrenInitialized (ContentSize isn't real before MeasureAndArrange has
     /// run). Also subscribes to this window's own Resized here (not unsubscribed on close -- see
     /// ElementPoolService.CloseElement's own reflection-based event cleanup) so a user drag-resize
-    /// (Element.SetBounds, changing this window's own OriginalSize directly) reflows both columns
+    /// (Element.SetBounds, changing this window's own OriginalSize directly) reflows every column
     /// too -- see HandleResized's own doc comment for why that's required, not optional polish.
     /// </summary>
     private void BuildColumns()
     {
-        var (leftPosition, rightPosition, columnSize) = ComputeColumnLayout();
-
-        _leftColumn = ElementPoolService.CreateElement<Window>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
-            Layout = new ElementLayoutOptions { RelativePosition = leftPosition, Size = columnSize, DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        AddChild(_leftColumn);
-
-        _rightColumn = ElementPoolService.CreateElement<Window>(this, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
-            Layout = new ElementLayoutOptions { RelativePosition = rightPosition, Size = columnSize, DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true, CanUserFocus = false },
-            Content = new ElementContentOptions { ContentColor = Color.Transparent },
-        });
-        AddChild(_rightColumn);
+        _healthColumn = BuildColumn(0);
+        _buffColumn = BuildColumn(1);
+        _debuffColumn = BuildColumn(2);
 
         Resized += HandleResized;
         Closed += _ => tooltipController.Hide(this);
     }
 
     /// <summary>
-    /// Both columns are Fixed-size/Fixed-position -- they don't reflow on their own just because
+    /// Every column is Fixed-size/Fixed-position -- they don't reflow on their own just because
     /// this window's own ContentSize changed. A user drag-resize sets this window's own
     /// OriginalSize directly (Element.SetBounds, via UiInputController's resize-drag handling),
     /// which only reaches a child as the space Measure offers it, clamped against that child's own
     /// still-stale OriginalSize/RelativePosition -- it never actually moves or regrows the child.
-    /// Left unfixed: shrinking this window left the right column's stale (too-large) RelativePosition.X
+    /// Left unfixed: shrinking this window left a later column's stale (too-large) RelativePosition.X
     /// in place, driving its own available width negative and corrupting its Measure/RetileChildren
     /// pass (the reported bug -- column scrolling breaking, rows overlapping); growing this window
     /// just left dead space with neither column any bigger. So the same layout math re-runs on every
-    /// Resized and pushes it into both columns via SetBounds.
+    /// Resized and pushes it into every column via SetBounds.
     /// </summary>
     private void HandleResized(Element _)
     {
-        var (leftPosition, rightPosition, columnSize) = ComputeColumnLayout();
-
-        _leftColumn.SetBounds(leftPosition, columnSize);
-        _rightColumn.SetBounds(rightPosition, columnSize);
+        ApplyColumnLayout(_healthColumn, 0);
+        ApplyColumnLayout(_buffColumn, 1);
+        ApplyColumnLayout(_debuffColumn, 2);
     }
 
-    private (Vector2 LeftPosition, Vector2 RightPosition, Vector2 ColumnSize) ComputeColumnLayout()
+    private void ApplyColumnLayout(Window column, int columnIndex)
     {
-        var columnWidth = (ContentSize.X - ColumnGap) / 2f;
+        var (position, columnSize) = ComputeColumnLayout(columnIndex);
+        column.SetBounds(position, columnSize);
+    }
+
+    private Window BuildColumn(int columnIndex)
+    {
+        var (position, columnSize) = ComputeColumnLayout(columnIndex);
+
+        var column = ElementPoolService.CreateElement<Window>(this, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
+            Layout = new ElementLayoutOptions { RelativePosition = position, Size = columnSize, DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserScrollVertical = true, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+        });
+        AddChild(column);
+        return column;
+    }
+
+    private (Vector2 Position, Vector2 ColumnSize) ComputeColumnLayout(int columnIndex)
+    {
+        var columnWidth = (ContentSize.X - ColumnGap * (ColumnCount - 1)) / ColumnCount;
         var columnSize = new Vector2(columnWidth, ContentSize.Y);
-        return (Vector2.Zero, new Vector2(columnWidth + ColumnGap, 0), columnSize);
+        return (new Vector2((columnWidth + ColumnGap) * columnIndex, 0), columnSize);
     }
 
     /// <summary>
@@ -368,7 +377,26 @@ public sealed class HealthWindow(
     /// <summary>The status-effect, buff or debuff row the pointer is over, if any -- never one scrolled out of view or under another window.</summary>
     private HoveredRow? FindHoveredRow(out TextWindow? rowWindow)
     {
-        if (_leftColumn.IsPointerOver)
+        if (_healthColumn.IsPointerOver)
+        {
+            if (FindRowAt(_bodyPartStatusEffectRowWindows, out rowWindow) is { } bodyPartIndex)
+            {
+                return new HoveredRow(HoveredRowKind.BodyPartBurning, bodyPartIndex);
+            }
+        }
+        else if (_buffColumn.IsPointerOver)
+        {
+            if (FindRowAt(_buffRowWindows, out rowWindow) is { } buffIndex)
+            {
+                return new HoveredRow(HoveredRowKind.Buff, buffIndex);
+            }
+
+            if (FindRowAt(_immunityRowWindows, out rowWindow) is { } immunityIndex)
+            {
+                return new HoveredRow(HoveredRowKind.Immunity, immunityIndex);
+            }
+        }
+        else if (_debuffColumn.IsPointerOver)
         {
             if (FindRowAt(_statusEffectRowWindows, out rowWindow) is { } statusEffectIndex)
             {
@@ -379,23 +407,6 @@ public sealed class HealthWindow(
             {
                 rowWindow = potionCooldownRow;
                 return new HoveredRow(HoveredRowKind.PotionCooldown, 0);
-            }
-
-            if (FindRowAt(_bodyPartStatusEffectRowWindows, out rowWindow) is { } bodyPartIndex)
-            {
-                return new HoveredRow(HoveredRowKind.BodyPartBurning, bodyPartIndex);
-            }
-        }
-        else if (_rightColumn.IsPointerOver)
-        {
-            if (FindRowAt(_buffRowWindows, out rowWindow) is { } buffIndex)
-            {
-                return new HoveredRow(HoveredRowKind.Buff, buffIndex);
-            }
-
-            if (FindRowAt(_immunityRowWindows, out rowWindow) is { } immunityIndex)
-            {
-                return new HoveredRow(HoveredRowKind.Immunity, immunityIndex);
             }
 
             if (FindRowAt(_debuffRowWindows, out rowWindow) is { } debuffIndex)
@@ -516,8 +527,9 @@ public sealed class HealthWindow(
     /// <summary>Full rebuild -- status effect types actually appearing/disappearing is rare enough (a stack granted/expiring) that closing and re-adding every row is simpler and safer than an in-place structural diff. Only clears each column's own children, not the column sub-windows themselves (those are built once by BuildColumns and persist across opens).</summary>
     private void RebuildContent()
     {
-        ElementPoolService.CloseAllChildren(_leftColumn);
-        ElementPoolService.CloseAllChildren(_rightColumn);
+        ElementPoolService.CloseAllChildren(_healthColumn);
+        ElementPoolService.CloseAllChildren(_buffColumn);
+        ElementPoolService.CloseAllChildren(_debuffColumn);
         _statusEffectRowWindows.Clear();
         _buffRowWindows.Clear();
         _debuffRowWindows.Clear();
@@ -527,10 +539,14 @@ public sealed class HealthWindow(
         _potionCooldownRowWindow = null;
         _highlightedRowWindow = null;
 
-        BuildStatusEffectSection(_leftColumn);
-        BuildBodyPartSection(_leftColumn);
-        BuildBuffSection(_rightColumn);
-        BuildDebuffSection(_rightColumn);
+        BuildBodyPartSection(_healthColumn);
+
+        BuildDivider(_buffColumn, _buffColumn.ContentSize.X, "Buffs");
+        BuildBuffSection(_buffColumn);
+
+        BuildDivider(_debuffColumn, _debuffColumn.ContentSize.X, "Debuffs");
+        BuildStatusEffectSection(_debuffColumn);
+        BuildDebuffSection(_debuffColumn);
     }
 
     /// <summary>Fills destination with the PartId of every body part currently showing an active body-part-scoped Burning line -- the per-part-section counterpart to StatusEffectQueries.GetActiveEffectTypes, in the same stable (dense body-part-chain) order every call, so Update's own frame-to-frame comparison only reports a change on a genuine appear/disappear, not on an ordinary tick's stack-count decrement.</summary>
@@ -568,7 +584,7 @@ public sealed class HealthWindow(
     }
 
     /// <summary>
-    /// Right column, first section -- every active non-ability-score StatModifierComponent with
+    /// The Buffs column's rows -- every active non-ability-score StatModifierComponent with
     /// Polarity.Buff, one row each (unlike Status Effects' per-type grouping, each modifier
     /// instance is its own row since two modifiers can target the same stat with different
     /// magnitudes/sources), followed by every active StatusEffectImmunityComponent -- immunity is
@@ -579,12 +595,6 @@ public sealed class HealthWindow(
     {
         BuildModifierRows(_buffRows, ReadStatModifiers(), StatModifierPolarity.Buff, CurrentFrame);
         BuildImmunityRows(_immunityRows, ReadStatusEffectImmunities(), CurrentFrame);
-        if (_buffRows.Count == 0 && _immunityRows.Count == 0)
-        {
-            return;
-        }
-
-        BuildDivider(parent, parent.ContentSize.X, "Buffs");
 
         foreach (var row in _buffRows)
         {
@@ -597,16 +607,10 @@ public sealed class HealthWindow(
         }
     }
 
-    /// <summary>Right column, second section -- same shape as BuildBuffSection, filtered to Polarity.Debuff instead.</summary>
+    /// <summary>The Debuffs column's modifier rows, after its status effects -- same shape as BuildBuffSection, filtered to Polarity.Debuff instead.</summary>
     private void BuildDebuffSection(Window parent)
     {
         BuildModifierRows(_debuffRows, ReadStatModifiers(), StatModifierPolarity.Debuff, CurrentFrame);
-        if (_debuffRows.Count == 0)
-        {
-            return;
-        }
-
-        BuildDivider(parent, parent.ContentSize.X, "Debuffs");
 
         foreach (var row in _debuffRows)
         {
@@ -618,12 +622,6 @@ public sealed class HealthWindow(
     {
         BuildStatusEffectRows(_statusEffectRows, _activeEffectTypesScratch, _entityId, statusEffectDisplays, CurrentFrame);
         var hasPotionCooldown = TryGetPotionCooldownLine(ReadPotionCooldown(), itemCatalog, CurrentFrame, out var potionCooldownText, out var potionCooldownColor);
-        if (_statusEffectRows.Count == 0 && !hasPotionCooldown)
-        {
-            return;
-        }
-
-        BuildDivider(parent, parent.ContentSize.X, "Status Effects");
 
         foreach (var row in _statusEffectRows)
         {
@@ -708,7 +706,7 @@ public sealed class HealthWindow(
     /// <summary>
     /// Section-opening divider -- a single labeled TextDivider row, the same 95%-width/12.5%-label-position
     /// shape ItemDetailsWindow.BuildDivider's own Effects/Activation headers use, so this window reads as
-    /// the same visual language. Added to parent (one of the two columns), not this window directly -- see
+    /// the same visual language. Added to parent (one of the three columns), not this window directly -- see
     /// BuildColumns' own doc comment. Leads with DividerTopSpacing's own gap, set as the preceding
     /// sibling's SpacingAfter so a divider never sits flush against whatever content precedes it -- a
     /// no-op when this is the column's very first child, since there's no preceding sibling to carry that

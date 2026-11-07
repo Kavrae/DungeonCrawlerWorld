@@ -19,6 +19,6 @@ public static class HealthWindowChrome
     /// <summary>Same value as InventoryChrome.WindowPosition today, but kept as its own independent field -- two separately-owned windows that happen to coincide, not one true duplicate (see InventoryChrome's own doc comment).</summary>
     public static Vector2 WindowPosition = new(300, 150);
 
-    /// <summary>Wider than its pre-two-column size (260) -- HealthWindow now splits this width across 2 side-by-side columns (see HealthWindow.BuildColumns), so each needs enough room on its own for a body part's bar/status line or a buff/debuff's "+50 MaximumHealth: 12s"-shaped text.</summary>
-    public static Vector2 WindowSize = new(480, 540);
+    /// <summary>HealthWindow splits this width across 3 side-by-side columns (see HealthWindow.BuildColumns), so each needs enough room on its own for a body part's bar/burning line or a buff/debuff's "+50 MaximumHealth: 12s"-shaped text.</summary>
+    public static Vector2 WindowSize = new(720, 540);
 }

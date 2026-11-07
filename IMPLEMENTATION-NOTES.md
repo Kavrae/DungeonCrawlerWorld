@@ -2051,8 +2051,10 @@ depth still open (blocked on Skills).
 ### HealthWindow
 
 Red-heart `Button` (`HealthWindowController`) opens
-`HealthWindow`: one row per body part (modifier-effective current/max), one Status Effects section
-above (each effect has its own duration formula -- no shared "remaining" field exists).
+`HealthWindow`: three columns -- the body parts (one bar per part, modifier-effective current/max,
+with that part's burning line; no header, the window's title says Health), then Buffs (buff
+modifiers, immunities) and Debuffs, each under an always-shown header (status effects, the potion cooldown, then debuff modifiers; each effect has its own
+duration formula -- no shared "remaining" field exists).
 `WindowLifecycle<T>` (renamed from `WindowSlot<T>`) now shared by 3 window-toggle consumers. Not done:
 Vital/disabled state per part not shown; parts list in pool order, not anatomical position.
 

@@ -4010,11 +4010,6 @@ Show an icon for each boss and each crawler an entity has killed, in two places:
 by kind (boss/crawler), fed from `EntityDiedEvent` the same way `BossLootboxAwarder` reads a slain
 boss's blueprint. Blocked on "Player status window" (Medium Priority, this section).
 
-#### Health Window: status effects in a third column
-
-The Health Window has two columns today (see IMPLEMENTATION-NOTES.md, "HealthWindow"). Move status
-effects into a third column of their own.
-
 #### Compare input hit-testing against a unified picking pipeline
 
 Pointer handling is split: `UiInputController` hit-tests windows and elements, the map resolves tiles
