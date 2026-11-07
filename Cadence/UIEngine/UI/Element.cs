@@ -221,25 +221,64 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     protected GlowMode _glowMode = GlowMode.ExteriorFade;
     public GlowMode GlowMode => _glowMode;
 
+    protected GlowAnimation _glowAnimation;
+    public GlowAnimation GlowAnimation => _glowAnimation;
+
+    private GlowPulseClock _glowPulse;
+
     /// <summary>Turns the glow (see GlowRenderer) on/off around this window's border -- e.g. a folder with something unread. Drawn before the content background fill/DrawContent/children (see Draw), so an interior-facing mode here would just get painted over -- use SetOverlayGlow instead for a glow that needs to sit on top of content.</summary>
-    public void SetGlow(bool isGlowing, Color? color = null, GlowMode mode = GlowMode.ExteriorFade)
+    /// <remarks>A pulse starts when the glow turns on or its animation changes; setting the same glow again leaves it running. RestartGlowPulse starts it over.</remarks>
+    public void SetGlow(bool isGlowing, Color? color = null, GlowMode mode = GlowMode.ExteriorFade, GlowAnimation animation = default)
     {
+        var restartsPulse = (isGlowing && !_isGlowing) || animation != _glowAnimation;
         _isGlowing = isGlowing;
         _glowColor = color ?? Color.Gold;
         _glowMode = mode;
+        _glowAnimation = animation;
+        if (restartsPulse)
+        {
+            _glowPulse.Restart();
+        }
     }
+
+    /// <summary>Starts the glow's pulse over, from the next draw -- something new arrived while it was already glowing.</summary>
+    public void RestartGlowPulse() => _glowPulse.Restart();
+
+    /// <summary>Starts the glow's pulse at presentationTime if it is waiting to start, as Draw does before drawing the glow.</summary>
+    public void StartPendingGlowPulseAt(TimeSpan presentationTime) => _glowPulse.StartPendingAt(presentationTime);
+
+    /// <summary>The glow's strength at presentationTime; full while its pulse waits to start.</summary>
+    public float GlowStrengthAt(TimeSpan presentationTime) => _glowAnimation.StrengthAt(_glowPulse.ElapsedAt(presentationTime));
 
     protected bool _isOverlayGlowing;
     protected Color _overlayGlowColor = Color.Gold;
     protected GlowMode _overlayGlowMode = GlowMode.InteriorFade;
+    protected GlowAnimation _overlayGlowAnimation;
+    private GlowPulseClock _overlayGlowPulse;
 
     /// <summary>Turns a glow drawn over this element's content area on/off, after the content background fill and every child has drawn (see Draw) -- e.g. column panels, where a white InteriorFade vignette needs to sit on top of the dark panel fill and its rows, not get erased by them.</summary>
-    public void SetOverlayGlow(bool isGlowing, Color? color = null, GlowMode mode = GlowMode.InteriorFade)
+    /// <remarks>Its pulse starts and restarts as SetGlow's does.</remarks>
+    public void SetOverlayGlow(bool isGlowing, Color? color = null, GlowMode mode = GlowMode.InteriorFade, GlowAnimation animation = default)
     {
+        var restartsPulse = (isGlowing && !_isOverlayGlowing) || animation != _overlayGlowAnimation;
         _isOverlayGlowing = isGlowing;
         _overlayGlowColor = color ?? Color.Gold;
         _overlayGlowMode = mode;
+        _overlayGlowAnimation = animation;
+        if (restartsPulse)
+        {
+            _overlayGlowPulse.Restart();
+        }
     }
+
+    /// <summary>Starts the overlay glow's pulse over, from the next draw.</summary>
+    public void RestartOverlayGlowPulse() => _overlayGlowPulse.Restart();
+
+    /// <summary>Starts the overlay glow's pulse at presentationTime if it is waiting to start, as Draw does before drawing the overlay glow.</summary>
+    public void StartPendingOverlayGlowPulseAt(TimeSpan presentationTime) => _overlayGlowPulse.StartPendingAt(presentationTime);
+
+    /// <summary>The overlay glow's strength at presentationTime; full while its pulse waits to start.</summary>
+    public float OverlayGlowStrengthAt(TimeSpan presentationTime) => _overlayGlowAnimation.StrengthAt(_overlayGlowPulse.ElapsedAt(presentationTime));
 
     /*========Focus========*/
     public event Action<Element>? FocusChanged;
@@ -493,9 +532,13 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
         _isGlowing = false;
         _glowColor = Color.Gold;
         _glowMode = GlowMode.ExteriorFade;
+        _glowAnimation = GlowAnimation.Static;
+        _glowPulse.Reset();
         _isOverlayGlowing = false;
         _overlayGlowColor = Color.Gold;
         _overlayGlowMode = GlowMode.InteriorFade;
+        _overlayGlowAnimation = GlowAnimation.Static;
+        _overlayGlowPulse.Reset();
 
         /*========Focus========*/
         // Pooled windows (see WindowService) must not inherit a stale focused look from
@@ -678,7 +721,8 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
         if (_isGlowing)
         {
-            GlowRenderer.Draw(spriteBatch, unitRectangle, _geometry.Rectangle, _glowColor, _glowMode);
+            StartPendingGlowPulseAt(gameTime.TotalGameTime);
+            GlowRenderer.Draw(spriteBatch, unitRectangle, _geometry.Rectangle, _glowColor, _glowMode, GlowStrengthAt(gameTime.TotalGameTime));
         }
 
         if ((_geometry.DisplayMode != ElementDisplayMode.Minimized && _headerState.ShowHeader) || (_geometry.DisplayMode == ElementDisplayMode.Minimized && _headerState.ShowHeaderWhenMinimized))
@@ -731,7 +775,8 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
             if (_isOverlayGlowing)
             {
-                GlowRenderer.Draw(spriteBatch, unitRectangle, _contentState.Rectangle, _overlayGlowColor, _overlayGlowMode);
+                StartPendingOverlayGlowPulseAt(gameTime.TotalGameTime);
+                GlowRenderer.Draw(spriteBatch, unitRectangle, _contentState.Rectangle, _overlayGlowColor, _overlayGlowMode, OverlayGlowStrengthAt(gameTime.TotalGameTime));
             }
 
             if (_scrollbars.ShowVertical || _scrollbars.ShowHorizontal)

@@ -15,6 +15,7 @@ public sealed class TooltipRowsElement(FontService fontService, ElementPoolServi
     private readonly List<float> _rightTextWidths = [];
     private SpriteFontBase _font = null!;
     private float _middleColumnLeft;
+    private GlowPulseClock _rowGlowPulse;
 
     /// <summary>The height rows take in the default font.</summary>
     public static float HeightFor(FontService fontService, IReadOnlyList<TooltipRow> rows) =>
@@ -32,6 +33,7 @@ public sealed class TooltipRowsElement(FontService fontService, ElementPoolServi
 
         _middleColumnLeft = TooltipRowDrawing.MeasureMiddleColumnLeft(_font, _rows);
         TooltipRowDrawing.MeasureRightTextWidths(_font, _rows, _rightTextWidths);
+        _rowGlowPulse.Restart();
     }
 
     public override void DrawContent(GameTime gameTime)
@@ -41,6 +43,7 @@ public sealed class TooltipRowsElement(FontService fontService, ElementPoolServi
             return;
         }
 
-        TooltipRowDrawing.Draw(Render.Batch, Render.UnitRectangle, _font, _rows, _rightTextWidths, _middleColumnLeft, Vector2.Zero, LocalContentRectangle.Width);
+        _rowGlowPulse.StartPendingAt(gameTime.TotalGameTime);
+        TooltipRowDrawing.Draw(Render.Batch, Render.UnitRectangle, _font, _rows, _rightTextWidths, _middleColumnLeft, Vector2.Zero, LocalContentRectangle.Width, _rowGlowPulse.ElapsedAt(gameTime.TotalGameTime));
     }
 }

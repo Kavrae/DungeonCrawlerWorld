@@ -632,6 +632,87 @@ public sealed class NotificationCenterTests
         CollectionAssert.AreEquivalent(new[] { first.AchievementId, second.AchievementId }, dismissedAchievementIds);
     }
 
+    private static (ElementPoolService WindowService, Func<Folder> GetFolder, List<TextWindow> CapturedTextWindows) CreateWindowServiceCapturingFolderAndTextWindows()
+    {
+        var fontService = TestFonts.Shared;
+        var capturedTextWindows = new List<TextWindow>();
+        var windowService = TestElementPoolServiceFactory.Create(fontService, createTextWindow: pool =>
+        {
+            var window = new TextWindow(fontService, pool, new UiRenderService());
+            capturedTextWindows.Add(window);
+            return window;
+        });
+        Folder? capturedFolder = null;
+        windowService.RegisterFactory<Folder>(() =>
+        {
+            capturedFolder = new Folder(fontService, windowService, new UiRenderService(), new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver));
+            return capturedFolder;
+        });
+        return (windowService, () => capturedFolder ?? throw new InvalidOperationException("Folder not created yet."), capturedTextWindows);
+    }
+
+    private static TextWindow BadgeReading(List<TextWindow> capturedTextWindows, string text) =>
+        capturedTextWindows.Single(window => window.OriginalText == text);
+
+    private static readonly TimeSpan HalfAPulse = TimeSpan.FromSeconds(1);
+
+    [TestMethod]
+    public void AddNotification_Unread_PulsesTheFolderAndItsCategoryBadgeFiveTimesEveryTwoSeconds()
+    {
+        var (windowService, getFolder, capturedTextWindows) = CreateWindowServiceCapturingFolderAndTextWindows();
+        var notificationCenter = CreateNotificationCenter(windowService, new UiLayerStack());
+
+        notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: false);
+
+        var folder = getFolder();
+        var questBadge = BadgeReading(capturedTextWindows, "Quest: 1");
+        foreach (var glowing in new Element[] { folder, questBadge })
+        {
+            Assert.IsTrue(glowing.IsGlowing);
+            Assert.AreEqual(TimeSpan.FromSeconds(2), glowing.GlowAnimation.PulsePeriod);
+            Assert.AreEqual(0.25f, glowing.GlowAnimation.PulseMinimumStrength);
+            Assert.AreEqual(5, glowing.GlowAnimation.PulseCycles);
+        }
+
+        Assert.IsFalse(BadgeReading(capturedTextWindows, "Achievement: 0").IsGlowing);
+    }
+
+    [TestMethod]
+    public void AddNotification_UnreadWhileAlreadyGlowing_RestartsTheFolderAndThatBadgeOnly()
+    {
+        var (windowService, getFolder, capturedTextWindows) = CreateWindowServiceCapturingFolderAndTextWindows();
+        var notificationCenter = CreateNotificationCenter(windowService, new UiLayerStack());
+        notificationCenter.AddNotification(NotificationCategory.Quest, "First quest", showImmediately: false);
+        notificationCenter.AddNotification(NotificationCategory.Achievement, "First achievement", showImmediately: false);
+        var folder = getFolder();
+        var questBadge = BadgeReading(capturedTextWindows, "Quest: 1");
+        var achievementBadge = BadgeReading(capturedTextWindows, "Achievement: 1");
+        foreach (var glowing in new Element[] { folder, questBadge, achievementBadge })
+        {
+            glowing.StartPendingGlowPulseAt(TimeSpan.Zero);
+        }
+
+        notificationCenter.AddNotification(NotificationCategory.Quest, "Second quest", showImmediately: false);
+
+        Assert.AreEqual(1f, folder.GlowStrengthAt(HalfAPulse), 1e-5f);
+        Assert.AreEqual(1f, questBadge.GlowStrengthAt(HalfAPulse), 1e-5f);
+        Assert.AreEqual(0.25f, achievementBadge.GlowStrengthAt(HalfAPulse), 1e-5f);
+    }
+
+    [TestMethod]
+    public void OpeningTheLastUnreadNotification_TurnsTheFolderAndBadgeGlowOff()
+    {
+        var (windowService, getFolder, capturedTextWindows) = CreateWindowServiceCapturingFolderAndTextWindows();
+        var notificationCenter = CreateNotificationCenter(windowService, new UiLayerStack());
+        notificationCenter.AddNotification(NotificationCategory.Quest, "Hello", showImmediately: false);
+        var questBadge = BadgeReading(capturedTextWindows, "Quest: 1");
+
+        notificationCenter.OpenNextNotification(NotificationCategory.Quest);
+
+        Assert.IsFalse(getFolder().IsGlowing);
+        Assert.IsFalse(questBadge.IsGlowing);
+    }
+
     [TestMethod]
     [DataRow("")]
     [DataRow("   ")]

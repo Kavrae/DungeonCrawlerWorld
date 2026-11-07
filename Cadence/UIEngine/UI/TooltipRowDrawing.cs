@@ -44,8 +44,11 @@ public static class TooltipRowDrawing
     }
 
     /// <summary>Draws rows one line each from topLeft down, rowWidth wide: a rule for a divider, otherwise the left, middle and right columns, and an inner glow around a row that has one.</summary>
-    /// <remarks>RightText is inset from the row's right edge by the glow's width, on every row so the column lines up, so it never sits under the glow's brightest ring.</remarks>
-    public static void Draw<TTarget>(TTarget target, Texture2D unitRectangle, SpriteFontBase font, IReadOnlyList<TooltipRow> rows, IReadOnlyList<float> rightTextWidths, float middleColumnLeft, Vector2 topLeft, float rowWidth)
+    /// <remarks>
+    /// RightText is inset from the row's right edge by the glow's width, on every row so the column lines up, so it never sits under the glow's brightest ring.
+    /// A null elapsedSinceRowGlowPulseStart draws every row's glow steady, whatever its GlowAnimation.
+    /// </remarks>
+    public static void Draw<TTarget>(TTarget target, Texture2D unitRectangle, SpriteFontBase font, IReadOnlyList<TooltipRow> rows, IReadOnlyList<float> rightTextWidths, float middleColumnLeft, Vector2 topLeft, float rowWidth, TimeSpan? elapsedSinceRowGlowPulseStart)
         where TTarget : ISpriteDrawTarget
     {
         var rowSize = new Vector2(rowWidth, font.LineHeight);
@@ -75,10 +78,18 @@ public static class TooltipRowDrawing
                 LabelRenderer.DrawRightAligned(target, font, row.RightText, rightTextWidths[rowIndex], rowPosition, rightColumnSize, row.Color);
             }
 
-            if (row.GlowColor is { } glowColor)
+            if (row.GlowColor is not { } glowColor)
             {
-                GlowRenderer.Draw(target, unitRectangle, rowBounds, glowColor, GlowMode.InteriorFade);
+                continue;
             }
+
+            if (elapsedSinceRowGlowPulseStart is { } elapsed)
+            {
+                GlowRenderer.Draw(target, unitRectangle, rowBounds, glowColor, GlowMode.InteriorFade, row.GlowAnimation, elapsed);
+                continue;
+            }
+
+            GlowRenderer.Draw(target, unitRectangle, rowBounds, glowColor, GlowMode.InteriorFade);
         }
     }
 }

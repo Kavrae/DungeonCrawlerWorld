@@ -14,9 +14,10 @@ namespace UIEngine.UI;
 /// length. IsDivider true draws a thin horizontal rule in Color instead of any text (LeftText/
 /// MiddleText/RightText ignored) -- see Divider below. GlowColor, when set, draws an inner-fade
 /// glow (GlowRenderer.InteriorFade) around this row's own bounds in that color -- marking the
-/// current row of a table without colouring its text.
+/// current row of a table without colouring its text. A TooltipRowsElement draws it at GlowAnimation's
+/// strength, its pulse restarting whenever its rows change; a Tooltip draws it steady.
 /// </summary>
-public readonly record struct TooltipRow(string LeftText, string RightText, Color Color, bool IsDivider = false, Color? GlowColor = null, string MiddleText = "")
+public readonly record struct TooltipRow(string LeftText, string RightText, Color Color, bool IsDivider = false, Color? GlowColor = null, string MiddleText = "", GlowAnimation GlowAnimation = default)
 {
     public static TooltipRow Divider(Color color) => new(string.Empty, string.Empty, color, IsDivider: true);
 }
@@ -256,6 +257,6 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
 
         var blockTopLeft = new Vector2(LinePadding + RowPadding, ContentFont.LineHeight * DisplayText.LineCount + LinePadding + RowPadding);
         var rowWidth = System.Math.Max(0f, _contentState.Size.X - (LinePadding + RowPadding) * 2);
-        TooltipRowDrawing.Draw(Render.Batch, Render.UnitRectangle, ContentFont, rows, _rightTextWidths, _middleColumnLeft, blockTopLeft, rowWidth);
+        TooltipRowDrawing.Draw(Render.Batch, Render.UnitRectangle, ContentFont, rows, _rightTextWidths, _middleColumnLeft, blockTopLeft, rowWidth, elapsedSinceRowGlowPulseStart: null);
     }
 }

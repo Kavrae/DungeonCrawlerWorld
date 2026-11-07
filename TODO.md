@@ -3711,7 +3711,8 @@ needs a deliberate look once there's room to design against.
 
 Nothing on screen animates except the charge fill, the glows and floating text, each timed by its own
 code. Planned items that need shared primitives: "Walking and action animations" (High), "Window
-open/close/minimize animation" (Low), "Folder glow blink" (Low), taller sprites, and HUD transitions.
+open/close/minimize animation" (Low), taller sprites, and HUD transitions. Glow pulses already exist as a
+small piece of "Curves" (`GlowAnimation`, timed by a `GlowPulseClock`); fold them in rather than duplicate them.
 - **Flipbooks:** a sprite manifest entry can be a sequence of cells with per-cell durations and a loop
   mode (loop, once, ping-pong), played by time or scrubbed to a fraction (a Delayed action's windup
   driven by `IMapViewQuery.GetChargeFraction`). Per-entity playback state only in Local and the
@@ -4016,11 +4017,6 @@ decide what a Ghost leaves (none, or ectoplasm). Draw it under the corpse in the
 (`MapRenderer.DrawOccupants`, before the corpse sprite), not after. Pairs with the red X
 `MapRenderer.DrawCorpseMarker` draws over a corpse (both make a corpse read as dead) and Corpse decay/destruction (Game) -- the pool should go when the
 corpse does.
-
-#### Folder glow blink
-
-`Folder.SetGlow` (used by `NotificationCenter`'s unread-glow) is flat on/off. Make it pulse instead --
-more noticeable, especially once more things drive glow (Magic Menu, Skills leveling).
 
 #### "Open many" button for stacked achievement notifications
 
@@ -4736,6 +4732,12 @@ settings) scales the whole UI by one factor, with fonts re-rendered at the scale
 exposes it at runtime so games offer it as a setting. Godot 4.5 added screen reader support through
 AccessKit: `Control`s report a role, name and description to the OS accessibility API. AccessKit has
 C bindings, so the same library is an option here when the time comes.
+
+#### Reduced motion option
+
+A player setting that stops UI motion for anyone it bothers. Every glow pulse goes through
+`GlowAnimation.StrengthAt`, so the setting makes it return full strength there and every pulse becomes a
+steady glow. Animation primitives (tweens, flipbooks), once they exist, should honour the same setting.
 
 ### MEDIUM PRIORITY : Unsimulated-tier time -- research alternatives to freezing
 

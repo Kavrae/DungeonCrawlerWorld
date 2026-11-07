@@ -21,7 +21,13 @@ namespace Presentation.UI.Notifications;
 /// </summary>
 public sealed class NotificationCenter(ElementPoolService elementPoolService, EventBus eventBus, UiLayerStack layers, ContextMenuController contextMenuController)
 {
-    private readonly List<(NotificationCategory Category, TextWindow SummaryWindow, List<Notification> Notifications)> _unreadByCategory = [];
+    /// <summary>The Folder's and the badges' glow while they have unread notifications: five 2-second pulses from each new one, then steady.</summary>
+    private static readonly GlowAnimation UnreadNotificationGlowPulse = GlowAnimation.Pulse(TimeSpan.FromSeconds(2));
+
+    /// <summary>A category's unread queue and the badge that counts it.</summary>
+    private sealed record UnreadCategory(NotificationCategory Category, TextWindow SummaryWindow, List<Notification> Notifications);
+
+    private readonly List<UnreadCategory> _unreadByCategory = [];
     private readonly List<(Window ActiveWindow, Notification Notification)> _activeNotifications = [];
 
     private Folder _folder = null!;
@@ -97,7 +103,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
                     Text = new TextOptions { Text = $"{category}: 0" },
                 });
 
-                _unreadByCategory.Add((category, countWindow, []));
+                _unreadByCategory.Add(new UnreadCategory(category, countWindow, []));
                 _folder.AddChild(countWindow);
 
                 // Summary count windows are created once here and never pooled/reused (unlike
@@ -106,7 +112,7 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
                 countWindow.Clicked += _ => OpenNextNotification(category);
                 countWindow.OnRightClicked = position =>
                 {
-                    var hasUnread = UnreadListFor(category).Count > 0;
+                    var hasUnread = UnreadCategoryFor(category).Notifications.Count > 0;
                     contextMenuController.Open(new Vector2(position.X, position.Y),
                     [
                         new DropdownOption("Open", null, hasUnread, () => OpenNextNotification(category)),
@@ -140,8 +146,11 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         }
         else
         {
-            UnreadListFor(category).Add(notification);
-            RefreshUnreadSummary(category);
+            var unread = UnreadCategoryFor(category);
+            unread.Notifications.Add(notification);
+            RefreshUnreadSummary(unread);
+            _folder.RestartGlowPulse();
+            unread.SummaryWindow.RestartGlowPulse();
         }
 
         return notification.Id;
@@ -149,15 +158,15 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
 
     public void OpenNextNotification(NotificationCategory category)
     {
-        var unreadList = UnreadListFor(category);
-        if (unreadList.Count == 0)
+        var unread = UnreadCategoryFor(category);
+        if (unread.Notifications.Count == 0)
         {
             return;
         }
 
-        var notification = unreadList[0];
-        unreadList.RemoveAt(0);
-        RefreshUnreadSummary(category);
+        var notification = unread.Notifications[0];
+        unread.Notifications.RemoveAt(0);
+        RefreshUnreadSummary(unread);
 
         ShowActive(notification);
     }
@@ -165,7 +174,8 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     /// <summary>Opens every currently-unread notification in category, one popup per call (see OpenNextNotification) -- each stacks visually via ActiveNotificationStackOffset, the same as opening them one at a time by hand. Scoped to this one category only, not every category -- the summary badge being right-clicked is itself category-specific.</summary>
     public void OpenAllNotifications(NotificationCategory category)
     {
-        while (UnreadListFor(category).Count > 0)
+        var unread = UnreadCategoryFor(category);
+        while (unread.Notifications.Count > 0)
         {
             OpenNextNotification(category);
         }
@@ -298,8 +308,9 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
     /// </summary>
     private void MinimizeNotification(Notification notification)
     {
-        UnreadListFor(notification.Category).Add(notification);
-        RefreshUnreadSummary(notification.Category);
+        var unread = UnreadCategoryFor(notification.Category);
+        unread.Notifications.Add(notification);
+        RefreshUnreadSummary(unread);
 
         CloseNotification(notification.Id);
     }
@@ -318,14 +329,14 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         layers.CloseMenuWindow(closedWindow);
 
         // Minimizing closes the popup too, but puts the notification back in its unread queue first.
-        if (closedNotification?.Achievement is { } achievement && !UnreadListFor(closedNotification.Category).Contains(closedNotification))
+        if (closedNotification?.Achievement is { } achievement && !UnreadCategoryFor(closedNotification.Category).Notifications.Contains(closedNotification))
         {
             eventBus.Publish(new AchievementNotificationDismissedEvent(achievement.AchievementId));
         }
 
         // Closing the last unread notification auto-tidies the HUD back down -- SetWindowDisplayMode
         // no-ops if the Folder is already Minimized, so this is safe to call unconditionally.
-        if (_unreadByCategory?.Sum(category => category.Notifications.Count) == 0)
+        if (!HasAnyUnread())
         {
             _folder.SetDisplayMode(ElementDisplayMode.Minimized);
         }
@@ -360,20 +371,43 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
         return $"{notification.Text} \n\n Requirement fulfilled: {achievement.RequirementText} \n\n {lootboxLine}{rewardSection}";
     }
 
-    private List<Notification> UnreadListFor(NotificationCategory category) =>
-        _unreadByCategory.First(entry => entry.Category == category).Notifications;
+    private UnreadCategory UnreadCategoryFor(NotificationCategory category)
+    {
+        foreach (var unread in _unreadByCategory)
+        {
+            if (unread.Category == category)
+            {
+                return unread;
+            }
+        }
+
+        throw new InvalidOperationException($"No unread queue for {category}.");
+    }
+
+    private bool HasAnyUnread()
+    {
+        foreach (var unread in _unreadByCategory)
+        {
+            if (unread.Notifications.Count > 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Refreshes a category badge's text alongside both glow conditions this same unread-count
     /// change affects: the badge itself glows while its own category has a queued-unread
     /// notification, and the Folder glows while *any* category does.
     /// </summary>
-    private void RefreshUnreadSummary(NotificationCategory category)
+    /// <remarks>A glow turning on starts its pulse; a new unread notification restarts the Folder's and its badge's in AddNotification.</remarks>
+    private void RefreshUnreadSummary(UnreadCategory unread)
     {
-        var entry = _unreadByCategory.First(e => e.Category == category);
-        entry.SummaryWindow.UpdateText($"{category}: {entry.Notifications.Count}");
-        entry.SummaryWindow.SetGlow(entry.Notifications.Count > 0, WindowPalette.AttentionGlow);
+        unread.SummaryWindow.UpdateText($"{unread.Category}: {unread.Notifications.Count}");
+        unread.SummaryWindow.SetGlow(unread.Notifications.Count > 0, WindowPalette.AttentionGlow, animation: UnreadNotificationGlowPulse);
 
-        _folder.SetGlow(_unreadByCategory.Any(e => e.Notifications.Count > 0), WindowPalette.AttentionGlow);
+        _folder.SetGlow(HasAnyUnread(), WindowPalette.AttentionGlow, animation: UnreadNotificationGlowPulse);
     }
 }

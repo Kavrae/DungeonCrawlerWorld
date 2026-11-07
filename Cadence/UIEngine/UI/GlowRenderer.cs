@@ -45,4 +45,9 @@ public static class GlowRenderer
                 break;
         }
     }
+
+    /// <summary>Draws the glow at animation's strength this long after its pulse started.</summary>
+    public static void Draw<TTarget>(TTarget target, Texture2D unitRectangle, Rectangle bounds, Color glowColor, GlowMode mode, GlowAnimation animation, TimeSpan elapsedSincePulseStart, float alphaMultiplier = 1f, SpriteDrawStyle style = default)
+        where TTarget : ISpriteDrawTarget =>
+        Draw(target, unitRectangle, bounds, glowColor, mode, alphaMultiplier * animation.StrengthAt(elapsedSincePulseStart), style);
 }

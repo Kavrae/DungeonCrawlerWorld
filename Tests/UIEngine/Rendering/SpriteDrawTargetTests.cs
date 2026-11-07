@@ -171,4 +171,26 @@ public sealed class SpriteDrawTargetTests
 
         Assert.AreEqual((new Rectangle(10, 20, 32, 16), (Rectangle?)null, Color.Gold * 0.5f, Style), target.Rectangles.Single());
     }
+
+    [TestMethod]
+    public void PulsingGlow_HalfAPeriodIn_DrawsAtItsMinimumStrength()
+    {
+        var target = new RecordingDrawTarget();
+        var pulse = GlowAnimation.Pulse(TimeSpan.FromSeconds(2));
+
+        GlowRenderer.Draw(target, null!, new Rectangle(10, 20, 32, 16), Color.Gold, GlowMode.InteriorFull, pulse, TimeSpan.FromSeconds(1), style: Style);
+
+        Assert.AreEqual(Color.Gold * (GlowRenderer.FadeMaximumAlpha * GlowAnimation.DefaultPulseMinimumStrength), target.Rectangles.Single().Color);
+    }
+
+    [TestMethod]
+    public void PulsingGlow_AfterItsCycles_DrawsAtFullStrength()
+    {
+        var target = new RecordingDrawTarget();
+        var pulse = GlowAnimation.Pulse(TimeSpan.FromSeconds(2));
+
+        GlowRenderer.Draw(target, null!, new Rectangle(10, 20, 32, 16), Color.Gold, GlowMode.InteriorFull, pulse, TimeSpan.FromSeconds(11), style: Style);
+
+        Assert.AreEqual(Color.Gold * GlowRenderer.FadeMaximumAlpha, target.Rectangles.Single().Color);
+    }
 }
