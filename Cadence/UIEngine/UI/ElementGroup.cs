@@ -2,8 +2,8 @@ namespace UIEngine.UI;
 
 /// <summary>A set of open elements that belong together -- the windows a light-dismissable counts as inside it.</summary>
 /// <remarks>
-/// An element joins when it opens and leaves when it closes, so whoever asks (Contains) never lists the members
-/// itself and a new member needs nothing from it. Leaving on close also keeps a pooled element from still being a
+/// An element joins when it opens and leaves when it closes, so whoever asks (Contains, Members) never keeps its own
+/// list and a new member needs nothing from it. Leaving on close also keeps a pooled element from still being a
 /// member when it is reused.
 /// </remarks>
 public sealed class ElementGroup
@@ -16,4 +16,7 @@ public sealed class ElementGroup
     public void Leave(Element element) => _members.Remove(element);
 
     public bool Contains(Element element) => _members.Contains(element);
+
+    /// <summary>Every element open in the group now.</summary>
+    public IReadOnlyCollection<Element> Members => _members;
 }

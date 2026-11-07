@@ -165,42 +165,14 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
         }
 
         _rows = _ownedRows.Count > 0 ? _ownedRows : null;
-        _middleColumnLeft = MiddleColumnLeftFor(_rows);
-
-        _rightTextWidths.Clear();
-        for (var index = 0; index < _ownedRows.Count; index++)
-        {
-            var rightText = _ownedRows[index].RightText;
-            _rightTextWidths.Add(string.IsNullOrEmpty(rightText) ? 0f : ContentFont.MeasureString(rightText).X);
-        }
+        _middleColumnLeft = TooltipRowDrawing.MeasureMiddleColumnLeft(ContentFont, _ownedRows);
+        TooltipRowDrawing.MeasureRightTextWidths(ContentFont, _ownedRows, _rightTextWidths);
     }
 
     private readonly List<TooltipRow> _ownedRows = [];
 
     /// <summary>Each row's RightText width, measured once per SetRows, not per draw; parallel to _ownedRows.</summary>
     private readonly List<float> _rightTextWidths = [];
-
-    private float MiddleColumnLeftFor(IReadOnlyList<TooltipRow>? rows)
-    {
-        if (rows is null)
-        {
-            return 0f;
-        }
-
-        var widestLeftText = 0f;
-        for (var index = 0; index < rows.Count; index++)
-        {
-            var row = rows[index];
-            if (row.IsDivider || string.IsNullOrEmpty(row.MiddleText))
-            {
-                continue;
-            }
-
-            widestLeftText = System.Math.Max(widestLeftText, ContentFont.MeasureString(row.LeftText).X);
-        }
-
-        return widestLeftText + MiddleColumnGap;
-    }
 
     /// <summary>
     /// True pins width to MaximumSize.X, only height auto-grows -- for a summary popup
@@ -220,9 +192,6 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
     /// plain description-only tooltip doesn't need it).
     /// </summary>
     private const float ExtraWidthForRows = 8f;
-
-    /// <summary>Gap between the middle column's shared start (the widest LeftText among rows that use one, see MiddleText's own doc comment) and that longest LeftText itself, so the range text doesn't sit flush against the band name.</summary>
-    private const float MiddleColumnGap = 6f;
 
     protected override void RecalculateWrapContentSize()
     {
@@ -285,51 +254,8 @@ public sealed class Tooltip(FontService fontService, ElementPoolService elementP
             return;
         }
 
-        // Raw content-area origin (no LinePadding baked in yet, unlike the base class's own
-        // "origin" for body text) -- the row block applies its own (LinePadding + RowPadding)
-        // inset on the left, distinct from the plain LinePadding-only inset the body text uses.
-        var contentTopLeft = Vector2.Zero;
-        var blockLeft = LinePadding + RowPadding;
-        var blockTop = ContentFont.LineHeight * DisplayText.LineCount + LinePadding + RowPadding;
+        var blockTopLeft = new Vector2(LinePadding + RowPadding, ContentFont.LineHeight * DisplayText.LineCount + LinePadding + RowPadding);
         var rowWidth = System.Math.Max(0f, _contentState.Size.X - (LinePadding + RowPadding) * 2);
-        var rowSize = new Vector2(rowWidth, ContentFont.LineHeight);
-
-        // RightText's own footprint, inset from the row's right edge by the interior glow's own
-        // width -- flush against rowSize instead, RightText would sit directly under the current
-        // band's fade rings (see GlowRenderer.FadeRingCount's own doc comment), unreadable against
-        // its brightest, innermost ring. Applied to every row, not just the glowing one, so the
-        // price column still lines up straight down the block.
-        var priceRowSize = new Vector2(System.Math.Max(0f, rowSize.X - GlowRenderer.FadeRingCount), rowSize.Y);
-
-        for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
-        {
-            var row = rows[rowIndex];
-            var rowPosition = contentTopLeft + new Vector2(blockLeft, blockTop + ContentFont.LineHeight * rowIndex);
-            var rowBounds = new Rectangle((int)rowPosition.X, (int)rowPosition.Y, (int)rowSize.X, (int)rowSize.Y);
-
-            if (row.IsDivider)
-            {
-                var lineRectangle = new Rectangle(rowBounds.X, rowBounds.Y + rowBounds.Height / 2, rowBounds.Width, 1);
-                Render.Batch.Draw(Render.UnitRectangle, lineRectangle, row.Color);
-                continue;
-            }
-
-            LabelRenderer.DrawLeftAligned(Render.Batch, ContentFont, row.LeftText, rowPosition, rowSize, row.Color);
-            if (!string.IsNullOrEmpty(row.MiddleText))
-            {
-                var middlePosition = rowPosition + new Vector2(_middleColumnLeft, 0);
-                LabelRenderer.DrawLeftAligned(Render.Batch, ContentFont, row.MiddleText, middlePosition, rowSize, row.Color);
-            }
-
-            if (!string.IsNullOrEmpty(row.RightText))
-            {
-                LabelRenderer.DrawRightAligned(Render.Batch, ContentFont, row.RightText, _rightTextWidths[rowIndex], rowPosition, priceRowSize, row.Color);
-            }
-
-            if (row.GlowColor is { } glowColor)
-            {
-                GlowRenderer.Draw(Render.Batch, Render.UnitRectangle, rowBounds, glowColor, GlowMode.InteriorFade);
-            }
-        }
+        TooltipRowDrawing.Draw(Render.Batch, Render.UnitRectangle, ContentFont, rows, _rightTextWidths, _middleColumnLeft, blockTopLeft, rowWidth);
     }
 }

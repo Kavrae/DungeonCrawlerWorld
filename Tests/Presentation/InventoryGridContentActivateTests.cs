@@ -50,7 +50,7 @@ public sealed class InventoryGridContentActivateTests
         tooltipController.Initialize(windowService, new UiLayerStack());
 
         var activateRequests = new List<uint>();
-        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, tooltipController, static () => null, new MapViewState(), static (_, _) => { }, static (_, _) => { }, (_, stackInstanceId) => activateRequests.Add(stackInstanceId), static _ => { }, new SimulationClock());
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, new MapViewState(), static (_, _) => { }, (_, stackInstanceId) => activateRequests.Add(stackInstanceId), static _ => { }, new SimulationClock());
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {

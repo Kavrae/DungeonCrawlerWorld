@@ -16,6 +16,9 @@ public interface IUiInputHandler
     /// <summary>Every frame, after focus cycling and Escape and before the focused element's key presses.</summary>
     void HandleKeys(KeyboardState current, KeyboardState previous, bool isTextBoxFocused) { }
 
+    /// <summary>A fresh Escape press, after an open context menu takes it and before any window is closed -- true consumes it, so no window closes (a mode the application ends on Escape).</summary>
+    bool TryConsumeEscape() => false;
+
     /// <summary>A left press at position, before anything is hit-tested or focused -- true consumes it, so nothing else sees the press.</summary>
     bool TryConsumePress(Point position) => false;
 

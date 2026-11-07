@@ -88,7 +88,6 @@ public sealed class TradeWindow(
     private InventoryDropTarget? _playerSideDropTarget;
     private InventoryDropTarget? _shopSideDropTarget;
     private Action<int, uint> _onItemSelected = static (_, _) => { };
-    private Action<int, uint> _onCompareRequested = static (_, _) => { };
 
     /// <summary>
     /// The *real* shop entity, captured once at Configure time -- not re-read from
@@ -105,8 +104,6 @@ public sealed class TradeWindow(
 
     private readonly List<InventoryItemStackComponent> _columnStacksScratch = [];
 
-    /// <summary>The one shared TooltipController every hover-popup consumer in the app shows/hides through -- see its own doc comment. Both columns' own InventoryGridContent instances are given the same instance; each is already a distinct owner (see TooltipController.Show/Hide's own doc comment), so whichever column's Update happens to run second in a frame can never stomp the other's tooltip.</summary>
-    private TooltipController _tooltipController = null!;
 
     /// <summary>Recomputed every Update by ComputeColumnValueText -- "0G" only until the first Update ever runs, or while no shop is open. Public for testability, same reasoning as ShopItemStackCell.TotalPrice/StockStatus.</summary>
     public string PlayerValueText => _playerValueText;
@@ -140,22 +137,19 @@ public sealed class TradeWindow(
 
     /// <summary>
     /// Must be called after CreateElement but before Initialize -- same contract ShopWindow.Configure
-    /// follows. onItemSelected/onCompareRequested mirror ShopWindow.Configure's own two callbacks
-    /// (see ShopWindowController.OnItemSelected/OnCompareRequested's own doc comments) -- routed by
-    /// TradeWindowController into the shared comparison-aware click dispatch every other inventory
-    /// grid already uses (ItemWindowCoordinator's own item-click dispatch), so a real item cell in either trade
-    /// column can anchor or be added to Item Details Comparison exactly like any other grid's cell.
+    /// follows. onItemSelected mirrors ShopWindow.Configure's own callback (see
+    /// ShopWindowController.OnItemSelected's own doc comment) -- routed by TradeWindowController into
+    /// the item-click dispatch every other inventory grid uses (ItemWindowCoordinator's), so a real
+    /// item cell in either trade column selects like any other grid's cell.
     /// </summary>
-    public void Configure(int playerSideEntityId, int shopSideEntityId, int shopEntityId, TooltipController tooltipController, Action<int, uint> onItemSelected, Action<int, uint> onCompareRequested)
+    public void Configure(int playerSideEntityId, int shopSideEntityId, int shopEntityId, Action<int, uint> onItemSelected)
     {
         _playerSideEntityId = playerSideEntityId;
         _shopSideEntityId = shopSideEntityId;
         _playerSideDropTarget = new InventoryDropTarget(playerSideEntityId);
         _shopSideDropTarget = new InventoryDropTarget(shopSideEntityId);
         _shopEntityId = shopEntityId;
-        _tooltipController = tooltipController;
         _onItemSelected = onItemSelected;
-        _onCompareRequested = onCompareRequested;
     }
 
     /// <summary>
@@ -444,15 +438,13 @@ public sealed class TradeWindow(
         // getSecondaryTargetEntityId/onActivateRequested stay no-ops -- trade-offer entities can
         // never be a "secondary target" (see InventoryGridContent.GetSecondaryTargetEntityId's own
         // callers) and can never satisfy CanActivate's cellEntityId == world.PlayerEntityId check.
-        // onItemSelected is the real, wired comparison-aware dispatch (see Configure's own doc
-        // comment) -- onCompareRequested stays a no-op since a trade cell's OnRightClicked is
-        // hardcoded below to RemoveFromTrade, never BuildItemContextMenu's "Compare" option; arming
-        // Compare from a trade-column item instead goes through that item's own Item Details anchor
-        // (opened via onItemSelected), the same as any other grid. tradeGridIsShopSide: isShopSide
+        // onItemSelected is the real, wired item-click dispatch (see Configure's own doc comment).
+        // A trade cell's OnRightClicked is hardcoded below to RemoveFromTrade, never
+        // BuildItemContextMenu's "Compare" option; Compare on a trade-column item goes through its
+        // hovered Item Details' Compare button instead. tradeGridIsShopSide: isShopSide
         // picks TradeItemStackCell and the correct buy/sell pricing direction for this column -- see
-        // InventoryGridContent's own doc comment on that parameter. Both columns are given the same
-        // _tooltipController -- see its own doc comment for why that's safe now.
-        gridWindow.SetContent(new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, entityId, filterTag: GameplayTag.None, _tooltipController, static () => null, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, static _ => { }, simulationClock, isShopSide));
+        // InventoryGridContent's own doc comment on that parameter.
+        gridWindow.SetContent(new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, entityId, filterTag: GameplayTag.None, static () => null, mapViewState, _onItemSelected, static (_, _) => { }, static _ => { }, simulationClock, isShopSide));
         AddChild(gridWindow);
 
         var footerWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions

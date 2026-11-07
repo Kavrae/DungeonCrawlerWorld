@@ -1,317 +1,114 @@
 using Game.Modules.Inventory;
-using Game.Views;
-using Microsoft.Xna.Framework;
 using UIEngine.UI;
-using UIEngine.UI.ColorPalettes;
 using UIEngine.UI.Content;
 
 namespace Presentation.UI.Inventory;
 
-/// <summary>
-/// Owns Item Details Comparison's own arm/add/remove state -- mirrors ActionTargetingController's
-/// own arm/disarm shape (MapViewState.ArmedActionId/Disarm/CancelArmedOrPendingAction) but scoped
-/// to inventory clicks rather than map targeting. The *anchor* item is always whatever
-/// ItemDetailsWindowController's own single pane currently shows -- this controller never owns a
-/// duplicate of that state, only the *additional* compared items beside it, each its own
-/// independent ItemDetailsWindow instance (no shared comparison table -- see that class's own
-/// comparedAgainst-driven coloring). Constructed with a direct reference to
-/// ItemDetailsWindowController (built after it, one-directional, no cycle).
-/// </summary>
+/// <summary>Owns compare mode and routes item hovers: to Item Details normally, to the comparison popup while comparing.</summary>
+/// <remarks>
+/// Compare (Item Details' button, or an item's "Compare" option) pins Item Details beside the window holding the item --
+/// the anchor -- and starts compare mode. While it lasts, hovering a comparable item (IsComparable, the rule the grids
+/// grey the rest out by) opens the comparison popup on it (a second ItemDetailsWindowController, kept just below the
+/// anchor), coloured against the anchor and the anchor against it; anything else only shows its name, under the refusal
+/// cursor (ItemComparisonInputHandler). When the popup closes the anchor goes back to plain. Stop Comparison, a right press, Escape or the
+/// anchor closing ends compare mode and closes both windows.
+/// </remarks>
 public sealed class ItemComparisonController(
-    ElementPoolService elementPoolService,
-    InventoryView inventoryView,
-    ItemCatalog itemCatalog,
-    InventoryWindowController inventoryWindowController,
-    ContextMenuController contextMenuController,
-    MapWindow mapWindow,
     MapViewState mapViewState,
-    ItemDetailsWindowController itemDetailsWindowController,
+    ItemDetailsWindowController itemDetails,
+    ItemDetailsWindowController comparisonPopup,
     CursorTextContent cursorTextContent,
-    ElementGroup itemWindows)
+    Func<int, Window?> windowHoldingItemsOf) : IItemDetailsPopup
 {
-    /// <summary>Shown at the cursor for as long as IsArmed -- see Arm/Disarm/ClearComparison.</summary>
-    private const string SelectNextItemMessage = "Select next item...";
+    /// <summary>Shown at the cursor for as long as compare mode lasts.</summary>
+    private const string CompareModeMessage = "Hover an item to compare";
 
-    /// <summary>The additional compared items, anchor excluded -- index-aligned with _columns.</summary>
-    private readonly List<(int EntityId, uint StackInstanceId)> _entries = [];
+    /// <summary>True from Arm until ClearComparison.</summary>
+    public bool IsComparing { get; private set; }
 
-    private readonly List<ItemDetailsWindow> _columns = [];
+    public bool OpensFor(in ItemHoverTarget target) => !IsComparing || IsComparable(target);
 
-    private UiLayerStack _layers = null!;
+    /// <summary>Whether compare mode can compare target with the anchor: one stack (not a merged cell) with the same kind of activator (MapViewState.CompareRequiredActivatorType) -- the rule the grids grey the rest out by.</summary>
+    public bool IsComparable(in ItemHoverTarget target) =>
+        target.StackInstanceId is not null && mapViewState.CompareRequiredActivatorType is { } requiredType && target.Definition.Activator?.GetType() == requiredType;
 
-    /// <summary>Guards HandleColumnClosed against reacting to RebuildColumns' own programmatic teardown -- only a genuine user-initiated Close (via a column's own title-bar button) should remove that entry and trigger a fresh rebuild.</summary>
-    private bool _isRebuilding;
+    public bool IsShowing(in ItemHoverTarget target) =>
+        IsComparing ? itemDetails.IsShowing(target) || comparisonPopup.IsShowing(target) : itemDetails.IsShowing(target);
 
-    /// <summary>True while future inventory clicks should add to (or toggle out of) this comparison -- see Arm/Disarm. Independent of whether any columns are currently open: closing every column (one at a time, via each one's own Close button) does not itself disarm, and disarming (right-click) does not itself close already-open columns.</summary>
-    public bool IsArmed { get; private set; }
+    public void OpenAtCursor(in ItemHoverTarget target, IItemShopPricingSource shopPricing)
+    {
+        if (!IsComparing)
+        {
+            itemDetails.OpenAtCursor(target, shopPricing, []);
+            return;
+        }
 
-    /// <summary>Every open comparison column, beside the Item Details anchor.</summary>
-    public IReadOnlyList<ItemDetailsWindow> Columns => _columns;
+        if (itemDetails.CurrentDefinition is not { } anchorDefinition || !IsComparable(target))
+        {
+            return;
+        }
 
-    public void Initialize(UiLayerStack layers) => _layers = layers;
+        comparisonPopup.OpenAtCursor(target, shopPricing, [anchorDefinition]);
+        itemDetails.UpdateComparedAgainst([target.Definition]);
+    }
+
+    /// <summary>The comparison popup closed: the anchor goes back to plain.</summary>
+    public void HandleComparisonPopupClosed() => itemDetails.UpdateComparedAgainst([]);
 
     /// <summary>
-    /// Invoked from an inventory item's own "Compare" context-menu option or ItemDetailsWindow's
-    /// own Compare title button. Ensures entityId/stackId is shown as the anchor (opening/updating
-    /// ItemDetailsWindowController's own pane), then arms -- future inventory clicks add to this
-    /// comparison until Disarm. If this is a genuinely different anchor than whatever's currently
-    /// shown/compared, any existing comparison is cleared first (comparing against a stale
-    /// anchor's own items doesn't make sense); re-arming the *same* already-shown anchor (e.g.
-    /// after a right-click paused adding) leaves already-open columns alone, resuming rather than
-    /// restarting. A no-op if the target item has no Activator at all -- nothing to compare.
+    /// Starts compare mode on entityId's stack: shows it in Item Details, priced by shopPricing while a shop is open, and
+    /// pins it beside the window holding it. A different anchor than the one shown ends any comparison first. A no-op for
+    /// an item with no activator -- nothing to compare.
     /// </summary>
-    public void Arm(int entityId, uint stackId)
+    public void Arm(int entityId, uint stackId, IItemShopPricingSource? shopPricing = null)
     {
-        var isNewAnchor = itemDetailsWindowController.CurrentEntityId != entityId || itemDetailsWindowController.CurrentStackInstanceId != stackId;
-        if (isNewAnchor)
+        var isNewAnchor = itemDetails.CurrentEntityId != entityId || itemDetails.CurrentStackInstanceId != stackId;
+        if (isNewAnchor && IsComparing)
         {
             ClearComparison();
         }
 
-        itemDetailsWindowController.Open(entityId, stackId);
+        itemDetails.Open(entityId, stackId, shopPricing: shopPricing);
 
-        if (itemDetailsWindowController.CurrentDefinition?.Activator is not { } activator)
+        if (itemDetails.CurrentDefinition?.Activator is not { } activator)
         {
             return;
         }
 
-        IsArmed = true;
+        IsComparing = true;
         mapViewState.CompareRequiredActivatorType = activator.GetType();
-        cursorTextContent.ShowPersistent(SelectNextItemMessage);
+        cursorTextContent.ShowPersistent(CompareModeMessage);
+        if (windowHoldingItemsOf(entityId) is { } besideWindow)
+        {
+            itemDetails.PinBeside(besideWindow);
+        }
     }
 
-    /// <summary>
-    /// The inventory's own onItemSelected click path while IsArmed, instead of
-    /// ItemDetailsWindowController.Open -- adds entityId/stackId to the comparison, or removes it
-    /// if it's already in there (toggle, mirrors the hotbar's own re-press convention). No-op if
-    /// it's the anchor itself, or if it's ineligible (Activator concrete type doesn't match
-    /// MapViewState.CompareRequiredActivatorType -- the same check InventoryGridContent's own
-    /// per-frame grey/highlight sync already makes, re-checked here since a stale click could
-    /// still land after the eligibility state moved on).
-    /// </summary>
-    public void AddOrToggle(int entityId, uint stackId)
-    {
-        if (!IsArmed)
-        {
-            return;
-        }
-
-        if (itemDetailsWindowController.CurrentEntityId == entityId && itemDetailsWindowController.CurrentStackInstanceId == stackId)
-        {
-            return;
-        }
-
-        if (mapViewState.CompareRequiredActivatorType is not { } requiredType ||
-            !inventoryView.TryGetStack(entityId, stackId, out var stack) ||
-            !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition) ||
-            definition.Activator?.GetType() != requiredType)
-        {
-            return;
-        }
-
-        var existingIndex = _entries.FindIndex(entry => entry.EntityId == entityId && entry.StackInstanceId == stackId);
-        if (existingIndex >= 0)
-        {
-            _entries.RemoveAt(existingIndex);
-        }
-        else
-        {
-            _entries.Add((entityId, stackId));
-        }
-
-        RebuildColumns();
-    }
-
-    /// <summary>Right-click's own "stop adding" -- stops future clicks from adding/toggling and clears the grid's own eligible/ineligible highlighting (MapViewState.CompareRequiredActivatorType), but leaves already-open columns exactly as they are. Re-arming (Compare again, same or different anchor) is what resumes or restarts.</summary>
-    public void Disarm()
-    {
-        IsArmed = false;
-        mapViewState.CompareRequiredActivatorType = null;
-        cursorTextContent.HidePersistent();
-    }
-
-    /// <summary>Full teardown -- every open column closes, all state clears. Called when the anchor itself closes (ItemDetailsWindowController.OnClosed) or changes to an unrelated item via a normal, non-compare click (see ClearIfAnchorChanging) -- a comparison against an anchor that's no longer even shown doesn't make sense.</summary>
+    /// <summary>Ends compare mode and closes Item Details and the comparison popup -- a no-op outside compare mode.</summary>
     public void ClearComparison()
     {
-        IsArmed = false;
-        mapViewState.CompareRequiredActivatorType = null;
-        cursorTextContent.HidePersistent();
-
-        _isRebuilding = true;
-        foreach (var column in _columns)
-        {
-            column.Close();
-        }
-
-        _isRebuilding = false;
-        _columns.Clear();
-        _entries.Clear();
-    }
-
-    /// <summary>Called by ItemWindowCoordinator's own item-click dispatcher before a normal (non-armed) click opens a different item in ItemDetailsWindowController -- clears any active comparison first if the newly-clicked item genuinely differs from whatever's currently the anchor. A no-op both when nothing is active and when the click just re-selects the item already shown.</summary>
-    public void ClearIfAnchorChanging(int entityId, uint stackId)
-    {
-        if (_entries.Count == 0 && !IsArmed)
+        if (!IsComparing)
         {
             return;
         }
 
-        if (itemDetailsWindowController.CurrentEntityId == entityId && itemDetailsWindowController.CurrentStackInstanceId == stackId)
+        IsComparing = false;
+        mapViewState.CompareRequiredActivatorType = null;
+        cursorTextContent.HidePersistent();
+        itemDetails.Close();
+        comparisonPopup.Close();
+    }
+
+    public void Compare(int entityId, uint stackInstanceId, IItemShopPricingSource shopPricing) => Arm(entityId, stackInstanceId, shopPricing);
+
+    /// <summary>Ends a comparison against another anchor before a loot box reward opens in Item Details -- a no-op when nothing is compared or the reward is the anchor.</summary>
+    public void ClearIfAnchorChanging(int entityId, uint stackId)
+    {
+        if (itemDetails.CurrentEntityId == entityId && itemDetails.CurrentStackInstanceId == stackId)
         {
             return;
         }
 
         ClearComparison();
-    }
-
-    /// <summary>
-    /// Closes and recreates every column from scratch, chained left to right off the anchor's own
-    /// live position, each Configured with the current, full comparedAgainst set (anchor's own
-    /// pane included -- see ItemDetailsWindowController.UpdateComparedAgainst) so coloring stays
-    /// symmetric across every open pane. Also prunes any entry whose stack can no longer be
-    /// resolved (consumed since it was added) before rebuilding, keeping _entries and the
-    /// definitions built from it in lockstep, index for index.
-    /// </summary>
-    private void RebuildColumns()
-    {
-        _isRebuilding = true;
-        foreach (var column in _columns)
-        {
-            column.Close();
-        }
-
-        _isRebuilding = false;
-        _columns.Clear();
-
-        for (var i = _entries.Count - 1; i >= 0; i--)
-        {
-            var (entityId, stackId) = _entries[i];
-            if (!inventoryView.TryGetStack(entityId, stackId, out var stack) ||
-                !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out _))
-            {
-                _entries.RemoveAt(i);
-            }
-        }
-
-        if (_entries.Count == 0)
-        {
-            itemDetailsWindowController.UpdateComparedAgainst([]);
-            return;
-        }
-
-        var definitions = new List<ItemDefinition>(_entries.Count);
-        foreach (var (entityId, stackId) in _entries)
-        {
-            inventoryView.TryGetStack(entityId, stackId, out var stack);
-            InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition);
-            definitions.Add(definition);
-        }
-
-        itemDetailsWindowController.UpdateComparedAgainst(definitions);
-
-        var anchorDefinition = itemDetailsWindowController.CurrentDefinition;
-        var anchorRectangle = itemDetailsWindowController.Rectangle;
-
-        for (var i = 0; i < _entries.Count; i++)
-        {
-            var otherDefinitions = new List<ItemDefinition>(definitions.Count);
-            if (anchorDefinition is not null)
-            {
-                otherDefinitions.Add(anchorDefinition);
-            }
-
-            for (var j = 0; j < definitions.Count; j++)
-            {
-                if (j != i)
-                {
-                    otherDefinitions.Add(definitions[j]);
-                }
-            }
-
-            var column = CreateColumn(_entries[i].EntityId, _entries[i].StackInstanceId, definitions[i], anchorRectangle, i, otherDefinitions);
-            if (column is null)
-            {
-                continue;
-            }
-
-            _columns.Add(column);
-        }
-    }
-
-    /// <summary>OnCompareRequested is deliberately never set here -- comparison columns get a Close button but no Compare button of their own (see ItemDetailsWindow.OnChildrenInitialized's own doc comment on why attachment is opt-in per instance).</summary>
-    private ItemDetailsWindow? CreateColumn(int entityId, uint stackInstanceId, ItemDefinition definition, Rectangle anchorRectangle, int siblingIndex, IReadOnlyList<ItemDefinition> comparedAgainst)
-    {
-        if (inventoryWindowController.PlayerInventoryWindow is not { } playerWindow)
-        {
-            return null;
-        }
-
-        var maximumSize = new Vector2(playerWindow.CurrentSize.X, mapWindow.CurrentSize.Y);
-        var window = elementPoolService.CreateElement<ItemDetailsWindow>(null, new ElementOptions
-        {
-            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
-            Layout = new ElementLayoutOptions
-            {
-                // Anchored to the comparison anchor's own live Rectangle, not chained through the
-                // previous column, and cascaded diagonally per sibling index -- see
-                // WindowCascadePlacement's own doc comment: chaining off the previous column used
-                // to run each new one further right by a full window-width, letting a
-                // third-or-later column spawn off-screen with nothing to pull it back. Clamped to
-                // the map's own screen-bounds proxy either way -- clamp size uses height 0, not
-                // maximumSize.Y (the WrapContent growth ceiling, ~the full map height): feeding
-                // that into the clamp made `screenSize.Y - size.Y` collapse to ~0, forcing every
-                // column's Y to the very top regardless of the anchor's own position or the
-                // cascade offset -- confirmed by reproduction (columns landing at the top of the
-                // screen with no vertical stagger). The real rendered height is unknown up front
-                // (WrapContent), so height-0 just keeps the position clamp from fighting the
-                // anchor-relative Y at all, rather than asserting a wrong assumed height.
-                RelativePosition = WindowCascadePlacement.ComputePosition(anchorRectangle, new Vector2(maximumSize.X, 0), siblingIndex, mapWindow.CurrentSize),
-                MaximumSize = maximumSize,
-                DisplayMode = ElementDisplayMode.WrapContent,
-            },
-            Chrome = new ElementChromeOptions
-            {
-                ShowTitle = true,
-                ShowBorder = true,
-                CanUserClose = true,
-                CanUserMinimize = false,
-                CanUserMove = true,
-                CanUserResize = false,
-                CanUserScrollVertical = true,
-                CanUserFocus = true,
-            },
-            Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
-        });
-        window.Configure(entityId, stackInstanceId, definition, playerWindow.ContentSize.X, comparedAgainst);
-        window.Closed += HandleColumnClosed;
-        window.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y), DynamicHudContextMenus.BuildCloseMenu(window, _layers));
-        window.Initialize();
-        _layers.Add(UiLayer.DynamicHud, window);
-        _layers.OpenMenuWindow(window);
-        itemWindows.Join(window);
-
-        return window;
-    }
-
-    /// <summary>Only reacts to a genuine user-initiated Close (via a column's own title-bar button) -- RebuildColumns' own programmatic teardown is guarded out via _isRebuilding. Removes the matching entry (found by this column's own index within _columns, since the two lists are built in lockstep) and rebuilds the rest.</summary>
-    private void HandleColumnClosed(Element closedWindow)
-    {
-        _layers.Remove(UiLayer.DynamicHud, closedWindow);
-        _layers.CloseMenuWindow(closedWindow);
-        itemWindows.Leave(closedWindow);
-
-        if (_isRebuilding || closedWindow is not ItemDetailsWindow closedColumn)
-        {
-            return;
-        }
-
-        var index = _columns.IndexOf(closedColumn);
-        if (index < 0)
-        {
-            return;
-        }
-
-        _entries.RemoveAt(index);
-        RebuildColumns();
     }
 }

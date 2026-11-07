@@ -35,10 +35,9 @@ namespace Presentation.UI.Content;
 /// mutation or a property change, not every frame) whenever the pool's per-entity version
 /// changes, or SortOrder/NameFilter/HideDisabled actually changes. Its hover is
 /// the cell UiInputController finds under the pointer (Element.IsPointerOver), so a cell under
-/// another window or scrolled out of view is never hovered. Shows/hides through the shared TooltipController
-/// (see its own doc comment) rather than owning a private Tooltip -- this instance itself is what
-/// TooltipController.Show/Hide's owner identity is, since a specific InventoryGridContent instance
-/// is already exactly "one independent poller" (one per tab, or per Trade column).
+/// another window or scrolled out of view is never hovered; it is reported to ItemHoverDetails every
+/// update, with this instance as the owner (one independent poller per tab, or per Trade column).
+/// While a shop is open it prices the items it shows for Item Details (IItemShopPricingSource).
 /// </summary>
 public sealed class InventoryGridContent(
     World world,
@@ -47,11 +46,9 @@ public sealed class InventoryGridContent(
     ContextMenuController contextMenuController,
     int entityId,
     GameplayTag filterTag,
-    TooltipController tooltipController,
     Func<int?> getSecondaryTargetEntityId,
     MapViewState mapViewState,
     Action<int, uint> onItemSelected,
-    Action<int, uint> onCompareRequested,
     Action<int, uint> onActivateRequested,
     Action<int> onOpenLootboxesRequested,
     // "CurrentFrame" for the shared action lock, which is a deadline (see ActionLockGate) -- only read by
@@ -65,7 +62,7 @@ public sealed class InventoryGridContent(
     // (buy pricing, same direction the real shop grid uses), false for the player-side column
     // (sell pricing, same direction the real player grid uses). See IsThisGridTheShop's own use
     // below for every place this substitutes for the ordinary entity-id check.
-    bool? tradeGridIsShopSide = null) : IElementContent, IContentDropTarget
+    bool? tradeGridIsShopSide = null) : IElementContent, IContentDropTarget, IItemShopPricingSource
 {
     private readonly ItemCatalog _itemCatalog = inventoryServices.ItemCatalog;
     private readonly InventoryView _inventoryView = inventoryServices.InventoryView;
@@ -92,9 +89,6 @@ public sealed class InventoryGridContent(
     /// <summary>A drop anywhere on this grid, a cell or the space between them, lands in its entity's inventory.</summary>
     public object? DropTargetFor(object payload, Point position) => _dropTarget;
 
-    /// <summary>Popup sits just to the right of whatever's hovered, vertically centered against it -- see PopupPositioning.GetPosition(East).</summary>
-    private static readonly Vector2 PopupGap = new(1, 1);
-
     /// <summary>Same LightGreen/LightCoral pair ShopItemStackCell's own price-line color and ItemDetailsWindow's BetterColor/WorseColor already use (LightCoral, not IndianRed -- see ItemDetailsWindow.WorseColor's own doc comment for why) -- see ComputeShopRows' own doc comment for the favorable/unfavorable-per-grid-direction rule these color.</summary>
     private static readonly Color FavorableStatusColor = Color.LightGreen;
 
@@ -113,9 +107,8 @@ public sealed class InventoryGridContent(
     private InventoryItemStackCell? _hoveredCell;
     private int _hoveredFrames;
 
-    /// <summary>The hovered item's summary and rows, rebuilt only when what they're built from changes -- the popup stays up for many frames.</summary>
-    private readonly KeyedCache<(ItemDefinition Definition, bool ShowCharges), string> _hoverSummary = new();
-    private readonly KeyedCache<HoverRowsKey, IReadOnlyList<TooltipRow>?> _hoverRows = new();
+    /// <summary>The shop pricing rows each cell's Item Details last asked for, rebuilt only when what they're built from changes -- one cache per cell, since Item Details and the comparison popup can both ask every update for different cells of this grid.</summary>
+    private readonly Dictionary<(int EntityId, uint? StackInstanceId, Guid DefinitionId), KeyedCache<ShopPricingRowsKey, IReadOnlyList<TooltipRow>>> _shopPricingRowsByCell = [];
     private bool _closeHookupSubscribed;
     private bool _isRebuildingCells;
     private bool _isRebuildCellsRequestedDuringRebuild;
@@ -260,7 +253,7 @@ public sealed class InventoryGridContent(
         // only invokes Closed on the exact window it's called on, and a child torn down as part of
         // its parent's own recursive close (ElementPoolService.CloseAllChildren) never fires its
         // own Closed at all. Walking up to whichever ancestor genuinely has no Window parent finds
-        // the one that's actually .Close()'d directly, so the tooltip still hides itself the moment
+        // the one that's actually .Close()'d directly, so the hover still ends the moment
         // the real top-level window closes, regardless of how deep this grid is nested inside it.
         // Guarded to run once per instance -- TabbedContent re-Initializes the same instance every
         // time the player switches back to its tab (see this method's own doc comment), which would
@@ -274,7 +267,7 @@ public sealed class InventoryGridContent(
                 root = parentWindow;
             }
 
-            root.Closed += _ => tooltipController.Hide(this);
+            root.Closed += _ => inventoryServices.ItemHoverDetails.EndHover(this);
         }
 
         _isShopMode = mapViewState.OpenShopEntityId is not null;
@@ -469,12 +462,7 @@ public sealed class InventoryGridContent(
         }
     }
 
-    /// <summary>
-    /// Header highlight is immediate (instant visual feedback); the popup itself is delay-gated
-    /// against the same shared PopupChrome.HoverTooltipDelayFrames AbilityScoreWindow/
-    /// HotbarController use -- but hides immediately on candidate change/loss (no delay on
-    /// hiding, only on showing, same convention MapViewState.HoverSlot uses).
-    /// </summary>
+    /// <summary>Reports the cell under the pointer to ItemHoverDetails with how many updates it has been hovered, or that none is -- the count restarts when the cell changes.</summary>
     private void UpdateHover()
     {
         var candidate = FindHoverCandidate();
@@ -489,55 +477,58 @@ public sealed class InventoryGridContent(
             _hoveredFrames = candidate is null ? 0 : 1;
         }
 
-        if (candidate is null || _hoveredFrames < PopupChrome.HoverTooltipDelayFrames)
+        if (candidate is null || !TryResolveHoverTarget(candidate, out var target))
         {
-            tooltipController.Hide(this);
+            inventoryServices.ItemHoverDetails.EndHover(this);
             return;
         }
 
+        inventoryServices.ItemHoverDetails.Hover(this, target, _hoveredFrames, this);
+    }
+
+    /// <summary>The cell's effective item, or for a merged cell (no single stack, see CellEntry) its catalog definition -- false when the stack is already gone.</summary>
+    private bool TryResolveHoverTarget(InventoryItemStackCell cell, out ItemHoverTarget target)
+    {
         ItemDefinition? definition = null;
-        var isSingleStack = candidate.StackInstanceId is not null;
-        ushort? stackQuantity = null;
-        if (candidate.StackInstanceId is { } stackInstanceId)
+        if (cell.StackInstanceId is { } stackInstanceId)
         {
-            if (_inventoryView.TryGetStack(entityId, stackInstanceId, out var stack))
+            if (_inventoryView.TryGetStack(cell.EntityId, stackInstanceId, out var stack))
             {
                 InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out definition);
-                stackQuantity = stack.Quantity;
             }
         }
         else
         {
-            // A merged cell (see CellEntry's own doc comment) has no single stack to resolve --
-            // fall back to the plain catalog definition, the same "default" shape every member
-            // shares the ItemDefinitionId of.
-            _itemCatalog.TryGet(candidate.ItemDefinitionId, out definition);
+            _itemCatalog.TryGet(cell.ItemDefinitionId, out definition);
         }
 
-        if (definition is null)
-        {
-            return;
-        }
-
-        // Charges only makes sense for one specific physical stack -- a merged cell could be
-        // averaging over several different charge counts, so it's suppressed there entirely
-        // rather than showing a misleading single number.
-        var summary = _hoverSummary.Get((definition, isSingleStack), inventoryServices.GameplayTags, static (key, gameplayTags) => ItemHoverSummary.For(key.Definition, key.ShowCharges, gameplayTags));
-
-        var blocker = candidate.StackInstanceId is { } blockedStackInstanceId && entityId == world.PlayerEntityId && definition.Activator is not null
-            ? _actionStateView.GetItemBlocker(world.PlayerEntityId, blockedStackInstanceId)
-            : ActivationBlocker.None;
-        var hasShopRows = TryGetShopRowsInputs(definition, out var shopRowsInputs);
-        var rows = _hoverRows.Get(new HoverRowsKey(definition, stackQuantity, blocker, hasShopRows, shopRowsInputs), static key => WithBlockerRows(key.Blocker, key.HasShopRows ? ComputeShopRows(key.Definition, key.StackQuantity, key.ShopRowsInputs) : null));
-
-        // Shop mode's band table needs a guaranteed-wide-enough box for its range-annotated rows
-        // (e.g. "Understocked (10-14)") -- a plain description tooltip still shrinks to content as
-        // before.
-        tooltipController.Show(this, candidate.Rectangle, PopupAnchor.East, PopupGap, PopupChrome.HoverPopupMaximumSize, summary, definition.Name, rows, useFixedWidth: hasShopRows);
+        target = definition is null ? default : new ItemHoverTarget(cell.EntityId, cell.StackInstanceId, definition);
+        return definition is not null;
     }
 
-    /// <summary>Everything the hover popup's rows are built from -- the cache key for them, so they're rebuilt only when one changes.</summary>
-    private readonly record struct HoverRowsKey(ItemDefinition Definition, ushort? StackQuantity, ActivationBlocker Blocker, bool HasShopRows, ShopRowsInputs ShopRowsInputs);
+    /// <summary>The stock-band table and receipt for target as this grid prices it (see ComputeShopRows) -- null outside shop mode.</summary>
+    public IReadOnlyList<TooltipRow>? ShopPricingRowsFor(in ItemHoverTarget target)
+    {
+        if (!TryGetShopRowsInputs(target.Definition, out var inputs))
+        {
+            return null;
+        }
+
+        ushort? stackQuantity = target.StackInstanceId is { } stackInstanceId && _inventoryView.TryGetStack(target.EntityId, stackInstanceId, out var stack)
+            ? stack.Quantity
+            : null;
+        var cellKey = (target.EntityId, target.StackInstanceId, target.Definition.Id);
+        if (!_shopPricingRowsByCell.TryGetValue(cellKey, out var cellRows))
+        {
+            cellRows = new KeyedCache<ShopPricingRowsKey, IReadOnlyList<TooltipRow>>();
+            _shopPricingRowsByCell[cellKey] = cellRows;
+        }
+
+        return cellRows.Get(new ShopPricingRowsKey(target.Definition, stackQuantity, inputs), static key => ComputeShopRows(key.Definition, key.StackQuantity, key.Inputs));
+    }
+
+    /// <summary>Everything the shop pricing rows are built from -- the cache key for them, so they're rebuilt only when one changes.</summary>
+    private readonly record struct ShopPricingRowsKey(ItemDefinition Definition, ushort? StackQuantity, ShopRowsInputs Inputs);
 
     /// <summary>What ComputeShopRows reads from the open shop for one item: the shop as this player trades with it (its accepted items and multipliers), which side this grid is, and the stock levels pricing reads.</summary>
     private readonly record struct ShopRowsInputs(GameplayTagQuery? AcceptedItems, float BuyMultiplier, float SellMultiplier, bool IsThisGridTheShop, int EffectiveStock, byte PreferredStockLevel)
@@ -545,27 +536,9 @@ public sealed class InventoryGridContent(
         public ShopComponent Shop => new(AcceptedItems, BuyMultiplier, SellMultiplier);
     }
 
-    /// <summary>The reason the player can't use this item (see ActivationBlockerText) ahead of whatever rows shop mode adds -- only the player's own activatable stacks ever have one; a sword with no activation isn't "deactivated".</summary>
-    private static IReadOnlyList<TooltipRow>? WithBlockerRows(ActivationBlocker blocker, IReadOnlyList<TooltipRow>? rows)
-    {
-        if (blocker == ActivationBlocker.None)
-        {
-            return rows;
-        }
-
-        var combined = new List<TooltipRow>();
-        ActivationBlockerText.AppendRows(combined, blocker);
-        if (rows is not null)
-        {
-            combined.AddRange(rows);
-        }
-
-        return combined;
-    }
-
     /// <summary>
     /// The stock-band table (one row per StockStatus, each showing its own stock range alongside
-    /// its price) under the description while shop mode is open -- null outside it. Shown
+    /// its price), Item Details' shop pricing section while shop mode is open. Shown
     /// unconditionally, not just when the current band is Overstocked/Understocked -- the whole
     /// point of a band table is showing the player
     /// where "now" sits on the curve, which is exactly as informative for a Normal-band item as any
@@ -573,7 +546,6 @@ public sealed class InventoryGridContent(
     /// inner-fade glow instead (green for Desperate/Understocked, red for Overstocked/Flooded, white
     /// for Normal -- a fixed mapping, not the favorable/unfavorable-per-grid-direction rule
     /// ShopItemStackCell's own price-line color still uses) rather than by coloring that row's text.
-    /// A divider separates the table from the description above it.
     ///
     /// On the player's own grid specifically (never the shop's own -- buying from the shop has no
     /// analogous cap), a wrong-tag item or one the shop is already at ItemDefinition.
@@ -602,7 +574,7 @@ public sealed class InventoryGridContent(
             var maximumShopStock = definition.MaximumShopStock ?? ShopStockPricing.DefaultMaximumShopStock;
             if (!ShopActions.CanTrade(shop, definition) || effectiveStock >= maximumShopStock)
             {
-                return [TooltipRow.Divider(neutralColor), new TooltipRow("Shop will not buy", string.Empty, UnfavorableStatusColor)];
+                return [new TooltipRow("Shop will not buy", string.Empty, UnfavorableStatusColor)];
             }
         }
 
@@ -611,7 +583,7 @@ public sealed class InventoryGridContent(
         var (e1, e2, e3, e4) = ShopStockPricing.GetBandEdges(preferredStockLevel, maxStock);
         var currentBand = ShopStockPricing.GetStockStatus(effectiveStock, e1, e2, e3, e4);
 
-        var rows = new List<TooltipRow> { TooltipRow.Divider(neutralColor) };
+        var rows = new List<TooltipRow>();
         foreach (var band in ShopStockPricing.GetAllBands())
         {
             var (low, high) = ShopStockPricing.GetBandRange(band, e1, e2, e3, e4);
@@ -693,7 +665,7 @@ public sealed class InventoryGridContent(
         // which Window already draws as part of its own child-element loop.
     }
 
-    /// <summary>Removes every cell -- called by TabbedContent when this tab is switched away from. Also hides the hover popup -- a no-op today (there's only one tab), but keeps this correct if a second tab is ever added.</summary>
+    /// <summary>Removes every cell and ends its hover -- called by TabbedContent when this tab is switched away from.</summary>
     public void Deactivate()
     {
         elementPoolService.CloseAllChildren(_hostWindow);
@@ -701,16 +673,17 @@ public sealed class InventoryGridContent(
         _hoveredCell = null;
         _hoveredFrames = 0;
         _expandedItemDefinitionId = null;
-        tooltipController.Hide(this);
+        _shopPricingRowsByCell.Clear();
+        inventoryServices.ItemHoverDetails.EndHover(this);
     }
 
     private void OnHostWindowContentResized(Element _) => RebuildCells();
 
     /// <summary>
     /// Clicking a badged (merged) cell expands its item id. A real single-stack cell click
-    /// (standalone, or one of an already-expanded group's own member cells) opens/updates the
-    /// Item Details window for that stack instead of collapsing anything -- the group needs to
-    /// stay expanded while the player browses its members' details one at a time. Collapsing an
+    /// (standalone, or one of an already-expanded group's own member cells) goes to onItemSelected
+    /// -- selecting the stack, or picking it for a comparison -- instead of collapsing anything,
+    /// so the group stays expanded while the player works through its members. Collapsing an
     /// expanded group back down therefore no longer happens via re-clicking one of its own
     /// members (there is no persistent badge cell to re-click while expanded -- see
     /// InventoryItemStackCell's own doc comment on Expansion Stacks replacing the badge entirely)
@@ -748,12 +721,9 @@ public sealed class InventoryGridContent(
 
     /// <summary>
     /// Double-click-to-activate -- a second entry point into the same arm flow "Activate"
-    /// (BuildItemContextMenu) uses. Single/double-click disambiguation itself (the deferred-single-
-    /// click, cancel-on-double timing) is UiInputController's own job now (see its
-    /// DispatchClick/HandleDoubleClickAwareClick) -- this only ever runs once UiInputController has
-    /// already decided a second click on this cell landed within the double-click window, so
-    /// OnCellClicked's own onItemSelected call for the first click is guaranteed never to have fired
-    /// (or ever will) for this gesture. Only wired up for player-owned, non-Merged-Stack cells (see
+    /// (BuildItemContextMenu) uses. UiInputController raises it in place of the second click
+    /// (DispatchClick/HandleDoubleClickAwareClick); the first already selected the stack, which a
+    /// double-click leaves selected. Only wired up for player-owned, non-Merged-Stack cells (see
     /// RebuildCells) -- a corpse/shop/trade cell, or a Merged Stack badge, never reaches here at all.
     /// </summary>
     private void OnCellDoubleClicked(Element element)
@@ -896,7 +866,7 @@ public sealed class InventoryGridContent(
             options.Add(new DropdownOption(ActivateLabel(stackInstanceId), null, Enabled: !IsHeldByActionLock(stackInstanceId) && !IsBlocked(stackInstanceId), () => onActivateRequested(cell.EntityId, stackInstanceId)));
         }
 
-        options.Add(new DropdownOption("Compare", null, Enabled: true, () => onCompareRequested(cell.EntityId, stackInstanceId)));
+        options.Add(new DropdownOption("Compare", null, Enabled: true, () => inventoryServices.ItemHoverDetails.Compare(cell.EntityId, stackInstanceId, this)));
 
         // While a shop is open, every cell's ShopTradeEligible reflects shop trade eligibility
         // (see UpdateShopEligibilityState) -- false (wrong tag, or the paying side can't afford
@@ -1112,11 +1082,8 @@ public sealed class InventoryGridContent(
             cell.Clicked += OnCellClicked;
 
             // Only the player's own real (non-Merged-Stack) cells ever support Activate at all (see
-            // CanActivate) -- gating DoubleClicked's subscription the same way keeps every other
-            // cell's single click exactly as instant as before double-click existed, rather than
-            // paying UiInputController's deferred-click cost for a feature that could never apply
-            // (a Merged Stack badge's own click must stay instant too -- expanding a group has
-            // nothing to do with double-click).
+            // CanActivate), so only they listen for a double-click: on any other cell a quick second
+            // click stays a click (a Merged Stack badge's expands its group).
             if (!entry.MergedStackBadgeVisible && entityId == world.PlayerEntityId)
             {
                 cell.DoubleClicked += OnCellDoubleClicked;

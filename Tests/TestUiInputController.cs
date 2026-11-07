@@ -50,7 +50,7 @@ internal static class TestUiInputController
 
         if (itemComparisonController is not null)
         {
-            inputHandlers.Add(new ItemComparisonDisarmInputHandler(itemComparisonController));
+            inputHandlers.Add(new ItemComparisonInputHandler(itemComparisonController));
         }
 
         if (hotbarController is not null)

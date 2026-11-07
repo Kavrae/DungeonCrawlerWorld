@@ -40,9 +40,7 @@ public abstract class ContainerInventoryWindow(
     private const string UnlimitedCapacityText = "∞";
     private static readonly float RowHeight = InventoryGridContent.CellSize.Y + InventoryGridContent.CellGap;
 
-    private TooltipController _tooltipController = null!;
     private Action<int, uint> _onItemSelected = static (_, _) => { };
-    private Action<int, uint> _onCompareRequested = static (_, _) => { };
     private Window _gridWindow = null!;
     private InventoryGridContent _gridContent = null!;
     private TextWindow _gridHeader = null!;
@@ -85,12 +83,10 @@ public abstract class ContainerInventoryWindow(
     private float GridTop => SummaryHeight + Padding + TextLineHeight;
 
     /// <summary>Must be called after CreateElement but before Initialize. Registers the currency row here, so FooterHeight is set before the first measure.</summary>
-    public void Configure(int entityId, TooltipController tooltipController, Action<int, uint> onItemSelected, Action<int, uint> onCompareRequested)
+    public void Configure(int entityId, Action<int, uint> onItemSelected)
     {
         EntityId = entityId;
-        _tooltipController = tooltipController;
         _onItemSelected = onItemSelected;
-        _onCompareRequested = onCompareRequested;
         _gridRows = 0;
         _gridScrolls = false;
         OnConfigured();
@@ -207,7 +203,7 @@ public abstract class ContainerInventoryWindow(
         _gridWindow.ContentPadding = Vector2.Zero;
 
         // Activate is player-inventory-only (InventoryGridContent.CanActivate), so it is never reached here.
-        _gridContent = new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, EntityId, filterTag: GameplayTag.None, _tooltipController, () => EntityId, mapViewState, _onItemSelected, _onCompareRequested, static (_, _) => { }, static _ => { }, simulationClock: simulationClock);
+        _gridContent = new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, EntityId, filterTag: GameplayTag.None, () => EntityId, mapViewState, _onItemSelected, static (_, _) => { }, static _ => { }, simulationClock: simulationClock);
         _gridWindow.SetContent(_gridContent);
         AddChild(_gridWindow);
     }

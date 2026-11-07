@@ -47,6 +47,7 @@ public static class ShellBootstrapper
         var commands = gameSession.Commands;
 
         var pointerState = new PointerState();
+        var cursorLabelContent = new CursorLabelContent(pointerState, uiEngine.FontService);
         var shellServices = new ShellServices(
             new UiLayerStack(),
             new MapViewState { ReservedEntityIds = worldSession.ReservedEntityIds },
@@ -54,7 +55,9 @@ public static class ShellBootstrapper
             new ContextMenuController(new DropdownController(uiEngine.ElementPoolService, uiEngine.RenderService)),
             new TooltipController(),
             pointerState,
-            new CursorTextContent(pointerState, uiEngine.FontService));
+            new CursorTextContent(pointerState, uiEngine.FontService),
+            cursorLabelContent,
+            new ItemHoverDetails(cursorLabelContent));
         var uiLayers = shellServices.Layers;
         var mapViewState = shellServices.MapViewState;
         var contextMenuController = shellServices.ContextMenuController;
@@ -87,7 +90,7 @@ public static class ShellBootstrapper
         var (notificationCenter, healthController) = BuildDynamicHudWindows(uiEngine, world, ecsContext.EventBus, contextMenuController, uiLayers);
         var itemWindows = new ItemWindowCoordinator(uiEngine.ElementPoolService, shellServices, world, mapWindow, actionTargetingController, views.InventoryView, catalogs.ItemCatalog, catalogs.LootboxCatalog, commands.LootCommands, commands.LootboxCommands, worldSession.ReservedEntityIds);
         var hotbarController = BuildHotbarController(mapViewState, hotbarContent, actionTargetingController, tooltipController, contextMenuController);
-        BuildUserWindows(uiEngine, shellServices.CursorTextContent, dragGhostContent, uiLayers);
+        BuildUserWindows(uiEngine, [dragGhostContent, shellServices.CursorTextContent, shellServices.CursorLabelContent], uiLayers);
 
         var abilityScoreController = BuildAbilityScoreWindowController(uiEngine, world, views.InventoryView, itemWindows.Inventory, mapWindow, contextMenuController, uiLayers, tooltipController);
         var diagnosticsController = BuildDiagnosticsWindowController(uiEngine, ecsContext, diagnostics, uiLayers);
@@ -113,7 +116,7 @@ public static class ShellBootstrapper
             new KeyPressInputHandler(Keys.O, abilityScoreController.ToggleAbilityScoreWindow),
             new KeyPressInputHandler(Keys.F3, diagnosticsController.ToggleDiagnosticsWindow),
             new KeyPressInputHandler(Keys.LeftAlt, targetingModeSwitch.Switch),
-            new ItemComparisonDisarmInputHandler(itemWindows.ItemComparison),
+            new ItemComparisonInputHandler(itemWindows.ItemComparison),
             new HotbarInputHandler(hotbarController),
             new ActivationRefusalInputHandler(),
         ];
@@ -353,31 +356,21 @@ public static class ShellBootstrapper
         MapViewState mapViewState, HotbarContent hotbarContent, ActionTargetingController actionTargeting, TooltipController tooltipController, ContextMenuController contextMenuController) =>
         new(mapViewState, hotbarContent, actionTargeting, tooltipController, contextMenuController);
 
-    /// <summary>User tier: hosts cursorTextContent/dragGhostContent, both drawn at the pointer through PointerState -- see UiLayer's own doc comment for what this tier is for.</summary>
-    private static void BuildUserWindows(UiEngineContext uiEngine, CursorTextContent cursorTextContent, DragGhostContent dragGhostContent, UiLayerStack layers)
+    /// <summary>User tier: one zero-size, transparent window per content drawn at the pointer through PointerState (the drag ghost, cursor text, the hovered item's name) -- see UiLayer's own doc comment for what this tier is for.</summary>
+    /// <remarks>Each content draws at the live mouse position, not relative to its window's bounds, so a window exists only to host its content and get its DrawContent called.</remarks>
+    private static void BuildUserWindows(UiEngineContext uiEngine, IElementContent[] cursorContents, UiLayerStack layers)
     {
-        // Zero-size and fully transparent -- DragGhostContent draws directly at the live mouse
-        // position (see its own doc comment), not relative to this window's own bounds, so the
-        // window itself exists only to host the content and get its DrawContent called.
-        var dragGhostWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
+        foreach (var cursorContent in cursorContents)
         {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = Vector2.Zero, DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-        });
-        dragGhostWindow.SetContent(dragGhostContent);
-        dragGhostWindow.Initialize();
-        layers.Add(UiLayer.User, dragGhostWindow);
-
-        // Same hosting shape as dragGhostWindow above -- see CursorTextContent's own doc comment
-        // for why it's built the same way DragGhostContent is.
-        var cursorTextWindow = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
-        {
-            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = Vector2.Zero, DisplayMode = ElementDisplayMode.Fixed },
-            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
-        });
-        cursorTextWindow.SetContent(cursorTextContent);
-        cursorTextWindow.Initialize();
-        layers.Add(UiLayer.User, cursorTextWindow);
+            var window = uiEngine.ElementPoolService.CreateElement<Window>(null, new ElementOptions
+            {
+                Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, Size = Vector2.Zero, DisplayMode = ElementDisplayMode.Fixed },
+                Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            });
+            window.SetContent(cursorContent);
+            window.Initialize();
+            layers.Add(UiLayer.User, window);
+        }
     }
 
     /// <summary>TEMPORARYOpens a fresh closeable popup with one multiline TextBox; submitting posts a Quest notification and closes the popup. Returns the popup so the caller can focus it.</summary>

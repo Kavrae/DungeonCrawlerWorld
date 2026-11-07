@@ -1,4 +1,5 @@
 using Presentation.MapRendering;
+using Presentation.UI.Inventory;
 using UIEngine.Input;
 using UIEngine.UI;
 using UIEngine.UI.Content;
@@ -17,4 +18,6 @@ public sealed record ShellServices(
     ContextMenuController ContextMenuController,
     TooltipController TooltipController,
     PointerState PointerState,
-    CursorTextContent CursorTextContent);
+    CursorTextContent CursorTextContent,
+    CursorLabelContent CursorLabelContent,
+    ItemHoverDetails ItemHoverDetails);

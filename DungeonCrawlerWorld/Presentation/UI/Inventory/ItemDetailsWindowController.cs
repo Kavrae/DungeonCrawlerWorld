@@ -1,80 +1,100 @@
+using Engine.Utilities;
 using Game.Modules.Inventory;
 using Game.Views;
 using Microsoft.Xna.Framework;
+using Presentation.UI.Content;
+using UIEngine.Geometry;
+using UIEngine.Input;
 using UIEngine.UI;
 using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Inventory;
 
-/// <summary>
-/// Owns the single, persistent Item Details window -- shows whatever item stack was last clicked
-/// in either the player's own inventory grid or an open secondary/corpse grid (see
-/// InventoryWindowController.OnItemSelected/SecondaryInventoryWindowController.OnItemSelected,
-/// both wired here by ItemWindowCoordinator). Clicking a different item updates this same window in
-/// place rather than opening a second one -- mirrors SecondaryInventoryWindowController's own
-/// "one target at a time" shape, but for item selection instead of a loot target. Always opens
-/// next to the player's own InventoryManagementWindow (InventoryWindowController.PlayerInventoryWindow),
-/// even when the click that opened it came from a secondary/corpse grid -- matches the literal
-/// "next to the Inventory Menu" spec rather than whichever grid happened to be clicked. The one
-/// exception is a loot box reward clicked in the results window, which opens next to that window
-/// instead (see Open's anchorWindow and OpenDefinition). Also
-/// drives MapViewState.SelectedItemStackInstanceId, which InventoryGridContent and HotbarContent
-/// both read to glow the selected stack wherever it's shown.
-/// </summary>
+/// <summary>Owns one Item Details popup: one item at a time, opened just below and right of the cursor, closed when the pointer has left both the item and the popup for a moment -- unless pinned.</summary>
+/// <remarks>
+/// The game has two: Item Details itself and, while comparing, the hovered item's comparison (ItemComparisonController
+/// routes hovers between them). Showing another item while one is open updates it in place and moves it to the cursor.
+/// It stays open while the pointer is over the item's own cell, over the popup itself or over a context menu; otherwise
+/// it closes once the pointer has been away for PointerAwayGraceFrames. Pinned (Compare), it moves beside the window
+/// holding its item and stays wherever the pointer goes. With closesOnPressOutside, a press outside every item window closes it too (light dismiss).
+/// Without closesWhenPointerLeaves (the comparison popup, kept below the pinned Item Details, out of the pointer's way)
+/// it stays open wherever the pointer goes, until it shows another item or is closed.
+/// Its width is the player's Inventory window's, or the loot box results window's for a reward.
+/// </remarks>
 public sealed class ItemDetailsWindowController(
     ElementPoolService elementPoolService,
     InventoryView inventoryView,
     ItemCatalog itemCatalog,
     InventoryWindowController inventoryWindowController,
-    ContextMenuController contextMenuController,
-    MapViewState mapViewState,
     MapWindow mapWindow,
-    ElementGroup itemWindows) : ILightDismissable
+    PointerState pointerState,
+    ElementGroup itemWindows,
+    bool closesOnPressOutside = true,
+    bool closesWhenPointerLeaves = true) : ILightDismissable
 {
+    /// <summary>How far below and right of the cursor the popup's top-left lands, so a double-click on the item never lands on the popup's edge.</summary>
+    private static readonly Vector2 CursorOffset = new(16, 16);
+
+    /// <summary>How long the pointer may be away from both the item and the popup before it closes -- time to cross the gap CursorOffset leaves.</summary>
+    private static readonly int PointerAwayGraceFrames = GameTiming.FramesForSeconds(0.3f);
 
     private UiLayerStack _layers = null!;
     private ItemDetailsWindow? _window;
+    private int _pointerAwayFrames;
 
-    /// <summary>The window the open Item Details docks beside and takes its width from: the player's Inventory window, or the loot box results window for a reward clicked there.</summary>
-    private Window? _anchorWindow;
+    /// <summary>The window the open Item Details takes its width from: the player's Inventory window, or the loot box results window for a reward clicked there.</summary>
+    private Window? _widthSourceWindow;
+
+    /// <summary>What the open window shows -- its stack is null for a merged cell's or a used-up reward's definition.</summary>
+    private ItemHoverTarget? _shownTarget;
 
     public bool IsOpen => _window is not null;
+
+    /// <summary>True from PinBeside until the window closes: it stays where it was put, wherever the pointer goes.</summary>
+    public bool IsPinned { get; private set; }
 
     /// <summary>The open window's own bounds -- Rectangle.Empty when nothing is open.</summary>
     public Rectangle Rectangle => _window?.Rectangle ?? Rectangle.Empty;
 
-    /// <summary>The item currently shown, if any -- Item Details Comparison's own anchor identity (ItemComparisonController.Arm/AddOrToggle read these to gate eligibility and detect "is this the anchor itself").</summary>
-    public ItemDefinition? CurrentDefinition { get; private set; }
+    /// <summary>The open window, if any.</summary>
+    public ItemDetailsWindow? Window => _window;
 
-    public int? CurrentEntityId { get; private set; }
+    /// <summary>The item currently shown, if any -- the comparison's anchor identity while pinned.</summary>
+    public ItemDefinition? CurrentDefinition => _shownTarget?.Definition;
 
-    public uint? CurrentStackInstanceId { get; private set; }
+    public int? CurrentEntityId => _shownTarget?.EntityId;
 
-    /// <summary>Settable late-bound notification fired when this window closes -- wired by ItemWindowCoordinator to ItemComparisonController.ClearComparison, since a stale comparison against an item that's no longer even shown doesn't make sense.</summary>
+    public uint? CurrentStackInstanceId => _shownTarget?.StackInstanceId;
+
+    /// <summary>Settable late-bound notification fired when this window closes.</summary>
     public Action? OnClosed { get; set; }
 
-    /// <summary>Settable late-bound callback for the anchor window's own "Compare" title button -- wired by ItemWindowCoordinator to ItemComparisonController.Arm once that controller exists (built after this one). Threaded into the window itself (see ItemDetailsWindow.OnCompareRequested) via a wrapper lambda, not the property's own current value captured once, so re-assignment ordering can never matter.</summary>
+    /// <summary>Settable late-bound: where the popup's top-left goes, kept there every update, instead of beside the cursor -- the comparison popup's, below the pinned Item Details.</summary>
+    public Func<Vector2>? FixedPosition { get; set; }
+
+    /// <summary>Settable late-bound callback for the window's own "Compare" button -- none on a popup that leaves it unset.</summary>
     public Action<int, uint>? OnCompareRequested { get; set; }
+
+    /// <summary>Settable late-bound callback for the window's "Stop Comparison" button, shown while pinned.</summary>
+    public Action? OnStopComparisonRequested { get; set; }
 
     public void Initialize(UiLayerStack layers) => _layers = layers;
 
-    /// <summary>Every open item window (itemWindows: this one, inventory, loot, shop, trade, loot box results, comparison columns) is inside -- a press anywhere else closes it and goes no further.</summary>
+    /// <summary>Every open item window (itemWindows: this one, inventory, loot, shop, trade, loot box results) is inside -- a press anywhere else closes it and goes no further.</summary>
     public bool CountsAsInside(Element element) => itemWindows.Contains(element);
 
     public void Dismiss() => Close();
 
-    /// <summary>
-    /// Resolves stackInstanceId's live stack/effective item and shows it -- creates the window
-    /// (positioned next to the player's own Inventory window) if nothing is open yet, or just
-    /// updates the existing one's content in place otherwise (per spec: clicking another item
-    /// changes the same window's item, never opens a second one). A no-op if the stack can no
-    /// longer be resolved (e.g. fully consumed between the click and this call) or the player's
-    /// own Inventory window isn't open -- every path that can reach this call requires it open
-    /// first (both grids only exist inside/alongside it), but this controller has no other way
-    /// to anchor a first-time position if that assumption is ever violated.
-    /// </summary>
-    /// <param name="anchorWindow">The window to dock beside if this opens the window; null for the player's own Inventory window.</param>
-    public void Open(int entityId, uint stackInstanceId, Window? anchorWindow = null)
+    public bool IsShowing(in ItemHoverTarget target) => _window is not null && _shownTarget is { } shown && shown.IsSameCellAs(target);
+
+    /// <summary>Shows target at the cursor, priced by shopPricing while a shop is open, its lines coloured against comparedAgainst.</summary>
+    public void OpenAtCursor(in ItemHoverTarget target, IItemShopPricingSource shopPricing, IReadOnlyList<ItemDefinition> comparedAgainst) =>
+        Show(target, inventoryWindowController.PlayerInventoryWindow, shopPricing, comparedAgainst);
+
+    /// <summary>Shows stackInstanceId's live stack and effective item, priced by shopPricing while a shop is open -- a no-op if the stack is gone or there's no window to take the width from.</summary>
+    /// <param name="widthSourceWindow">The window whose width to take; null for the player's own Inventory window.</param>
+    /// <param name="shopPricing">The grid the item was chosen in, or null; an item already shown keeps its own pricing when this is null.</param>
+    public void Open(int entityId, uint stackInstanceId, Window? widthSourceWindow = null, IItemShopPricingSource? shopPricing = null)
     {
         if (!inventoryView.TryGetStack(entityId, stackInstanceId, out var stack) ||
             !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var definition))
@@ -82,106 +102,194 @@ public sealed class ItemDetailsWindowController(
             return;
         }
 
-        Show(entityId, stackInstanceId, definition, anchorWindow ?? inventoryWindowController.PlayerInventoryWindow);
-    }
-
-    /// <summary>Shows definition with no stack behind it -- a loot box reward whose stack has since been used up. Read-only: there's no stack to select or compare.</summary>
-    public void OpenDefinition(int entityId, ItemDefinition definition, Window anchorWindow) =>
-        Show(entityId, ItemDetailsWindow.NoStackInstanceId, definition, anchorWindow);
-
-    private void Show(int entityId, uint stackInstanceId, ItemDefinition definition, Window? anchorWindow)
-    {
-        if (anchorWindow is null)
+        var target = new ItemHoverTarget(entityId, stackInstanceId, definition);
+        if (IsShowing(target) && (shopPricing is null || ReferenceEquals(shopPricing, _window!.ShopPricing)))
         {
             return;
         }
 
-        _anchorWindow = anchorWindow;
-        CurrentDefinition = definition;
-        CurrentEntityId = entityId;
-        CurrentStackInstanceId = stackInstanceId == ItemDetailsWindow.NoStackInstanceId ? null : stackInstanceId;
-        var selectedStackInstanceId = CurrentStackInstanceId;
+        Show(target, widthSourceWindow ?? inventoryWindowController.PlayerInventoryWindow, shopPricing, comparedAgainst: []);
+    }
+
+    /// <summary>Shows definition with no stack behind it -- a loot box reward whose stack has since been used up. Read-only: there's no stack to compare.</summary>
+    public void OpenDefinition(int entityId, ItemDefinition definition, Window widthSourceWindow) =>
+        Show(new ItemHoverTarget(entityId, null, definition), widthSourceWindow, shopPricing: null, comparedAgainst: []);
+
+    /// <summary>Pins the open window beside besideWindow -- to its right, else its left, wherever it overlaps no other item window and stays on screen -- so it stays put, whatever the pointer does, until it closes.</summary>
+    public void PinBeside(Window besideWindow)
+    {
+        if (_window is not { } window)
+        {
+            return;
+        }
+
+        IsPinned = true;
+        var size = window.CurrentSize;
+        var screenSize = mapWindow.CurrentSize;
+        var beside = besideWindow.Rectangle;
+        Vector2[] candidates =
+        [
+            new(beside.Right + WindowCascadePlacement.Gap, beside.Top),
+            new(beside.Left - WindowCascadePlacement.Gap - size.X, beside.Top),
+        ];
+
+        foreach (var candidate in candidates)
+        {
+            var clamped = new Vector2(candidate.X, RectangleClamp.ClampInside(candidate, size, screenSize).Y);
+            if (clamped.X >= 0 && clamped.X + size.X <= screenSize.X && !OverlapsAnotherItemWindow(window, clamped, size))
+            {
+                window.SetRelativePosition(clamped);
+                return;
+            }
+        }
+
+        PlaceAt(window, candidates[0]);
+    }
+
+    private bool OverlapsAnotherItemWindow(Window window, Vector2 position, Vector2 size)
+    {
+        var bounds = new Rectangle((int)position.X, (int)position.Y, (int)size.X, (int)size.Y);
+        foreach (var member in itemWindows.Members)
+        {
+            if (!ReferenceEquals(member, window) && member.IsVisible && member.Rectangle.Intersects(bounds))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void Show(in ItemHoverTarget target, Window? widthSourceWindow, IItemShopPricingSource? shopPricing, IReadOnlyList<ItemDefinition> comparedAgainst)
+    {
+        if (widthSourceWindow is null)
+        {
+            return;
+        }
+
+        _widthSourceWindow = widthSourceWindow;
+        _shownTarget = target;
+        var stackInstanceId = target.StackInstanceId ?? ItemDetailsWindow.NoStackInstanceId;
+        var openPosition = FixedPosition?.Invoke() ?? new Vector2(pointerState.CursorPosition.X, pointerState.CursorPosition.Y) + CursorOffset;
+        _pointerAwayFrames = 0;
 
         if (_window is { } existing)
         {
-            existing.Configure(entityId, stackInstanceId, definition, anchorWindow.ContentSize.X);
-            mapViewState.SelectedItemStackInstanceId = selectedStackInstanceId;
+            existing.Configure(target.EntityId, stackInstanceId, target.Definition, widthSourceWindow.ContentSize.X, comparedAgainst, shopPricing);
+            PlaceAt(existing, openPosition);
             return;
         }
 
         var window = elementPoolService.CreateElement<ItemDetailsWindow>(null, new ElementOptions
         {
-            // ChildrenTileMode.Vertical -- every section ItemDetailsWindow.Rebuild adds stacks
-            // top to bottom automatically (see InspectionWindow's own host setup), so section
-            // content never needs to compute its own Y position.
+            // Vertical tiling stacks every section ItemDetailsWindow.Rebuild adds, so no section computes its own Y.
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = true, ChildrenTileMode = ChildElementTileMode.Vertical },
             Layout = new ElementLayoutOptions
             {
-                // Derived from the player window's own live position/size, not a hardcoded
-                // offset, the same idiom SecondaryInventoryWindowController.OpenLoot already
-                // uses for the corpse window -- stays adjacent even after the player drags
-                // their inventory window elsewhere. Singleton window (siblingCount 0), clamped
-                // to the map's own screen-bounds proxy via WindowCascadePlacement so this can
-                // never spawn off-screen if the player's dragged Inventory near an edge. Clamp
-                // size uses height 0, not mapWindow.CurrentSize.Y (the WrapContent growth
-                // ceiling, ~the full map height) -- feeding that into the clamp collapses
-                // `screenSize.Y - size.Y` to ~0, forcing Y to the very top regardless of the
-                // player window's own Top (confirmed by reproduction on the comparison-column
-                // version of this same call).
-                RelativePosition = WindowCascadePlacement.ComputePosition(
-                    anchorWindow.Rectangle, new Vector2(anchorWindow.CurrentSize.X, 0), 0, mapWindow.CurrentSize),
-                // WrapContent, not Fixed -- see ItemDetailsWindow's own doc comment for why:
-                // a Fixed-mode window whose own height shrinks between rebuilds re-measures its
-                // children against its own (small, stale) content size instead of a stable outer
-                // budget, silently clamping a later child's height to 0 once an earlier one's
-                // real content pushed it far enough down a tall column -- confirmed by
-                // reproduction (Tags rendering on top of Description). WrapContent's own Measure
-                // offers children the content area within this MaximumSize, a stable budget,
-                // sidestepping that shrink-feedback loop entirely -- the same mechanism Tooltip
-                // already relies on for its own auto-height content. MaximumSize.Y caps growth at
-                // the map's visible area (CanUserScrollVertical scrolls whatever overflows that).
-                MaximumSize = new Vector2(anchorWindow.CurrentSize.X, mapWindow.CurrentSize.Y),
+                RelativePosition = openPosition,
+                // WrapContent, not Fixed -- see ItemDetailsWindow's own doc comment. MaximumSize.Y caps growth at the
+                // map's visible area; CanUserScrollVertical scrolls whatever overflows it.
+                MaximumSize = new Vector2(widthSourceWindow.CurrentSize.X, mapWindow.CurrentSize.Y),
                 DisplayMode = ElementDisplayMode.WrapContent,
             },
             Chrome = new ElementChromeOptions
             {
-                ShowTitle = true,
+                ShowTitle = false,
                 ShowBorder = true,
-                CanUserClose = true,
+                CanUserClose = true, // No title bar, so no Close button: Escape still closes it.
                 CanUserMinimize = false,
-                CanUserMove = true,
+                CanUserMove = false,
                 CanUserResize = false, // WrapContent windows can't be manually resized -- see SetSize's own doc comment.
                 CanUserScrollVertical = true,
                 CanUserFocus = true,
             },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
-        window.Configure(entityId, stackInstanceId, definition, anchorWindow.ContentSize.X);
+        window.Configure(target.EntityId, stackInstanceId, target.Definition, widthSourceWindow.ContentSize.X, comparedAgainst, shopPricing);
         window.Closed += HandleClosed;
-        DynamicHudContextMenus.WireCloseContextMenu(window, contextMenuController, _layers);
-        window.OnCompareRequested = (compareEntityId, compareStackInstanceId) => OnCompareRequested?.Invoke(compareEntityId, compareStackInstanceId);
+        if (OnCompareRequested is not null)
+        {
+            window.OnCompareRequested = (compareEntityId, compareStackInstanceId) => OnCompareRequested?.Invoke(compareEntityId, compareStackInstanceId);
+        }
+
+        window.OnUpdated = HandleWindowUpdated;
+        window.IsComparing = () => IsPinned;
+        window.OnStopComparisonRequested = () => OnStopComparisonRequested?.Invoke();
         window.Initialize();
         _layers.Add(UiLayer.DynamicHud, window);
         _layers.OpenMenuWindow(window); // Menu Mode, same as the player's own Inventory window and a corpse window.
         itemWindows.Join(window);
-        _layers.OpenLightDismiss(this);
-
+        if (closesOnPressOutside)
+        {
+            _layers.OpenLightDismiss(this);
+        }
         _window = window;
-        mapViewState.SelectedItemStackInstanceId = selectedStackInstanceId;
+        PlaceAt(window, openPosition);
     }
 
-    public void Close() => _window?.Close();
-
-    /// <summary>Re-Configures the already-open window with the same item it's already showing, just a new comparedAgainst set -- Item Details Comparison's own "every column, anchor included, re-colors symmetrically whenever the compared set changes" step. A no-op if nothing is open or the player's own Inventory window isn't (mirrors Open's own guard -- ContentSize.X needs a live source).</summary>
-    public void UpdateComparedAgainst(IReadOnlyList<ItemDefinition> comparedAgainst)
+    /// <summary>Puts window's top-left at position, moved only as far as it takes to keep it on screen.</summary>
+    private void PlaceAt(Window window, Vector2 position)
     {
-        if (_window is not { } window || CurrentDefinition is not { } definition || CurrentEntityId is not { } entityId ||
-            CurrentStackInstanceId is not { } stackInstanceId || _anchorWindow is not { } anchorWindow)
+        var placed = RectangleClamp.ClampInside(position, window.CurrentSize, mapWindow.CurrentSize);
+        if (placed != window.RelativePosition)
+        {
+            window.SetRelativePosition(placed);
+        }
+    }
+
+    /// <summary>Each update of the open window: keep it on screen as its content grows, and -- unless pinned -- close it once the pointer has left both the shown item and the window.</summary>
+    private void HandleWindowUpdated()
+    {
+        if (_window is not { } window)
         {
             return;
         }
 
-        window.Configure(entityId, stackInstanceId, definition, anchorWindow.ContentSize.X, comparedAgainst);
+        PlaceAt(window, FixedPosition?.Invoke() ?? window.RelativePosition);
+
+        if (IsPinned || !closesWhenPointerLeaves || IsPointerOverShownItem(window))
+        {
+            _pointerAwayFrames = 0;
+            return;
+        }
+
+        _pointerAwayFrames++;
+        if (_pointerAwayFrames > PointerAwayGraceFrames)
+        {
+            Close();
+        }
+    }
+
+    private bool IsPointerOverShownItem(ItemDetailsWindow window)
+    {
+        for (var element = pointerState.HoveredElement; element is not null; element = element.ParentElement)
+        {
+            if (ReferenceEquals(element, window) || element is Dropdown)
+            {
+                return true;
+            }
+
+            if (element is InventoryItemStackCell cell && _shownTarget is { } shown && shown.EntityId == cell.EntityId &&
+                shown.StackInstanceId == cell.StackInstanceId && (cell.StackInstanceId is not null || shown.Definition.Id == cell.ItemDefinitionId))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public void Close() => _window?.Close();
+
+    /// <summary>Re-Configures the open window with the item it already shows, its lines coloured against comparedAgainst instead -- a no-op if nothing is open.</summary>
+    public void UpdateComparedAgainst(IReadOnlyList<ItemDefinition> comparedAgainst)
+    {
+        if (_window is not { } window || _shownTarget is not { } shown || _widthSourceWindow is not { } widthSourceWindow)
+        {
+            return;
+        }
+
+        window.Configure(shown.EntityId, shown.StackInstanceId ?? ItemDetailsWindow.NoStackInstanceId, shown.Definition, widthSourceWindow.ContentSize.X, comparedAgainst, window.ShopPricing);
     }
 
     private void HandleClosed(Element closedWindow)
@@ -189,13 +297,14 @@ public sealed class ItemDetailsWindowController(
         _layers.Remove(UiLayer.DynamicHud, closedWindow);
         _layers.CloseMenuWindow(closedWindow);
         itemWindows.Leave(closedWindow);
-        _layers.CloseLightDismiss(this);
+        if (closesOnPressOutside)
+        {
+            _layers.CloseLightDismiss(this);
+        }
         _window = null;
-        _anchorWindow = null;
-        mapViewState.SelectedItemStackInstanceId = null;
-        CurrentDefinition = null;
-        CurrentEntityId = null;
-        CurrentStackInstanceId = null;
+        _widthSourceWindow = null;
+        _shownTarget = null;
+        IsPinned = false;
         OnClosed?.Invoke();
     }
 }

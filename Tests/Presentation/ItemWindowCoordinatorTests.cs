@@ -48,7 +48,7 @@ public sealed class ItemWindowCoordinatorTests
 
     private static readonly Guid PotionItemId = Guid.NewGuid();
 
-    private sealed record Harness(ItemWindowCoordinator Coordinator, MapWindow MapWindow, MapViewState MapViewState, Engine.ECS.Components.ComponentManager ComponentManager, UiLayerStack Layers, ItemCatalog ItemCatalog, ContextMenuController ContextMenuController, Game.Terrain.TerrainRegistry Terrain);
+    private sealed record Harness(ItemWindowCoordinator Coordinator, MapWindow MapWindow, MapViewState MapViewState, Engine.ECS.Components.ComponentManager ComponentManager, UiLayerStack Layers, ItemCatalog ItemCatalog, ContextMenuController ContextMenuController, Game.Terrain.TerrainRegistry Terrain, PointerState PointerState);
 
     private static Harness Build()
     {
@@ -76,6 +76,7 @@ public sealed class ItemWindowCoordinatorTests
         var layers = new UiLayerStack();
         var pointerState = new PointerState();
         var tooltipController = new TooltipController();
+        var cursorLabelContent = new CursorLabelContent(pointerState, fontService);
         var shellServices = new ShellServices(
             layers,
             mapViewState,
@@ -83,10 +84,12 @@ public sealed class ItemWindowCoordinatorTests
             TestElementPoolServiceFactory.CreateContextMenuController(elementPool, layers),
             tooltipController,
             pointerState,
-            new CursorTextContent(pointerState, fontService));
+            new CursorTextContent(pointerState, fontService),
+            cursorLabelContent,
+            new ItemHoverDetails(cursorLabelContent));
 
         var eventBus = new EventBus();
-        var inventoryServices = TestInventoryServices.Over(componentManager, itemCatalog, world, eventBus);
+        var inventoryServices = TestInventoryServices.Over(componentManager, itemCatalog, world, eventBus, shellServices.ItemHoverDetails);
         var definitions = new BlueprintRegistry();
         var entityNaming = EntityNaming.For(componentManager, definitions);
         var healthView = new HealthView(componentManager, Game.Modules.Health.EntityBodyParts.For(componentManager, definitions));
@@ -128,7 +131,7 @@ public sealed class ItemWindowCoordinatorTests
             new LootboxCommands(new LootboxOpener(componentManager, lootboxCatalog, itemCatalog, seed: 1)),
             mapViewState.ReservedEntityIds);
 
-        return new Harness(coordinator, mapHarness.MapWindow, mapViewState, componentManager, layers, itemCatalog, contextMenuController, terrain);
+        return new Harness(coordinator, mapHarness.MapWindow, mapViewState, componentManager, layers, itemCatalog, contextMenuController, terrain, pointerState);
     }
 
     private static int? OpenSecondaryTarget(Harness harness) => harness.Coordinator.Inventory.GetSecondaryTargetEntityId!();
@@ -177,7 +180,7 @@ public sealed class ItemWindowCoordinatorTests
         var harness = Build();
         harness.MapWindow.OnCorpseClicked!(CorpseEntityId);
         var stackInstanceId = InventoryActions.AddItem(harness.ComponentManager, CorpseEntityId, PotionItemId, quantity: 1);
-        harness.Coordinator.Inventory.OnItemSelected!(CorpseEntityId, stackInstanceId);
+        harness.Coordinator.ItemDetails.Open(CorpseEntityId, stackInstanceId);
         Assert.AreEqual(CorpseEntityId, harness.Coordinator.ItemDetails.CurrentEntityId, "Sanity check: Item Details opened on the corpse's potion.");
 
         harness.Coordinator.ReleaseEntity(CorpseEntityId);
@@ -187,7 +190,7 @@ public sealed class ItemWindowCoordinatorTests
     }
 
     [TestMethod]
-    public void ClickingAnItem_WithComparisonDisarmed_OpensItInItemDetails()
+    public void ClickingAnItem_WithComparisonDisarmed_SelectsItAndOpensNothing()
     {
         var harness = Build();
         var stackInstanceId = InventoryActions.AddItem(harness.ComponentManager, PlayerEntityId, PotionItemId, quantity: 1);
@@ -195,8 +198,8 @@ public sealed class ItemWindowCoordinatorTests
 
         harness.Coordinator.Inventory.OnItemSelected!(PlayerEntityId, stackInstanceId);
 
-        Assert.AreEqual(PlayerEntityId, harness.Coordinator.ItemDetails.CurrentEntityId);
-        Assert.AreEqual(stackInstanceId, harness.Coordinator.ItemDetails.CurrentStackInstanceId);
+        Assert.AreEqual(stackInstanceId, harness.MapViewState.SelectedItemStackInstanceId);
+        Assert.IsFalse(harness.Coordinator.ItemDetails.IsOpen);
     }
 
     private static void Press(UiInputController controller, Point position)
@@ -214,7 +217,7 @@ public sealed class ItemWindowCoordinatorTests
         harness.Coordinator.Inventory.OpenInventoryWindow();
         harness.MapWindow.OnCorpseClicked!(CorpseEntityId);
         var stackInstanceId = InventoryActions.AddItem(harness.ComponentManager, CorpseEntityId, PotionItemId, quantity: 1);
-        harness.Coordinator.Inventory.OnItemSelected!(CorpseEntityId, stackInstanceId);
+        harness.Coordinator.ItemDetails.Open(CorpseEntityId, stackInstanceId);
         Assert.IsTrue(harness.Coordinator.ItemDetails.IsOpen, "Sanity check: Item Details opened on the corpse's potion.");
         return harness;
     }
@@ -386,66 +389,259 @@ public sealed class ItemWindowCoordinatorTests
         Assert.AreEqual(CorpseEntityId, OpenSecondaryTarget(harness));
     }
 
-    [TestMethod]
-    public void ClickingAnItem_WithComparisonArmed_AddsItAsAColumnAndKeepsTheAnchor()
+    private sealed class NoShopPricing : IItemShopPricingSource
+    {
+        public IReadOnlyList<TooltipRow>? ShopPricingRowsFor(in ItemHoverTarget target) => null;
+    }
+
+    /// <summary>Two potions in the player's inventory, the inventory open, and compare mode started on the first.</summary>
+    private static (Harness Harness, uint AnchorStackId, uint OtherStackId) BuildComparingTwoPotions()
     {
         var harness = Build();
         var anchorStackId = InventoryActions.AddItem(harness.ComponentManager, PlayerEntityId, PotionItemId, quantity: 1);
-        var comparedStack = new Game.Modules.Inventory.Components.InventoryItemStackComponent(PotionItemId, 1);
-        harness.ComponentManager.GetMultiPool<Game.Modules.Inventory.Components.InventoryItemStackComponent>().Add(PlayerEntityId, comparedStack);
+        var otherStack = new InventoryItemStackComponent(PotionItemId, 1);
+        harness.ComponentManager.GetMultiPool<InventoryItemStackComponent>().Add(PlayerEntityId, otherStack);
         harness.Coordinator.Inventory.OpenInventoryWindow();
         harness.Coordinator.ItemComparison.Arm(PlayerEntityId, anchorStackId);
-        Assert.IsTrue(harness.Coordinator.ItemComparison.IsArmed, "Sanity check: a potion has an activator, so comparison arms.");
+        Assert.IsTrue(harness.Coordinator.ItemComparison.IsComparing, "Sanity check: a potion has an activator, so compare mode starts.");
+        return (harness, anchorStackId, otherStack.StackInstanceId);
+    }
 
-        harness.Coordinator.Inventory.OnItemSelected!(PlayerEntityId, comparedStack.StackInstanceId);
+    private static UiInputController ComparisonController(Harness harness) =>
+        TestUiInputController.Create(
+            harness.Layers, new Vector2(2000, 2000), harness.ComponentManager, TestPlayerQuery.NoPlayer, new EventBus(), harness.ItemCatalog,
+            contextMenuController: harness.ContextMenuController, itemComparisonController: harness.Coordinator.ItemComparison,
+            mapViewState: harness.MapViewState, inventoryWindowController: harness.Coordinator.Inventory);
 
-        Assert.AreEqual(anchorStackId, harness.Coordinator.ItemDetails.CurrentStackInstanceId);
-        Assert.HasCount(1, harness.Coordinator.ItemComparison.Columns);
+    private static void HoverOtherPotion(Harness harness, uint otherStackId)
+    {
+        var definition = harness.ItemCatalog.Get(PotionItemId);
+        harness.Coordinator.ItemComparison.OpenAtCursor(new ItemHoverTarget(PlayerEntityId, otherStackId, definition), new NoShopPricing());
     }
 
     [TestMethod]
-    public void HoldingEscape_OverInventoryAndSeveralComparisonColumns_ClosesEveryMenuWindowAndLeavesMenuMode()
+    public void ClosingTheInventoryWindow_ClearsTheSelectedItem()
     {
         var harness = Build();
-        var anchorStackId = InventoryActions.AddItem(harness.ComponentManager, PlayerEntityId, PotionItemId, quantity: 1);
-        var stackPool = harness.ComponentManager.GetMultiPool<InventoryItemStackComponent>();
-        var firstComparedStack = new InventoryItemStackComponent(PotionItemId, 1);
-        var secondComparedStack = new InventoryItemStackComponent(PotionItemId, 1);
-        var thirdComparedStack = new InventoryItemStackComponent(PotionItemId, 1);
-        stackPool.Add(PlayerEntityId, firstComparedStack);
-        stackPool.Add(PlayerEntityId, secondComparedStack);
-        stackPool.Add(PlayerEntityId, thirdComparedStack);
+        var stackId = InventoryActions.AddItem(harness.ComponentManager, PlayerEntityId, PotionItemId, quantity: 1);
         harness.Coordinator.Inventory.OpenInventoryWindow();
-        harness.Coordinator.ItemComparison.Arm(PlayerEntityId, anchorStackId);
-        harness.Coordinator.Inventory.OnItemSelected!(PlayerEntityId, firstComparedStack.StackInstanceId);
-        harness.Coordinator.Inventory.OnItemSelected!(PlayerEntityId, secondComparedStack.StackInstanceId);
-        harness.Coordinator.Inventory.OnItemSelected!(PlayerEntityId, thirdComparedStack.StackInstanceId);
-        Assert.HasCount(3, harness.Coordinator.ItemComparison.Columns, "Sanity check: three comparison columns beside the anchor.");
+        harness.Coordinator.Inventory.OnItemSelected!(PlayerEntityId, stackId);
+        Assert.AreEqual(stackId, harness.MapViewState.SelectedItemStackInstanceId);
 
-        var controller = TestUiInputController.Create(
-            harness.Layers,
-            new Vector2(2000, 2000),
-            harness.ComponentManager,
-            TestPlayerQuery.NoPlayer,
-            new EventBus(),
-            harness.ItemCatalog,
-            contextMenuController: harness.ContextMenuController,
-            itemComparisonController: harness.Coordinator.ItemComparison,
-            mapViewState: harness.MapViewState,
-            inventoryWindowController: harness.Coordinator.Inventory);
+        harness.Coordinator.Inventory.ToggleInventoryWindow();
+
+        Assert.IsNull(harness.MapViewState.SelectedItemStackInstanceId);
+    }
+
+    [TestMethod]
+    public void Compare_PinsItemDetailsBesideTheInventoryWindow_WithoutOverlappingIt()
+    {
+        var (harness, _, _) = BuildComparingTwoPotions();
+
+        var inventoryRectangle = harness.Coordinator.Inventory.PlayerInventoryWindow!.Rectangle;
+        Assert.IsTrue(harness.Coordinator.ItemDetails.IsPinned);
+        Assert.IsFalse(harness.Coordinator.ItemDetails.Rectangle.Intersects(inventoryRectangle));
+    }
+
+    [TestMethod]
+    public void HoveringAnotherPotionWhileComparing_OpensItsComparisonBelowTheAnchor_AndKeepsTheAnchorWhereItIs()
+    {
+        var (harness, anchorStackId, otherStackId) = BuildComparingTwoPotions();
+        var anchorPosition = harness.Coordinator.ItemDetails.Rectangle.Location;
+
+        HoverOtherPotion(harness, otherStackId);
+
+        Assert.HasCount(2, harness.Layers[UiLayer.DynamicHud].OfType<ItemDetailsWindow>().ToList());
+        Assert.AreEqual(anchorStackId, harness.Coordinator.ItemDetails.CurrentStackInstanceId);
+        Assert.AreEqual(anchorPosition, harness.Coordinator.ItemDetails.Rectangle.Location);
+        var anchor = harness.Coordinator.ItemDetails.Rectangle;
+        var comparison = harness.Layers[UiLayer.DynamicHud].OfType<ItemDetailsWindow>().Single(window => window.Rectangle != anchor).Rectangle;
+        Assert.AreEqual(anchor.Left, comparison.Left);
+        Assert.IsGreaterThanOrEqualTo(anchor.Bottom, comparison.Top);
+    }
+
+    [TestMethod]
+    public void HoveringAnItemWithNoActivatorWhileComparing_OpensNothing_AndItsCellRefusesTheCursor()
+    {
+        var (harness, _, _) = BuildComparingTwoPotions();
+        var trinket = new ItemDefinition(Guid.NewGuid(), "Trinket", null, "t", Color.White, Tags: [], Effects: []);
+        harness.ItemCatalog.Register(trinket);
+        var trinketStackId = InventoryActions.AddItem(harness.ComponentManager, PlayerEntityId, trinket.Id, quantity: 1);
+        var target = new ItemHoverTarget(PlayerEntityId, trinketStackId, trinket);
+
+        Assert.IsFalse(harness.Coordinator.ItemComparison.OpensFor(target));
+        harness.Coordinator.ItemComparison.OpenAtCursor(target, new NoShopPricing());
+        Assert.HasCount(1, harness.Layers[UiLayer.DynamicHud].OfType<ItemDetailsWindow>().ToList(), "Only the pinned anchor is open.");
+
+        var cell = DescendantsOf(harness.Coordinator.Inventory.PlayerInventoryWindow!).OfType<InventoryItemStackCell>().First();
+        cell.CompareState = CellCompareState.Ineligible;
+        Assert.IsTrue(new global::Presentation.Input.ItemComparisonInputHandler(harness.Coordinator.ItemComparison).IsInputRefusedAt(cell, Point.Zero));
+    }
+
+    [TestMethod]
+    public void EscapeWhileComparing_EndsItAndClosesBothDetailsWindows_AndNothingElse()
+    {
+        var (harness, _, otherStackId) = BuildComparingTwoPotions();
+        HoverOtherPotion(harness, otherStackId);
+        var controller = ComparisonController(harness);
+
+        controller.Update(new KeyboardState(Keys.Escape), new MouseState());
+
+        Assert.IsFalse(harness.Coordinator.ItemComparison.IsComparing);
+        Assert.IsFalse(harness.Layers[UiLayer.DynamicHud].OfType<ItemDetailsWindow>().Any());
+        Assert.IsNotNull(harness.Coordinator.Inventory.PlayerInventoryWindow);
+    }
+
+    [TestMethod]
+    public void ARightPressWhileComparing_EndsItAndClosesBothDetailsWindows()
+    {
+        var (harness, _, otherStackId) = BuildComparingTwoPotions();
+        HoverOtherPotion(harness, otherStackId);
+        var controller = ComparisonController(harness);
+
+        controller.Update(new KeyboardState(), new MouseState(1990, 1990, 0, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released));
+        controller.Update(new KeyboardState(), new MouseState(1990, 1990, 0, ButtonState.Released, ButtonState.Released, ButtonState.Pressed, ButtonState.Released, ButtonState.Released));
+
+        Assert.IsFalse(harness.Coordinator.ItemComparison.IsComparing);
+        Assert.IsFalse(harness.Layers[UiLayer.DynamicHud].OfType<ItemDetailsWindow>().Any());
+    }
+
+    [TestMethod]
+    public void HoldingEscape_WhileComparing_ClosesEveryMenuWindowAndLeavesMenuMode()
+    {
+        var (harness, _, otherStackId) = BuildComparingTwoPotions();
+        HoverOtherPotion(harness, otherStackId);
+        var controller = ComparisonController(harness);
 
         var escapeHeld = new KeyboardState(Keys.Escape);
-        var mouseIdle = new MouseState();
         for (var frame = 0; frame < 40; frame++)
         {
-            controller.Update(escapeHeld, mouseIdle);
+            controller.Update(escapeHeld, new MouseState());
         }
 
         Assert.IsNull(harness.Coordinator.Inventory.PlayerInventoryWindow);
-        Assert.IsFalse(harness.Coordinator.ItemDetails.IsOpen);
-        Assert.IsEmpty(harness.Coordinator.ItemComparison.Columns);
         Assert.IsFalse(harness.Layers[UiLayer.DynamicHud].OfType<ItemDetailsWindow>().Any(), "No Item Details window may be left in the DynamicHud layer.");
         Assert.IsNull(harness.Layers.BottommostMenuWindow, "No menu window may be left in a layer to draw the dim under.");
         Assert.IsFalse(harness.Layers.IsMenuModeActive, "Menu mode, and the game's pause with it, must end once every menu window has closed.");
+    }
+
+    private static IEnumerable<Element> DescendantsOf(Element element)
+    {
+        foreach (var child in element.ChildElements)
+        {
+            yield return child;
+            foreach (var descendant in DescendantsOf(child))
+            {
+                yield return descendant;
+            }
+        }
+    }
+
+    private static ItemDetailsWindow OpenItemDetailsOnAPlayerPotion(Harness harness, out uint stackInstanceId)
+    {
+        stackInstanceId = InventoryActions.AddItem(harness.ComponentManager, PlayerEntityId, PotionItemId, quantity: 1);
+        harness.Coordinator.Inventory.OpenInventoryWindow();
+        harness.Coordinator.ItemDetails.Open(PlayerEntityId, stackInstanceId);
+        return harness.Layers[UiLayer.DynamicHud].OfType<ItemDetailsWindow>().Single();
+    }
+
+    [TestMethod]
+    public void ItemDetails_OpensBelowAndRightOfTheCursor_WithNoTitleBar()
+    {
+        var harness = Build();
+        harness.PointerState.CursorPosition = new Point(300, 200);
+
+        var window = OpenItemDetailsOnAPlayerPotion(harness, out _);
+
+        Assert.IsGreaterThan(300f, window.RelativePosition.X);
+        Assert.IsGreaterThan(200f, window.RelativePosition.Y);
+        Assert.IsFalse(window.ShowHeader);
+    }
+
+    [TestMethod]
+    public void ItemDetails_PointerOverNeitherItsItemNorItself_StaysForAMomentThenCloses()
+    {
+        var harness = Build();
+        var window = OpenItemDetailsOnAPlayerPotion(harness, out _);
+        harness.PointerState.HoveredElement = null;
+
+        window.Update(new GameTime());
+        Assert.IsTrue(harness.Coordinator.ItemDetails.IsOpen, "The pointer may cross the gap to the popup.");
+
+        for (var frame = 0; frame < 60 && harness.Coordinator.ItemDetails.IsOpen; frame++)
+        {
+            window.Update(new GameTime());
+        }
+
+        Assert.IsFalse(harness.Coordinator.ItemDetails.IsOpen);
+    }
+
+    private static IEnumerable<string> ButtonLabels(ItemDetailsWindow window) =>
+        DescendantsOf(window).OfType<Button>().Select(button => button.LeftText);
+
+    [TestMethod]
+    public void ItemDetails_ForAComparableStack_HasCompareAndNoStopComparison()
+    {
+        var harness = Build();
+
+        var window = OpenItemDetailsOnAPlayerPotion(harness, out _);
+
+        CollectionAssert.AreEqual(new[] { "Compare" }, ButtonLabels(window).ToArray());
+    }
+
+    [TestMethod]
+    public void ItemDetails_WhileComparing_HasOnlyStopComparison_AndItEndsTheComparisonAndCloses()
+    {
+        var harness = Build();
+        var window = OpenItemDetailsOnAPlayerPotion(harness, out var stackInstanceId);
+        harness.Coordinator.ItemComparison.Arm(PlayerEntityId, stackInstanceId);
+        window.Update(new GameTime());
+
+        var buttons = DescendantsOf(window).OfType<Button>().ToList();
+        CollectionAssert.AreEqual(new[] { "Stop Comparison" }, buttons.Select(button => button.LeftText).ToArray());
+
+        buttons[0].RaiseClicked();
+
+        Assert.IsFalse(harness.Coordinator.ItemComparison.IsComparing);
+        Assert.IsFalse(harness.Coordinator.ItemDetails.IsOpen, "Stopping closes Item Details too.");
+    }
+
+
+    [TestMethod]
+    public void ItemDetails_PointerOverItsOwnContent_StaysOpen()
+    {
+        var harness = Build();
+        var window = OpenItemDetailsOnAPlayerPotion(harness, out _);
+        harness.PointerState.HoveredElement = window.ChildElements.First();
+
+        window.Update(new GameTime());
+
+        Assert.IsTrue(harness.Coordinator.ItemDetails.IsOpen);
+    }
+
+    [TestMethod]
+    public void ItemDetails_PointerOverItsItemsCell_StaysOpen()
+    {
+        var harness = Build();
+        var window = OpenItemDetailsOnAPlayerPotion(harness, out var stackInstanceId);
+        var cell = DescendantsOf(harness.Coordinator.Inventory.PlayerInventoryWindow!).OfType<InventoryItemStackCell>().Single(candidate => candidate.StackInstanceId == stackInstanceId);
+        harness.PointerState.HoveredElement = cell;
+
+        window.Update(new GameTime());
+
+        Assert.IsTrue(harness.Coordinator.ItemDetails.IsOpen);
+    }
+
+    [TestMethod]
+    public void ItemDetails_WhileComparing_StaysOpenWhereverThePointerIs()
+    {
+        var harness = Build();
+        var window = OpenItemDetailsOnAPlayerPotion(harness, out var stackInstanceId);
+        harness.Coordinator.ItemComparison.Arm(PlayerEntityId, stackInstanceId);
+        harness.PointerState.HoveredElement = null;
+
+        window.Update(new GameTime());
+
+        Assert.IsTrue(harness.Coordinator.ItemDetails.IsOpen);
     }
 }

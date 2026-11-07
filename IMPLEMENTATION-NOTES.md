@@ -1588,8 +1588,8 @@ record in Achievements.
 - Reward cells set the new `IsDragSource = false` (reset true by every `Configure`), so they never
   start a drag and offer no context menu. Hover shows the inventory's tooltip (the summary text is now
   shared as `ItemHoverSummary`).
-- Click opens Item Details docked beside the results window: `ItemDetailsWindowController.Open` takes
-  an optional anchor window, and a reward whose stack has since been used up opens read-only through
+- Click opens Item Details at the cursor, as wide as the results window: `ItemDetailsWindowController.Open` takes
+  an optional width-source window, and a reward whose stack has since been used up opens read-only through
   `OpenDefinition` (stack id `ItemDetailsWindow.NoStackInstanceId`; Compare does nothing).
   The results window counts as inside Item Details on its own (it joins the item windows' `ElementGroup` while open), never through another window.
 
@@ -1933,18 +1933,47 @@ Level Up and Skill Up join later as new `FloatingTextKind` values.
   reliably). Fixed by calling `mapWindow.UpdateHoveredTile(new Point(-1, -1))` (deterministically
   off-map) right before the final `HandleHotkeys` press in both tests.
 
-### Selected item details window + Item Details Comparison
+### Item Details on hover + Item Details Comparison
 
-- `ItemDetailsWindow`/`ItemDetailsWindowController`: click a single-stack cell -> persistent details
-  pane (sprite/name, Effects, Activation w/ targeting-shape preview, Description, Tags). Closes via own
-  button or outside-click. `DisplayMode.WrapContent` (not `Fixed`) required for correct re-measure
-  across rebuilds -- a shrinking `Fixed` window re-measures against its own stale small size (was a
-  real bug: Tags rendered over Description).
-- `ItemComparisonController`: gated to same-`Activator`-type items only (cross-type diff judged
-  meaningless). Each compared item opens its own `ItemDetailsWindow` column, not a shared table; lines
-  colored green/red by `ItemComparisonStatExtraction`/`ItemComparisonHighlighting` -- whole-line color
-  only, `TextWindow` has no per-substring styling. Columns anchor to a fixed point +
-  `WindowCascadePlacement` (fixed a bug where a 3rd+ column could spawn off-screen).
+- Inventory grids have no hover summary (the hotbar keeps its own). A grid reports its hovered cell to
+  `ItemHoverDetails` every update: the item's name shows at once above the cursor (`CursorLabelContent`,
+  UIEngine, owner-checked like `TooltipController`), and after 1.5s (`DetailsDelayFrames`) Item Details
+  opens 16px below and right of the cursor -- clear of a double-click on the item. No title bar, no
+  Close button (Escape still closes it, `CanUserClose`), not movable. It closes once the pointer has
+  been off both its item's cell and itself for 0.3s (time to cross that gap); a context menu over it
+  counts as on it.
+- A hover opens Item Details once: closed while its cell is still hovered (Escape, Stop Comparison), it
+  stays closed until the hover ends or starts over (`ItemHoverDetails`), or the next update would reopen it.
+- A click only selects (`MapViewState.SelectedItemStackInstanceId`, later for sorting; cleared when the
+  player's Inventory window closes) and fires at once:
+  `UiInputController` raises a double-click-aware element's first click immediately and the second, within
+  the OS double-click time (`OperatingSystemDoubleClickTime`, user32 `GetDoubleClickTime`, 0.3s elsewhere,
+  no buffer), as `DoubleClicked` in its place -- so such an element's single click must be harmless as the
+  first half of a double-click. The old deferred single click was dropped with this. The candidate is
+  remembered with its `Element.PoolReturnCount`, not through `Closed`: a grid's cells go back to the pool
+  through `CloseAllChildren`, which never raises `Closed`, and the pool can hand the same instance back
+  for another stack within the window.
+- Shop pricing (band table, "Shop will not buy", receipt) is Item Details' "Shop" section while a shop is
+  open: the grid the item was hovered in is its `IItemShopPricingSource` (it knows its side and stock),
+  polled each update and rebuilt only when its cached rows change -- cached per cell, since the pinned
+  Item Details and the comparison popup poll the same grid for different cells every update; drawn by
+  `TooltipRowsElement` / `TooltipRowDrawing`, shared with `Tooltip`. An item cell's "Compare" goes through
+  `ItemHoverDetails.Compare` with its grid as the pricing source, so the pinned anchor keeps its Shop
+  section.
+- Comparison (`ItemComparisonController`, which routes every hover): Compare pins Item Details beside the
+  window holding the item (right, else left, wherever it overlaps no other item window). Hovering a
+  comparable item -- one stack, same `Activator` type, the rule the grids grey the rest out by -- opens a
+  second Item Details popup kept just below the pinned one, each coloured against the other
+  (`ItemComparisonStatExtraction`/`ItemComparisonHighlighting`, whole-line colour only); anything else gets
+  the refusal cursor and its name only. Stop Comparison, a right press or Escape (`TryConsumeEscape`,
+  ahead of any window closing) ends it and closes both. The second popup has no light dismiss, or a right
+  press outside would close only it and never reach the comparison, and doesn't close when the pointer
+  leaves its item: it sits below the anchor, too far to reach within the 0.3s grace, so it stays until
+  another comparable item replaces it or the comparison ends. Replaced click-to-add columns, which
+  overlapped unreadably once title bars went and took too many clicks.
+- `DisplayMode.WrapContent` (not `Fixed`) is required for correct re-measure across rebuilds -- a
+  shrinking `Fixed` window re-measures against its own stale small size (was a real bug: Tags rendered
+  over Description).
 - Equipped-item comparison still open (blocked on Equipment).
 - Comparison now works in shop mode and across the trade window: `InventoryItemStackCell.CompareState`
   (comparison eligibility) and the new `ShopTradeEligible` bool (shop trade eligibility) are computed
@@ -3024,7 +3053,7 @@ FontStashSharp; Presentation, the exe and Tests reference it.
   resolver chain, unchanged inside) and `HotbarBindingDropHandler`.
 - **Everything else the game does with raw input is an `IUiInputHandler`**, one small handler per concern with only
   required dependencies: a `KeyPressInputHandler` (UIEngine) per hotkey -- U/I/O/F3 and Left Alt --,
-  `AdminModeInputHandler` (F12), `ItemComparisonDisarmInputHandler`, `HotbarInputHandler` (the hotbar's hover summary) and
+  `AdminModeInputHandler` (F12), `ItemComparisonInputHandler`, `HotbarInputHandler` (the hotbar's hover summary) and
   `ActivationRefusalInputHandler` (the refusal cursor). It started as one `GameInputHandler` with every controller
   optional, which existed only so tests could leave them out; split, a test registers only the handlers it exercises
   (`TestUiInputController`) and nothing is nullable. Handlers receive an `Element`, never the internal

@@ -19,7 +19,10 @@ namespace Presentation.UI.Inventory;
 /// - A loot window and a shop window are never open together: both cascade off the player's inventory window, so two
 ///   at once would overlap. Opening either closes the other first.
 /// - The trade window opens and closes with the shop.
-/// - Clicking an item compares it while comparison is armed, and otherwise opens it in Item Details.
+/// - Hovering an item opens it in Item Details at the cursor (ItemHoverDetails); clicking one selects it until the
+///   player's Inventory window closes. Compare pins
+///   Item Details beside the window holding the item, and until it ends a hover opens the hovered item's comparison
+///   instead (ItemComparisonController).
 /// - Activate arms the item's action; opening loot boxes shows their results, where a reward opens in Item Details
 ///   on the stack it landed in while that still exists, otherwise read-only from its definition.
 /// - A destroyed entity's id is reused straight away, so every window open for it closes (see ReleaseEntity).
@@ -30,6 +33,9 @@ public sealed class ItemWindowCoordinator
     private readonly MapViewState _mapViewState;
     private readonly SecondaryInventoryWindowController _secondaryInventory;
     private readonly ShopWindowController _shop;
+
+    /// <summary>The hovered item's comparison while comparing -- a second Item Details popup (see ItemComparisonController).</summary>
+    private readonly ItemDetailsWindowController _comparisonPopup;
 
     public ItemWindowCoordinator(
         ElementPoolService elementPoolService,
@@ -50,16 +56,16 @@ public sealed class ItemWindowCoordinator
         _mapViewState = shellServices.MapViewState;
         var itemWindows = new ElementGroup();
 
-        Inventory = new InventoryWindowController(elementPoolService, world, inventoryView, mapWindow, contextMenuController, tooltipController, itemWindows);
+        Inventory = new InventoryWindowController(elementPoolService, world, inventoryView, mapWindow, contextMenuController, itemWindows);
         Inventory.Initialize(layers);
 
-        _secondaryInventory = new SecondaryInventoryWindowController(elementPoolService, lootCommands, Inventory, contextMenuController, mapWindow, tooltipController, itemWindows);
+        _secondaryInventory = new SecondaryInventoryWindowController(elementPoolService, lootCommands, Inventory, contextMenuController, mapWindow, itemWindows);
         _secondaryInventory.Initialize(layers);
 
-        _shop = new ShopWindowController(elementPoolService, _mapViewState, Inventory, contextMenuController, mapWindow, tooltipController, itemWindows);
+        _shop = new ShopWindowController(elementPoolService, _mapViewState, Inventory, contextMenuController, mapWindow, itemWindows);
         _shop.Initialize(layers);
 
-        var trade = new TradeWindowController(elementPoolService, Inventory, _shop, mapWindow, reservedEntityIds.TradeOfferPlayerEntityId, reservedEntityIds.TradeOfferShopEntityId, tooltipController, itemWindows);
+        var trade = new TradeWindowController(elementPoolService, Inventory, _shop, mapWindow, reservedEntityIds.TradeOfferPlayerEntityId, reservedEntityIds.TradeOfferShopEntityId, itemWindows);
         trade.Initialize(layers);
         _shop.OnOpened = trade.Open;
         _shop.OnClosed = trade.CloseForShopClosed;
@@ -70,22 +76,24 @@ public sealed class ItemWindowCoordinator
         // At most one of the two is ever open, so whichever isn't answers null.
         Inventory.GetSecondaryTargetEntityId = () => _secondaryInventory.OpenTargetEntityId ?? _shop.OpenTargetEntityId;
 
-        ItemDetails = new ItemDetailsWindowController(elementPoolService, inventoryView, itemCatalog, Inventory, contextMenuController, _mapViewState, mapWindow, itemWindows);
+        ItemDetails = new ItemDetailsWindowController(elementPoolService, inventoryView, itemCatalog, Inventory, mapWindow, shellServices.PointerState, itemWindows);
         ItemDetails.Initialize(layers);
+        _comparisonPopup = new ItemDetailsWindowController(elementPoolService, inventoryView, itemCatalog, Inventory, mapWindow, shellServices.PointerState, itemWindows, closesOnPressOutside: false, closesWhenPointerLeaves: false);
+        _comparisonPopup.Initialize(layers);
 
-        // Built after Item Details, whose pane is always the comparison's anchor (see ItemComparisonController.Arm).
-        ItemComparison = new ItemComparisonController(elementPoolService, inventoryView, itemCatalog, Inventory, contextMenuController, mapWindow, _mapViewState, ItemDetails, shellServices.CursorTextContent, itemWindows);
-        ItemComparison.Initialize(layers);
+        ItemComparison = new ItemComparisonController(_mapViewState, ItemDetails, _comparisonPopup, shellServices.CursorTextContent, entityId => WindowHoldingItemsOf(entityId, trade));
+        shellServices.ItemHoverDetails.Popup = ItemComparison;
         ItemDetails.OnClosed = ItemComparison.ClearComparison;
-        ItemDetails.OnCompareRequested = ItemComparison.Arm;
-        Inventory.OnCompareRequested = ItemComparison.Arm;
-        _secondaryInventory.OnCompareRequested = ItemComparison.Arm;
-        _shop.OnCompareRequested = ItemComparison.Arm;
+        ItemDetails.OnStopComparisonRequested = ItemComparison.ClearComparison;
+        ItemDetails.OnCompareRequested = (entityId, stackInstanceId) => ItemComparison.Arm(entityId, stackInstanceId);
+        _comparisonPopup.OnClosed = ItemComparison.HandleComparisonPopupClosed;
+        _comparisonPopup.FixedPosition = () => new Vector2(ItemDetails.Rectangle.Left, ItemDetails.Rectangle.Bottom + WindowCascadePlacement.Gap);
 
         Inventory.OnItemSelected = OnItemClicked;
         _secondaryInventory.OnItemSelected = OnItemClicked;
         _shop.OnItemSelected = OnItemClicked;
         trade.OnItemSelected = OnItemClicked;
+        Inventory.OnClosed = () => _mapViewState.SelectedItemStackInstanceId = null;
 
         Inventory.OnActivateRequested = (_, stackInstanceId) => actionTargetingController.ArmItemFromStack(stackInstanceId);
 
@@ -150,21 +158,37 @@ public sealed class ItemWindowCoordinator
             _shop.CloseIfOpen();
         }
 
+        if (_comparisonPopup.CurrentEntityId == entityId)
+        {
+            _comparisonPopup.Close();
+        }
+
         if (ItemDetails.CurrentEntityId == entityId)
         {
             ItemDetails.Close();
         }
     }
 
-    private void OnItemClicked(int entityId, uint stackInstanceId)
+    private void OnItemClicked(int entityId, uint stackInstanceId) => _mapViewState.SelectedItemStackInstanceId = stackInstanceId;
+
+    /// <summary>The open window showing entityId's items: the shop's, the loot window's, the trade window for a trade offer, else the player's Inventory window.</summary>
+    private Window? WindowHoldingItemsOf(int entityId, TradeWindowController trade)
     {
-        if (ItemComparison.IsArmed)
+        if (_shop.OpenTargetEntityId == entityId)
         {
-            ItemComparison.AddOrToggle(entityId, stackInstanceId);
-            return;
+            return _shop.Window;
         }
 
-        ItemComparison.ClearIfAnchorChanging(entityId, stackInstanceId);
-        ItemDetails.Open(entityId, stackInstanceId);
+        if (_secondaryInventory.OpenTargetEntityId == entityId)
+        {
+            return _secondaryInventory.Window;
+        }
+
+        if (_mapViewState.ReservedEntityIds is { } reserved && (entityId == reserved.TradeOfferPlayerEntityId || entityId == reserved.TradeOfferShopEntityId))
+        {
+            return trade.Window;
+        }
+
+        return Inventory.PlayerInventoryWindow;
     }
 }

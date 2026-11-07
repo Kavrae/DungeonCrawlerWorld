@@ -22,6 +22,12 @@ What exists today:
      coin flip (temporary: only at the player, see TODO "Spatial queries for NPC decisions").
   4. Loot a corpse on or beside it (`NpcCorpseLooting`, with its 30 s `CorpseLootRetryComponent`).
   5. Wander: a coin flip between idle (2 s `WaitUntilFrame`) and a random adjacent step.
+
+  Melee and looting are skipped outright unless something else stands on or beside the creature
+  (`HasOtherOccupantOnOrBeside`, one pass over the footprint's ring) -- a cheap gate that made the
+  common "nothing near me" decision fast. Ranged aims through `TargetResolution.IsAimable`, which
+  checks range and line of sight (`Engine.Tiles.LineOfSight` over `World.BlocksSight`). Every roll
+  draws from `NpcBehaviorModule.BehaviorRandomStream` (`GameModuleContext.RandomStreams`).
 - It's an `ITieredSystem` with the same `StripeCount` (15) and tier divisors as `MovementSystem`,
   wired to the same `MovementComponent` pool, so an entity is decided and moved on the same frame.
   It was once the largest per-frame cost in the game, and tiering fixed that. A replacement has to
@@ -32,6 +38,13 @@ What exists today:
   pending pools. The rule now is "queuing an activation clears the step": `TestCombatBehaviorSystem`
   calls `ClearStep` after each queue, and `PlayerCommands` sets `NextMapPosition` to null before it
   writes a pending activation. It holds, but by convention in two places, not by structure.
+- **Component writes** (IMPLEMENTATION-NOTES "Component writes: write scopes and struct updaters"):
+  every in-place write is a write scope (`using var write = pool.TryWrite(id)`, main thread only, no
+  structural change to that pool while it's open) or an `unmanaged` struct updater (`TryUpdate`), and
+  both notify. The NPC code already follows it: the step goes through the shared
+  `SetNextMapPositionUpdate` (`MovementComponentUpdates`, also used by `MovementSystem` and
+  `PlayerCommands`), and the idle wait is a write scope. Pools are `Unobserved` unless the module that
+  registers them says otherwise; none of the pools this plan writes is observed.
 - `TestDummyAttackSystem` is a second decision system: a plain `ISystem` (stripe 1) that fires Power
   Attack at its Adjacent ring whenever its action lock clears. It stays separate (a decision below).
 - Hostility is "has a different primary race" (`IsAttackable`). There are no factions.
@@ -40,14 +53,19 @@ What exists today:
   plan's follow-up "Terrain and blueprints as data").
 - Toggles have landed: Toxic Idol is an `Items.jsonl` record with a `ToggleItem` activator and an
   `AuraSourceGrant` naming a `Auras.jsonl` aura.
+- **Content loads by id and is fixed per session.** A game decodes a record the first time its Guid is
+  asked for; game code never enumerates `ActionCatalog`/`ItemCatalog.Definitions` (a whole-catalog
+  question reads `Summaries`). No definition changes mid-session: overrides take effect when the next
+  session loads (IMPLEMENTATION-NOTES; memory "Definitions fixed per session").
 - The engine has the pieces the framework builds on: `Catalog<T>` (Guid-keyed, redirects),
-  `GameplayTag`/`GameplayTagSet` (declared by modules, parent-aware), `MathUtility`/`SeededRandom`,
-  `FrameDeadline`, and Packed pools any module can register.
+  `GameplayTag`/`GameplayTagSet` (declared by modules, parent-aware), `RandomStreams` and `MathUtility`,
+  `FrameDeadline`, write scopes and struct updaters, and Packed pools any module can register.
 
 Related TODO items that this plan does not need, but which will improve its behaviors later:
 "Grid pathfinding and navigation" (Engage/Flee step one tile and can get cornered), "Field of view
-and perception" (behaviors count hostiles through walls), and "Spatial queries for NPC decisions"
-(where to flee to, ranged targets other than the player).
+and perception" (line of sight now exists per pair, which this plan uses; a full field of view and
+memory of what was seen don't), "Spatial queries for NPC decisions" (where to flee to, ranged targets
+other than the player), and "Research multithreading" (decisions on workers; see `IntentWriter`).
 
 ## Research: how other games do it
 
@@ -105,7 +123,7 @@ so the framework lives in `Engine.Decisions`, and behaviors are registered into 
 **A. Keep the convention.** Every writer clears the step itself (today's two places).
 - Con: a third writer that forgets lets a creature step and act in one frame.
 
-**B. `IntentWriter`, the one chokepoint (recommended).** Game, next to `ActionLockGate`:
+**B. `IntentWriter`, the one chokepoint (decided).** Game, next to `ActionLockGate`:
 `QueueAction(entityId, actionId, selection)`, `QueueItemActivation(entityId, stackInstanceId,
 selection, activatedFromSlot)`, `Step(entityId, tile)`, `Idle(entityId, now, frames)`. Queuing an
 activation writes the pending component *and* clears `NextMapPosition`; `Step` withdraws a pending
@@ -113,6 +131,22 @@ activation, as `PlayerCommands` does today. Behaviors never see a pending pool: 
 exposes only these methods, so a behavior structurally can't double-book a turn.
 - FreeCast actions don't clear the step: they don't wait for the lock, and a FreeCast plus a step
   on the same frame is legitimate (today's `PlayerCommands` rule, moved here).
+- **Its writes, by the component-write rules:**
+
+  | Method | Writes |
+  |---|---|
+  | `QueueAction` / `QueueItemActivation` | `Merge` of the pending component (an add, or the merge action on a second queue in a frame), then `TryUpdate(SetNextMapPositionUpdate(null))` unless FreeCast |
+  | `Step` | `Remove` of both pending components, then `TryUpdate(SetNextMapPositionUpdate(tile))` |
+  | `Idle` | A write scope on `MovementComponent` setting `WaitUntilFrame` (single site, assignment only) |
+
+  The step goes through the existing shared updater, so `IntentWriter` adds no updater of its own.
+  Removals and merges happen outside any scope, so the Debug structural-change guard never trips.
+  No pool becomes observed.
+- **Why the chokepoint matters beyond the step rule:** a write scope is main-thread only, and a write
+  recorded on a worker and applied later must be an `unmanaged` updater or an add (IMPLEMENTATION-NOTES,
+  "Scopes are main-thread only"). Every NPC intent goes through these four methods, so if decisions ever
+  move to workers ("Research multithreading"), only `IntentWriter` changes -- `Idle` becomes a recorded
+  updater -- and no behavior does.
 
 **C. Owned gameplay tags, as Unreal's GAS does** (`ActivationOwnedTags`/`ActivationBlockedTags`): an
 activation adds "turn claimed" to its owner, and anything can check it.
@@ -287,8 +321,10 @@ an item, `Area.Testing` can't condition a stat modifier, and `Damage.Fire` can't
 ### Catalog and resolved sets
 
 - **`BehaviorCatalog<TContext> : Catalog<IBehavior<TContext>>`**: re-registering a Guid replaces a
-  behavior in place (how a mod replaces "Flee"), and redirects work as for any catalog. It also issues
-  each behavior a session-local `ushort` id, which is what a commitment stores. Never persist one.
+  behavior in place (how a mod replaces "Flee"), and redirects work as for any catalog. Registration
+  happens in `Configure` only; once the build resolves sets, the catalog is fixed for the session,
+  like every definition. It also issues each behavior a session-local `ushort` id, which is what a
+  commitment stores. Never persist one: a future world save stores the behavior's Guid.
 - **`BehaviorSet<TContext>.Resolve(catalog, grantLists, modifiers)`** turns the grant lists of a
   composition (in order) and every modifier into one immutable set:
   1. Merge: a later grant of the same behavior id replaces an earlier one; `Rank = 0` removes it.
@@ -301,8 +337,10 @@ an item, `Area.Testing` can't condition a stat modifier, and `Damage.Fire` can't
 
 ### The arbiter
 
-`BehaviorArbiter<TContext>.Decide(ref context, set, in commitment, trace)` returns what it did and the
-commitment to store. Its options (`BehaviorArbiterOptions`) are the game's: the cutoff fraction (0.25).
+`BehaviorArbiter<TContext>.Decide(ref context, set, in commitment, trace)` reads the commitment as a
+value and returns a `BehaviorDecision`: what it did, and a new commitment if one started. It never holds
+a pool or a `ref` into one -- the engine has no raw mutable `ref` to hand it, and the caller decides how
+to write. Its options (`BehaviorArbiterOptions`) are the game's: the cutoff fraction (0.25).
 
 ```
 if commitment is live (deadline not reached, and set still holds that behavior):
@@ -325,23 +363,28 @@ foreach entry in set (sorted by rank ceiling, descending):
     if rank > winnerRank: winnerRank = rank; candidates.Clear()
     candidates.Add(entry, weight)
 drop candidates with weight < cutoff x best
-pick = weighted random over candidates using context.NextUnitRandom()
+pick = the only candidate, or weighted random over them using context.NextUnitRandom()
 pick.Behavior.Act(ref context, pick.Grant)
-commitment = pick.Grant.CommitFrames > 0 ? (pick.SessionId, FrameDeadline.After(now, CommitFrames)) : unchanged
+decision.NewCommitment = pick.Grant.CommitFrames > 0 ? (pick.SessionId, FrameDeadline.After(now, CommitFrames)) : none
 ```
 
 - A grant's rank is a **ceiling**: `Evaluate` may return it or lower, never higher. That's what makes
   the early exit valid.
-- **Weighted random, not argmax**, with a cutoff so a 2% option never wins a roll.
+- **Weighted random, not argmax**, with a cutoff so a 2% option never wins a roll. A lone candidate
+  draws nothing, so a creature with one thing to do doesn't advance the stream.
 - Considerations and the runtime multiplier are only computed once a candidate's intrinsic weight is
   above 0, so a creature with nothing adjacent never pays for them.
 - **Allocation-free**: the candidate buffer belongs to the arbiter instance (one per system; the
   simulation is single-threaded).
 - **Commitment** is a stored deadline, not a countdown: `BehaviorCommitment { ushort BehaviorSessionId;
-  uint CommittedUntilFrame; }`, 8 bytes. The game registers a Packed pool of it; the system writes it
-  only when `Decide` changes it, and never removes it -- an expired deadline is just stale, so there's
-  no churn and no expiry system (the CLAUDE.md "nothing happens, it just stops gating" timer shape).
-  Only entities that have ever committed hold one.
+  uint CommittedUntilFrame; }`, 8 bytes, a mutable struct with auto-properties (it's rewritten in place
+  each time a new commitment starts; IMPLEMENTATION-NOTES "Component shape"). The game registers a
+  Packed pool of it, `Unobserved` (nothing reacts to a commitment changing; the arbiter reads it on the
+  next decision). The system writes it only when `Decide` returns a new one, as a find-or-add: a
+  `TryWrite` scope assigns both fields and returns when found, and the `Add` comes after the block.
+  It's never removed -- an expired deadline is just stale, so there's no churn and no expiry system
+  (the CLAUDE.md "nothing happens, it just stops gating" timer shape). Only entities that have ever
+  committed hold one.
 - **`DecisionTrace`** (optional, null in normal play): records each evaluated entry's rank, intrinsic
   weight, resolved weight, considerations product, runtime multiplier, final weight, whether the cutoff
   dropped it, and the pick. The game passes one only for the entity being inspected.
@@ -368,12 +411,26 @@ clears. Unchanged by this plan; waking each entity on its unlock frame would byp
 ### `NpcDecisionContext`
 
 A `ref struct` implementing `IDecisionContext`: the entity id, `now`, its transform, the pools and
-queries, `IntentWriter`, plus **lazily cached perception** -- health fraction, adjacent tiles, hostiles
-adjacent, hostiles within 3, allies within R (keyed by radius) -- each computed on first ask, so Engage
-and Flee share one scan. `IsHostileTo`/`IsAllyOf` hold today's race rule in one place for factions later.
+queries, `IntentWriter`, plus **lazily cached perception**, each computed on first ask:
+- **Anyone on or beside me** -- today's `HasOtherOccupantOnOrBeside` gate, asked first by every
+  behavior that needs a neighbor (EngageMelee, LootCorpse, and Flee's adjacent case), so the common
+  "nothing near me" decision stays as cheap as it is now.
+- Health fraction, adjacent tiles, hostiles adjacent, hostiles within 3, allies within R (keyed by
+  radius), so Engage and Flee share one scan.
+- **Hostiles within 3 count only those in sight** (`LineOfSight.IsVisibleFromFootprint` over
+  `World.BlocksSight`, the rule targeting already uses), so a goblin doesn't flee from an enemy behind a
+  wall. A few short lines per decision, paid only when a hostile is near. Allies are counted without
+  sight: a pack is heard as much as seen.
 
-- `NextUnitRandom()` draws from the session's `MathUtility`, as today's coin flips do, so seeded runs
-  stay deterministic.
+All reads go through `GetReadonly`/`TryGetReadonly` and `GetOccupantEntityIdSpanAt`; the context writes
+nothing itself -- every write is `IntentWriter`'s. `IsHostileTo`/`IsAllyOf` hold today's race rule in
+one place for factions later. Behaviors ask the entity what it has (`EntityActions`, its inventory
+stacks), never a whole catalog, so by-id content loading holds: a behavior names content only by Guid
+(`BuiltInItemIds.HealthPotion`, `BuiltInActionIds.MagicMissile`) and only ever finds it on an entity
+that already holds it.
+
+- `NextUnitRandom()` draws from `NpcBehaviorModule.BehaviorRandomStream`, the stream today's coin flips
+  use, so a seeded run stays deterministic and no other module's rolls shift.
 - `RuntimeWeightMultiplier(tags)` multiplies, for each drive tag the behavior has, the entity's
   stat modifiers on that drive's target: `StatModifierMath.GetEffectiveValue(modifiers, entityId,
   target, 1f)`. The tag-to-target table is the game's (`NpcDrives`): `Behavior.Drive.Aggression` ->
@@ -402,7 +459,8 @@ mod registers its own in its `Configure`.
   should have it. Neither the arbiter nor `NpcDecisionSystem` changes.
 - `WanderStep` and `Idle` at equal weight reproduce today's coin flip.
 - `LootCorpse` loots in its `Evaluate`-confirmed `Act`: `NpcCorpseLooting.TryLootNearbyCorpse` splits
-  into a find (Evaluate, which caches the corpse on the context) and a loot (Act).
+  into a find (Evaluate, which caches the corpse on the context) and a loot (Act). Its retry deadline
+  (`CorpseLootRetryComponent`) keeps its own find-or-add write, unchanged.
 - Flee's `Parameter` is a baseline panic: without it, Flee's weight is 0 at full health and no
   multiplier (Fear included) could make an unhurt creature run.
 
@@ -447,7 +505,8 @@ public static readonly BehaviorModifier[] BehaviorModifiers =
 2. Stat modifiers on a drive target, from any effect: a `StatModifierGrant` in an aura, an item, an
    action. Timed or permanent, stacking by the grant's own rule. The behavior framework knows nothing
    of them.
-3. Re-registering a behavior or a definition (how mods replace them).
+3. Replacing a behavior or a definition in a mod or a save. Never mid-session: definitions are fixed
+   for the session, so a replacement takes effect when the next session loads.
 
 ## Starting configurations
 
@@ -574,14 +633,16 @@ Stop after each phase for in-game testing. Each ends with what to check.
    `TestCombatBehaviorSystem` and `TestDummyAttackSystem` write through it. `ClearStep` and
    `PlayerCommands`' own step clearing go.
 2. Tests: queuing an activation clears the step; a FreeCast doesn't; a step withdraws a pending
-   activation; the existing input-buffer, Dodge and windup tests pass unchanged.
+   activation; idle sets the wait; queuing twice in a frame keeps the newest (the pending pools' merge
+   action); the existing input-buffer, Dodge and windup tests pass unchanged; `BuiltInModulesTests`
+   still finds no newly observed pool.
 3. In-game check: walking and attacking feel the same; a Dodge still steps; goblins still attack and
    drink potions without stepping on the same frame.
 
 ### Phase 4 -- the game on the framework, at parity
 1. `NpcDecisionContext`, `GameModuleContext.NpcBehaviors`, the `Behavior` root (owned by
    NpcBehavior, `Behavior.Drive` extensible) and the Behavior domain, the drive tags (declared, unused
-   until Phase 6), the commitment pool.
+   until Phase 6), the commitment pool (Packed, `Unobserved`, written find-or-add through a scope).
 2. Behaviors: SelfHeal, EngageMelee, RangedAttack, LootCorpse, WanderStep, Idle (split
    `NpcCorpseLooting` into find and loot).
 3. `BlueprintDefinition.Behaviors`/`BehaviorModifiers`, `ResolvedBlueprint.Behaviors`,
@@ -589,9 +650,15 @@ Stop after each phase for in-game testing. Each ends with what to check.
 4. Grants on Goblin, Fairy and Ghost (the table minus Flee and considerations).
 5. `NpcDecisionSystem` replaces `TestCombatBehaviorSystem` (deleted); IMPLEMENTATION-NOTES' stand-in
    entry is rewritten; the TODO.md entry is deleted.
-6. Tests: a seeded parity test against the old chain, captured before deletion; a mod registering a
-   new behavior and replacing a built-in by Guid; a blueprint naming an unknown behavior fails
-   `ResolveAll`.
+6. Tests: **parity per situation, not per roll sequence.** The arbiter draws from the same stream but
+   in a different pattern (one weighted draw instead of a coin flip, none for a lone candidate), so a
+   seeded run won't repeat the old chain roll for roll. Instead, scenario tests captured from the old
+   chain before deletion: for each situation (low health with a potion, an adjacent hostile, the player
+   in range and in sight, a lootable corpse beside it, nothing near), the same decision, or the same
+   choices at the same rates over many seeded trials (QuickAttack/PowerAttack, Target/Ground,
+   idle/step). Also: a mod registering a new behavior and replacing a built-in by Guid; a blueprint
+   naming an unknown behavior fails `ResolveAll`; the "nothing near me" gate means a lone creature's
+   decision never evaluates EngageMelee or LootCorpse past the gate.
 7. Benchmark A/B (headless, fixed seed): `NpcDecisionSystem` against `TestCombatBehaviorSystem`'s row.
 8. In-game check: goblins wander, fight adjacent enemies with both attacks, drink potions below half
    health and loot corpses; a Fairy casts Magic Missile at the player from range.
@@ -603,12 +670,13 @@ Stop after each phase for in-game testing. Each ends with what to check.
 4. The goblin configuration above.
 5. Tests: Boss through an include (Goblin Foreman) and through `Apply` (once only); a modifier on a
    missing behavior does nothing; `NearbyAlliesFactor` counts (self and dead excluded, radius edge,
-   cap, other layer ignored); the goblin table's rows as decision tests; a committed Flee interrupted
-   by SelfHeal.
+   cap, other layer ignored); a hostile behind a wall isn't counted for Flee; the goblin table's rows as
+   decision tests; a committed Flee interrupted by SelfHeal; a new commitment is added the first time
+   and rewritten in place after (one pool entry per entity, never removed).
 6. Benchmark a goblin-heavy fight (the ally scan is the new cost).
 7. In-game check (Admin Mode "Spawn here >"): a lone goblin hit to half health usually runs and keeps
    running for a few seconds; a pack of five holds; "Apply > Boss" to a fleeing goblin and it turns
-   back to fight.
+   back to fight; a hurt goblin with an enemy on the far side of a wall doesn't run from it.
 
 ### Phase 6 -- runtime drives, Dread Idol, inspection
 1. `StatModifierTarget.BehaviorAggression`/`BehaviorCaution` (appended), display names, and

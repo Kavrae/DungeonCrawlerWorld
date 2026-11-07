@@ -10,16 +10,15 @@ using Presentation.UI.Details;
 using UIEngine.Fonts;
 using UIEngine.Rendering;
 using UIEngine.UI;
+using UIEngine.UI.ColorPalettes;
 
 namespace Presentation.UI.Inventory;
 
 /// <summary>
-/// Persistent single-item details pane -- shows whatever item ItemDetailsWindowController last
-/// selected, updating in place rather than opening a second window when a different item is
-/// clicked (see that controller's own doc comment). Close-only (no minimize), the same shape as
-/// InventoryManagementWindow/SecondaryInventoryWindow, not InspectionWindow (minimize-only). The
-/// sections it shares with Action Details are ActivatableDetailsSections'; the stack's blocker, the
-/// gold value and Item Details Comparison's colouring are its own.
+/// Single-item details popup -- shows whatever item ItemDetailsWindowController last opened,
+/// updating in place rather than opening a second window (see that controller's own doc comment).
+/// The sections it shares with Action Details are ActivatableDetailsSections'; the stack's blocker,
+/// the gold value, the shop pricing and Item Details Comparison's colouring are its own.
 ///
 /// Sections, top to bottom, a divider (BuildDivider, a single TextDivider row -- plain when its
 /// label is omitted, mirroring InspectionWindowContent.BuildSpacer; labeled for the two sections
@@ -31,7 +30,9 @@ namespace Presentation.UI.Inventory;
 /// per-line coloring can never drift out of sync about what lines exist); full
 /// Description (no header, omitted when blank -- same convention InspectionWindowContent.
 /// BuildDescriptionRow already uses); GoldValue (no header, currency-gold icon + "{n}G", same
-/// icon-beside-text shape the name row uses); Tags, comma-separated (no header). Every top-level child
+/// icon-beside-text shape the name row uses); Shop (labeled divider, then the band table and
+/// receipt, only while a shop is open and the item was hovered in a grid that prices it); Tags,
+/// comma-separated (no header). Every top-level child
 /// tiles vertically via the host window's own ChildElementTileMode.Vertical (see
 /// ItemDetailsWindowController.Open), the same convention InspectionWindowContent uses, rather
 /// than manual Y math -- only the name row's own icon-beside-text layout needs an explicit
@@ -82,9 +83,29 @@ public sealed class ItemDetailsWindow(
     private int _currentEntityId;
     private uint _currentStackInstanceId;
     private ActivationBlocker _displayedBlocker;
+    private IReadOnlyList<TooltipRow>? _displayedShopPricingRows;
+    private bool _displayedComparing;
 
-    /// <summary>Settable late-bound callback for this window's own "Compare" title button, if it has one -- see this class's own Initialize override for why only some instances do. Wired by whichever controller creates this instance (ItemDetailsWindowController for the anchor pane; ItemComparisonController deliberately never sets this for its own comparison columns) *before* calling Initialize.</summary>
+    /// <summary>Height of the Compare and Stop Comparison buttons.</summary>
+    private const float ButtonHeight = 20f;
+
+    /// <summary>Space beside a button's label, each side, and between two buttons.</summary>
+    private const float ButtonGap = 6f;
+
+    /// <summary>Settable late-bound: the "Compare" button's action, with the item shown -- set only on the anchor pane (ItemDetailsWindowController); a comparison column has no Compare button.</summary>
     public Action<int, uint>? OnCompareRequested { get; set; }
+
+    /// <summary>Settable late-bound: the "Stop Comparison" button's action, shown while IsComparing says a comparison is in progress.</summary>
+    public Action? OnStopComparisonRequested { get; set; }
+
+    /// <summary>Settable late-bound: whether a comparison is in progress -- the Stop Comparison button shows while it is.</summary>
+    public Func<bool>? IsComparing { get; set; }
+
+    /// <summary>Settable late-bound: called at the end of every Update -- ItemDetailsWindowController's placement and close-on-leave check.</summary>
+    public Action? OnUpdated { get; set; }
+
+    /// <summary>Where the shown item's shop pricing comes from -- the grid it was hovered in -- or null; its rows show while a shop is open.</summary>
+    public IItemShopPricingSource? ShopPricing { get; private set; }
 
     /// <summary>
     /// Safe to call both before the first Initialize (a brand-new window -- the real build is
@@ -95,17 +116,18 @@ public sealed class ItemDetailsWindow(
     /// is empty for plain single-item viewing; Item Details Comparison passes every *other*
     /// compared item's own definition here (see ResolveLineColor) so this item's own lines color
     /// symmetrically against them. entityId/stackInstanceId are this exact stack's own identity --
-    /// not used for rendering at all, only so the Compare title button (if this instance has one)
-    /// can invoke OnCompareRequested with the item currently shown, not a stale one captured at
-    /// construction time.
+    /// so the Compare button (if this instance has one) invokes OnCompareRequested with the
+    /// item currently shown, and the blocker and shop pricing are read for it. shopPricing is the
+    /// grid it was hovered in, or null.
     /// </summary>
-    public void Configure(int entityId, uint stackInstanceId, ItemDefinition definition, float contentWidth, IReadOnlyList<ItemDefinition> comparedAgainst = null!)
+    public void Configure(int entityId, uint stackInstanceId, ItemDefinition definition, float contentWidth, IReadOnlyList<ItemDefinition> comparedAgainst = null!, IItemShopPricingSource? shopPricing = null)
     {
         _currentEntityId = entityId;
         _currentStackInstanceId = stackInstanceId;
         _definition = definition;
         _contentWidth = contentWidth;
         _comparedAgainst = comparedAgainst ?? [];
+        ShopPricing = shopPricing;
 
         if (_childrenReady)
         {
@@ -113,48 +135,33 @@ public sealed class ItemDetailsWindow(
         }
     }
 
-    /// <summary>
-    /// The Compare title button is opt-in per instance, not universal -- attached only when
-    /// OnCompareRequested is already set by the time this runs (the anchor pane's own controller
-    /// sets it before calling Initialize; Item Details Comparison's own columns never do), rather
-    /// than always attaching it and leaving it a dead click on columns. Deliberately added here,
-    /// not in OnChildrenInitialized -- Window.Initialize's own CloseBehavior/MinimizeRestoreBehavior
-    /// attachment (see its own doc comment) doesn't run until *after* base.Initialize() (which is
-    /// what actually fires OnChildrenInitialized, from deep inside Element.Initialize) returns, so
-    /// attaching Compare there ran before Close ever existed -- appending (the default insertIndex)
-    /// only inserts to the left of whatever's *already* attached, so Compare ended up added first
-    /// and read as the rightmost button, past Close's own right edge. Calling AddTitleButton here,
-    /// after base.Initialize() has fully returned (Close/Minimize included), keeps every window's
-    /// title buttons in the same left-to-right order: unique -> minimize/restore -> close.
-    /// </summary>
-    public override void Initialize()
-    {
-        base.Initialize();
-
-        if (OnCompareRequested is not null)
-        {
-            var compareButton = BuildTitleButton(this, "↔");
-            compareButton.TooltipText = "Compare";
-            compareButton.Clicked += _ =>
-            {
-                if (_currentStackInstanceId != NoStackInstanceId)
-                {
-                    OnCompareRequested?.Invoke(_currentEntityId, _currentStackInstanceId);
-                }
-            };
-            AddTitleButton(compareButton);
-        }
-    }
-
-    /// <summary>Rebuilds when the reason the player can't use the shown item appears, changes or clears -- arms destroyed, mana spent -- while the window stays open.</summary>
+    /// <summary>Rebuilds when the reason the player can't use the shown item appears, changes or clears -- arms destroyed, mana spent -- when its shop pricing changes, or when a comparison starts or stops, while the window stays open.</summary>
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
 
-        if (_childrenReady && _definition is not null && ComputeBlocker() != _displayedBlocker)
+        if (_childrenReady && _definition is not null &&
+            (ComputeBlocker() != _displayedBlocker ||
+             !ReferenceEquals(ComputeShopPricingRows(), _displayedShopPricingRows) ||
+             IsComparingNow() != _displayedComparing))
         {
             Rebuild();
         }
+
+        OnUpdated?.Invoke();
+    }
+
+    private bool IsComparingNow() => IsComparing?.Invoke() == true;
+
+    private IReadOnlyList<TooltipRow>? ComputeShopPricingRows()
+    {
+        if (ShopPricing is null || _definition is null)
+        {
+            return null;
+        }
+
+        var stackInstanceId = _currentStackInstanceId == NoStackInstanceId ? (uint?)null : _currentStackInstanceId;
+        return ShopPricing.ShopPricingRowsFor(new ItemHoverTarget(_currentEntityId, stackInstanceId, _definition));
     }
 
     /// <summary>Why the player can't use the shown stack right now -- only for the player's own activatable stack; a shop's or a corpse's item isn't the player's to use yet.</summary>
@@ -220,7 +227,97 @@ public sealed class ItemDetailsWindow(
         _sections.BuildDivider(this, width);
         _sections.BuildIconTextRow(this, "Currency-Gold", "G", Color.Gold, $"{_definition.GoldValue}G", width);
 
-        _sections.BuildTagsSection(this, _definition, width);
+        _displayedShopPricingRows = ComputeShopPricingRows();
+        if (_displayedShopPricingRows is { Count: > 0 } shopPricingRows)
+        {
+            BuildShopPricingSection(shopPricingRows, width);
+        }
+
+        BuildTagsAndButtonsRow(width);
+    }
+
+    /// <summary>A plain divider, then the tags on the left and, right-aligned, Stop Comparison while comparing, otherwise Compare (anchor pane, for a stack that can be compared).</summary>
+    /// <remarks>The row fits its children (WrapContent, no padding): the tags wrap within the width the buttons leave, and the last button ends at width, so the row is exactly as wide as every other.</remarks>
+    private void BuildTagsAndButtonsRow(float width)
+    {
+        _sections.BuildDivider(this, width);
+
+        _displayedComparing = IsComparingNow();
+        var buttons = new List<(string Label, Action OnClicked)>(2);
+        if (_displayedComparing && OnStopComparisonRequested is { } stopComparison)
+        {
+            buttons.Add(("Stop Comparison", stopComparison));
+        }
+
+        if (!_displayedComparing && OnCompareRequested is { } compare && _currentStackInstanceId != NoStackInstanceId && _definition!.Activator is not null)
+        {
+            var entityId = _currentEntityId;
+            var stackInstanceId = _currentStackInstanceId;
+            buttons.Add(("Compare", () => compare(entityId, stackInstanceId)));
+        }
+
+        var row = ElementPoolService.CreateElement<Window>(this, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = true },
+            Layout = new ElementLayoutOptions { MaximumSize = new Vector2(width, ActivatableDetailsSections.MaximumTextRowHeight), DisplayMode = ElementDisplayMode.WrapContent },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+        });
+        row.ContentPadding = Vector2.Zero;
+        AddChild(row);
+
+        var buttonWidths = new float[buttons.Count];
+        var buttonsWidth = 0f;
+        for (var index = 0; index < buttons.Count; index++)
+        {
+            buttonWidths[index] = _sections.BodyFont.MeasureString(buttons[index].Label).X + ButtonGap * 2;
+            buttonsWidth += buttonWidths[index] + ButtonGap;
+        }
+
+        var tags = ElementPoolService.CreateElement<TextWindow>(row, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            Layout = new ElementLayoutOptions { RelativePosition = Vector2.Zero, MaximumSize = new Vector2(System.Math.Max(0f, width - buttonsWidth), ActivatableDetailsSections.MaximumTextRowHeight), DisplayMode = ElementDisplayMode.WrapContent },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+            Text = new TextOptions { Text = _sections.TagDisplayText(_definition!.Tags), TextColor = BodyTextColor },
+        });
+        tags.ContentFont = _sections.BodyFont;
+        row.AddChild(tags);
+
+        var buttonX = width;
+        for (var index = buttons.Count - 1; index >= 0; index--)
+        {
+            buttonX -= buttonWidths[index];
+            var (label, onClicked) = buttons[index];
+            var button = ElementPoolService.CreateElement<Button>(row, new ElementOptions
+            {
+                Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+                Layout = new ElementLayoutOptions { RelativePosition = new Vector2(buttonX, 0), Size = new Vector2(buttonWidths[index], ButtonHeight), DisplayMode = ElementDisplayMode.Fixed },
+                Chrome = new ElementChromeOptions { ShowBorder = true },
+                Content = new ElementContentOptions { ContentColor = WindowPalette.ControlBackground },
+                Text = new TextOptions { Text = label, TextColor = WindowPalette.ControlLabelTextColor },
+            });
+            button.Clicked += _ => onClicked();
+            row.AddChild(button);
+            buttonX -= ButtonGap;
+        }
+    }
+
+    /// <summary>"Shop", then the open shop's stock-band table and the receipt for this stack (see InventoryGridContent.ComputeShopRows).</summary>
+    private void BuildShopPricingSection(IReadOnlyList<TooltipRow> rows, float width)
+    {
+        _sections.BuildDivider(this, width, "Shop", 0.125f);
+
+        var table = ElementPoolService.CreateElement<TooltipRowsElement>(this, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            Layout = new ElementLayoutOptions { Size = new Vector2(width, TooltipRowsElement.HeightFor(FontService, rows)), DisplayMode = ElementDisplayMode.Fixed },
+            Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
+            Content = new ElementContentOptions { ContentColor = Color.Transparent },
+        });
+        table.Configure(rows);
+        AddChild(table);
     }
 
     /// <summary>

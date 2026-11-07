@@ -830,6 +830,11 @@ sampler's bias, the probes): that section.
   - If small moving carried auras come to dominate, consider a hybrid: large static auras stay in the field, small
     moving ones push timed effects to the entities in their radius (a stacking and credit decision, not only
     performance).
+  - Worker threads (see "Research multithreading"): only the scans could split -- the power each cell of a source's
+    diamond gets is pure reads of the map and the source, then added into `AuraField`'s totals on the main thread in a
+    fixed order. Exposure ticks can't: an effect writes health through `HealthDamage`/`HealthHeal`, the ledger and the
+    event bus. At 0.26 ms/frame (2026-11-06) the scans are too small to pay for a fork-join (~5-20 µs); revisit only
+    if large or many moving sources make them heavy.
 - **TestCombatBehaviorSystem, further:** the shared nearby-occupant pass reads nine tiles a wanderer through the
   occupant index. A one-bit-per-cell occupancy map (`NeighborhoodBits`, ~128 KB a plane per neighborhood) or one
   neighborhood lookup per 3x3 block would cut it again.
@@ -2665,6 +2670,22 @@ Planned in `PLAN-npc-behavior-composition.md`. Behaviors that move need "Grid pa
 navigation" (High) -- today's Engage/Flee steps get stuck on walls -- and "can I see it" needs "Field
 of view and perception" (High). "Where to go" (flee to which tile, which shop, which corpse) is
 "Spatial queries for NPC decisions" (Medium).
+
+**Design the decide step to run on worker threads** (the first system where "Research multithreading" pays): it is
+mostly reads -- dead, transform, movement gate, action lock, health totals, inventory, neighbours, race -- ending in one
+queued activation or step, so it splits into a parallel decide that records each entity's choice and a serial apply.
+`TestCombatBehaviorSystem` is the largest system today (0.42 ms of 1.13 ms/frame, 2026-11-06), still far below needing
+it, so build the shape in rather than threading now. What blocks it:
+- **Rolls:** every choice draws from one sequence (`NpcBehaviorModule.BehaviorRandomStream`), so drawing in parallel
+  ties a seeded world to thread timing. Derive each roll from the entity's key and the frame with `SeedMix`, as
+  generated content does.
+- **Shared scratch:** `TargetResolution`'s buffers and the system's `_adjacentTilesBuffer` are single instances; a
+  worker needs its own.
+- **Acting while deciding:** `NpcCorpseLooting` moves inventory stacks in the middle of a decision; looting becomes a
+  recorded choice applied in the serial half.
+- **Writes:** recorded as `unmanaged` struct updaters and pending-activation merges, applied in entity order so the
+  result never depends on which worker finished first.
+Movement stays serial: two entities claiming one tile are settled by order, and the step is ~0.14 ms/frame.
 
 **Unreal Engine reference:** Unreal's decision layers are Behavior Trees (with a Blackboard) and the
 newer StateTree; neither is utility-based, and the plan's dual utility stays. What maps across:
@@ -4696,19 +4717,6 @@ settings) scales the whole UI by one factor, with fonts re-rendered at the scale
 exposes it at runtime so games offer it as a setting. Godot 4.5 added screen reader support through
 AccessKit: `Control`s report a role, name and description to the OS accessibility API. AccessKit has
 C bindings, so the same library is an option here when the time comes.
-
-#### Read the OS double-click speed instead of a hardcoded window
-
-`InventoryGridContent.DoubleClickWindowFrames` (inventory item double-click-to-activate) is a fixed
-constant, not the user's actual configured Windows double-click speed (Control Panel/Settings ->
-Mouse, default 500ms) -- unlike WinForms/WPF apps, which read this via
-`SystemInformation.DoubleClickTime`. Retrievable without a `System.Windows.Forms` dependency (which
-would force retargeting to `net10.0-windows`) via a direct `user32.dll` P/Invoke of
-`GetDoubleClickTime()`, callable at startup since it's a system-wide query with no window-handle
-dependency. Windows-only -- FNA itself is cross-platform, so this needs an `OperatingSystem.IsWindows()`
-guard with today's hardcoded value as the non-Windows fallback. Scoped to the mouse double-click only
-(the keyboard hotbar has no double-tap window any more). Open question if picked up: does the current +25% buffer on top of the base
-value still make sense once the base is the user's own real OS setting rather than a fixed guess.
 
 ### MEDIUM PRIORITY : Unsimulated-tier time -- research alternatives to freezing
 

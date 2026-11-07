@@ -65,14 +65,12 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
     /// </summary>
     public event Action<Element>? Clicked;
 
-    /// <summary>
-    /// Raised instead of Clicked once UiInputController has recognized a second click on this same
-    /// element within its own double-click window -- see UiInputController.HandleDoubleClickAwareClick.
-    /// Opt-in: subscribing to this at all (see WantsDoubleClickDetection) is what tells
-    /// UiInputController this element's clicks need single/double disambiguation in the first place;
-    /// an element nobody has subscribed this on keeps firing Clicked immediately on every click, same
-    /// as always.
-    /// </summary>
+    /// <summary>Raised in place of Clicked for a second click on this element within the double-click window.</summary>
+    /// <remarks>
+    /// Opt-in: subscribing is what makes UiInputController watch this element's clicks for a pair
+    /// (WantsDoubleClickDetection). The first click of the pair still raises Clicked at once -- see
+    /// UiInputController.HandleDoubleClickAwareClick.
+    /// </remarks>
     public event Action<Element>? DoubleClicked;
 
     /// <summary>UiInputController's own opt-in signal -- see DoubleClicked's own doc comment.</summary>
@@ -80,8 +78,7 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
     /// <summary>
     /// Raises Clicked directly, bypassing HandleClick/HandleContentClick/OnContentClickAction --
-    /// used only by UiInputController's deferred click dispatch (DispatchClick) once it's already
-    /// decided a given click is a genuine single click, not the first half of a double-click. Safe to
+    /// used only by UiInputController's double-click-aware dispatch (DispatchClick). Safe to
     /// skip OnContentClickAction's own default recursion into children here specifically because
     /// WantsDoubleClickDetection is only ever true for a childless leaf (a grid cell)
     /// today -- revisit before adding double-click support to any compound Element.
@@ -90,6 +87,10 @@ public class Element(FontService fontService, ElementPoolService elementPoolServ
 
     /// <summary>See RaiseClicked.</summary>
     internal void RaiseDoubleClicked() => DoubleClicked?.Invoke(this);
+
+    /// <summary>How many times this element has gone back to its pool, counted by ElementPoolService.CloseElement for every element a close reaches, children included.</summary>
+    /// <remarks>Tells a pooled instance's later use from the one something remembered (UiInputController's double-click candidate) -- Closed can't, since it fires only for the element Close was called on.</remarks>
+    internal int PoolReturnCount { get; set; }
 
     /// <summary>
     /// Raised whenever this window's WindowDisplayMode actually changes, regardless of what

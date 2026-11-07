@@ -42,7 +42,7 @@ public static class ElementFactoryRegistry
         var views = gameSession.Views;
         var mapView = views.MapView;
         var commands = gameSession.Commands;
-        var inventoryServices = new InventoryServices(itemCatalog, views.InventoryView, views.ShopView, views.CurrencyView, views.ActionStateView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, catalogs.GameplayTags);
+        var inventoryServices = new InventoryServices(itemCatalog, views.InventoryView, views.ShopView, views.CurrencyView, views.ActionStateView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, catalogs.GameplayTags, shellServices.ItemHoverDetails);
 
         uiEngineContext.RegisterFrameworkElementFactories(contextMenuController, cursorTextContent);
 

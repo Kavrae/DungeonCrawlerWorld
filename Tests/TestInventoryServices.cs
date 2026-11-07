@@ -6,13 +6,17 @@ using Game.Modules.Shops;
 using Game.Views;
 using Game.World;
 using Presentation.UI.Inventory;
+using Tests.UIEngine;
+using UIEngine.Input;
+using UIEngine.UI.Content;
 
 namespace Tests;
 
 /// <summary>Builds the item windows' InventoryServices over a test's own pools, catalog and player.</summary>
 internal static class TestInventoryServices
 {
-    public static InventoryServices Over(ComponentManager componentManager, ItemCatalog itemCatalog, IPlayerQuery playerQuery, EventBus? eventBus = null) =>
+    /// <param name="itemHoverDetails">The hover hub the grids report to; a fresh one, with no popup, when null.</param>
+    public static InventoryServices Over(ComponentManager componentManager, ItemCatalog itemCatalog, IPlayerQuery playerQuery, EventBus? eventBus = null, ItemHoverDetails? itemHoverDetails = null) =>
         new(
             itemCatalog,
             new InventoryView(componentManager, itemCatalog),
@@ -22,5 +26,6 @@ internal static class TestInventoryServices
             new InventoryCommands(componentManager, itemCatalog, playerQuery),
             new ShopCommands(componentManager, itemCatalog, eventBus ?? new EventBus(), playerQuery),
             new CurrencyCommands(componentManager),
-            TestGameplayTags.BuiltIn);
+            TestGameplayTags.BuiltIn,
+            itemHoverDetails ?? new ItemHoverDetails(new CursorLabelContent(new PointerState(), TestFonts.Shared)));
 }

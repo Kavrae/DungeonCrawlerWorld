@@ -22,15 +22,16 @@ public sealed class UiInputController
     /// <summary>Content pixels scrolled per wheel detent -- roughly three lines of the 8pt font most window content uses, matching typical OS scroll-speed defaults.</summary>
     private const float ScrollPixelsPerNotch = 24f;
 
-    /// <summary>How long Escape must be held (not just tapped) before it closes every closeable DynamicHUD window at once instead of just the topmost -- see HandleEscape. Comfortably longer than DoubleClickWindowFrames-style thresholds elsewhere (0.3s), so an ordinary tap can never accidentally read as a hold.</summary>
+    /// <summary>How long Escape must be held (not just tapped) before it closes every closeable DynamicHUD window at once instead of just the topmost -- see HandleEscape. Longer than short tap thresholds elsewhere (0.3s), so an ordinary tap can never accidentally read as a hold.</summary>
     private static readonly int EscapeHoldCloseAllFrames = GameTiming.FramesForSeconds(0.5f);
 
-    /// <summary>
-    /// Shared single/double-click timing window, ~300ms -- the one place this value lives.
-    /// Public so a host's own keyboard double-tap uses the same window, and the two gestures agree.
-    /// See DispatchClick/HandleDoubleClickAwareClick.
-    /// </summary>
-    public static readonly int DoubleClickWindowFrames = GameTiming.FramesForSeconds(0.3f);
+    /// <summary>How soon a second click must follow the first to count as a double-click.</summary>
+    /// <remarks>
+    /// The user's own double-click speed from the operating system (<see cref="OperatingSystemDoubleClickTime"/>), read
+    /// once, with no buffer added; 0.3s where it can't be read. The one window every double-click detector uses --
+    /// DispatchClick/HandleDoubleClickAwareClick and <see cref="UI.ListView"/>.
+    /// </remarks>
+    public static readonly int DoubleClickWindowFrames = GameTiming.FramesForSeconds(OperatingSystemDoubleClickTime.ReadSecondsOr(0.3f));
 
     /// <summary>Consecutive frames Escape has been held down, 0 while it's up -- HandleEscape's own edge/hold distinction (1 == a fresh press).</summary>
     private int _escapeHeldFrames;
@@ -38,16 +39,17 @@ public sealed class UiInputController
     /// <summary>Guards UiLayerStack.CloseAllClosableWindows to firing once per hold, not every frame past EscapeHoldCloseAllFrames -- reset the moment Escape is released.</summary>
     private bool _escapeHoldCloseAllFired;
 
-    /// <summary>Advances once per Update -- the frame clock DispatchClick's deferred single-click/double-click state machine measures its own window against. See FlushExpiredPendingClicks.</summary>
+    /// <summary>Advances once per Update -- the frame clock the double-click window is measured on.</summary>
     private int _frameCounter;
 
-    /// <summary>
-    /// Elements with a pending, not-yet-fired single click -- see DispatchClick/
-    /// HandleDoubleClickAwareClick. Only ever populated for an element that opted into double-click
-    /// detection (Element.WantsDoubleClickDetection); every other click bypasses this dictionary
-    /// entirely and fires Clicked immediately, same as always.
-    /// </summary>
-    private readonly Dictionary<Element, int> _pendingSingleClickFrameByElement = [];
+    /// <summary>The element that opted into double-click detection and was clicked last, if its double-click window may still be open -- see HandleDoubleClickAwareClick.</summary>
+    private Element? _lastDoubleClickCandidate;
+
+    /// <summary>The frame _lastDoubleClickCandidate was clicked on.</summary>
+    private int _lastDoubleClickCandidateFrame;
+
+    /// <summary>_lastDoubleClickCandidate's PoolReturnCount when it was clicked -- a different count is the instance's later use.</summary>
+    private int _lastDoubleClickCandidatePoolReturnCount;
 
     private readonly UiLayerStack _layers;
     private Vector2 _screenSize;
@@ -347,7 +349,6 @@ public sealed class UiInputController
         CurrentMousePosition = new Point(mouseState.X, mouseState.Y);
 
         _frameCounter++;
-        FlushExpiredPendingClicks();
 
         var dropdownTookKey = RouteNavigationKeysToOpenDropdown(keyboardState);
         if (!dropdownTookKey)
@@ -583,6 +584,14 @@ public sealed class UiInputController
             {
                 dropdownController.Close();
                 return;
+            }
+
+            foreach (var handler in _inputHandlers)
+            {
+                if (handler.TryConsumeEscape())
+                {
+                    return;
+                }
             }
 
             // While menu mode is active, Escape must not reach through it to Base/StaticHud
@@ -876,10 +885,7 @@ public sealed class UiInputController
     /// <summary>
     /// The one dispatch point for every click: offered to the pressed element, then to each ancestor
     /// until one handles it (Element.HandleClick), so a label inside a clickable row clicks the row.
-    /// An element nobody has ever subscribed DoubleClicked on (the overwhelming majority -- every
-    /// plain Button, TabbedContent's tab tiles, ...) handles it at once; one that wants double-click
-    /// detection takes it into the deferred single/double-click state machine instead -- see
-    /// HandleDoubleClickAwareClick.
+    /// An element that subscribed DoubleClicked goes through HandleDoubleClickAwareClick instead.
     /// </summary>
     private void DispatchClick(Element? element, Point mousePosition)
     {
@@ -898,66 +904,28 @@ public sealed class UiInputController
         }
     }
 
-    /// <summary>
-    /// A click on an element that opted into double-click detection is never actioned immediately --
-    /// it's held in _pendingSingleClickFrameByElement until either DoubleClickWindowFrames passes
-    /// with nothing else claiming it (flushed from FlushExpiredPendingClicks, firing Clicked as if it
-    /// had happened normally), or a second click on this same element arrives within the window
-    /// (cancels the pending single-click outright and fires DoubleClicked instead, so whatever
-    /// Clicked would have done never runs at all for a genuine double-click).
-    /// </summary>
+    /// <summary>Raises Clicked at once, or DoubleClicked in its place when this is the second click on the same element within DoubleClickWindowFrames.</summary>
+    /// <remarks>
+    /// The first click is never held back, so an element that takes double-clicks must make its single click harmless as
+    /// the first half of one (the inventory's selects). A third click starts a new pair. An element closed between the two
+    /// (a grid recreating its cells, the pool reusing the instance) no longer matches (Element.PoolReturnCount), so the
+    /// second click is a single one.
+    /// </remarks>
     private void HandleDoubleClickAwareClick(Element element)
     {
-        if (_pendingSingleClickFrameByElement.TryGetValue(element, out var pendingFrame) &&
-            _frameCounter - pendingFrame <= DoubleClickWindowFrames)
+        if (ReferenceEquals(element, _lastDoubleClickCandidate) &&
+            element.PoolReturnCount == _lastDoubleClickCandidatePoolReturnCount &&
+            _frameCounter - _lastDoubleClickCandidateFrame <= DoubleClickWindowFrames)
         {
-            CancelPendingSingleClick(element);
+            _lastDoubleClickCandidate = null;
             element.RaiseDoubleClicked();
             return;
         }
 
-        _pendingSingleClickFrameByElement[element] = _frameCounter;
-        element.Closed += OnPendingClickElementClosed;
-    }
-
-    /// <summary>Fires whatever single click is still pending once its own window has fully elapsed with no second click -- called once per Update. Two-pass (collect then fire) since firing Clicked can trigger arbitrary consumer code that might itself click something else, and mutating _pendingSingleClickFrameByElement mid-enumeration would throw.</summary>
-    private void FlushExpiredPendingClicks()
-    {
-        if (_pendingSingleClickFrameByElement.Count == 0)
-        {
-            return;
-        }
-
-        List<Element>? expired = null;
-        foreach (var (pendingElement, pendingFrame) in _pendingSingleClickFrameByElement)
-        {
-            if (_frameCounter - pendingFrame > DoubleClickWindowFrames)
-            {
-                (expired ??= []).Add(pendingElement);
-            }
-        }
-
-        if (expired is null)
-        {
-            return;
-        }
-
-        foreach (var pendingElement in expired)
-        {
-            CancelPendingSingleClick(pendingElement);
-            pendingElement.RaiseClicked();
-        }
-    }
-
-    /// <summary>An element closed/returned to the pool (a grid recreating its cells) while its click was still pending must never later fire against whatever the pooled instance gets reused for -- evicts it the moment that happens, same as the double-click-escalation and timeout-flush paths already do on their own way out.</summary>
-    private void OnPendingClickElementClosed(Element element) => CancelPendingSingleClick(element);
-
-    private void CancelPendingSingleClick(Element element)
-    {
-        if (_pendingSingleClickFrameByElement.Remove(element))
-        {
-            element.Closed -= OnPendingClickElementClosed;
-        }
+        _lastDoubleClickCandidate = element;
+        _lastDoubleClickCandidatePoolReturnCount = element.PoolReturnCount;
+        _lastDoubleClickCandidateFrame = _frameCounter;
+        element.RaiseClicked();
     }
 
     /// <summary>Whether a content-drag payload is captured (see TryStartContentDrag) and the left press has become a drag -- a release then drops it rather than clicking the source.</summary>

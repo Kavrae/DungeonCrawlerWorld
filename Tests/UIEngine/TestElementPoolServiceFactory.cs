@@ -23,6 +23,7 @@ internal static class TestElementPoolServiceFactory
         pool.RegisterFactory<TextWindow>(() => createTextWindow?.Invoke(pool) ?? new TextWindow(fontService, pool, new UiRenderService()));
         pool.RegisterFactory<TextBox>(() => createTextBox?.Invoke(pool) ?? new TextBox(fontService, pool, new UiRenderService()));
         pool.RegisterFactory<HotbarSlotElement>(() => new HotbarSlotElement(fontService, pool, new UiRenderService()));
+        pool.RegisterFactory<TooltipRowsElement>(() => new TooltipRowsElement(fontService, pool, new UiRenderService()));
         return pool;
     }
 

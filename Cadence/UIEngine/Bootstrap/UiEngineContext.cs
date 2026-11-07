@@ -57,6 +57,7 @@ public sealed class UiEngineContext(
         pool.RegisterFactory(() => new SplitPane(fonts, pool, render));
         pool.RegisterFactory(() => new ModalDialog(fonts, pool, render));
         pool.RegisterFactory(() => new Tooltip(fonts, pool, render));
+        pool.RegisterFactory(() => new TooltipRowsElement(fonts, pool, render));
         pool.RegisterFactory(() => new Folder(fonts, pool, render, sprites));
         pool.RegisterFactory(() => new GridControl(fonts, pool, render));
         pool.RegisterFactory(() => new Toggle(fonts, pool, render));

@@ -209,7 +209,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     public void BuildTagsSection(Window host, GameplayTagSet tags, float width)
     {
         BuildDivider(host, width);
-        BuildWrappingTextLine(host, width, FormatTagDisplayNames(tags));
+        BuildWrappingTextLine(host, width, TagDisplayText(tags));
     }
 
     public void BuildFixedTextLine(Window host, float width, string text, Color color)
@@ -255,7 +255,8 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         divider.Configure(label, GameWindowPalette.HeaderTextColor, 0.95f, textPosition);
     }
 
-    private string FormatTagDisplayNames(GameplayTagSet tags)
+    /// <summary>tags' display names, comma-separated.</summary>
+    public string TagDisplayText(GameplayTagSet tags)
     {
         var displayNames = new List<string>(tags.Count);
         foreach (var tag in tags)

@@ -43,7 +43,6 @@ public sealed class TradeWindowController(
     MapWindow mapWindow,
     int tradeOfferPlayerEntityId,
     int tradeOfferShopEntityId,
-    TooltipController tooltipController,
     ElementGroup itemWindows)
 {
     /// <summary>
@@ -80,9 +79,6 @@ public sealed class TradeWindowController(
 
     /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in either trade column" -- see ShopWindowController.OnItemSelected's own doc comment.</summary>
     public Action<int, uint>? OnItemSelected { get; set; }
-
-    /// <summary>Settable late-bound callback for "the player chose Compare from a trade column's own item context menu" -- see ShopWindowController.OnCompareRequested's own doc comment. Currently unreachable in practice (see TradeWindow.Configure's own doc comment on why a trade cell's right-click never offers Compare), wired anyway for parity with every other grid's controller.</summary>
-    public Action<int, uint>? OnCompareRequested { get; set; }
 
     public void Initialize(UiLayerStack layers)
     {
@@ -121,9 +117,8 @@ public sealed class TradeWindowController(
             },
             Content = new ElementContentOptions { ContentColor = WindowPalette.PanelBackgroundColor },
         });
-        window.Configure(tradeOfferPlayerEntityId, tradeOfferShopEntityId, shopEntityId, tooltipController,
-            (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId),
-            (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId));
+        window.Configure(tradeOfferPlayerEntityId, tradeOfferShopEntityId, shopEntityId,
+            (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId));
         window.OnCancelClicked = HandleCancelClicked;
         window.OnCompleteClicked = HandleCompleteClicked;
         window.Closed += HandleWindowClosed;

@@ -21,7 +21,6 @@ public sealed class InventoryWindowController(
     InventoryView inventoryView,
     MapWindow mapWindow,
     ContextMenuController contextMenuController,
-    TooltipController tooltipController,
     ElementGroup itemWindows)
 {
 
@@ -48,14 +47,14 @@ public sealed class InventoryWindowController(
     /// <summary>Settable late-bound callback for "the player clicked a real single-stack item cell in their own inventory grid" -- wired by ItemWindowCoordinator to ItemDetailsWindowController.Open once that controller exists (built after this one, and itself depends on this controller's PlayerInventoryWindow accessor, so the two can't reference each other via constructor injection -- same ordering cycle GetSecondaryTargetEntityId already breaks the same way). Threaded down to the player's own InventoryManagementWindow via CreateInventoryWindow's Configure call, and from there to every tab's own InventoryGridContent.</summary>
     public Action<int, uint>? OnItemSelected { get; set; }
 
-    /// <summary>Settable late-bound callback for "the player chose Compare from an inventory item cell's own context menu" -- wired by ItemWindowCoordinator to ItemComparisonController.Arm once that controller exists, the same ordering reason OnItemSelected is wired the same way. Threaded the same path.</summary>
-    public Action<int, uint>? OnCompareRequested { get; set; }
-
-    /// <summary>Settable late-bound callback for "the player chose Activate (or double-clicked) an inventory item cell" -- wired by ItemWindowCoordinator to arm the item via ActionTargetingController.ArmItemFromStack (which closes this window itself as part of arming -- see its own doc comment), the same ordering reason OnItemSelected/OnCompareRequested are wired the same way. Threaded the same path.</summary>
+    /// <summary>Settable late-bound callback for "the player chose Activate (or double-clicked) an inventory item cell" -- wired by ItemWindowCoordinator to arm the item via ActionTargetingController.ArmItemFromStack (which closes this window itself as part of arming -- see its own doc comment), the same ordering reason OnItemSelected is wired the same way. Threaded the same path.</summary>
     public Action<int, uint>? OnActivateRequested { get; set; }
 
     /// <summary>Settable late-bound callback for "the player chose Activate (or double-clicked) a loot box" -- wired by ItemWindowCoordinator to open every loot box the player holds (see LootboxCommands.OpenAll). Threaded the same path as OnActivateRequested.</summary>
     public Action<int>? OnOpenLootboxesRequested { get; set; }
+
+    /// <summary>Settable late-bound notification fired when the player's Inventory window closes.</summary>
+    public Action? OnClosed { get; set; }
 
     /// <summary>Opens the player's own Inventory window if it isn't already -- idempotent, same as WindowLifecycle.Open itself. Lets a non-button trigger (e.g. clicking a corpse to loot it) reuse this window instead of the button being the only way to open it.</summary>
     public void OpenInventoryWindow() => _windowLifecycle.Open();
@@ -66,7 +65,7 @@ public sealed class InventoryWindowController(
     public void Initialize(UiLayerStack layers)
     {
         _uiLayers = layers;
-        _windowLifecycle = new WindowLifecycle<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, layers, () => { }, itemWindows);
+        _windowLifecycle = new WindowLifecycle<InventoryManagementWindow>(CreateInventoryWindow, IsInventoryDisabled, layers, () => OnClosed?.Invoke(), itemWindows);
 
         _button = elementPoolService.CreateElement<Button>(null, new ElementOptions
         {
@@ -123,10 +122,8 @@ public sealed class InventoryWindowController(
         });
         window.Configure(
             world.PlayerEntityId,
-            tooltipController,
             () => GetSecondaryTargetEntityId?.Invoke(),
             (entityId, stackInstanceId) => OnItemSelected?.Invoke(entityId, stackInstanceId),
-            (entityId, stackInstanceId) => OnCompareRequested?.Invoke(entityId, stackInstanceId),
             (entityId, stackInstanceId) => OnActivateRequested?.Invoke(entityId, stackInstanceId),
             entityId => OnOpenLootboxesRequested?.Invoke(entityId));
         DynamicHudContextMenus.WireCloseContextMenu(window, contextMenuController, _uiLayers);

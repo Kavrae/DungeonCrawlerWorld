@@ -79,6 +79,7 @@ public sealed class ElementPoolService
             return;
         }
 
+        element.PoolReturnCount++;
         CloseAllTitleButtons(element);
         CloseAllChildren(element);
         ClearEventSubscriptions(element);
