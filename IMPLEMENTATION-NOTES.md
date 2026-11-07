@@ -2241,6 +2241,9 @@ RPG Maker, Godot, Unity, Tiled, LDtk) are in `PLAN-tall-sprites-and-wall-tops.md
   grid (`MapRenderer.TouchesDrawnArea`).
 - Overhangs over the player's drawn sprite -- and the inspected entity's, in Detail or Admin inspection --
   draw at 0.7 alpha (`OverhangFade`), instantly. 0.4 read as too faint in game.
+- So do overhangs around the player (only the player): their one rectangle is their footprint grown by a tile
+  on every side, joined with their drawn sprite (`OverhangFade.PlayerRectangle`), so a one-tile entrance
+  through a two-tile-tall wall shows where its floor is. A cached piece never fades, which is fine: it covers only walls.
 
 **Joining** (the group is Game's, the mask Presentation's: `MapTerrainCells`).
 - A top's piece comes from the wall's four neighbours (north 1, east 2, south 4, west 8), a face's from left

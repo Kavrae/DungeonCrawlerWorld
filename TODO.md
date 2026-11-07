@@ -795,13 +795,6 @@ tile and learn that it is heated by lava, which burns and damages whoever walks 
 - Name where it comes from where that helps (the terrain, a shrine, a placed aura), from the same attribution the
   aura's credit uses (`AuraField.PowerReaching`'s credit).
 
-#### Walls fade beside the player, not only over them
-
-A wall's face and top fade where they hide the player (`OverhangFade`, 0.7). They should also fade while the player stands
-directly beside the wall -- left, left and up, left and down, right, right and up, right and down -- so a one-tile
-entrance through a two-tile-tall wall shows where the floor is. Decide it in the same place the fade is decided now (the
-watched entities' rectangles in `MapRenderer`), widened by one column either side, and keep it to the player.
-
 #### Resolve highest performance costs
 
 Find and fix what costs the most per frame. Headless Release, seed 1, frames 600-3600, map 3072 (2026-10-29,
@@ -2714,10 +2707,6 @@ event. Floating text already covers damage taken.
 future looting). `DestroyEntity` is reserved for a real decay-timer or "loot then destroy" step, or
 future destructible terrain (skips `DeadComponent` entirely, just calls `DestroyEntity` on trigger).
 
-#### Self damage buff ability
-
-Example FreeCast/Immediate ability raising the caster's own outgoing damage for a duration.
-
 #### Defensive buff spell -- damage reduction + healing over time
 
 Self-targeted, combining a timed `StatModifierGrant(IncomingDamage, ...)` (fully supported today) with
@@ -2922,6 +2911,16 @@ To settle when designing it:
 ## Presentation
 
 ### High Priority
+
+#### QuickCast mode
+
+A hotbar mode, chosen by the Activation Style setting ("Options menu", Global), where an action is aimed while its key
+is held and lands when the key is let go:
+- **Holding** a hotbar slot's key arms its action.
+- **Releasing** the key while the cursor is over a valid target activates it there.
+- **Cancelling**: right-click, Escape, or releasing the key over an invalid target cancels the arm.
+- **Switching**: pressing another hotbar slot's key while the first is still held cancels the first action's arm and
+  arms the new one.
 
 #### Replace the text outline with SDF glyphs and an outline shader
 
@@ -3245,7 +3244,7 @@ Persisted view of the player's active stats -- fixed set.
 #### Standard widget set
 
 No checkbox, radio button, dropdown, slider, list box, or tree view (`Toggle` covers checkbox --
-`IMPLEMENTATION-NOTES.md`). Tabs exist (`TabbedContent`). Inventory/spell hotbar and equipment/stats
+`IMPLEMENTATION-NOTES.md`; the radio button group is specified under "Options menu" (Global), its first user). Tabs exist (`TabbedContent`). Inventory/spell hotbar and equipment/stats
 windows still want list/grid controls beyond what exists.
 
 #### Tile count and size closer to Dungeon Settlers
@@ -4171,6 +4170,10 @@ Settings it holds:
 - **Default Targeting Mode** -- Ground or Target (default Ground). `MapViewState.TargetingMode` is set to the
   selected value on startup; Left Alt (`TargetingModeSwitch`) still switches it for the rest of the session without
   changing the setting.
+- **Activation Style** -- Manual or QuickCast (default Manual), a radio button group. Manual is today's hotbar: a
+  press arms the slot, and a click or a second press confirms it. QuickCast is "QuickCast mode" (Presentation, High):
+  holding the key arms it, and releasing it over a valid target activates it. Hovering over an option's text or its
+  radio button shows a tooltip explaining that option.
 - **Log File Expiration** -- how many days of each log's dated files are kept (default 31,
   `RollingLogTarget.RetentionDays`, which every host passes today as `DefaultRetentionDays`). Read by `StartupCleanup` at the next start, which is the only
   place old log files are deleted; writing a log (`RollingLogFile`) never deletes anything.
@@ -4179,6 +4182,22 @@ Settings it holds:
   `%LocalAppData%\DungeonCrawlerWorld` (`PlayerFolders.Mods`, `PlayerFolders.Saves`). All three are read before
   anything else at startup (logs opened and pruned, mods loaded, the save opened and compacted), so a change takes
   effect on the next start, and the setting itself has to be read from somewhere that doesn't move with it.
+- **Hover Delay** -- how long the pointer rests before a Delayed hover action opens (default 1.5 seconds). Every hover
+  action declares which kind it is through an enum (e.g. `HoverActionDelay`: `Immediate`, `Delayed`) rather than
+  holding its own delay:
+  - **Immediate** -- short tooltips (resource bars, health rows, ability scores, loot box results, text boxes). Keep the
+    hard-coded 0.4 s (`PopupChrome.HoverTooltipDelayFrames`); not a setting.
+  - **Delayed** -- the larger hover actions: Item Details over an item cell (today its own constant,
+    `ItemHoverDetails.DetailsDelayFrames`, 1.5 s) and the hotbar slot summary (today on the 0.4 s tooltip delay, so it
+    moves to 1.5 s). They read this setting, stored in seconds and converted to frames with
+    `GameTiming.FramesForSeconds`.
+  What shows at once (an item's name above the cursor) is neither kind and is unaffected.
+
+Controls it needs that don't exist yet:
+- **Radio button group** (UIEngine, from "Standard widget set"): a group of options where exactly one is selected.
+  Each option is a radio button plus its label text; clicking either one selects that option. Each option can carry
+  tooltip text, shown when the pointer hovers over the option's radio button or its text. Built for Activation Style
+  first. Default Targeting Mode is the same shape, so it uses the control too.
 
 #### Floating text settings on the options menu
 

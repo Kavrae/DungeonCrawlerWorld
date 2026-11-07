@@ -104,7 +104,7 @@ public sealed class MapRenderer : IDisposable
     /// <summary>The terrain and structures around the grid, read once per rebuild of the cached terrain image (DrawTerrainDirectly) and resolved for drawing.</summary>
     private readonly MapTerrainCells _terrainCells;
 
-    /// <summary>The drawn sprites of this frame's watched entities, which overhangs fade over (OverhangFade). A field so it isn't reallocated per frame.</summary>
+    /// <summary>The drawn sprites of this frame's watched entities, the player's grown by a tile on every side, which overhangs fade over (OverhangFade). A field so it isn't reallocated per frame.</summary>
     private readonly List<Rectangle> _watchedRectangles = [];
 
     /// <summary>The image passes, as delegates made once rather than per Update.</summary>
@@ -441,7 +441,7 @@ public sealed class MapRenderer : IDisposable
         }
     }
 
-    /// <summary>Where each watched entity's sprite is drawn this frame, for OverhangFade.</summary>
+    /// <summary>Where each watched entity on the shown layer has its sprite drawn this frame, the player's grown by a tile on every side, for OverhangFade.</summary>
     private void CollectWatchedRectangles(IReadOnlyList<int> watchedEntityIds, MapImageKey key)
     {
         _watchedRectangles.Clear();
@@ -449,14 +449,17 @@ public sealed class MapRenderer : IDisposable
         for (var watchedIndex = 0; watchedIndex < watchedEntityIds.Count; watchedIndex++)
         {
             var entityId = watchedEntityIds[watchedIndex];
-            if (!_mapView.TryGetOccupant(entityId, out var occupant) || !_mapView.TryGetVisual(entityId, out var visual))
+            if (!_mapView.TryGetOccupant(entityId, out var occupant) || occupant.Position.Z != key.MapLayer || !_mapView.TryGetVisual(entityId, out var visual))
             {
                 continue;
             }
 
             var footprintTopLeft = _camera.TileOrigin(occupant.Position.X - key.Scroll.X, occupant.Position.Y - key.Scroll.Y);
             var footprintSize = new Vector2(occupant.Size.X * key.TileSize.X, occupant.Size.Y * key.TileSize.Y);
-            _watchedRectangles.Add(OverhangFade.WatchedRectangle(footprintTopLeft, footprintSize, occupant.Size, _spriteSheetService.Sprites.Resolve(visual).Sprite));
+            var drawnSprite = OverhangFade.WatchedRectangle(footprintTopLeft, footprintSize, occupant.Size, _spriteSheetService.Sprites.Resolve(visual).Sprite);
+            _watchedRectangles.Add(entityId == _mapView.PlayerEntityId
+                ? OverhangFade.PlayerRectangle(drawnSprite, footprintTopLeft, footprintSize, key.TileSize)
+                : drawnSprite);
         }
     }
 

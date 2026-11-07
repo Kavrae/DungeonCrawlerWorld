@@ -5,17 +5,19 @@ using UIEngine.Rendering;
 
 namespace Presentation.MapRendering;
 
-/// <summary>Which live wall pieces fade so whoever is behind them stays visible: any overhang drawn over a watched entity's drawn sprite.</summary>
+/// <summary>Which live wall pieces fade so whoever is behind them stays visible: any overhang drawn over a watched entity's drawn sprite, or around the player.</summary>
 /// <remarks>
 /// <para>
-/// Watched: the player always, and the inspected entity while inspection is Detail or Admin -- at most two rectangles, so no
-/// spatial index. Each is the entity's drawn sprite (SpritePlacementMath), which for a 1x1 stretched sprite is exactly its
-/// tile and for a placed one covers a tall head or a wide sprite reaching into the next column.
+/// Watched: the player always, and the inspected entity while inspection is Detail or Admin. Each is the entity's drawn
+/// sprite (SpritePlacementMath), which for a 1x1 stretched sprite is exactly its tile and for a placed one covers a tall
+/// head or a wide sprite reaching into the next column. The player's also reaches one tile past their footprint on every
+/// side (PlayerRectangle), so a one-tile entrance through a tall wall shows its floor -- at most two rectangles, so no
+/// spatial index.
 /// </para>
 /// <para>
 /// Only overhangs fade: a cached piece covers only walls, where nobody stands, and a Phasing entity inside a wall already
 /// draws over it. The fade is instant rather than eased in, since easing needs per-piece state for a cosmetic nicety.
-/// Rectangles that only touch (a piece on the tile beside the player) don't count.
+/// Rectangles that only touch don't count.
 /// </para>
 /// </remarks>
 public static class OverhangFade
@@ -45,6 +47,15 @@ public static class OverhangFade
             : (footprintTopLeft, footprintSize);
 
         return new Rectangle((int)topLeft.X, (int)topLeft.Y, (int)size.X, (int)size.Y);
+    }
+
+    /// <summary>The player's watched rectangle: their footprint grown by one tile on every side, grown further to hold their drawn sprite where it reaches past that.</summary>
+    public static Rectangle PlayerRectangle(Rectangle drawnSprite, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize)
+    {
+        var surrounding = new Rectangle((int)footprintTopLeft.X, (int)footprintTopLeft.Y, (int)footprintSize.X, (int)footprintSize.Y);
+        surrounding.Inflate(tileSize.X, tileSize.Y);
+
+        return Rectangle.Union(surrounding, drawnSprite);
     }
 
     /// <summary>FadedAlpha when the overhang's drawn rectangle overlaps any watched rectangle, otherwise fully opaque.</summary>

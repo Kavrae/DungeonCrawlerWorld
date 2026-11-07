@@ -40,6 +40,35 @@ public sealed class OverhangFadeTests
     }
 
     [TestMethod]
+    public void PlayerRectangle_FadesEveryTileAroundTheFootprint_AndNothingFurther()
+    {
+        List<Rectangle> watched = [OverhangFade.PlayerRectangle(TileRectangle(5, 5), new Vector2(5 * Tile, 5 * Tile), new Vector2(Tile, Tile), new Point(Tile, Tile))];
+
+        for (var row = 4; row <= 6; row++)
+        {
+            for (var column = 4; column <= 6; column++)
+            {
+                Assert.AreEqual(OverhangFade.FadedAlpha, OverhangFade.AlphaFor(TileRectangle(column, row), watched), $"({column}, {row})");
+            }
+        }
+
+        foreach (var (column, row) in new[] { (3, 5), (7, 5), (5, 3), (5, 7) })
+        {
+            Assert.AreEqual(1f, OverhangFade.AlphaFor(TileRectangle(column, row), watched), $"({column}, {row})");
+        }
+    }
+
+    [TestMethod]
+    public void PlayerRectangle_ASpriteReachingPastTheSurroundingTiles_KeepsItsReach()
+    {
+        var drawnSprite = new Rectangle(5 * Tile, 2 * Tile, Tile, 4 * Tile);
+
+        var watched = OverhangFade.PlayerRectangle(drawnSprite, new Vector2(5 * Tile, 5 * Tile), new Vector2(Tile, Tile), new Point(Tile, Tile));
+
+        Assert.AreEqual(new Rectangle(4 * Tile, 2 * Tile, 3 * Tile, 5 * Tile), watched);
+    }
+
+    [TestMethod]
     [DataRow(InspectionMode.None, false)]
     [DataRow(InspectionMode.Basic, false)]
     [DataRow(InspectionMode.Detail, true)]
