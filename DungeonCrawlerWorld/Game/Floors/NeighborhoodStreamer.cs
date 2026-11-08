@@ -12,11 +12,13 @@ namespace Game.Floors;
 /// <summary>Unloads and loads whole neighborhoods a slice per frame: destroying every entity in one, and generating one from its record.</summary>
 /// <remarks>
 /// <para>
-/// Unloading destroys each entity through EntityManager.DestroyEntity, whose EntityDestroying
+/// Unloading first publishes NeighborhoodUnloadingEvent, so what the record keeps (item piles) is kept as it is destroyed, then
+/// destroys each entity through EntityManager.DestroyEntity, whose EntityDestroying
 /// handlers remove its aura sources, map footprint and tier bookkeeping, then publishes a
-/// TerrainUnloadingEvent per row and drops the neighborhood's map stores. Loading loads the stores
+/// TerrainUnloadingEvent per row, drops the neighborhood's map stores and publishes NeighborhoodUnloadedEvent. Loading loads the stores
 /// with the whole layout, announces it with a TerrainLoadedEvent per row, then creates the
-/// population, born with the tier its position deserves.
+/// population, born with the tier its position deserves, and last publishes NeighborhoodPopulatedEvent, which puts back
+/// what the record kept.
 /// </para>
 /// <para>
 /// A load is decided on a worker thread (TestMapBuilder.Plan) from the moment it is queued, and applied
@@ -390,6 +392,8 @@ public sealed class NeighborhoodStreamer : ISystem
     /// <remarks>Anything that arrives while the terrain is announced is destroyed all at once just before the stores drop, so nothing is left on cells that no longer exist.</remarks>
     private IEnumerable<int> Unload(int cellX, int cellY, UnloadProgress? eviction = null)
     {
+        _eventBus.Publish(new NeighborhoodUnloadingEvent(cellX, cellY, _records.GetOrCreate(cellX, cellY)));
+
         if (eviction is not null)
         {
             foreach (var cost in DestroyEntitiesIn(cellX, cellY, entityId => !_skeletons.IsSkeleton(entityId)))
@@ -416,6 +420,7 @@ public sealed class NeighborhoodStreamer : ISystem
         }
 
         _world.Map.UnloadNeighborhood(cellX, cellY);
+        _eventBus.Publish(new NeighborhoodUnloadedEvent(cellX, cellY));
     }
 
     /// <summary>Destroys every entity indexed in the neighborhood, one unit each, until the membership index holds none.</summary>
@@ -538,6 +543,8 @@ public sealed class NeighborhoodStreamer : ISystem
             TotalEntitiesSpawned += createdEntityCount;
             yield return System.Math.Max(1, createdEntityCount);
         }
+
+        _eventBus.Publish(new NeighborhoodPopulatedEvent(cellX, cellY, _records.GetOrCreate(cellX, cellY)));
     }
 
     /// <summary>Registers, in a just-loaded neighborhood, the cells of every multi-tile entity next door whose footprint reaches across the border -- cells that were dropped with the neighborhood's stores.</summary>

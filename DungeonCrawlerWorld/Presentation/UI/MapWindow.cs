@@ -185,8 +185,9 @@ public sealed class MapWindow : Window, IContentDropTarget
         }
 
         // Over another window (the hotbar, a menu), the tile beneath it isn't hovered: the cursor isn't on the map. Nor is
-        // one while something is dragged: a drop never confirms an armed action, so no preview invites one.
-        _actionTargeting.UpdateHoveredTile(IsPointerOver && !_pointerState.ContentDrag.Visible ? _pointerState.CursorPosition : null, ContentAbsolutePosition);
+        // one while something is dragged: a drop never confirms an armed action, so no preview invites one -- unless the
+        // drag armed a drop (DragDropArming), whose preview shows where the release will put it.
+        _actionTargeting.UpdateHoveredTile(IsPointerOver && (!_pointerState.ContentDrag.Visible || _mapViewState.ArmedDrop is not null) ? _pointerState.CursorPosition : null, ContentAbsolutePosition);
 
         // Last, after the camera-follow above, so a frame that re-centres rebuilds the renderer's
         // images against the new scroll position.
@@ -292,7 +293,7 @@ public sealed class MapWindow : Window, IContentDropTarget
     /// </summary>
     protected override bool OnContentClickAction(Point mousePosition)
     {
-        if (_mapViewState.ArmedActionId is not null || _mapViewState.ArmedItemStackInstanceId is not null)
+        if (_mapViewState.IsAnythingArmed)
         {
             _actionTargeting.TryConfirmActivation(mousePosition, ContentAbsolutePosition);
             return true;

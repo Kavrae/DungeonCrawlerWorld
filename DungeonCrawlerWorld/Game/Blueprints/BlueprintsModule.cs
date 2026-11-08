@@ -29,6 +29,7 @@ public sealed class BlueprintsModule : IGameModule
         TreasureChest.Definition,
         HealingShrine.Definition,
         AuraAnchor.Definition,
+        ItemPile.Definition,
         Shop.Definition,
         GeneralShopStock.Definition,
         PotionShopStock.Definition,

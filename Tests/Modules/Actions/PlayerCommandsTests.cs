@@ -127,7 +127,7 @@ public sealed class PlayerCommandsTests
             TestActionStateViews.Over(componentManager, actionCatalog),
             TestActionStateViews.Targeting(componentManager, world, actionCatalog),
             playerCommands,
-            simulationClock: clock);
+            simulationClock: clock, dropPlacement: new TestPlayerItemDrops());
 
         return new Harness
         {

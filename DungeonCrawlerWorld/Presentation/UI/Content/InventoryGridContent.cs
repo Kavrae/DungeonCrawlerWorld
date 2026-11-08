@@ -5,6 +5,7 @@ using Game.Modules.Actions.Activators;
 using Game.Modules.Currency;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.ItemPiles;
 using Game.Modules.Shops;
 using Game.Modules.Shops.Components;
 using Game.Tags;
@@ -858,6 +859,11 @@ public sealed class InventoryGridContent(
 
         if (cell.StackInstanceId is not { } stackInstanceId)
         {
+            if (IsPlayersOwnDropCell(cell))
+            {
+                AddDropOption(options, "Drop All", ItemDrop.EveryStackOf(cell.ItemDefinitionId));
+            }
+
             return options;
         }
 
@@ -943,8 +949,23 @@ public sealed class InventoryGridContent(
             }
         }
 
+        if (IsPlayersOwnDropCell(cell))
+        {
+            AddDropOption(options, "Drop", ItemDrop.OneUnitOf(stackInstanceId));
+            AddDropOption(options, "Drop All", ItemDrop.WholeStackOf(stackInstanceId));
+        }
+
         return options;
     }
+
+    /// <summary>A cell of the player's own inventory holding something that may leave it, while no shop is open: where Drop and Drop All are offered.</summary>
+    /// <remarks>Never a corpse's, a container's, a shop's or a trade offer's cell. A loot box never leaves its owner (CanTrade), so it isn't offered.</remarks>
+    private bool IsPlayersOwnDropCell(InventoryItemStackCell cell) =>
+        cell.EntityId == world.PlayerEntityId && cell.CanTrade && mapViewState.OpenShopEntityId is null;
+
+    /// <summary>Adds an option arming drop (IPlayerItemDrops), disabled while it can't be armed.</summary>
+    private void AddDropOption(List<DropdownOption> options, string label, ItemDrop drop) =>
+        options.Add(new DropdownOption(label, null, Enabled: inventoryServices.PlayerItemDrops.CanArmDrop(drop), () => inventoryServices.PlayerItemDrops.ArmDrop(drop)));
 
     /// <summary>
     /// Trade-grid cells' own right-click action, wired in place of BuildItemContextMenu/a context

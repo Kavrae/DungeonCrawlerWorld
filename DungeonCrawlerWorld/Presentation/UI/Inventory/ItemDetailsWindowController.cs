@@ -36,7 +36,7 @@ public sealed class ItemDetailsWindowController(
     private static readonly Vector2 CursorOffset = new(16, 16);
 
     /// <summary>How long the pointer may be away from both the item and the popup before it closes -- time to cross the gap CursorOffset leaves.</summary>
-    private static readonly int PointerAwayGraceFrames = GameTiming.FramesForSeconds(0.3f);
+    internal static readonly int PointerAwayGraceFrames = GameTiming.FramesForSeconds(0.3f);
 
     private UiLayerStack _layers = null!;
     private ItemDetailsWindow? _window;

@@ -22,7 +22,8 @@ public static class ElementFactoryRegistry
         AdminTools adminTools,
         ShellServices shellServices,
         ActionTargetingController actionTargetingController,
-        PlayerMovementController playerMovementController)
+        PlayerMovementController playerMovementController,
+        PlayerItemDrops playerItemDrops)
     {
         var elementPool = uiEngineContext.ElementPoolService;
         var mapViewState = shellServices.MapViewState;
@@ -39,7 +40,7 @@ public static class ElementFactoryRegistry
         var views = gameSession.Views;
         var mapView = views.MapView;
         var commands = gameSession.Commands;
-        var inventoryServices = new InventoryServices(itemCatalog, views.InventoryView, views.ShopView, views.CurrencyView, views.ActionStateView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, catalogs.GameplayTags, shellServices.ItemHoverDetails);
+        var inventoryServices = new InventoryServices(itemCatalog, views.InventoryView, views.ShopView, views.CurrencyView, views.ActionStateView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, catalogs.GameplayTags, shellServices.ItemHoverDetails, playerItemDrops);
 
         uiEngineContext.RegisterFrameworkElementFactories(contextMenuController, cursorTextContent);
 

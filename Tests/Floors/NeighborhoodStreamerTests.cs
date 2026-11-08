@@ -13,6 +13,9 @@ using Game.Modules.ProcessingTier.Components;
 using Game.Terrain;
 using Game.World;
 using Game.Blueprints;
+using Game.Modules.Currency.Components;
+using Game.Modules.Inventory;
+using Game.Modules.Inventory.Components;
 
 namespace Tests.Floors;
 
@@ -24,7 +27,7 @@ public sealed class NeighborhoodStreamerTests
 
     private static readonly Vector3Int Reference = new(10, 5, (int)MapLayer.Ground);
 
-    private sealed record Session(Game.World.World World, EcsContext Ecs, ProcessingTierResolver Resolver, NeighborhoodStreamer Streamer, FrameEventBuffer<EntityMovedEvent> MovedEntities, BlueprintRegistry Definitions, CreatureSkeletons Skeletons);
+    private sealed record Session(Game.World.World World, EcsContext Ecs, ProcessingTierResolver Resolver, NeighborhoodStreamer Streamer, FrameEventBuffer<EntityMovedEvent> MovedEntities, BlueprintRegistry Definitions, CreatureSkeletons Skeletons, EntityFactory Factory);
 
     private static Session Build(int budgetPerFrame = NeighborhoodStreamer.DefaultBudgetPerFrame)
     {
@@ -42,7 +45,7 @@ public sealed class NeighborhoodStreamerTests
 
         var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);
         var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, result.Internals.ProcessingTierResolver, records, builder, result.Internals.Skeletons) { BudgetPerFrame = budgetPerFrame };
-        return new Session(world, ecs, result.Internals.ProcessingTierResolver, streamer, result.Internals.MovedEntities, result.Catalogs.Definitions, result.Internals.Skeletons);
+        return new Session(world, ecs, result.Internals.ProcessingTierResolver, streamer, result.Internals.MovedEntities, result.Catalogs.Definitions, result.Internals.Skeletons, factory);
     }
 
     /// <summary>Pumps the streamer until it has nothing left to do, returning how many entities each frame created or destroyed.</summary>
@@ -294,7 +297,7 @@ public sealed class NeighborhoodStreamerTests
 
         var builder = new TestMapBuilder(ecs.EntityManager, factory, result.Catalogs.Terrain, result.Catalogs.Auras, result.Catalogs.Definitions, result.Catalogs.Areas, result.Internals.UniqueEntities);
         var streamer = new NeighborhoodStreamer(world, ecs.EntityManager, ecs.ComponentManager.GetDirectPool<TransformComponent>(), ecs.EventBus, result.Internals.ProcessingTierResolver, records, builder, skeletons);
-        return new Session(world, ecs, result.Internals.ProcessingTierResolver, streamer, result.Internals.MovedEntities, result.Catalogs.Definitions, skeletons);
+        return new Session(world, ecs, result.Internals.ProcessingTierResolver, streamer, result.Internals.MovedEntities, result.Catalogs.Definitions, skeletons, factory);
     }
 
     /// <summary>Moves the player a neighborhood along and shifts the window there, the way ProcessingTierSystem does.</summary>
@@ -515,5 +518,70 @@ public sealed class NeighborhoodStreamerTests
 
         Assert.AreEqual(straddlerEntityId, session.World.GetEntityIdAt(farSideCell));
         CollectionAssert.Contains(session.World.GetOccupantEntityIdsAt(farSideCell).ToArray(), straddlerEntityId);
+    }
+
+    [TestMethod]
+    public void Regenerate_KeepsAnItemPile_WithItsStacksExactlyAsTheyWere_AndItsCurrency()
+    {
+        var session = Build();
+        var tile = OpenTileInNeighborhoodOne(session);
+        var pile = SpawnPile(session, tile);
+        var stacks = session.Ecs.ComponentManager.GetMultiPool<InventoryItemStackComponent>();
+        var potion = TestContent.Item(BuiltInItemIds.HealthPotion) with { Name = "Odd Potion" };
+        var stackId = InventoryActions.AddDivergentItem(session.Ecs.ComponentManager, pile, potion);
+        session.Ecs.ComponentManager.Merge(pile, new CurrencyComponent(gold: 7, credits: 2));
+
+        Assert.IsTrue(session.Streamer.TryRequestRegenerate(1, 0));
+        RunUntilIdle(session);
+
+        Assert.IsFalse(session.Ecs.EntityManager.EntityExists(pile) && PileAt(session, tile) == pile, "Sanity check: the old pile went with the neighborhood.");
+        var restored = PileAt(session, tile);
+        Assert.AreNotEqual(-1, restored);
+        var restoredStacks = new List<InventoryItemStackComponent>();
+        InventoryQueries.CopyStacksForEntity(stacks, restored, restoredStacks);
+        Assert.AreEqual(stackId, restoredStacks.Single().StackInstanceId);
+        Assert.AreEqual("Odd Potion", restoredStacks.Single().Override?.Name);
+        var currency = session.Ecs.ComponentManager.GetPackedPool<CurrencyComponent>().GetReadonly(restored);
+        Assert.AreEqual((7, 2), (currency.Gold, currency.Credits));
+    }
+
+    private static int SpawnPile(Session session, Vector3Int tile)
+    {
+        var pile = session.Factory.Spawn(SpawnRequest.At(session.Definitions.GetId(Game.Blueprints.Objects.ItemPile.Id), tile));
+        Assert.AreNotEqual(EntityFactory.NoEntity, pile);
+        return pile;
+    }
+
+    private static int PileAt(Session session, Vector3Int tile)
+    {
+        var piles = session.Ecs.ComponentManager.GetPackedPool<Game.Modules.ItemPiles.Components.ItemPileComponent>();
+        foreach (var occupant in session.World.GetOccupantEntityIdsAt(tile))
+        {
+            if (piles.Has(occupant))
+            {
+                return occupant;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>The first open, unoccupied Ground tile of neighborhood one, away from its edges.</summary>
+    private static Vector3Int OpenTileInNeighborhoodOne(Session session)
+    {
+        for (var y = 4; y < Rows - 4; y++)
+        {
+            for (var x = Neighborhoods.SizeTiles + 4; x < 2 * Neighborhoods.SizeTiles - 4; x++)
+            {
+                var tile = new Vector3Int(x, y, (int)MapLayer.Ground);
+                if (!session.World.IsCellBlocked(tile) && session.World.GetOccupantEntityIdsAt(tile).Count == 0)
+                {
+                    return tile;
+                }
+            }
+        }
+
+        Assert.Fail("No open tile in neighborhood one.");
+        return default;
     }
 }

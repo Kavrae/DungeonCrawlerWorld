@@ -3,6 +3,7 @@ using Engine.Tiles;
 using Game.Floors;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
+using Game.Modules.ItemPiles;
 using Microsoft.Xna.Framework;
 
 namespace Presentation.UI;
@@ -35,7 +36,13 @@ public sealed class MapViewState
     /// <summary>The consumable item stack currently armed, if any -- see ArmedActionId, which this mirrors exactly for the item-hotkey path (Game.Modules.Inventory.Components.ItemHotkeyBindingComponent) instead of the action one. By StackInstanceId, not ItemDefinitionId -- see that component's own doc comment for why.</summary>
     public uint? ArmedItemStackInstanceId;
 
-    /// <summary>See ArmedActionId/ArmedItemStackInstanceId -- shared regardless of which of the two is actually armed.</summary>
+    /// <summary>The drop currently armed, if any: what it puts down, awaiting the tile (ItemDrops.Targeting). Mutually exclusive with ArmedActionId and ArmedItemStackInstanceId.</summary>
+    public ItemDrop? ArmedDrop;
+
+    /// <summary>Whether an action, an item or a drop is armed.</summary>
+    public bool IsAnythingArmed => ArmedActionId is not null || ArmedItemStackInstanceId is not null || ArmedDrop is not null;
+
+    /// <summary>See ArmedActionId/ArmedItemStackInstanceId/ArmedDrop -- shared regardless of which is armed.</summary>
     public HotkeySlot? ArmedSlot;
 
     /// <summary>The player's targeting mode for every activation that offers one: Ground (default) aims at the tile, Target marks the entity on the confirmed tile. Switched with Left Alt (TargetingModeSwitch), kept for the session and not saved yet.</summary>

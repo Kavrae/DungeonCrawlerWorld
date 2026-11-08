@@ -63,6 +63,7 @@ public static class ShellBootstrapper
         var contextMenuController = shellServices.ContextMenuController;
         var tooltipController = shellServices.TooltipController;
 
+        var itemDropPlacement = new ItemDropPlacement(commands.ItemDropCommands, mapViewState);
         var actionTargetingController = new ActionTargetingController(
             world,
             mapViewState,
@@ -75,11 +76,15 @@ public static class ShellBootstrapper
             views.ActionStateView,
             views.TargetingView,
             commands.PlayerCommands,
-            gameSession.SimulationClock);
+            gameSession.SimulationClock,
+            itemDropPlacement);
         var playerMovementController = new PlayerMovementController(commands.PlayerCommands);
-        var dragGhostContent = new DragGhostContent(pointerState, world, catalogs.ActionCatalog, catalogs.ItemCatalog, views.InventoryView, uiEngine.FontService, uiEngine.SpriteSheetService);
+        var playerItemDrops = new PlayerItemDrops(itemDropPlacement, actionTargetingController);
+        var dropCursorText = new DropCursorText(shellServices.CursorTextContent, actionTargetingController, mapViewState);
+        _ = new ArmedDropHover(views.MapView, mapViewState, playerItemDrops, dropCursorText, actionTargetingController);
+        var dragGhostContent = new DragGhostContent(pointerState, mapViewState, world, catalogs.ActionCatalog, catalogs.ItemCatalog, views.InventoryView, uiEngine.FontService, uiEngine.SpriteSheetService);
 
-        ElementFactoryRegistry.RegisterAll(uiEngine, gameSession, worldSession.AdminTools, shellServices, actionTargetingController, playerMovementController);
+        ElementFactoryRegistry.RegisterAll(uiEngine, gameSession, worldSession.AdminTools, shellServices, actionTargetingController, playerMovementController, playerItemDrops);
 
         contextMenuController.Dropdowns.Initialize(uiLayers);
         tooltipController.Initialize(uiEngine.ElementPoolService, uiLayers);
@@ -126,7 +131,8 @@ public static class ShellBootstrapper
             new ItemDragDetailsDismissal(itemWindows, shellServices.ItemHoverDetails),
             new HotbarBindingDropHandler(hotbarContent, world),
             inventoryTransferDropHandler,
-            new MapDropHandler(views.MapView, views.ShopView, mapViewState, inventoryTransferDropHandler),
+            new MapDropHandler(views.MapView, views.ShopView, mapViewState, inventoryTransferDropHandler, playerItemDrops),
+            new DragDropArming(views.MapView, mapViewState, playerItemDrops, actionTargetingController, dropCursorText),
         ];
         var inputController = new UiInputController(uiLayers, screenSize, pointerState, inputHandlers, contentDropHandlers, contextMenuController.Dropdowns, tooltipController);
         inputController.SetDefaultFocusElement(mapWindow);

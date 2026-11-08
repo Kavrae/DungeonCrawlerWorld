@@ -438,21 +438,31 @@ see every change. `#[require(B)]` (0.15) inserts `B` with its default whenever `
 
 #### Change detection
 
-Knowing that a component changed today means subscribing to a pool's `ComponentChanged` event, which
-fires on every write, costs a delegate call per write per subscriber, and exists only on Packed and
-Multi pools. Things that only need "did it change since I last looked" pay for more than they use or
-compare values by hand: `HealthWindow` and HUD refresh, Presentation caches (`MapTileLayerCache`),
-and perception that could skip recomputing when nothing nearby moved.
+Two tools exist today. Every pool keeps a per-entity version counter (`GetVersion`, Multi's
+`GetEntityVersion`, `GetVersionByDenseIndex`), bumped by every write scope, updater, add and removal;
+a reader that remembers one entity's last version can ask "did it change since I looked" -- the
+inventory, ability score and stat modifier views hand it to their windows that way. And an Observed
+Packed or Multi pool raises `ComponentChanged`/`ComponentRemoving` on every write, a delegate call
+per write per subscriber, fixed for the build. What neither gives:
+- A question across entities: a counter is per entity, so "which entities changed since frame N"
+  means remembering a version for each one and visiting them all.
+- Added versus changed, and removals at all: a counter bumps the same for each, and a removed
+  component's entity reads as unchanged once its version is gone.
+- A change that matters versus a routine write: `HealthWindow` stopped watching its pool's version
+  because every tick's stack decrement bumped it, and now compares which effects are present instead.
+- Perception that could skip recomputing when nothing nearby moved has no cheap way to ask.
 - **Per-component change ticks:** each pool stores, per entity, the frame the component was added and
-  the frame it last changed. Every write through the pool's update path stamps it; no subscriber
-  exists.
+  the frame it last changed, alongside or instead of the version counter. Every write through the
+  pool's write paths stamps it; no subscriber exists.
 - **Queries:** "added since frame N", "changed since frame N", and a reader for "removed since frame
   N" (a per-pool list of removals, kept for a frame or two). A system or window remembers the frame
   it last ran and asks about everything since.
 - **Write only when different:** an update helper that compares and skips the write (and the stamp)
   when the value didn't change, so a system that rewrites the same value every visit doesn't count as
-  a change.
-- **Cost:** one `uint` per entity per pool that opts in, written on every write. Measure it on the
+  a change. It doesn't help a reader like `HealthWindow`, whose writes really change the value; that
+  reader keeps comparing what it shows.
+- **Cost:** one `uint` per entity per pool that opts in, written on every write (the versions already
+  pay this once). Measure it on the
   hottest pools with the `phase-performance-testing` skill before turning it on everywhere; opt-in
   per pool is the fallback.
 - Events stay the tool for "something happened" (damage, death), and for the timer wheels, which need
@@ -468,14 +478,14 @@ work.
 #### Named schedules, system sets and run conditions
 
 System order is the module order (`RunsAfter`/`RunsBefore`) plus registration order within a module,
-with `SystemManager.RegisterFirst` for the systems that must lead the frame (`NeighborhoodStreamer`,
-`SpawnMoves`). `BuiltInModulesTests` pins the resulting order. Whether a system runs at all is decided
+with a frame-start lane (`SystemManager.RegisterAtFrameStart(system, order)`, the game's orders in
+`GameFrameStartOrder`: `NeighborhoodStreaming` then `SpawnMoves`) for the systems that must lead the frame. `BuiltInModulesTests` pins the resulting order. Whether a system runs at all is decided
 inside it (pause is a `GameLoop` skip of the whole ECS; tier gates are in `TieredSystemRunner`). Two
 things are hard to express: ordering a single system against another module's system, and "this
 system doesn't run in this state" (menus, game over, a frozen map).
 - **Named phases** in a fixed order (for example: frame start, input, streaming, decisions, actions,
   movement, resolution, cleanup). A system declares its phase, and a mod adds systems into a phase
-  without caring about module order. `RegisterFirst` becomes the frame-start phase.
+  without caring about module order. The frame-start lane becomes the frame-start phase.
 - **System sets:** a named group of systems (every damage-over-time system, every NPC decision system)
   that other systems or sets order against, so a mod's DoT runs with the built-in DoTs without naming
   each one.
@@ -1397,50 +1407,9 @@ they come in through a door elsewhere.
   remembers the door used, so leaving returns there ("Area entry points").
 - **Persistence:** what is inside -- dropped items, a killed resident -- survives leaving and returning. Today's
   streamer destroys a neighborhood's entities on unload and regenerates its population, so this needs instance
-  contents saved and restored ("Save and load Beyond neighborhoods", Global).
+  contents saved and restored ("Save and load Beyond neighborhoods", Global). Item piles are the exception already: their
+  neighborhood's record keeps them (`ItemPileKeeping`), the model for keeping anything else.
 - Needs "Area pools" (the random first pick) and "Area entry points".
-
-#### Dropping items on the ground
-
-Let the player put items down on the map, and pick them up again. Besides being expected, it is how
-a light is set down: a carried light item stays lit in a dropped pile and radiates from it
-(`ToggleItemHolderSync` already lets any holder, on the map or not, alive or dead, hold a lit unit),
-which replaces using Ground mode to anchor an item's light. Plan it as one rule set, so every way an
-item leaves an inventory treats it the same.
-
-**What a drop is**
-- An item pile: an entity on the dropper's tile (a blueprint like `TreasureChest`, but non-blocking,
-  with no health and no `ContainerComponent` destruction), holding ordinary `InventoryItemStackComponent`s.
-  One pile per tile and layer: dropping where a pile already is adds to it. It shows the loot bag badge
-  (`MapViewQuery`'s `LootBagState`) and opens in the loot window, where Take/Take All pick items up, as
-  for a corpse or a chest. An empty pile is destroyed.
-- The moved unit keeps everything that is the unit's: a diverged stack's `Override` (a wand's
-  charges), its lit state (`ToggleItemActivator.IsToggledOn`), `FirstAcquired`. A lit stack never
-  joins a Merged Stack cell, here as anywhere. Moving goes through the existing transfer path
-  (`InventoryActions`), never a new one, so `ToggleItemHolderSync` (lit units) and
-  `ItemHotkeyBindingActions.RepointAfterUnitMoved` (slots on a stack that is now gone) follow with no
-  caller remembering.
-
-**Where it is offered**
-- Inventory grid context menu: "Drop" (one unit) and "Drop All" (the stack), named like
-  "Give"/"Give All" (`InventoryGridContent`). Offered for the player's own inventory only, not a
-  corpse's, a shop's or a trade offer.
-- Hotbar item slot context menu: "Drop" -- one unit of the stack the slot is bound to, the same unit
-  an activation from that slot would use (`ActivatedFromSlot`). The slot follows the rule
-  `RepointAfterUnitMoved` already applies: it moves with the unit only if the stack it named is gone.
-- Dragging an item out of the inventory onto an empty tile (wanted, 2026-10-27): the ground resolver in
-  `PLAN-unified-pointer-picking.md` Phase 5's map-drop chain, after "into a container on the tile". Drops
-  the whole stack, as every drag does until "Stack Controls and Partial Stacks".
-
-**Decide**
-- Refused, with the disabled cursor and a reason, while the stack is winding up (`PendingWindupComponent`
-  with Kind Item) or has a pending activation, during a trade, and while dead.
-- What an unloaded neighborhood does to a pile (today every entity in it is destroyed): lose the
-  items, or keep piles in the neighborhood record ("Entity storage", Global).
-- Whether NPCs pick piles up (`NpcCorpseLooting`) and whether a pile has loot rights like a corpse
-  (`LootRights`, see IMPLEMENTATION-NOTES.md "Corpse loot rights and mob looting").
-- Currency: a "Drop" on the currency row, or never.
-- Destroying an item outright stays "Destroyed items", not a drop.
 
 #### Bouncing actions -- chain lightning
 
@@ -1703,7 +1672,7 @@ heal, cheaper Magic Missile) -- exact "what changes" design still open.
 
 #### Mobs looting corpses by preference
 
-NPCs loot every corpse they stand on or beside, taking everything that fits (`NpcCorpseLooting`, see
+NPCs loot every corpse they stand on or beside, taking everything that fits (`NpcLooting`, see
 IMPLEMENTATION-NOTES.md "Corpse loot rights and mob looting"). Give them preferences -- by combat style or
 item rarity, once either concept exists -- and let them walk to a corpse rather than only loot one they
 happen to pass.
@@ -2629,7 +2598,7 @@ it, so build the shape in rather than threading now. What blocks it:
   generated content does.
 - **Shared scratch:** `TargetResolution`'s buffers and the system's `_adjacentTilesBuffer` are single instances; a
   worker needs its own.
-- **Acting while deciding:** `NpcCorpseLooting` moves inventory stacks in the middle of a decision; looting becomes a
+- **Acting while deciding:** `NpcLooting` moves inventory stacks in the middle of a decision; looting becomes a
   recorded choice applied in the serial half.
 - **Writes:** recorded as `unmanaged` struct updaters and pending-activation merges, applied in entity order so the
   result never depends on which worker finished first.
@@ -3140,6 +3109,12 @@ investigation in this session's transcript for a starting comparison. Blocked on
 The scheme also covers drags onto the map (`PLAN-unified-pointer-picking.md` Phase 5): into a container on
 a tile and onto the ground both move the whole stack in v1; v2 gives them the same half / exact-amount
 controls as a drag between grids.
+Investigate merging the item drop rules (`Game.Modules.ItemPiles`: `ItemDrop`'s kinds -- one unit, whole
+stack, every stack of an item, currency -- moved by `ItemDrops.Move` through `InventoryActions.TryGiveOneUnit`/
+`TryLootStack`/`LootAllStacksOfItem`) into the new split logic, so a drop is just a split whose destination
+is a tile (a container there, or a new pile) and "Drop" / "Drop All" become the split scheme's whole /
+one / exact-amount choices rather than a separate set of quantities. `TryGiveOneUnit` is already a
+one-unit split into another inventory and is the likely starting point for the split primitive.
 
 #### Equipped-item comparison
 

@@ -10,6 +10,7 @@ using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.ItemPiles;
 using Game.Modules.Mana;
 using Game.Modules.Mana.Components;
 using Game.Modules.ProcessingTier;
@@ -32,11 +33,15 @@ public sealed class ActionStateView(ComponentManager componentManager, EntityAct
     private readonly PackedComponentPool<PendingWindupComponent> _pendingWindups = componentManager.GetPackedPool<PendingWindupComponent>();
     private readonly PackedComponentPool<MeleeDisabledComponent> _meleeDisabled = componentManager.GetPackedPool<MeleeDisabledComponent>();
     private readonly MultiComponentPool<InventoryItemStackComponent> _inventoryStacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+    private readonly ItemDropRefusals _dropRefusals = new(componentManager, itemCatalog);
 
     public bool TryGetActionLock(int entityId, out ActionLockComponent actionLock) => _actionLocks.TryGetReadonly(entityId, out actionLock);
 
     /// <inheritdoc cref="ActionLockGate.IsBlocked"/>
     public bool IsActionLocked(int entityId, long now) => ActionLockGate.IsBlocked(_actionLocks, entityId, now);
+
+    /// <inheritdoc cref="ItemDropRefusals.GetRefusal"/>
+    public ItemDropRefusal GetDropRefusal(int entityId, in ItemDrop drop) => _dropRefusals.GetRefusal(entityId, in drop);
 
     public bool TryGetMana(int entityId, out ManaComponent mana) => _mana.TryGetReadonly(entityId, out mana);
 

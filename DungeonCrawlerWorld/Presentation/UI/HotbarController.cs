@@ -45,7 +45,7 @@ public sealed class HotbarController
     /// <summary>A click on a slot -- a press and release on it that never became a drag -- is the same as pressing its key: it arms the slot, or confirms an armed one.</summary>
     public void OnSlotClicked(HotkeySlot slot) => _actionTargeting.HandleHotkeySlotPress(slot);
 
-    /// <summary>A bound slot's menu: Arm, or Activate/Deactivate for a toggle by its state -- each exactly what a press of the slot does -- then Unbind.</summary>
+    /// <summary>A bound slot's menu: Arm, or Activate/Deactivate for a toggle by its state -- each exactly what a press of the slot does -- then, for an item, Drop (one unit), then Unbind.</summary>
     /// <remarks>An option the slot can't take right now (blocked, locked, already armed) is shown disabled, not left out.</remarks>
     public void OnSlotRightClicked(HotkeySlot slot, Point position)
     {
@@ -59,6 +59,11 @@ public sealed class HotbarController
         else
         {
             options.Add(new DropdownOption("Arm", null, isUsable && _mapViewState.ArmedSlot != slot, () => _actionTargeting.HandleHotkeySlotPress(slot)));
+        }
+
+        if (_actionTargeting.TryGetSlotDrop(slot, out var drop))
+        {
+            options.Add(new DropdownOption("Drop", null, _actionTargeting.CanArmDrop(drop), () => _actionTargeting.ArmDrop(drop, slot)));
         }
 
         options.Add(new DropdownOption("Unbind", null, true, () => Unbind(slot)));

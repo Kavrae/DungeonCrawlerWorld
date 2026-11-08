@@ -1,3 +1,5 @@
+using Game.Modules.ItemPiles;
+
 namespace Game.World;
 
 /// <summary>What the world keeps about a neighborhood coordinate once it has been assigned, including after the neighborhood's contents are unloaded.</summary>
@@ -5,10 +7,15 @@ namespace Game.World;
 /// The layout (terrain and walls) is generated from Seed alone, so it comes back the same on every visit. Each
 /// population draws a fresh seed derived from Seed and how many times the neighborhood has been populated
 /// (NeighborhoodSeeds.ForPopulation), so a return brings new creatures while a seeded session that populates a
-/// neighborhood as many times generates the same ones, whatever else happened in between.
+/// neighborhood as many times generates the same ones, whatever else happened in between. What the player left there --
+/// item piles -- is not generated: it is kept here while the neighborhood is unloaded (KeptItemPiles) and put back when
+/// it loads.
 /// </remarks>
 public sealed class NeighborhoodRecord(int cellX, int cellY, int seed)
 {
+    /// <summary>The item piles that lay in the neighborhood when it last unloaded, to be put back when it loads (ItemPileKeeping); empty while it is loaded.</summary>
+    public List<ItemPileSnapshot> KeptItemPiles { get; } = [];
+
     public int CellX { get; } = cellX;
 
     public int CellY { get; } = cellY;

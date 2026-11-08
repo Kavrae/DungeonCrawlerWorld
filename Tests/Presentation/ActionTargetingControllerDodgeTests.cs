@@ -79,7 +79,7 @@ public sealed class ActionTargetingControllerDodgeTests
             new InventoryView(componentManager, itemCatalog),
             TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog),
             TestActionStateViews.Targeting(componentManager, world, actionCatalog, itemCatalog),
-            playerCommands, simulationClock: new SimulationClock());
+            playerCommands, simulationClock: new SimulationClock(), dropPlacement: new TestPlayerItemDrops());
 
         return (actionTargeting, mapViewState, componentManager, new PlayerMovementController(playerCommands), clock, eventBus);
     }

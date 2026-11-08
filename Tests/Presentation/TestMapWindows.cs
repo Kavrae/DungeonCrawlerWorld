@@ -18,6 +18,7 @@ using Presentation.MapRendering;
 using Presentation.Rendering;
 using Presentation.UI;
 using Presentation.UI.FloatingText;
+using Presentation.UI.Inventory;
 using Tests.UIEngine;
 using UIEngine.Input;
 using UIEngine.Rendering;
@@ -39,7 +40,7 @@ internal static class TestMapWindows
         MapViewQuery MapView);
 
     /// <param name="playerPosition">Where a PlayerControlled player (PlayerEntityId) stands, with every hotkey slot unlocked; null for no player.</param>
-    public static MapWindowHarness Create(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int? playerPosition, ActionCatalog? actionCatalog = null, ItemCatalog? itemCatalog = null)
+    public static MapWindowHarness Create(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int? playerPosition, ActionCatalog? actionCatalog = null, ItemCatalog? itemCatalog = null, IItemDropPlacement? dropPlacement = null)
     {
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(mapSizeX, mapSizeY, mapSizeZ)));
         var mapViewState = new MapViewState();
@@ -90,7 +91,7 @@ internal static class TestMapWindows
             new InventoryView(componentManager, resolvedItemCatalog),
             TestActionStateViews.Over(componentManager, resolvedActionCatalog, resolvedItemCatalog),
             TestActionStateViews.Targeting(componentManager, world, resolvedActionCatalog, resolvedItemCatalog, world.EntityKeys),
-            playerCommands, simulationClock: new SimulationClock());
+            playerCommands, simulationClock: new SimulationClock(), dropPlacement: dropPlacement ?? new TestPlayerItemDrops());
         var playerMovement = new PlayerMovementController(playerCommands);
 
         var contextMenuController = TestElementPoolServiceFactory.CreateContextMenuController(windowService, new UiLayerStack());

@@ -20,7 +20,7 @@ What exists today:
      skipped if `ActivationQueries.GetBlocker` refuses it.
   3. Ranged: Magic Missile at the player when in range and not adjacent; Target or Ground mode on a
      coin flip (temporary: only at the player, see TODO "Spatial queries for NPC decisions").
-  4. Loot a corpse on or beside it (`NpcCorpseLooting`, with its 30 s `CorpseLootRetryComponent`).
+  4. Loot a corpse on or beside it (`NpcLooting`, with its 30 s `CorpseLootRetryComponent`).
   5. Wander: a coin flip between idle (2 s `WaitUntilFrame`) and a random adjacent step.
 
   Melee and looting are skipped outright unless something else stands on or beside the creature
@@ -450,7 +450,7 @@ mod registers its own in its `Configure`.
 | `SelfHeal` | Caution | 1 if health < `Parameter` and holds a Health Potion, else 0 | Queue the potion on itself |
 | `EngageMelee` | Aggression | 1 if a hostile is adjacent and a `Melee`-tagged action isn't blocked, else 0 | Queue one unblocked melee action, picked uniformly (QuickAttack/PowerAttack: parity) |
 | `RangedAttack` | Aggression | 1 if the player is hostile, in range, not adjacent, and Magic Missile isn't blocked | Queue it, Target or Ground mode on a coin flip (today's rule, until spatial queries) |
-| `LootCorpse` | none | 1 if `NpcCorpseLooting` finds a corpse it may loot (its retry deadline respected) | Loot it |
+| `LootCorpse` | none | 1 if `NpcLooting` finds a corpse it may loot (its retry deadline respected) | Loot it |
 | `Flee` | Caution | (`Parameter` + missing health fraction) x hostiles within 3; 0 with none | Step to the adjacent tile farthest from the nearest hostile |
 | `WanderStep` | none | 1 | Random adjacent step |
 | `Idle` | none | 1 | Wait 2 s |
@@ -458,7 +458,7 @@ mod registers its own in its `Configure`.
 - **Adding a behavior** = one class and one registration line, then a grant on whichever creatures
   should have it. Neither the arbiter nor `NpcDecisionSystem` changes.
 - `WanderStep` and `Idle` at equal weight reproduce today's coin flip.
-- `LootCorpse` loots in its `Evaluate`-confirmed `Act`: `NpcCorpseLooting.TryLootNearbyCorpse` splits
+- `LootCorpse` loots in its `Evaluate`-confirmed `Act`: `NpcLooting.TryLootNearby` splits
   into a find (Evaluate, which caches the corpse on the context) and a loot (Act). Its retry deadline
   (`CorpseLootRetryComponent`) keeps its own find-or-add write, unchanged.
 - Flee's `Parameter` is a baseline panic: without it, Flee's weight is 0 at full health and no
@@ -644,7 +644,7 @@ Stop after each phase for in-game testing. Each ends with what to check.
    NpcBehavior, `Behavior.Drive` extensible) and the Behavior domain, the drive tags (declared, unused
    until Phase 6), the commitment pool (Packed, `Unobserved`, written find-or-add through a scope).
 2. Behaviors: SelfHeal, EngageMelee, RangedAttack, LootCorpse, WanderStep, Idle (split
-   `NpcCorpseLooting` into find and loot).
+   `NpcLooting` into find and loot).
 3. `BlueprintDefinition.Behaviors`/`BehaviorModifiers`, `ResolvedBlueprint.Behaviors`,
    `EntityBehaviors` with `Compose` for applied parts.
 4. Grants on Goblin, Fairy and Ghost (the table minus Flee and considerations).

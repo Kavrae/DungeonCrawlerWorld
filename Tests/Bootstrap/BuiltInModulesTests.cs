@@ -129,6 +129,7 @@ public sealed class BuiltInModulesTests
             "AchievementPollingSystem",
             "ItemActivationSystem",
             "ContainerDestructionSystem",
+            "ItemPileEndingSystem",
         ];
 
         CollectionAssert.AreEqual(expectedSystemOrder, recorder.SystemNames, string.Join(Environment.NewLine, recorder.SystemNames));

@@ -18,4 +18,5 @@ public sealed record InventoryServices(
     ShopCommands ShopCommands,
     CurrencyCommands CurrencyCommands,
     GameplayTagRegistry GameplayTags,
-    ItemHoverDetails ItemHoverDetails);
+    ItemHoverDetails ItemHoverDetails,
+    IPlayerItemDrops PlayerItemDrops);

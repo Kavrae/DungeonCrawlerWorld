@@ -25,6 +25,7 @@ using Game.Modules.Currency;
 using Game.Modules.Death;
 using Game.Modules.Health;
 using Game.Modules.Inventory;
+using Game.Modules.ItemPiles;
 using Game.Modules.Lootboxes;
 using Game.Modules.Mana;
 using Game.Modules.Movement;
@@ -83,6 +84,7 @@ public static class GameBootstrapper
         ModuleFactory<GameModuleContext>.For<LootboxModule>(),
         ModuleFactory<GameModuleContext>.For<CurrencyModule>(),
         ModuleFactory<GameModuleContext>.For<ContainersModule>(),
+        ModuleFactory<GameModuleContext>.For<ItemPilesModule>(),
         ModuleFactory<GameModuleContext>.For<ShopModule>(),
         ModuleFactory<GameModuleContext>.For<Areas.AreasModule>(),
     ];

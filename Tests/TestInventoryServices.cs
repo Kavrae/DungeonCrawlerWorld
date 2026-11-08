@@ -16,7 +16,8 @@ namespace Tests;
 internal static class TestInventoryServices
 {
     /// <param name="itemHoverDetails">The hover hub the grids report to; a fresh one, with no popup, when null.</param>
-    public static InventoryServices Over(ComponentManager componentManager, ItemCatalog itemCatalog, IPlayerQuery playerQuery, EventBus? eventBus = null, ItemHoverDetails? itemHoverDetails = null) =>
+    /// <param name="playerItemDrops">What Drop and Drop All arm; a TestPlayerItemDrops when null.</param>
+    public static InventoryServices Over(ComponentManager componentManager, ItemCatalog itemCatalog, IPlayerQuery playerQuery, EventBus? eventBus = null, ItemHoverDetails? itemHoverDetails = null, IPlayerItemDrops? playerItemDrops = null) =>
         new(
             itemCatalog,
             new InventoryView(componentManager, itemCatalog),
@@ -27,5 +28,6 @@ internal static class TestInventoryServices
             new ShopCommands(componentManager, itemCatalog, eventBus ?? new EventBus(), playerQuery),
             new CurrencyCommands(componentManager),
             TestGameplayTags.BuiltIn,
-            itemHoverDetails ?? new ItemHoverDetails(new CursorLabelContent(new PointerState(), TestFonts.Shared)));
+            itemHoverDetails ?? new ItemHoverDetails(new CursorLabelContent(new PointerState(), TestFonts.Shared)),
+            playerItemDrops ?? new TestPlayerItemDrops());
 }

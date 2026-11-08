@@ -8,6 +8,7 @@ using Game.Modules.Currency;
 using Game.Modules.Death.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.ItemPiles;
 using Game.Modules.Shops;
 using Game.Modules.Shops.Components;
 using Game.Views;
@@ -28,7 +29,7 @@ public sealed class MapDropTests
     private static readonly Vector3Int DistantTile = new(105, 100, 0);
     private static readonly Guid PotionItemId = Guid.NewGuid();
 
-    private sealed record Harness(TestMapWindows.MapWindowHarness Map, ItemCatalog ItemCatalog, MapDropHandler Handler)
+    private sealed record Harness(TestMapWindows.MapWindowHarness Map, ItemCatalog ItemCatalog, MapDropHandler Handler, TestPlayerItemDrops Drops)
     {
         public ComponentManager ComponentManager => Map.ComponentManager;
     }
@@ -41,7 +42,8 @@ public sealed class MapDropTests
         var componentManager = map.ComponentManager;
         var shopView = new ShopView(componentManager);
         var inventoryTransfer = new InventoryTransferDropHandler(map.MapViewState, shopView, new InventoryView(componentManager, itemCatalog), new InventoryCommands(componentManager, itemCatalog, map.World), new ShopCommands(componentManager, itemCatalog, new EventBus(), map.World), new CurrencyCommands(componentManager), map.World);
-        return new Harness(map, itemCatalog, new MapDropHandler(map.MapView, shopView, map.MapViewState, inventoryTransfer));
+        var drops = new TestPlayerItemDrops();
+        return new Harness(map, itemCatalog, new MapDropHandler(map.MapView, shopView, map.MapViewState, inventoryTransfer, drops), drops);
     }
 
     private static void Place(Harness harness, int entityId, Vector3Int position, byte size = 1, NonBlockingKind? nonBlockingKind = null)
@@ -124,47 +126,6 @@ public sealed class MapDropTests
     }
 
     [TestMethod]
-    public void ADropOnAnAdjacentChest_MovesTheWholeStackIntoIt()
-    {
-        var harness = Build();
-        PlaceChest(harness, 10, AdjacentTile);
-        var stackInstanceId = GivePlayerAPotion(harness);
-        var hit = HitAt(harness, AdjacentTile);
-
-        Assert.IsFalse(harness.Handler.IsDropRefusedAt(PlayerPotion(stackInstanceId), hit, Point.Zero));
-        Assert.IsTrue(harness.Handler.TryDrop(PlayerPotion(stackInstanceId), hit, Point.Zero));
-
-        Assert.IsTrue(Holds(harness, 10, stackInstanceId));
-        Assert.IsFalse(Holds(harness, PlayerEntityId, stackInstanceId));
-    }
-
-    [TestMethod]
-    public void ADropOnAnAdjacentCorpse_MovesTheStackIntoIt()
-    {
-        var harness = Build();
-        PlaceCorpse(harness, 11, AdjacentTile);
-        var stackInstanceId = GivePlayerAPotion(harness);
-
-        harness.Handler.TryDrop(PlayerPotion(stackInstanceId), HitAt(harness, AdjacentTile), Point.Zero);
-
-        Assert.IsTrue(Holds(harness, 11, stackInstanceId));
-    }
-
-    [TestMethod]
-    public void ADropOnADistantChest_IsRefused_AndMovesNothing()
-    {
-        var harness = Build();
-        PlaceChest(harness, 10, DistantTile);
-        var stackInstanceId = GivePlayerAPotion(harness);
-        var hit = HitAt(harness, DistantTile);
-
-        Assert.IsTrue(harness.Handler.IsDropRefusedAt(PlayerPotion(stackInstanceId), hit, Point.Zero));
-        Assert.IsTrue(harness.Handler.TryDrop(PlayerPotion(stackInstanceId), hit, Point.Zero), "The map claims the drop, so nothing behind it acts on it.");
-
-        Assert.IsTrue(Holds(harness, PlayerEntityId, stackInstanceId));
-    }
-
-    [TestMethod]
     public void ADropOnAShopkeeper_IsRefused()
     {
         var harness = Build();
@@ -181,12 +142,102 @@ public sealed class MapDropTests
     }
 
     [TestMethod]
-    public void ADropOnAnEmptyTile_IsRefused()
+    public void APlayersDragOntoAContainer_GoesThroughTheDropRule_OnEveryFootprintTile()
+    {
+        var footprint = new[] { AdjacentTile, AdjacentTile + new Vector3Int(1, 0, 0), AdjacentTile + new Vector3Int(0, 1, 0), AdjacentTile + new Vector3Int(1, 1, 0) };
+        var harness = Build();
+        PlaceChest(harness, 10, AdjacentTile, size: 2);
+        var stackInstanceId = GivePlayerAPotion(harness);
+
+        foreach (var tile in footprint)
+        {
+            var hit = HitAt(harness, tile);
+            Assert.IsFalse(harness.Handler.IsDropRefusedAt(PlayerPotion(stackInstanceId), hit, Point.Zero), $"Refused at {tile}.");
+            Assert.IsTrue(harness.Handler.TryDrop(PlayerPotion(stackInstanceId), hit, Point.Zero));
+        }
+
+        CollectionAssert.AreEqual(footprint.Select(tile => (ItemDrop.WholeStackOf(stackInstanceId), tile)).ToArray(), harness.Drops.PlacedDrops);
+    }
+
+    [TestMethod]
+    public void AContainerTheDropRuleRefuses_LightsRed_AndTakesNothing()
+    {
+        var harness = Build();
+        harness.Drops.AcceptsDrops = false;
+        PlaceChest(harness, 10, AdjacentTile);
+        var stackInstanceId = GivePlayerAPotion(harness);
+        var hit = HitAt(harness, AdjacentTile);
+
+        harness.Handler.OnDragOver(PlayerPotion(stackInstanceId), hit, Point.Zero);
+        Assert.AreEqual((10, false), harness.Map.MapViewState.ContainerDropHighlight);
+        Assert.IsTrue(harness.Handler.IsDropRefusedAt(PlayerPotion(stackInstanceId), hit, Point.Zero));
+        Assert.IsTrue(harness.Handler.TryDrop(PlayerPotion(stackInstanceId), hit, Point.Zero), "The map claims the drop, so nothing behind it acts on it.");
+        Assert.IsEmpty(harness.Drops.PlacedDrops);
+    }
+
+    [TestMethod]
+    public void AContainerTheDropRuleAccepts_LightsGreen()
+    {
+        var harness = Build();
+        PlaceCorpse(harness, 11, AdjacentTile);
+        var stackInstanceId = GivePlayerAPotion(harness);
+
+        harness.Handler.OnDragOver(PlayerPotion(stackInstanceId), HitAt(harness, AdjacentTile), Point.Zero);
+
+        Assert.AreEqual((11, true), harness.Map.MapViewState.ContainerDropHighlight);
+    }
+
+    [TestMethod]
+    public void ADropOnAnEmptyTile_PutsTheWholeStackOnTheGroundThere()
     {
         var harness = Build();
         var stackInstanceId = GivePlayerAPotion(harness);
+        var hit = HitAt(harness, AdjacentTile);
 
-        Assert.IsTrue(harness.Handler.IsDropRefusedAt(PlayerPotion(stackInstanceId), HitAt(harness, AdjacentTile), Point.Zero));
+        Assert.IsFalse(harness.Handler.IsDropRefusedAt(PlayerPotion(stackInstanceId), hit, Point.Zero));
+        Assert.IsTrue(harness.Handler.TryDrop(PlayerPotion(stackInstanceId), hit, Point.Zero));
+
+        CollectionAssert.AreEqual(new[] { (ItemDrop.WholeStackOf(stackInstanceId), AdjacentTile) }, harness.Drops.PlacedDrops);
+    }
+
+    [TestMethod]
+    public void CurrencyAndAMergedStack_DropAllOfIt()
+    {
+        var harness = Build();
+        var goldPayload = new DragPayload(DragPayloadOrigin.Currency, CurrencyType: CurrencyType.Gold, OriginEntityId: PlayerEntityId);
+        var mergedPayload = new DragPayload(DragPayloadOrigin.InventoryCell, MergedItemDefinitionId: PotionItemId, OriginEntityId: PlayerEntityId);
+
+        harness.Handler.TryDrop(goldPayload, HitAt(harness, PlayerPosition), Point.Zero);
+        harness.Handler.TryDrop(mergedPayload, HitAt(harness, PlayerPosition), Point.Zero);
+
+        CollectionAssert.AreEqual(
+            new[] { ItemDrop.AllOf(CurrencyType.Gold), ItemDrop.EveryStackOf(PotionItemId) },
+            harness.Drops.PlacedDrops.Select(placed => placed.Drop).ToArray());
+    }
+
+    [TestMethod]
+    public void AGroundDropTheGameRefuses_IsRefused_AndClaimed()
+    {
+        var harness = Build();
+        harness.Drops.AcceptsDrops = false;
+        var stackInstanceId = GivePlayerAPotion(harness);
+        var hit = HitAt(harness, DistantTile);
+
+        Assert.IsTrue(harness.Handler.IsDropRefusedAt(PlayerPotion(stackInstanceId), hit, Point.Zero));
+        Assert.IsTrue(harness.Handler.TryDrop(PlayerPotion(stackInstanceId), hit, Point.Zero), "The map claims the drop, so nothing behind it acts on it.");
+        Assert.IsEmpty(harness.Drops.PlacedDrops);
+    }
+
+    [TestMethod]
+    public void SomethingFromAnotherInventory_IsNeverPutOnTheGround()
+    {
+        var harness = Build();
+        var fromCorpse = new DragPayload(DragPayloadOrigin.InventoryCell, ItemStackInstanceId: 99, OriginEntityId: 10);
+        var hit = HitAt(harness, AdjacentTile);
+
+        Assert.IsTrue(harness.Handler.IsDropRefusedAt(fromCorpse, hit, Point.Zero));
+        harness.Handler.TryDrop(fromCorpse, hit, Point.Zero);
+        Assert.IsEmpty(harness.Drops.PlacedDrops);
     }
 
     [TestMethod]
@@ -234,49 +285,6 @@ public sealed class MapDropTests
         Assert.IsFalse(harness.Handler.IsDropRefusedAt(FromHotbarSlot(stackInstanceId), hit, Point.Zero));
         Assert.IsFalse(harness.Handler.TryDrop(FromHotbarSlot(stackInstanceId), hit, Point.Zero));
         Assert.IsTrue(Holds(harness, PlayerEntityId, stackInstanceId));
-    }
-
-    [TestMethod]
-    public void AFullChest_RefusesTheDrop_AndKeepsTheItemWithThePlayer()
-    {
-        var harness = Build();
-        PlaceChest(harness, 10, AdjacentTile);
-        FillWithStacks(harness, 10);
-        var stackInstanceId = GivePlayerAPotion(harness);
-        var hit = HitAt(harness, AdjacentTile);
-
-        Assert.IsTrue(harness.Handler.IsDropRefusedAt(PlayerPotion(stackInstanceId), hit, Point.Zero));
-        harness.Handler.TryDrop(PlayerPotion(stackInstanceId), hit, Point.Zero);
-
-        Assert.IsTrue(Holds(harness, PlayerEntityId, stackInstanceId));
-    }
-
-    [TestMethod]
-    public void HoldingAnItemOverAChest_LightsItGreenWithRoom_AndRedWhenFull()
-    {
-        var harness = Build();
-        PlaceChest(harness, 10, AdjacentTile);
-        var stackInstanceId = GivePlayerAPotion(harness);
-        var hit = HitAt(harness, AdjacentTile);
-
-        harness.Handler.OnDragOver(PlayerPotion(stackInstanceId), hit, Point.Zero);
-        Assert.AreEqual((10, true), harness.Map.MapViewState.ContainerDropHighlight);
-
-        FillWithStacks(harness, 10);
-        harness.Handler.OnDragOver(PlayerPotion(stackInstanceId), hit, Point.Zero);
-        Assert.AreEqual((10, false), harness.Map.MapViewState.ContainerDropHighlight);
-    }
-
-    [TestMethod]
-    public void HoldingAnItemOverAChestOutOfReach_LightsItRed()
-    {
-        var harness = Build();
-        PlaceChest(harness, 10, DistantTile);
-        var stackInstanceId = GivePlayerAPotion(harness);
-
-        harness.Handler.OnDragOver(PlayerPotion(stackInstanceId), HitAt(harness, DistantTile), Point.Zero);
-
-        Assert.AreEqual((10, false), harness.Map.MapViewState.ContainerDropHighlight);
     }
 
     [TestMethod]

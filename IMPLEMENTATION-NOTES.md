@@ -397,7 +397,7 @@ looting corpses").
   still top up what it carries. `LootAllStacksOfItem`/`LootEveryStack` (the loot window's Take All) build on
   it. Used for Take, Take All, a plain drag from another entity onto the player, and NPC looting. Give and
   trade staging keep `TryTransferStack` -- staging undoes a move by `StackInstanceId`.
-- **NPCs** (`NpcCorpseLooting`, a branch of `TestCombatBehaviorSystem` after heal/melee/ranged, before
+- **NPCs** (`NpcLooting`, formerly `NpcCorpseLooting`, a branch of `TestCombatBehaviorSystem` after heal/melee/ranged, before
   wander): loots the first corpse on or around its footprint that is simulated, not yet looted and holds a
   stack or currency, if `LootRights` allows -- marking it looted first, whether or not anything fits.
   Refused everywhere: no corpse for 30 s (`CorpseLootRetryComponent`, a plain deadline). Opportunistic: no
@@ -420,6 +420,63 @@ looting corpses").
   threshold, EverQuest aggregate damage): most-damage resists tag griefing but lets a late high-DPS
   joiner take a fight; no party pooling yet (two goblins split credit); the victim doesn't heal back on
   reset. Melee hits every adjacent tile, allies included, so NPCs often out-damage each other.
+
+### Item piles and dropping
+
+Landed 2026-11-07 to 2026-11-08 (replaced TODO.md "Dropping items on the ground"; plan
+`PLAN-dropping-items-on-the-ground.md`, which records each step as built and every decision changed along the way).
+
+- **A pile is an ordinary entity.** `ItemPile` (`Game/Blueprints/Objects/`) is a non-blocking (`NonBlockingKind.None`)
+  container with no health and no stack limit (`ItemPileComponent`, `ContainerComponent`, `UnlimitedStackCountComponent`).
+  So the loot bag, the loot window, Take/Take All and NPC looting all work on it unchanged. `ItemPileEndings` observes the
+  stack and currency pools, and `ItemPileEndingSystem` destroys a pile the frame after it holds nothing. It is never marked
+  looted (`LootCommands.MarkLooted` skips it), and the map draws it as a `MapDrawItemKind.FloorObject`: a living non-blocking
+  entity that is neither Tiny nor Phasing, lying at its footprint like a corpse with no corpse marker.
+- **One drop rule, `ItemDrops`, for every way to drop.** It covers a menu Drop, a drag, onto the ground or into a container:
+  - A corpse or a container on the tile takes the drop, on any of its footprint tiles, as long as its footprint touches the
+    dropper's. Preference goes corpse, then container, then pile. A reserved corpse (`LootRights`) and a container with no
+    room refuse.
+  - A standing shop refuses (`IntoShop`).
+  - Any other tile within `ItemDrops.Targeting` (the dropper's own tile and the 8 around it, never a wall) gets a new pile.
+  - What moves is the drop's own kind (`ItemDrop`): one unit (`InventoryActions.TryGiveOneUnit`, new), the stack
+    (`TryLootStack`, merging), every stack of a Merged Stack, or currency.
+  - Each unit keeps its `Override` and lit state, so `ToggleItemHolderSync` moves a lit toggle with it, and a pile radiates.
+  - Refusals are `ItemDropRefusal` (`ItemDropRefusals` holds the per-entity ones that `ActionStateView.GetDropRefusal`
+    shares), not `ActivationBlocker`: a drop isn't an activation.
+- **At once, no action lock.** `ItemDropCommands` (in `GameCommands`) drops for the player immediately, even with the
+  simulation paused behind an open inventory. A first version queued drops as Immediate actions through `PlayerCommands`;
+  in game, a drag from the open (pausing) inventory then landed only once it closed, and the lock made inventory management
+  tedious.
+- **Presentation: one placer, `PlayerItemDrops` (`IPlayerItemDrops`).** It is carried on `InventoryServices`, and given to
+  `MapDropHandler` and `DragDropArming`.
+  - Menus: Drop / Drop All on the player's own grid cells and currency row, and Drop (one unit) on a hotbar item slot. They
+    are disabled while refused or while a shop is open.
+  - The menu arms `MapViewState.ArmedDrop`. `ActionTargetingController` aims it through a private `DropTargeting`
+    activator; a Game activator would need a content codec.
+  - A confirm places it on the exact tile through `IItemDropPlacement` (`ItemDropPlacement` over `ItemDropCommands`, a
+    constructor dependency of `ActionTargetingController`), whose `CanDropAt` drives the refusal cursor.
+  - An armed drop carries the drag ghost (`DragGhostContent`, at hotbar-slot size), and `ArmedDropHover` gives it a drag's
+    green/red container wash and "Add". A menu option behaves exactly like its matching gesture.
+  - A drag of the player's own goods held over the map for `ItemDetailsWindowController.PointerAwayGraceFrames` arms its
+    drop (`DragDropArming`), which closes the inventory while the drag goes on. The drop is disarmed when the drag ends.
+  - Cursor text is `DropCursorText`: "Drop", "Add", "Bind" over a hotbar slot, "Unbind" off one. It hides only what it
+    showed. A drag off a hotbar slot never drops (`DragPayload.TryGetGroundDrop` refuses an `OriginSlot`).
+- **Kept through unloading.** `NeighborhoodStreamer` publishes `NeighborhoodUnloadingEvent` as an unload job starts,
+  `NeighborhoodUnloadedEvent` once its stores drop, and `NeighborhoodPopulatedEvent` after a load's population. Between the
+  first two, `ItemPileKeeping` keeps each pile the unload destroys (on `EntityDestroying`) in
+  `NeighborhoodRecord.KeptItemPiles` (`ItemPileSnapshot`: position, the stack components themselves, currency) and puts it
+  back on load. Keeping a pile as it is destroyed, not all of them as the job starts, matters because an unload is spread
+  over frames: a pile taken from or added to meanwhile (a Regenerate under the player) would otherwise come back duplicated
+  or lose what was added. A pile holding nothing is not kept. A pile now on a blocked tile moves up to `RelocationRadius`
+  (3) to an open one, or is lost. Regeneration keeps piles.
+- **Which occupant receives.** `DropReceivers` is the one rule (a standing shop anywhere refuses, else a corpse, else a
+  container, else a pile): `ItemDrops` drops through it and `IMapViewQuery.FindDropReceiver` hands it to Presentation's
+  container wash and "Add", so what is lit is what is dropped into.
+- **NPCs** (`NpcLooting`): a pile is a candidate with no loot rights and no looted mark. One it can take nothing from is
+  passed over rather than counted as its decision, and waiting to retry reserved corpses never holds it off a pile.
+- **Found along the way:** nothing repoints a hotkey slot when its stack leaves the inventory, by Give or by drop
+  (`RepointAfterUnitMoved` runs only on activation and toggle paths). The slot keeps naming the stack, and works again if
+  that stack comes back.
 
 ### Storage containers and Currency
 

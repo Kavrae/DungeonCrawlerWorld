@@ -88,7 +88,7 @@ public sealed class HotbarControllerTests
                 new Engine.ECS.Systems.SimulationClock(),
                 TestActionStateViews.EntityActions(componentManager, actionCatalog),
                 new EventBus()),
-            simulationClock: new SimulationClock());
+            simulationClock: new SimulationClock(), dropPlacement: new TestPlayerItemDrops());
 
         var fontService = TestFonts.Shared;
         var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), TestActionStateViews.Over(componentManager, actionCatalog, itemCatalog), new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog, fontService, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: new SimulationClock());

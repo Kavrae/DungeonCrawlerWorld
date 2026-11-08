@@ -16,6 +16,7 @@ using Game.Modules.Health;
 using Game.Modules.Health.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.ItemPiles;
 using Game.Modules.Shops.Components;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatModifiers.Components;
@@ -54,6 +55,7 @@ public sealed class MapViewQuery : IMapViewQuery
     private readonly DirectComponentPool<SpawnRecordComponent> _spawnRecords;
     private readonly SimulationClock _simulationClock;
     private readonly LootRights _lootRights;
+    private readonly DropReceivers _dropReceivers;
 
     /// <param name="creatures">The blueprint definitions, for drawing and naming every entity that holds no visual or name of its own -- which is nearly all of them, built or skeleton.</param>
     /// <param name="simulationClock">The current simulation frame, which a windup's progress is measured against.</param>
@@ -84,6 +86,7 @@ public sealed class MapViewQuery : IMapViewQuery
         _creatures = creatures;
         _spawnRecords = componentManager.GetDirectPool<SpawnRecordComponent>();
         _lootRights = LootRights.For(componentManager, world.EntityKeys);
+        _dropReceivers = new DropReceivers(componentManager);
     }
 
     public MapBounds Bounds => _world.Map.Bounds;
@@ -220,6 +223,9 @@ public sealed class MapViewQuery : IMapViewQuery
         _containers.Has(entityId),
         _dead.Has(entityId),
         !_lootRights.CanLoot(entityId, _world.PlayerEntityKey, _simulationClock.CurrentFrame));
+
+    public DropReceiverKind FindDropReceiver(ReadOnlySpan<int> occupants, out int receiverEntityId) =>
+        _dropReceivers.Find(_world.PlayerEntityId, occupants, out receiverEntityId);
 
     private string ResolveName(int entityId) => _naming.NameOf(entityId);
 

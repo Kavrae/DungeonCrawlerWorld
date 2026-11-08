@@ -6,6 +6,7 @@ using Game.Modules.Currency;
 using Game.Modules.Death;
 using Game.Modules.Inventory;
 using Game.Modules.Inventory.Components;
+using Game.Modules.ItemPiles;
 using Game.Modules.Lootboxes;
 using Game.Modules.Movement.Components;
 using Game.Modules.Shops;
@@ -27,6 +28,9 @@ public sealed class GameCommands(World.World world, GameModuleContext context)
     public LootboxCommands LootboxCommands { get; } = new(context.LootboxOpener);
 
     public LootCommands LootCommands { get; } = new(context.ComponentManager);
+
+    /// <summary>The player putting items and currency down, at once.</summary>
+    public ItemDropCommands ItemDropCommands { get; } = new(ItemPilesModule.ItemDropsFor(context), world);
 
     /// <summary>The player's one pending command and the only writer of the player's step and activation requests.</summary>
     public PlayerCommands PlayerCommands { get; } = new(

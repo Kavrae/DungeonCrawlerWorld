@@ -88,7 +88,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     private readonly TieredEntityStripeSet _tieredStripeSet;
     private readonly IPlayerQuery _playerQuery;
     private readonly TargetResolution _targetResolution;
-    private readonly NpcCorpseLooting _corpseLooting;
+    private readonly NpcLooting _looting;
 
     /// <summary>A Health Potion's targeting, for marking the drinker itself.</summary>
     private readonly IActionActivator _healthPotionActivator;
@@ -115,7 +115,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         PackedComponentPool<MeleeDisabledComponent> meleeDisabled,
         IPlayerQuery playerQuery,
         TargetResolution targetResolution,
-        NpcCorpseLooting corpseLooting,
+        NpcLooting looting,
         IActionActivator healthPotionActivator)
     {
         _healthPotionActivator = healthPotionActivator;
@@ -138,7 +138,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         _meleeDisabled = meleeDisabled;
         _playerQuery = playerQuery;
         _targetResolution = targetResolution;
-        _corpseLooting = corpseLooting;
+        _looting = looting;
 
         _tierQuery = new ProcessingTierQuery(processingTiers);
         _tieredStripeSet = ProcessingTierWiring.CreateAndWire(StripeCount, movementPool, processingTiers, processingTierEvents);
@@ -217,7 +217,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         var hasNeighbors = HasOtherOccupantOnOrBeside(entityId, transform);
         if ((hasNeighbors && TryDecideMeleeAttack(entityId, transform, now))
             || TryDecideRangedAttackOnPlayer(entityId, transform, now)
-            || (hasNeighbors && TryDecideLootCorpse(entityId, transform, now)))
+            || (hasNeighbors && TryDecideLoot(entityId, transform, now)))
         {
             return;
         }
@@ -225,7 +225,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         DecideWander(entityId, transform, now);
     }
 
-    /// <summary>Whether anything other than entityId stands on its footprint or a tile beside it, on its layer: the tiles both an adjacent melee target and a corpse to loot are looked for in.</summary>
+    /// <summary>Whether anything other than entityId stands on its footprint or a tile beside it, on its layer: the tiles both an adjacent melee target and a corpse or item pile to loot are looked for in.</summary>
     /// <remarks>One pass over that rectangle, so the common case -- nobody around a wanderer -- rules out both branches without either scanning it.</remarks>
     private bool HasOtherOccupantOnOrBeside(int entityId, TransformComponent transform)
     {
@@ -411,10 +411,10 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
         SetIdle(entityId, now);
     }
 
-    /// <summary>Loots a corpse on or beside it -- see NpcCorpseLooting. Only once nothing is left to fight, so an adjacent enemy is still dealt with first.</summary>
-    private bool TryDecideLootCorpse(int entityId, TransformComponent transform, long now)
+    /// <summary>Loots a corpse or an item pile on or beside it -- see NpcLooting. Only once nothing is left to fight, so an adjacent enemy is still dealt with first.</summary>
+    private bool TryDecideLoot(int entityId, TransformComponent transform, long now)
     {
-        if (!_corpseLooting.TryLootNearbyCorpse(entityId, transform, now))
+        if (!_looting.TryLootNearby(entityId, transform, now))
         {
             return false;
         }

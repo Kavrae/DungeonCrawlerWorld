@@ -132,7 +132,7 @@ public sealed class DisabledActionInputTests
             actionStateView,
             TestActionStateViews.Targeting(componentManager, world, actionCatalog, itemCatalog),
             playerCommands,
-            simulationClock: clock);
+            simulationClock: clock, dropPlacement: new TestPlayerItemDrops());
 
         var hotbarContent = new HotbarContent(world, mapViewState, new HotkeyBindingView(componentManager), new InventoryView(componentManager, itemCatalog), actionStateView, new HotkeyBindingCommands(componentManager, itemCatalog, new EventBus()), itemCatalog, TestFonts.Shared, new SpriteSheetService(null, "Spritesheets", TestSprites.Resolver), new Vector2(1920, 1080), simulationClock: clock);
         var hotbarController = new HotbarController(mapViewState, hotbarContent, actionTargeting, new TooltipController(), TestElementPoolServiceFactory.CreateContextMenuController(TestElementPoolServiceFactory.Create(TestFonts.Shared), new UiLayerStack()));

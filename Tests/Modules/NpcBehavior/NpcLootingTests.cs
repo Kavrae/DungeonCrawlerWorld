@@ -3,6 +3,7 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Blueprints.Composites;
+using Game.Blueprints.Objects;
 using Game.Blueprints.Races;
 using Game.Bootstrap;
 using Game.Modules.Core.Components;
@@ -21,9 +22,9 @@ using Game.World;
 
 namespace Tests.Modules.NpcBehavior;
 
-/// <summary>An NPC looting a corpse it stands on or next to, through the real module build -- corpses die through DeathSystem.</summary>
+/// <summary>An NPC looting a corpse or an item pile it stands on or next to, through the real module build -- corpses die through DeathSystem.</summary>
 [TestClass]
-public sealed class NpcCorpseLootingTests
+public sealed class NpcLootingTests
 {
     private static readonly Vector3Int LooterPosition = new(10, 10, (int)MapLayer.Ground);
     private static readonly Vector3Int AdjacentPosition = new(11, 10, (int)MapLayer.Ground);
@@ -34,7 +35,7 @@ public sealed class NpcCorpseLootingTests
 
         public MultiComponentPool<InventoryItemStackComponent> Stacks => Components.GetMultiPool<InventoryItemStackComponent>();
 
-        public NpcCorpseLooting Looting { get; } = new(Build.EcsContext.ComponentManager, Build.Context.Items, Build.World, Build.Context.EntityKeys, Build.World,
+        public NpcLooting Looting { get; } = new(Build.EcsContext.ComponentManager, Build.Context.Items, Build.World, Build.Context.EntityKeys, Build.World,
             new ProcessingTierQuery(Build.EcsContext.ComponentManager.GetDirectPool<ProcessingTierComponent>()));
 
         /// <summary>A goblin holding nothing at all, so a test decides everything it carries.</summary>
@@ -72,12 +73,29 @@ public sealed class NpcCorpseLootingTests
         }
 
         public bool TryLoot(int looter, long now) =>
-            Looting.TryLootNearbyCorpse(looter, Components.GetDirectPool<TransformComponent>().GetReadonly(looter), now);
+            Looting.TryLootNearby(looter, Components.GetDirectPool<TransformComponent>().GetReadonly(looter), now);
 
         public ushort QuantityOf(int entityId, Guid itemId) =>
             InventoryQueries.TryGetStack(Stacks, entityId, itemId, out var stack) ? stack.Quantity : (ushort)0;
 
         public bool IsLooted(int entityId) => Components.GetPackedPool<LootedComponent>().Has(entityId);
+
+        /// <summary>An item pile at position holding itemQuantity of itemId and gold.</summary>
+        public int SpawnPile(Vector3Int position, Guid itemId, ushort itemQuantity, int gold = 0)
+        {
+            var pile = Build.Factory.Spawn(SpawnRequest.At(Build.Context.Definitions.GetId(ItemPile.Id), position));
+            if (itemQuantity > 0)
+            {
+                InventoryActions.AddItem(Components, pile, itemId, itemQuantity);
+            }
+
+            if (gold > 0)
+            {
+                Components.Merge(pile, new CurrencyComponent(gold, credits: 0));
+            }
+
+            return pile;
+        }
     }
 
     private static Session BuildSession()
@@ -190,13 +208,13 @@ public sealed class NpcCorpseLootingTests
 
         Assert.IsFalse(session.TryLoot(looter, now: 0));
         Assert.IsFalse(session.IsLooted(reservedCorpse));
-        Assert.AreEqual((uint)NpcCorpseLooting.RetryFrames, session.Components.GetPackedPool<CorpseLootRetryComponent>().GetReadonly(looter).RetryAfterFrame);
+        Assert.AreEqual((uint)NpcLooting.RetryFrames, session.Components.GetPackedPool<CorpseLootRetryComponent>().GetReadonly(looter).RetryAfterFrame);
 
         var openCorpse = session.SpawnCorpse(new Vector3Int(9, 10, (int)MapLayer.Ground), itemId, itemQuantity: 1);
-        Assert.IsFalse(session.TryLoot(looter, now: NpcCorpseLooting.RetryFrames - 1), "A refusal holds the looter off every corpse, not only the one that refused it.");
+        Assert.IsFalse(session.TryLoot(looter, now: NpcLooting.RetryFrames - 1), "A refusal holds the looter off every corpse, not only the one that refused it.");
         Assert.IsFalse(session.IsLooted(openCorpse));
 
-        Assert.IsTrue(session.TryLoot(looter, now: NpcCorpseLooting.RetryFrames));
+        Assert.IsTrue(session.TryLoot(looter, now: NpcLooting.RetryFrames));
     }
 
     [TestMethod]
@@ -226,6 +244,52 @@ public sealed class NpcCorpseLootingTests
         Assert.IsTrue(session.TryLoot(looter, now: 0));
         Assert.IsTrue(session.IsLooted(corpse));
         Assert.AreEqual(3, session.QuantityOf(corpse, itemId));
+    }
+
+    [TestMethod]
+    public void AnAdjacentItemPile_IsTakenWithNoLootRights_AndNeverMarkedLooted()
+    {
+        var session = BuildSession();
+        var itemId = Guid.NewGuid();
+        var pile = session.SpawnPile(AdjacentPosition, itemId, itemQuantity: 3, gold: 4);
+        var looter = session.SpawnEmptyGoblin(LooterPosition);
+
+        Assert.IsTrue(session.TryLoot(looter, now: 0));
+
+        Assert.AreEqual(3, session.QuantityOf(looter, itemId));
+        Assert.AreEqual(4, session.Components.GetPackedPool<CurrencyComponent>().GetReadonly(looter).Gold);
+        Assert.IsFalse(session.IsLooted(pile));
+    }
+
+    [TestMethod]
+    public void AnItemPileNothingFitsFrom_IsPassedOver()
+    {
+        var session = BuildSession();
+        var itemId = Guid.NewGuid();
+        session.SpawnPile(AdjacentPosition, itemId, itemQuantity: 3);
+        var looter = session.SpawnEmptyGoblin(LooterPosition);
+        for (var i = 0; i < InventoryCapacity.MaxNonPlayerStackCount; i++)
+        {
+            InventoryActions.AddItem(session.Components, looter, Guid.NewGuid(), quantity: 1);
+        }
+
+        Assert.IsFalse(session.TryLoot(looter, now: 0));
+    }
+
+    [TestMethod]
+    public void WaitingToRetryCorpses_NeverHoldsTheLooterOffAnItemPile()
+    {
+        var session = BuildSession();
+        var itemId = Guid.NewGuid();
+        var reservedCorpse = session.SpawnCorpse(AdjacentPosition, itemId, itemQuantity: 3);
+        var looter = session.SpawnEmptyGoblin(LooterPosition);
+        session.ReserveLootFor(reservedCorpse, session.SpawnEmptyGoblin(new Vector3Int(20, 20, (int)MapLayer.Ground)));
+        Assert.IsFalse(session.TryLoot(looter, now: 0), "Sanity check: the corpse is refused, and the looter waits.");
+
+        session.SpawnPile(new Vector3Int(9, 10, (int)MapLayer.Ground), itemId, itemQuantity: 2);
+
+        Assert.IsTrue(session.TryLoot(looter, now: 1));
+        Assert.AreEqual(2, session.QuantityOf(looter, itemId));
     }
 
     [TestMethod]

@@ -105,7 +105,7 @@ public sealed class DodgeDuringActionLockTests
             new ActionStateView(components, EntityActions.For(components, result.Catalogs.ActionCatalog, result.Catalogs.Definitions), result.Catalogs.ItemCatalog, localTierRoster: null, TestActionStateViews.EffectServicesOver(components)),
             result.Views.TargetingView,
             playerCommands,
-            simulationClock: clock);
+            simulationClock: clock, dropPlacement: new TestPlayerItemDrops());
 
         return new Harness
         {

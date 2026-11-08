@@ -1,5 +1,6 @@
 using Game.Modules.Actions;
 using Game.Modules.Currency;
+using Game.Modules.ItemPiles;
 
 namespace Presentation.Input.DragDrop;
 
@@ -32,4 +33,34 @@ public sealed record DragPayload(
 {
     /// <summary>Whether this is anything a hotbar slot could hold -- not a Merged Stack, not currency.</summary>
     public bool CanBindToHotbar => MergedItemDefinitionId is null && CurrencyType is null;
+
+    /// <summary>What this drag puts down on the ground: the player's own whole stack, Merged Stack or currency. False for a drag from a hotbar slot or from any other inventory.</summary>
+    public bool TryGetGroundDrop(int playerEntityId, out ItemDrop drop)
+    {
+        drop = default;
+        if (OriginSlot is not null || OriginEntityId != playerEntityId)
+        {
+            return false;
+        }
+
+        if (CurrencyType is { } currencyType)
+        {
+            drop = ItemDrop.AllOf(currencyType);
+            return true;
+        }
+
+        if (MergedItemDefinitionId is { } itemDefinitionId)
+        {
+            drop = ItemDrop.EveryStackOf(itemDefinitionId);
+            return true;
+        }
+
+        if (ItemStackInstanceId is { } stackInstanceId)
+        {
+            drop = ItemDrop.WholeStackOf(stackInstanceId);
+            return true;
+        }
+
+        return false;
+    }
 }

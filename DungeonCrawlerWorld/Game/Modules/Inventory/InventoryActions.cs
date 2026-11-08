@@ -412,6 +412,54 @@ public static class InventoryActions
         return true;
     }
 
+    /// <summary>Moves one unit of sourceEntityId's stack stackInstanceId to destinationEntityId, topping up an interchangeable stack there or starting one.</summary>
+    /// <remarks>
+    /// The unit keeps everything a unit of its stack is: its item, Override, divergence and disabled state. The stack's
+    /// last unit moves as TryLootStack moves a stack, keeping its StackInstanceId. A unit that starts a new stack needs a
+    /// free stack slot (InventoryCapacity) and is re-stamped as freshly acquired. Refuses an untradeable item.
+    /// </remarks>
+    /// <returns>Whether the unit moved.</returns>
+    public static bool TryGiveOneUnit(ComponentManager componentManager, ItemCatalog itemCatalog, int sourceEntityId, int destinationEntityId, uint stackInstanceId, IPlayerQuery playerQuery)
+    {
+        if (sourceEntityId == destinationEntityId)
+        {
+            return false;
+        }
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        var sourceDenseIndex = FindMatchingDenseIndex(stacks, sourceEntityId, stackInstanceId, static (stack, id) => stack.StackInstanceId == id);
+        if (sourceDenseIndex == -1)
+        {
+            return false;
+        }
+
+        var source = stacks.GetReadonlyByDenseIndex(sourceDenseIndex);
+        if (source.Quantity <= 1)
+        {
+            return TryLootStack(componentManager, itemCatalog, sourceEntityId, destinationEntityId, stackInstanceId, playerQuery);
+        }
+
+        if (!CanTrade(itemCatalog, in source))
+        {
+            return false;
+        }
+
+        var unit = source with { Quantity = 1 };
+        if (TopUpInterchangeableStacks(componentManager, stacks, destinationEntityId, in unit) > 0)
+        {
+            if (!InventoryCapacity.HasRoomForNewStack(componentManager, destinationEntityId, playerQuery))
+            {
+                return false;
+            }
+
+            InventoryGrant.EnsureInventoryComponentExists(componentManager, destinationEntityId);
+            stacks.Add(destinationEntityId, StackTemplate.Of(in source).CreateStack(1));
+        }
+
+        RemoveOneUnit(componentManager, sourceEntityId, stackInstanceId);
+        return true;
+    }
+
     /// <summary>The Merged Stack case of TryLootStack: loots every stack of itemDefinitionId sourceEntityId holds.</summary>
     /// <remarks>Not all or nothing, unlike TryTransferAllStacksOfItem: what doesn't fit stays behind, the same as each TryLootStack.</remarks>
     /// <returns>Whether any quantity moved.</returns>

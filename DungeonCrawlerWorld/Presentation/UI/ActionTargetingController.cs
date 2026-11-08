@@ -4,6 +4,7 @@ using Engine.Tiles;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Components;
 using Game.Modules.Inventory;
+using Game.Modules.ItemPiles;
 using Game.Tags;
 using Game.Views;
 using Game.World;
@@ -11,6 +12,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Presentation.Input;
 using Presentation.MapRendering;
+using Presentation.UI.Inventory;
 using System.Runtime.InteropServices;
 using UIEngine.UI;
 
@@ -35,7 +37,8 @@ public sealed class ActionTargetingController(
     ActionStateView actionStateView,
     TargetingView targetingView,
     PlayerCommands playerCommands,
-    SimulationClock simulationClock)
+    SimulationClock simulationClock,
+    IItemDropPlacement dropPlacement)
 {
 
     /// <summary>What TargetingView resolves into, copied out at once into _targetableTiles or _hoveredFootprint; reused so a resolve allocates nothing.</summary>
@@ -150,12 +153,19 @@ public sealed class ActionTargetingController(
             return actionStateView.GetItemBlocker(world.PlayerEntityId, armedStackInstanceId) != ActivationBlocker.None;
         }
 
+        if (mapViewState.ArmedDrop is { } armedDrop)
+        {
+            return actionStateView.GetDropRefusal(world.PlayerEntityId, in armedDrop) != ItemDropRefusal.None;
+        }
+
         return false;
     }
 
     /// <summary>Something is armed and a confirm of it would be refused right now (see CanConfirmArmed) -- what UiInputController shows the disabled cursor over the map for.</summary>
-    internal bool IsArmedConfirmRefused =>
-        (mapViewState.ArmedActionId is not null || mapViewState.ArmedItemStackInstanceId is not null) && !CanConfirmArmed();
+    /// <remarks>An armed drop is refused over a tile that wouldn't take it (IItemDropPlacement.CanDropAt), as a drag of it would be: a click there does nothing.</remarks>
+    internal bool IsArmedConfirmRefused => mapViewState.ArmedDrop is { } drop
+        ? IsArmedBlocked() || mapViewState.HoveredTile is not { } hoveredTile || !dropPlacement.CanDropAt(drop, hoveredTile)
+        : mapViewState.IsAnythingArmed && !CanConfirmArmed();
 
     /// <summary>Whether a confirm of whatever is armed would be accepted now: it isn't blocked, and PlayerCommands would queue it (ready before the input buffer expires).</summary>
     /// <remarks>A refused confirm leaves the action armed, so the player can confirm again once it's ready.</remarks>
@@ -186,8 +196,18 @@ public sealed class ActionTargetingController(
     /// isn't over the map window (it is over another window, such as the hotbar). Takes the mouse
     /// position and the host window's content-area origin explicitly rather than reading either
     /// itself, so tests can simulate a mouse position without a real OS cursor or a real Window subclass.
+    /// While a drop is armed, then tells ArmedDropHovered where the cursor is.
     /// </summary>
     public void UpdateHoveredTile(Point? mousePosition, Vector2 contentAbsolutePosition)
+    {
+        RefreshHoveredTile(mousePosition, contentAbsolutePosition);
+        if (mapViewState.ArmedDrop is not null)
+        {
+            ArmedDropHovered?.Invoke(mapViewState.HoveredTile);
+        }
+    }
+
+    private void RefreshHoveredTile(Point? mousePosition, Vector2 contentAbsolutePosition)
     {
         if (!TryGetArmedActivator(out var activator) || !transformView.TryGetTransform(world.PlayerEntityId, out var playerTransform))
         {
@@ -272,7 +292,7 @@ public sealed class ActionTargetingController(
     /// </summary>
     public bool CancelArmedOrPendingAction()
     {
-        if (mapViewState.ArmedActionId is not null || mapViewState.ArmedItemStackInstanceId is not null)
+        if (mapViewState.IsAnythingArmed)
         {
             Disarm();
             return true;
@@ -358,6 +378,12 @@ public sealed class ActionTargetingController(
     {
         if (IsSlotLocked(slot))
         {
+            return;
+        }
+
+        if (mapViewState.ArmedDrop is not null && mapViewState.ArmedSlot == slot)
+        {
+            TryActivateArmedFromHotkey();
             return;
         }
 
@@ -464,6 +490,7 @@ public sealed class ActionTargetingController(
 
         mapViewState.ArmedActionId = actionId;
         mapViewState.ArmedItemStackInstanceId = null;
+        SetArmedDrop(null);
         mapViewState.ArmedSlot = slot;
         _targetableTilesKey = null;
 
@@ -480,6 +507,7 @@ public sealed class ActionTargetingController(
 
         mapViewState.ArmedItemStackInstanceId = stackInstanceId;
         mapViewState.ArmedActionId = null;
+        SetArmedDrop(null);
         mapViewState.ArmedSlot = slot;
         _targetableTilesKey = null;
 
@@ -526,10 +554,81 @@ public sealed class ActionTargetingController(
         }
     }
 
+    /// <summary>Arms a drop of drop, awaiting the tile it lands on: the player's own or one beside it (ItemDrops.Targeting), confirmed by a map click or, from a hotbar slot, a re-press of it.</summary>
+    /// <remarks>A drop that would be refused now (ActionStateView.GetDropRefusal) arms nothing. Closes every closable window, as arming anything does.</remarks>
+    /// <param name="slot">The hotbar slot the drop came from, if any.</param>
+    public void ArmDrop(ItemDrop drop, HotkeySlot? slot = null)
+    {
+        if (!CanArmDrop(drop))
+        {
+            return;
+        }
+
+        uiLayers.CloseAllClosableWindows();
+
+        SetArmedDrop(drop);
+        mapViewState.ArmedActionId = null;
+        mapViewState.ArmedItemStackInstanceId = null;
+        mapViewState.ArmedSlot = slot;
+        _targetableTilesKey = null;
+
+        if (transformView.TryGetTransform(world.PlayerEntityId, out var transform))
+        {
+            RefreshTargetableTiles(ItemDrops.Targeting, transform.Position, transform.Size);
+        }
+    }
+
+    /// <summary>Whether drop can be armed now: Game wouldn't refuse it (ActionStateView.GetDropRefusal), and no shop is open, since a trade decides where items go until it closes.</summary>
+    public bool CanArmDrop(ItemDrop drop) =>
+        mapViewState.OpenShopEntityId is null &&
+        actionStateView.GetDropRefusal(world.PlayerEntityId, in drop) == ItemDropRefusal.None;
+
+    /// <summary>Raised every update while a drop is armed, with the tile the cursor is over on the map, or null off it.</summary>
+    /// <remarks>For what the hovered tile does to the drop -- a container it would go into (ArmedDropHover).</remarks>
+    public event Action<Vector3Int?>? ArmedDropHovered;
+
+    /// <summary>Raised whenever MapViewState.ArmedDrop changes: a drop armed, replaced or disarmed by any path.</summary>
+    public event Action? ArmedDropChanged;
+
+    /// <summary>Disarms an armed drop; does nothing while anything else, or nothing, is armed.</summary>
+    /// <remarks>For a drag that armed one (DragDropArming), when it ends.</remarks>
+    public void DisarmDrop()
+    {
+        if (mapViewState.ArmedDrop is not null)
+        {
+            Disarm();
+        }
+    }
+
+    private void SetArmedDrop(ItemDrop? drop)
+    {
+        if (mapViewState.ArmedDrop == drop)
+        {
+            return;
+        }
+
+        mapViewState.ArmedDrop = drop;
+        ArmedDropChanged?.Invoke();
+    }
+
+    /// <summary>The drop a hotbar slot's "Drop" arms: one unit of the stack bound to it -- the unit an activation from that slot would use. False for a slot with no item.</summary>
+    public bool TryGetSlotDrop(HotkeySlot slot, out ItemDrop drop)
+    {
+        if (hotkeyBindingView.TryGetBoundItem(world.PlayerEntityId, slot, out var stackInstanceId))
+        {
+            drop = ItemDrop.OneUnitOf(stackInstanceId);
+            return true;
+        }
+
+        drop = default;
+        return false;
+    }
+
     private void Disarm()
     {
         mapViewState.ArmedActionId = null;
         mapViewState.ArmedItemStackInstanceId = null;
+        SetArmedDrop(null);
         mapViewState.ArmedSlot = null;
         mapViewState.TargetableTiles = null;
         _targetableTilesKey = null;
@@ -538,15 +637,21 @@ public sealed class ActionTargetingController(
     }
 
     /// <summary>
-    /// The activator of whichever of {action, item} is currently armed -- the one piece both kinds
-    /// need for every targeting computation below, so callers stop caring which kind they're
+    /// The activator of whichever of {action, item, drop} is currently armed -- the one piece every kind
+    /// needs for every targeting computation below, so callers stop caring which kind they're
     /// dealing with past this point. Resolves the armed item through its bound *stack*
     /// (InventoryQueries.TryResolveEffectiveItem), not a bare catalog lookup by item id -- a
     /// diverged stack's own Override (e.g. a wand carrying non-default Targeting) is what actually
-    /// gets read, not always the catalog original.
+    /// gets read, not always the catalog original. A drop's is DropTargeting.
     /// </summary>
     private bool TryGetArmedActivator(out IActionActivator activator)
     {
+        if (mapViewState.ArmedDrop is not null)
+        {
+            activator = DropTargeting.Instance;
+            return true;
+        }
+
         if (mapViewState.ArmedActionId is { } actionId && actionStateView.TryGetEffectiveAction(world.PlayerEntityId, actionId, out var action))
         {
             activator = action.Activator;
@@ -615,8 +720,19 @@ public sealed class ActionTargetingController(
     private void TryActivateArmedFromHotkey() => TryActivateArmed(mapViewState.HoveredTile, isMapClick: false, fallsBackFromUntargetableTile: true);
 
     /// <summary>Queues and disarms whatever is armed, aimed by TrySelectActivationTarget; nothing to land on, or a confirm that would be refused, leaves it armed with nothing paid.</summary>
+    /// <remarks>An armed drop is put down on cursorTile itself (IItemDropPlacement.TryDropAt), by the same rule a drag onto that tile follows -- into a container there, or onto the ground -- and stays armed if it can't go there.</remarks>
     private void TryActivateArmed(Vector3Int? cursorTile, bool isMapClick, bool fallsBackFromUntargetableTile)
     {
+        if (mapViewState.ArmedDrop is { } drop)
+        {
+            if (!IsArmedBlocked() && cursorTile is { } dropTile && dropPlacement.TryDropAt(drop, dropTile))
+            {
+                Disarm();
+            }
+
+            return;
+        }
+
         if (!TryGetArmedActivator(out var activator) || !CanConfirmArmed())
         {
             return;
@@ -837,5 +953,16 @@ public sealed class ActionTargetingController(
         {
             QueueItemActivation(stackInstanceId, selection, mapViewState.ArmedSlot);
         }
+    }
+
+    /// <summary>A drop's targeting as an activator, so an armed drop is previewed by the same rules as an action or item.</summary>
+    /// <remarks>It lives here, not in Game: it is only a way to aim, and Game's activators are content, each with its codec.</remarks>
+    private sealed class DropTargeting : IActionActivator
+    {
+        public static DropTargeting Instance { get; } = new();
+
+        public TargetingSpec Targeting => ItemDrops.Targeting;
+
+        public ActionTiming Timing { get; } = new(ActionTimingCategory.Immediate);
     }
 }

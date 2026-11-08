@@ -13,6 +13,9 @@ public enum MapDrawItemKind : byte
     /// <summary>A corpse lying on the floor, at its full footprint; drawn in its top row, under whatever stands on its lower tiles.</summary>
     Corpse,
 
+    /// <summary>A living non-blocking occupant that is neither Tiny nor Phasing (an item pile), lying on the floor at its full footprint like a corpse, without the corpse marker.</summary>
+    FloorObject,
+
     /// <summary>One of a tile's Tiny occupants, drawn into the tile's sub-grid in the order they come.</summary>
     Tiny,
 
@@ -174,6 +177,12 @@ public sealed class MapDrawOrder
                     _items.Add(new MapDrawItem(MapDrawItemKind.Tiny, entityId, mapX, mapY, new Vector2Byte(1, 1)));
                 }
 
+                continue;
+            }
+
+            if (!occupant.IsDead && occupant.Position.X == mapX && occupant.Position.Y == mapY)
+            {
+                _items.Add(new MapDrawItem(MapDrawItemKind.FloorObject, entityId, occupant.Position.X, occupant.Position.Y, occupant.Size));
                 continue;
             }
 

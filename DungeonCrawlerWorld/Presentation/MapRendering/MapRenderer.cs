@@ -408,6 +408,11 @@ public sealed class MapRenderer : IDisposable
                     DrawLootBagBadge(batch, _mapView.GetStatus(item.EntityId).LootBag, footprintTopLeft, footprintSize, key.TileSize);
                     break;
 
+                case MapDrawItemKind.FloorObject:
+                    TryDrawEntityVisual(batch, item.EntityId, FontMeasurerForSize(item.Size.X), footprintTopLeft, footprintSize, item.Size, GroundRowY(footprintTopLeft, footprintSize, key.TileSize));
+                    DrawLootBagBadge(batch, _mapView.GetStatus(item.EntityId).LootBag, footprintTopLeft, footprintSize, key.TileSize);
+                    break;
+
                 case MapDrawItemKind.Tiny:
                     if (tinyTile.X != item.MapX || tinyTile.Y != item.MapY)
                     {

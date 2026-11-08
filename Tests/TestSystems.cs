@@ -310,14 +310,14 @@ internal static class TestSystems
         PackedComponentPool<MeleeDisabledComponent>? meleeDisabled = null,
         IPlayerQuery? playerQuery = null,
         EntityKeys? entityKeys = null,
-        NpcCorpseLooting? corpseLooting = null) =>
+        NpcLooting? looting = null) =>
         new(movementPool, transformPool, actionLocks, health, bodyParts, inventoryStacks, actions, raceSlots, pendingActivations, pendingItemActivations, mapQuery, mathUtility, processingTiers, processingTierEvents,
             deadEntities ?? EmptyPools.Packed<DeadComponent>(),
             TestActionEffects.Services(BuiltInTestComponents.RegisterAll(new ComponentManager(16, 16)), entityKeys ?? new EntityKeys(), new EventBus(), mathUtility, deadEntities: deadEntities, mana: mana),
             meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>(),
             playerQuery ?? TestPlayerQuery.NoPlayer,
             new TargetResolution(mapQuery, mapQuery as Engine.Tiles.ISightBlockers ?? EmptyPools.NoWalls, transformPool, entityKeys ?? new EntityKeys(), deadEntities ?? EmptyPools.Packed<DeadComponent>(), EmptyPools.Multi<NonBlockingComponent>(), EmptyPools.Packed<AbilityScoresComponent>()),
-            corpseLooting ?? new NpcCorpseLooting(BuiltInTestComponents.RegisterAll(new ComponentManager(16, 16)), new ItemCatalog(), playerQuery ?? TestPlayerQuery.NoPlayer, entityKeys ?? new EntityKeys(), mapQuery, new ProcessingTierQuery(processingTiers)),
+            looting ?? new NpcLooting(BuiltInTestComponents.RegisterAll(new ComponentManager(16, 16)), new ItemCatalog(), playerQuery ?? TestPlayerQuery.NoPlayer, entityKeys ?? new EntityKeys(), mapQuery, new ProcessingTierQuery(processingTiers)),
             TestContent.Item(Game.Modules.Inventory.BuiltInItemIds.HealthPotion).Activator!);
 
     public static DeathSystem DeathSystem(

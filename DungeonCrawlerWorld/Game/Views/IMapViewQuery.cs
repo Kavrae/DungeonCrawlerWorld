@@ -1,5 +1,6 @@
 using Engine.Math;
 using Engine.Tiles;
+using Game.Modules.ItemPiles;
 using Game.Terrain;
 using Game.World;
 
@@ -58,4 +59,7 @@ public interface IMapViewQuery
     float GetChargeFraction(int entityId);
 
     EntityInteractionView GetInteraction(int entityId);
+
+    /// <summary>What among occupants something the player puts down goes into -- the same rule the drop itself follows (DropReceivers): a standing shop, which refuses, else a corpse, a container or an item pile; or the ground, with receiverEntityId -1.</summary>
+    DropReceiverKind FindDropReceiver(ReadOnlySpan<int> occupants, out int receiverEntityId);
 }

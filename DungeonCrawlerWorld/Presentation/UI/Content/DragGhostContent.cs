@@ -1,6 +1,7 @@
 using Game.Modules.Actions;
 using Game.Modules.Currency;
 using Game.Modules.Inventory;
+using Game.Modules.ItemPiles;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -22,10 +23,12 @@ namespace Presentation.UI.Content;
 /// every drag, so the ghost doesn't visibly jump in scale relative to wherever it was picked up
 /// from. Hosted in a minimal (zero-size, fully transparent) User-tier Window -- see
 /// ShellBootstrapper.BuildUserWindows -- since everything this draws is positioned directly at the live
-/// mouse position, not relative to any window's own bounds.
+/// mouse position, not relative to any window's own bounds. A drop armed from a menu (MapViewState.ArmedDrop) carries the
+/// same ghost, at the size of a hotbar slot, so it looks exactly like dragging what it drops.
 /// </summary>
 public sealed class DragGhostContent(
     PointerState pointerState,
+    MapViewState mapViewState,
     World world,
     ActionCatalog actionCatalog,
     ItemCatalog itemCatalog,
@@ -42,7 +45,18 @@ public sealed class DragGhostContent(
     public void DrawContent(GameTime gameTime)
     {
         var state = pointerState.ContentDrag;
-        if (!state.Visible || state.Payload is not DragPayload drag)
+        DragPayload drag;
+        Vector2 size;
+        Point mousePosition;
+        if (state.Visible && state.Payload is DragPayload heldDrag)
+        {
+            (drag, size, mousePosition) = (heldDrag, state.SourceSize, state.CursorPosition);
+        }
+        else if (mapViewState.ArmedDrop is { } armedDrop)
+        {
+            (drag, size, mousePosition) = (PayloadOf(armedDrop), HotbarContent.SlotSize, pointerState.CursorPosition);
+        }
+        else
         {
             return;
         }
@@ -79,13 +93,21 @@ public sealed class DragGhostContent(
             return;
         }
 
-        var size = state.SourceSize;
         SpriteView? sprite = spriteName is not null && spriteSheetService.Sprites.TryGetFirst(spriteName, out var spriteView) ? spriteView : null;
         var glyphFontMeasurer = fontService.GetTextMeasurer(fontService.GetFont((int)(size.Y * GameFontChrome.DragGhostGlyphFontFraction)));
-        var mousePosition = state.CursorPosition;
 
         DragGhostRenderer.Draw(
             _hostWindow.Render.Batch, spriteSheetService, glyphFontMeasurer,
             sprite, glyph, glyphColor, _hostWindow.ToContentLocal(new Vector2(mousePosition.X, mousePosition.Y)), size);
     }
+
+    /// <summary>What a drag of the player's own goods carrying drop would hold: the stack, the Merged Stack's item, or the currency (Gold for all of it).</summary>
+    private DragPayload PayloadOf(ItemDrop drop) => drop.Kind switch
+    {
+        ItemDropKind.OneUnit or ItemDropKind.WholeStack => new(DragPayloadOrigin.InventoryCell, ItemStackInstanceId: drop.StackInstanceId, OriginEntityId: world.PlayerEntityId),
+        ItemDropKind.EveryStackOfItem => new(DragPayloadOrigin.InventoryCell, MergedItemDefinitionId: drop.ItemDefinitionId, OriginEntityId: world.PlayerEntityId),
+        ItemDropKind.Currency => new(DragPayloadOrigin.Currency, CurrencyType: drop.CurrencyType, OriginEntityId: world.PlayerEntityId),
+        ItemDropKind.AllCurrency => new(DragPayloadOrigin.Currency, CurrencyType: CurrencyType.Gold, OriginEntityId: world.PlayerEntityId),
+        _ => throw new ArgumentOutOfRangeException(nameof(drop), drop.Kind, null),
+    };
 }

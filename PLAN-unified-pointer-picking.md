@@ -229,7 +229,9 @@ frame, and nothing reads it yet; the targeting preview and confirm still resolve
 standing shop, or anything dead) takes the drop through `InventoryTransferDropHandler` as if dropped on its window --
 so items, Merged Stacks and currency follow Give's rules; refused (cursor and drop) for a tile nothing takes, a
 container out of reach, a corpse reserved for someone else, and anything picked up from a shop or a trade column; a
-hotbar-slot drag is left to the hotbar. No resolver chain yet: the ground resolver adds one when item piles land.
+hotbar-slot drag is left to the hotbar. No resolver chain: when item piles landed (2026-11-07), `MapDropHandler` took the
+ground case itself, after the container one, and the player's own goods now go through the one drop rule
+(`IPlayerItemDrops`; PLAN-dropping-items-on-the-ground.md).
 Menu mode: a drag held where menu mode leaves nothing hovered finds its drop target among every layer
 (`UiInputController.DropElementAt`), so items can be carried out of an open inventory onto the map; clicks are still
 blocked. While something is dragged the map shows no targeting preview.
@@ -289,5 +291,5 @@ hotkeys).
 - A content drag that goes out past the threshold and back does nothing: no click, and the drop on its own origin is
   a no-op.
 - A drop onto the map moves the whole stack, like every drag today. Half / exact amounts on map drops are v2 of TODO.md
-  "Stack Controls and Partial Stacks". TODO.md "Dropping items on the ground" points at Phase 5 for the drag.
+  "Stack Controls and Partial Stacks". Dropping on the ground landed with item piles (PLAN-dropping-items-on-the-ground.md).
 - Hotbar slots become elements, in Phase 3.

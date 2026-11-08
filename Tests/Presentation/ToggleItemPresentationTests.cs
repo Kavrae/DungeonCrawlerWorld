@@ -102,7 +102,7 @@ public sealed class ToggleItemPresentationTests
             new ActionStateView(components, entityActions, session.Catalogs.ItemCatalog, localTierRoster: null, TestActionStateViews.EffectServicesOver(components)),
             session.Views.TargetingView,
             session.Commands.PlayerCommands,
-            simulationClock: ecs.SystemManager.Clock);
+            simulationClock: ecs.SystemManager.Clock, dropPlacement: new TestPlayerItemDrops());
 
         return new InputHarness { Ecs = ecs, Items = session.Catalogs.ItemCatalog, PlayerEntityId = playerEntityId, ActionTargeting = actionTargeting, MapViewState = mapViewState };
     }

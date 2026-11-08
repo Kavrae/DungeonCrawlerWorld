@@ -1,6 +1,7 @@
 using Engine.Math;
 using Engine.Tiles;
 using Game.Modules.Core.Components;
+using Game.Modules.ItemPiles;
 using Game.Terrain;
 using Game.Views;
 using Game.World;
@@ -82,6 +83,8 @@ internal sealed class FakeMapView : IMapViewQuery
     public float GetChargeFraction(int entityId) => throw new NotSupportedException();
 
     public EntityInteractionView GetInteraction(int entityId) => throw new NotSupportedException();
+
+    public DropReceiverKind FindDropReceiver(ReadOnlySpan<int> occupants, out int receiverEntityId) => throw new NotSupportedException();
 
     private int Add(int x, int y, Vector2Byte size, NonBlockingKind kind, bool isDead, bool isBlocking)
     {
