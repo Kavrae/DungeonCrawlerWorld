@@ -1605,7 +1605,7 @@ record in Achievements.
   first). `AchievementModule` subscribes and claims for the player; `AchievementLootboxClaims.TryClaim`
   removes the record then grants, so it can't grant twice.
   A minimized or never-opened notification never pays out -- no timeout, no fallback.
-  Boxes: AngelInvestor Bronze Investor, Archivist Bronze Librarian, DrinkingProblem Bronze Alchemist
+  Boxes: AngelInvestor Bronze Investor, Scammed Bronze Investor, Archivist Bronze Librarian, DrinkingProblem Bronze Alchemist
   (set contents: 2 Health Potions, 2 Cure Poison Potions), EarlyAdopter Silver Adventurer, EmptyPockets
   Bronze Adventurer, InertGas Bronze Exorcist, SpellCaster Bronze Adventurer (set contents: 5 Mana
   Potions), UnarmedCombat Bronze Weapon. `RewardText` explains only an unusual reward, why a particular
@@ -2519,8 +2519,13 @@ never a copy. A menu option that can't be taken now is shown disabled, not left 
   staged stacks counted as its stock), refused by one rule (`ShopDealRefusal`: not a shop, stack missing, not accepted,
   sell cap, no room, Gold missing, offer too low) and completed all or nothing. A direct buy or sale is a one-stack deal
   (`ShopActions.TryBuyFromShop`/`TrySellToShop`, `ShopDeals.Purchase`/`Sale`); the trade window's values, Complete and
-  Balance Offer read the deal (`TradeWindow.BuildDeal`). Only Gold given beyond the price is a gift
-  (`GoldGivenToShopEvent`, announced by `ShopCommands.TryCompleteDeal`). Buy All / Sell All are enabled by the deal rule
+  Balance Offer read the deal (`TradeWindow.BuildDeal`). Every completed deal, a direct buy or sale
+  included, is announced once with both sides' values, the player's Gold and whether the shop's side was empty
+  (`ShopDealCompletedEvent`, by `ShopCommands.TryCompleteDeal`); Gold given outright to a shop -- the currency row's Give,
+  a currency drag (`ShopCommands.TryGiveCurrencyToShop`) -- is announced the same way, as a deal whose shop side is
+  empty. "Scammed" unlocks on the first deal where the shop gave something but less than the player's side was worth,
+  "Angel Investor" on the first that gave the shop Gold for nothing (Gold given outright among them) -- never both from
+  one deal. Buy All / Sell All are enabled by the deal rule
   (`ShopCommands.GetPurchaseRefusal`/`GetSaleRefusal`).
 - **Arming goes through the action lock** everywhere, as a hotbar press always did: only the confirm waits on it. The
   inventory grid no longer reads the lock.

@@ -27,35 +27,19 @@ public static class ShopActions
     public static bool TryBuyFromShop(ComponentManager componentManager, ItemCatalog itemCatalog, int playerEntityId, int shopEntityId, uint stackInstanceId, IPlayerQuery playerQuery)
     {
         var deal = ShopDeals.Purchase(componentManager, itemCatalog, playerEntityId, shopEntityId, stackInstanceId, playerQuery);
-        return ShopDeals.TryComplete(componentManager, itemCatalog, in deal, playerQuery, out _) == ShopDealRefusal.None;
+        return ShopDeals.TryComplete(componentManager, itemCatalog, in deal, playerQuery).Refusal == ShopDealRefusal.None;
     }
 
     /// <summary>The player sells one stack to the shop for its price: a one-stack shop deal (ShopDeals.Sale), refused as any deal is -- the shop's sell cap among them.</summary>
     public static bool TrySellToShop(ComponentManager componentManager, ItemCatalog itemCatalog, int playerEntityId, int shopEntityId, uint stackInstanceId, IPlayerQuery playerQuery)
     {
         var deal = ShopDeals.Sale(componentManager, itemCatalog, playerEntityId, shopEntityId, stackInstanceId, playerQuery);
-        return ShopDeals.TryComplete(componentManager, itemCatalog, in deal, playerQuery, out _) == ShopDealRefusal.None;
+        return ShopDeals.TryComplete(componentManager, itemCatalog, in deal, playerQuery).Refusal == ShopDealRefusal.None;
     }
 
-    /// <summary>
-    /// Moves sourceEntityId's whole balance of currencyType to destinationEntityId (the same
-    /// whole-balance CurrencyActions.TryTransfer overload every "give" gesture already uses),
-    /// publishing GoldGivenToShopEvent afterward if Gold actually moved, there was some to give,
-    /// and destinationEntityId genuinely carries a ShopComponent. This is the one chokepoint every
-    /// currency-to-a-shop gesture -- context-menu Give/Give All, a direct currency drag dropped on
-    /// the shop, and Complete swapping a trade's player-side Gold to the real shop -- should route
-    /// through, so the "Angel Investor" achievement's own trigger never depends on which specific
-    /// UI gesture the player used to give it (confirmed live gap: only the context menu published
-    /// this before).
-    ///
-    /// eventPlayerEntityId defaults to sourceEntityId -- true for the context-menu and direct-drag
-    /// callers, where the real player's own Gold is what's moving. TradeWindow.CompleteTrade is the
-    /// one caller that must override it: its own sourceEntityId is the trade-offer player column
-    /// (a reserved placeholder entity, never the real player -- see TradeWindow's own doc comment on
-    /// _playerSideEntityId), so GoldGivenToShopEvent.PlayerEntityId would otherwise report that
-    /// placeholder instead of the real player.
-    /// </summary>
-    public static bool TryGiveCurrencyToShop(ComponentManager componentManager, EventBus eventBus, int sourceEntityId, int destinationEntityId, CurrencyType currencyType, int? eventPlayerEntityId = null)
+    /// <summary>Moves sourceEntityId's whole balance of currencyType to destinationEntityId, announcing Gold that reached a shop as a completed trade in which the giver got nothing back (ShopDealCompletedEvent).</summary>
+    /// <remarks>Every gesture that gives currency outright -- the currency row's Give and Give All, a currency drag -- goes through here, so each is announced the same way; to anything but a shop it is a plain transfer.</remarks>
+    public static bool TryGiveCurrencyToShop(ComponentManager componentManager, EventBus eventBus, int sourceEntityId, int destinationEntityId, CurrencyType currencyType)
     {
         componentManager.GetPackedPool<CurrencyComponent>().TryGetReadonly(sourceEntityId, out var sourceCurrencyBefore);
         var amountBefore = currencyType == CurrencyType.Gold ? sourceCurrencyBefore.Gold : sourceCurrencyBefore.Credits;
@@ -67,7 +51,7 @@ public static class ShopActions
 
         if (currencyType == CurrencyType.Gold && amountBefore > 0 && componentManager.GetPackedPool<ShopComponent>().Has(destinationEntityId))
         {
-            eventBus.Publish(new GoldGivenToShopEvent(eventPlayerEntityId ?? sourceEntityId, destinationEntityId, amountBefore));
+            eventBus.Publish(new ShopDealCompletedEvent(sourceEntityId, destinationEntityId, PlayerOfferValue: amountBefore, ShopOfferValue: 0, PlayerOfferGold: amountBefore, ShopOfferIsEmpty: true));
         }
 
         return true;

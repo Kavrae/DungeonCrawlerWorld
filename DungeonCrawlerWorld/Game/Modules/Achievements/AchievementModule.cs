@@ -35,6 +35,7 @@ public sealed class AchievementModule : IGameModule
         new MinMaxerAchievement(),
         new MostBoringLibrarianAchievement(),
         new RevengeOfTheNerdsAchievement(),
+        new ScammedAchievement(),
         new ShanghaiKidAchievement(),
         new SpellCasterAchievement(),
         new UnarmedCombatAchievement(),

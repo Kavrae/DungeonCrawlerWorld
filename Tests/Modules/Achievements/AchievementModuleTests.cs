@@ -45,6 +45,7 @@ public sealed class AchievementModuleTests
     private static readonly Guid UnarmedCombatAchievementId = new UnarmedCombatAchievement().Id;
 
     private static readonly Guid AngelInvestorAchievementId = new AngelInvestorAchievement().Id;
+    private static readonly Guid ScammedAchievementId = new ScammedAchievement().Id;
 
     [TestMethod]
     public void EnteredDungeon_UnlocksLonerAndPublishesMinimizedNotification()
@@ -267,7 +268,7 @@ public sealed class AchievementModuleTests
         NotificationRequestedEvent? published = null;
         eventBus.Subscribe<NotificationRequestedEvent>(requested => published = requested);
 
-        eventBus.Publish(new Game.Modules.Shops.GoldGivenToShopEvent(playerEntityId, shopEntityId, 50));
+        eventBus.Publish(new Game.Modules.Shops.ShopDealCompletedEvent(playerEntityId, shopEntityId, PlayerOfferValue: 50, ShopOfferValue: 0, PlayerOfferGold: 50, ShopOfferIsEmpty: true));
         eventBus.DispatchBuffered<NotificationRequestedEvent>();
 
         Assert.IsTrue(AchievementQueries.HasEarned(
@@ -278,6 +279,46 @@ public sealed class AchievementModuleTests
         Assert.IsNotNull(published);
         Assert.AreEqual(NotificationCategory.Achievement, published!.Category);
         Assert.AreEqual("Angel Investor", published.Title);
+        Assert.IsFalse(AchievementQueries.HasEarned(
+            ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
+            playerEntityId,
+            ScammedAchievementId));
+    }
+
+    [TestMethod]
+    public void DealGivingBackLessThanThePlayerGave_UnlocksScammedButNotAngelInvestor()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+        var unlockedAchievements = ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>();
+
+        eventBus.Publish(new Game.Modules.Shops.ShopDealCompletedEvent(playerEntityId, ecsContext.EntityManager.CreateEntity(), PlayerOfferValue: 50, ShopOfferValue: 20, PlayerOfferGold: 50, ShopOfferIsEmpty: false));
+
+        Assert.IsTrue(AchievementQueries.HasEarned(unlockedAchievements, playerEntityId, ScammedAchievementId));
+        Assert.IsFalse(AchievementQueries.HasEarned(unlockedAchievements, playerEntityId, AngelInvestorAchievementId));
+    }
+
+    [TestMethod]
+    public void FairDealsFirst_StillUnlockScammedAndAngelInvestorLater()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        var shopEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+        var unlockedAchievements = ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>();
+
+        eventBus.Publish(new Game.Modules.Shops.ShopDealCompletedEvent(playerEntityId, shopEntityId, PlayerOfferValue: 20, ShopOfferValue: 20, PlayerOfferGold: 20, ShopOfferIsEmpty: false));
+        eventBus.Publish(new Game.Modules.Shops.ShopDealCompletedEvent(playerEntityId, shopEntityId, PlayerOfferValue: 30, ShopOfferValue: 0, PlayerOfferGold: 0, ShopOfferIsEmpty: true));
+
+        Assert.IsFalse(AchievementQueries.HasEarned(unlockedAchievements, playerEntityId, ScammedAchievementId));
+        Assert.IsFalse(AchievementQueries.HasEarned(unlockedAchievements, playerEntityId, AngelInvestorAchievementId), "Items given for nothing are no Gold.");
+
+        eventBus.Publish(new Game.Modules.Shops.ShopDealCompletedEvent(playerEntityId, shopEntityId, PlayerOfferValue: 30, ShopOfferValue: 10, PlayerOfferGold: 0, ShopOfferIsEmpty: false));
+        eventBus.Publish(new Game.Modules.Shops.ShopDealCompletedEvent(playerEntityId, shopEntityId, PlayerOfferValue: 5, ShopOfferValue: 0, PlayerOfferGold: 5, ShopOfferIsEmpty: true));
+
+        Assert.IsTrue(AchievementQueries.HasEarned(unlockedAchievements, playerEntityId, ScammedAchievementId));
+        Assert.IsTrue(AchievementQueries.HasEarned(unlockedAchievements, playerEntityId, AngelInvestorAchievementId));
     }
 
     [TestMethod]
@@ -363,7 +404,7 @@ public sealed class AchievementModuleTests
         NotificationRequestedEvent? published = null;
         eventBus.Subscribe<NotificationRequestedEvent>(requested => published = requested);
 
-        eventBus.Publish(new Game.Modules.Shops.GoldGivenToShopEvent(world.PlayerEntityId, ecsContext.EntityManager.CreateEntity(), 50));
+        eventBus.Publish(new Game.Modules.Shops.ShopDealCompletedEvent(world.PlayerEntityId, ecsContext.EntityManager.CreateEntity(), PlayerOfferValue: 50, ShopOfferValue: 0, PlayerOfferGold: 50, ShopOfferIsEmpty: true));
         eventBus.DispatchBuffered<NotificationRequestedEvent>();
 
         Assert.AreEqual(AngelInvestorAchievementId, published!.Achievement!.AchievementId);
@@ -378,7 +419,7 @@ public sealed class AchievementModuleTests
         var build = BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)));
         var playerEntityId = build.EcsContext.EntityManager.CreateEntity();
         build.World.PlayerEntityId = playerEntityId;
-        build.Context.EventBus.Publish(new Game.Modules.Shops.GoldGivenToShopEvent(playerEntityId, build.EcsContext.EntityManager.CreateEntity(), 50));
+        build.Context.EventBus.Publish(new Game.Modules.Shops.ShopDealCompletedEvent(playerEntityId, build.EcsContext.EntityManager.CreateEntity(), PlayerOfferValue: 50, ShopOfferValue: 0, PlayerOfferGold: 50, ShopOfferIsEmpty: true));
 
         return (build.EcsContext, build.Context.EventBus, playerEntityId);
     }

@@ -9,13 +9,13 @@ namespace Game.Modules.Shops;
 /// <summary>A session's shop transactions, for code outside a system: ShopActions with the session's pools, catalog, bus and player bound.</summary>
 public sealed class ShopCommands(ComponentManager componentManager, ItemCatalog itemCatalog, EventBus eventBus, IPlayerQuery playerQuery)
 {
-    /// <inheritdoc cref="ShopActions.TryBuyFromShop"/>
+    /// <summary>The player buys one stack from the shop for its price: a one-stack deal (ShopDeals.Purchase) completed through TryCompleteDeal.</summary>
     public bool TryBuyFromShop(int playerEntityId, int shopEntityId, uint stackInstanceId) =>
-        ShopActions.TryBuyFromShop(componentManager, itemCatalog, playerEntityId, shopEntityId, stackInstanceId, playerQuery);
+        TryCompleteDeal(ShopDeals.Purchase(componentManager, itemCatalog, playerEntityId, shopEntityId, stackInstanceId, playerQuery)) == ShopDealRefusal.None;
 
-    /// <inheritdoc cref="ShopActions.TrySellToShop"/>
+    /// <summary>The player sells one stack to the shop for its price: a one-stack deal (ShopDeals.Sale) completed through TryCompleteDeal.</summary>
     public bool TrySellToShop(int playerEntityId, int shopEntityId, uint stackInstanceId) =>
-        ShopActions.TrySellToShop(componentManager, itemCatalog, playerEntityId, shopEntityId, stackInstanceId, playerQuery);
+        TryCompleteDeal(ShopDeals.Sale(componentManager, itemCatalog, playerEntityId, shopEntityId, stackInstanceId, playerQuery)) == ShopDealRefusal.None;
 
     /// <summary>Why the player can't buy stackInstanceId from the shop for its price now (ShopDeals.Purchase), or None.</summary>
     public ShopDealRefusal GetPurchaseRefusal(int playerEntityId, int shopEntityId, uint stackInstanceId) =>
@@ -28,20 +28,22 @@ public sealed class ShopCommands(ComponentManager componentManager, ItemCatalog 
     /// <inheritdoc cref="ShopDeals.Evaluate"/>
     public ShopDealValuation EvaluateDeal(in ShopDeal deal) => ShopDeals.Evaluate(componentManager, itemCatalog, in deal, playerQuery);
 
-    /// <summary>Completes deal (ShopDeals.TryComplete), announcing any Gold the player gave beyond its worth (GoldGivenToShopEvent).</summary>
+    /// <summary>Completes deal (ShopDeals.TryComplete), announcing what each side was worth (ShopDealCompletedEvent).</summary>
     /// <returns>None when it completed; otherwise why not, with nothing changed.</returns>
     public ShopDealRefusal TryCompleteDeal(in ShopDeal deal)
     {
-        var refusal = ShopDeals.TryComplete(componentManager, itemCatalog, in deal, playerQuery, out var giftedGold);
-        if (giftedGold > 0)
+        var valuation = ShopDeals.TryComplete(componentManager, itemCatalog, in deal, playerQuery);
+        if (valuation.Refusal != ShopDealRefusal.None)
         {
-            eventBus.Publish(new GoldGivenToShopEvent(deal.PlayerEntityId, deal.ShopEntityId, giftedGold));
+            return valuation.Refusal;
         }
 
-        return refusal;
+        var shopOfferIsEmpty = deal.ShopOffer.StackInstanceIds.Count == 0 && deal.ShopOffer.Gold == 0;
+        eventBus.Publish(new ShopDealCompletedEvent(deal.PlayerEntityId, deal.ShopEntityId, valuation.PlayerOfferValue, valuation.ShopOfferValue, deal.PlayerOffer.Gold, shopOfferIsEmpty));
+        return ShopDealRefusal.None;
     }
 
     /// <inheritdoc cref="ShopActions.TryGiveCurrencyToShop"/>
-    public bool TryGiveCurrencyToShop(int sourceEntityId, int destinationEntityId, CurrencyType currencyType, int? eventPlayerEntityId = null) =>
-        ShopActions.TryGiveCurrencyToShop(componentManager, eventBus, sourceEntityId, destinationEntityId, currencyType, eventPlayerEntityId);
+    public bool TryGiveCurrencyToShop(int sourceEntityId, int destinationEntityId, CurrencyType currencyType) =>
+        ShopActions.TryGiveCurrencyToShop(componentManager, eventBus, sourceEntityId, destinationEntityId, currencyType);
 }

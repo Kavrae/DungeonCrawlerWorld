@@ -166,7 +166,7 @@ public sealed class CurrencyRowContent(
     private void AddDropOption(List<DropdownOption> options, string label, ItemDrop drop) =>
         options.Add(new DropdownOption(label, null, Enabled: inventoryServices.PlayerItemDrops.CanArmDrop(drop), () => inventoryServices.PlayerItemDrops.ArmDrop(drop)));
 
-    /// <summary>Moves one currency type's whole balance through ShopCommands.TryGiveCurrencyToShop -- the shared chokepoint every "give currency to a shop" gesture (this context menu, a direct currency drag, or completing a trade) routes through, so GoldGivenToShopEvent (the "Angel Investor" achievement's own trigger) fires the same way regardless of which gesture the player used. Take never reaches the shop branch: destinationEntityId is always world.PlayerEntityId on that path, which never carries ShopComponent.</summary>
+    /// <summary>Moves one currency type's whole balance through ShopCommands.TryGiveCurrencyToShop -- the shared chokepoint every "give currency to a shop" gesture (this context menu or a direct currency drag) routes through, so the gift is announced (ShopDealCompletedEvent, read by the "Angel Investor" and "Scammed" achievements) the same way regardless of which gesture the player used. Take never reaches the shop branch: destinationEntityId is always world.PlayerEntityId on that path, which never carries ShopComponent.</summary>
     private void TransferOne(CurrencyElement element, int sourceEntityId, int destinationEntityId) =>
         _shopCommands.TryGiveCurrencyToShop(sourceEntityId, destinationEntityId, element.Type);
 

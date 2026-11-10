@@ -157,15 +157,15 @@ public sealed class CurrencyRowContentTests
     }
 
     [TestMethod]
-    public void GiveAllGoldToShop_PublishesGoldGivenToShopEventWithTheAmountGiven()
+    public void GiveAllGoldToShop_AnnouncesAGiftDealWithTheAmountGiven()
     {
         var eventBus = new EventBus();
         var (goldElement, componentManager, contextMenuController) = BuildForGiveTake(PlayerEntityId, ShopEntityId, eventBus);
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 42, credits: 0));
         componentManager.Merge(ShopEntityId, new ShopComponent(acceptedItems: null, buyMultiplier: 1.2f, sellMultiplier: 0.8f));
 
-        GoldGivenToShopEvent? published = null;
-        eventBus.Subscribe<GoldGivenToShopEvent>(e => published = e);
+        ShopDealCompletedEvent? published = null;
+        eventBus.Subscribe<ShopDealCompletedEvent>(e => published = e);
 
         goldElement.OnRightClicked!.Invoke(Point.Zero);
         var giveAllButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Give All");
@@ -174,12 +174,12 @@ public sealed class CurrencyRowContentTests
         Assert.IsNotNull(published);
         Assert.AreEqual(PlayerEntityId, published!.Value.PlayerEntityId);
         Assert.AreEqual(ShopEntityId, published.Value.ShopEntityId);
-        Assert.AreEqual(42, published.Value.Amount);
+        Assert.AreEqual(42, published.Value.PlayerOfferGold);
         Assert.AreEqual(0, componentManager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold, "The whole Gold balance moved -- a shop only ever offers Give All (see BuildCurrencyContextMenu's own ShopComponent check), which still moves the entire amount per currency type, same as CurrencyActions.TryTransfer's own doc comment.");
     }
 
     [TestMethod]
-    public void GiveGoldToNonShopTarget_DoesNotPublishGoldGivenToShopEvent()
+    public void GiveGoldToNonShopTarget_DoesNotAnnounceAShopDeal()
     {
         const int corpseEntityId = 12;
         var eventBus = new EventBus();
@@ -187,7 +187,7 @@ public sealed class CurrencyRowContentTests
         componentManager.Merge(PlayerEntityId, new CurrencyComponent(gold: 42, credits: 0));
 
         var publishedCount = 0;
-        eventBus.Subscribe<GoldGivenToShopEvent>(_ => publishedCount++);
+        eventBus.Subscribe<ShopDealCompletedEvent>(_ => publishedCount++);
 
         goldElement.OnRightClicked!.Invoke(Point.Zero);
         var giveButton = contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Give");

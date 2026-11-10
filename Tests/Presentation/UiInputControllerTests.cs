@@ -3512,21 +3512,15 @@ public sealed class UiInputControllerTests
         Assert.AreEqual(1000, ReadGold(componentManager, tradeShopEntityId));
     }
 
-    /// <summary>
-    /// Dragging the player's own Gold straight onto the real shop's currency row (no trade window
-    /// involved at all) must publish GoldGivenToShopEvent -- the "Angel Investor" achievement's own
-    /// trigger -- the same as the currency context menu's Give/Give All already does. Confirmed live
-    /// gap this closes: before ResolveContentDrag's plain-currency branch routed through
-    /// ShopActions.TryGiveCurrencyToShop, a direct drag moved the Gold but never published anything.
-    /// </summary>
+    /// <summary>Dragging the player's own Gold straight onto the shop's currency row announces a deal giving Gold for nothing, as the currency row's Give does.</summary>
     [TestMethod]
-    public void Drag_PlayerGoldDirectlyToShop_PublishesGoldGivenToShopEvent()
+    public void Drag_PlayerGoldDirectlyToShop_AnnouncesAGiftDeal()
     {
         var (playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow, componentManager, mapViewState, world, playerEntityId, shopEntityId, tradePlayerEntityId, tradeShopEntityId) = BuildTradeCurrencyDragHarness();
         componentManager.Merge(playerEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: 75, credits: 0));
         var eventBus = new EventBus();
-        GoldGivenToShopEvent? published = null;
-        eventBus.Subscribe<GoldGivenToShopEvent>(e => published = e);
+        ShopDealCompletedEvent? published = null;
+        eventBus.Subscribe<ShopDealCompletedEvent>(e => published = e);
         var controller = CreateController([playerWindow, shopWindow, tradePlayerWindow, tradeShopWindow], [], [], [], LargeScreenSize, componentManager: componentManager, playerQuery: world, mapViewState: mapViewState, eventBus: eventBus);
 
         DragGoldElement(controller, playerWindow, shopWindow);
@@ -3536,7 +3530,7 @@ public sealed class UiInputControllerTests
         Assert.IsNotNull(published);
         Assert.AreEqual(playerEntityId, published!.Value.PlayerEntityId);
         Assert.AreEqual(shopEntityId, published.Value.ShopEntityId);
-        Assert.AreEqual(75, published.Value.Amount);
+        Assert.AreEqual(75, published.Value.PlayerOfferGold);
     }
 
     /// <summary>

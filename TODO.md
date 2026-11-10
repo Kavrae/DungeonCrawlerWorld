@@ -1956,20 +1956,6 @@ Until then a shop or small building is a single entity up to Huge, like the 2x2 
 
 ### Low Priority
 
-#### Scammed and Angel Investor: split the shop achievements
-
-Two first-time achievements for completing a trade with a shop (`ShopCommands.TryCompleteDeal`, `ShopDeals`):
-- **Scammed:** the first completed trade where the player's side was worth more than the shop's
-  (`ShopDealValuation.PlayerOfferValue > ShopOfferValue`).
-- **Angel Investor:** the first completed trade where the shop got currency and the player got nothing (the shop's offer
-  is empty: no stacks, no Gold).
-
-Today Angel Investor fires on `GoldGivenToShopEvent` for any Gold given beyond a deal's price, and on a plain currency
-give to a shop (`ShopActions.TryGiveCurrencyToShop`: the currency row's Give, a currency drag). Decide whether those
-plain gives still count (they are a trade where the player gets nothing, by this rule's spirit) and replace the event
-with one carrying the deal's outcome (both offers' values and whether either side was empty), published once per
-completed deal, so each achievement reads its own condition from it. Scammed needs a new definition and reward.
-
 #### Doors that open and close
 
 A door is an entity in a doorway that the player and creatures open and close. Closed, it blocks movement,

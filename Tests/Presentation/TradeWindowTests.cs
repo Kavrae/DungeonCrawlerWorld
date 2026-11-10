@@ -392,13 +392,9 @@ public sealed class TradeWindowTests
         Assert.AreEqual((ushort)3, playerStacks[0].Quantity);
     }
 
-    /// <summary>
-    /// Confirmed live gap this closes: completing a trade that offers only player Gold (no items on
-    /// either side) never published GoldGivenToShopEvent before CompleteTrade's player-to-shop Gold
-    /// leg was routed through ShopActions.TryGiveCurrencyToShop -- see that method's own doc comment.
-    /// </summary>
+    /// <summary>Completing a trade that offers only the player's Gold announces a deal with an empty shop side, naming the real player rather than the trade offer entity.</summary>
     [TestMethod]
-    public void Complete_TradeWithOnlyPlayerCurrency_PublishesGoldGivenToShopEvent()
+    public void Complete_TradeWithOnlyPlayerCurrency_AnnouncesAGiftDeal()
     {
         var eventBus = new EventBus();
         var (window, componentManager, _) = Build(eventBus);
@@ -406,8 +402,8 @@ public sealed class TradeWindowTests
         window.Update(new GameTime());
         Assert.IsTrue(FindButton(window, "Complete").Enabled, "Sanity check: Player Value (40G, no items) already exceeds Shop Value (0).");
 
-        GoldGivenToShopEvent? published = null;
-        eventBus.Subscribe<GoldGivenToShopEvent>(e => published = e);
+        ShopDealCompletedEvent? published = null;
+        eventBus.Subscribe<ShopDealCompletedEvent>(e => published = e);
 
         ClickButton(FindButton(window, "Complete"));
 
@@ -415,7 +411,8 @@ public sealed class TradeWindowTests
         Assert.IsNotNull(published);
         Assert.AreEqual(PlayerEntityId, published!.Value.PlayerEntityId);
         Assert.AreEqual(ShopEntityId, published.Value.ShopEntityId);
-        Assert.AreEqual(40, published.Value.Amount);
+        Assert.AreEqual(40, published.Value.PlayerOfferGold);
+        Assert.IsTrue(published.Value.ShopOfferIsEmpty);
     }
 
     [TestMethod]

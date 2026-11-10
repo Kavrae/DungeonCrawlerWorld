@@ -44,7 +44,7 @@ internal sealed class PlainInventoryDragDropResolver(InventoryCommands inventory
         else if (context.CurrencyType is { } currencyType)
         {
             // Unconditional -- TryGiveCurrencyToShop already checks internally whether
-            // the destination is shop-registered before publishing GoldGivenToShopEvent, so this
+            // the destination is shop-registered before announcing the gift (ShopDealCompletedEvent), so this
             // one call degrades to a plain transfer when it isn't. ShopDragDropResolver has already
             // claimed and refused any shop-*origin* currency drag before this resolver ever runs.
             shopCommands.TryGiveCurrencyToShop(context.OriginEntityId, context.DestinationEntityId, currencyType);

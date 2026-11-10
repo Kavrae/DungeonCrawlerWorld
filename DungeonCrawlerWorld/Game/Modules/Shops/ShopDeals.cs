@@ -51,8 +51,7 @@ public readonly record struct ShopDealValuation(int PlayerOfferValue, int ShopOf
 /// <remarks>
 /// Each side is worth its stacks at the shop's stock-aware bulk price (ShopStockPricing -- what the shop pays for the
 /// player's, what it charges for its own; same-item stacks priced together, against the shop's stock including any of its
-/// own stacks staged in a trade) plus its Gold. A deal completes only when nothing refuses it, all at once. The Gold the
-/// player offers beyond what the deal is worth to the shop is a gift (TryComplete's giftedGold); Gold paid as a price is not.
+/// own stacks staged in a trade) plus its Gold. A deal completes only when nothing refuses it, all at once.
 /// </remarks>
 public static class ShopDeals
 {
@@ -113,15 +112,13 @@ public static class ShopDeals
     }
 
     /// <summary>Completes deal: every stack and the Gold of each side moves to the other, or, when anything refuses it, nothing does.</summary>
-    /// <param name="giftedGold">The Gold the player gave beyond what the deal was worth to the shop, which ShopCommands announces (GoldGivenToShopEvent); 0 when refused.</param>
-    /// <returns>None when it completed; otherwise why not.</returns>
-    public static ShopDealRefusal TryComplete(ComponentManager componentManager, ItemCatalog itemCatalog, in ShopDeal deal, IPlayerQuery playerQuery, out int giftedGold)
+    /// <returns>What each offer was worth as it completed, with Refusal None; otherwise why not.</returns>
+    public static ShopDealValuation TryComplete(ComponentManager componentManager, ItemCatalog itemCatalog, in ShopDeal deal, IPlayerQuery playerQuery)
     {
-        giftedGold = 0;
         var valuation = Evaluate(componentManager, itemCatalog, in deal, playerQuery);
         if (valuation.Refusal != ShopDealRefusal.None)
         {
-            return valuation.Refusal;
+            return valuation;
         }
 
         foreach (var stackInstanceId in deal.PlayerOffer.StackInstanceIds)
@@ -147,8 +144,7 @@ public static class ShopDeals
             CurrencyActions.TryTransfer(componentManager, deal.ShopOffer.HolderEntityId, deal.PlayerEntityId, CurrencyType.Gold, deal.ShopOffer.Gold);
         }
 
-        giftedGold = Math.Max(0, Math.Min(deal.PlayerOffer.Gold, valuation.PlayerOfferValue - valuation.ShopOfferValue));
-        return ShopDealRefusal.None;
+        return valuation;
     }
 
     /// <summary>What side's stacks are worth at the shop's price -- what it charges for its own (isShopSide), else what it pays -- and the first thing about them that refuses the deal.</summary>

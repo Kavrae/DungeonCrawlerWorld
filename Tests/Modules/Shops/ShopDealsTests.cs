@@ -24,7 +24,7 @@ public sealed class ShopDealsTests
 
     private static readonly ShopComponent GeneralShop = new(acceptedItems: null, buyMultiplier: 1f, sellMultiplier: 1f);
 
-    private sealed record Fixture(ComponentManager Manager, ShopCommands Commands, List<GoldGivenToShopEvent> Gifts);
+    private sealed record Fixture(ComponentManager Manager, ShopCommands Commands, List<ShopDealCompletedEvent> Completed);
 
     private static Fixture Build()
     {
@@ -36,9 +36,9 @@ public sealed class ShopDealsTests
         manager.Merge(ShopEntityId, new CurrencyComponent(gold: 1000, credits: 0));
 
         var eventBus = new EventBus();
-        var gifts = new List<GoldGivenToShopEvent>();
-        eventBus.Subscribe<GoldGivenToShopEvent>(gifts.Add);
-        return new Fixture(manager, new ShopCommands(manager, catalog, eventBus, TestPlayerQuery.NoPlayer), gifts);
+        var completed = new List<ShopDealCompletedEvent>();
+        eventBus.Subscribe<ShopDealCompletedEvent>(completed.Add);
+        return new Fixture(manager, new ShopCommands(manager, catalog, eventBus, TestPlayerQuery.NoPlayer), completed);
     }
 
     private static int GoldOf(ComponentManager manager, int entityId) =>
@@ -50,7 +50,7 @@ public sealed class ShopDealsTests
             new ShopDealSide(ShopOfferEntityId, shopStacks, GoldOf(fixture.Manager, ShopOfferEntityId)));
 
     [TestMethod]
-    public void ATradePayingExactlyThePrice_GivesNoGold_ButOneOfferingMoreGivesTheRest()
+    public void ACompletedTrade_IsAnnouncedOnceWithBothSidesValues()
     {
         var fixture = Build();
         var bought = InventoryActions.AddItem(fixture.Manager, ShopOfferEntityId, PotionItemId, quantity: 1);
@@ -60,12 +60,34 @@ public sealed class ShopDealsTests
 
         Assert.AreEqual(ShopDealRefusal.None, fixture.Commands.TryCompleteDeal(deal));
 
-        CollectionAssert.AreEqual(new[] { new GoldGivenToShopEvent(PlayerEntityId, ShopEntityId, 100 - price) }, fixture.Gifts);
+        CollectionAssert.AreEqual(new[] { new ShopDealCompletedEvent(PlayerEntityId, ShopEntityId, PlayerOfferValue: 100, ShopOfferValue: price, PlayerOfferGold: 100, ShopOfferIsEmpty: false) }, fixture.Completed);
         Assert.AreEqual(1000 + 100, GoldOf(fixture.Manager, ShopEntityId));
     }
 
     [TestMethod]
-    public void ADirectPurchase_PaysThePrice_AndGivesNoGold()
+    public void ATradeGivingGoldForNothing_IsAnnouncedWithAnEmptyShopSide()
+    {
+        var fixture = Build();
+        fixture.Manager.Merge(PlayerOfferEntityId, new CurrencyComponent(gold: 40, credits: 0));
+
+        Assert.AreEqual(ShopDealRefusal.None, fixture.Commands.TryCompleteDeal(TradeOf(fixture, [], [])));
+
+        CollectionAssert.AreEqual(new[] { new ShopDealCompletedEvent(PlayerEntityId, ShopEntityId, PlayerOfferValue: 40, ShopOfferValue: 0, PlayerOfferGold: 40, ShopOfferIsEmpty: true) }, fixture.Completed);
+    }
+
+    [TestMethod]
+    public void ARefusedTrade_IsNotAnnounced()
+    {
+        var fixture = Build();
+        var bought = InventoryActions.AddItem(fixture.Manager, ShopOfferEntityId, PotionItemId, quantity: 1);
+
+        Assert.AreEqual(ShopDealRefusal.OfferTooLow, fixture.Commands.TryCompleteDeal(TradeOf(fixture, [], [bought])));
+
+        Assert.IsEmpty(fixture.Completed);
+    }
+
+    [TestMethod]
+    public void ADirectPurchase_PaysThePrice_AndIsAnnouncedAsAnEvenDeal()
     {
         var fixture = Build();
         var bought = InventoryActions.AddItem(fixture.Manager, ShopEntityId, PotionItemId, quantity: 1);
@@ -73,7 +95,9 @@ public sealed class ShopDealsTests
 
         Assert.IsTrue(fixture.Commands.TryBuyFromShop(PlayerEntityId, ShopEntityId, bought));
 
-        Assert.IsEmpty(fixture.Gifts);
+        Assert.HasCount(1, fixture.Completed);
+        Assert.AreEqual(fixture.Completed[0].PlayerOfferValue, fixture.Completed[0].ShopOfferValue);
+        Assert.IsFalse(fixture.Completed[0].ShopOfferIsEmpty);
         Assert.IsLessThan(100, GoldOf(fixture.Manager, PlayerEntityId));
     }
 
