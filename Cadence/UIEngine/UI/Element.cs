@@ -1355,16 +1355,17 @@ public class Element(ElementServices services)
     /// <summary>What a content click on this element itself does; returns whether it did anything. Nothing by default -- a click on a child goes to the child first, never down from here.</summary>
     protected virtual bool OnContentClickAction(Point mousePosition) => false;
 
-    /// <summary>A double-click at mousePosition on this element's content; returns whether this element took it.</summary>
+    /// <summary>A double-click at mousePosition on this element's header or content; returns whether this element took it.</summary>
     /// <remarks>
     /// UiInputController offers the second click of a pair here, from the element under the cursor up to the one that
-    /// handled the first click; when none takes it, the second click is an ordinary click. The header never takes one.
+    /// handled the first click; when none takes it, the second click is an ordinary click. A header double-click goes to
+    /// OnHeaderDoubleClickAction and never raises DoubleClicked.
     /// </remarks>
     public bool HandleDoubleClick(Point mousePosition)
     {
         if (_headerState.ShowHeader && _headerState.Rectangle.Contains(mousePosition))
         {
-            return false;
+            return OnHeaderDoubleClickAction(mousePosition);
         }
 
         if (!_contentState.BackgroundRectangle.Contains(mousePosition))
@@ -1384,6 +1385,9 @@ public class Element(ElementServices services)
 
     /// <summary>What a double-click on this element's content does; returns whether it did anything. Nothing by default, so the second click is a click.</summary>
     protected virtual bool OnContentDoubleClickAction(Point mousePosition) => false;
+
+    /// <summary>What a double-click on this element's header does; returns whether it did anything. Nothing by default, so the second click is a click.</summary>
+    protected virtual bool OnHeaderDoubleClickAction(Point mousePosition) => false;
 
     /// <summary>
     /// Attaches newChild to this element and initializes it -- callers must NOT also call

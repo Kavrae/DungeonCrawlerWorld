@@ -93,7 +93,7 @@ public static class ElementFactoryRegistry
             services, inventoryServices, world, contextMenuController, mapViewState));
         elementPool.RegisterFactory(() => new EntityIconElement(services, sprites, mapView));
 
-        elementPool.RegisterFactory(() => new InspectionWindow(services, mapViewState));
+        elementPool.RegisterFactory(() => new InspectionWindow(services));
         elementPool.RegisterFactory(() => new ItemDetailsWindow(services, actionCatalog, catalogs.GameplayTags, views.ActionStateView, world));
         elementPool.RegisterFactory(() => new ItemIconElement(services, sprites));
         elementPool.RegisterFactory(() => new CurrencyElement(services, sprites));

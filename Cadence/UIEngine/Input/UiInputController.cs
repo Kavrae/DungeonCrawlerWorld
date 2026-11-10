@@ -853,7 +853,9 @@ public sealed class UiInputController
 
         if (!isScrollbarInteraction && !isPointerDrag && !IsTextSelectionDrag && !IsContentDragPastTapThreshold)
         {
-            DispatchClick(_activeInteraction.Element, releasePosition);
+            var opensDoubleClickPair = _activeInteraction.Button is null &&
+                !(_leftGesture.IsDrag && _activeInteraction.Kind is ElementDragInteractionKind.Move or ElementDragInteractionKind.Resize);
+            DispatchClick(_activeInteraction.Element, releasePosition, opensDoubleClickPair);
         }
 
         if (isScrollbarInteraction)
@@ -893,11 +895,13 @@ public sealed class UiInputController
     /// </summary>
     /// <remarks>
     /// The first click is never held back, so an element that takes double-clicks makes its single click harmless as the
-    /// first half of one (the inventory's selects). A double-click ends the pair, so a third click starts a new one.
+    /// first half of one (the inventory's selects). A double-click ends the pair, so a third click starts a new one. A
+    /// click that doesn't open a pair (a header button's, the release of a window moved or resized) can still be the
+    /// second half of one, and is never the first.
     /// </remarks>
-    private void DispatchClick(Element? element, Point mousePosition)
+    private void DispatchClick(Element? element, Point mousePosition, bool opensDoubleClickPair)
     {
-        if (TryDispatchDoubleClick(element, mousePosition) || !TryDispatchClick(element, mousePosition))
+        if (TryDispatchDoubleClick(element, mousePosition) || !TryDispatchClick(element, mousePosition) || !opensDoubleClickPair)
         {
             _lastClickHandler = null;
         }

@@ -350,6 +350,22 @@ public class Window : Element
 
     protected override Button? FindHeaderButtonAt(Point position) => ShowHeader ? FindTopmostHit(_titleButtons, position) as Button : null;
 
+    /// <summary>Minimizes or restores this window, as its minimize/restore button does, when the double-click is on its title bar rather than a title button.</summary>
+    /// <remarks>A window that can't minimize takes no header double-click; on a title button the second click stays that button's click.</remarks>
+    protected override bool OnHeaderDoubleClickAction(Point mousePosition)
+    {
+        if (!CanUserMinimize || FindTopmostHit(_titleButtons, mousePosition) is not null)
+        {
+            return false;
+        }
+
+        ToggleMinimized();
+        return true;
+    }
+
+    /// <summary>Minimizes this window when it is expanded and restores its previous display mode when it is minimized.</summary>
+    public void ToggleMinimized() => SetDisplayMode(DisplayMode == ElementDisplayMode.Minimized ? PreviousDisplay : ElementDisplayMode.Minimized);
+
     /// <summary>Inset from the title bar's own height a title button's default square size shrinks by, leaving a small margin above/below it -- shared by every chrome behavior that builds a standard-looking title button.</summary>
     private const float DefaultTitleButtonSizeInset = 4;
 

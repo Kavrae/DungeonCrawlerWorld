@@ -39,8 +39,8 @@ namespace Presentation.UI.Content;
 /// Rebuilt only when the followed entity id itself changes, not every frame -- but the dump's
 /// text refreshes on the same ComponentRefreshInterval cadence SelectionWindowContent's own
 /// per-component windows used to, since component values (health ticking, status effects, ...)
-/// change continuously while an entity is being followed. Falls back to Minimized (clearing
-/// itself, see InspectionWindow.OnDisplayModeChanged) if the followed entity is ever genuinely
+/// change continuously while an entity is being followed. Ends the inspection and falls back to
+/// Minimized (ReleaseDestroyedEntity) if the followed entity is ever genuinely
 /// destroyed (EntityManager.EntityExists false) -- not on death alone, since DeathSystem never
 /// destroys a corpse (see CLAUDE.md's Death notes), so a killed target just keeps showing, now
 /// with DeadComponent visible in the dump.</item>
@@ -114,8 +114,19 @@ public sealed class InspectionWindowContent(
 
     public void Initialize(Window hostWindow) => _hostWindow = hostWindow;
 
+    /// <remarks>While the window is minimized its target is kept but nothing is rebuilt; restoring it rebuilds whatever changed meanwhile. A followed entity destroyed meanwhile is still let go at once.</remarks>
     public void Update(GameTime gameTime)
     {
+        if (_hostWindow.DisplayMode == ElementDisplayMode.Minimized)
+        {
+            if (mapViewState.InspectionMode is InspectionMode.Detail or InspectionMode.Admin && !InspectedEntityExists())
+            {
+                ReleaseDestroyedEntity();
+            }
+
+            return;
+        }
+
         switch (mapViewState.InspectionMode)
         {
             case InspectionMode.Basic:
@@ -222,13 +233,14 @@ public sealed class InspectionWindowContent(
 
     private void UpdateDetail()
     {
-        var entityId = mapViewState.InspectedEntityId;
-        if (entityId == -1 || !entityManager.EntityExists(entityId))
+        if (!InspectedEntityExists())
         {
-            ClearIfNeeded();
+            ReleaseDestroyedEntity();
             _hostWindow.SetDisplayMode(ElementDisplayMode.Minimized);
             return;
         }
+
+        var entityId = mapViewState.InspectedEntityId;
 
         if (entityId != _lastDetailEntityId || IsSkeleton(entityId) != _lastDetailWasSkeleton)
         {
@@ -261,6 +273,17 @@ public sealed class InspectionWindowContent(
             _updatesSinceLastAdminRefresh = 0;
             RefreshAdminDump(entityId);
         }
+    }
+
+    private bool InspectedEntityExists() => mapViewState.InspectedEntityId != -1 && entityManager.EntityExists(mapViewState.InspectedEntityId);
+
+    /// <summary>Ends a Detail inspection whose entity is gone: nothing is inspected and the title is cleared.</summary>
+    private void ReleaseDestroyedEntity()
+    {
+        ClearIfNeeded();
+        mapViewState.InspectionMode = InspectionMode.None;
+        mapViewState.InspectedEntityId = -1;
+        _hostWindow.TitleText = string.Empty;
     }
 
     private void ClearIfNeeded()

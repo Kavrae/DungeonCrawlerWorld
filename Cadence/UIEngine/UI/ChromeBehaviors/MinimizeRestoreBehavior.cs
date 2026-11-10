@@ -17,10 +17,7 @@ public sealed class MinimizeRestoreBehavior : IChromeBehavior
         var button = Window.BuildTitleButton(window);
         UpdateButtonLabel(window, button);
 
-        button.Clicked += _ => window.SetDisplayMode(
-            window.DisplayMode == ElementDisplayMode.Minimized
-                ? window.PreviousDisplay
-                : ElementDisplayMode.Minimized);
+        button.Clicked += _ => window.ToggleMinimized();
 
         // No manual detach needed on close -- ElementPoolService.CloseElement clears every
         // event on a pooled Element (DisplayModeChanged included) before it goes back into its

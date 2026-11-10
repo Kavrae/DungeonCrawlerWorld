@@ -3391,16 +3391,6 @@ as if a key were pressed, a ready shape for "Replay by recording input" and "In-
 
 ### Medium Priority
 
-#### Double-click a header to minimize or expand
-
-Double-clicking an element's header (a window's title bar, a Folder's header) minimizes it when it is expanded and
-expands it when it is minimized -- the same change its minimize/restore button makes (`WindowDisplayMode`), through the
-same call, so the button, a double-click and any menu option stay one path. Today `Element.HandleDoubleClick` never takes
-a header click (a second click there is a plain click), so this is an `OnHeaderDoubleClickAction` beside
-`OnHeaderClickAction`, offered by `UiInputController.TryDispatchDoubleClick` the way content is. Decide: whether a
-double-click on a header *button* (close, minimize) stays two clicks; what a window that can't minimize does (nothing);
-and that the first click of the pair -- which may start a window move drag or raise it -- stays harmless.
-
 #### Shop cells greyed by the shop deal rule
 
 An inventory cell in shop mode is greyed out, and refuses Give/Take/drag, by `InventoryItemStackCell.ShopTradeEligible`,
