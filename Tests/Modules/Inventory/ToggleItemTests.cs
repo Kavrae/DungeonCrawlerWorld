@@ -91,7 +91,7 @@ public sealed class ToggleItemTests
         }
 
         public void QueueActivation(uint stackInstanceId) =>
-            Components.Merge(PlayerEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(PlayerPosition)));
+            Components.Merge(PlayerEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.TargetModeAt(PlayerPosition)));
 
         public void LockPlayerUntil(uint frame) =>
             Components.GetPackedPool<ActionLockComponent>().TrySet(PlayerEntityId, Components.GetPackedPool<ActionLockComponent>().GetReadonly(PlayerEntityId) with { UnlockedAtFrame = frame });

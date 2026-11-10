@@ -95,7 +95,7 @@ public sealed class LootboxResultsContentTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(600, 0), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        corpseGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, CorpseEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, new MapViewState(), static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new Engine.ECS.Systems.SimulationClock()));
+        corpseGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, CorpseEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, new MapViewState(), static (_, _) => { }, static (_, _) => { }, static _ => { }));
         corpseGridWindow.Initialize();
         layers.Add(UiLayer.Base, corpseGridWindow);
 

@@ -1,4 +1,5 @@
 using Game.Floors;
+using Game.Modules.Containers;
 using Game.Modules.Death;
 using Game.Modules.Inventory;
 using Game.Modules.Lootboxes;
@@ -72,8 +73,8 @@ public sealed class ItemWindowCoordinator
         _shop.OnOpened = trade.Open;
         _shop.OnClosed = trade.CloseForShopClosed;
 
-        mapWindow.OnCorpseClicked = OpenLoot;
-        mapWindow.OnShopClicked = OpenShop;
+        mapWindow.OnOpenContainerRequested = OpenContainer;
+        mapWindow.OnTakeAllRequested = entityId => lootCommands.TakeAll(entityId, world.PlayerEntityId);
 
         // At most one of the two is ever open, so whichever isn't answers null.
         Inventory.GetSecondaryTargetEntityId = () => _secondaryInventory.OpenTargetEntityId ?? _shop.OpenTargetEntityId;
@@ -127,6 +128,20 @@ public sealed class ItemWindowCoordinator
     public ItemDetailsWindowController ItemDetails { get; }
 
     public ItemComparisonController ItemComparison { get; }
+
+    /// <summary>Opens entityId's items in the window of kind (OpenLoot or OpenShop) -- the map's one way in (MapWindow.TryOpenContainer).</summary>
+    public void OpenContainer(int entityId, ContainerWindowKind kind)
+    {
+        switch (kind)
+        {
+            case ContainerWindowKind.Loot:
+                OpenLoot(entityId);
+                break;
+            case ContainerWindowKind.Shop:
+                OpenShop(entityId);
+                break;
+        }
+    }
 
     /// <summary>Opens entityId's loot window, closing the shop window first.</summary>
     public void OpenLoot(int entityId)

@@ -272,7 +272,8 @@ internal static class TestSystems
             processingTiers ?? EmptyPools.Tiers(),
             TogglesOver(services),
             services.ComponentManager.GetPackedPool<PendingWindupComponent>(),
-            TargetResolutionOver(services, mapQuery)));
+            TargetResolutionOver(services, mapQuery),
+            new ToggleItemGroundPlacement()));
 
     private static TSystem WithServices<TSystem>(EffectServices services, Func<EffectServices, TSystem> build) => build(services);
 

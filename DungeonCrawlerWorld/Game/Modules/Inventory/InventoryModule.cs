@@ -81,7 +81,8 @@ public sealed class InventoryModule : IGameModule
             new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>()),
             context.Toggles,
             componentManager.GetPackedPool<PendingWindupComponent>(),
-            context.TargetResolution));
+            context.TargetResolution,
+            context.ToggleItemGroundPlacement));
 
         var toggleItemHolderSync = new ToggleItemHolderSync(
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
@@ -92,6 +93,6 @@ public sealed class InventoryModule : IGameModule
             context.SimulationClock,
             componentManager);
         context.Toggles.RegisterOwner(ActivatableKind.Item, toggleItemHolderSync);
-        context.WindupResolvers.RegisterItemResolver(new ToggleItemWindupResolver(componentManager, context.Items));
+        context.WindupResolvers.RegisterItemResolver(new ToggleItemWindupResolver(componentManager, context.Items, context.ToggleItemGroundPlacement));
     }
 }

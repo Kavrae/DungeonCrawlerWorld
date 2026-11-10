@@ -454,9 +454,25 @@ public sealed class ItemDropsTests
         harness.Drops.TryDrop(harness.PlayerEntityId, ItemDrop.WholeStackOf(stackId), AdjacentTile);
         var pile = harness.PileAt(AdjacentTile);
 
-        new LootCommands(harness.Components).MarkLooted(pile);
+        new LootCommands(harness.Components, harness.Build.Context.Items, harness.Build.World).MarkLooted(pile);
 
         Assert.IsFalse(harness.Components.GetPackedPool<LootedComponent>().Has(pile));
+    }
+
+    [TestMethod]
+    public void TakeAll_MovesAPilesItemsAndGoldToThePlayer()
+    {
+        var harness = CreateHarness();
+        var stackId = harness.GiveItem(Guid.NewGuid(), quantity: 2);
+        harness.Drops.TryDrop(harness.PlayerEntityId, ItemDrop.WholeStackOf(stackId), AdjacentTile);
+        var pile = harness.PileAt(AdjacentTile);
+        harness.Components.Merge(pile, new Game.Modules.Currency.Components.CurrencyComponent(gold: 7, credits: 0));
+        harness.Components.GetPackedPool<Game.Modules.Currency.Components.CurrencyComponent>().TryGetReadonly(harness.PlayerEntityId, out var before);
+
+        new LootCommands(harness.Components, harness.Build.Context.Items, harness.Build.World).TakeAll(pile, harness.PlayerEntityId);
+
+        Assert.AreEqual(0, harness.Components.GetMultiPool<Game.Modules.Inventory.Components.InventoryItemStackComponent>().CountForEntity(pile));
+        Assert.AreEqual(before.Gold + 7, harness.Components.GetPackedPool<Game.Modules.Currency.Components.CurrencyComponent>().GetReadonly(harness.PlayerEntityId).Gold);
     }
 
     [TestMethod]
@@ -465,7 +481,7 @@ public sealed class ItemDropsTests
         var harness = CreateHarness();
         var goblin = harness.Build.Factory.Spawn(SpawnRequest.At(harness.Build.Context.Definitions.GetId(Goblin.Id), TwoTilesAway) with { Seed = 1 });
 
-        new LootCommands(harness.Components).MarkLooted(goblin);
+        new LootCommands(harness.Components, harness.Build.Context.Items, harness.Build.World).MarkLooted(goblin);
 
         Assert.IsTrue(harness.Components.GetPackedPool<LootedComponent>().Has(goblin));
     }

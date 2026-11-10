@@ -65,7 +65,7 @@ public sealed class ListView(ElementServices services)
     private int _sortColumnIndex = -1;
     private bool _sortAscending = true;
 
-    private int _framesSinceLastRowClick = int.MaxValue;
+    /// <summary>The row the last click selected, which a double-click must land on to activate it.</summary>
     private ListViewRow? _lastClickedRow;
 
     /// <summary>Rows drawn on a colour of their owner's choosing, by the row itself; the selected row's highlight wins.</summary>
@@ -101,7 +101,6 @@ public sealed class ListView(ElementServices services)
         _columnWidths = [];
         _sortColumnIndex = -1;
         _sortAscending = true;
-        _framesSinceLastRowClick = int.MaxValue;
         _lastClickedRow = null;
         _rowColors.Clear();
         SelectedRow = null;
@@ -323,46 +322,34 @@ public sealed class ListView(ElementServices services)
         }
     }
 
-    public override void Update(GameTime gameTime)
-    {
-        base.Update(gameTime);
-
-        if (_framesSinceLastRowClick < int.MaxValue)
-        {
-            _framesSinceLastRowClick++;
-        }
-    }
-
     protected override bool OnContentClickAction(Point mousePosition)
     {
-        var localX = mousePosition.X - ContentAbsolutePosition.X;
-        var localY = mousePosition.Y - ContentAbsolutePosition.Y;
-        if (localY < HeaderHeight)
-        {
-            ClickHeader(localX);
-            return true;
-        }
-
-        var displayIndex = (int)((localY - HeaderHeight + ScrollOffset.Y) / RowHeight);
-        if (displayIndex < 0 || displayIndex >= _order.Length)
-        {
-            return true;
-        }
-
-        var row = _rows[_order[displayIndex]];
-        var isSecondClick = ReferenceEquals(row, _lastClickedRow) && _framesSinceLastRowClick <= UiInputController.DoubleClickWindowFrames;
-        Select(row);
-
-        if (isSecondClick)
+        if (mousePosition.Y - ContentAbsolutePosition.Y < HeaderHeight)
         {
             _lastClickedRow = null;
-            _framesSinceLastRowClick = int.MaxValue;
-            RowActivated?.Invoke(row);
+            ClickHeader(mousePosition.X - ContentAbsolutePosition.X);
             return true;
         }
 
-        _lastClickedRow = row;
-        _framesSinceLastRowClick = 0;
+        _lastClickedRow = RowAt(mousePosition);
+        if (_lastClickedRow is { } row)
+        {
+            Select(row);
+        }
+
+        return true;
+    }
+
+    /// <summary>A double-click on the row the first click selected activates it; anywhere else it is a second click.</summary>
+    protected override bool OnContentDoubleClickAction(Point mousePosition)
+    {
+        if (_lastClickedRow is not { } firstRow || !ReferenceEquals(RowAt(mousePosition), firstRow))
+        {
+            return false;
+        }
+
+        _lastClickedRow = null;
+        RowActivated?.Invoke(firstRow);
         return true;
     }
 

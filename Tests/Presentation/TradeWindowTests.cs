@@ -79,7 +79,7 @@ public sealed class TradeWindowTests
         itemCatalog.Register(new ItemDefinition(PotionItemId, "Test Potion", null, "p", Color.White, Tags: [GameTags.ItemConsumablePotion], Effects: [], GoldValue: 10));
         itemCatalog.Register(new ItemDefinition(GadgetItemId, "Test Gadget", null, "g", Color.White, Tags: [], Effects: [], GoldValue: 10));
 
-        windowService.RegisterFactory<TradeWindow>(() => new TradeWindow(TestElementServices.For(windowService, fontService), TestInventoryServices.Over(componentManager, itemCatalog, world, eventBus ?? new EventBus()), world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
+        windowService.RegisterFactory<TradeWindow>(() => new TradeWindow(TestElementServices.For(windowService, fontService), TestInventoryServices.Over(componentManager, itemCatalog, world, eventBus ?? new EventBus()), world, contextMenuController, mapViewState));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
@@ -517,7 +517,7 @@ public sealed class TradeWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 500), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        playerGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
+        playerGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static _ => { }));
         playerGridWindow.Initialize();
 
         var layers = new UiLayerStack();
@@ -580,7 +580,7 @@ public sealed class TradeWindowTests
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(500, 500), Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
         });
-        playerGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock()));
+        playerGridWindow.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static _ => { }));
         playerGridWindow.Initialize();
 
         var layers = new UiLayerStack();

@@ -29,7 +29,7 @@ namespace Presentation.UI.Trade;
 /// Cancel, Complete) sits beneath both columns.
 ///
 /// Drag-eligibility (Add to trade/Remove from trade/direct sell/direct buy, both items and
-/// currency) and live header Value computation (ComputeColumnValueText) are landed. Still to land, per TODO.md's "Trade
+/// currency) and live header Values (the trade as a shop deal, BuildDeal) are landed. Still to land, per TODO.md's "Trade
 /// window" entry: Balance Offer/Complete's own logic (both buttons stay inert placeholders below)
 /// and the whole-window drop-zone widening (drops still require landing exactly on a grid cell or
 /// the currency row, not just anywhere in the column). Every position/size below is explicit, not
@@ -41,8 +41,7 @@ public sealed class TradeWindow(
     InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
-    MapViewState mapViewState,
-    Engine.ECS.Systems.SimulationClock simulationClock)
+    MapViewState mapViewState)
     : Window(services), IContentDropTarget
 {
     private readonly ItemCatalog _itemCatalog = inventoryServices.ItemCatalog;
@@ -101,9 +100,11 @@ public sealed class TradeWindow(
     private int _shopEntityId;
 
     private readonly List<InventoryItemStackComponent> _columnStacksScratch = [];
+    private readonly List<uint> _playerOfferStackInstanceIds = [];
+    private readonly List<uint> _shopOfferStackInstanceIds = [];
 
 
-    /// <summary>Recomputed every Update by ComputeColumnValueText -- "0G" only until the first Update ever runs, or while no shop is open. Public for testability, same reasoning as ShopItemStackCell.TotalPrice/StockStatus.</summary>
+    /// <summary>Recomputed every Update from the deal's valuation (BuildDeal) -- "0G" only until the first Update ever runs, or while no shop is open. Public for testability, same reasoning as ShopItemStackCell.TotalPrice/StockStatus.</summary>
     public string PlayerValueText => _playerValueText;
 
     public string ShopValueText => _shopValueText;
@@ -198,14 +199,13 @@ public sealed class TradeWindow(
     {
         base.Update(gameTime);
 
-        var playerValue = ComputeColumnValue(_playerSideEntityId, isShopSide: false);
-        var shopValue = ComputeColumnValue(_shopSideEntityId, isShopSide: true);
-        _playerValueText = _playerValueTextCache.Get(playerValue, static value => $"{value}G");
-        _shopValueText = _shopValueTextCache.Get(shopValue, static value => $"{value}G");
+        var valuation = _shopCommands.EvaluateDeal(BuildDeal());
+        _playerValueText = _playerValueTextCache.Get(valuation.PlayerOfferValue, static value => $"{value}G");
+        _shopValueText = _shopValueTextCache.Get(valuation.ShopOfferValue, static value => $"{value}G");
 
         var isEmpty = IsColumnEmpty(_playerSideEntityId) && IsColumnEmpty(_shopSideEntityId);
         _balanceOfferButton.Enabled = !isEmpty;
-        _completeButton.Enabled = !isEmpty && playerValue >= shopValue;
+        _completeButton.Enabled = !isEmpty && valuation.Refusal == ShopDealRefusal.None;
     }
 
     /// <summary>No item stacks and no Gold/Credits of any kind currently sitting in tradeEntityId's own column -- both Complete and Balance Offer stay disabled while both columns read this.</summary>
@@ -219,87 +219,35 @@ public sealed class TradeWindow(
         return !_currencyView.TryGetCurrency(tradeEntityId, out var currency) || (currency.Gold == 0 && currency.Credits == 0);
     }
 
-    /// <summary>
-    /// Sum of every item stack's *current* trade price in tradeEntityId's own column (via the exact
-    /// same ShopStockPricing.ComputeBulkSellPrice/ComputeBulkBuyPrice calls the grid cells
-    /// themselves already use to price a cell, and InventoryGridContent.GetEffectiveShopStock for
-    /// the identical "a stack staged in the shop-side column still counts as the shop's own stock"
-    /// correction those cells already need -- see its own doc comment) plus that column's own
-    /// footer Gold. 0 whenever the shop's own ShopComponent can't be resolved at all (shouldn't
-    /// normally arise once _shopEntityId is captured, but mirrors InventoryGridContent's own
-    /// fallback for a missing/destroyed shop).
-    ///
-    /// Every stack is priced independently against the shop's *actual* current stock, not a running
-    /// simulation of "what would stock be if every other item already in this trade had already
-    /// been sold/bought" -- real stock only actually changes at Complete, when items physically
-    /// move. Same-item stacks are grouped and priced together in one bulk-price call *before*
-    /// summing, not each priced independently then summed -- bulk pricing is a non-linear,
-    /// band-crossing curve (ShopStockPricing.ComputeBulkPrice), so five separate 1-unit calls would
-    /// each price against the *same* starting stock level instead of the cumulative depletion/
-    /// buildup five units bought/sold together actually causes, overstating this column's real Value.
-    /// </summary>
-    private int ComputeColumnValue(int tradeEntityId, bool isShopSide)
+    /// <summary>The trade as a shop deal: each column's stacks and Gold, offered by its trade-offer entity -- what the header values show, Complete is enabled by, and Complete completes (ShopCommands).</summary>
+    /// <remarks>Fills the window's own lists, so the deal is read at once and never kept.</remarks>
+    private ShopDeal BuildDeal() => new(
+        world.PlayerEntityId,
+        _shopEntityId,
+        OfferOf(_playerSideEntityId, _playerOfferStackInstanceIds),
+        OfferOf(_shopSideEntityId, _shopOfferStackInstanceIds));
+
+    private ShopDealSide OfferOf(int tradeEntityId, List<uint> stackInstanceIds)
     {
-        if (!_shopView.TryGetShop(_shopEntityId, out var shop))
-        {
-            return 0;
-        }
-
-        shop = _shopView.ResolveEffectiveShop(shop, world.PlayerEntityId);
-
-        var groupedQuantities = new Dictionary<Guid, (ItemDefinition Definition, int Quantity)>();
         _inventoryView.CopyStacks(tradeEntityId, _columnStacksScratch);
+        stackInstanceIds.Clear();
         foreach (var stack in _columnStacksScratch)
         {
-            if (!InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var definition))
-            {
-                continue;
-            }
-
-            groupedQuantities[definition.Id] = groupedQuantities.TryGetValue(definition.Id, out var existing)
-                ? (definition, existing.Quantity + stack.Quantity)
-                : (definition, stack.Quantity);
+            stackInstanceIds.Add(stack.StackInstanceId);
         }
 
-        var total = 0;
-        foreach (var (definition, quantity) in groupedQuantities.Values)
-        {
-            var effectiveStock = InventoryGridContent.GetEffectiveShopStock(_shopView, mapViewState, _shopEntityId, definition.Id);
-            var preferredStockLevel = _shopView.GetPreferredStockLevel(_shopEntityId, definition.Id);
-            total += isShopSide
-                ? ShopStockPricing.ComputeBulkBuyPrice(effectiveStock, preferredStockLevel, shop, definition, (ushort)quantity)
-                : ShopStockPricing.ComputeBulkSellPrice(effectiveStock, preferredStockLevel, shop, definition, (ushort)quantity);
-        }
-
-        if (_currencyView.TryGetCurrency(tradeEntityId, out var currency))
-        {
-            total += currency.Gold;
-        }
-
-        return total;
+        return new ShopDealSide(tradeEntityId, stackInstanceIds, _currencyView.TryGetCurrency(tradeEntityId, out var currency) ? currency.Gold : 0);
     }
 
-    /// <summary>
-    /// Moves every item stack currently in sourceEntityId's own inventory to destinationEntityId,
-    /// one InventoryCommands.TryTransferStack call per stack (the same primitive every other
-    /// transfer in this feature already uses) -- what both CompleteTrade (swap) and
-    /// ReturnEverythingToOwners (unwind) are built from. Copies the stack list first rather than
-    /// walking the entity's stacks directly, since TryTransferStack removes from that same
-    /// chain mid-walk -- the same "collect then act" shape InventoryActions.TryTransferAllStacksOfItem
-    /// already uses for an identical reason. mergeIntoEquivalentStacks is true only for what the player
-    /// receives when a trade completes -- a purchase, like ShopActions.TryBuyFromShop -- never for the
-    /// unwind, which puts staged stacks back as they were.
-    /// </summary>
-    private void TransferAllStacksTo(int sourceEntityId, int destinationEntityId, bool mergeIntoEquivalentStacks = false)
+    /// <summary>Moves every item stack sourceEntityId holds to destinationEntityId as it is -- ReturnEverythingToOwners' unwind.</summary>
+    /// <remarks>Copies the stack list first, since each transfer removes from the chain being walked.</remarks>
+    private void TransferAllStacksTo(int sourceEntityId, int destinationEntityId)
     {
         var stacks = new List<InventoryItemStackComponent>();
         _inventoryView.CopyStacks(sourceEntityId, stacks);
         foreach (var stack in stacks)
         {
-            if (_inventoryCommands.TryTransferStack(sourceEntityId, destinationEntityId, stack.StackInstanceId) && mergeIntoEquivalentStacks)
-            {
-                _inventoryCommands.MergeIntoEquivalentStack(destinationEntityId, stack.StackInstanceId);
-            }
+            _inventoryCommands.TryTransferStack(sourceEntityId, destinationEntityId, stack.StackInstanceId);
         }
     }
 
@@ -318,28 +266,10 @@ public sealed class TradeWindow(
         _currencyCommands.TryTransfer(_shopSideEntityId, _shopEntityId, CurrencyType.Gold);
     }
 
-    /// <summary>
-    /// A direct item/currency swap between the two trade entities and the two real entities -- not
-    /// routed through ShopActions.TryBuyFromShop/TrySellToShop, which do their own per-call
-    /// bulk-pricing-and-charge; pricing already did its job gating _completeButton.Enabled, so this
-    /// only needs to move what's physically sitting in each column. Because this moves real
-    /// InventoryItemStackComponent stacks into/out of the real shop entity, the shop's stock bands
-    /// for the *next* trade or purchase already reflect the change for free -- ShopStockPricing.
-    /// GetTotalStock reads live state, no special post-trade recompute needed.
-    ///
-    /// The player-to-shop Gold leg is routed through ShopActions.TryGiveCurrencyToShop, not a plain
-    /// CurrencyActions.TryTransfer, so completing a trade that moves player Gold to the shop --
-    /// including a trade offering only Gold and no items at all -- publishes GoldGivenToShopEvent
-    /// the same as every other "give currency to a shop" gesture (confirmed live gap: this path
-    /// never published it before).
-    /// </summary>
-    private void CompleteTrade()
-    {
-        TransferAllStacksTo(_playerSideEntityId, _shopEntityId);
-        TransferAllStacksTo(_shopSideEntityId, world.PlayerEntityId, mergeIntoEquivalentStacks: true);
-        _shopCommands.TryGiveCurrencyToShop(_playerSideEntityId, _shopEntityId, CurrencyType.Gold, eventPlayerEntityId: world.PlayerEntityId);
-        _currencyCommands.TryTransfer(_shopSideEntityId, world.PlayerEntityId, CurrencyType.Gold);
-    }
+    /// <summary>Completes the trade as one shop deal (ShopCommands.TryCompleteDeal): both columns' stacks and Gold change hands, refused by the same rule a direct buy or sale is.</summary>
+    /// <remarks>Real stacks move into and out of the shop, so its stock bands for the next trade read the change from live state.</remarks>
+    /// <returns>Whether it completed; when refused, nothing moved and everything stays staged.</returns>
+    private bool CompleteTrade() => _shopCommands.TryCompleteDeal(BuildDeal()) == ShopDealRefusal.None;
 
     /// <summary>
     /// Rebuilds both columns' Gold from a clean slate every click, rather than only topping up the
@@ -361,8 +291,9 @@ public sealed class TradeWindow(
         _currencyCommands.TryTransfer(_playerSideEntityId, world.PlayerEntityId, CurrencyType.Gold);
         _currencyCommands.TryTransfer(_shopSideEntityId, _shopEntityId, CurrencyType.Gold);
 
-        var playerValue = ComputeColumnValue(_playerSideEntityId, isShopSide: false);
-        var shopValue = ComputeColumnValue(_shopSideEntityId, isShopSide: true);
+        var valuation = _shopCommands.EvaluateDeal(BuildDeal());
+        var playerValue = valuation.PlayerOfferValue;
+        var shopValue = valuation.ShopOfferValue;
 
         if (shopValue > playerValue)
         {
@@ -442,7 +373,7 @@ public sealed class TradeWindow(
         // hovered Item Details' Compare button instead. tradeGridIsShopSide: isShopSide
         // picks TradeItemStackCell and the correct buy/sell pricing direction for this column -- see
         // InventoryGridContent's own doc comment on that parameter.
-        gridWindow.SetContent(new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, entityId, filterTag: GameplayTag.None, static () => null, mapViewState, _onItemSelected, static (_, _) => { }, static _ => { }, simulationClock, isShopSide));
+        gridWindow.SetContent(new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, entityId, filterTag: GameplayTag.None, static () => null, mapViewState, _onItemSelected, static (_, _) => { }, static _ => { }, isShopSide));
         AddChild(gridWindow);
 
         var footerWindow = ElementPoolService.CreateElement<Window>(this, new ElementOptions
@@ -490,8 +421,10 @@ public sealed class TradeWindow(
         // reason matters (ReturnEverythingToOwners must NOT also run for this close).
         _completeButton.Clicked += _ =>
         {
-            CompleteTrade();
-            OnCompleteClicked?.Invoke();
+            if (CompleteTrade())
+            {
+                OnCompleteClicked?.Invoke();
+            }
         };
     }
 

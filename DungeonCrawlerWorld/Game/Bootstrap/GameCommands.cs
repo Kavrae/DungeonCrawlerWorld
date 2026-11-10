@@ -27,7 +27,7 @@ public sealed class GameCommands(World.World world, GameModuleContext context)
 
     public LootboxCommands LootboxCommands { get; } = new(context.LootboxOpener);
 
-    public LootCommands LootCommands { get; } = new(context.ComponentManager);
+    public LootCommands LootCommands { get; } = new(context.ComponentManager, context.Items, world);
 
     /// <summary>The player putting items and currency down, at once.</summary>
     public ItemDropCommands ItemDropCommands { get; } = new(ItemPilesModule.ItemDropsFor(context), world);

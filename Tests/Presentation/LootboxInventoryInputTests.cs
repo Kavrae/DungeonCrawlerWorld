@@ -16,7 +16,7 @@ using UIEngine.UI;
 
 namespace Tests.Presentation;
 
-/// <summary>A loot box in the player's inventory, driven through the real grid and UiInputController: it opens on "Open All" or double-click, offers nothing else, and never starts a drag.</summary>
+/// <summary>A loot box in the player's inventory, driven through the real grid and UiInputController while a corpse's loot window is open: it opens on "Open All", offers nothing else, never starts a drag, and a double-click (a Give while looting) does nothing.</summary>
 [TestClass]
 [DoNotParallelize]
 public sealed class LootboxInventoryInputTests
@@ -70,7 +70,7 @@ public sealed class LootboxInventoryInputTests
                 Layout = new ElementLayoutOptions { RelativePosition = position, Size = new Vector2(200, 200), DisplayMode = ElementDisplayMode.Fixed },
                 Chrome = new ElementChromeOptions { ShowBorder = true, CanUserFocus = false },
             });
-            window.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, entityId, filterTag: Engine.Tags.GameplayTag.None, () => CorpseEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, openRequests.Add, simulationClock: new SimulationClock()));
+            window.SetContent(new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, entityId, filterTag: Engine.Tags.GameplayTag.None, () => CorpseEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, openRequests.Add));
             window.Initialize();
             return window;
         }
@@ -119,7 +119,7 @@ public sealed class LootboxInventoryInputTests
     }
 
     [TestMethod]
-    public void DoubleClick_PlayerLootbox_RequestsOpeningForThePlayer()
+    public void DoubleClick_PlayerLootboxWhileLooting_OpensNothing()
     {
         var harness = Build();
         var point = harness.LootboxCell.ContentRectangle.Center;
@@ -128,7 +128,7 @@ public sealed class LootboxInventoryInputTests
         Click(harness.Controller, point);
         Click(harness.Controller, point);
 
-        CollectionAssert.AreEqual(new[] { PlayerEntityId }, harness.OpenRequests);
+        Assert.IsEmpty(harness.OpenRequests);
     }
 
     [TestMethod]

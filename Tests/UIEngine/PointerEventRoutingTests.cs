@@ -6,8 +6,7 @@ using UIEngine.UI;
 namespace Tests.UIEngine;
 
 /// <summary>
-/// Clicks, right taps and drops go to the element under the pointer and up its ancestors until one handles them
-/// (PLAN-unified-pointer-picking.md, Phase 3) -- driven through a real UiInputController with no game handlers.
+/// Clicks, right taps and drops go to the element under the pointer and up its ancestors until one handles them -- driven through a real UiInputController with no game handlers.
 /// </summary>
 [TestClass]
 [DoNotParallelize]

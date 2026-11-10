@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace Tests.Architecture;
 
 /// <summary>
-/// Only UiInputController reads the mouse (PLAN-unified-pointer-picking.md, Phase 2): every other piece of the UI asks
+/// Only UiInputController reads the mouse: every other piece of the UI asks
 /// what it hit-tested -- Element.IsPointerOver, PointerState -- so nothing hovers through a window drawn over it, outside
 /// its scrolled viewport or behind menu mode. Read from the source; comments may still name Mouse.GetState.
 /// </summary>

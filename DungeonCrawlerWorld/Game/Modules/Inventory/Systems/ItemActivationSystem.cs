@@ -122,6 +122,7 @@ public sealed class ItemActivationSystem : ISystem
     private readonly Toggles _toggles;
     private readonly PackedComponentPool<PendingWindupComponent> _pendingWindups;
     private readonly TargetResolution _targetResolution;
+    private readonly ToggleItemGroundPlacement _toggleItemGroundPlacement;
     private readonly List<Vector3Int> _targetTilesScratch = [];
 
     /// <summary>Where the last CollectTargets call landed, for the entries placed once per activation (ApplyOnce).</summary>
@@ -144,8 +145,10 @@ public sealed class ItemActivationSystem : ISystem
         ProcessingTierQuery processingTiers,
         Toggles toggles,
         PackedComponentPool<PendingWindupComponent> pendingWindups,
-        TargetResolution targetResolution)
+        TargetResolution targetResolution,
+        ToggleItemGroundPlacement toggleItemGroundPlacement)
     {
+        _toggleItemGroundPlacement = toggleItemGroundPlacement;
         _effectServices = effectServices;
         _pendingActivations = pendingActivations;
         _actionLocks = actionLocks;
@@ -272,7 +275,7 @@ public sealed class ItemActivationSystem : ISystem
                         }
                     }
 
-                    if (!ToggleItemActions.TryToggle(_componentManager, _itemCatalog, entityId, request.StackInstanceId, out _, request.ActivatedFromSlot))
+                    if (!ToggleItemActions.TryToggle(_componentManager, _itemCatalog, entityId, request.StackInstanceId, out var flippedStackInstanceId, request.ActivatedFromSlot))
                     {
                         continue;
                     }
@@ -280,6 +283,12 @@ public sealed class ItemActivationSystem : ISystem
                     if (!ignoresActionLock)
                     {
                         ActionLockGate.Lock(_actionLocks, entityId, _now, LockFramesFor(entityId, toggleActivator.Timing));
+                    }
+
+                    // Lit in Ground mode, the unit is put down where the holder stands (ToggleItemGroundPlacement).
+                    if (!toggleActivator.IsToggledOn)
+                    {
+                        _toggleItemGroundPlacement.PutDownIfGround(entityId, flippedStackInstanceId, request.Selection);
                     }
 
                     break;

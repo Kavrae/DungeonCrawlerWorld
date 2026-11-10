@@ -165,7 +165,27 @@ public sealed class ActionTargetingController(
     /// <remarks>An armed drop is refused over a tile that wouldn't take it (IItemDropPlacement.CanDropAt), as a drag of it would be: a click there does nothing.</remarks>
     internal bool IsArmedConfirmRefused => mapViewState.ArmedDrop is { } drop
         ? IsArmedBlocked() || mapViewState.HoveredTile is not { } hoveredTile || !dropPlacement.CanDropAt(drop, hoveredTile)
-        : mapViewState.IsAnythingArmed && !CanConfirmArmed();
+        : TryGetArmedToggleDrop(out var toggleDrop)
+            ? !CanConfirmArmed() || mapViewState.HoveredTile is not { } toggleTile || !dropPlacement.CanDropAt(toggleDrop, toggleTile)
+            : mapViewState.IsAnythingArmed && !CanConfirmArmed();
+
+    /// <summary>The armed item is an unlit toggle and the mode is Ground, so confirming it lights one unit and drops it (ToggleItemGroundPlacement): it is aimed, highlighted and refused as that drop is.</summary>
+    private bool TryGetArmedToggleDrop(out ItemDrop drop)
+    {
+        drop = default;
+        if (mapViewState.TargetingMode != TargetingMode.Ground ||
+            mapViewState.ArmedItemStackInstanceId is not { } stackInstanceId ||
+            !inventoryView.TryGetStack(world.PlayerEntityId, stackInstanceId, out var stack) ||
+            !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
+            item.Toggle is null ||
+            ToggleText.IsLit(item))
+        {
+            return false;
+        }
+
+        drop = ItemDrop.OneUnitOf(stackInstanceId);
+        return true;
+    }
 
     /// <summary>Whether a confirm of whatever is armed would be accepted now: it isn't blocked, and PlayerCommands would queue it (ready before the input buffer expires).</summary>
     /// <remarks>A refused confirm leaves the action armed, so the player can confirm again once it's ready.</remarks>
@@ -201,10 +221,31 @@ public sealed class ActionTargetingController(
     public void UpdateHoveredTile(Point? mousePosition, Vector2 contentAbsolutePosition)
     {
         RefreshHoveredTile(mousePosition, contentAbsolutePosition);
-        if (mapViewState.ArmedDrop is not null)
+        RaiseIfAimedDropChanged();
+        if (AimedDrop is not null)
         {
             ArmedDropHovered?.Invoke(mapViewState.HoveredTile);
         }
+    }
+
+    /// <summary>The drop being aimed on the map: an armed drop, or the one unit a toggle item armed in Ground mode will drop (TryGetArmedToggleDrop) -- null otherwise.</summary>
+    /// <remarks>What the cursor text, the container wash and the ghost at the cursor show (DropCursorText, ArmedDropHover, DragGhostContent), so lighting a toggle on the ground looks exactly like dropping it.</remarks>
+    public ItemDrop? AimedDrop => mapViewState.ArmedDrop ?? (TryGetArmedToggleDrop(out var toggleDrop) ? toggleDrop : null);
+
+    /// <summary>AimedDrop as ArmedDropChanged last announced it.</summary>
+    private ItemDrop? _announcedAimedDrop;
+
+    /// <summary>Raises ArmedDropChanged when AimedDrop differs from what was last announced -- after any arm or disarm, and every update, which catches a targeting mode switch while a toggle is armed.</summary>
+    private void RaiseIfAimedDropChanged()
+    {
+        var aimedDrop = AimedDrop;
+        if (aimedDrop == _announcedAimedDrop)
+        {
+            return;
+        }
+
+        _announcedAimedDrop = aimedDrop;
+        ArmedDropChanged?.Invoke();
     }
 
     private void RefreshHoveredTile(Point? mousePosition, Vector2 contentAbsolutePosition)
@@ -428,9 +469,11 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        // A toggle action is never armed: it applies to the player, so every press queues it at
-        // once on the player's own tile, in the player's mode (Ground anchors what it places there), and no window closes.
-        if (actionStateView.TryGetEffectiveAction(world.PlayerEntityId, actionId, out var pressedAction) && pressedAction.Toggle is not null)
+        // A toggle action applies to the player, so a press queues it at once on the player's own tile, in the player's
+        // mode, and no window closes -- except turning it on in Ground mode, which anchors what it places on the tile and
+        // so is armed first like any other action (ToggleArming).
+        if (actionStateView.TryGetEffectiveAction(world.PlayerEntityId, actionId, out var pressedAction) && pressedAction.Toggle is not null &&
+            !ToggleArming.ArmsFirst(actionStateView.IsActionToggledOn(world.PlayerEntityId, actionId), mapViewState.TargetingMode))
         {
             if (transformView.TryGetTransform(world.PlayerEntityId, out var playerTransform))
             {
@@ -457,7 +500,8 @@ public sealed class ActionTargetingController(
     /// is -- HotbarContent greys it out the same way, so "can't be armed" and "looks unusable"
     /// stay in sync. Otherwise the same rhythm as HandleActionSlotPress: the first press arms, a
     /// re-press of the armed slot activates (see TryActivateArmedFromHotkey). A toggle item is
-    /// never armed: every press queues it at once (see QueueToggleItem).
+    /// queued at once (see QueueToggleItem), except turning it on in Ground mode, which puts it down
+    /// and so is armed first (ToggleArming).
     /// </summary>
     private void HandleItemSlotPress(HotkeySlot slot, uint stackInstanceId)
     {
@@ -468,9 +512,9 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        if (item.Toggle is not null)
+        if (item.Toggle is not null && item.Activator is { } toggleActivator && !ToggleArming.ArmsFirst(ToggleText.IsLit(item), mapViewState.TargetingMode))
         {
-            QueueToggleItem(stackInstanceId, slot);
+            QueueToggleItem(stackInstanceId, toggleActivator, slot);
             return;
         }
 
@@ -498,6 +542,8 @@ public sealed class ActionTargetingController(
         {
             RefreshTargetableTiles(targeting, transform.Position, transform.Size);
         }
+
+        RaiseIfAimedDropChanged();
     }
 
     /// <summary>Resolves targeting via TryGetArmedTargeting (not a parameter of its own) -- called after ArmedItemStackInstanceId is already set above, so it reads back the correctly (Scroll-)scaled spec instead of a stale unscaled one, the same single-chokepoint reasoning as ArmAction re-fetching Activator.Targeting itself rather than taking it as a parameter. Also, critically, what makes a diverged stack's own Override targeting (e.g. a wand with non-default Targeting) actually apply -- TryGetArmedTargeting resolves through the bound stack itself, not a bare catalog lookup by item id. slot is null for a menu-driven arm with no originating HotkeySlot (see ArmItemFromStack) -- every ArmedSlot consumer already treats null as "no slot to highlight/reuse for a same-slot re-press confirm," which is exactly correct there: a menu-armed item can only ever be confirmed via a map-tile click.</summary>
@@ -515,6 +561,8 @@ public sealed class ActionTargetingController(
         {
             RefreshTargetableTiles(targeting, transform.Position, transform.Size);
         }
+
+        RaiseIfAimedDropChanged();
     }
 
     /// <summary>
@@ -524,7 +572,8 @@ public sealed class ActionTargetingController(
     /// arming from a hotbar press, and ArmItem's own targeting-refresh logic unchanged -- no separate
     /// activation path -- arming here matches the first press of an unarmed hotbar slot exactly.
     /// That includes a toggle item, which a hotbar press queues at once rather than arming (see
-    /// QueueToggleItem). With no slot, the armed item is confirmed only by a map-tile click.
+    /// QueueToggleItem) unless it turns on in Ground mode (ToggleArming). With no slot, the armed
+    /// item is confirmed only by a map-tile click.
     /// </summary>
     public void ArmItemFromStack(uint stackInstanceId)
     {
@@ -535,22 +584,22 @@ public sealed class ActionTargetingController(
             return;
         }
 
-        if (item.Toggle is not null)
+        if (item.Toggle is not null && item.Activator is { } toggleActivator && !ToggleArming.ArmsFirst(ToggleText.IsLit(item), mapViewState.TargetingMode))
         {
-            QueueToggleItem(stackInstanceId, activatedFromSlot: null);
+            QueueToggleItem(stackInstanceId, toggleActivator, activatedFromSlot: null);
             return;
         }
 
         ArmItem(null, stackInstanceId);
     }
 
-    /// <summary>Queues a toggle item's activation on the player's own tile, with nothing armed and no window closed.</summary>
+    /// <summary>Queues a toggle item's activation on the player's own tile, in the player's targeting mode, with nothing armed and no window closed -- exactly as a toggle action is queued (HandleActionSlotPress).</summary>
     /// <remarks>A toggle applies to its holder, so there is no target to pick and nothing on the map to make room for. Whatever was armed stays armed.</remarks>
-    private void QueueToggleItem(uint stackInstanceId, HotkeySlot? activatedFromSlot)
+    private void QueueToggleItem(uint stackInstanceId, IActionActivator activator, HotkeySlot? activatedFromSlot)
     {
         if (transformView.TryGetTransform(world.PlayerEntityId, out var transform))
         {
-            playerCommands.QueueItemActivation(stackInstanceId, TargetSelection.Ground(transform.Position), activatedFromSlot);
+            playerCommands.QueueItemActivation(stackInstanceId, targetingView.Select(world.PlayerEntityId, activator, mapViewState.TargetingMode, transform.Position, simulationClock.CurrentFrame), activatedFromSlot);
         }
     }
 
@@ -583,11 +632,11 @@ public sealed class ActionTargetingController(
         mapViewState.OpenShopEntityId is null &&
         actionStateView.GetDropRefusal(world.PlayerEntityId, in drop) == ItemDropRefusal.None;
 
-    /// <summary>Raised every update while a drop is armed, with the tile the cursor is over on the map, or null off it.</summary>
+    /// <summary>Raised every update while a drop is aimed (AimedDrop), with the tile the cursor is over on the map, or null off it.</summary>
     /// <remarks>For what the hovered tile does to the drop -- a container it would go into (ArmedDropHover).</remarks>
     public event Action<Vector3Int?>? ArmedDropHovered;
 
-    /// <summary>Raised whenever MapViewState.ArmedDrop changes: a drop armed, replaced or disarmed by any path.</summary>
+    /// <summary>Raised whenever AimedDrop changes: a drop, or a toggle item in Ground mode, armed, replaced or disarmed by any path.</summary>
     public event Action? ArmedDropChanged;
 
     /// <summary>Disarms an armed drop; does nothing while anything else, or nothing, is armed.</summary>
@@ -608,7 +657,7 @@ public sealed class ActionTargetingController(
         }
 
         mapViewState.ArmedDrop = drop;
-        ArmedDropChanged?.Invoke();
+        RaiseIfAimedDropChanged();
     }
 
     /// <summary>The drop a hotbar slot's "Drop" arms: one unit of the stack bound to it -- the unit an activation from that slot would use. False for a slot with no item.</summary>
@@ -634,6 +683,7 @@ public sealed class ActionTargetingController(
         _targetableTilesKey = null;
         _targetableTiles.Clear();
         _aimableTiles.Clear();
+        RaiseIfAimedDropChanged();
     }
 
     /// <summary>
@@ -646,7 +696,7 @@ public sealed class ActionTargetingController(
     /// </summary>
     private bool TryGetArmedActivator(out IActionActivator activator)
     {
-        if (mapViewState.ArmedDrop is not null)
+        if (mapViewState.ArmedDrop is not null || TryGetArmedToggleDrop(out _))
         {
             activator = DropTargeting.Instance;
             return true;
@@ -739,6 +789,12 @@ public sealed class ActionTargetingController(
         }
 
         if (!TrySelectActivationTarget(activator, cursorTile, isMapClick, fallsBackFromUntargetableTile, out var aimedTile, out var selection))
+        {
+            return;
+        }
+
+        // A toggle item lit in Ground mode is dropped there: a tile the drop rule refuses leaves it armed, as an armed drop.
+        if (TryGetArmedToggleDrop(out var toggleDrop) && !dropPlacement.CanDropAt(toggleDrop, aimedTile))
         {
             return;
         }

@@ -1,4 +1,5 @@
 using Engine.Math;
+using Game.Modules.Containers;
 using Game.Modules.Core.Components;
 using Microsoft.Xna.Framework;
 
@@ -41,7 +42,9 @@ public readonly record struct TerrainVisualView(string? SpriteName, uint Seed, s
 /// <summary>A cell's terrain or structure, as the inspector and the context menu show it.</summary>
 public readonly record struct TerrainView(string Name, string Description, TerrainVisualView Visual);
 
-/// <summary>What the map's right-click menu needs to know about one thing on a tile.</summary>
-/// <param name="IsDestroyed">Dead -- a destroyed shop or container keeps its components, so this, not IsShop, decides whether it still trades.</param>
-/// <param name="IsLootReservedFromPlayer">A corpse whose loot belongs to someone else for now (LootRights): the player may not open it yet.</param>
-public readonly record struct EntityInteractionView(string Name, bool IsShop, bool IsContainer, bool IsDestroyed, bool IsLootReservedFromPlayer);
+/// <summary>What the map needs to know about one thing on a tile to name it and open its items (ContainerAccess).</summary>
+/// <param name="WindowKind">The window its items open in, if any.</param>
+/// <param name="AccessRefusal">Why the player can't reach its items now, or None.</param>
+/// <param name="IsContainer">A chest, an item pile or a shop -- a holder of items rather than a corpse.</param>
+/// <param name="HoldsAnything">It holds an item or some currency -- what its loot bag shows, and what Take All needs.</param>
+public readonly record struct EntityInteractionView(string Name, ContainerWindowKind WindowKind, ContainerAccessRefusal AccessRefusal, bool IsContainer, bool HoldsAnything);

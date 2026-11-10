@@ -1,5 +1,6 @@
 using Engine.Tags;
 using Game.Modules.Currency;
+using Game.Modules.Death;
 using Game.Modules.Inventory;
 using Game.Modules.Shops;
 using Game.Views;
@@ -19,4 +20,5 @@ public sealed record InventoryServices(
     CurrencyCommands CurrencyCommands,
     GameplayTagRegistry GameplayTags,
     ItemHoverDetails ItemHoverDetails,
-    IPlayerItemDrops PlayerItemDrops);
+    IPlayerItemDrops PlayerItemDrops,
+    LootCommands LootCommands);

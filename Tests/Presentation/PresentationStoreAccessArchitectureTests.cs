@@ -6,8 +6,7 @@ using Presentation.UI;
 namespace Tests.Presentation;
 
 /// <summary>
-/// Presentation reads the game through Game.Views and changes it through the command services
-/// (PLAN-shell-composition-cleanup.md): no field, property, parameter, return value, local variable or
+/// Presentation reads the game through Game.Views and changes it through the command services: no field, property, parameter, return value, local variable or
 /// generic argument anywhere in Presentation -- closures and state machines included -- may name the
 /// store itself: ComponentManager, EntityManager or a component pool. Component values are allowed;
 /// they're what the views hand back.

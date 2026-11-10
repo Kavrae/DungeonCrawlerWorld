@@ -9,6 +9,12 @@ public static class ToggleText
 {
     public const string Active = "Active";
 
+    /// <summary>What turning a toggle item on does with the item, by targeting mode (ToggleItemGroundPlacement): shown in Item Details.</summary>
+    public const string ItemPlacement = "Ground mode: lit and dropped where you aim. Target mode: lit and carried.";
+
+    /// <summary>Whether a definition is a toggle item, which Ground mode turns on where it is aimed and leaves there.</summary>
+    public static bool IsToggleItem(ActivatableDefinition definition) => definition is Game.Modules.Inventory.ItemDefinition { Toggle: not null };
+
     /// <summary>Whether an item definition is a lit unit of a toggle item.</summary>
     public static bool IsLit(ActivatableDefinition definition) => definition is Game.Modules.Inventory.ItemDefinition { Activator: ToggleItemActivator { IsToggledOn: true } };
 }

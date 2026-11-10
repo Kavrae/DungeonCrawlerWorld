@@ -111,10 +111,10 @@ public sealed class ItemWindowCoordinatorTests
         elementPool.RegisterFactory<TargetShapePreviewElement>(() => new TargetShapePreviewElement(TestElementServices.For(elementPool, fontService)));
         elementPool.RegisterFactory<EntityIconElement>(() => new EntityIconElement(TestElementServices.For(elementPool, fontService), spriteSheetService, mapView));
         elementPool.RegisterFactory<ItemDetailsWindow>(() => new ItemDetailsWindow(TestElementServices.For(elementPool, fontService), new ActionCatalog(), TestGameplayTags.BuiltIn, inventoryServices.ActionStateView, world));
-        elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
-        elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming, healthView: healthView, actionSourceNaming: TestActionSources.Naming(terrain, entityKeys: componentManager.Keys)));
-        elementPool.RegisterFactory<ShopWindow>(() => new ShopWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock(), entityNaming: entityNaming));
-        elementPool.RegisterFactory<TradeWindow>(() => new TradeWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
+        elementPool.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState));
+        elementPool.RegisterFactory<SecondaryInventoryWindow>(() => new SecondaryInventoryWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState, entityNaming: entityNaming, healthView: healthView, actionSourceNaming: TestActionSources.Naming(terrain, entityKeys: componentManager.Keys)));
+        elementPool.RegisterFactory<ShopWindow>(() => new ShopWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState, entityNaming: entityNaming));
+        elementPool.RegisterFactory<TradeWindow>(() => new TradeWindow(TestElementServices.For(elementPool, fontService), inventoryServices, world, contextMenuController, mapViewState));
 
         tooltipController.Initialize(elementPool, layers);
 
@@ -128,7 +128,7 @@ public sealed class ItemWindowCoordinatorTests
             inventoryServices.InventoryView,
             itemCatalog,
             lootboxCatalog,
-            new LootCommands(componentManager),
+            new LootCommands(componentManager, itemCatalog, world),
             new LootboxCommands(new LootboxOpener(componentManager, lootboxCatalog, itemCatalog, seed: 1)),
             mapViewState.ReservedEntityIds);
 
@@ -141,10 +141,10 @@ public sealed class ItemWindowCoordinatorTests
     public void ClickingACorpse_WhileAShopIsOpen_ClosesTheShopAndOpensTheLoot()
     {
         var harness = Build();
-        harness.MapWindow.OnShopClicked!(ShopEntityId);
+        harness.Coordinator.OpenShop(ShopEntityId);
         Assert.AreEqual(ShopEntityId, harness.MapViewState.OpenShopEntityId, "Sanity check: the shop opened.");
 
-        harness.MapWindow.OnCorpseClicked!(CorpseEntityId);
+        harness.Coordinator.OpenLoot(CorpseEntityId);
 
         Assert.IsNull(harness.MapViewState.OpenShopEntityId);
         Assert.AreEqual(CorpseEntityId, OpenSecondaryTarget(harness));
@@ -154,10 +154,10 @@ public sealed class ItemWindowCoordinatorTests
     public void ClickingAShop_WhileALootWindowIsOpen_ClosesTheLootAndOpensTheShop()
     {
         var harness = Build();
-        harness.MapWindow.OnCorpseClicked!(CorpseEntityId);
+        harness.Coordinator.OpenLoot(CorpseEntityId);
         Assert.AreEqual(CorpseEntityId, OpenSecondaryTarget(harness), "Sanity check: the loot window opened.");
 
-        harness.MapWindow.OnShopClicked!(ShopEntityId);
+        harness.Coordinator.OpenShop(ShopEntityId);
 
         Assert.AreEqual(ShopEntityId, OpenSecondaryTarget(harness));
         Assert.AreEqual(ShopEntityId, harness.MapViewState.OpenShopEntityId);
@@ -167,7 +167,7 @@ public sealed class ItemWindowCoordinatorTests
     public void ReleaseEntity_ForTheOpenShop_ClosesIt()
     {
         var harness = Build();
-        harness.MapWindow.OnShopClicked!(ShopEntityId);
+        harness.Coordinator.OpenShop(ShopEntityId);
 
         harness.Coordinator.ReleaseEntity(ShopEntityId);
 
@@ -179,7 +179,7 @@ public sealed class ItemWindowCoordinatorTests
     public void ReleaseEntity_ForTheItemShownInItemDetails_ClosesItemDetails()
     {
         var harness = Build();
-        harness.MapWindow.OnCorpseClicked!(CorpseEntityId);
+        harness.Coordinator.OpenLoot(CorpseEntityId);
         var stackInstanceId = InventoryActions.AddItem(harness.ComponentManager, CorpseEntityId, PotionItemId, quantity: 1);
         harness.Coordinator.ItemDetails.Open(CorpseEntityId, stackInstanceId);
         Assert.AreEqual(CorpseEntityId, harness.Coordinator.ItemDetails.CurrentEntityId, "Sanity check: Item Details opened on the corpse's potion.");
@@ -216,7 +216,7 @@ public sealed class ItemWindowCoordinatorTests
     {
         var harness = Build();
         harness.Coordinator.Inventory.OpenInventoryWindow();
-        harness.MapWindow.OnCorpseClicked!(CorpseEntityId);
+        harness.Coordinator.OpenLoot(CorpseEntityId);
         var stackInstanceId = InventoryActions.AddItem(harness.ComponentManager, CorpseEntityId, PotionItemId, quantity: 1);
         harness.Coordinator.ItemDetails.Open(CorpseEntityId, stackInstanceId);
         Assert.IsTrue(harness.Coordinator.ItemDetails.IsOpen, "Sanity check: Item Details opened on the corpse's potion.");
@@ -226,7 +226,7 @@ public sealed class ItemWindowCoordinatorTests
     private static (SecondaryInventoryWindow Window, Window Grid) OpenCorpseLoot(Harness harness)
     {
         harness.Coordinator.Inventory.OpenInventoryWindow();
-        harness.MapWindow.OnCorpseClicked!(CorpseEntityId);
+        harness.Coordinator.OpenLoot(CorpseEntityId);
         var window = harness.Layers[UiLayer.DynamicHud].OfType<SecondaryInventoryWindow>().Single();
         var grid = window.ChildElements.OfType<Window>().Single(child => child.Content is InventoryGridContent);
         return (window, grid);
@@ -331,7 +331,7 @@ public sealed class ItemWindowCoordinatorTests
     private static (ShopWindow Window, Window Grid) OpenShop(Harness harness)
     {
         harness.Coordinator.Inventory.OpenInventoryWindow();
-        harness.MapWindow.OnShopClicked!(ShopEntityId);
+        harness.Coordinator.OpenShop(ShopEntityId);
         var window = harness.Layers[UiLayer.DynamicHud].OfType<ShopWindow>().Single();
         var grid = window.ChildElements.OfType<Window>().Single(child => child.Content is InventoryGridContent);
         return (window, grid);
@@ -601,7 +601,7 @@ public sealed class ItemWindowCoordinatorTests
         var buttons = DescendantsOf(window).OfType<Button>().ToList();
         CollectionAssert.AreEqual(new[] { "Stop Comparison" }, buttons.Select(button => button.LeftText).ToArray());
 
-        buttons[0].RaiseClicked();
+        buttons[0].HandleClick(buttons[0].Rectangle.Center);
 
         Assert.IsFalse(harness.Coordinator.ItemComparison.IsComparing);
         Assert.IsFalse(harness.Coordinator.ItemDetails.IsOpen, "Stopping closes Item Details too.");

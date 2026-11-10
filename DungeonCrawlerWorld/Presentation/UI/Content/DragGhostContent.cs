@@ -23,12 +23,12 @@ namespace Presentation.UI.Content;
 /// every drag, so the ghost doesn't visibly jump in scale relative to wherever it was picked up
 /// from. Hosted in a minimal (zero-size, fully transparent) User-tier Window -- see
 /// ShellBootstrapper.BuildUserWindows -- since everything this draws is positioned directly at the live
-/// mouse position, not relative to any window's own bounds. A drop armed from a menu (MapViewState.ArmedDrop) carries the
+/// mouse position, not relative to any window's own bounds. A drop aimed on the map (ActionTargetingController.AimedDrop: armed from a menu, or a toggle item armed in Ground mode) carries the
 /// same ghost, at the size of a hotbar slot, so it looks exactly like dragging what it drops.
 /// </summary>
 public sealed class DragGhostContent(
     PointerState pointerState,
-    MapViewState mapViewState,
+    ActionTargetingController actionTargeting,
     World world,
     ActionCatalog actionCatalog,
     ItemCatalog itemCatalog,
@@ -52,7 +52,7 @@ public sealed class DragGhostContent(
         {
             (drag, size, mousePosition) = (heldDrag, state.SourceSize, state.CursorPosition);
         }
-        else if (mapViewState.ArmedDrop is { } armedDrop)
+        else if (actionTargeting.AimedDrop is { } armedDrop)
         {
             (drag, size, mousePosition) = (PayloadOf(armedDrop), HotbarContent.SlotSize, pointerState.CursorPosition);
         }

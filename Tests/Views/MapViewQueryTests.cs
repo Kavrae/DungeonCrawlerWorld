@@ -8,6 +8,7 @@ using Engine.Tiles;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
+using Game.Modules.Containers;
 using Game.Modules.Containers.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
@@ -452,15 +453,19 @@ public sealed class MapViewQueryTests
     }
 
     [TestMethod]
-    public void GetInteraction_DestroyedShop_ReportsBothFlags()
+    public void GetInteraction_AStandingShopOpensItsShop_ADestroyedOneItsLoot()
     {
         var fixture = new Fixture();
         fixture.Components.Merge(5, new DisplayTextComponent("Potion Shop", ""));
         fixture.Components.Merge(5, new ShopComponent(acceptedItems: null, buyMultiplier: 1f, sellMultiplier: 1f));
         fixture.Components.Merge(5, new ContainerComponent());
+
+        Assert.AreEqual(ContainerWindowKind.Shop, fixture.Query.GetInteraction(5).WindowKind);
+
         fixture.Components.Merge(5, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
 
-        Assert.AreEqual(new EntityInteractionView("Potion Shop", IsShop: true, IsContainer: true, IsDestroyed: true, IsLootReservedFromPlayer: false), fixture.Query.GetInteraction(5));
+        Assert.AreEqual(ContainerWindowKind.Loot, fixture.Query.GetInteraction(5).WindowKind);
+        Assert.AreEqual("Potion Shop", fixture.Query.GetInteraction(5).Name);
     }
 
     [TestMethod]

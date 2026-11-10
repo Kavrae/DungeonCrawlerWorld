@@ -338,6 +338,20 @@ public sealed class HotbarContent(
     internal void RightClickSlot(HotkeySlot slot, Point position) => SlotRightClicked?.Invoke(slot, position);
 
     /// <summary>Whether slot holds a toggle, and whether it is on -- false for anything else, or nothing.</summary>
+    /// <summary>The tags of what slot holds -- the player's effective action or the bound stack's effective item -- empty for an empty slot.</summary>
+    internal GameplayTagSet GetSlotTags(HotkeySlot slot)
+    {
+        var playerEntityId = world.PlayerEntityId;
+        if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionStateView.TryGetEffectiveAction(playerEntityId, actionId, out var action))
+        {
+            return action.Tags;
+        }
+
+        return hotkeyBindingView.TryGetBoundItem(playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out _)
+            ? item.Tags
+            : GameplayTagSet.Empty;
+    }
+
     internal bool TryGetSlotToggle(HotkeySlot slot, out bool isOn)
     {
         var playerEntityId = world.PlayerEntityId;

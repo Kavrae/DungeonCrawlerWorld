@@ -43,8 +43,7 @@ public sealed class InventoryManagementWindow(
     InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
-    MapViewState mapViewState,
-    Engine.ECS.Systems.SimulationClock simulationClock) : Window(services), IContentDropTarget
+    MapViewState mapViewState) : Window(services), IContentDropTarget
 {
     private TabbedContent _tabbedContent = null!;
     private CurrencyRowContent _currencyRowContent = null!;
@@ -131,7 +130,7 @@ public sealed class InventoryManagementWindow(
 
     private InventoryTabContent CreateTabContent(GameplayTag filterTag)
     {
-        var gridContent = new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, _entityId, filterTag, _getSecondaryTargetEntityId, mapViewState, _onItemSelected, _onActivateRequested, _onOpenLootboxesRequested, simulationClock: simulationClock);
+        var gridContent = new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, _entityId, filterTag, _getSecondaryTargetEntityId, mapViewState, _onItemSelected, _onActivateRequested, _onOpenLootboxesRequested);
         return new InventoryTabContent(ElementPoolService, gridContent);
     }
 }

@@ -45,21 +45,16 @@ public sealed class HotbarController
     /// <summary>A click on a slot -- a press and release on it that never became a drag -- is the same as pressing its key: it arms the slot, or confirms an armed one.</summary>
     public void OnSlotClicked(HotkeySlot slot) => _actionTargeting.HandleHotkeySlotPress(slot);
 
-    /// <summary>A bound slot's menu: Arm, or Activate/Deactivate for a toggle by its state -- each exactly what a press of the slot does -- then, for an item, Drop (one unit), then Unbind.</summary>
-    /// <remarks>An option the slot can't take right now (blocked, locked, already armed) is shown disabled, not left out.</remarks>
+    /// <summary>A bound slot's menu: what a press of the slot does (ActivationMenuLabels: Arm; on the armed slot Drink, Cast or Activate; Turn on/Turn off for a toggle), then, for an item, Drop (one unit), then Unbind.</summary>
+    /// <remarks>An option the slot can't take right now (blocked, locked) is shown disabled, not left out.</remarks>
     public void OnSlotRightClicked(HotkeySlot slot, Point position)
     {
         var isUsable = _hotbarContent.IsSlotActive(slot);
-        List<DropdownOption> options = [];
-
-        if (_hotbarContent.TryGetSlotToggle(slot, out var isOn))
-        {
-            options.Add(new DropdownOption(isOn ? "Deactivate" : "Activate", null, isUsable, () => _actionTargeting.HandleHotkeySlotPress(slot)));
-        }
-        else
-        {
-            options.Add(new DropdownOption("Arm", null, isUsable && _mapViewState.ArmedSlot != slot, () => _actionTargeting.HandleHotkeySlotPress(slot)));
-        }
+        var isToggle = _hotbarContent.TryGetSlotToggle(slot, out var isOn);
+        List<DropdownOption> options =
+        [
+            new DropdownOption(ActivationMenuLabels.For(isToggle, isOn, isArmedHere: _mapViewState.ArmedSlot == slot, _mapViewState.TargetingMode, _hotbarContent.GetSlotTags(slot)), null, isUsable, () => _actionTargeting.HandleHotkeySlotPress(slot)),
+        ];
 
         if (_actionTargeting.TryGetSlotDrop(slot, out var drop))
         {

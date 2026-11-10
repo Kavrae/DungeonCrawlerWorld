@@ -1,6 +1,8 @@
 ﻿using Engine.Events;
 using Game.Notifications;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
+using UIEngine.Input;
 using Presentation.UI.Notifications;
 using Tests.UIEngine;
 using UIEngine.Rendering;
@@ -192,6 +194,42 @@ public sealed class NotificationCenterTests
         notificationCenter.OpenNextNotification(NotificationCategory.Quest);
 
         Assert.IsTrue(ClickDynamicHud(layers, FirstActiveNotificationTopLeft));
+    }
+
+    [TestMethod]
+    public void ClickingACategoryBadge_OpensOne_AndDoubleClickingItOpensTheRest()
+    {
+        var (windowService, getFolder) = CreateWindowServiceCapturingFolder();
+        var layers = new UiLayerStack();
+        var notificationCenter = CreateNotificationCenter(windowService, layers);
+        for (var index = 0; index < 3; index++)
+        {
+            notificationCenter.AddNotification(NotificationCategory.Quest, $"Quest {index}", showImmediately: false);
+        }
+
+        var opened = new List<Window>();
+        notificationCenter.ActiveNotificationOpened += opened.Add;
+        var folder = getFolder();
+        folder.HandleClick(new Point(35, 35));
+        var questBadge = folder.ChildElements.OfType<TextWindow>().Single(badge => badge.OriginalText.StartsWith("Quest", StringComparison.Ordinal));
+        var controller = new UiInputController(layers, new Vector2(2000, 2000), new PointerState(), [], []);
+        var badgeCenter = questBadge.Rectangle.Center;
+
+        ClickThroughController(controller, badgeCenter);
+        Assert.HasCount(1, opened, "A click is the menu's Open: one notification.");
+
+        ClickThroughController(controller, badgeCenter);
+        Assert.HasCount(3, opened, "The second click of a double-click is Open All: the rest of them.");
+    }
+
+    private static void ClickThroughController(UiInputController controller, Point position)
+    {
+        MouseState At(ButtonState leftButton) =>
+            new(position.X, position.Y, 0, leftButton, ButtonState.Released, ButtonState.Released, ButtonState.Released, ButtonState.Released);
+        var noKeys = new KeyboardState();
+        controller.Update(noKeys, At(ButtonState.Released));
+        controller.Update(noKeys, At(ButtonState.Pressed));
+        controller.Update(noKeys, At(ButtonState.Released));
     }
 
     [TestMethod]

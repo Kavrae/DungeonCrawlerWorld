@@ -75,7 +75,14 @@ public sealed class ToggleWindupTests
         public uint IdolStackId => IdolStacks(PlayerEntityId).Single().StackInstanceId;
 
         public void QueueItem(uint stackInstanceId) =>
-            Components.Merge(PlayerEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(PlayerPosition)));
+            Components.Merge(PlayerEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.TargetModeAt(PlayerPosition)));
+
+        public void QueueItemInGroundMode(uint stackInstanceId, Vector3Int? aimedTile = null) =>
+            Components.Merge(PlayerEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(aimedTile ?? PlayerPosition)));
+
+        /// <summary>The item pile on the player's tile, if any.</summary>
+        public int? PileAtPlayer() =>
+            Session.World.GetOccupantEntityIdSpanAt(PlayerPosition).ToArray().Where(Components.GetPackedPool<Game.Modules.ItemPiles.Components.ItemPileComponent>().Has).Cast<int?>().FirstOrDefault();
 
         public void QueueAction(Guid actionId) =>
             Components.Merge(PlayerEntityId, new PendingActionActivationComponent(actionId, TestSelections.At(PlayerPosition)));
@@ -121,6 +128,36 @@ public sealed class ToggleWindupTests
 
         Assert.IsFalse(harness.Windups.Has(harness.PlayerEntityId));
         Assert.IsFalse(harness.IsPlayerLocked);
+    }
+
+    [TestMethod]
+    public void DelayedIdolInGroundMode_IsLitAndPutDownOnThePlayersTile_WhenItsWindupResolves()
+    {
+        var harness = Build();
+
+        harness.QueueItemInGroundMode(harness.IdolStackId);
+        harness.Frame();
+        Assert.IsNull(harness.PileAtPlayer(), "Nothing is put down while it winds up.");
+
+        harness.FrameUntil(() => harness.PileAtPlayer() is not null);
+
+        Assert.IsEmpty(harness.IdolStacks(harness.PlayerEntityId), "The lit idol left the player.");
+        var pileEntityId = harness.PileAtPlayer()!.Value;
+        Assert.AreEqual(1, harness.LitCount(pileEntityId), "It lies in the pile, still lit.");
+        Assert.IsTrue(harness.Components.GetMultiPool<ActiveToggleComponent>().Has(pileEntityId), "The pile holds its toggle, so the cloud comes from where it lies.");
+    }
+
+    [TestMethod]
+    public void DelayedIdolInGroundMode_AimedWhereTheDropRuleRefuses_IsLitAndStaysCarried()
+    {
+        var harness = Build();
+        var outOfReach = PlayerPosition + new Vector3Int(5, 0, 0);
+
+        harness.QueueItemInGroundMode(harness.IdolStackId, outOfReach);
+        harness.FrameUntil(() => harness.LitCount(harness.PlayerEntityId) == 1);
+
+        Assert.IsNull(harness.PileAtPlayer());
+        Assert.AreEqual(0, harness.Session.World.GetOccupantEntityIdSpanAt(outOfReach).Length, "Nothing was put down where a Drop would be refused.");
     }
 
     [TestMethod]

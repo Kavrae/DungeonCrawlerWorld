@@ -60,7 +60,7 @@ public sealed class DragDropArmingTests
         var map = TestMapWindows.Create(60, 60, 1, PlayerPosition, itemCatalog: itemCatalog);
         var stackInstanceId = InventoryActions.AddItem(map.ComponentManager, PlayerEntityId, PotionItemId, quantity: 3);
         var cursorText = new CursorTextContent(new PointerState(), TestFonts.Shared);
-        var dropCursorText = new DropCursorText(cursorText, map.ActionTargetingController, map.MapViewState);
+        var dropCursorText = new DropCursorText(cursorText, map.ActionTargetingController);
         var handler = new DragDropArming(map.MapView, map.MapViewState, new ControllerArming(map.ActionTargetingController), map.ActionTargetingController, dropCursorText);
         return new Fixture(map, handler, cursorText, dropCursorText, stackInstanceId);
     }

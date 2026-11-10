@@ -20,15 +20,15 @@ public sealed class DropCursorText
     public const string BindText = "Bind";
 
     private readonly CursorTextContent _cursorText;
-    private readonly MapViewState _mapViewState;
+    private readonly ActionTargetingController _actionTargeting;
     private string? _dragText;
     private bool _armedDropOverContainer;
     private string? _shownText;
 
-    public DropCursorText(CursorTextContent cursorText, ActionTargetingController actionTargeting, MapViewState mapViewState)
+    public DropCursorText(CursorTextContent cursorText, ActionTargetingController actionTargeting)
     {
         _cursorText = cursorText;
-        _mapViewState = mapViewState;
+        _actionTargeting = actionTargeting;
         actionTargeting.ArmedDropChanged += OnArmedDropChanged;
     }
 
@@ -48,7 +48,7 @@ public sealed class DropCursorText
 
     private void OnArmedDropChanged()
     {
-        if (_mapViewState.ArmedDrop is null)
+        if (_actionTargeting.AimedDrop is null)
         {
             _armedDropOverContainer = false;
         }
@@ -58,7 +58,7 @@ public sealed class DropCursorText
 
     private void Refresh()
     {
-        var text = _dragText ?? (_mapViewState.ArmedDrop is null ? null : _armedDropOverContainer ? AddText : DropText);
+        var text = _dragText ?? (_actionTargeting.AimedDrop is null ? null : _armedDropOverContainer ? AddText : DropText);
         if (text == _shownText)
         {
             return;

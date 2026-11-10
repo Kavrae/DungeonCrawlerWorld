@@ -7,7 +7,7 @@ namespace Tests.UIEngine;
 
 /// <summary>
 /// A press outside the topmost open light-dismissable closes it and goes no further, inside meaning what was hit, not
-/// where (PLAN-unified-pointer-picking.md, Phase 4) -- driven through a real UiInputController with no game handlers.
+/// where -- driven through a real UiInputController with no game handlers.
 /// </summary>
 [TestClass]
 [DoNotParallelize]

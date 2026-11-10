@@ -10,7 +10,7 @@ namespace Presentation.UI.Trade;
 /// <summary>
 /// Opens the middle Trade Window alongside a shop. Wired by
 /// ItemWindowCoordinator to ShopWindowController.OnOpened/OnClosed (not called directly from
-/// MapWindow.OnShopClicked) so this only ever opens when a shop genuinely finished opening a new
+/// MapWindow.TryOpenContainer) so this only ever opens when a shop genuinely finished opening a new
 /// window, and always closes in lockstep with it.
 ///
 /// All three windows of one trade session (player inventory, shop, trade) always close together,

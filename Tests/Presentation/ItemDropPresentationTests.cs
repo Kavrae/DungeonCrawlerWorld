@@ -198,7 +198,7 @@ public sealed class ItemDropPresentationTests
 
         var drops = new TestPlayerItemDrops();
         var services = TestInventoryServices.Over(componentManager, itemCatalog, world, playerItemDrops: drops);
-        var grid = new InventoryGridContent(world, services, windowService, contextMenuController, gridEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, new MapViewState(), static (_, _) => { }, static (_, _) => { }, static _ => { }, new SimulationClock());
+        var grid = new InventoryGridContent(world, services, windowService, contextMenuController, gridEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, new MapViewState(), static (_, _) => { }, static (_, _) => { }, static _ => { });
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -221,14 +221,16 @@ public sealed class ItemDropPresentationTests
         return fixture.ContextMenuController.Menu.ChildElements.OfType<Button>().ToList();
     }
 
+    private static void ClickButton(Button button) => button.HandleClick(button.Rectangle.Center);
+
     [TestMethod]
     public void ThePlayersOwnCell_OffersDropAndDropAll_ArmingOneUnitAndTheStack()
     {
         var fixture = BuildGrid(PlayerEntityId);
         var buttons = OpenMenu(fixture);
 
-        buttons.Single(button => button.LeftText == "Drop").RaiseClicked();
-        OpenMenu(fixture).Single(button => button.LeftText == "Drop All").RaiseClicked();
+        ClickButton(buttons.Single(button => button.LeftText == "Drop"));
+        ClickButton(OpenMenu(fixture).Single(button => button.LeftText == "Drop All"));
 
         CollectionAssert.AreEqual(
             new[] { ItemDrop.OneUnitOf(fixture.StackInstanceId), ItemDrop.WholeStackOf(fixture.StackInstanceId) },

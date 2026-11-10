@@ -28,8 +28,7 @@ public sealed class UiInputController
     /// <summary>How soon a second click must follow the first to count as a double-click.</summary>
     /// <remarks>
     /// The user's own double-click speed from the operating system (<see cref="OperatingSystemDoubleClickTime"/>), read
-    /// once, with no buffer added; 0.3s where it can't be read. The one window every double-click detector uses --
-    /// DispatchClick/HandleDoubleClickAwareClick and <see cref="UI.ListView"/>.
+    /// once, with no buffer added; 0.3s where it can't be read. DispatchClick is the one place it is measured.
     /// </remarks>
     public static readonly int DoubleClickWindowFrames = GameTiming.FramesForSeconds(OperatingSystemDoubleClickTime.ReadSecondsOr(0.3f));
 
@@ -42,14 +41,14 @@ public sealed class UiInputController
     /// <summary>Advances once per Update -- the frame clock the double-click window is measured on.</summary>
     private int _frameCounter;
 
-    /// <summary>The element that opted into double-click detection and was clicked last, if its double-click window may still be open -- see HandleDoubleClickAwareClick.</summary>
-    private Element? _lastDoubleClickCandidate;
+    /// <summary>The element that handled the last click, while a second click may still pair with it -- see DispatchClick.</summary>
+    private Element? _lastClickHandler;
 
-    /// <summary>The frame _lastDoubleClickCandidate was clicked on.</summary>
-    private int _lastDoubleClickCandidateFrame;
+    /// <summary>The frame _lastClickHandler handled its click on.</summary>
+    private int _lastClickFrame;
 
-    /// <summary>_lastDoubleClickCandidate's PoolReturnCount when it was clicked -- a different count is the instance's later use.</summary>
-    private int _lastDoubleClickCandidatePoolReturnCount;
+    /// <summary>_lastClickHandler's PoolReturnCount when it handled its click -- a different count is the instance's later use.</summary>
+    private int _lastClickHandlerPoolReturnCount;
 
     private readonly UiLayerStack _layers;
     private Vector2 _screenSize;
@@ -890,47 +889,79 @@ public sealed class UiInputController
     /// <summary>
     /// The one dispatch point for every click: offered to the pressed element, then to each ancestor
     /// until one handles it (Element.HandleClick), so a label inside a clickable row clicks the row.
-    /// An element that subscribed DoubleClicked goes through HandleDoubleClickAwareClick instead.
+    /// A second click pairing with the first is offered as a double-click first (TryDispatchDoubleClick).
     /// </summary>
+    /// <remarks>
+    /// The first click is never held back, so an element that takes double-clicks makes its single click harmless as the
+    /// first half of one (the inventory's selects). A double-click ends the pair, so a third click starts a new one.
+    /// </remarks>
     private void DispatchClick(Element? element, Point mousePosition)
     {
-        for (var candidate = element; candidate is not null; candidate = candidate.ParentElement)
+        if (TryDispatchDoubleClick(element, mousePosition) || !TryDispatchClick(element, mousePosition))
         {
-            if (candidate.WantsDoubleClickDetection)
-            {
-                HandleDoubleClickAwareClick(candidate);
-                return;
-            }
-
-            if (candidate.HandleClick(mousePosition))
-            {
-                return;
-            }
+            _lastClickHandler = null;
         }
     }
 
-    /// <summary>Raises Clicked at once, or DoubleClicked in its place when this is the second click on the same element within DoubleClickWindowFrames.</summary>
-    /// <remarks>
-    /// The first click is never held back, so an element that takes double-clicks must make its single click harmless as
-    /// the first half of one (the inventory's selects). A third click starts a new pair. An element closed between the two
-    /// (a grid recreating its cells, the pool reusing the instance) no longer matches (Element.PoolReturnCount), so the
-    /// second click is a single one.
-    /// </remarks>
-    private void HandleDoubleClickAwareClick(Element element)
+    /// <summary>Offers this click to element, then each ancestor, until one handles it, and remembers that one so a second click can pair with it; returns whether one did.</summary>
+    private bool TryDispatchClick(Element? element, Point mousePosition)
     {
-        if (ReferenceEquals(element, _lastDoubleClickCandidate) &&
-            element.PoolReturnCount == _lastDoubleClickCandidatePoolReturnCount &&
-            _frameCounter - _lastDoubleClickCandidateFrame <= DoubleClickWindowFrames)
+        for (var candidate = element; candidate is not null; candidate = candidate.ParentElement)
         {
-            _lastDoubleClickCandidate = null;
-            element.RaiseDoubleClicked();
-            return;
+            if (candidate.HandleClick(mousePosition))
+            {
+                _lastClickHandler = candidate;
+                _lastClickHandlerPoolReturnCount = candidate.PoolReturnCount;
+                _lastClickFrame = _frameCounter;
+                return true;
+            }
         }
 
-        _lastDoubleClickCandidate = element;
-        _lastDoubleClickCandidatePoolReturnCount = element.PoolReturnCount;
-        _lastDoubleClickCandidateFrame = _frameCounter;
-        element.RaiseClicked();
+        return false;
+    }
+
+    /// <summary>Offers this click as a double-click, from element up to the one that handled the last click, when it pairs with that click; returns whether one took it.</summary>
+    /// <remarks>
+    /// It pairs within DoubleClickWindowFrames, when the handler of the last click is element or an ancestor of it and has
+    /// not been closed since (a grid recreating its cells, the pool reusing the instance: Element.PoolReturnCount).
+    /// </remarks>
+    private bool TryDispatchDoubleClick(Element? element, Point mousePosition)
+    {
+        if (_lastClickHandler is not { } firstHandler ||
+            firstHandler.PoolReturnCount != _lastClickHandlerPoolReturnCount ||
+            _frameCounter - _lastClickFrame > DoubleClickWindowFrames ||
+            !IsSelfOrAncestor(firstHandler, element))
+        {
+            return false;
+        }
+
+        for (var candidate = element; candidate is not null; candidate = candidate.ParentElement)
+        {
+            if (candidate.HandleDoubleClick(mousePosition))
+            {
+                return true;
+            }
+
+            if (ReferenceEquals(candidate, firstHandler))
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsSelfOrAncestor(Element ancestor, Element? element)
+    {
+        for (var candidate = element; candidate is not null; candidate = candidate.ParentElement)
+        {
+            if (ReferenceEquals(candidate, ancestor))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Whether a content-drag payload is captured (see TryStartContentDrag) and the left press has become a drag -- a release then drops it rather than clicking the source.</summary>

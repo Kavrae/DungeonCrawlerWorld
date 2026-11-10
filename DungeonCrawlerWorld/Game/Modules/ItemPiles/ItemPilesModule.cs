@@ -1,4 +1,3 @@
-using Engine.ECS.Components;
 using Engine.Modules;
 using Game.Blueprints;
 using Game.Floors;
@@ -9,9 +8,9 @@ using Game.Modules.Currency;
 using Game.Modules.Currency.Components;
 using Game.Modules.Death;
 using Game.Modules.Inventory;
-using Game.Modules.Shops;
 using Game.Modules.ItemPiles.Components;
 using Game.Modules.ItemPiles.Systems;
+using Game.Modules.Shops;
 
 namespace Game.Modules.ItemPiles;
 
@@ -48,7 +47,10 @@ public sealed class ItemPilesModule : IGameModule
         var context = registration.Context;
         registration.SystemManager.Register(new ItemPileEndingSystem(new ItemPileEndings(registration.ComponentManager, context.EntityManager)));
 
-        var keeping = new ItemPileKeeping(registration.ComponentManager, context.EntityManager, context.MapQuery, ItemDropsFor(context));
+        var itemDrops = ItemDropsFor(context);
+        context.ToggleItemGroundPlacement.RegisterPlacer(new ItemDropGroundPlacer(itemDrops));
+
+        var keeping = new ItemPileKeeping(registration.ComponentManager, context.EntityManager, context.MapQuery, itemDrops);
         context.EventBus.Subscribe<NeighborhoodUnloadingEvent>(keeping.BeginKeeping);
         context.EventBus.Subscribe<NeighborhoodUnloadedEvent>(keeping.EndKeeping);
         context.EventBus.Subscribe<NeighborhoodPopulatedEvent>(keeping.Restore);

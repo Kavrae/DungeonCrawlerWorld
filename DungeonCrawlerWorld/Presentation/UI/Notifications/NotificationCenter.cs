@@ -107,9 +107,12 @@ public sealed class NotificationCenter(ElementPoolService elementPoolService, Ev
                 _folder.AddChild(countWindow);
 
                 // Summary count windows are created once here and never pooled/reused (unlike
-                // active notification windows), so this subscription lives for the game's
+                // active notification windows), so these subscriptions live for the game's
                 // lifetime -- no unsubscribe-on-fire needed, unlike OnActiveNotificationClosed.
+                // A click is the menu's "Open" and a double-click its "Open All": the first click
+                // opens one, the second the rest, so a double-click opens every one.
                 countWindow.Clicked += _ => OpenNextNotification(category);
+                countWindow.DoubleClicked += _ => OpenAllNotifications(category);
                 countWindow.OnRightClicked = position =>
                 {
                     var hasUnread = UnreadCategoryFor(category).Notifications.Count > 0;

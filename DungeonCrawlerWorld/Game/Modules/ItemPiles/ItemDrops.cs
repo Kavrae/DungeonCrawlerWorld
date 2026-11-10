@@ -7,9 +7,9 @@ using Engine.Tiles;
 using Game.Blueprints;
 using Game.Blueprints.Objects;
 using Game.Modules.Actions;
+using Game.Modules.Containers;
 using Game.Modules.Core.Components;
 using Game.Modules.Currency;
-using Game.Modules.Death;
 using Game.Modules.Inventory;
 using Game.Modules.ItemPiles.Components;
 using Game.Spawning;
@@ -21,8 +21,8 @@ namespace Game.Modules.ItemPiles;
 /// <remarks>
 /// The one rule for every drop, whether it is dragged or chosen from a menu, so the two gestures always do the same thing.
 /// A tile holding a corpse or a container takes the drop into it (a corpse first, then a container, then an item pile),
-/// whichever of its footprint tiles was aimed at, as long as its footprint touches the dropper's and a corpse's loot isn't
-/// reserved for someone else (LootRights). A standing shop on the tile refuses: items reach a shop only through its
+/// whichever of its footprint tiles was aimed at, as long as the dropper can reach its items (ContainerAccess: footprints
+/// touching, and a corpse's loot not reserved for someone else). A standing shop on the tile refuses: items reach a shop only through its
 /// window. Any other tile takes it onto the ground -- the dropper's own footprint or a tile next to it (Targeting), never a
 /// wall -- in a new pile. Units move through InventoryActions, keeping everything that is the unit's (its Override, its lit
 /// state), so ToggleItemHolderSync follows. A drop takes no action lock and needs none clear (ItemDropCommands).
@@ -42,10 +42,9 @@ public sealed class ItemDrops(
     public static TargetingSpec Targeting { get; } = new(TargetShape.SingleTarget, MaximumRange: 1, Modes: TargetingModes.GroundOnly);
 
     private readonly PackedComponentPool<ItemPileComponent> _piles = componentManager.GetPackedPool<ItemPileComponent>();
-    private readonly DirectComponentPool<TransformComponent> _transforms = componentManager.GetDirectPool<TransformComponent>();
     private readonly ItemDropRefusals _refusals = new(componentManager, itemCatalog);
     private readonly DropReceivers _receivers = new(componentManager);
-    private readonly LootRights _lootRights = LootRights.For(componentManager, componentManager.Keys);
+    private readonly ContainerAccess _containerAccess = new(componentManager, componentManager.Keys, simulationClock);
 
     /// <summary>The item pile on tile, on its layer.</summary>
     public bool TryFindPileAt(Vector3Int tile, out int pileEntityId)
@@ -124,20 +123,13 @@ public sealed class ItemDrops(
     private DropReceiverKind FindReceiver(int dropperEntityId, Vector3Int tile, out int containerEntityId) =>
         _receivers.Find(dropperEntityId, mapQuery.GetOccupantEntityIdSpanAt(tile), out containerEntityId);
 
-    /// <summary>Why containerEntityId can't take a drop from dropperEntityId: its footprint doesn't touch the dropper's, or a corpse's loot is reserved for someone else.</summary>
-    private ItemDropRefusal ContainerRefusal(int dropperEntityId, int containerEntityId)
+    /// <summary>Why containerEntityId can't take a drop from dropperEntityId: the dropper can't reach its items (ContainerAccess).</summary>
+    private ItemDropRefusal ContainerRefusal(int dropperEntityId, int containerEntityId) => _containerAccess.GetRefusal(dropperEntityId, containerEntityId) switch
     {
-        if (!_transforms.TryGetReadonly(dropperEntityId, out var dropper) ||
-            !_transforms.TryGetReadonly(containerEntityId, out var container) ||
-            GridDistance.ChebyshevDistance(dropper.Position, dropper.Size, container.Position, container.Size) > 1)
-        {
-            return ItemDropRefusal.OutOfReach;
-        }
-
-        return _lootRights.CanLoot(containerEntityId, componentManager.Keys.GetKey(dropperEntityId), simulationClock.CurrentFrame)
-            ? ItemDropRefusal.None
-            : ItemDropRefusal.LootReserved;
-    }
+        ContainerAccessRefusal.OutOfReach => ItemDropRefusal.OutOfReach,
+        ContainerAccessRefusal.LootReserved => ItemDropRefusal.LootReserved,
+        _ => ItemDropRefusal.None,
+    };
 
     private bool Move(int dropperEntityId, int receiverEntityId, in ItemDrop drop) => drop.Kind switch
     {

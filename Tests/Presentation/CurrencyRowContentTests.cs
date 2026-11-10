@@ -196,4 +196,21 @@ public sealed class CurrencyRowContentTests
         Assert.AreEqual(0, publishedCount);
         Assert.AreEqual(0, componentManager.GetPackedPool<CurrencyComponent>().GetReadonly(PlayerEntityId).Gold, "Give itself must still have happened -- only the shop-specific event is what's suppressed for a non-shop target.");
     }
+
+    [TestMethod]
+    public void AnEmptyChestsRow_ShowsTakeAndTakeAllDisabled_AndEnablesThemOnceItHoldsGold()
+    {
+        const int chestEntityId = 13;
+        var (goldElement, componentManager, contextMenuController) = BuildForGiveTake(chestEntityId, chestEntityId);
+        Button Option(string label) => contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == label);
+
+        goldElement.OnRightClicked!.Invoke(Point.Zero);
+        Assert.IsFalse(Option("Take").Enabled);
+        Assert.IsFalse(Option("Take All").Enabled);
+
+        componentManager.Merge(chestEntityId, new CurrencyComponent(gold: 3, credits: 0));
+        goldElement.OnRightClicked!.Invoke(Point.Zero);
+        Assert.IsTrue(Option("Take").Enabled);
+        Assert.IsTrue(Option("Take All").Enabled);
+    }
 }

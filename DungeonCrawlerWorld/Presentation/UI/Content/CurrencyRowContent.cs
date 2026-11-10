@@ -1,4 +1,5 @@
 using Game.Modules.Currency;
+using Game.Modules.Currency.Components;
 using Game.Modules.ItemPiles;
 using Game.Modules.Shops;
 using Game.Views;
@@ -150,12 +151,16 @@ public sealed class CurrencyRowContent(
         }
         else if (element.EntityId == secondaryTargetEntityId && secondaryTargetEntityId != world.PlayerEntityId && !secondaryIsShop)
         {
-            options.Add(new DropdownOption("Take", null, Enabled: true, () => TransferOne(element, secondaryTargetEntityId, world.PlayerEntityId)));
-            options.Add(new DropdownOption("Take All", null, Enabled: true, () => _currencyCommands.TryTransferAll(secondaryTargetEntityId, world.PlayerEntityId)));
+            // Nothing to take reads disabled, not absent: an empty chest or pile still shows its row.
+            _currencyView.TryGetCurrency(secondaryTargetEntityId, out var held);
+            options.Add(new DropdownOption("Take", null, Enabled: AmountOf(held, element.Type) > 0, () => TransferOne(element, secondaryTargetEntityId, world.PlayerEntityId)));
+            options.Add(new DropdownOption("Take All", null, Enabled: held.Gold > 0 || held.Credits > 0, () => _currencyCommands.TryTransferAll(secondaryTargetEntityId, world.PlayerEntityId)));
         }
 
         return options;
     }
+
+    private static int AmountOf(CurrencyComponent currency, CurrencyType type) => type == CurrencyType.Gold ? currency.Gold : currency.Credits;
 
     /// <summary>Adds an option arming drop (IPlayerItemDrops), disabled while it can't be armed.</summary>
     private void AddDropOption(List<DropdownOption> options, string label, ItemDrop drop) =>

@@ -40,7 +40,7 @@ public static class ElementFactoryRegistry
         var views = gameSession.Views;
         var mapView = views.MapView;
         var commands = gameSession.Commands;
-        var inventoryServices = new InventoryServices(itemCatalog, views.InventoryView, views.ShopView, views.CurrencyView, views.ActionStateView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, catalogs.GameplayTags, shellServices.ItemHoverDetails, playerItemDrops);
+        var inventoryServices = new InventoryServices(itemCatalog, views.InventoryView, views.ShopView, views.CurrencyView, views.ActionStateView, commands.InventoryCommands, commands.ShopCommands, commands.CurrencyCommands, catalogs.GameplayTags, shellServices.ItemHoverDetails, playerItemDrops, commands.LootCommands);
 
         uiEngineContext.RegisterFrameworkElementFactories(contextMenuController, cursorTextContent);
 
@@ -68,7 +68,7 @@ public static class ElementFactoryRegistry
             shellServices.PointerState));
 
         elementPool.RegisterFactory(() => new InventoryManagementWindow(
-            services, inventoryServices, world, contextMenuController, mapViewState, simulationClock: gameSession.SimulationClock));
+            services, inventoryServices, world, contextMenuController, mapViewState));
         elementPool.RegisterFactory(() => new InventoryItemStackCell(services, sprites));
         elementPool.RegisterFactory(() => new HotbarSlotElement(services));
         elementPool.RegisterFactory(() => new ShopItemStackCell(services, sprites));
@@ -85,12 +85,12 @@ public static class ElementFactoryRegistry
 
         elementPool.RegisterFactory(() => new SecondaryInventoryWindow(
             services, inventoryServices, world, contextMenuController, mapViewState,
-            simulationClock: gameSession.SimulationClock, entityNaming: views.EntityNaming, healthView: views.HealthView, actionSourceNaming: views.ActionSourceNaming));
+            entityNaming: views.EntityNaming, healthView: views.HealthView, actionSourceNaming: views.ActionSourceNaming));
         elementPool.RegisterFactory(() => new ShopWindow(
             services, inventoryServices, world, contextMenuController, mapViewState,
-            simulationClock: gameSession.SimulationClock, entityNaming: views.EntityNaming));
+            entityNaming: views.EntityNaming));
         elementPool.RegisterFactory(() => new TradeWindow(
-            services, inventoryServices, world, contextMenuController, mapViewState, simulationClock: gameSession.SimulationClock));
+            services, inventoryServices, world, contextMenuController, mapViewState));
         elementPool.RegisterFactory(() => new EntityIconElement(services, sprites, mapView));
 
         elementPool.RegisterFactory(() => new InspectionWindow(services, mapViewState));

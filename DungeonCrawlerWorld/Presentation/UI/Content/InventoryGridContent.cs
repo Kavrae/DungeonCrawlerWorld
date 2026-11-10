@@ -52,9 +52,6 @@ public sealed class InventoryGridContent(
     Action<int, uint> onItemSelected,
     Action<int, uint> onActivateRequested,
     Action<int> onOpenLootboxesRequested,
-    // "CurrentFrame" for the shared action lock, which is a deadline (see ActionLockGate) -- only read by
-    // IsPlayerActionLocked below.
-    SimulationClock simulationClock,
     // Null (every non-trade caller) -- this grid's own pricing direction/cell type derive from
     // mapViewState.OpenShopEntityId/entityId as they always have. Non-null only for the trade
     // window's own two columns, which need TradeItemStackCell instead of
@@ -721,14 +718,26 @@ public sealed class InventoryGridContent(
     }
 
     /// <summary>
-    /// Double-click-to-activate -- a second entry point into the same arm flow "Activate"
-    /// (BuildItemContextMenu) uses. UiInputController raises it in place of the second click
-    /// (DispatchClick/HandleDoubleClickAwareClick); the first already selected the stack, which a
-    /// double-click leaves selected. Only wired up for player-owned, non-Merged-Stack cells (see
-    /// RebuildCells) -- a corpse/shop/trade cell, or a Merged Stack badge, never reaches here at all.
+    /// A double-click on a stack: while a loot or shop window is open, it moves the whole stack between the player and
+    /// it, exactly as the "Give"/"Take" or "Sell All"/"Buy All" option (TryGetSecondaryTransfer) -- in place of
+    /// activating, and a no-op where that option isn't offered or allowed; otherwise, on the player's own stack, the
+    /// "Activate" option's arm (or opening loot boxes). The first click already selected the stack. Wired for
+    /// non-Merged-Stack cells of the player's grid and the open loot or shop window's (RebuildCells).
     /// </summary>
     private void OnCellDoubleClicked(Element element)
     {
+        if (IsTradingWithSecondary())
+        {
+            if (element is InventoryItemStackCell { StackInstanceId: { } stackInstanceIdToMove } cellToMove &&
+                TryGetSecondaryTransfer(cellToMove, stackInstanceIdToMove, out _, out var isAllowed, out var transfer) &&
+                isAllowed)
+            {
+                transfer();
+            }
+
+            return;
+        }
+
         if (element is InventoryItemStackCell lootboxCell && IsPlayerLootbox(lootboxCell))
         {
             onOpenLootboxesRequested(world.PlayerEntityId);
@@ -741,19 +750,15 @@ public sealed class InventoryGridContent(
         }
     }
 
-    /// <summary>The actual Activate attempt, shared by "Activate" (BuildItemContextMenu) and a confirmed double-click (OnCellDoubleClicked) -- a no-op, not a fallback to the single-click action, if the item can't be activated, the global cooldown is still up and holds it, or the player can't use it right now (see CanActivate/IsHeldByActionLock/IsBlocked).</summary>
+    /// <summary>The Arm or Turn on/off attempt, shared by its menu option (BuildItemContextMenu) and a double-click (OnCellDoubleClicked) -- a no-op if the item can't be used or the player can't use it now (CanActivate, IsBlocked).</summary>
+    /// <remarks>It arms through the action lock, as a hotbar press does: only the confirm waits on the lock.</remarks>
     private void TryActivate(int cellEntityId, uint stackInstanceId)
     {
-        if (CanActivate(cellEntityId, stackInstanceId) && !IsHeldByActionLock(stackInstanceId) && !IsBlocked(stackInstanceId))
+        if (CanActivate(cellEntityId, stackInstanceId) && !IsBlocked(stackInstanceId))
         {
             onActivateRequested(cellEntityId, stackInstanceId);
         }
     }
-
-    /// <summary>Whether the action lock is what stops the player activating this stack now: it is up, and the stack's item isn't FreeCast (which ignores it).</summary>
-    private bool IsHeldByActionLock(uint stackInstanceId) =>
-        IsPlayerActionLocked() &&
-        !(TryGetPlayerItem(stackInstanceId, out var item) && item.Activator?.Timing.Category == ActionTimingCategory.FreeCast);
 
     private bool TryGetPlayerItem(uint stackInstanceId, out ItemDefinition item)
     {
@@ -767,18 +772,22 @@ public sealed class InventoryGridContent(
         return false;
     }
 
-    /// <summary>What activating this stack is called: "Turn on" or "Turn off" for a toggle item, by whether the unit is lit, and "Activate" for anything else.</summary>
-    private string ActivateLabel(uint stackInstanceId) =>
-        TryGetPlayerItem(stackInstanceId, out var item) && item.Activator is ToggleItemActivator toggleActivator
-            ? toggleActivator.IsToggledOn ? "Turn off" : "Turn on"
-            : "Activate";
+    /// <summary>What using this stack is called (ActivationMenuLabels): "Turn off" for a lit toggle item, "Turn on" for an unlit one in Target mode, else "Arm" -- the same words the hotbar uses. The inventory never confirms, so nothing here is armed already.</summary>
+    private string ActivateLabel(uint stackInstanceId)
+    {
+        if (!TryGetPlayerItem(stackInstanceId, out var item))
+        {
+            return ActivationMenuLabels.Arm;
+        }
+
+        var toggleActivator = item.Activator as ToggleItemActivator;
+        return ActivationMenuLabels.For(toggleActivator is not null, toggleActivator?.IsToggledOn ?? false, isArmedHere: false, mapViewState.TargetingMode, item.Tags);
+    }
 
     /// <summary>
     /// Player-owned, non-Merged-Stack, and the effective ItemDefinition carries an IActionActivator
     /// -- the same base eligibility ActionTargetingController.HandleItemSlotPress/ArmItemFromStack
-    /// check, duplicated here since this class already reads the inventory itself
-    /// independently. Deliberately ignores the global cooldown -- see IsPlayerActionLocked, checked
-    /// separately so "Activate" stays visible-but-disabled on cooldown rather than disappearing.
+    /// check, duplicated here since this class already reads the inventory itself independently.
     /// </summary>
     private bool CanActivate(int cellEntityId, uint stackInstanceId) =>
         cellEntityId == world.PlayerEntityId &&
@@ -792,17 +801,14 @@ public sealed class InventoryGridContent(
         _itemCatalog.TryGet(cell.ItemDefinitionId, out var definition) &&
         definition.Tags.Has(GameTags.ItemLootbox);
 
-    /// <summary>Mirrors MapWindow's own "Inspect" context-menu option, the existing precedent for gating a UI action on the shared per-entity action lock (ActionLockGate.IsBlocked).</summary>
-    private bool IsPlayerActionLocked() => _actionStateView.IsActionLocked(world.PlayerEntityId, simulationClock.CurrentFrame);
-
-    /// <summary>The player can't use this stack right now (ActionStateView.GetItemBlocker) -- "Activate" stays visible but disabled, the same as while locked.</summary>
+    /// <summary>The player can't use this stack right now (ActionStateView.GetItemBlocker) -- its option stays visible but disabled.</summary>
     private bool IsBlocked(uint stackInstanceId) => _actionStateView.GetItemBlocker(world.PlayerEntityId, stackInstanceId) != ActivationBlocker.None;
 
-    /// <summary>
-    /// "Activate" (arms the item exactly as an ordinary hotbar press would -- see
+    /// "Arm" (arms the item exactly as an ordinary hotbar press would, through the action lock -- see
     /// ActionTargetingController.ArmItemFromStack -- and closes this window; shown whenever
-    /// CanActivate is true, but disabled rather than omitted while IsHeldByActionLock, so the
-    /// player can see it exists and why it's currently unavailable; placed first, before Compare;
+    /// CanActivate is true, but disabled rather than omitted while the item is blocked, so the
+    /// player can see it exists; placed first, before Compare; reads "Turn on"/"Turn off" for a
+    /// toggle item, which is queued at once and closes nothing -- ActivationMenuLabels),
     /// reads "Turn on"/"Turn off" for a toggle item, which is queued at once and closes nothing),
     /// "Compare" (arms Item Details Comparison against this stack -- see ItemComparisonController.
     /// Arm), "Add to trade" (this grid's own entity -> the matching trade-offer entity, only while a
@@ -817,8 +823,8 @@ public sealed class InventoryGridContent(
     /// exists), so its cells only ever offer "Take"; for the player's own grid, it queries whatever's
     /// actually open right now (see InventoryWindowController.GetSecondaryTargetEntityId), so "Give"
     /// only appears while a secondary window is open. Trade-grid cells never reach this method at all
-    /// (see this grid's own OnRightClicked wiring in RebuildCells): right-click there removes the stack
-    /// immediately instead. A loot window's cells (see IsLootCell) also end with "Take All", on
+    /// (see this grid's own OnRightClicked wiring in RebuildCells): their menu holds only "Remove from
+    /// trade". A loot window's cells (see IsLootCell) also end with "Take All", on
     /// every cell, a Merged Stack or untradeable one included.
     /// </summary>
     private List<DropdownOption> BuildItemContextMenu(InventoryItemStackCell cell)
@@ -841,11 +847,7 @@ public sealed class InventoryGridContent(
         !_shopView.IsShop(secondaryTargetEntityId);
 
     /// <summary>Moves every item and all currency lootedEntityId holds to the player.</summary>
-    private void TakeAll(int lootedEntityId)
-    {
-        _inventoryCommands.LootEveryStack(lootedEntityId, world.PlayerEntityId);
-        _currencyCommands.TryTransferAll(lootedEntityId, world.PlayerEntityId);
-    }
+    private void TakeAll(int lootedEntityId) => inventoryServices.LootCommands.TakeAll(lootedEntityId, world.PlayerEntityId);
 
     private List<DropdownOption> BuildStackContextMenu(InventoryItemStackCell cell)
     {
@@ -869,16 +871,10 @@ public sealed class InventoryGridContent(
 
         if (CanActivate(cell.EntityId, stackInstanceId))
         {
-            options.Add(new DropdownOption(ActivateLabel(stackInstanceId), null, Enabled: !IsHeldByActionLock(stackInstanceId) && !IsBlocked(stackInstanceId), () => onActivateRequested(cell.EntityId, stackInstanceId)));
+            options.Add(new DropdownOption(ActivateLabel(stackInstanceId), null, Enabled: !IsBlocked(stackInstanceId), () => TryActivate(cell.EntityId, stackInstanceId)));
         }
 
         options.Add(new DropdownOption("Compare", null, Enabled: true, () => inventoryServices.ItemHoverDetails.Compare(cell.EntityId, stackInstanceId, this)));
-
-        // While a shop is open, every cell's ShopTradeEligible reflects shop trade eligibility
-        // (see UpdateShopEligibilityState) -- false (wrong tag, or the paying side can't afford
-        // it) means Give/Take must not even be offered, closing the same currency-drain-style
-        // exploit a naive reuse of plain Give/Take would otherwise open.
-        var isShopIneligible = mapViewState.OpenShopEntityId is not null && !cell.ShopTradeEligible;
 
         if (!cell.CanTrade)
         {
@@ -886,7 +882,7 @@ public sealed class InventoryGridContent(
         }
 
         // "Add to trade" -- gated on CanStageInTrade (tag match only, see its own doc comment), not
-        // the stricter isShopIneligible (tag match AND affordability) Sell All/Buy All below use --
+        // the deal rule Sell All/Buy All below are enabled by (ShopDeals: tags, cap, room, Gold) --
         // an unaffordable item can still be staged in the trade window even though it can't be
         // directly bought/sold there or on the shop's own grid; it just stays greyed out. Only on
         // the player's own grid (-> ReservedEntityIds.TradeOfferPlayerEntityId) or the real shop's
@@ -909,44 +905,9 @@ public sealed class InventoryGridContent(
             }
         }
 
-        if (!isShopIneligible && getSecondaryTargetEntityId() is { } secondaryTargetEntityId)
+        if (TryGetSecondaryTransfer(cell, stackInstanceId, out var transferLabel, out var isTransferAllowed, out var transfer))
         {
-            // A shop endpoint routes the same Give/Take gesture through ShopActions instead of a
-            // plain transfer -- "Give" to a shop is a sale (ShopActions.TrySellToShop, relabeled
-            // "Sell All"), "Take" from a shop is a purchase (ShopActions.TryBuyFromShop, relabeled
-            // "Buy All"), both moving Gold the opposite direction at the shop's own price. A
-            // non-shop secondary target (a corpse/container) keeps the plain "Give"/"Take" labels --
-            // there's no price to speak of, just a transfer.
-            var isShopSecondary = _shopView.IsShop(secondaryTargetEntityId);
-
-            if (cell.EntityId == world.PlayerEntityId && secondaryTargetEntityId != world.PlayerEntityId)
-            {
-                options.Add(new DropdownOption(isShopSecondary ? "Sell All" : "Give", null, Enabled: true, () =>
-                {
-                    if (isShopSecondary)
-                    {
-                        _shopCommands.TrySellToShop(world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId);
-                    }
-                    else
-                    {
-                        _inventoryCommands.TryTransferStack(cell.EntityId, secondaryTargetEntityId, stackInstanceId);
-                    }
-                }));
-            }
-            else if (cell.EntityId == secondaryTargetEntityId && secondaryTargetEntityId != world.PlayerEntityId)
-            {
-                options.Add(new DropdownOption(isShopSecondary ? "Buy All" : "Take", null, Enabled: true, () =>
-                {
-                    if (isShopSecondary)
-                    {
-                        _shopCommands.TryBuyFromShop(world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId);
-                    }
-                    else
-                    {
-                        _inventoryCommands.TryLootStack(cell.EntityId, world.PlayerEntityId, stackInstanceId);
-                    }
-                }));
-            }
+            options.Add(new DropdownOption(transferLabel, null, Enabled: isTransferAllowed, transfer));
         }
 
         if (IsPlayersOwnDropCell(cell))
@@ -958,6 +919,54 @@ public sealed class InventoryGridContent(
         return options;
     }
 
+    /// <summary>The whole-stack move between the player and the open secondary window for cell -- the one path its menu option and a double-click both take.</summary>
+    /// <remarks>
+    /// From the player's grid it goes to the secondary target ("Give", or "Sell All" to a shop); from the secondary target's
+    /// grid to the player ("Take", or "Buy All" from a shop). A shop's is a one-stack shop deal (ShopCommands), allowed only
+    /// when the deal rule allows it now; a plain move is the one a drag makes (PlainInventoryDragDropResolver): a Take merges
+    /// into the player's interchangeable stacks, a Give moves the stack whole. None for an item that can't change hands, or
+    /// with no secondary window open.
+    /// </remarks>
+    /// <param name="isAllowed">Whether it would go ahead now -- the menu option's Enabled.</param>
+    private bool TryGetSecondaryTransfer(InventoryItemStackCell cell, uint stackInstanceId, out string label, out bool isAllowed, out Action transfer)
+    {
+        label = "";
+        isAllowed = false;
+        transfer = static () => { };
+        if (!cell.CanTrade || getSecondaryTargetEntityId() is not { } secondaryTargetEntityId || secondaryTargetEntityId == world.PlayerEntityId)
+        {
+            return false;
+        }
+
+        var isShopSecondary = _shopView.IsShop(secondaryTargetEntityId);
+        if (cell.EntityId == world.PlayerEntityId)
+        {
+            label = isShopSecondary ? "Sell All" : "Give";
+            isAllowed = !isShopSecondary || _shopCommands.GetSaleRefusal(world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId) == ShopDealRefusal.None;
+            transfer = isShopSecondary
+                ? () => _shopCommands.TrySellToShop(world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId)
+                : () => _inventoryCommands.TryTransferStack(world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId);
+            return true;
+        }
+
+        if (cell.EntityId == secondaryTargetEntityId)
+        {
+            label = isShopSecondary ? "Buy All" : "Take";
+            isAllowed = !isShopSecondary || _shopCommands.GetPurchaseRefusal(world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId) == ShopDealRefusal.None;
+            transfer = isShopSecondary
+                ? () => _shopCommands.TryBuyFromShop(world.PlayerEntityId, secondaryTargetEntityId, stackInstanceId)
+                : () => _inventoryCommands.TryLootStack(secondaryTargetEntityId, world.PlayerEntityId, stackInstanceId);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether a shop's or a corpse's or container's window is open beside the player's -- the secondary target isn't the player. While one is, a double-click moves a stack between them.</summary>
+    private bool IsTradingWithSecondary() =>
+        getSecondaryTargetEntityId() is { } secondaryTargetEntityId &&
+        secondaryTargetEntityId != world.PlayerEntityId;
+
     /// <summary>A cell of the player's own inventory holding something that may leave it, while no shop is open: where Drop and Drop All are offered.</summary>
     /// <remarks>Never a corpse's, a container's, a shop's or a trade offer's cell. A loot box never leaves its owner (CanTrade), so it isn't offered.</remarks>
     private bool IsPlayersOwnDropCell(InventoryItemStackCell cell) =>
@@ -968,9 +977,8 @@ public sealed class InventoryGridContent(
         options.Add(new DropdownOption(label, null, Enabled: inventoryServices.PlayerItemDrops.CanArmDrop(drop), () => inventoryServices.PlayerItemDrops.ArmDrop(drop)));
 
     /// <summary>
-    /// Trade-grid cells' own right-click action, wired in place of BuildItemContextMenu/a context
-    /// menu entirely (see that method's own doc comment) -- removes the clicked stack from the
-    /// trade immediately, moving it back to whichever real entity it came from (the real player for
+    /// A trade column's stack out of the trade -- its menu's "Remove from trade" and its double-click (RebuildCells) --
+    /// moving it back to whichever real entity it came from (the real player for
     /// the player-side column, the real shop for the shop-side column), the same transfer "Add to
     /// trade" performs in reverse. A no-op for a Merged Stack cell (no single StackInstanceId) or if
     /// isTradeShopSide's own real owner (OpenShopEntityId) is somehow unset.
@@ -1102,17 +1110,31 @@ public sealed class InventoryGridContent(
 
             cell.Clicked += OnCellClicked;
 
-            // Only the player's own real (non-Merged-Stack) cells ever support Activate at all (see
-            // CanActivate), so only they listen for a double-click: on any other cell a quick second
-            // click stays a click (a Merged Stack badge's expands its group).
-            if (!entry.MergedStackBadgeVisible && entityId == world.PlayerEntityId)
+            // The player's own real (non-Merged-Stack) cells double-click to activate, or, beside a loot or shop window, to
+            // give or sell; that window's cells to take or buy (OnCellDoubleClicked). On any other cell a quick second click
+            // stays a click (a Merged Stack badge's expands its group).
+            if (!entry.MergedStackBadgeVisible && tradeGridIsShopSide is null && (entityId == world.PlayerEntityId || entityId == getSecondaryTargetEntityId()))
             {
                 cell.DoubleClicked += OnCellDoubleClicked;
             }
 
-            cell.OnRightClicked = tradeGridIsShopSide is { } isTradeShopSide
-                ? _ => RemoveFromTrade(cell, isTradeShopSide)
-                : position =>
+            // A trade column's stack: its menu's one option and a double-click both take it out of the trade
+            // (RemoveFromTrade), the same as every other cell's right-click opening a menu.
+            if (tradeGridIsShopSide is { } isTradeShopSide)
+            {
+                if (!entry.MergedStackBadgeVisible)
+                {
+                    cell.DoubleClicked += _ => RemoveFromTrade(cell, isTradeShopSide);
+                }
+
+                cell.OnRightClicked = position => contextMenuController.Open(new Vector2(position.X, position.Y),
+                [
+                    new DropdownOption("Remove from trade", null, Enabled: cell.StackInstanceId is not null, () => RemoveFromTrade(cell, isTradeShopSide)),
+                ]);
+            }
+            else
+            {
+                cell.OnRightClicked = position =>
                 {
                     var options = BuildItemContextMenu(cell);
                     if (options.Count > 0)
@@ -1120,6 +1142,8 @@ public sealed class InventoryGridContent(
                         contextMenuController.Open(new Vector2(position.X, position.Y), options);
                     }
                 };
+            }
+
             _hostWindow.AddChild(cell);
             _cells.Add(cell);
 

@@ -23,9 +23,8 @@ public sealed class ShopWindow(
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    Engine.ECS.Systems.SimulationClock simulationClock,
     EntityNaming entityNaming)
-    : ContainerInventoryWindow(services, inventoryServices, world, contextMenuController, mapViewState, simulationClock), IContentDropTarget
+    : ContainerInventoryWindow(services, inventoryServices, world, contextMenuController, mapViewState), IContentDropTarget
 {
     private InventoryDropTarget? _dropTarget;
 

@@ -769,6 +769,16 @@ The IDE's Error List shows severity, description, table, record, field and layer
 
 ### High Priority
 
+#### ItemActivationSystem.Update: one method per activator?
+
+`ItemActivationSystem.Update` is one loop with a `switch` on the item's activator (potion, scroll, wand, consumable,
+toggle item, ...), each case doing its own checks, costs, lock and windup; the toggle item case is the worst (FreeCast
+lock bypass, activation effects only when turning on, a Delayed windup, the flip, then the Ground-mode drop). Decide
+whether it is worth moving each case into a private method (`ActivatePotion`, `ActivateToggleItem`, ...) with the loop
+left as dispatch -- and whether the shared steps (still holds the stack, lock check, activation effects, lock) can be
+one helper rather than repeated per case. Measure nothing changes: the system runs per stripe every frame, so keep the
+cases free of new allocations, and keep the existing activation tests passing unchanged as the proof.
+
 #### Resolve highest performance costs
 
 Find and fix what costs the most per frame. Headless Release, seed 1, frames 600-3600, map 3072 (2026-10-29,
@@ -1346,6 +1356,23 @@ Built on the senses in "Field of view and perception" above.
   block them; anyone in range with hearing perceives the location, not the entity.
 
 ### Medium Priority
+
+#### Use items in item piles and on corpses without picking them up
+
+A context-menu option on a stack in a loot window (an item pile's, a corpse's, a container's) that uses it where it
+lies -- toggles included (turning a lit Toxic Idol in a pile off, or one on) -- with no Take first.
+- **Who holds it while used:** the effects' source is the player (an item is used by someone), but the stack stays with
+  the pile or corpse. A toggle item's lit state is the unit's (`ToggleItemHolderSync`), so a toggle lit in place is held
+  by the pile or corpse -- as a lit unit dropped there is (IMPLEMENTATION-NOTES "UI consistency: one path for every input") -- and its aura radiates
+  from there.
+- **Same path as everything else that uses an item:** the activation goes through `ItemActivationSystem` (blockers,
+  action lock, windup, activation effects charged to the player), only with the stack found on another holder. Decide
+  how a request names that holder; today `PendingItemActivationComponent` assumes the stack is the activator's own.
+- **Rules:** within reach and loot rights (`ContainerAccess`), like Take; refused for a shop's stock. A consumable
+  used in place consumes from the pile. Double-click in a loot window stays Take (UI consistency rule: a double-click is
+  the window's whole-stack move), so this is a menu option only, labelled with the same words as the hotbar
+  (`ActivationMenuLabels`).
+- Hotkey binding: a stack the player doesn't hold can't be bound, as now.
 
 #### Area pools
 
@@ -1928,6 +1955,20 @@ doors opens its trade, destroying it destroys its parts -- is a parent entity ow
 Until then a shop or small building is a single entity up to Huge, like the 2x2 `shop-stand` shops.
 
 ### Low Priority
+
+#### Scammed and Angel Investor: split the shop achievements
+
+Two first-time achievements for completing a trade with a shop (`ShopCommands.TryCompleteDeal`, `ShopDeals`):
+- **Scammed:** the first completed trade where the player's side was worth more than the shop's
+  (`ShopDealValuation.PlayerOfferValue > ShopOfferValue`).
+- **Angel Investor:** the first completed trade where the shop got currency and the player got nothing (the shop's offer
+  is empty: no stacks, no Gold).
+
+Today Angel Investor fires on `GoldGivenToShopEvent` for any Gold given beyond a deal's price, and on a plain currency
+give to a shop (`ShopActions.TryGiveCurrencyToShop`: the currency row's Give, a currency drag). Decide whether those
+plain gives still count (they are a trade where the player gets nothing, by this rule's spirit) and replace the event
+with one carrying the deal's outcome (both offers' values and whether either side was empty), published once per
+completed deal, so each achievement reads its own condition from it. Scammed needs a new definition and reward.
 
 #### Doors that open and close
 
@@ -2836,6 +2877,20 @@ To settle when designing it:
 
 ### High Priority
 
+#### TOP PRIORITY: "Loot All" / "Take All" button on loot windows
+
+A button on the loot window (`SecondaryInventoryWindow`) that moves everything it holds -- every item stack and all
+currency -- to the player: labelled **"Loot All"** on a corpse and **"Take All"** on a container (a chest, an item pile,
+a destroyed shop), with the same action behind both: `LootCommands.TakeAll` (every stack, then all currency, marking it
+looted), which the loot window's context-menu "Take All" and the map's "Take All" on a chest or pile already call -- the
+button calls that one path, never a copy (IMPLEMENTATION-NOTES "UI consistency: one path for every input"), and the menu option's label follows the same
+corpse/container split (`EntityInteractionView.IsContainer`).
+- Where it sits: the window's footer (`Element` footer content), beside the currency row.
+- Disabled, not hidden, when there is nothing left to take; what happens to items that don't fit (no room for a new
+  stack) is whatever `LootEveryStack` already does -- show what stayed behind rather than silently leaving it.
+- Which label: a corpse is a dead creature (`DeadComponent` without a `ContainerComponent` of its own); decide whether a
+  destroyed shop or chest reads as a container ("Take All") -- the window kind is `ContainerWindowKind.Loot` for all of them.
+
 #### QuickCast mode
 
 A hotbar mode, chosen by the Activation Style setting ("Options menu", Global), where an action is aimed while its key
@@ -3349,6 +3404,72 @@ as if a key were pressed, a ready shape for "Replay by recording input" and "In-
 (Global).
 
 ### Medium Priority
+
+#### Double-click a header to minimize or expand
+
+Double-clicking an element's header (a window's title bar, a Folder's header) minimizes it when it is expanded and
+expands it when it is minimized -- the same change its minimize/restore button makes (`WindowDisplayMode`), through the
+same call, so the button, a double-click and any menu option stay one path. Today `Element.HandleDoubleClick` never takes
+a header click (a second click there is a plain click), so this is an `OnHeaderDoubleClickAction` beside
+`OnHeaderClickAction`, offered by `UiInputController.TryDispatchDoubleClick` the way content is. Decide: whether a
+double-click on a header *button* (close, minimize) stays two clicks; what a window that can't minimize does (nothing);
+and that the first click of the pair -- which may start a window move drag or raise it -- stays harmless.
+
+#### Shop cells greyed by the shop deal rule
+
+An inventory cell in shop mode is greyed out, and refuses Give/Take/drag, by `InventoryItemStackCell.ShopTradeEligible`,
+which `InventoryGridContent.UpdateShopEligibilityState` computes every frame from tags and the payer's Gold alone. The
+rule that actually decides a direct buy or sale is `ShopDeals` (sell cap and room too), which "Buy All"/"Sell All"
+already read (`ShopCommands.GetPurchaseRefusal`/`GetSaleRefusal`) -- so a cell can look buyable while the shop is at its
+cap. Make the greyed look the deal rule's answer without evaluating a deal per cell per frame (it allocates): cache per
+cell on the inputs that change it (stack, both sides' Gold, the shop's stock of the item), or have `ShopDeals` take a
+span of stack ids. Keep the trade columns' own meaning: an item that can't be bought outright can still be staged
+(`CanStageInTrade`, tags only).
+
+#### An item pile holding one item looks like that item
+
+An item pile (`ItemPile`, drawn as a `FloorObject`) whose contents are a single item -- one stack, or several stacks of
+the same item, and no currency -- takes that item's name and its sprite or glyph, so to the player the item is simply
+lying on the ground: a dropped Toxic Idol (lit in Ground mode) reads as the idol, not
+"Item Pile".
+- **Where it's decided:** names and looks are read through the spawn record (`MapViewQuery`, `EntityNaming`), with
+  per-instance overrides (`DisplayTextComponent`/`GlyphComponent`/`SpriteComponent`) only for something like a destroyed
+  container. Prefer a view rule ("a pile with one item shows that item", read from its contents) over writing override
+  components on every inventory change -- so it can't fall out of step when a stack is taken or added.
+- **Everywhere a name shows:** the map, the right-click menu header, Inspection, the loot window's title and icon
+  (`EntityIconElement`), drop cursor text and the map's container wash.
+- **Back to a pile:** a second item, any currency, or a quantity the sprite should show (a stack count badge?) -- decide
+  whether a stack of 5 potions shows as a potion with a count.
+- A lit toggle item lying there could draw its lit marker (`ToggleActiveMarker`) too.
+
+#### Drag a throwable item onto the map: drop when adjacent, throw when farther
+
+Dragging an item from the inventory onto the map always drops it today (`MapDropHandler` through `ItemDrops`, the one
+drop rule). A throwable item gets two bands of drop targets instead:
+- **Adjacent** (the tiles `ItemDrops.Targeting` reaches now): drop, exactly as today.
+- **Farther, up to the item's maximum throw range**: throw it there -- the same activation its Throw action makes, aimed
+  at that tile, so a drag and the hotbar land the same way (one rule, several ways in).
+- Beyond the throw range the drag is refused with the refusal cursor and a cursor message, never clamped.
+- The drag shows which band the cursor is in (drop vs throw wording in the cursor text, the throw's target preview
+  through `TargetingView` while in the throw band).
+- Decide what makes an item throwable (no tag says so yet: an item whose activation is a `Lobbed` or `Projectile` path,
+  or a declared `Item.Throwable` tag) and where its throw range comes from ("Lobbed paths: the arc and throwing range",
+  Game).
+
+#### Target path indicators, the line-of-sight stop, and piercing
+
+The targeting preview and windup telegraph wash the tiles a path crosses and the shape it lands (`MapGameOverlay`,
+`TargetingView`), but don't say how it travels, where sight stops it, or who it will hit. Research how other games show
+this (tactics games' throw arcs and shot lines, XCOM's hit markers, Divinity's arcs and blocked-path markers, Into the
+Breach's projectile and artillery previews), then design:
+- **Path shape per kind**: an arc for a `Lobbed` throw, a straight line ending in an arrowhead for a `Projectile`, a down
+  arrow for a drop onto a tile.
+- **Line of sight**: a slashed-out eye where `LineOfSight` stops the path, the rest of the would-be path dimmed or not
+  drawn.
+- **Piercing**: a projectile that passes through `ProjectileHitCount` entities shows where it stops.
+- **"Will be hit" markers** over each entity the resolved targets reach (path hits and the landing shape), read from
+  `ResolvedTargets` so what is marked is what lands.
+- All of it comes from the one `TargetResolution.Resolve`; nothing re-traces a path in Presentation.
 
 #### Separate the drawing of backgrounds, borders, content and titles across UI elements
 
@@ -3918,6 +4039,16 @@ from the UIEngine work, `IContentDropHandler`). The outcome may be "no change"; 
 (an equipped item, a quest item, a bound-to-owner item) has one obvious place to go.
 
 ### Low Priority
+
+#### Highlight the item a context menu is open for
+
+While a right-click menu is open for a stack in an inventory grid (the player's, a loot window's, a shop's, a trade
+column's), that cell is highlighted, so it's clear which item the options act on -- the menu opens at the cursor, which
+can sit between cells or drift off the cell before an option is chosen. The highlight ends when the menu closes, however
+it closes (an option chosen, Escape, a press outside: light dismiss). Read it from the menu's own open state
+(`ContextMenuController`/`DropdownController`) rather than a flag each grid sets and clears, and draw it as the grid's
+existing selection or hover treatment does, distinct from both. The hotbar's slot menu and the map's tile menu (the
+tile under it: a ground ring, `MapGroundMark`) could follow the same rule.
 
 #### Map glyphs overflow their tiles when zoomed out
 

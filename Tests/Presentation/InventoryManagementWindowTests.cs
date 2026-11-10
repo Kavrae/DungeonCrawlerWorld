@@ -59,7 +59,7 @@ public sealed class InventoryManagementWindowTests
         contextMenuController.Dropdowns.Initialize(new UiLayerStack());
         var mapViewState = new MapViewState();
 
-        windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(TestElementServices.For(windowService, fontService), TestInventoryServices.Over(componentManager, itemCatalog, world, new EventBus()), world, contextMenuController, mapViewState, simulationClock: new SimulationClock()));
+        windowService.RegisterFactory<InventoryManagementWindow>(() => new InventoryManagementWindow(TestElementServices.For(windowService, fontService), TestInventoryServices.Over(componentManager, itemCatalog, world, new EventBus()), world, contextMenuController, mapViewState));
 
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());

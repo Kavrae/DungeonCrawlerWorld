@@ -80,9 +80,9 @@ public static class ShellBootstrapper
             itemDropPlacement);
         var playerMovementController = new PlayerMovementController(commands.PlayerCommands);
         var playerItemDrops = new PlayerItemDrops(itemDropPlacement, actionTargetingController);
-        var dropCursorText = new DropCursorText(shellServices.CursorTextContent, actionTargetingController, mapViewState);
+        var dropCursorText = new DropCursorText(shellServices.CursorTextContent, actionTargetingController);
         _ = new ArmedDropHover(views.MapView, mapViewState, playerItemDrops, dropCursorText, actionTargetingController);
-        var dragGhostContent = new DragGhostContent(pointerState, mapViewState, world, catalogs.ActionCatalog, catalogs.ItemCatalog, views.InventoryView, uiEngine.FontService, uiEngine.SpriteSheetService);
+        var dragGhostContent = new DragGhostContent(pointerState, actionTargetingController, world, catalogs.ActionCatalog, catalogs.ItemCatalog, views.InventoryView, uiEngine.FontService, uiEngine.SpriteSheetService);
 
         ElementFactoryRegistry.RegisterAll(uiEngine, gameSession, worldSession.AdminTools, shellServices, actionTargetingController, playerMovementController, playerItemDrops);
 

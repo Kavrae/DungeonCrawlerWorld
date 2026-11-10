@@ -19,11 +19,10 @@ public sealed class SecondaryInventoryWindow(
     World world,
     ContextMenuController contextMenuController,
     MapViewState mapViewState,
-    Engine.ECS.Systems.SimulationClock simulationClock,
     EntityNaming entityNaming,
     HealthView healthView,
     ActionSourceNaming actionSourceNaming)
-    : ContainerInventoryWindow(services, inventoryServices, world, contextMenuController, mapViewState, simulationClock)
+    : ContainerInventoryWindow(services, inventoryServices, world, contextMenuController, mapViewState)
 {
     /// <summary>Five plain cells, the "2x5" shape a ten-item corpse reads as.</summary>
     protected override int GridColumns => 5;

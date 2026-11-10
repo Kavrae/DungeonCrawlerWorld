@@ -69,7 +69,7 @@ public sealed class ToggleActionTests
             Components.Merge(PlayerEntityId, new PendingActionActivationComponent(BuiltInActionIds.ToxicAura, TestSelections.At(PlayerPosition)));
 
         public void QueueItem(uint stackInstanceId) =>
-            Components.Merge(PlayerEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(PlayerPosition)));
+            Components.Merge(PlayerEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.TargetModeAt(PlayerPosition)));
 
         public bool IsToxicAuraOn => Session.Views.ActionStateView.IsActionToggledOn(PlayerEntityId, BuiltInActionIds.ToxicAura);
 

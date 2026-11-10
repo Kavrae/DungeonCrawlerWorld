@@ -7,6 +7,7 @@ using Game.Effects.Entries;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
+using Game.Modules.Containers;
 using Game.Modules.Core.Components;
 using Game.Modules.Death.Components;
 using Game.Modules.Health.Components;
@@ -1240,7 +1241,7 @@ public sealed class MapWindowTests
     public void TryOpenEntityContextMenuAt_AdjacentCorpse_OpensMenuWithLootEnabled()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
-        mapWindow.OnCorpseClicked = _ => { };
+        mapWindow.OnOpenContainerRequested = (_, _) => { };
         var corpsePosition = new Vector3Int(101, 100, 0);
         PlaceCorpse(world, componentManager, corpsePosition);
 
@@ -1263,7 +1264,7 @@ public sealed class MapWindowTests
     public void TryOpenEntityContextMenuAt_PlayerAdjacentToFarFootprintTileOfLargeCorpse_LootEnabled()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
-        mapWindow.OnCorpseClicked = _ => { };
+        mapWindow.OnOpenContainerRequested = (_, _) => { };
         var corpseOrigin = new Vector3Int(97, 101, 0);
         PlaceCorpse(world, componentManager, corpseOrigin, size: 3);
 
@@ -1278,7 +1279,7 @@ public sealed class MapWindowTests
     public void TryOpenEntityContextMenuAt_NonAdjacentCorpse_OpensMenuWithLootDisabled()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
-        mapWindow.OnCorpseClicked = _ => { };
+        mapWindow.OnOpenContainerRequested = (_, _) => { };
         var corpsePosition = new Vector3Int(110, 100, 0);
         PlaceCorpse(world, componentManager, corpsePosition);
 
@@ -1306,7 +1307,7 @@ public sealed class MapWindowTests
     public void TryOpenEntityContextMenuAt_CorpseReservedForAnotherEntity_OffersADisabledReservedLoot()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
-        mapWindow.OnCorpseClicked = _ => { };
+        mapWindow.OnOpenContainerRequested = (_, _) => { };
         var corpsePosition = PlaceCorpseReservedForAnotherEntity(world, componentManager);
 
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
@@ -1320,7 +1321,7 @@ public sealed class MapWindowTests
     public void TryOpenEntityContextMenuAt_CorpseReservedForAnotherEntity_AdminModeLootsAnyway()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
-        mapWindow.OnCorpseClicked = _ => { };
+        mapWindow.OnOpenContainerRequested = (_, _) => { };
         var corpsePosition = PlaceCorpseReservedForAnotherEntity(world, componentManager);
 
         AdminMode.IsOn = true;
@@ -1342,7 +1343,7 @@ public sealed class MapWindowTests
     public void TryOpenEntityContextMenuAt_NoCorpseOnTile_OpensNothing()
     {
         var (_, mapViewState, mapWindow, _) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
-        mapWindow.OnCorpseClicked = _ => { };
+        mapWindow.OnOpenContainerRequested = (_, _) => { };
 
         mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, new Vector3Int(105, 100, 0)));
 
@@ -1350,11 +1351,12 @@ public sealed class MapWindowTests
     }
 
     [TestMethod]
-    public void ContextMenuLootOption_Selected_InvokesOnCorpseClickedAndClosesMenu()
+    public void ContextMenuLootOption_Selected_OpensTheLootWindowAndClosesMenu()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
         var invokedEntityId = -1;
-        mapWindow.OnCorpseClicked = entityId => invokedEntityId = entityId;
+        var invokedKind = ContainerWindowKind.None;
+        mapWindow.OnOpenContainerRequested = (entityId, kind) => (invokedEntityId, invokedKind) = (entityId, kind);
         var corpsePosition = new Vector3Int(101, 100, 0);
         PlaceCorpse(world, componentManager, corpsePosition);
 
@@ -1364,7 +1366,123 @@ public sealed class MapWindowTests
         lootButton.HandleClick(lootButton.Rectangle.Center);
 
         Assert.AreEqual(CorpseEntityId, invokedEntityId);
+        Assert.AreEqual(ContainerWindowKind.Loot, invokedKind);
         Assert.IsFalse(mapWindow.ContextMenuController.IsOpen);
+    }
+
+    [TestMethod]
+    public void DoubleClickingAnAdjacentCorpse_OpensItsLootAsTheMenuOptionDoes()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        var opened = new List<(int EntityId, ContainerWindowKind Kind)>();
+        mapWindow.OnOpenContainerRequested = (entityId, kind) => opened.Add((entityId, kind));
+        var corpsePosition = new Vector3Int(101, 100, 0);
+        PlaceCorpse(world, componentManager, corpsePosition);
+        var screenPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition);
+
+        mapWindow.HandleClick(screenPosition);
+        Assert.IsTrue(mapWindow.HandleDoubleClick(screenPosition));
+
+        CollectionAssert.AreEqual(new[] { (CorpseEntityId, ContainerWindowKind.Loot) }, opened);
+    }
+
+    [TestMethod]
+    public void DoubleClickingACorpseOutOfReach_OpensNothing_AndIsASecondClick()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        var opened = new List<int>();
+        mapWindow.OnOpenContainerRequested = (entityId, _) => opened.Add(entityId);
+        var corpsePosition = new Vector3Int(110, 100, 0);
+        PlaceCorpse(world, componentManager, corpsePosition);
+        var screenPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition);
+
+        mapWindow.HandleClick(screenPosition);
+
+        Assert.IsFalse(mapWindow.HandleDoubleClick(screenPosition));
+        Assert.IsEmpty(opened);
+    }
+
+    [TestMethod]
+    public void ADoubleClickWhoseFirstClickConfirmedAnArmedActivation_OpensNothing()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        var opened = new List<int>();
+        mapWindow.OnOpenContainerRequested = (entityId, _) => opened.Add(entityId);
+        var corpsePosition = new Vector3Int(101, 100, 0);
+        PlaceCorpse(world, componentManager, corpsePosition);
+        var screenPosition = ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition);
+        mapViewState.ArmedActionId = Guid.NewGuid();
+
+        mapWindow.HandleClick(screenPosition);
+        mapViewState.ArmedActionId = null;
+
+        Assert.IsFalse(mapWindow.HandleDoubleClick(screenPosition));
+        Assert.IsEmpty(opened);
+    }
+
+    private const int ChestEntityId = 4;
+
+    private static void PlaceChest(Game.World.World world, ComponentManager componentManager, Vector3Int position, int gold = 5)
+    {
+        componentManager.Merge(ChestEntityId, new Game.Modules.Currency.Components.CurrencyComponent(gold: gold, credits: 0));
+        var transform = new TransformComponent(position, new Vector2Byte(1, 1));
+        componentManager.Merge(ChestEntityId, transform);
+        world.PlaceEntityOnMap(ChestEntityId, position, ref transform);
+        componentManager.Merge(ChestEntityId, new Game.Modules.Containers.Components.ContainerComponent());
+    }
+
+    [TestMethod]
+    public void AChestBesideThePlayer_OffersTakeAll_WhichTakesEverythingThroughTheOneCommand()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        var takenFrom = new List<int>();
+        mapWindow.OnOpenContainerRequested = (_, _) => { };
+        mapWindow.OnTakeAllRequested = takenFrom.Add;
+        var chestPosition = new Vector3Int(101, 100, 0);
+        PlaceChest(world, componentManager, chestPosition);
+
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, chestPosition));
+        var takeAll = mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Take All");
+        Assert.IsTrue(takeAll.Enabled);
+        takeAll.HandleClick(takeAll.Rectangle.Center);
+
+        CollectionAssert.AreEqual(new[] { ChestEntityId }, takenFrom);
+    }
+
+    [TestMethod]
+    public void AnEmptyChestBesideThePlayer_ShowsTakeAllDisabled()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapWindow.OnOpenContainerRequested = (_, _) => { };
+        var takenFrom = new List<int>();
+        mapWindow.OnTakeAllRequested = takenFrom.Add;
+        var chestPosition = new Vector3Int(101, 100, 0);
+        PlaceChest(world, componentManager, chestPosition, gold: 0);
+
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, chestPosition));
+
+        Assert.IsFalse(mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Take All").Enabled);
+        Assert.IsFalse(mapWindow.TryTakeAll(ChestEntityId));
+        Assert.IsEmpty(takenFrom);
+    }
+
+    [TestMethod]
+    public void AChestOutOfReach_ShowsTakeAllDisabled_AndACorpseOffersNone()
+    {
+        var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
+        mapWindow.OnOpenContainerRequested = (_, _) => { };
+        mapWindow.OnTakeAllRequested = _ => { };
+        var chestPosition = new Vector3Int(110, 100, 0);
+        PlaceChest(world, componentManager, chestPosition);
+        var corpsePosition = new Vector3Int(101, 100, 0);
+        PlaceCorpse(world, componentManager, corpsePosition);
+
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, chestPosition));
+        Assert.IsFalse(mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Take All").Enabled);
+        Assert.IsFalse(mapWindow.TryTakeAll(ChestEntityId));
+
+        mapWindow.TryOpenEntityContextMenuAt(ComputeScreenPositionForMapPosition(mapWindow, mapViewState, corpsePosition));
+        Assert.IsFalse(mapWindow.ContextMenuController.Menu.ChildElements.OfType<Button>().Any(button => button.LeftText == "Take All"));
     }
 
     private const int ShopEntityId = 3;
@@ -1381,7 +1499,7 @@ public sealed class MapWindowTests
     public void TryOpenEntityContextMenuAt_AdjacentShop_OpensMenuWithShopEnabledAndNoLoot()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
-        mapWindow.OnShopClicked = _ => { };
+        mapWindow.OnOpenContainerRequested = (_, _) => { };
         var shopPosition = new Vector3Int(101, 100, 0);
         PlaceShop(world, componentManager, shopPosition);
 
@@ -1396,11 +1514,12 @@ public sealed class MapWindowTests
     }
 
     [TestMethod]
-    public void ContextMenuShopOption_Selected_InvokesOnShopClickedAndClosesMenu()
+    public void ContextMenuShopOption_Selected_OpensTheShopWindowAndClosesMenu()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
         var invokedEntityId = -1;
-        mapWindow.OnShopClicked = entityId => invokedEntityId = entityId;
+        var invokedKind = ContainerWindowKind.None;
+        mapWindow.OnOpenContainerRequested = (entityId, kind) => (invokedEntityId, invokedKind) = (entityId, kind);
         var shopPosition = new Vector3Int(101, 100, 0);
         PlaceShop(world, componentManager, shopPosition);
 
@@ -1410,6 +1529,7 @@ public sealed class MapWindowTests
         shopButton.HandleClick(shopButton.Rectangle.Center);
 
         Assert.AreEqual(ShopEntityId, invokedEntityId);
+        Assert.AreEqual(ContainerWindowKind.Shop, invokedKind);
         Assert.IsFalse(mapWindow.ContextMenuController.IsOpen);
     }
 
@@ -1418,8 +1538,7 @@ public sealed class MapWindowTests
     public void TryOpenEntityContextMenuAt_DestroyedShop_OffersLootNotShop()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
-        mapWindow.OnCorpseClicked = _ => { };
-        mapWindow.OnShopClicked = _ => { };
+        mapWindow.OnOpenContainerRequested = (_, _) => { };
         var shopPosition = new Vector3Int(101, 100, 0);
         PlaceShop(world, componentManager, shopPosition);
         componentManager.Merge(ShopEntityId, new DeadComponent(KilledBy: Game.World.ActionSource.Admin, DiedAtFrame: 0));
@@ -1437,7 +1556,7 @@ public sealed class MapWindowTests
     public void TryOpenEntityContextMenuAt_NonBlockingCorpse_StillOffersInspect()
     {
         var (world, mapViewState, mapWindow, componentManager) = BuildMapWindowWithPlayer(300, 300, 1, new Vector3Int(100, 100, 0));
-        mapWindow.OnCorpseClicked = _ => { };
+        mapWindow.OnOpenContainerRequested = (_, _) => { };
         var corpsePosition = new Vector3Int(101, 100, 0);
         PlaceCorpse(world, componentManager, corpsePosition);
 

@@ -17,6 +17,7 @@ public sealed class ArmedDropHover
     private readonly MapViewState _mapViewState;
     private readonly IPlayerItemDrops _playerItemDrops;
     private readonly DropCursorText _dropCursorText;
+    private readonly ActionTargetingController _actionTargeting;
     private bool _setsHighlight;
 
     public ArmedDropHover(IMapViewQuery mapView, MapViewState mapViewState, IPlayerItemDrops playerItemDrops, DropCursorText dropCursorText, ActionTargetingController actionTargeting)
@@ -25,13 +26,14 @@ public sealed class ArmedDropHover
         _mapViewState = mapViewState;
         _playerItemDrops = playerItemDrops;
         _dropCursorText = dropCursorText;
+        _actionTargeting = actionTargeting;
         actionTargeting.ArmedDropHovered += OnArmedDropHovered;
         actionTargeting.ArmedDropChanged += OnArmedDropChanged;
     }
 
     private void OnArmedDropHovered(Vector3Int? hoveredTile)
     {
-        if (_mapViewState.ArmedDrop is not { } drop || hoveredTile is not { } tile)
+        if (_actionTargeting.AimedDrop is not { } drop || hoveredTile is not { } tile)
         {
             ClearOverContainer();
             return;
@@ -58,7 +60,7 @@ public sealed class ArmedDropHover
 
     private void OnArmedDropChanged()
     {
-        if (_mapViewState.ArmedDrop is null)
+        if (_actionTargeting.AimedDrop is null)
         {
             ClearOwnHighlight();
         }

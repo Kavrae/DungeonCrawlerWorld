@@ -118,7 +118,7 @@ public sealed class HotbarControllerTests
     }
 
     [TestMethod]
-    public void ChoosingArm_ArmsTheSlot_AndItsArmIsDisabledOnceArmed()
+    public void ChoosingArm_ArmsTheSlot_AndTheArmedSpellSlotOffersCast()
     {
         var (controller, mapViewState, _, _, contextMenuController) = Build();
         controller.OnSlotRightClicked(HotkeySlot.Slot1, new Point(100, 100));
@@ -128,7 +128,7 @@ public sealed class HotbarControllerTests
 
         Assert.AreEqual(HotkeySlot.Slot1, mapViewState.ArmedSlot);
         controller.OnSlotRightClicked(HotkeySlot.Slot1, new Point(100, 100));
-        Assert.IsFalse(MenuOption(contextMenuController, "Arm").Enabled);
+        Assert.IsTrue(MenuOption(contextMenuController, "Cast").Enabled, "A press of the armed slot casts the spell, so its option does too.");
     }
 
     [TestMethod]

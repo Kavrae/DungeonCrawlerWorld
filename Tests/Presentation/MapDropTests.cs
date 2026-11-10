@@ -18,7 +18,7 @@ using Presentation.UI;
 
 namespace Tests.Presentation;
 
-/// <summary>What MapWindow reports under the pointer, and dropping an item from an inventory onto the map (PLAN-unified-pointer-picking.md, Phase 5).</summary>
+/// <summary>What MapWindow reports under the pointer, and dropping an item from an inventory onto the map.</summary>
 [TestClass]
 [DoNotParallelize]
 public sealed class MapDropTests

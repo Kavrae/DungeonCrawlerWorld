@@ -11,9 +11,10 @@ namespace Game.Modules.Inventory;
 /// A Delayed toggle item winds up only to turn on, so resolving means lighting one unit of the stack
 /// -- if the holder still has it and it is still unlit. A stack that left the holder during the
 /// windup (traded, given away) lights nothing, and neither does one already lit some other way.
-/// What turning on takes was applied when the windup began.
+/// What turning on takes was applied when the windup began. Lit in Ground mode, the unit is put down where the holder
+/// stands (ToggleItemGroundPlacement).
 /// </remarks>
-internal sealed class ToggleItemWindupResolver(ComponentManager componentManager, ItemCatalog itemCatalog) : IItemWindupResolver
+internal sealed class ToggleItemWindupResolver(ComponentManager componentManager, ItemCatalog itemCatalog, ToggleItemGroundPlacement groundPlacement) : IItemWindupResolver
 {
     public void Resolve(int entityId, in PendingWindupComponent windup, long now)
     {
@@ -24,6 +25,9 @@ internal sealed class ToggleItemWindupResolver(ComponentManager componentManager
             return;
         }
 
-        ToggleItemActions.TryToggle(componentManager, itemCatalog, entityId, windup.Activatable.StackInstanceId, out _, windup.ActivatedFromSlot);
+        if (ToggleItemActions.TryToggle(componentManager, itemCatalog, entityId, windup.Activatable.StackInstanceId, out var litStackInstanceId, windup.ActivatedFromSlot))
+        {
+            groundPlacement.PutDownIfGround(entityId, litStackInstanceId, windup.Selection);
+        }
     }
 }

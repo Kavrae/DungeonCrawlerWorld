@@ -212,6 +212,12 @@ public sealed class ItemDetailsWindow(
         }
 
         _sections.BuildEffectsSection(this, _definition, width, ResolveLineColor);
+
+        if (ToggleText.IsToggleItem(_definition))
+        {
+            _sections.BuildFixedTextLine(this, width, ToggleText.ItemPlacement, ActivatableDetailsSections.BodyTextColor);
+        }
+
         _sections.BuildCostSection(this, _definition, width);
 
         if (_definition.Activator is { } activator)

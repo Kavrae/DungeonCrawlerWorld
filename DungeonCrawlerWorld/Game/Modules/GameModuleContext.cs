@@ -240,6 +240,9 @@ public sealed class GameModuleContext
     /// <summary>What resolves a windup Actions doesn't resolve itself (an item's), filled during RegisterBehavior by the feature that owns it.</summary>
     public WindupResolvers WindupResolvers { get; } = new();
 
+    /// <summary>What puts a toggle item lit in Ground mode down on its holder's tile, registered during RegisterBehavior by the feature that owns dropping.</summary>
+    public ToggleItemGroundPlacement ToggleItemGroundPlacement { get; } = new();
+
     /// <summary>Switches an entity's toggles on and off, for every feature that owns a kind of toggle (an action, an item).</summary>
     /// <remarks>Made on first use, like EffectServices, which it applies effects through: a module that reads this lists EffectServices.RequiredModuleIds in Requires.</remarks>
     public Toggles Toggles => _toggles.Value;

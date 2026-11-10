@@ -1,6 +1,7 @@
 using Engine.Events;
 using Engine.Math;
 using Engine.Tiles;
+using Game.Modules.Containers;
 using Game.Modules.Core.Components;
 using Presentation.Input;
 using Game.Views;
@@ -66,24 +67,18 @@ public sealed class MapWindow : Window, IContentDropTarget
     /// </summary>
     public Func<bool>? IsTextInputFocused { get; set; }
 
-    /// <summary>
-    /// Invoked with a corpse's entity id when the player selects "Loot" from its right-click
-    /// context menu (see TryOpenEntityContextMenuAt). Settable rather than a constructor
-    /// dependency for the same reason IsTextInputFocused above is: the real listener
-    /// (ItemWindowCoordinator.OpenLoot) is built after MapWindow. Null (before that wiring runs,
-    /// and in tests that construct a MapWindow directly) means right-clicking a corpse opens no
-    /// context menu at all, rather than one with a "Loot" option that does nothing.
-    /// </summary>
-    public Action<int>? OnCorpseClicked { get; set; }
+    /// <summary>Opens an entity's items in the window they open in, once TryOpenContainer has allowed it -- ItemWindowCoordinator.OpenContainer.</summary>
+    /// <remarks>Settable because the coordinator is built after MapWindow. Null (in tests that build a MapWindow alone) offers no "Loot" or "Shop" and opens nothing.</remarks>
+    public Action<int, ContainerWindowKind>? OnOpenContainerRequested { get; set; }
 
-    /// <summary>Invoked with a shop's entity id when the player selects "Shop" from its right-click context menu (see AddEntityGroup) -- same settable-delegate shape as OnCorpseClicked, wired by ItemWindowCoordinator to its OpenShop.</summary>
-    public Action<int>? OnShopClicked { get; set; }
+    /// <summary>Moves everything a chest or pile holds to the player once TryTakeAll has allowed it -- ItemWindowCoordinator's, over LootCommands.TakeAll. Null offers no "Take All".</summary>
+    public Action<int>? OnTakeAllRequested { get; set; }
 
     /// <summary>
     /// Invoked whenever a map-tile click sets Basic inspection (see SelectMapNodes) or the
     /// right-click "Inspect" option sets Detail inspection (see TryOpenEntityContextMenuAt) --
     /// lets ShellBootstrapper un-minimize InspectionWindow without MapWindow needing a direct
-    /// reference to it, the same settable-delegate shape OnCorpseClicked above already uses.
+    /// reference to it, the same settable-delegate shape OnOpenContainerRequested above already uses.
     /// </summary>
     public Action? OnInspectionOpened { get; set; }
 
@@ -293,6 +288,7 @@ public sealed class MapWindow : Window, IContentDropTarget
     /// </summary>
     protected override bool OnContentClickAction(Point mousePosition)
     {
+        _lastSelectedTile = null;
         if (_mapViewState.IsAnythingArmed)
         {
             _actionTargeting.TryConfirmActivation(mousePosition, ContentAbsolutePosition);
@@ -300,16 +296,75 @@ public sealed class MapWindow : Window, IContentDropTarget
         }
 
         SelectMapNodes(mousePosition);
+        if (TryGetPointerHit(mousePosition, out var hit))
+        {
+            _lastSelectedTile = hit.Tile;
+        }
+
         return true;
     }
 
-    /// <summary>A player can only loot a corpse they're standing on or next to -- 8-directional (Chebyshev) distance of at most 1 between any tile of the player's footprint and any tile of the corpse's, the same adjacency shape TargetShape.Adjacent's ring uses elsewhere, just inclusive of the caster's own tile too (unlike melee's ring, which excludes it -- standing on a corpse to loot it is expected, unlike punching yourself).</summary>
-    internal static bool IsAdjacentToPlayer(IMapViewQuery mapView, int entityId) =>
-        mapView.TryGetOccupant(entityId, out var target) &&
-        mapView.TryGetOccupant(mapView.PlayerEntityId, out var player) &&
-        GridDistance.ChebyshevDistance(target.Position, target.Size, player.Position, player.Size) <= 1;
+    /// <summary>The tile the last click selected, when it was a plain select -- a double-click opens what is there only after one.</summary>
+    private Vector3Int? _lastSelectedTile;
 
-    private bool IsAdjacentToPlayer(int entityId) => IsAdjacentToPlayer(_mapView, entityId);
+    /// <summary>A double-click on the tile the first click selected opens the topmost thing there whose items open in a window (TryOpenContainer); anything else is a second click.</summary>
+    /// <remarks>Never after a click that confirmed an armed activation, so aiming twice in quick succession never also opens a container.</remarks>
+    protected override bool OnContentDoubleClickAction(Point mousePosition)
+    {
+        if (_lastSelectedTile is not { } selectedTile || !TryGetPointerHit(mousePosition, out var hit) || hit.Tile != selectedTile)
+        {
+            return false;
+        }
+
+        _lastSelectedTile = null;
+        foreach (var entityId in hit.OccupantEntityIds)
+        {
+            if (_mapView.GetInteraction(entityId).WindowKind != ContainerWindowKind.None)
+            {
+                return TryOpenContainer(entityId);
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Opens entityId's items in their window, if it has one the player can reach now (ContainerAccess, AllowsAccess) -- the one path the "Loot"/"Shop" option and a double-click both take.</summary>
+    internal bool TryOpenContainer(int entityId)
+    {
+        var interaction = _mapView.GetInteraction(entityId);
+        if (OnOpenContainerRequested is not { } openContainer || interaction.WindowKind == ContainerWindowKind.None || !AllowsAccess(interaction.AccessRefusal))
+        {
+            return false;
+        }
+
+        openContainer(entityId, interaction.WindowKind);
+        return true;
+    }
+
+    /// <summary>A chest or an item pile -- a container whose items open in a loot window, not a corpse -- offers Take All on the map, as its loot window does.</summary>
+    private static bool OffersTakeAll(in EntityInteractionView interaction) =>
+        interaction.WindowKind == ContainerWindowKind.Loot && interaction.IsContainer;
+
+    /// <summary>Whether Take All would take something now: it offers it, the player can reach it, and it holds anything -- the option's Enabled and TryTakeAll's check.</summary>
+    private static bool CanTakeAll(in EntityInteractionView interaction) =>
+        OffersTakeAll(in interaction) && AllowsAccess(interaction.AccessRefusal) && interaction.HoldsAnything;
+
+    /// <summary>Takes everything entityId holds when it can (CanTakeAll) -- the map's "Take All", the same command as the loot window's (LootCommands.TakeAll).</summary>
+    internal bool TryTakeAll(int entityId)
+    {
+        var interaction = _mapView.GetInteraction(entityId);
+        if (OnTakeAllRequested is not { } takeAll || !CanTakeAll(in interaction))
+        {
+            return false;
+        }
+
+        takeAll(entityId);
+        return true;
+    }
+
+    /// <summary>Whether the player may reach a container's items despite refusal: only when there is none, or Admin Mode overrides a loot reservation.</summary>
+    internal static bool AllowsAccess(ContainerAccessRefusal refusal) =>
+        refusal == ContainerAccessRefusal.None || (refusal == ContainerAccessRefusal.LootReserved && AdminMode.IsOn);
 
     /// <summary>The tile under screenPosition on the layer shown, and its occupants topmost first -- false off the map.</summary>
     /// <remarks>Asked every frame a drag is held over the map, so an unchanged tile with unchanged occupants hands back the hit it made last time.</remarks>
@@ -403,9 +458,8 @@ public sealed class MapWindow : Window, IContentDropTarget
     /// Opens a stacked context menu for everything on the tile under mousePosition -- every
     /// occupant (Blocking or not), each its own group, with the structure's then the terrain's name
     /// as last headers when there is at least one occupant group: a read-only name header (see DropdownOption.Header -- also the visual separator
-    /// from the next group, no blank divider needed), "Loot" first if that entity is a corpse or
-    /// a container (a container is lootable even while alive -- see ContainerComponent's own doc
-    /// comment; replaces the old click-to-loot, see OnCorpseClicked's own doc comment), then always
+    /// from the next group, no blank divider needed), "Loot" or "Shop" first if that entity's items
+    /// open in a window (TryOpenContainer, which a double-click takes too), then always
     /// "Inspect" (Details/Admin inspection -- see MapViewState.InspectionMode's own doc comment
     /// on why Admin isn't a separate option yet). Internal, not private, so tests can simulate a
     /// right-click-tap at a specific screen position directly. A miss (off-map, nothing on the
@@ -413,7 +467,7 @@ public sealed class MapWindow : Window, IContentDropTarget
     /// armed/pending action, already ran and found nothing to cancel either, so a right-click
     /// over empty space is correctly a total no-op, matching this codebase's "remove unexpected
     /// actions" principle. Each option is disabled rather than omitted when it can't currently be
-    /// taken ("Loot" when the player isn't adjacent, "Inspect" while the global cooldown is
+    /// taken ("Loot" when the player can't reach it, "Inspect" while the global cooldown is
     /// active) so the player sees why, rather than the menu silently missing an option.
     /// </summary>
     internal void TryOpenEntityContextMenuAt(Point mousePosition)
@@ -464,30 +518,14 @@ public sealed class MapWindow : Window, IContentDropTarget
         var interaction = _mapView.GetInteraction(entityId);
         options.Add(DropdownOption.Header(interaction.Name));
 
-        var isShop = interaction.IsShop;
-
-        // A shop that's died goes through the same EntityDiedEvent -> DeadComponent pipeline as any
-        // other SimpleHealthComponent entity (DeathSystem doesn't special-case containers/shops out
-        // of it -- see its own doc comment), even though ContainerDestructionSystem's own handling
-        // for the same event leaves its ShopComponent/ContainerComponent in place (renaming it
-        // "Destroyed" and clearing its stock, not removing the components). So isShop alone can't
-        // tell a live shop apart from a destroyed one -- isDestroyed does.
-        var isDestroyed = interaction.IsDestroyed;
-
-        // A shop is still a ContainerComponent (see Shop's own doc comment), but gets its own
-        // "Shop" verb instead of the generic corpse/chest "Loot" one while it's alive -- excluded
-        // here so a live shop never offers both. A destroyed shop is the opposite: "Shop" no longer
-        // makes sense (nothing left to trade), so it falls through to the plain "Loot" a dead
-        // creature or a destroyed chest already gets.
-        if ((isDestroyed || (interaction.IsContainer && !isShop)) && OnCorpseClicked is { } onCorpseClicked)
+        if (interaction.WindowKind != ContainerWindowKind.None && OnOpenContainerRequested is not null)
         {
-            var isLootReserved = interaction.IsLootReservedFromPlayer && !AdminMode.IsOn;
-            options.Add(new DropdownOption(isLootReserved ? "Loot (reserved)" : "Loot", null, IsAdjacentToPlayer(entityId) && !isLootReserved, () => onCorpseClicked.Invoke(entityId)));
+            options.Add(new DropdownOption(OpenOptionLabel(interaction), null, AllowsAccess(interaction.AccessRefusal), () => TryOpenContainer(entityId)));
         }
 
-        if (isShop && !isDestroyed && OnShopClicked is { } onShopClicked)
+        if (OffersTakeAll(in interaction) && OnTakeAllRequested is not null)
         {
-            options.Add(new DropdownOption("Shop", null, IsAdjacentToPlayer(entityId), () => onShopClicked.Invoke(entityId)));
+            options.Add(new DropdownOption("Take All", null, CanTakeAll(in interaction), () => TryTakeAll(entityId)));
         }
 
         options.Add(new DropdownOption("Inspect", null, !_playerActionGate.IsLocked, () => InspectEntity(entityId)));
@@ -496,6 +534,17 @@ public sealed class MapWindow : Window, IContentDropTarget
         {
             _adminContextMenuOptions.AddEntityOptions(options, entityId);
         }
+    }
+
+    /// <summary>"Shop" for a standing shop, otherwise "Loot" -- "Loot (reserved)" while its loot is someone else's and Admin Mode doesn't override it.</summary>
+    private static string OpenOptionLabel(in EntityInteractionView interaction)
+    {
+        if (interaction.WindowKind == ContainerWindowKind.Shop)
+        {
+            return "Shop";
+        }
+
+        return interaction.AccessRefusal == ContainerAccessRefusal.LootReserved && !AdminMode.IsOn ? "Loot (reserved)" : "Loot";
     }
 
     /// <summary>Details/Admin inspection's actual activation -- sets Detail or Admin mode (AdminMode.IsOn) on the shared entityId (see MapViewState.InspectedEntityId), starts the global cooldown (the same shared ActionLockComponent lock movement/melee/consumables already use), and un-minimizes InspectionWindow. Only ever reached via the "Inspect" DropdownOption above, which already gates on the cooldown being clear -- no redundant re-check here, matching how "Loot" above trusts its own Enabled gate instead of re-checking adjacency.</summary>

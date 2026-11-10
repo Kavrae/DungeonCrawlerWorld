@@ -1,6 +1,7 @@
 using Engine.ECS.Components;
 using Engine.Events;
 using Game.Modules.Currency;
+using Game.Modules.Death;
 using Game.Modules.Inventory;
 using Game.Modules.Shops;
 using Game.Views;
@@ -29,5 +30,6 @@ internal static class TestInventoryServices
             new CurrencyCommands(componentManager),
             TestGameplayTags.BuiltIn,
             itemHoverDetails ?? new ItemHoverDetails(new CursorLabelContent(new PointerState(), TestFonts.Shared)),
-            playerItemDrops ?? new TestPlayerItemDrops());
+            playerItemDrops ?? new TestPlayerItemDrops(),
+            new LootCommands(componentManager, itemCatalog, playerQuery));
 }

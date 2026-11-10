@@ -28,8 +28,7 @@ public abstract class ContainerInventoryWindow(
     InventoryServices inventoryServices,
     World world,
     ContextMenuController contextMenuController,
-    MapViewState mapViewState,
-    SimulationClock simulationClock)
+    MapViewState mapViewState)
     : Window(services)
 {
     private static readonly Vector2 IconSize = new(48, 48);
@@ -200,7 +199,7 @@ public abstract class ContainerInventoryWindow(
         _gridWindow.ContentPadding = Vector2.Zero;
 
         // Activate is player-inventory-only (InventoryGridContent.CanActivate), so it is never reached here.
-        _gridContent = new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, EntityId, filterTag: GameplayTag.None, () => EntityId, mapViewState, _onItemSelected, static (_, _) => { }, static _ => { }, simulationClock: simulationClock);
+        _gridContent = new InventoryGridContent(world, inventoryServices, ElementPoolService, contextMenuController, EntityId, filterTag: GameplayTag.None, () => EntityId, mapViewState, _onItemSelected, static (_, _) => { }, static _ => { });
         _gridWindow.SetContent(_gridContent);
         AddChild(_gridWindow);
     }

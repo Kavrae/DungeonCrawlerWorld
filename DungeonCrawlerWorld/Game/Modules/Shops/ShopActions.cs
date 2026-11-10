@@ -9,14 +9,7 @@ using Game.World;
 
 namespace Game.Modules.Shops;
 
-/// <summary>
-/// The buy/sell chokepoint every shop trade goes through: tag eligibility, pricing, and the
-/// combined item-for-Gold swap (check every precondition first, then commit both halves --
-/// never leave a trade half-applied). TryBuyFromShop/TrySellToShop each move one exact stack (the
-/// same "whole stack, not a partial quantity" semantics InventoryActions.TryTransferStack already
-/// has) for ShopStockPricing.ComputeBulkBuyPrice/ComputeBulkSellPrice's stock-aware total, not a
-/// flat per-unit price times quantity.
-/// </summary>
+/// <summary>Shop trading for systems and tests: what a shop accepts, its reference prices, a one-stack buy or sale (a shop deal, ShopDeals), and giving currency to a shop.</summary>
 public static class ShopActions
 {
     /// <summary>AcceptedItems null means the shop trades any item (General Shop); otherwise the item's tags must match it (Potion Shop). An item that can't be traded at all (ItemDefinition.CanTrade) is never tradeable with any shop.</summary>
@@ -29,110 +22,19 @@ public static class ShopActions
     /// <summary>The flat, stock-*un*aware base price: GoldValue marked down by the shop's SellMultiplier, no ShopStockPricing curve applied. What a trade actually pays out is ShopStockPricing.ComputeBulkSellPrice below -- this stays as the simple "Normal band" reference value.</summary>
     public static int ComputeSellPrice(ShopComponent shop, ItemDefinition item) => (int)MathF.Round(item.GoldValue * shop.SellMultiplier);
 
-    /// <summary>
-    /// Player buys one exact stack out of the shop's inventory for ShopStockPricing.
-    /// ComputeBulkBuyPrice's total Gold (per-unit "bracket" pricing off the shop's own current
-    /// stock of the item, not a flat price times quantity).
-    /// Fails with no state changed if the shop entity has no ShopComponent, the stack isn't found
-    /// on the shop, the item's tags don't match the shop's AcceptedItems, the player has no room for
-    /// a new stack, or the player can't afford it. The currency transfer commits before the item
-    /// transfer; if the item transfer still fails afterward (defense in depth -- shouldn't happen
-    /// given the capacity check above), the currency is rolled back rather than leaving Gold moved
-    /// with no item to show for it.
-    /// A bought stack merges into an equivalent stack the player already holds (see
-    /// InventoryActions.MergeIntoEquivalentStack), so buying more of something the player carries
-    /// tops up that stack instead of leaving two the inventory grid would show as one Merged Stack.
-    /// </summary>
+    /// <summary>The player buys one stack from the shop for its price: a one-stack shop deal (ShopDeals.Purchase), refused as any deal is.</summary>
+    /// <remarks>A bought stack merges into an equivalent stack the player already holds, so buying more of something tops up that stack.</remarks>
     public static bool TryBuyFromShop(ComponentManager componentManager, ItemCatalog itemCatalog, int playerEntityId, int shopEntityId, uint stackInstanceId, IPlayerQuery playerQuery)
     {
-        if (!componentManager.GetPackedPool<ShopComponent>().TryGetReadonly(shopEntityId, out var shop))
-        {
-            return false;
-        }
-
-        shop = ShopMarginPricing.ResolveEffectiveShop(componentManager, shop, playerEntityId);
-
-        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
-        if (!InventoryQueries.TryFindByStackInstanceId(stacks, shopEntityId, stackInstanceId, out var stack) ||
-            !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
-            !CanTrade(shop, item) ||
-            !InventoryCapacity.HasRoomForNewStack(componentManager, playerEntityId, playerQuery))
-        {
-            return false;
-        }
-
-        var totalPrice = ShopStockPricing.ComputeBulkBuyPrice(componentManager, shopEntityId, shop, item, stack.Quantity);
-
-        componentManager.GetPackedPool<CurrencyComponent>().TryGetReadonly(playerEntityId, out var playerCurrency);
-        if (playerCurrency.Gold < totalPrice)
-        {
-            return false;
-        }
-
-        if (!CurrencyActions.TryTransfer(componentManager, playerEntityId, shopEntityId, CurrencyType.Gold, totalPrice))
-        {
-            return false;
-        }
-
-        if (!InventoryActions.TryTransferStack(componentManager, itemCatalog, shopEntityId, playerEntityId, stackInstanceId, playerQuery))
-        {
-            CurrencyActions.TryTransfer(componentManager, shopEntityId, playerEntityId, CurrencyType.Gold, totalPrice);
-            return false;
-        }
-
-        InventoryActions.MergeIntoEquivalentStack(componentManager, playerEntityId, stackInstanceId);
-
-        return true;
+        var deal = ShopDeals.Purchase(componentManager, itemCatalog, playerEntityId, shopEntityId, stackInstanceId, playerQuery);
+        return ShopDeals.TryComplete(componentManager, itemCatalog, in deal, playerQuery, out _) == ShopDealRefusal.None;
     }
 
-    /// <summary>
-    /// Player sells one exact stack out of their own inventory to the shop for ShopStockPricing.
-    /// ComputeBulkSellPrice's total Gold. Fails with no state changed if the shop entity has no
-    /// ShopComponent, the stack isn't found on the player, the item's tags don't match the shop's
-    /// AcceptedItems, the shop is already at its ItemDefinition.MaximumShopStock cap for this item (a
-    /// hard sell-cap, not just a price floor), the shop has
-    /// no room for a new stack, or the shop can't afford it. Same commit-then-verify-then-rollback-
-    /// on-failure shape as TryBuyFromShop, roles reversed.
-    /// </summary>
+    /// <summary>The player sells one stack to the shop for its price: a one-stack shop deal (ShopDeals.Sale), refused as any deal is -- the shop's sell cap among them.</summary>
     public static bool TrySellToShop(ComponentManager componentManager, ItemCatalog itemCatalog, int playerEntityId, int shopEntityId, uint stackInstanceId, IPlayerQuery playerQuery)
     {
-        if (!componentManager.GetPackedPool<ShopComponent>().TryGetReadonly(shopEntityId, out var shop))
-        {
-            return false;
-        }
-
-        shop = ShopMarginPricing.ResolveEffectiveShop(componentManager, shop, playerEntityId);
-
-        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
-        if (!InventoryQueries.TryFindByStackInstanceId(stacks, playerEntityId, stackInstanceId, out var stack) ||
-            !InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item) ||
-            !CanTrade(shop, item) ||
-            ShopStockPricing.GetTotalStock(componentManager, shopEntityId, item.Id) >= (item.MaximumShopStock ?? ShopStockPricing.DefaultMaximumShopStock) ||
-            !InventoryCapacity.HasRoomForNewStack(componentManager, shopEntityId, playerQuery))
-        {
-            return false;
-        }
-
-        var totalPrice = ShopStockPricing.ComputeBulkSellPrice(componentManager, shopEntityId, shop, item, stack.Quantity);
-
-        componentManager.GetPackedPool<CurrencyComponent>().TryGetReadonly(shopEntityId, out var shopCurrency);
-        if (shopCurrency.Gold < totalPrice)
-        {
-            return false;
-        }
-
-        if (!CurrencyActions.TryTransfer(componentManager, shopEntityId, playerEntityId, CurrencyType.Gold, totalPrice))
-        {
-            return false;
-        }
-
-        if (!InventoryActions.TryTransferStack(componentManager, itemCatalog, playerEntityId, shopEntityId, stackInstanceId, playerQuery))
-        {
-            CurrencyActions.TryTransfer(componentManager, playerEntityId, shopEntityId, CurrencyType.Gold, totalPrice);
-            return false;
-        }
-
-        return true;
+        var deal = ShopDeals.Sale(componentManager, itemCatalog, playerEntityId, shopEntityId, stackInstanceId, playerQuery);
+        return ShopDeals.TryComplete(componentManager, itemCatalog, in deal, playerQuery, out _) == ShopDealRefusal.None;
     }
 
     /// <summary>

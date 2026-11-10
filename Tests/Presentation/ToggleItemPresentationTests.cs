@@ -9,6 +9,7 @@ using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Components;
 using Game.Modules.Core.Components;
 using Game.Modules.Inventory;
+using Game.Modules.ItemPiles;
 using Game.Modules.Inventory.Components;
 using Game.Spawning;
 using Game.Views;
@@ -39,6 +40,13 @@ public sealed class ToggleItemPresentationTests
         public required int PlayerEntityId { get; init; }
         public required ActionTargetingController ActionTargeting { get; init; }
         public required MapViewState MapViewState { get; init; }
+        public required Game.World.World World { get; init; }
+
+        public Vector3Int PlayerPosition => Ecs.ComponentManager.GetDirectPool<TransformComponent>().GetReadonly(PlayerEntityId).Position;
+
+        /// <summary>The item pile on tile, if any.</summary>
+        public int? PileAt(Vector3Int tile) =>
+            World.GetOccupantEntityIdSpanAt(tile).ToArray().Where(Ecs.ComponentManager.GetPackedPool<Game.Modules.ItemPiles.Components.ItemPileComponent>().Has).Cast<int?>().FirstOrDefault();
 
         private long _frame;
 
@@ -88,7 +96,7 @@ public sealed class ToggleItemPresentationTests
         world.PlayerEntityId = playerEntityId;
         components.Merge(playerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 10));
 
-        var mapViewState = new MapViewState();
+        var mapViewState = new MapViewState { TargetingMode = TargetingMode.Target };
         var entityActions = EntityActions.For(components, session.Catalogs.ActionCatalog, session.Catalogs.Definitions);
         var actionTargeting = new ActionTargetingController(
             world,
@@ -102,9 +110,9 @@ public sealed class ToggleItemPresentationTests
             new ActionStateView(components, entityActions, session.Catalogs.ItemCatalog, localTierRoster: null, TestActionStateViews.EffectServicesOver(components)),
             session.Views.TargetingView,
             session.Commands.PlayerCommands,
-            simulationClock: ecs.SystemManager.Clock, dropPlacement: new TestPlayerItemDrops());
+            simulationClock: ecs.SystemManager.Clock, dropPlacement: new global::Presentation.UI.Inventory.ItemDropPlacement(session.Commands.ItemDropCommands, mapViewState));
 
-        return new InputHarness { Ecs = ecs, Items = session.Catalogs.ItemCatalog, PlayerEntityId = playerEntityId, ActionTargeting = actionTargeting, MapViewState = mapViewState };
+        return new InputHarness { Ecs = ecs, Items = session.Catalogs.ItemCatalog, PlayerEntityId = playerEntityId, ActionTargeting = actionTargeting, MapViewState = mapViewState, World = world };
     }
 
     [TestMethod]
@@ -130,6 +138,72 @@ public sealed class ToggleItemPresentationTests
         Assert.IsFalse(harness.IsIdolLit, "The slot follows the unit it lit, and putting it out is at once.");
         Assert.AreEqual(1, harness.IdolStacks().Sum(stack => stack.Quantity));
         Assert.IsNull(harness.MapViewState.ArmedSlot);
+    }
+
+    [TestMethod]
+    public void HotbarPressOnAToggleItemInGroundMode_ArmsItAsADrop_AndARepressOverATileBesideThePlayerPutsItDownThere()
+    {
+        var harness = BuildInput();
+        harness.MapViewState.TargetingMode = TargetingMode.Ground;
+        harness.FrameUntil(() => !harness.IsPlayerLocked);
+
+        harness.ActionTargeting.HandleHotkeySlotPress(HotkeySlot.Slot6);
+        for (var frame = 0; frame < 60; frame++)
+        {
+            harness.Frame();
+        }
+
+        Assert.AreEqual(HotkeySlot.Slot6, harness.MapViewState.ArmedSlot, "Turning it on in Ground mode puts it down, so the first press only arms it.");
+        Assert.IsFalse(harness.IsIdolLit);
+
+        var besideThePlayer = harness.PlayerPosition + new Vector3Int(1, 0, 0);
+        harness.MapViewState.HoveredTile = besideThePlayer;
+        harness.ActionTargeting.HandleHotkeySlotPress(HotkeySlot.Slot6);
+        Assert.IsNull(harness.MapViewState.ArmedItemStackInstanceId, "The re-press confirms and disarms.");
+
+        harness.FrameUntil(() => harness.PileAt(besideThePlayer) is not null);
+        Assert.IsEmpty(harness.IdolStacks(), "The lit idol was dropped beside the player, as a Drop there would.");
+    }
+
+    [TestMethod]
+    public void ArmingAToggleItemInGroundMode_MakesItsOneUnitTheAimedDrop_SoItShowsAsADrop()
+    {
+        var harness = BuildInput();
+        harness.FrameUntil(() => !harness.IsPlayerLocked);
+        var announcements = 0;
+        harness.ActionTargeting.ArmedDropChanged += () => announcements++;
+
+        harness.MapViewState.TargetingMode = TargetingMode.Target;
+        harness.ActionTargeting.HandleHotkeySlotPress(HotkeySlot.Slot6);
+        Assert.IsNull(harness.ActionTargeting.AimedDrop, "In Target mode it lights at once, carried: nothing is dropped.");
+        harness.FrameUntil(() => harness.IsIdolLit);
+        harness.ActionTargeting.HandleHotkeySlotPress(HotkeySlot.Slot6);
+        harness.FrameUntil(() => !harness.IsIdolLit && !harness.IsPlayerLocked);
+
+        harness.MapViewState.TargetingMode = TargetingMode.Ground;
+        harness.ActionTargeting.HandleHotkeySlotPress(HotkeySlot.Slot6);
+
+        Assert.AreEqual(ItemDrop.OneUnitOf(harness.IdolStacks().Single().StackInstanceId), harness.ActionTargeting.AimedDrop);
+        Assert.AreEqual(1, announcements);
+
+        harness.ActionTargeting.CancelArmedOrPendingAction();
+        Assert.IsNull(harness.ActionTargeting.AimedDrop);
+        Assert.AreEqual(2, announcements);
+    }
+
+    [TestMethod]
+    public void AGroundModeToggleArmedOverATileOutOfDropReach_IsRefusedByTheDropRule_AndStaysArmed()
+    {
+        var harness = BuildInput();
+        harness.MapViewState.TargetingMode = TargetingMode.Ground;
+        harness.FrameUntil(() => !harness.IsPlayerLocked);
+        harness.ActionTargeting.HandleHotkeySlotPress(HotkeySlot.Slot6);
+
+        harness.MapViewState.HoveredTile = harness.PlayerPosition + new Vector3Int(3, 0, 0);
+
+        Assert.IsTrue(harness.ActionTargeting.IsArmedConfirmRefused);
+        harness.ActionTargeting.HandleHotkeySlotPress(HotkeySlot.Slot6);
+        Assert.AreEqual(HotkeySlot.Slot6, harness.MapViewState.ArmedSlot);
     }
 
     [TestMethod]
@@ -184,7 +258,7 @@ public sealed class ToggleItemPresentationTests
         public void Refresh() => Grid.Update(new GameTime());
     }
 
-    private static GridFixture BuildGrid(uint unlockedAtFrame = 0)
+    private static GridFixture BuildGrid(uint unlockedAtFrame = 0, TargetingMode targetingMode = TargetingMode.Target)
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20));
         componentManager.Merge(GridPlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: unlockedAtFrame));
@@ -206,7 +280,7 @@ public sealed class ToggleItemPresentationTests
         tooltipController.Initialize(windowService, new UiLayerStack());
 
         var activateRequests = new List<uint>();
-        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, GridPlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, new MapViewState(), static (_, _) => { }, (_, stackInstanceId) => activateRequests.Add(stackInstanceId), static _ => { }, new SimulationClock());
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, GridPlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, new MapViewState { TargetingMode = targetingMode }, static (_, _) => { }, (_, stackInstanceId) => activateRequests.Add(stackInstanceId), static _ => { });
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -273,6 +347,18 @@ public sealed class ToggleItemPresentationTests
     }
 
     [TestMethod]
+    public void InGroundMode_AnUnlitUnitsOptionReadsArm_AndALitOnesTurnOff()
+    {
+        var fixture = BuildGrid(targetingMode: TargetingMode.Ground);
+        var plainStackId = InventoryActions.AddItem(fixture.ComponentManager, GridPlayerEntityId, BuiltInItemIds.ToxicIdol, quantity: 2);
+        Assert.IsTrue(ToggleItemActions.TryToggle(fixture.ComponentManager, fixture.ItemCatalog, GridPlayerEntityId, plainStackId, out var litStackId));
+        fixture.Refresh();
+
+        Assert.IsTrue(MenuOption(fixture, fixture.Cells.Single(cell => cell.StackInstanceId == plainStackId), "Arm").Enabled);
+        Assert.IsTrue(MenuOption(fixture, fixture.Cells.Single(cell => cell.StackInstanceId == litStackId), "Turn off").Enabled);
+    }
+
+    [TestMethod]
     public void FreeCastToggleItem_CanBeActivatedFromTheGridWhileActionLocked()
     {
         var fixture = BuildGrid(unlockedAtFrame: LockedUntilFrame);
@@ -282,7 +368,7 @@ public sealed class ToggleItemPresentationTests
 
         Assert.IsTrue(MenuOption(fixture, cell, "Turn on").Enabled);
 
-        cell.RaiseDoubleClicked();
+        cell.HandleDoubleClick(cell.Rectangle.Center);
 
         CollectionAssert.AreEqual(new[] { stackId }, fixture.ActivateRequests);
     }

@@ -36,7 +36,7 @@ public sealed class InventoryWindowController(
     /// for which entity" -- wired by ItemWindowCoordinator to SecondaryInventoryWindowController.
     /// OpenTargetEntityId once that controller exists (it's built after this one, and itself
     /// depends on this controller, so the two can't reference each other via constructor
-    /// injection -- the same settable-delegate shape MapWindow.OnCorpseClicked/OnInspectionOpened
+    /// injection -- the same settable-delegate shape MapWindow.OnOpenContainerRequested/OnInspectionOpened
     /// already use to break an identical ordering cycle). Threaded down to the player's own
     /// InventoryManagementWindow via CreateInventoryWindow's Configure call, and from there to
     /// every tab's own InventoryGridContent, whose Give/Take menu calls it fresh on every

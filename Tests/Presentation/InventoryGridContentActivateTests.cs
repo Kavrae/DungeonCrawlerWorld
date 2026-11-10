@@ -17,7 +17,7 @@ using UIEngine.UI;
 
 namespace Tests.Presentation;
 
-/// <summary>An item the player can't use right now keeps "Activate" in its menu, disabled, and a double-click doesn't arm it.</summary>
+/// <summary>An item's "Arm" option and its double-click are one path: enabled and arming while the action lock is up (as a hotbar press arms), shown disabled and inert while the item is blocked.</summary>
 [TestClass]
 [DoNotParallelize]
 public sealed class InventoryGridContentActivateTests
@@ -27,10 +27,10 @@ public sealed class InventoryGridContentActivateTests
 
     private sealed record Fixture(InventoryGridContent Grid, Window HostWindow, ComponentManager ComponentManager, ContextMenuController ContextMenuController, List<uint> ActivateRequests);
 
-    private static Fixture Build()
+    private static Fixture Build(uint unlockedAtFrame = 0)
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 20));
-        componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: unlockedAtFrame));
 
         var fontService = TestFonts.Shared;
         var windowService = TestElementPoolServiceFactory.Create(fontService);
@@ -50,7 +50,7 @@ public sealed class InventoryGridContentActivateTests
         tooltipController.Initialize(windowService, new UiLayerStack());
 
         var activateRequests = new List<uint>();
-        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, new MapViewState(), static (_, _) => { }, (_, stackInstanceId) => activateRequests.Add(stackInstanceId), static _ => { }, new SimulationClock());
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, new MapViewState(), static (_, _) => { }, (_, stackInstanceId) => activateRequests.Add(stackInstanceId), static _ => { });
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -67,32 +67,49 @@ public sealed class InventoryGridContentActivateTests
         return new Fixture(grid, hostWindow, componentManager, contextMenuController, activateRequests);
     }
 
-    private static Button ActivateOption(Fixture fixture)
+    private static Button ArmOption(Fixture fixture)
     {
         fixture.HostWindow.ChildElements.OfType<InventoryItemStackCell>().Single().OnRightClicked!.Invoke(Point.Zero);
-        return fixture.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Activate");
+        return fixture.ContextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Arm");
+    }
+
+    private static void DoubleClickCell(Fixture fixture)
+    {
+        var cell = fixture.HostWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
+        cell.HandleDoubleClick(cell.Rectangle.Center);
     }
 
     [TestMethod]
-    public void UsableItem_ActivateIsEnabled_AndDoubleClickRequestsIt()
+    public void UsableItem_ArmIsEnabled_AndDoubleClickRequestsIt()
     {
         var fixture = Build();
 
-        Assert.IsTrue(ActivateOption(fixture).Enabled);
+        Assert.IsTrue(ArmOption(fixture).Enabled);
 
-        fixture.HostWindow.ChildElements.OfType<InventoryItemStackCell>().Single().RaiseDoubleClicked();
+        DoubleClickCell(fixture);
         Assert.HasCount(1, fixture.ActivateRequests);
     }
 
     [TestMethod]
-    public void BlockedItem_ActivateIsShownButDisabled_AndDoubleClickDoesNothing()
+    public void BlockedItem_ArmIsShownButDisabled_AndDoubleClickDoesNothing()
     {
         var fixture = Build();
         fixture.ComponentManager.Merge(PlayerEntityId, new MeleeDisabledComponent());
 
-        Assert.IsFalse(ActivateOption(fixture).Enabled);
+        Assert.IsFalse(ArmOption(fixture).Enabled);
 
-        fixture.HostWindow.ChildElements.OfType<InventoryItemStackCell>().Single().RaiseDoubleClicked();
+        DoubleClickCell(fixture);
         Assert.IsEmpty(fixture.ActivateRequests);
+    }
+
+    [TestMethod]
+    public void WhileTheActionLockIsUp_ArmIsEnabled_AndDoubleClickArmsAsAHotbarPressDoes()
+    {
+        var fixture = Build(unlockedAtFrame: 10_000);
+
+        Assert.IsTrue(ArmOption(fixture).Enabled);
+
+        DoubleClickCell(fixture);
+        Assert.HasCount(1, fixture.ActivateRequests);
     }
 }

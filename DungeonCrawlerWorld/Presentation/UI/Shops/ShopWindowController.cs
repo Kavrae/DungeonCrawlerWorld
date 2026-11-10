@@ -54,7 +54,7 @@ public sealed class ShopWindowController(
     }
 
     /// <summary>
-    /// Invoked from a shop's right-click context menu "Shop" option (see MapWindow.OnShopClicked).
+    /// Invoked from a shop's right-click context menu "Shop" option (MapWindow.TryOpenContainer, through ItemWindowCoordinator.OpenContainer).
     /// Toggles closed if targetEntityId is already the open target; otherwise opens the player's
     /// own inventory window (idempotent) alongside a fresh ShopWindow for targetEntityId --
     /// replacing whichever shop was previously open, if any.

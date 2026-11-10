@@ -71,28 +71,9 @@ public class Element(ElementServices services)
     /// </summary>
     public event Action<Element>? Clicked;
 
-    /// <summary>Raised in place of Clicked for a second click on this element within the double-click window.</summary>
-    /// <remarks>
-    /// Opt-in: subscribing is what makes UiInputController watch this element's clicks for a pair
-    /// (WantsDoubleClickDetection). The first click of the pair still raises Clicked at once -- see
-    /// UiInputController.HandleDoubleClickAwareClick.
-    /// </remarks>
+    /// <summary>Raised when this element's content area is double-clicked, after OnContentDoubleClickAction, in place of a second Clicked.</summary>
+    /// <remarks>The first click of the pair has already raised Clicked (UiInputController never holds a click back), so an element that takes double-clicks makes its single click harmless as the first half of one.</remarks>
     public event Action<Element>? DoubleClicked;
-
-    /// <summary>UiInputController's own opt-in signal -- see DoubleClicked's own doc comment.</summary>
-    internal bool WantsDoubleClickDetection => DoubleClicked is not null;
-
-    /// <summary>
-    /// Raises Clicked directly, bypassing HandleClick/HandleContentClick/OnContentClickAction --
-    /// used only by UiInputController's double-click-aware dispatch (DispatchClick). Safe to
-    /// skip OnContentClickAction's own default recursion into children here specifically because
-    /// WantsDoubleClickDetection is only ever true for a childless leaf (a grid cell)
-    /// today -- revisit before adding double-click support to any compound Element.
-    /// </summary>
-    internal void RaiseClicked() => Clicked?.Invoke(this);
-
-    /// <summary>See RaiseClicked.</summary>
-    internal void RaiseDoubleClicked() => DoubleClicked?.Invoke(this);
 
     /// <summary>How many times this element has gone back to its pool, counted by ElementPoolService.CloseElement for every element a close reaches, children included.</summary>
     /// <remarks>Tells a pooled instance's later use from the one something remembered (UiInputController's double-click candidate) -- Closed can't, since it fires only for the element Close was called on.</remarks>
@@ -1373,6 +1354,36 @@ public class Element(ElementServices services)
 
     /// <summary>What a content click on this element itself does; returns whether it did anything. Nothing by default -- a click on a child goes to the child first, never down from here.</summary>
     protected virtual bool OnContentClickAction(Point mousePosition) => false;
+
+    /// <summary>A double-click at mousePosition on this element's content; returns whether this element took it.</summary>
+    /// <remarks>
+    /// UiInputController offers the second click of a pair here, from the element under the cursor up to the one that
+    /// handled the first click; when none takes it, the second click is an ordinary click. The header never takes one.
+    /// </remarks>
+    public bool HandleDoubleClick(Point mousePosition)
+    {
+        if (_headerState.ShowHeader && _headerState.Rectangle.Contains(mousePosition))
+        {
+            return false;
+        }
+
+        if (!_contentState.BackgroundRectangle.Contains(mousePosition))
+        {
+            return false;
+        }
+
+        var handled = OnContentDoubleClickAction(mousePosition);
+        if (DoubleClicked is not { } doubleClicked)
+        {
+            return handled;
+        }
+
+        doubleClicked(this);
+        return true;
+    }
+
+    /// <summary>What a double-click on this element's content does; returns whether it did anything. Nothing by default, so the second click is a click.</summary>
+    protected virtual bool OnContentDoubleClickAction(Point mousePosition) => false;
 
     /// <summary>
     /// Attaches newChild to this element and initializes it -- callers must NOT also call

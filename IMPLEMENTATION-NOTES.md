@@ -2488,32 +2488,53 @@ instead of three independent `HudChrome.EntrySize.Y` copies) and each grew a hot
 `HotkeyLabel` overlay (`ButtonOptions.HotkeyLabel`, drawn via the same `ContrastTextRenderer` hotbar
 slots already use, sized off a new `FontChrome.ButtonHotkeyLabelFontFraction`).
 
-### Inventory "Activate" (context menu + double-click) landed
+### UI consistency: one path for every input (2026-11-10)
 
-Click-to-activate an inventory item, matching the hotbar's own arm/target/confirm flow -- see
-`ActionTargetingController.ArmItemFromStack` (a slot-less entry point into the existing `ArmItem`,
-reusing `HandleItemSlotPress`'s own eligibility guard) and `InventoryGridContent.BuildItemContextMenu`'s
-"Activate" option (first in the list, before Compare; visible whenever `CanActivate` is true, but
-disabled -- not hidden -- while `IsPlayerActionLocked`, mirroring `MapWindow`'s own "Inspect" option's
-`ActionLockGate.IsBlocked` gate). Double-click is a second entry point to the same call.
+**Rule: whenever several inputs can do an action, they share one path and one result.** A gesture (click, double-click,
+drag, hotkey) calls exactly what its menu option calls, and the option's Enabled is that path's own "can I" answer --
+never a copy. A menu option that can't be taken now is shown disabled, not left out.
 
-Landed alongside two generalizations prompted by this feature recurring elsewhere:
-- **Click/double-click gesture recognition moved into `UiInputController`** (`Element.DoubleClicked`,
-  opt-in via `WantsDoubleClickDetection`; `DispatchClick`/`HandleDoubleClickAwareClick`/
-  `FlushExpiredPendingClicks` defer a single click and cancel it on a real second click within
-  `UiInputController.DoubleClickWindowFrames`) -- `InventoryGridContent` no longer hand-rolls its own
-  frame counter/pending-click buffer, it just reacts to `Clicked`/`DoubleClicked` like any other
-  consumer. `ActionTargetingController.DoubleTapWindowFrames` (keyboard hotbar double-tap) now reads
-  this same shared constant instead of an independently-tuned one -- settled on double-tap's original
-  0.3s value, not double-click's briefly-tried +25% tuning.
-- **Activating anything closes every closable window** -- `UiLayerStack.CloseAllClosableWindows()` (a
-  new, unconditional sweep across every layer, no menu-mode short-circuit) is called from
-  `ActionTargetingController`'s four real commit points (`ArmAction`/`ArmItem` for arming,
-  `QueueActionActivation`/`QueueItemActivation` for the double-tap instant-fire paths that skip
-  arming). This replaced `UiInputController`'s own bespoke Escape-hold sweep entirely -- Escape-hold and
-  item/action activation now share the one implementation (single-tap Escape's
-  `CloseTopmostClosableWindow` is unrelated and untouched). A future Magic Menu cast goes through the
-  same `ArmAction`/`QueueActionActivation` chokepoints and gets this behavior for free.
+- **Double-click is the engine's** (`UiInputController.DispatchClick`): a click records the element that handled it; a
+  second click within the OS double-click time, on that element or a descendant, is first offered as a double-click
+  (`Element.HandleDoubleClick` -> `OnContentDoubleClickAction(Point)`, the `DoubleClicked` event its default) from the
+  element under the cursor up to the first click's handler, and is a plain click when nothing takes it. The first click
+  is never held back, so a double-clickable element's single click must be harmless as half of one. A double-click ends
+  the pair. `ListView` rows and the map use the position; the old opt-in (`WantsDoubleClickDetection`, `RaiseClicked`)
+  and ListView's own timer are gone.
+- **What a double-click does:** the map opens the topmost container on the tile the first click selected (never after a
+  click that confirmed an armed activation); a notification category badge opens them all (its menu's Open All); a stack
+  moves whole while a loot window is open (Take / Give) or buys or sells while a shop is open (Buy All / Sell All), in
+  place of arming; a trade column's stack leaves the trade; otherwise the player's stack arms (or opens loot boxes).
+- **Reaching a container is Game's** (`Game.Modules.Containers.ContainerAccess`): which window an entity's items open in
+  (`ContainerWindowKind`: a dead entity's loot, a standing shop's shop, a container's loot) and why the player can't
+  reach them (`ContainerAccessRefusal`: footprints not touching, loot reserved). `ItemDrops` asks it for dropping into a
+  container and `MapViewQuery.GetInteraction` hands it to Presentation (`EntityInteractionView`: also `IsContainer` and
+  `HoldsAnything`). `MapWindow.TryOpenContainer` and `TryTakeAll` are the map's one path for each option and gesture.
+  Admin Mode's override of loot reservations stays Presentation's (`MapWindow.AllowsAccess`).
+- **Take All is one command** (`LootCommands.TakeAll`: mark looted, every stack, all currency): the loot window's option
+  and the map's on a chest or pile (not a corpse), disabled when it holds nothing or is out of reach. The loot window's
+  currency Take/Take All are disabled when there's nothing to take.
+- **Every shop trade is a deal** (`Game.Modules.Shops.ShopDeals`): each side's stacks and Gold from a holder (the player
+  or shop, or a trade offer entity), valued at the shop's stock-aware bulk prices (same-item stacks together, the shop's
+  staged stacks counted as its stock), refused by one rule (`ShopDealRefusal`: not a shop, stack missing, not accepted,
+  sell cap, no room, Gold missing, offer too low) and completed all or nothing. A direct buy or sale is a one-stack deal
+  (`ShopActions.TryBuyFromShop`/`TrySellToShop`, `ShopDeals.Purchase`/`Sale`); the trade window's values, Complete and
+  Balance Offer read the deal (`TradeWindow.BuildDeal`). Only Gold given beyond the price is a gift
+  (`GoldGivenToShopEvent`, announced by `ShopCommands.TryCompleteDeal`). Buy All / Sell All are enabled by the deal rule
+  (`ShopCommands.GetPurchaseRefusal`/`GetSaleRefusal`).
+- **Arming goes through the action lock** everywhere, as a hotbar press always did: only the confirm waits on it. The
+  inventory grid no longer reads the lock.
+- **One set of words** (`ActivationMenuLabels`): "Arm"; on the armed hotbar slot, what its press does -- "Drink" (a
+  potion), "Cast" (a spell or scroll), "Activate" (a wand, anything else); "Turn on"/"Turn off" for a toggle.
+- **Toggles in Ground mode are armed before turning on** (`ToggleArming`), actions and items alike, since that puts
+  something on a tile; Target mode and turning off happen at once. A toggle *item* turned on in Ground mode is aimed as a
+  Drop of one unit (`ActionTargetingController.TryGetArmedToggleDrop`: the drop's targeting and refusal, cursor text,
+  container wash and ghost through `AimedDrop`), and Game lights the unit and drops it on the aimed tile through the drop
+  rule (`ToggleItemGroundPlacement`, Inventory's seam, filled by ItemPiles' `ItemDropGroundPlacer` over `ItemDrops`).
+  Whoever holds a lit unit holds its effects, so the pile radiates its aura and owes its upkeep -- a toggle with upkeep
+  goes out the first time a pile can't pay. A refused drop leaves it lit and carried. Design B of the two considered:
+  anchoring the aura while the item stayed carried was rejected, since it leaves the item in the pack while it works
+  elsewhere and needs a placement state every transfer must carry.
 
 ### AuraExposureComponent growth: not a leak (leak detector fix)
 

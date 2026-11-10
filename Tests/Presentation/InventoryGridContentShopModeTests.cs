@@ -65,7 +65,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, gridEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, gridEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static _ => { });
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -285,7 +285,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, PlayerEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static _ => { });
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -487,7 +487,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, gridEntityId, filterTag: Engine.Tags.GameplayTag.None, getSecondaryTargetEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static _ => { }, new SimulationClock(), tradeGridIsShopSide);
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, gridEntityId, filterTag: Engine.Tags.GameplayTag.None, getSecondaryTargetEntityId, mapViewState, static (_, _) => { }, static (_, _) => { }, static _ => { }, tradeGridIsShopSide);
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
@@ -650,12 +650,12 @@ public sealed class InventoryGridContentShopModeTests
     /// <summary>
     /// An unaffordable-but-right-tag item (0 Gold, Potion vs. a Potion-only shop) must still offer
     /// "Add to trade" (CanStageInTrade, tag match only -- see its own doc comment) but must NOT
-    /// offer "Buy All" (gated by the stricter isShopIneligible, tag match AND affordability) --
-    /// confirmed live requirement: an unaffordable item can still be staged for a trade/barter, just
-    /// not bought outright.
+    /// "Add to trade" (CanStageInTrade, tag match only -- see its own doc comment) but shows "Buy All"
+    /// disabled: the deal rule refuses it (the player hasn't the Gold), so it can be staged for a
+    /// trade/barter, just not bought outright.
     /// </summary>
     [TestMethod]
-    public void RightClick_UnaffordableShopCell_OffersAddToTradeButNotBuyAll()
+    public void RightClick_UnaffordableShopCell_OffersAddToTrade_AndBuyAllDisabled()
     {
         const int tradeShopEntityId = 51;
         var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(ShopEntityId, () => ShopEntityId);
@@ -675,11 +675,11 @@ public sealed class InventoryGridContentShopModeTests
 
         Assert.IsTrue(contextMenuController.IsOpen);
         CollectionAssert.Contains(MenuLabels(contextMenuController), "Add to trade");
-        CollectionAssert.DoesNotContain(MenuLabels(contextMenuController), "Buy All");
+        Assert.IsFalse(contextMenuController.Menu.ChildElements.OfType<Button>().Single(button => button.LeftText == "Buy All").Enabled);
     }
 
     [TestMethod]
-    public void RightClick_TradePlayerColumnCell_RemovesFromTradeImmediatelyWithNoMenu()
+    public void RightClick_TradePlayerColumnCell_OffersRemoveFromTrade_WhichReturnsTheStack()
     {
         const int tradePlayerEntityId = 50;
         var (grid, hostWindow, componentManager, _, contextMenuController, _) = BuildForContextMenu(tradePlayerEntityId, () => null, tradeGridIsShopSide: false);
@@ -689,25 +689,27 @@ public sealed class InventoryGridContentShopModeTests
         var cell = hostWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
         cell.OnRightClicked!.Invoke(Point.Zero);
 
-        Assert.IsFalse(contextMenuController.IsOpen, "Trade-grid cells never open a context menu -- right-click removes the stack immediately instead.");
+        CollectionAssert.AreEqual(new[] { "Remove from trade" }, MenuLabels(contextMenuController));
+        var remove = contextMenuController.Menu.ChildElements.OfType<Button>().Single();
+        remove.HandleClick(remove.Rectangle.Center);
+
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         Assert.IsFalse(InventoryQueries.TryGetStack(stacks, tradePlayerEntityId, PotionItemId, out _));
         Assert.IsTrue(InventoryQueries.TryGetStack(stacks, PlayerEntityId, PotionItemId, out _));
     }
 
     [TestMethod]
-    public void RightClick_TradeShopColumnCell_RemovesFromTradeImmediatelyWithNoMenu()
+    public void DoubleClick_TradeShopColumnCell_ReturnsTheStackToTheShop()
     {
         const int tradeShopEntityId = 51;
-        var (grid, hostWindow, componentManager, mapViewState, contextMenuController, _) = BuildForContextMenu(tradeShopEntityId, () => null, tradeGridIsShopSide: true);
+        var (grid, hostWindow, componentManager, mapViewState, _, _) = BuildForContextMenu(tradeShopEntityId, () => null, tradeGridIsShopSide: true);
         InventoryActions.AddItem(componentManager, tradeShopEntityId, PotionItemId, quantity: 1);
         mapViewState.OpenShopEntityId = ShopEntityId;
         grid.Update(new GameTime());
 
         var cell = hostWindow.ChildElements.OfType<InventoryItemStackCell>().Single();
-        cell.OnRightClicked!.Invoke(Point.Zero);
+        Assert.IsTrue(cell.HandleDoubleClick(cell.Rectangle.Center));
 
-        Assert.IsFalse(contextMenuController.IsOpen, "Trade-grid cells never open a context menu -- right-click removes the stack immediately instead.");
         var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
         Assert.IsFalse(InventoryQueries.TryGetStack(stacks, tradeShopEntityId, PotionItemId, out _));
         Assert.IsTrue(InventoryQueries.TryGetStack(stacks, ShopEntityId, PotionItemId, out _));
@@ -787,7 +789,7 @@ public sealed class InventoryGridContentShopModeTests
         var tooltipController = new TooltipController();
         tooltipController.Initialize(windowService, new UiLayerStack());
 
-        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, ShopEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static _ => { }, simulationClock: new SimulationClock());
+        var grid = new InventoryGridContent(world, TestInventoryServices.Over(componentManager, itemCatalog, world), windowService, contextMenuController, ShopEntityId, filterTag: Engine.Tags.GameplayTag.None, static () => null, mapViewState, static (_, _) => { }, static (_, _) => { }, static _ => { });
 
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
