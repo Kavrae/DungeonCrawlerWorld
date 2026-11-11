@@ -41,6 +41,8 @@ public sealed class AreaStampTests
         (PotionShop.Id, 24, 13, null),
         (GoblinForeman.Id, 13, 5, null),
         (HealingShrine.Id, 19, 11, null),
+        (AntiMagicShrine.Id, 6, 13, null),
+        (AntiLiteracyShrine.Id, 13, 7, null),
     ];
 
     private static GameBuildPassResult Build(MapBounds bounds) =>

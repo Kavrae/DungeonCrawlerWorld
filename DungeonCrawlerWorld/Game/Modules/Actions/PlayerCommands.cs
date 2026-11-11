@@ -32,7 +32,7 @@ namespace Game.Modules.Actions;
 /// move whose tile can't be occupied clears NextMapPosition rather than leaving an older step in place.
 ///
 /// An action can carry a step to take once it activates (Dodge's destination). The step is written to
-/// NextMapPosition only when the player's ActionActivatedEvent for that action arrives, so an activation that fails
+/// NextMapPosition only when the player's ActivationUsedEvent for that action arrives, so an activation that fails
 /// (on cooldown, say) never moves the player. A request the game consumed without that event drops its step.
 ///
 /// A Stagger (EntityStaggeredEvent on the player) drops the buffered command. A Dodge's step waiting on its activation
@@ -102,7 +102,7 @@ public sealed class PlayerCommands
         _simulationClock = simulationClock;
         _entityActions = entityActions;
 
-        eventBus.Subscribe<ActionActivatedEvent>(OnActionActivated);
+        eventBus.Subscribe<ActivationUsedEvent>(OnActivationUsed);
         eventBus.Subscribe<EntityStaggeredEvent>(OnEntityStaggered);
     }
 
@@ -154,17 +154,16 @@ public sealed class PlayerCommands
         return true;
     }
 
-    /// <summary>Whether an activation of the stack <paramref name="stackInstanceId"/> buffered now could be written before it expires: its item is FreeCast, or the player's action lock clears in time.</summary>
+    /// <summary>Whether the player holds the stack <paramref name="stackInstanceId"/> and its item will be ready (its unit's cooldown and, unless FreeCast, the action lock) before a command buffered now would expire.</summary>
     public bool CanQueueItemActivation(uint stackInstanceId) =>
-        IgnoresActionLock(stackInstanceId) ||
-        (_actionLocks.TryGetReadonly(_world.PlayerEntityId, out var actionLock) &&
-            ActionLockGate.FramesRemaining(actionLock, _simulationClock.CurrentFrame) < ExpiryFrames);
+        FramesUntilItemReady(stackInstanceId, _simulationClock.CurrentFrame) < ExpiryFrames;
 
-    /// <summary>Whether the item in the player's stack <paramref name="stackInstanceId"/> is activated FreeCast, so it never waits for the action lock.</summary>
-    private bool IgnoresActionLock(uint stackInstanceId) =>
+    /// <summary>Frames until the player could use the item in its stack <paramref name="stackInstanceId"/> (InventoryQueries.FramesUntilReady); int.MaxValue when it doesn't hold the stack.</summary>
+    private int FramesUntilItemReady(uint stackInstanceId, long now) =>
         InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, _world.PlayerEntityId, stackInstanceId, out var stack) &&
-        InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var item) &&
-        item.Activator?.Timing.Category == ActionTimingCategory.FreeCast;
+        InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var item)
+            ? InventoryQueries.FramesUntilReady(_world.PlayerEntityId, in stack, item, _actionLocks, now)
+            : int.MaxValue;
 
     /// <summary>Drops the buffered command. Returns whether there was one.</summary>
     /// <remarks>A step waiting on an activation already written is not buffered input, so it is kept.</remarks>
@@ -211,17 +210,18 @@ public sealed class PlayerCommands
         }
     }
 
-    private void OnActionActivated(ActionActivatedEvent activated)
+    private void OnActivationUsed(ActivationUsedEvent used)
     {
-        if (activated.EntityId != _world.PlayerEntityId ||
+        if (used.EntityId != _world.PlayerEntityId ||
+            used.Kind != ActivatableKind.Action ||
             _pendingActivationStep is not { } step ||
-            step.ActionId != activated.ActionId)
+            step.ActionId != used.DefinitionId)
         {
             return;
         }
 
         _pendingActivationStep = null;
-        SetNextMapPosition(activated.EntityId, step.Destination);
+        SetNextMapPosition(used.EntityId, step.Destination);
     }
 
     private void OnEntityStaggered(EntityStaggeredEvent staggered)
@@ -282,10 +282,16 @@ public sealed class PlayerCommands
 
     private bool IsBufferedCommandReady(int playerEntityId, long now)
     {
-        if (_kind != CommandKind.Action)
+        if (_kind == CommandKind.Move)
         {
-            return (_kind == CommandKind.Item && IgnoresActionLock(_stackInstanceId)) ||
-                !ActionLockGate.IsBlocked(_actionLocks, playerEntityId, now);
+            return !ActionLockGate.IsBlocked(_actionLocks, playerEntityId, now);
+        }
+
+        if (_kind == CommandKind.Item)
+        {
+            return !InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, playerEntityId, _stackInstanceId, out var stack) ||
+                !InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var item) ||
+                InventoryQueries.FramesUntilReady(playerEntityId, in stack, item, _actionLocks, now) == 0;
         }
 
         return !_entityActions.TryGetEffectiveAction(playerEntityId, _actionId, out var action) ||

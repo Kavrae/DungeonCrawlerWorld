@@ -36,7 +36,7 @@ public sealed class WindupTelegraphTests
         TestTransforms.Set(components, TargetEntityId, targetTransform);
         world.PlaceEntityOnMap(TargetEntityId, TargetPosition, ref targetTransform);
         var targetKey = world.EntityKeys.Issue(TargetEntityId);
-        components.Merge(CasterEntityId, PendingWindupComponent.ForAction(BurstActionId, new TargetSelection(TargetingMode.Target, TargetPosition, targetKey, default, MaximumRange: 10, AreaSize: 1), readyAtFrame: 60));
+        components.Merge(CasterEntityId, PendingWindupComponent.ForAction(actionCatalog.Get(BurstActionId), new TargetSelection(TargetingMode.Target, TargetPosition, targetKey, default, MaximumRange: 10, AreaSize: 1), readyAtFrame: 60));
 
         var moved = new Vector3Int(TargetPosition.X, TargetPosition.Y + 3, 0);
         world.MoveEntity(TargetEntityId, moved, targetTransform);

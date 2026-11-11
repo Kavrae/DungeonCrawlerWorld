@@ -32,7 +32,7 @@ public sealed class TomesTests
         var tome = Tomes.Create(spell);
 
         var activator = Assert.IsInstanceOfType<ConsumableActivator>(tome.Activator);
-        Assert.IsTrue(activator.ReachesOnlyUser);
+        Assert.IsTrue(activator.Targeting.IsSelfOnly);
         Assert.AreSame(spell, ((SpellGrant)tome.Effects.Single().Entries.Single()).Spell);
         Assert.IsTrue(tome.Tags.Has(GameTags.ItemConsumableTome));
         Assert.IsTrue(tome.CanTrade);

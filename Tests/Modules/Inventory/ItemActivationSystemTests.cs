@@ -24,6 +24,7 @@ using Game.Modules.Poison.Components;
 using Game.Modules.ProcessingTier;
 using Game.Modules.ProcessingTier.Components;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 using Game.World;
 using Microsoft.Xna.Framework;
 
@@ -140,7 +141,8 @@ public sealed class ItemActivationSystemTests
             auraSources: null,
             itemHotkeyBindings: componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
             bodyParts: BodyPartTestWorld.PartsOf(componentManager),
-            processingTiers: withProcessingTiers ? new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>()) : null);
+            processingTiers: withProcessingTiers ? new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>()) : null,
+            dodgingEntities: componentManager.GetPackedPool<DodgingComponent>());
 
         return (system, componentManager, mapQuery, eventBus);
     }
@@ -200,6 +202,158 @@ public sealed class ItemActivationSystemTests
         return stack.StackInstanceId;
     }
 
+    /// <summary>Grants one Test Potion timed by category, as its own divergent stack.</summary>
+    private static uint GrantPotionTimed(ComponentManager componentManager, ActionTimingCategory category) =>
+        InventoryActions.AddDivergentItem(componentManager, CasterEntityId, new ItemDefinition(
+            PotionId, "Test Potion", null, "p", Color.Green, Tags: [],
+            Effects: [new Effect([new DirectHeal(0.5f)])],
+            Activator: new PotionActivator(new TargetingSpec(TargetShape.Circle, MaximumRange: 3, AreaSize: 1), new ActionTiming(category, 60, null))));
+
+    [TestMethod]
+    public void Potion_FreeCast_IgnoresTheActionLock_AndLeavesItAsItWas()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        var stackInstanceId = GrantPotionTimed(componentManager, ActionTimingCategory.FreeCast);
+        componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 30, unlockedAtFrame: 30));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(70, HealthOf(componentManager, TargetEntityId));
+        Assert.AreEqual(30u, componentManager.GetPackedPool<ActionLockComponent>().GetReadonly(CasterEntityId).UnlockedAtFrame);
+    }
+
+    [TestMethod]
+    public void Potion_Delayed_IsSpentWhenItsWindupStarts_AndLandsWhenItResolves()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        var stackInstanceId = GrantPotionTimed(componentManager, ActionTimingCategory.Delayed);
+        componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(20, HealthOf(componentManager, TargetEntityId));
+        Assert.IsFalse(InventoryQueries.TryFindByStackInstanceId(componentManager.GetMultiPool<InventoryItemStackComponent>(), CasterEntityId, stackInstanceId, out _), "The last potion is spent as the windup starts.");
+        Assert.IsTrue(componentManager.GetPackedPool<PendingWindupComponent>().TryGetReadonly(CasterEntityId, out var windup));
+        Assert.AreEqual(60u, windup.ReadyAtFrame);
+        Assert.AreEqual(PotionId, windup.Definition.Id);
+
+        system.Resolve(CasterEntityId, in windup, now: 60);
+
+        Assert.AreEqual(70, HealthOf(componentManager, TargetEntityId));
+    }
+
+    [TestMethod]
+    public void Potion_Use_PublishesOneActivationUsedEventForTheItem()
+    {
+        var (system, componentManager, mapQuery, eventBus) = Build();
+        var used = new List<ActivationUsedEvent>();
+        eventBus.Subscribe<ActivationUsedEvent>(used.Add);
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
+        componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
+
+        system.Update(default, 0);
+
+        Assert.HasCount(1, used);
+        Assert.AreEqual((CasterEntityId, ActivatableKind.Item, PotionId), (used[0].EntityId, used[0].Kind, used[0].DefinitionId));
+    }
+
+    /// <summary>Grants one Test Potion carrying tags, as its own divergent stack.</summary>
+    private static uint GrantPotionTagged(ComponentManager componentManager, Engine.Tags.GameplayTagSet tags) =>
+        InventoryActions.AddDivergentItem(componentManager, CasterEntityId, new ItemDefinition(
+            PotionId, "Test Potion", null, "p", Color.Green, Tags: tags,
+            Effects: [new Effect([new DirectHeal(0.5f)])],
+            Activator: new PotionActivator(new TargetingSpec(TargetShape.Circle, MaximumRange: 3, AreaSize: 1), new ActionTiming(ActionTimingCategory.Immediate, 60, null))));
+
+    [TestMethod]
+    public void DodgeablePotion_ThrownAtADodgingTarget_IsDodged_AndStartsNoCooldown()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.GetPackedPool<DodgingComponent>().Add(TargetEntityId, new DodgingComponent(expiresAtFrame: 30));
+        var stackInstanceId = GrantPotionTagged(componentManager, [GameTags.TraitDodgeable]);
+        componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(20, HealthOf(componentManager, TargetEntityId));
+        Assert.IsFalse(componentManager.GetPackedPool<PotionCooldownComponent>().Has(TargetEntityId));
+    }
+
+    [TestMethod]
+    public void UndodgeablePotion_ThrownAtADodgingTarget_Lands()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.GetPackedPool<DodgingComponent>().Add(TargetEntityId, new DodgingComponent(expiresAtFrame: 30));
+        var stackInstanceId = GrantPotionTagged(componentManager, []);
+        componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
+
+        system.Update(default, 0);
+
+        Assert.AreEqual(70, HealthOf(componentManager, TargetEntityId));
+    }
+
+    [TestMethod]
+    public void StaggeringPotion_StaggersTheTargetItLands_On()
+    {
+        var (system, componentManager, mapQuery, eventBus) = Build();
+        var staggered = new List<int>();
+        eventBus.Subscribe<EntityStaggeredEvent>(staggeredEvent => staggered.Add(staggeredEvent.EntityId));
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        var stackInstanceId = GrantPotionTagged(componentManager, [GameTags.TraitStaggering]);
+        componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
+
+        system.Update(default, 0);
+
+        CollectionAssert.AreEqual(new[] { TargetEntityId }, staggered);
+    }
+
+    [TestMethod]
+    public void Potion_ThrownAtACorpseWithHealth_LandsAndStartsItsCooldown()
+    {
+        var (system, componentManager, mapQuery, _) = Build();
+        mapQuery.SetOccupant(TargetTile, TargetEntityId);
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 100));
+        componentManager.GetPackedPool<DeadComponent>().Add(TargetEntityId, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
+        var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
+        componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
+        componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
+
+        system.Update(default, 0);
+
+        Assert.IsTrue(componentManager.GetPackedPool<PotionCooldownComponent>().Has(TargetEntityId), "A corpse is reached, as an action reaches one.");
+        Assert.AreEqual(-1, StackQuantity(componentManager, CasterEntityId, PotionId));
+    }
+
+    [TestMethod]
+    public void Request_FromADeadEntity_IsDropped()
+    {
+        var (system, componentManager, _, _) = Build();
+        var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
+        componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
+        componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
+
+        system.Update(default, 0);
+
+        Assert.IsFalse(componentManager.GetPackedPool<PendingItemActivationComponent>().Has(CasterEntityId));
+        Assert.AreEqual(1, StackQuantity(componentManager, CasterEntityId, PotionId));
+    }
+
     [TestMethod]
     public void Potion_TargetOccupantAtTargetTile_HealsByHealFractionOfItsOwnMaxHealth()
     {
@@ -232,7 +386,7 @@ public sealed class ItemActivationSystemTests
         Assert.AreEqual(70, HealthOf(componentManager, TargetEntityId));
     }
 
-    /// <summary>A Complex target (a body plan, no SimpleHealthComponent) must not be rejected by ApplyPotionToTarget's presence gate -- proves ItemActivationSystem actually lands the effect instead of silently no-oping.</summary>
+    /// <summary>A Complex target (a body plan, no SimpleHealthComponent) must not be rejected by PotionTargetRule's presence gate -- proves ItemActivationSystem actually lands the effect instead of silently no-oping.</summary>
     [TestMethod]
     public void Potion_ComplexTargetWithBodyPartsAndNoSimpleHealth_HealsByHealFractionOfItsOwnMaxHealth()
     {

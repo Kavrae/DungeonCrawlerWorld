@@ -38,6 +38,5 @@ internal static class TestActionStateViews
                 entityKeys ?? new EntityKeys(),
                 componentManager.IsRegistered<DeadComponent>() ? componentManager.GetPackedPool<DeadComponent>() : EmptyPools.Packed<DeadComponent>(),
                 componentManager.IsRegistered<NonBlockingComponent>() ? componentManager.GetMultiPool<NonBlockingComponent>() : EmptyPools.Multi<NonBlockingComponent>(),
-                componentManager.IsRegistered<AbilityScoresComponent>() ? componentManager.GetPackedPool<AbilityScoresComponent>() : EmptyPools.Packed<AbilityScoresComponent>()),
-            EntityActions(componentManager, actionCatalog), itemCatalog ?? new ItemCatalog(), componentManager);
+                componentManager.IsRegistered<AbilityScoresComponent>() ? componentManager.GetPackedPool<AbilityScoresComponent>() : EmptyPools.Packed<AbilityScoresComponent>()));
 }

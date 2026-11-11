@@ -1,5 +1,7 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Game.Modules.Actions;
+using Game.Modules.Core.Components;
 using Game.Modules.Inventory.Components;
 
 namespace Game.Modules.Inventory;
@@ -28,6 +30,12 @@ public static class InventoryQueries
     /// <returns><c>true</c> if the stack was found; otherwise, <c>false</c>.</returns>
     public static bool TryGetStack(MultiComponentPool<InventoryItemStackComponent> stacks, int entityId, Guid itemDefinitionId, out InventoryItemStackComponent stack) =>
         stacks.TryGetFirst(entityId, new ItemDefinitionMatcher(itemDefinitionId), out stack);
+
+    /// <summary>Frames until entityId could use item, the effective item of its stack, at frame now: the later of the stack's own cooldown and, unless the item is FreeCast, the action lock (ActivationQueries.FramesUntilReady). 0 when ready, and for an item with no activator.</summary>
+    public static int FramesUntilReady(int entityId, in InventoryItemStackComponent stack, ItemDefinition item, PackedComponentPool<ActionLockComponent> actionLocks, long now) =>
+        item.Activator is { } activator
+            ? ActivationQueries.FramesUntilReady(entityId, activator.Timing, stack.CooldownFramesRemaining(now), actionLocks, now)
+            : 0;
 
     /// <summary>
     /// Resolves the effective ItemDefinition for a stack -- its own Override if diverged, else the

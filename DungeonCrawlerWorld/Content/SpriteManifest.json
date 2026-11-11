@@ -382,6 +382,32 @@
     ]
   },
   {
+    "Name": "Shrine-AntiMagic",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Dungeon_Props.png",
+        "Column": 6,
+        "Row": 0,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "Tint": "#9B30FF"
+      }
+    ]
+  },
+  {
+    "Name": "Shrine-AntiLiteracy",
+    "Cells": [
+      {
+        "SheetPath": "Pixel Crawler - Free Pack/Environment/Props/Static/Dungeon_Props.png",
+        "Column": 6,
+        "Row": 0,
+        "CellWidth": 16,
+        "CellHeight": 16,
+        "Tint": "#A08060"
+      }
+    ]
+  },
+  {
     "Name": "wall-stone",
     "Cells": [
       {

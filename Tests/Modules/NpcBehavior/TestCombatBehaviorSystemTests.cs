@@ -35,7 +35,7 @@ public sealed class TestCombatBehaviorSystemTests
     private static readonly Vector3Int AdjacentTile = new(6, 5, 0); // due east of the goblin -- part of Adjacent's 8-neighbor footprint.
     private static readonly Vector2Byte SingleTile = new(1, 1);
 
-    /// <summary>Minimal IMapQuery test double with a configurable Blocking/occupant index -- same shape as ActionEffectResolverTests' own fake.</summary>
+    /// <summary>Minimal IMapQuery test double with a configurable Blocking/occupant index -- same shape as ActivationEffectResolverTests' own fake.</summary>
     private sealed class FakeMapQuery : IMapQuery
     {
         private readonly Dictionary<Vector3Int, int> _blockingByPosition = [];

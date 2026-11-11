@@ -1,5 +1,6 @@
 using Engine.ECS.Components;
 using Engine.ECS.Components.Stores;
+using Engine.ECS.Systems;
 using Game.Modules.Inventory.Components;
 using Game.World;
 
@@ -18,7 +19,7 @@ public static class InventoryActions
     /// ItemHotkeyBindingComponent for why binding is by stack). See AddUnits for how units are placed.
     /// </remarks>
     public static uint AddItem(ComponentManager componentManager, int entityId, Guid itemDefinitionId, ushort quantity) =>
-        AddUnits(componentManager, entityId, new StackTemplate(itemDefinitionId, overrideDefinition: null, isDivergent: false, isDisabled: false), quantity);
+        AddUnits(componentManager, entityId, new StackTemplate(itemDefinitionId, overrideDefinition: null, isDivergent: false), quantity);
 
     /// <summary>Adds quantity units shaped by template to entityId, filling every interchangeable stack with room before starting new ones.</summary>
     /// <remarks>
@@ -89,7 +90,7 @@ public static class InventoryActions
         a.ActivationEffects.SequenceEqual(b.ActivationEffects);
 
     /// <summary>What a unit is, apart from which stack holds it: the stacks it can join, and the stack it starts when none has room.</summary>
-    private readonly struct StackTemplate(Guid itemDefinitionId, ItemDefinition? overrideDefinition, bool isDivergent, bool isDisabled)
+    private readonly struct StackTemplate(Guid itemDefinitionId, ItemDefinition? overrideDefinition, bool isDivergent, uint cooldownReadyAtFrame = FrameDeadline.Never)
     {
         public Guid ItemDefinitionId { get; } = itemDefinitionId;
 
@@ -97,16 +98,16 @@ public static class InventoryActions
 
         public bool IsDivergent { get; } = isDivergent;
 
-        public bool IsDisabled { get; } = isDisabled;
+        public uint CooldownReadyAtFrame { get; } = cooldownReadyAtFrame;
 
         public static StackTemplate Of(in InventoryItemStackComponent stack) =>
-            new(stack.ItemDefinitionId, stack.Override, stack.IsDivergent, stack.IsDisabled);
+            new(stack.ItemDefinitionId, stack.Override, stack.IsDivergent, stack.CooldownReadyAtFrame);
 
-        /// <summary>Whether stack holds units interchangeable with this template's: the same item, the same Override (or neither has one), and the same divergence and disabled state.</summary>
+        /// <summary>Whether stack holds units interchangeable with this template's: the same item, the same Override (or neither has one), the same divergence, and the same cooldown.</summary>
         public bool Matches(in InventoryItemStackComponent stack) =>
             stack.ItemDefinitionId == ItemDefinitionId &&
             stack.IsDivergent == IsDivergent &&
-            stack.IsDisabled == IsDisabled &&
+            stack.CooldownReadyAtFrame == CooldownReadyAtFrame &&
             (stack.Override, OverrideDefinition) switch
             {
                 (null, null) => true,
@@ -115,7 +116,7 @@ public static class InventoryActions
             };
 
         public InventoryItemStackComponent CreateStack(ushort quantity) =>
-            new(ItemDefinitionId, quantity, IsDisabled, OverrideDefinition, IsDivergent);
+            new(ItemDefinitionId, quantity, OverrideDefinition, IsDivergent, CooldownReadyAtFrame);
     }
 
     /// <summary>Moves stack stackInstanceId's units into another stack entityId already holds with interchangeable units, as many as that stack's cap allows, removing stackInstanceId once it's empty.</summary>
@@ -198,7 +199,7 @@ public static class InventoryActions
     /// Intelligence-derived MaxCharges), so they are not divergent. Returns the StackInstanceId the last unit landed in.
     /// </remarks>
     public static uint AddItemWithOverride(ComponentManager componentManager, int entityId, ItemDefinition effectiveDefinition, ushort quantity) =>
-        AddUnits(componentManager, entityId, new StackTemplate(effectiveDefinition.Id, effectiveDefinition, isDivergent: false, isDisabled: false), quantity);
+        AddUnits(componentManager, entityId, new StackTemplate(effectiveDefinition.Id, effectiveDefinition, isDivergent: false), quantity);
 
     /// <summary>Adds one unit that differs from its catalog item, with overrideDefinition as its Override, divergent and not disabled.</summary>
     /// <remarks>
@@ -206,12 +207,12 @@ public static class InventoryActions
     /// StackInstanceId the unit landed in.
     /// </remarks>
     public static uint AddDivergentItem(ComponentManager componentManager, int entityId, ItemDefinition overrideDefinition) =>
-        AddUnits(componentManager, entityId, new StackTemplate(overrideDefinition.Id, overrideDefinition, isDivergent: true, isDisabled: false), quantity: 1);
+        AddUnits(componentManager, entityId, new StackTemplate(overrideDefinition.Id, overrideDefinition, isDivergent: true), quantity: 1);
 
     /// <summary>Changes one unit of entityId's stack stackInstanceId into newOverrideDefinition, moving it to the stack it now belongs in.</summary>
     /// <remarks>
     /// A null newOverrideDefinition returns the unit to a plain stack of its item; any other makes it a divergent unit
-    /// with that Override. The unit keeps its stack's disabled state. It joins an interchangeable stack with room when
+    /// with that Override. The unit keeps its stack's cooldown. It joins an interchangeable stack with room when
     /// there is one -- which may be the stack it left, if nothing about it changed -- and starts its own otherwise.
     /// Returns the StackInstanceId the unit landed in, or 0, changing nothing, when entityId doesn't hold the stack.
     /// </remarks>
@@ -226,11 +227,48 @@ public static class InventoryActions
 
         var source = stacks.GetReadonlyByDenseIndex(sourceDenseIndex);
         var template = newOverrideDefinition is null
-            ? new StackTemplate(source.ItemDefinitionId, overrideDefinition: null, isDivergent: false, source.IsDisabled)
-            : new StackTemplate(newOverrideDefinition.Id, newOverrideDefinition, isDivergent: true, source.IsDisabled);
+            ? new StackTemplate(source.ItemDefinitionId, overrideDefinition: null, isDivergent: false, source.CooldownReadyAtFrame)
+            : new StackTemplate(newOverrideDefinition.Id, newOverrideDefinition, isDivergent: true, source.CooldownReadyAtFrame);
 
         RemoveOneUnit(componentManager, entityId, stackInstanceId);
         return AddUnits(componentManager, entityId, template, quantity: 1);
+    }
+
+    /// <summary>Moves one unit of entityId's stack stackInstanceId to a stack cooling down until cooldownReadyAtFrame, everything else about it unchanged.</summary>
+    /// <remarks>It joins a stack whose units are the same and end their cooldown on the same frame, when one has room. Returns the StackInstanceId the unit landed in, or 0, changing nothing, when entityId doesn't hold the stack.</remarks>
+    public static uint MoveOneUnitIntoCooldown(ComponentManager componentManager, int entityId, uint stackInstanceId, uint cooldownReadyAtFrame)
+    {
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        var sourceDenseIndex = FindMatchingDenseIndex(stacks, entityId, stackInstanceId, static (stack, id) => stack.StackInstanceId == id);
+        if (sourceDenseIndex == -1)
+        {
+            return 0;
+        }
+
+        var source = stacks.GetReadonlyByDenseIndex(sourceDenseIndex);
+        var template = new StackTemplate(source.ItemDefinitionId, source.Override, source.IsDivergent, cooldownReadyAtFrame);
+
+        RemoveOneUnit(componentManager, entityId, stackInstanceId);
+        return AddUnits(componentManager, entityId, template, quantity: 1);
+    }
+
+    /// <summary>Ends stack stackInstanceId's cooldown and moves its units into an interchangeable ready stack entityId holds, as many as that stack's cap allows.</summary>
+    /// <remarks>Returns the StackInstanceId now holding the last of its units: the stack merged into, or stackInstanceId itself when anything was left behind (or nothing was ready to merge into). 0, changing nothing, when entityId doesn't hold the stack.</remarks>
+    public static uint EndCooldown(ComponentManager componentManager, int entityId, uint stackInstanceId)
+    {
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        var denseIndex = FindMatchingDenseIndex(stacks, entityId, stackInstanceId, static (stack, id) => stack.StackInstanceId == id);
+        if (denseIndex == -1)
+        {
+            return 0;
+        }
+
+        using (var cooling = stacks.WriteByDenseIndex(denseIndex))
+        {
+            cooling.Value.CooldownReadyAtFrame = FrameDeadline.Never;
+        }
+
+        return MergeIntoEquivalentStack(componentManager, entityId, stackInstanceId);
     }
 
     /// <summary>Takes one unit out of entityId's stack stackInstanceId, removing the stack once it is empty.</summary>
@@ -254,23 +292,13 @@ public static class InventoryActions
         stacks.UpdateByDenseIndex(denseIndex, new RemoveQuantityUpdate(1));
     }
 
-    /// <summary>Disables/enables one specific stack (e.g. an item withheld until some later trigger) -- distinct from SetInventoryDisabled below, which disables the whole inventory.</summary>
-    public static void SetStackDisabled(ComponentManager componentManager, int entityId, Guid itemDefinitionId, bool disabled)
-    {
-        using var heldStack = componentManager.GetMultiPool<InventoryItemStackComponent>().TryWriteFirst(entityId, new InventoryQueries.ItemDefinitionMatcher(itemDefinitionId));
-        if (heldStack.Found)
-        {
-            heldStack.Value.IsDisabled = disabled;
-        }
-    }
-
     /// <summary>Disables/enables an entity's whole inventory -- items still exist and can still be granted while disabled, but the management window can't be opened (see InventoryWindowController).</summary>
     public static void SetInventoryDisabled(ComponentManager componentManager, int entityId, bool disabled) =>
         componentManager.Merge(entityId, new InventoryDisabledComponent(disabled));
 
     /// <summary>
     /// Moves one exact stack from sourceEntityId to destinationEntityId, preserving its exact
-    /// identity (StackInstanceId, Override, IsDisabled, IsDivergent) -- never merges into an
+    /// identity (StackInstanceId, Override, IsDivergent, cooldown) -- never merges into an
     /// existing stack on the destination, even one matching the same item id (looting merges --
     /// see TryLootStack; giving and trade staging don't, since staging undoes a move by StackInstanceId). Refuses (returns false, no state changed) if source and
     /// destination are the same entity -- a drop back onto the grid it came from should never
@@ -414,7 +442,7 @@ public static class InventoryActions
 
     /// <summary>Moves one unit of sourceEntityId's stack stackInstanceId to destinationEntityId, topping up an interchangeable stack there or starting one.</summary>
     /// <remarks>
-    /// The unit keeps everything a unit of its stack is: its item, Override, divergence and disabled state. The stack's
+    /// The unit keeps everything a unit of its stack is: its item, Override, divergence and cooldown. The stack's
     /// last unit moves as TryLootStack moves a stack, keeping its StackInstanceId. A unit that starts a new stack needs a
     /// free stack slot (InventoryCapacity) and is re-stamped as freshly acquired. Refuses an untradeable item.
     /// </remarks>

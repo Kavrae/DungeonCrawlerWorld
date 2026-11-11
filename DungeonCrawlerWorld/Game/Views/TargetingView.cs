@@ -11,9 +11,8 @@ namespace Game.Views;
 
 /// <summary>Targeting for anything outside Game: the selection a confirm queues, the tiles it would land on, and where a windup in progress lands now.</summary>
 /// <remarks>Every answer comes from TargetResolution, the function activations and windups resolve through, so a preview or telegraph draws exactly what lands.</remarks>
-public sealed class TargetingView(TargetResolution targetResolution, EntityActions entityActions, ItemCatalog itemCatalog, ComponentManager componentManager)
+public sealed class TargetingView(TargetResolution targetResolution)
 {
-    private readonly ActivatableLookup _activatables = new(entityActions, itemCatalog, componentManager);
 
     /// <summary>A resolve's shape and path tiles, each once in order: AddPathTiles' scratch.</summary>
     private readonly TileSet _drawnTiles = new();
@@ -47,10 +46,10 @@ public sealed class TargetingView(TargetResolution targetResolution, EntityActio
         return resolved;
     }
 
-    /// <summary>Fills tiles with where entityId's windup would land if it ended now -- following its target in Target mode, its path included. False, with tiles empty, when what it winds up is gone.</summary>
+    /// <summary>Fills tiles with where entityId's windup would land if it ended now -- following its target in Target mode, its path included -- from the definition the windup captured. False, with tiles empty, when that definition has no activator.</summary>
     public bool TryResolveWindup(int entityId, in PendingWindupComponent pending, List<Vector3Int> tiles)
     {
-        if (!_activatables.TryGetActivator(entityId, pending.Activatable, out var activator))
+        if (pending.Definition.ActivatorOrNone is not { } activator)
         {
             tiles.Clear();
             return false;
@@ -74,7 +73,7 @@ public sealed class TargetingView(TargetResolution targetResolution, EntityActio
         tiles.AddRange(_drawnTiles.AsSpan());
     }
 
-    /// <summary>Whether what entityId is winding up can be dodged (GameTags.TraitDodgeable on the action or item it resolves into); false when it is gone.</summary>
-    public bool IsWindupDodgeable(int entityId, in PendingWindupComponent pending) =>
-        _activatables.TryGetDefinition(entityId, pending.Activatable, out var definition) && definition.Tags.Has(GameTags.TraitDodgeable);
+    /// <summary>Whether a windup can be dodged: GameTags.TraitDodgeable on the definition it captured.</summary>
+    public bool IsWindupDodgeable(in PendingWindupComponent pending) =>
+        pending.Definition.Tags.Has(GameTags.TraitDodgeable);
 }

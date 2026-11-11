@@ -34,7 +34,6 @@ public sealed class MapViewQuery : IMapViewQuery
 {
     private readonly World.World _world;
     private readonly TerrainRegistry _terrain;
-    private readonly ActivatableLookup _activatables;
     private readonly DirectComponentPool<TransformComponent> _transforms;
     private readonly PackedComponentPool<GlyphComponent> _glyphs;
     private readonly PackedComponentPool<SpriteComponent> _sprites;
@@ -60,13 +59,11 @@ public sealed class MapViewQuery : IMapViewQuery
 
     /// <param name="creatures">The blueprint definitions, for drawing and naming every entity that holds no visual or name of its own -- which is nearly all of them, built or skeleton.</param>
     /// <param name="simulationClock">The current simulation frame, which a windup's progress is measured against.</param>
-    public MapViewQuery(World.World world, ComponentManager componentManager, ActionCatalog actionCatalog, TerrainRegistry terrain, BlueprintRegistry creatures, SimulationClock simulationClock    /// <param name="itemCatalog">Names the item an item windup is for, so it is drawn like an action's; null (a test without items) draws none.</param>
-, ItemCatalog? itemCatalog = null)
+    public MapViewQuery(World.World world, ComponentManager componentManager, TerrainRegistry terrain, BlueprintRegistry creatures, SimulationClock simulationClock)
     {
         _simulationClock = simulationClock;
         _world = world;
         _terrain = terrain;
-        _activatables = new ActivatableLookup(EntityActions.For(componentManager, actionCatalog, creatures), itemCatalog, componentManager);
         _transforms = componentManager.GetDirectPool<TransformComponent>();
         _glyphs = componentManager.GetPackedPool<GlyphComponent>();
         _sprites = componentManager.GetPackedPool<SpriteComponent>();
@@ -193,13 +190,13 @@ public sealed class MapViewQuery : IMapViewQuery
 
     public bool TryGetChargingAction(int entityId, out ChargingActionView action)
     {
-        if (!_pendingWindups.TryGetReadonly(entityId, out var pending) ||
-            !_activatables.TryGetDefinition(entityId, pending.Activatable, out var definition))
+        if (!_pendingWindups.TryGetReadonly(entityId, out var pending))
         {
             action = default;
             return false;
         }
 
+        var definition = pending.Definition;
         action = new ChargingActionView(definition.SpriteName, definition.Glyph, definition.GlyphColor);
         return true;
     }

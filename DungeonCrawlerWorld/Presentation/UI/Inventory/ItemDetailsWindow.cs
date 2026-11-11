@@ -1,4 +1,5 @@
 using Engine.Tags;
+using Engine.Utilities;
 using Game.Modules.Actions;
 using Game.Modules.Inventory;
 using Game.Views;
@@ -80,6 +81,7 @@ public sealed class ItemDetailsWindow(
     private int _currentEntityId;
     private uint _currentStackInstanceId;
     private ActivationBlocker _displayedBlocker;
+    private int _displayedCooldownSeconds;
     private IReadOnlyList<TooltipRow>? _displayedShopPricingRows;
     private bool _displayedComparing;
 
@@ -139,6 +141,7 @@ public sealed class ItemDetailsWindow(
 
         if (_childrenReady && _definition is not null &&
             (ComputeBlocker() != _displayedBlocker ||
+             ComputeCooldownSeconds() != _displayedCooldownSeconds ||
              !ReferenceEquals(ComputeShopPricingRows(), _displayedShopPricingRows) ||
              IsComparingNow() != _displayedComparing))
         {
@@ -166,6 +169,12 @@ public sealed class ItemDetailsWindow(
         _definition?.Activator is not null && _currentStackInstanceId != NoStackInstanceId && _currentEntityId == playerQuery.PlayerEntityId
             ? actionStateView.GetItemBlocker(_currentEntityId, _currentStackInstanceId)
             : ActivationBlocker.None;
+
+    /// <summary>Whole seconds, rounded up, until the shown unit's own cooldown ends; 0 when it isn't cooling down or the stack isn't one held.</summary>
+    private int ComputeCooldownSeconds() =>
+        _currentStackInstanceId == NoStackInstanceId
+            ? 0
+            : (int)System.Math.Ceiling(actionStateView.ItemCooldownFramesRemaining(_currentEntityId, _currentStackInstanceId) / (float)GameTiming.FramesPerSecond);
 
     protected override void OnChildrenInitialized()
     {
@@ -209,6 +218,12 @@ public sealed class ItemDetailsWindow(
         if (_displayedBlocker != ActivationBlocker.None)
         {
             _sections.BuildFixedTextLine(this, width, ActivationBlockerText.Describe(_displayedBlocker), ActivationBlockerText.ReasonColor);
+        }
+
+        _displayedCooldownSeconds = ComputeCooldownSeconds();
+        if (_displayedCooldownSeconds > 0)
+        {
+            _sections.BuildFixedTextLine(this, width, $"Cooling down: {_displayedCooldownSeconds}s", ActivationBlockerText.ReasonColor);
         }
 
         _sections.BuildEffectsSection(this, _definition, width, ResolveLineColor);

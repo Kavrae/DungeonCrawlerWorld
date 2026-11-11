@@ -132,24 +132,6 @@ public sealed class InventoryActionsTests
     }
 
     [TestMethod]
-    public void SetStackDisabled_MatchingStack_FlipsOnlyThatStacksIsDisabled()
-    {
-        var manager = CreateRegisteredManager();
-        var disabledItemId = Guid.NewGuid();
-        var otherItemId = Guid.NewGuid();
-        InventoryActions.AddItem(manager, entityId: 0, disabledItemId, quantity: 1);
-        InventoryActions.AddItem(manager, entityId: 0, otherItemId, quantity: 1);
-
-        InventoryActions.SetStackDisabled(manager, entityId: 0, disabledItemId, disabled: true);
-
-        var stacks = new List<InventoryItemStackComponent>();
-        InventoryQueries.CopyStacksForEntity(manager.GetMultiPool<InventoryItemStackComponent>(), 0, stacks);
-
-        Assert.IsTrue(stacks.Single(stack => stack.ItemDefinitionId == disabledItemId).IsDisabled);
-        Assert.IsFalse(stacks.Single(stack => stack.ItemDefinitionId == otherItemId).IsDisabled);
-    }
-
-    [TestMethod]
     public void AddItem_OntoAnOverriddenStackOfTheSameItem_MakesItsOwnPlainStack()
     {
         var manager = CreateRegisteredManager();
@@ -166,20 +148,20 @@ public sealed class InventoryActionsTests
     }
 
     [TestMethod]
-    public void AddItem_OntoADisabledStackOfTheSameItem_MakesItsOwnEnabledStack()
+    public void AddItem_OntoACoolingStackOfTheSameItem_MakesItsOwnReadyStack()
     {
         var manager = CreateRegisteredManager();
         var itemId = Guid.NewGuid();
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
-        pool.Add(0, new InventoryItemStackComponent(itemId, quantity: 2, isDisabled: true));
+        pool.Add(0, new InventoryItemStackComponent(itemId, quantity: 2, cooldownReadyAtFrame: 100));
 
         InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 1);
 
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(pool, 0, stacks);
         Assert.HasCount(2, stacks);
-        Assert.AreEqual(2, stacks.Single(stack => stack.IsDisabled).Quantity);
-        Assert.AreEqual(1, stacks.Single(stack => !stack.IsDisabled).Quantity);
+        Assert.AreEqual(2, stacks.Single(stack => stack.CooldownReadyAtFrame == 100).Quantity);
+        Assert.AreEqual(1, stacks.Single(stack => stack.CooldownReadyAtFrame == Engine.ECS.Systems.FrameDeadline.Never).Quantity);
     }
 
     [TestMethod]
@@ -429,18 +411,18 @@ public sealed class InventoryActionsTests
     }
 
     [TestMethod]
-    public void MoveOneUnit_FromADisabledStack_LandsInADisabledStack()
+    public void MoveOneUnit_FromACoolingStack_KeepsItsCooldown()
     {
         var manager = CreateRegisteredManager();
         var itemId = Guid.NewGuid();
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
-        var disabledStack = new InventoryItemStackComponent(itemId, quantity: 2, isDisabled: true, overrideDefinition: CreateDefinition(itemId, charges: 10));
-        pool.Add(0, disabledStack);
+        var coolingStack = new InventoryItemStackComponent(itemId, quantity: 2, overrideDefinition: CreateDefinition(itemId, charges: 10), cooldownReadyAtFrame: 100);
+        pool.Add(0, coolingStack);
 
-        var landedStackInstanceId = InventoryActions.MoveOneUnit(manager, entityId: 0, disabledStack.StackInstanceId, CreateDefinition(itemId, charges: 9));
+        var landedStackInstanceId = InventoryActions.MoveOneUnit(manager, entityId: 0, coolingStack.StackInstanceId, CreateDefinition(itemId, charges: 9));
 
         Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 0, landedStackInstanceId, out var landedStack));
-        Assert.IsTrue(landedStack.IsDisabled);
+        Assert.AreEqual(100u, landedStack.CooldownReadyAtFrame);
         Assert.IsTrue(landedStack.IsDivergent);
     }
 
@@ -543,7 +525,6 @@ public sealed class InventoryActionsTests
         InventoryActions.AddItemWithOverride(manager, entityId: 0, CreateDefinition(itemId, charges: 7), quantity: 3);
         var pool = manager.GetMultiPool<InventoryItemStackComponent>();
         var sourceStack = pool.GetReadonlyByDenseIndex(pool.GetFirstDenseIndex(0));
-        InventoryActions.SetStackDisabled(manager, entityId: 0, itemId, disabled: true);
 
         var result = InventoryActions.TryTransferStack(manager, new ItemCatalog(), sourceEntityId: 0, destinationEntityId: 1, sourceStack.StackInstanceId, TestPlayerQuery.NoPlayer);
 
@@ -553,7 +534,6 @@ public sealed class InventoryActionsTests
 
         Assert.IsTrue(InventoryQueries.TryFindByStackInstanceId(pool, 1, sourceStack.StackInstanceId, out var movedStack));
         Assert.AreEqual(sourceStack.Quantity, movedStack.Quantity);
-        Assert.IsTrue(movedStack.IsDisabled);
         Assert.AreEqual(sourceStack.Override, movedStack.Override);
     }
 
@@ -940,15 +920,15 @@ public sealed class InventoryActionsTests
     }
 
     [TestMethod]
-    public void MergeIntoEquivalentStack_DisabledAgainstEnabled_LeavesBothStacksAlone()
+    public void MergeIntoEquivalentStack_CoolingAgainstReady_LeavesBothStacksAlone()
     {
         var manager = CreateRegisteredManager();
         var itemId = Guid.NewGuid();
         InventoryActions.AddItem(manager, entityId: 0, itemId, quantity: 2);
-        var disabledStack = new InventoryItemStackComponent(itemId, 1, isDisabled: true);
-        manager.GetMultiPool<InventoryItemStackComponent>().Add(0, disabledStack);
+        var coolingStack = new InventoryItemStackComponent(itemId, 1, cooldownReadyAtFrame: 100);
+        manager.GetMultiPool<InventoryItemStackComponent>().Add(0, coolingStack);
 
-        InventoryActions.MergeIntoEquivalentStack(manager, entityId: 0, disabledStack.StackInstanceId);
+        InventoryActions.MergeIntoEquivalentStack(manager, entityId: 0, coolingStack.StackInstanceId);
 
         Assert.AreEqual(2, manager.GetMultiPool<InventoryItemStackComponent>().CountForEntity(0));
     }

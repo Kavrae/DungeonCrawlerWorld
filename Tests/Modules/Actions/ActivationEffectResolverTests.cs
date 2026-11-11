@@ -23,7 +23,7 @@ using Game.World;
 namespace Tests.Modules.Actions;
 
 [TestClass]
-public sealed class ActionEffectResolverTests
+public sealed class ActivationEffectResolverTests
 {
     private static readonly EntityKeys Keys = new();
 
@@ -63,7 +63,7 @@ public sealed class ActionEffectResolverTests
     }
 
     /// <summary>Never rolls a crit -- NextDouble always returns 1.0, comfortably above any crit chance -- so damage-amount assertions in these orchestration tests stay deterministic.</summary>
-    /// <summary>Minimal IMapQuery test double supporting both the Blocking slot and the general occupant index -- everything else is unused by ActionEffectResolver.Apply.</summary>
+    /// <summary>Minimal IMapQuery test double supporting both the Blocking slot and the general occupant index -- everything else is unused by ActivationEffectResolver.Apply.</summary>
     private sealed class FakeMapQuery : IMapQuery
     {
         private readonly Dictionary<Vector3Int, int> _blockingByPosition = [];

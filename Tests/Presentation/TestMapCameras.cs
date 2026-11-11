@@ -12,5 +12,5 @@ namespace Tests.Presentation;
 internal static class TestMapCameras
 {
     public static MapCamera Over(Game.World.World world) =>
-        new(new MapViewQuery(world, BuiltInTestComponents.RegisterAll(new ComponentManager(100, 50)), new ActionCatalog(), new TerrainRegistry(), new BlueprintRegistry(), new SimulationClock()));
+        new(new MapViewQuery(world, BuiltInTestComponents.RegisterAll(new ComponentManager(100, 50)), new TerrainRegistry(), new BlueprintRegistry(), new SimulationClock()));
 }

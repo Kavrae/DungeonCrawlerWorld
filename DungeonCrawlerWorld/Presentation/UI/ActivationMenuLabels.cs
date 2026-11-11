@@ -47,6 +47,6 @@ public static class ActivationMenuLabels
             return Drink;
         }
 
-        return tags.Has(GameTags.ItemConsumableScroll) || tags.Has(GameTags.ActionSpell) ? Cast : Activate;
+        return tags.Has(GameTags.Spell) ? Cast : Activate;
     }
 }

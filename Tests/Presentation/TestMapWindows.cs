@@ -64,7 +64,7 @@ internal static class TestMapWindows
         var resolvedActionCatalog = actionCatalog ?? new ActionCatalog();
         var resolvedItemCatalog = itemCatalog ?? new ItemCatalog();
         var terrain = new Game.Terrain.TerrainRegistry();
-        var mapView = new MapViewQuery(world, componentManager, resolvedActionCatalog, terrain, creatures: new BlueprintRegistry(), new SimulationClock());
+        var mapView = new MapViewQuery(world, componentManager, terrain, creatures: new BlueprintRegistry(), new SimulationClock());
         var camera = new MapCamera(mapView);
         var eventBus = new EventBus();
         var playerCommands = new PlayerCommands(

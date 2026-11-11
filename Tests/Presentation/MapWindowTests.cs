@@ -1194,7 +1194,7 @@ public sealed class MapWindowTests
     public void HandleRightClickTap_NothingArmed_PendingWindup_CancelsItAndZeroesTheActionLock()
     {
         var (_, _, mapWindow, componentManager, _) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
-        componentManager.Merge(PlayerEntityId, PendingWindupComponent.ForAction(Guid.NewGuid(), TestSelections.At(new Vector3Int(101, 100, 0)), readyAtFrame: 60));
+        componentManager.Merge(PlayerEntityId, PendingWindupComponent.ForAction(TestContent.Action(BuiltInActionIds.QuickAttack), TestSelections.At(new Vector3Int(101, 100, 0)), readyAtFrame: 60));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 60, unlockedAtFrame: 45));
 
         mapWindow.HandleRightClickTap(new Point(0, 0));
@@ -1207,7 +1207,7 @@ public sealed class MapWindowTests
     public void HandleEscape_NothingArmed_PendingWindup_CancelsItAndZeroesTheActionLock()
     {
         var (_, _, mapWindow, componentManager, _) = BuildMapWindowWithPlayerAndActions(300, 300, 1, new Vector3Int(100, 100, 0));
-        componentManager.Merge(PlayerEntityId, PendingWindupComponent.ForAction(Guid.NewGuid(), TestSelections.At(new Vector3Int(101, 100, 0)), readyAtFrame: 60));
+        componentManager.Merge(PlayerEntityId, PendingWindupComponent.ForAction(TestContent.Action(BuiltInActionIds.QuickAttack), TestSelections.At(new Vector3Int(101, 100, 0)), readyAtFrame: 60));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 60, unlockedAtFrame: 45));
 
         mapWindow.HandleEscape();

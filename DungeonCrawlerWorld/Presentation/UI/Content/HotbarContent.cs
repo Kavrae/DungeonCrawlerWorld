@@ -681,7 +681,7 @@ public sealed class HotbarContent(
             SpriteName: item.SpriteName,
             Glyph: item.Glyph,
             GlyphColor: GameWindowPalette.SlotGlyphColor,
-            FillPercentage: isActive ? ComputeItemFillPercentage(playerEntityId) : 0f,
+            FillPercentage: isActive ? ComputeItemFillPercentage(playerEntityId, item, in stack) : 0f,
             Costs: actionStateView.ItemCostsOf(playerEntityId, stack.StackInstanceId),
             QuantityText: item.Activator is WandActivator wandActivator
                 ? SlotTextCachesFor(slot).Quantity.Get((true, wandActivator.Charges, wandActivator.MaxCharges), static key => $"{key.Count}/{key.MaximumCharges}")
@@ -805,17 +805,22 @@ public sealed class HotbarContent(
         return 0f;
     }
 
-    /// <summary>
-    /// Items have no per-instance cooldown the way actions do -- ItemActivationSystem
-    /// only ever sets the shared ActionLock (see PotionActivator.Timing.ActionLockFrames' own doc
-    /// comment), so that's the only fill signal here. Deliberately not PotionCooldownComponent:
-    /// that cooldown never blocks a second potion (see PotionCooldownEffects' own doc comment),
-    /// so masking the slot as if it were on cooldown would be actively misleading -- it gets its
-    /// own separate, informational display instead (see BuildItemVisual's countdown text).
-    /// </summary>
-    private float ComputeItemFillPercentage(int playerEntityId)
+    /// <summary>The slot's fill for an item, by the actions' rule (ComputeActionFillPercentage): the bound unit's own cooldown while it is cooling, else the shared ActionLock unless the item is FreeCast.</summary>
+    /// <remarks>
+    /// Deliberately not PotionCooldownComponent: that cooldown never blocks a second potion (see PotionCooldownEffects'
+    /// own doc comment), so masking the slot as if it were on cooldown would be actively misleading -- it gets its own
+    /// separate, informational display instead (see BuildItemVisual's countdown text).
+    /// </remarks>
+    private float ComputeItemFillPercentage(int playerEntityId, ItemDefinition item, in InventoryItemStackComponent stack)
     {
-        if (actionStateView.TryGetActionLock(playerEntityId, out var actionLock) && actionLock.CurrentLockTotalFrames > 0)
+        var cooldownFramesRemaining = stack.CooldownFramesRemaining(simulationClock.CurrentFrame);
+        if (cooldownFramesRemaining > 0 && item.Activator?.Timing.CooldownFrames is { } cooldownFrames && cooldownFrames > 0)
+        {
+            return System.Math.Min(1f, (float)cooldownFramesRemaining / cooldownFrames);
+        }
+
+        if (item.Activator?.Timing.Category != ActionTimingCategory.FreeCast &&
+            actionStateView.TryGetActionLock(playerEntityId, out var actionLock) && actionLock.CurrentLockTotalFrames > 0)
         {
             return (float)ActionLockGate.FramesRemaining(actionLock, simulationClock.CurrentFrame) / actionLock.CurrentLockTotalFrames;
         }

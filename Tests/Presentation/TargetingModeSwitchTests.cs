@@ -87,7 +87,7 @@ public sealed class TargetingModeSwitchTests
     public void DuringAWindup_RefusesAndSaysWhy()
     {
         var harness = BuildHarness();
-        harness.Components.Merge(PlayerEntityId, PendingWindupComponent.ForAction(Guid.NewGuid(), TestSelections.At(default), readyAtFrame: 60));
+        harness.Components.Merge(PlayerEntityId, PendingWindupComponent.ForAction(TestContent.Action(BuiltInActionIds.QuickAttack), TestSelections.At(default), readyAtFrame: 60));
 
         TapLeftAlt(harness);
 

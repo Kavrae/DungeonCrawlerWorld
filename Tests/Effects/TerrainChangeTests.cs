@@ -108,7 +108,7 @@ public sealed class TerrainChangeTests
         var tiles = new List<Vector3Int>();
         var resolved = resolution.Resolve(session.CasterId, action.Activator.Targeting, selection, tiles);
 
-        ActionEffectResolver.Apply(action, session.CasterId, tiles, resolved, session.Build.Context.EffectServices, session.World, now: 0,
+        ActivationEffectResolver.Apply(action, session.CasterId, tiles, resolved, session.Build.Context.EffectServices, session.World, now: 0,
             session.Components.GetPackedPool<DodgingComponent>(), new ProcessingTierQuery(session.Components.GetDirectPool<ProcessingTierComponent>()));
 
         Assert.IsNotEmpty(tiles);

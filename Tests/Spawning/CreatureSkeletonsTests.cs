@@ -292,7 +292,7 @@ public sealed class CreatureSkeletonsTests
     public void Skeleton_DrawsAndIsNamedExactlyAsItWillBeOnceBuilt()
     {
         var session = BuildSession();
-        var mapView = new MapViewQuery(session.World, session.Ecs.ComponentManager, session.Result.Catalogs.ActionCatalog, session.Result.Catalogs.Terrain, session.Result.Catalogs.Definitions, session.Ecs.SystemManager.Clock);
+        var mapView = new MapViewQuery(session.World, session.Ecs.ComponentManager, session.Result.Catalogs.Terrain, session.Result.Catalogs.Definitions, session.Ecs.SystemManager.Clock);
 
         foreach (var raceId in new[] { Goblin.Id, Fairy.Id, Ghost.Id })
         {

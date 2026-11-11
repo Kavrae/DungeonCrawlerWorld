@@ -25,7 +25,7 @@ public enum CellCompareState
 /// in the bottom-left corner when greater than 1 -- bottom-left, not bottom-right, for consistency
 /// with ShopItemStackCell/TradeItemStackCell's own quantity placement, both of which reserve the
 /// bottom-right corner for price. A plain Element (not Window) -- no title/
-/// chrome needed, same reasoning Folder/Button use. IsDisabled gray-tints the icon, mirroring
+/// chrome needed, same reasoning Folder/Button use. IsBlocked gray-tints the icon, mirroring
 /// Folder's own disabled tint and MapWindow's dead-entity tint (all three now share the same
 /// SpriteOrGlyphRenderer draw primitive). A drag source (TryBeginContentDrag): a press picks up
 /// its stack, or a Merged Stack's shared item, as a DragPayload.
@@ -62,7 +62,6 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
     protected string _glyph = string.Empty;
     protected Color _glyphColor;
     private int _quantity;
-    protected bool _isDisabled;
     private bool _itemCanBindToHotbar;
     private bool _groupBorderTop;
     private bool _groupBorderBottom;
@@ -155,6 +154,9 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
     /// <summary>True for a lit unit of a toggle item -- draws ToggleActiveMarker. Set after Configure, which resets it, by whatever built the cell; a pooled cell never carries it over.</summary>
     public bool IsToggledOn { get; set; }
 
+    /// <summary>Whether the cell's owner can't use its stack right now (ActionStateView.GetItemBlocker): the icon is greyed. Refreshed every frame by the grid, since a blocker comes and goes with no inventory change (the Disabled status).</summary>
+    public bool IsBlocked { get; set; }
+
     /// <summary>
     /// cellSize is the caller's known fixed cell size (see InventoryGridContent), not ContentSize
     /// -- Configure runs immediately after CreateElement, before this cell's own layout has
@@ -165,7 +167,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
     /// this way). SetGroupBorderEdges, called separately afterward, is the only thing that turns
     /// any of them back on for this Configure's cell.
     /// </summary>
-    public void Configure(int entityId, Guid itemDefinitionId, uint? stackInstanceId, string? spriteName, string glyph, Color glyphColor, int quantity, bool isDisabled, bool isDivergent, bool mergedStackBadgeVisible, bool canTrade, bool itemCanBindToHotbar, Vector2 cellSize)
+    public void Configure(int entityId, Guid itemDefinitionId, uint? stackInstanceId, string? spriteName, string glyph, Color glyphColor, int quantity, bool isDivergent, bool mergedStackBadgeVisible, bool canTrade, bool itemCanBindToHotbar, Vector2 cellSize)
     {
         CanTrade = canTrade;
         _itemCanBindToHotbar = itemCanBindToHotbar;
@@ -179,7 +181,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
         _glyphColor = glyphColor;
         IsDragSource = true;
         _quantity = quantity;
-        _isDisabled = isDisabled;
+        IsBlocked = false;
         ShopTradeEligible = true;
         IsToggledOn = false;
         _groupBorderTop = false;
@@ -251,7 +253,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
             GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, CompareEligibleGlowColor, GlowMode.InteriorFade);
         }
 
-        var isGreyedOut = _isDisabled || CompareState == CellCompareState.Ineligible || !ShopTradeEligible;
+        var isGreyedOut = IsBlocked || CompareState == CellCompareState.Ineligible || !ShopTradeEligible;
         var spriteTint = isGreyedOut ? Color.Gray : Color.White;
         var glyphColor = isGreyedOut ? Color.Gray : _glyphColor;
 

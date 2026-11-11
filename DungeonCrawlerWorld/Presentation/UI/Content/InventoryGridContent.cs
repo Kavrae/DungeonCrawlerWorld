@@ -30,11 +30,11 @@ namespace Presentation.UI.Content;
 /// stack, no empty filler cells, wraps to hostWindow's width and scrolls vertically without limit
 /// (the host tab body window already has CanUserScrollVertical -- see TabbedContent). Sorted
 /// alphabetically by item name by default (SortOrder), further narrowed by NameFilter (a
-/// case-insensitive Name.Contains match) and HideDisabled -- all three are settable properties
+/// case-insensitive Name.Contains match) -- both settable properties
 /// driven by GridControl via InventoryTabContent, this class has no idea either of those exist.
 /// Rebuilds (destroy-all, recreate-all -- cheap, since this only fires on an actual inventory
 /// mutation or a property change, not every frame) whenever the pool's per-entity version
-/// changes, or SortOrder/NameFilter/HideDisabled actually changes. Its hover is
+/// changes, or SortOrder/NameFilter actually changes. Its hover is
 /// the cell UiInputController finds under the pointer (Element.IsPointerOver), so a cell under
 /// another window or scrolled out of view is never hovered; it is reported to ItemHoverDetails every
 /// update, with this instance as the owner (one independent poller per tab, or per Trade column).
@@ -98,6 +98,12 @@ public sealed class InventoryGridContent(
     private readonly List<CellEntry> _reusableCellEntries = [];
     private readonly List<InventoryItemStackCell> _cells = [];
 
+    /// <summary>The effective item of every stack each of the player's cells shows, cell after cell: what UpdateBlocked asks about each frame without finding a stack again. Filled as cells are built, and only for the player's own grid.</summary>
+    private readonly List<ItemDefinition> _cellItems = [];
+
+    /// <summary>Where each cell's items are in _cellItems, by the cell's index in _cells: one for a stack's cell, every member's for a Merged Stack.</summary>
+    private readonly List<(int Start, int Count)> _cellItemRanges = [];
+
     private readonly VersionWatcher _versionWatcher = new();
 
     private Window _hostWindow = null!;
@@ -113,7 +119,6 @@ public sealed class InventoryGridContent(
 
     private InventorySortOrder _sortOrder = InventorySortOrder.NameAscending;
     private string _nameFilter = string.Empty;
-    private bool _hideDisabled;
     private bool _groupDivergedStacks = true;
 
     /// <summary>Which single ItemDefinitionId (if any) is currently shown expanded -- ungrouped into its individual member cells -- instead of merged into one badged cell. Cleared by any filter/sort/grouping-toggle change and by Deactivate (tab switch); set/cleared by OnCellClicked.</summary>
@@ -136,7 +141,7 @@ public sealed class InventoryGridContent(
     /// as SortQuantity) and for a merged badge cell (the "newest FirstAcquired of the item stacks
     /// in the merged stack" rule InventorySortOrder.RecentlyAcquiredDescending sorts by).
     /// </summary>
-    private readonly record struct CellEntry(ItemDefinition Definition, uint? StackInstanceId, ushort Quantity, ushort SortQuantity, uint SortAcquiredSequence, bool IsDisabled, bool IsDivergent, bool MergedStackBadgeVisible);
+    private readonly record struct CellEntry(ItemDefinition Definition, uint? StackInstanceId, ushort Quantity, ushort SortQuantity, uint SortAcquiredSequence, bool IsDivergent, bool MergedStackBadgeVisible);
 
     /// <summary>Defaults to NameAscending, reproducing this class's original always-alphabetical behavior exactly. Setting to the same value is a no-op -- doesn't force a rebuild.</summary>
     public InventorySortOrder SortOrder
@@ -168,23 +173,6 @@ public sealed class InventoryGridContent(
             }
 
             _nameFilter = value;
-            _expandedItemDefinitionId = null;
-            RebuildIfInitialized();
-        }
-    }
-
-    /// <summary>False (the default) shows disabled stacks the same as always -- grayed via InventoryItemStackCell's own icon tint (its background is transparent, so the tint is the only disabled cue). True hides them entirely instead.</summary>
-    public bool HideDisabled
-    {
-        get => _hideDisabled;
-        set
-        {
-            if (_hideDisabled == value)
-            {
-                return;
-            }
-
-            _hideDisabled = value;
             _expandedItemDefinitionId = null;
             RebuildIfInitialized();
         }
@@ -347,7 +335,37 @@ public sealed class InventoryGridContent(
 
         UpdateHover();
         UpdateSelection();
+        UpdateBlocked();
         UpdateCompareState();
+    }
+
+    /// <summary>Greys each of the player's own cells whose stack it can't use right now (ActionStateView.GetItemBlocker), every frame: a blocker -- the Disabled status, a cost -- comes and goes with no inventory change to rebuild on.</summary>
+    /// <remarks>A Merged Stack is greyed when every stack in it is blocked. Another inventory's cells are never the player's to use, so they aren't greyed.</remarks>
+    private void UpdateBlocked()
+    {
+        for (var cellIndex = 0; cellIndex < _cellItemRanges.Count; cellIndex++)
+        {
+            _cells[cellIndex].IsBlocked = IsEveryItemBlocked(_cellItemRanges[cellIndex]);
+        }
+    }
+
+    /// <summary>Whether a cell has items the player could use at all, and can use none of them now.</summary>
+    private bool IsEveryItemBlocked((int Start, int Count) itemRange)
+    {
+        if (itemRange.Count == 0)
+        {
+            return false;
+        }
+
+        for (var itemIndex = itemRange.Start; itemIndex < itemRange.Start + itemRange.Count; itemIndex++)
+        {
+            if (_actionStateView.GetItemBlocker(world.PlayerEntityId, _cellItems[itemIndex]) == ActivationBlocker.None)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Direct per-cell field set every frame, no rebuild, since selection (driven by the Item Details window, opened/changed/closed independently of this grid) can change without this grid ever rebuilding.</summary>
@@ -668,6 +686,8 @@ public sealed class InventoryGridContent(
     {
         elementPoolService.CloseAllChildren(_hostWindow);
         _cells.Clear();
+        _cellItems.Clear();
+        _cellItemRanges.Clear();
         _hoveredCell = null;
         _hoveredFrames = 0;
         _expandedItemDefinitionId = null;
@@ -1036,6 +1056,8 @@ public sealed class InventoryGridContent(
     {
         elementPoolService.CloseAllChildren(_hostWindow);
         _cells.Clear();
+        _cellItems.Clear();
+        _cellItemRanges.Clear();
 
         _inventoryView.CopyStacks(entityId, _reusableStacks);
 
@@ -1048,11 +1070,6 @@ public sealed class InventoryGridContent(
             }
 
             if (!filterTag.IsNone && !definition.Tags.Has(filterTag))
-            {
-                continue;
-            }
-
-            if (_hideDisabled && stack.IsDisabled)
             {
                 continue;
             }
@@ -1098,7 +1115,7 @@ public sealed class InventoryGridContent(
                     ? elementPoolService.CreateElement<ShopItemStackCell>(_hostWindow, options)
                     : elementPoolService.CreateElement<InventoryItemStackCell>(_hostWindow, options);
 
-            cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Quantity, entry.IsDisabled, entry.IsDivergent, entry.MergedStackBadgeVisible, entry.Definition.CanTrade, ItemHotkeyBindingQueries.CanBind(entry.Definition), cellSize);
+            cell.Configure(entityId, entry.Definition.Id, entry.StackInstanceId, entry.Definition.SpriteName, entry.Definition.Glyph, entry.Definition.GlyphColor, entry.Quantity, entry.IsDivergent, entry.MergedStackBadgeVisible, entry.Definition.CanTrade, ItemHotkeyBindingQueries.CanBind(entry.Definition), cellSize);
             cell.IsToggledOn = entry.StackInstanceId is not null && ToggleText.IsLit(entry.Definition);
 
             if (cell is ShopItemStackCell shopCell)
@@ -1146,6 +1163,7 @@ public sealed class InventoryGridContent(
 
             _hostWindow.AddChild(cell);
             _cells.Add(cell);
+            RecordCellItems(in entry);
 
             if (isExpandedMember)
             {
@@ -1269,6 +1287,42 @@ public sealed class InventoryGridContent(
         return ShopStockPricing.GetStockStatus(effectiveStock, preferredStockLevel, maximumShopStock);
     }
 
+    /// <summary>Records the items the cell just added to _cells shows, for UpdateBlocked: the entry's own for a stack's cell, every member's for a Merged Stack. Nothing for another inventory's grid, and no item without an activator: one that is never used is not blocked now.</summary>
+    /// <remarks>A Merged Stack's members are the visible stacks of its item that don't keep a cell of their own (BuildCellEntries).</remarks>
+    private void RecordCellItems(in CellEntry entry)
+    {
+        if (entityId != world.PlayerEntityId)
+        {
+            return;
+        }
+
+        var start = _cellItems.Count;
+        if (entry.StackInstanceId is not null)
+        {
+            if (entry.Definition.Activator is not null)
+            {
+                _cellItems.Add(entry.Definition);
+            }
+
+            _cellItemRanges.Add((start, _cellItems.Count - start));
+            return;
+        }
+
+        foreach (var visibleEntry in _reusableVisibleEntries)
+        {
+            if (visibleEntry.Definition.Id == entry.Definition.Id && visibleEntry.Definition.Activator is not null && !KeepsItsOwnCell(visibleEntry))
+            {
+                _cellItems.Add(visibleEntry.Definition);
+            }
+        }
+
+        _cellItemRanges.Add((start, _cellItems.Count - start));
+    }
+
+    /// <summary>Whether a stack keeps a cell of its own rather than joining a Merged Stack: a lit toggle item, or units cooling down until their own cooldown ends (ItemCooldownSystem merges them back then).</summary>
+    private static bool KeepsItsOwnCell((InventoryItemStackComponent Stack, ItemDefinition Definition) entry) =>
+        ToggleText.IsLit(entry.Definition) || entry.Stack.CooldownReadyAtFrame != Engine.ECS.Systems.FrameDeadline.Never;
+
     /// <summary>
     /// Groups _reusableVisibleEntries by ItemDefinitionId when GroupDivergedStacks is on --
     /// a group of exactly one stack (the overwhelmingly common case: every non-divergent item
@@ -1294,7 +1348,7 @@ public sealed class InventoryGridContent(
         {
             foreach (var (stack, definition) in _reusableVisibleEntries)
             {
-                _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.AcquiredSequence, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
+                _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.AcquiredSequence, stack.IsDivergent, MergedStackBadgeVisible: false));
             }
 
             return;
@@ -1317,18 +1371,18 @@ public sealed class InventoryGridContent(
         {
             var indices = allIndices;
 
-            // A lit toggle item never joins a Merged Stack cell: it keeps a cell of its own, so it
-            // is visible and can be clicked to turn it off. An expanded group shows every member
-            // anyway, lit ones included.
-            if (itemId != _expandedItemDefinitionId && allIndices.Count > 1 && allIndices.Exists(index => ToggleText.IsLit(_reusableVisibleEntries[index].Definition)))
+            // A lit toggle item or a cooling unit never joins a Merged Stack cell: it keeps a cell of
+            // its own, so it is visible and can be clicked, and the ready units beside it stay usable
+            // from their own cell. An expanded group shows every member anyway.
+            if (itemId != _expandedItemDefinitionId && allIndices.Count > 1 && allIndices.Exists(index => KeepsItsOwnCell(_reusableVisibleEntries[index])))
             {
                 indices = [];
                 foreach (var index in allIndices)
                 {
                     var (stack, definition) = _reusableVisibleEntries[index];
-                    if (ToggleText.IsLit(definition))
+                    if (KeepsItsOwnCell(_reusableVisibleEntries[index]))
                     {
-                        _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.AcquiredSequence, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
+                        _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.AcquiredSequence, stack.IsDivergent, MergedStackBadgeVisible: false));
                     }
                     else
                     {
@@ -1345,20 +1399,18 @@ public sealed class InventoryGridContent(
             if (indices.Count == 1)
             {
                 var (stack, definition) = _reusableVisibleEntries[indices[0]];
-                _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.AcquiredSequence, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
+                _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, stack.Quantity, stack.AcquiredSequence, stack.IsDivergent, MergedStackBadgeVisible: false));
                 continue;
             }
 
             var totalQuantity = 0;
             var anyDivergent = false;
-            var allDisabled = true;
             var newestAcquiredSequence = uint.MinValue;
             foreach (var index in indices)
             {
                 var memberStack = _reusableVisibleEntries[index].Stack;
                 totalQuantity += memberStack.Quantity;
                 anyDivergent |= memberStack.IsDivergent;
-                allDisabled &= memberStack.IsDisabled;
                 newestAcquiredSequence = System.Math.Max(newestAcquiredSequence, memberStack.AcquiredSequence);
             }
 
@@ -1369,7 +1421,7 @@ public sealed class InventoryGridContent(
                 foreach (var index in indices)
                 {
                     var (stack, definition) = _reusableVisibleEntries[index];
-                    _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, groupTotal, newestAcquiredSequence, stack.IsDisabled, stack.IsDivergent, MergedStackBadgeVisible: false));
+                    _reusableCellEntries.Add(new CellEntry(definition, stack.StackInstanceId, stack.Quantity, groupTotal, newestAcquiredSequence, stack.IsDivergent, MergedStackBadgeVisible: false));
                 }
 
                 continue;
@@ -1379,7 +1431,7 @@ public sealed class InventoryGridContent(
             // a different charge count (now shown per-stack in the hover tooltip, not this badge),
             // but the quantity itself is exactly the sum regardless.
             var first = _reusableVisibleEntries[indices[0]];
-            _reusableCellEntries.Add(new CellEntry(first.Definition, StackInstanceId: null, groupTotal, groupTotal, newestAcquiredSequence, allDisabled, IsDivergent: false, MergedStackBadgeVisible: anyDivergent));
+            _reusableCellEntries.Add(new CellEntry(first.Definition, StackInstanceId: null, groupTotal, groupTotal, newestAcquiredSequence, IsDivergent: false, MergedStackBadgeVisible: anyDivergent));
         }
     }
 

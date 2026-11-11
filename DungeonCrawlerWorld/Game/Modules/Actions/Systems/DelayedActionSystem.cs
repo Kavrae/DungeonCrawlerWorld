@@ -45,7 +45,6 @@ public sealed class DelayedActionSystem : ISystem
     public byte StripeCount => 1;
 
     private readonly PackedComponentPool<PendingWindupComponent> _pendingActions;
-    private readonly EntityActions _actions;
     private readonly EffectServices _effectServices;
     private readonly ActionCatalog _actionCatalog;
     private readonly IMapQuery _mapQuery;
@@ -56,6 +55,7 @@ public sealed class DelayedActionSystem : ISystem
     private readonly WindupResolvers _windupResolvers;
     private readonly TargetResolution _targetResolution;
     private readonly List<Vector3Int> _targetTilesScratch = [];
+    private readonly HashSet<int> _reachedScratch = [];
     private readonly PackedTimerWheel<PendingWindupComponent> _wheel;
 
     // Cached once instead of passing the method group every Update -- an instance method group
@@ -64,7 +64,6 @@ public sealed class DelayedActionSystem : ISystem
 
     public DelayedActionSystem(
         PackedComponentPool<PendingWindupComponent> pendingActions,
-        EntityActions actions,
         EffectServices effectServices,
         ActionCatalog actionCatalog,
         IMapQuery mapQuery,
@@ -78,7 +77,6 @@ public sealed class DelayedActionSystem : ISystem
     {
         _effectServices = effectServices;
         _pendingActions = pendingActions;
-        _actions = actions;
         _actionCatalog = actionCatalog;
         _mapQuery = mapQuery;
         _deadEntities = effectServices.DeadEntities;
@@ -99,7 +97,8 @@ public sealed class DelayedActionSystem : ISystem
     /// <remarks>
     /// An item's windup goes to the resolver Inventory registered. A toggle action's goes on, unless it
     /// already is; its activation effects were applied when the windup began. Any other action applies
-    /// its effects to its targets, resolved now (TargetResolution), so a Target-mode windup lands where its target is when it ends.
+    /// the definition the windup captured when it began (an override applied since changes only the next use)
+    /// to its targets, resolved now (TargetResolution), so a Target-mode windup lands where its target is when it ends.
     /// </remarks>
     private bool Resolve(int entityId, PendingWindupComponent pending, long now)
     {
@@ -116,17 +115,14 @@ public sealed class DelayedActionSystem : ISystem
             return true;
         }
 
-        if (!_actions.TryGetEffectiveAction(entityId, pending.Activatable.ActionId, out var action))
-        {
-            return true;
-        }
+        var action = (ActionDefinition)pending.Definition;
 
         if (action.Toggle is not null)
         {
             var owner = ActivatableReference.Action(action.Id);
             if (!_toggles.IsOn(entityId, owner))
             {
-                _effectServices.EventBus.Publish(new ActionActivatedEvent(entityId, action.Id));
+                _effectServices.EventBus.Publish(new ActivationUsedEvent(entityId, ActivatableKind.Action, action.Id, action.Tags));
                 _toggles.TurnOn(entityId, owner, action, now, placesAtHolderTile: pending.Selection.Mode == TargetingMode.Ground);
             }
 
@@ -134,7 +130,8 @@ public sealed class DelayedActionSystem : ISystem
         }
 
         var resolved = _targetResolution.Resolve(entityId, action.Activator.Targeting, pending.Selection, _targetTilesScratch);
-        ActionEffectResolver.Apply(action, entityId, _targetTilesScratch, resolved, _effectServices, _mapQuery, now, _dodgingEntities, _processingTiers);
+        var everyTarget = default(EveryTargetRule);
+        ActivationEffectResolver.Apply(action, ActivatableKind.Action, entityId, _targetTilesScratch, resolved, _effectServices, _mapQuery, now, _dodgingEntities, _processingTiers, _reachedScratch, ref everyTarget);
         return true;
     }
 }

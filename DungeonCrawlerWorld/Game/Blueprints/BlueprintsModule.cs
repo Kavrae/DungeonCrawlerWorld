@@ -28,6 +28,8 @@ public sealed class BlueprintsModule : IGameModule
         PlayerKit.Definition,
         TreasureChest.Definition,
         HealingShrine.Definition,
+        AntiMagicShrine.Definition,
+        AntiLiteracyShrine.Definition,
         AuraAnchor.Definition,
         ItemPile.Definition,
         Shop.Definition,

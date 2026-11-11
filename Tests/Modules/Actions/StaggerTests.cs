@@ -35,7 +35,7 @@ public sealed class StaggerTests
     {
         var (ecsContext, eventBus, targetEntityId) = Build();
         var componentManager = ecsContext.ComponentManager;
-        componentManager.Merge(targetEntityId, PendingWindupComponent.ForAction(Guid.NewGuid(), TestSelections.At(new Vector3Int(2, 2, 0)), LockedUntilFrame));
+        componentManager.Merge(targetEntityId, PendingWindupComponent.ForAction(TestContent.Action(BuiltInActionIds.QuickAttack), TestSelections.At(new Vector3Int(2, 2, 0)), LockedUntilFrame));
 
         eventBus.Publish(new EntityStaggeredEvent(targetEntityId, ActionSource.Admin));
 

@@ -29,4 +29,8 @@ public static class BuiltInAuraIds
 
     /// <summary>The Lantern action's light.</summary>
     public static readonly Guid Lantern = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000309");
+
+    public static readonly Guid AntiMagic = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000030a");
+
+    public static readonly Guid AntiLiteracy = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000030b");
 }

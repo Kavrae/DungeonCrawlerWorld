@@ -283,7 +283,7 @@ and roots growing without an owner.
 
 | Root | Owner (today: all Core) | Extensible by other modules | Why |
 |---|---|---|---|
-| `Action` | Actions | No | Classification code reads (`Action.Spell`, `Action.Attack`) |
+| `Action` | Actions | No | Classification code reads (`Action.Attack`; casting is the top-level `Spell`) |
 | `Delivery` | Actions | No | Melee/Ranged gate body-part effects and Dodge |
 | `Targeting` | Actions | No | `Targeting.Self` is checked exactly; a technical tag has no children |
 | `Trait` | Actions | Yes | Dodgeable, Staggering; a mod's own trait is reasonable |

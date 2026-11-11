@@ -25,8 +25,6 @@ public sealed class SpellCasterAchievement : IAchievementDefinition
     public string RewardText => "";
 
     public void RegisterTrigger(AchievementTriggerContext context) =>
-        context.SubscribeUntilUnlocked<ActionActivatedEvent>(activated =>
-            activated.EntityId == context.PlayerQuery!.PlayerEntityId
-            && context.Actions.TryGet(activated.ActionId, out var action)
-            && action.Tags.Has(GameTags.ActionSpell));
+        context.SubscribeUntilUnlocked<ActivationUsedEvent>(used =>
+            used.EntityId == context.PlayerQuery!.PlayerEntityId && used.Tags.Has(GameTags.Spell));
 }

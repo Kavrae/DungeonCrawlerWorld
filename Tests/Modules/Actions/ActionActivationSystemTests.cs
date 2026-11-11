@@ -371,7 +371,7 @@ public sealed class ActionActivationSystemTests
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 30, unlockedAtFrame: lockedUntilFrame));
         if (inWindup)
         {
-            componentManager.Merge(CasterEntityId, PendingWindupComponent.ForAction(DelayedActionId, TestSelections.At(TargetTile), lockedUntilFrame));
+            componentManager.Merge(CasterEntityId, PendingWindupComponent.ForAction(actionCatalog.Get(DelayedActionId), TestSelections.At(TargetTile), lockedUntilFrame));
         }
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(FreeCastReleasingLockActionId, TestSelections.At(TargetTile)));
         return (system, componentManager);

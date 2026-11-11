@@ -143,7 +143,7 @@ public sealed class LootboxResultsContent(
                     Content = new ElementContentOptions { ContentColor = Color.Transparent },
                 });
                 cell.Configure(playerEntityId, definition.Id, reward.StackInstanceId, definition.SpriteName, definition.Glyph, definition.GlyphColor, reward.Quantity,
-                    isDisabled: false, isDivergent: false, mergedStackBadgeVisible: false, canTrade: definition.CanTrade, itemCanBindToHotbar: false, cellSize);
+                    isDivergent: false, mergedStackBadgeVisible: false, canTrade: definition.CanTrade, itemCanBindToHotbar: false, cellSize);
                 cell.IsDragSource = false;
                 cell.Clicked += _ => onRewardClicked(reward);
                 _hostWindow.AddChild(cell);

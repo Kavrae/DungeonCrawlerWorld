@@ -54,7 +54,8 @@ public sealed record EffectServices(
     AuraSources AuraSources,
     AuraAnchors AuraAnchors,
     FloatingTextFeed FloatingTextFeed,
-    World.World World)
+    World.World World,
+    MultiComponentPool<DisabledActivationComponent> DisabledActivations)
 {
     /// <summary>The stream every effect entry rolls from: damage variance, crits, procs, and the body part an effect lands on.</summary>
     public static readonly RandomStreamKey RandomStream = new(CoreModule.ModuleId, "Effects");
@@ -108,6 +109,7 @@ public sealed record EffectServices(
             auraSources,
             new AuraAnchors(componentManager, entityManager, auraSources, spawnAuraAnchor),
             floatingTextFeed,
-            world);
+            world,
+            componentManager.GetMultiPool<DisabledActivationComponent>());
     }
 }

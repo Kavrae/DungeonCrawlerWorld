@@ -10,7 +10,7 @@ namespace Game.Modules.Actions.Activators;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed record SpellActivator(TargetingSpec Targeting, ActionTiming Timing) : IActionActivator
 {
-    private static readonly GameplayTagSet SpellImpliedTags = [GameTags.ActionSpell, GameTags.Magic];
+    private static readonly GameplayTagSet SpellImpliedTags = [GameTags.Spell, GameTags.Magic];
 
     public GameplayTagSet ImpliedTags => SpellImpliedTags;
 }

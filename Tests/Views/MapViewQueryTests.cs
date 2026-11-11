@@ -32,6 +32,11 @@ public sealed class MapViewQueryTests
 
     private static readonly Guid ChargingActionId = new("5d0c1f7e-1f1a-4d7e-9f10-3a6c9b2e7a11");
 
+    private static readonly ActionDefinition ChargingAction = new(
+        ChargingActionId, "Slam", null, "!", Color.Orange, [],
+        Effects: [Effect.None],
+        Activator: new DirectAction(new TargetingSpec(TargetShape.Adjacent, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 45, CooldownFrames: null)));
+
     private sealed class Fixture
     {
         public Game.World.World World { get; }
@@ -44,7 +49,7 @@ public sealed class MapViewQueryTests
         public Fixture()
         {
             World = TestWorlds.Over(new Map(new Vector3Int(10, 10, 3)), Components);
-            Query = new MapViewQuery(World, Components, Actions, Terrain, creatures: new BlueprintRegistry(), Clock);
+            Query = new MapViewQuery(World, Components, Terrain, creatures: new BlueprintRegistry(), Clock);
         }
 
         public void Place(int entityId, Vector3Int position)
@@ -132,7 +137,7 @@ public sealed class MapViewQueryTests
             world.PopulateStructure(new Vector3Int(x, 5, Ground), new TerrainCell(wall));
         }
 
-        var query = new MapViewQuery(world, components, new ActionCatalog(), terrain, new BlueprintRegistry(), new SimulationClock());
+        var query = new MapViewQuery(world, components, terrain, new BlueprintRegistry(), new SimulationClock());
         var cells = new MapCellBuffer();
         query.CopyCells(1016, 2, 20, 6, Ground, cells);
 
@@ -369,12 +374,7 @@ public sealed class MapViewQueryTests
     public void TryGetChargingAction_PendingKnownAction_ReportsItsGlyph()
     {
         var fixture = new Fixture();
-        fixture.Actions.Register(new ActionDefinition(
-            ChargingActionId, "Slam", null, "!", Color.Orange, [],
-            Effects: [Effect.None],
-            Activator: new DirectAction(new TargetingSpec(TargetShape.Adjacent, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 45, CooldownFrames: null))));
-        fixture.Components.Merge(5, new ActionInstanceComponent(ChargingActionId, overrideDefinition: null));
-        fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingActionId, default, readyAtFrame: 45));
+        fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingAction, default, readyAtFrame: 45));
         fixture.Components.Merge(5, new ActionLockComponent(currentLockTotalFrames: 45, unlockedAtFrame: 45));
 
         Assert.IsTrue(fixture.Query.TryGetChargingAction(5, out var action));
@@ -384,16 +384,12 @@ public sealed class MapViewQueryTests
     }
 
     [TestMethod]
-    public void TryGetChargingAction_ShowsTheEntitysOwnOverride_NotTheCatalogAction()
+    public void TryGetChargingAction_ShowsTheDefinitionTheWindupCaptured_NotTheEntitysCurrentOne()
     {
         var fixture = new Fixture();
-        var catalogAction = new ActionDefinition(
-            ChargingActionId, "Slam", null, "!", Color.Orange, [],
-            Effects: [Effect.None],
-            Activator: new DirectAction(new TargetingSpec(TargetShape.Adjacent, MaximumRange: 0, Anchor: TargetAnchor.Caster), new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 45, CooldownFrames: null)));
-        fixture.Actions.Register(catalogAction);
-        fixture.Components.Merge(5, new ActionInstanceComponent(ChargingActionId, overrideDefinition: catalogAction with { Glyph = "?", GlyphColor = Color.Purple }));
-        fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingActionId, default, readyAtFrame: 45));
+        fixture.Actions.Register(ChargingAction);
+        fixture.Components.Merge(5, new ActionInstanceComponent(ChargingActionId, overrideDefinition: ChargingAction with { Glyph = "x", GlyphColor = Color.Red }));
+        fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingAction with { Glyph = "?", GlyphColor = Color.Purple }, default, readyAtFrame: 45));
         fixture.Components.Merge(5, new ActionLockComponent(currentLockTotalFrames: 45, unlockedAtFrame: 45));
 
         Assert.IsTrue(fixture.Query.TryGetChargingAction(5, out var action));
@@ -409,7 +405,7 @@ public sealed class MapViewQueryTests
     public void GetChargeFraction_MeasuresTheWindupAgainstTheSimulationClock(long now, float expectedFraction)
     {
         var fixture = new Fixture();
-        fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingActionId, default, readyAtFrame: 160));
+        fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingAction, default, readyAtFrame: 160));
         fixture.Components.Merge(5, new ActionLockComponent(currentLockTotalFrames: 60, unlockedAtFrame: 160));
         fixture.Clock.Advance(now);
 
@@ -421,14 +417,14 @@ public sealed class MapViewQueryTests
     {
         var fixture = new Fixture();
         fixture.Components.Merge(5, new ActionLockComponent(currentLockTotalFrames: 60, unlockedAtFrame: 160));
-        fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingActionId, default, readyAtFrame: 160));
+        fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingAction, default, readyAtFrame: 160));
         fixture.Clock.Advance(159);
         Assert.AreEqual(59f / 60f, fixture.Query.GetChargeFraction(5), 0.0001f);
 
         fixture.Clock.Advance(160);
         fixture.Components.Merge(5, new ActionLockComponent(currentLockTotalFrames: 60, unlockedAtFrame: 220));
         fixture.Components.GetPackedPool<PendingWindupComponent>().Remove(5);
-        fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingActionId, default, readyAtFrame: 220));
+        fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingAction, default, readyAtFrame: 220));
 
         Assert.AreEqual(0f, fixture.Query.GetChargeFraction(5));
     }
@@ -444,10 +440,9 @@ public sealed class MapViewQueryTests
     }
 
     [TestMethod]
-    public void TryGetChargingAction_UnknownAction_IsFalse()
+    public void TryGetChargingAction_NotWindingUp_IsFalse()
     {
         var fixture = new Fixture();
-        fixture.Components.Merge(5, PendingWindupComponent.ForAction(ChargingActionId, default, readyAtFrame: 45));
 
         Assert.IsFalse(fixture.Query.TryGetChargingAction(5, out _));
     }

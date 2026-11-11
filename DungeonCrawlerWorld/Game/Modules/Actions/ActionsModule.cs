@@ -26,7 +26,7 @@ namespace Game.Modules.Actions;
 /// <summary>
 /// Doesn't require StatusEffectsModule:
 /// GameModuleContext.StatusEffectAppliers is always a live, shared registry regardless of
-/// which effect modules (if any) are loaded -- ActionEffectResolver's StatusEffects grant is a
+/// which effect modules (if any) are loaded -- ActivationEffectResolver's StatusEffects grant is a
 /// graceful no-op (TryGet returning false) for any StatusEffectType nothing registered an
 /// applier for.
 ///
@@ -63,6 +63,9 @@ public sealed class ActionsModule : IGameModule
 
         // Sparse: written the first time an entity uses an action that has a cooldown at all.
         componentManager.RegisterMultiPool<ActionCooldownComponent>(initialCapacity: 64);
+
+        // Sparse: written only while an entity stands in a null zone or is otherwise Disabled.
+        componentManager.RegisterMultiPool<DisabledActivationComponent>(initialCapacity: 16);
         componentManager.RegisterPackedPool<PendingWindupComponent>(
             static (ref PendingWindupComponent existing, PendingWindupComponent incoming) => existing = incoming);
         componentManager.RegisterPackedPool<DodgingComponent>(
@@ -102,7 +105,6 @@ public sealed class ActionsModule : IGameModule
 
         systemManager.Register(new DelayedActionSystem(
             componentManager.GetPackedPool<PendingWindupComponent>(),
-            EntityActions.For(componentManager, context.Actions, context.Definitions),
             context.EffectServices,
             context.Actions,
             context.MapQuery,
@@ -137,6 +139,15 @@ public sealed class ActionsModule : IGameModule
             componentManager.GetDirectPool<TransformComponent>(),
             context.MapQuery,
             context.EventBus,
+            context.SimulationClock,
+            context.SimulationScope));
+
+        systemManager.Register(new DisabledActivationSystem(
+            componentManager.GetMultiPool<DisabledActivationComponent>(),
+            componentManager.GetPackedPool<PendingWindupComponent>(),
+            componentManager.GetPackedPool<ActionLockComponent>(),
+            componentManager.GetMultiPool<ActiveToggleComponent>(),
+            context.Toggles,
             context.SimulationClock,
             context.SimulationScope));
     }

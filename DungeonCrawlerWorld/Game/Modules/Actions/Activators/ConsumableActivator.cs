@@ -18,7 +18,4 @@ public sealed record ConsumableActivator(TargetingSpec Targeting, ActionTiming T
     private static readonly GameplayTagSet ConsumableImpliedTags = [GameTags.ItemConsumable];
 
     public GameplayTagSet ImpliedTags => ConsumableImpliedTags;
-
-    /// <summary>Whether the targeting reaches only the user, so the effects can be asked of the user before a unit is used up.</summary>
-    public bool ReachesOnlyUser => Targeting.Shape == TargetShape.Self;
 }

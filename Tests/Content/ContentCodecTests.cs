@@ -172,6 +172,15 @@ public sealed class ContentCodecTests
     }
 
     [TestMethod]
+    public void AnActivationDisableGrantNamingNoTag_FailsTheRecord()
+    {
+        var text = "{\"e\":[{\"$\":\"ActivationDisableGrant\",\"d\":90}]}";
+        using var document = JsonDocument.Parse(text);
+
+        Assert.Throws<ContentFormatException>(() => ContentObject.Read<Effect>(document.RootElement, Types, References));
+    }
+
+    [TestMethod]
     public void AnOutOfRangeNumber_FailsTheRecord()
     {
         var text = "{\"e\":[{\"$\":\"DirectDamage\",\"mn\":3,\"mx\":40000}]}";

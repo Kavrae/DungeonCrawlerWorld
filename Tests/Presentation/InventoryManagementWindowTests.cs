@@ -2,7 +2,12 @@ using Engine.ECS.Components;
 using Engine.ECS.Systems;
 using Engine.Events;
 using Engine.Math;
+using Engine.Tags;
+using Engine.Tiles;
 using Game.Modules;
+using Game.Modules.Actions;
+using Game.Modules.Actions.Activators;
+using Game.Modules.Actions.Components;
 using Game.Modules.Inventory;
 using Game.Modules.Shops;
 using Game.Tags;
@@ -32,7 +37,7 @@ public sealed class InventoryManagementWindowTests
 {
     private const int EntityId = 1;
 
-    private static (InventoryManagementWindow Window, ComponentManager ComponentManager, Guid FirstItemId, Guid SecondItemId, Guid ScrollItemId) Build()
+    private static (InventoryManagementWindow Window, ComponentManager ComponentManager, Guid FirstItemId, Guid SecondItemId, Guid ScrollItemId) Build(int playerEntityId = -1)
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 20, initialComponentCapacity: 10));
 
@@ -54,7 +59,7 @@ public sealed class InventoryManagementWindowTests
         windowService.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(windowService, fontService)));
         windowService.RegisterFactory<CurrencyElement>(() => new CurrencyElement(TestElementServices.For(windowService, fontService), spriteSheetService));
 
-        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)));
+        var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(10, 10, 1)), playerEntityId: playerEntityId);
         var contextMenuController = new ContextMenuController(new DropdownController(windowService, TestElementServices.RenderFor(windowService)));
         contextMenuController.Dropdowns.Initialize(new UiLayerStack());
         var mapViewState = new MapViewState();
@@ -191,7 +196,7 @@ public sealed class InventoryManagementWindowTests
 
         var gridBeforeUpdate = FindActiveGrid(window);
         Assert.IsNotNull(gridBeforeUpdate);
-        gridBeforeUpdate!.HideDisabled = true;
+        gridBeforeUpdate!.GroupDivergedStacks = false;
 
         // A second stack sharing the same tag -- the tag SET stays {Potion}, only a stack count/
         // version bump happens, the exact case that must not trigger a tab rebuild.
@@ -201,7 +206,7 @@ public sealed class InventoryManagementWindowTests
         var gridAfterUpdate = FindActiveGrid(window);
         Assert.IsNotNull(gridAfterUpdate);
         Assert.AreSame(gridBeforeUpdate, gridAfterUpdate, "The active tab's own InventoryGridContent instance must survive a same-tag-set inventory update, not be rebuilt from scratch.");
-        Assert.IsTrue(gridAfterUpdate!.HideDisabled, "HideDisabled (and by extension every other per-tab toggle/sort/search state) must survive a same-tag-set inventory update -- and since a rebuild would replace every tab's grid, not just the active one, this also proves tab selection itself was never disturbed.");
+        Assert.IsFalse(gridAfterUpdate!.GroupDivergedStacks, "GroupDivergedStacks (and by extension every other per-tab toggle/sort/search state) must survive a same-tag-set inventory update -- and since a rebuild would replace every tab's grid, not just the active one, this also proves tab selection itself was never disturbed.");
     }
 
     [TestMethod]
@@ -284,5 +289,26 @@ public sealed class InventoryManagementWindowTests
         var mergedCell = orderedCells.Single(cell => cell.ItemDefinitionId == secondItemId);
         Assert.IsTrue(mergedCell.MergedStackBadgeVisible, "Two divergent stacks of the same item should merge into one badged cell.");
         Assert.AreEqual(0, orderedCells.IndexOf(mergedCell), "The merged cell (newest member acquired after firstItemId) must sort ahead of firstItemId.");
+    }
+    [TestMethod]
+    public void MergedStackCell_IsGreyedWhileEveryStackInItIsBlocked_AndAnItemNeverUsedIsNot()
+    {
+        var (window, componentManager, firstItemId, secondItemId, _) = Build(playerEntityId: EntityId);
+        var scrollActivator = new ScrollActivator(new TargetingSpec(TargetShape.Circle, MaximumRange: 5, AreaSize: 3), new ActionTiming(ActionTimingCategory.Immediate), Guid.NewGuid());
+        var scrollDefinition = new ItemDefinition(secondItemId, "Scroll B", null, "b", Color.White, Tags: [GameTags.ItemConsumableScroll], Effects: [], Activator: scrollActivator);
+        InventoryActions.AddDivergentItem(componentManager, EntityId, scrollDefinition with { Description = "batch 1" });
+        InventoryActions.AddDivergentItem(componentManager, EntityId, scrollDefinition with { Description = "batch 2" });
+        window.Update(new GameTime());
+
+        var mergedCell = GetOrderedCells(window).Single(cell => cell.ItemDefinitionId == secondItemId);
+        Assert.IsTrue(mergedCell.MergedStackBadgeVisible);
+        Assert.IsFalse(mergedCell.IsBlocked);
+
+        DisabledActivations.Grant(componentManager.GetMultiPool<DisabledActivationComponent>(), EntityId, GameplayTagQuery.Any([GameTags.ItemConsumableScroll]), expiresAtFrame: 200);
+        window.Update(new GameTime());
+
+        var cells = GetOrderedCells(window);
+        Assert.IsTrue(cells.Single(cell => cell.ItemDefinitionId == secondItemId).IsBlocked, "Every scroll in the Merged Stack is Disabled.");
+        Assert.IsFalse(cells.Single(cell => cell.ItemDefinitionId == firstItemId).IsBlocked, "An item with no activator is never used, so it is not blocked now.");
     }
 }

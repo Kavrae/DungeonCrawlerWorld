@@ -108,6 +108,18 @@ public sealed class Toggles(MultiComponentPool<ActiveToggleComponent> activeTogg
         owner.SwitchOff(holderEntityId, in toggle, definition, now);
     }
 
+    /// <summary>The definition of holderEntityId's active toggle, through the feature owning it; false when it can no longer be resolved.</summary>
+    public bool TryResolveDefinition(int holderEntityId, in ActiveToggleComponent toggle, out ActivatableDefinition definition)
+    {
+        if (TryGetOwner(toggle.Owner.Kind, out var owner))
+        {
+            return owner.TryResolveDefinition(holderEntityId, in toggle, out definition);
+        }
+
+        definition = null!;
+        return false;
+    }
+
     /// <summary>How many toggles belonging to owner holderEntityId has on.</summary>
     public int CountOn(int holderEntityId, ActivatableReference owner) =>
         activeToggles.CountMatching(holderEntityId, new OwnerMatcher(owner));

@@ -38,6 +38,7 @@ public sealed class ContentChecks(GameplayTagRegistry gameplayTags, AuraCatalog 
             .. ContentTagValidation.ProblemsOf(gameplayTags, item, heldBy),
             .. ToggleContentValidation.ProblemsOf(item),
             .. TargetingContentValidation.ProblemsOf(item),
+            .. ItemCooldownContentValidation.ProblemsOf(item),
             .. ReferenceProblemsOf(entries => EffectEntries.ForEach(item, entries), heldBy),
         ];
     }

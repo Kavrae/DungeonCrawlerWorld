@@ -12,7 +12,9 @@ namespace Game.Tags;
 public static class GameTags
 {
     public static readonly GameplayTag ActionAttack = GameplayTag.Get("Action.Attack");
-    public static readonly GameplayTag ActionSpell = GameplayTag.Get("Action.Spell");
+
+    /// <summary>Casting a spell: a spell action, or reading a scroll of one.</summary>
+    public static readonly GameplayTag Spell = GameplayTag.Get("Spell");
 
     public static readonly GameplayTag EffectHealing = GameplayTag.Get("Effect.Healing");
 
@@ -56,7 +58,8 @@ public static class GameTags
     /// <summary>Every tag above, for CoreModule to declare.</summary>
     public static readonly IReadOnlyList<GameplayTag> All =
     [
-        ActionAttack, ActionSpell,
+        ActionAttack,
+        Spell,
         EffectHealing,
         DeliveryMelee, DeliveryMeleeUnarmed, DeliveryRanged,
         TargetingSelf,

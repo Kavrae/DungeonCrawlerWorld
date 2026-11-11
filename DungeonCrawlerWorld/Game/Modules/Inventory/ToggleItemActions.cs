@@ -15,6 +15,19 @@ namespace Game.Modules.Inventory;
 /// </remarks>
 public static class ToggleItemActions
 {
+    /// <summary>Lights one unit of entityId's stack stackInstanceId and, when it was aimed in Ground mode, puts it down on the aimed tile. Returns false, changing nothing, when TryToggle flips nothing.</summary>
+    /// <remarks>The caller has checked the unit is unlit. Shared by an Immediate or FreeCast activation and a Delayed one's windup resolving.</remarks>
+    public static bool TryLight(ComponentManager componentManager, ItemCatalog itemCatalog, ToggleItemGroundPlacement groundPlacement, int entityId, uint stackInstanceId, HotkeySlot? activatedFromSlot, in TargetSelection selection)
+    {
+        if (!TryToggle(componentManager, itemCatalog, entityId, stackInstanceId, out var litStackInstanceId, activatedFromSlot))
+        {
+            return false;
+        }
+
+        groundPlacement.PutDownIfGround(entityId, litStackInstanceId, selection);
+        return true;
+    }
+
     /// <summary>Flips one unit of entityId's stack stackInstanceId between lit and unlit. Returns false, changing nothing, when the entity doesn't hold the stack or its item isn't a toggle.</summary>
     /// <remarks>
     /// Lighting a unit peels it into a lit stack, shared with any other lit unit of the same item.

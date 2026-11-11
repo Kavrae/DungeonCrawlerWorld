@@ -138,7 +138,7 @@ public sealed class ScrollMasteryEffectsTests
         }
 
         Assert.IsTrue(actionCatalog.TryGet(SpellId, out var spell));
-        Assert.IsTrue(spell.Tags.HasExact(GameTags.ActionSpell));
+        Assert.IsTrue(spell.Tags.HasExact(GameTags.Spell));
         Assert.IsTrue(spell.Tags.HasExact(GameTags.Magic));
         Assert.IsFalse(spell.Tags.Has(GameTags.Item), $"A spell is not an item, but has {spell.Tags}.");
     }

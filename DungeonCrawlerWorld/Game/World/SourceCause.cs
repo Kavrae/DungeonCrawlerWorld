@@ -29,5 +29,5 @@ public readonly record struct SourceCause(SourceCauseKind Kind, string? Name)
         new(part.Race is not null ? SourceCauseKind.Race : part.Class is not null ? SourceCauseKind.Class : SourceCauseKind.Trait, part.Name);
 
     public static SourceCause Of(ActivatableDefinition definition) =>
-        new(definition is ItemDefinition ? SourceCauseKind.Item : definition.Tags.Has(GameTags.ActionSpell) ? SourceCauseKind.Spell : SourceCauseKind.Action, definition.Name);
+        new(definition is ItemDefinition ? SourceCauseKind.Item : definition.Tags.Has(GameTags.Spell) ? SourceCauseKind.Spell : SourceCauseKind.Action, definition.Name);
 }

@@ -68,7 +68,7 @@ public sealed class InventoryModule : IGameModule
         var systemManager = registration.SystemManager;
         var componentManager = registration.ComponentManager;
 
-        systemManager.Register(new ItemActivationSystem(
+        var itemActivationSystem = new ItemActivationSystem(
             componentManager.GetPackedPool<PendingItemActivationComponent>(),
             componentManager.GetPackedPool<ActionLockComponent>(),
             componentManager.GetPackedPool<PotionCooldownComponent>(),
@@ -77,12 +77,18 @@ public sealed class InventoryModule : IGameModule
             context.Actions,
             context.MapQuery,
             componentManager.GetPackedPool<MeleeDisabledComponent>(),
+            componentManager.GetPackedPool<DodgingComponent>(),
             componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
             new ProcessingTierQuery(componentManager.GetDirectPool<ProcessingTierComponent>()),
-            context.Toggles,
             componentManager.GetPackedPool<PendingWindupComponent>(),
             context.TargetResolution,
-            context.ToggleItemGroundPlacement));
+            context.ToggleItemGroundPlacement);
+        systemManager.Register(itemActivationSystem);
+        systemManager.Register(new ItemCooldownSystem(
+            componentManager,
+            componentManager.GetMultiPool<ItemHotkeyBindingComponent>(),
+            componentManager.GetPackedPool<PendingWindupComponent>(),
+            context.SimulationScope));
 
         var toggleItemHolderSync = new ToggleItemHolderSync(
             componentManager.GetMultiPool<InventoryItemStackComponent>(),
@@ -93,6 +99,6 @@ public sealed class InventoryModule : IGameModule
             context.SimulationClock,
             componentManager);
         context.Toggles.RegisterOwner(ActivatableKind.Item, toggleItemHolderSync);
-        context.WindupResolvers.RegisterItemResolver(new ToggleItemWindupResolver(componentManager, context.Items, context.ToggleItemGroundPlacement));
+        context.WindupResolvers.RegisterItemResolver(itemActivationSystem);
     }
 }

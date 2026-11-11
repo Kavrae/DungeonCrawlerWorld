@@ -29,4 +29,6 @@ public sealed record ActionDefinition(
     : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Tags.Union(Activator.ImpliedTags), Effects, Description, Summary, Toggle)
 {
     public override GameplayTagSet DeclaredTags { get; } = Tags;
+
+    public override IActionActivator? ActivatorOrNone => Activator;
 }

@@ -17,7 +17,7 @@ namespace Tests.Effects;
 
 /// <summary>
 /// Focused coverage for the new composable entry types this plan introduced, exercised directly
-/// against IEffectEntry.Apply rather than only indirectly through ActionEffectResolver/
+/// against IEffectEntry.Apply rather than only indirectly through ActivationEffectResolver/
 /// ItemActivationSystem -- these are now the real unit of shared behavior.
 /// </summary>
 [TestClass]

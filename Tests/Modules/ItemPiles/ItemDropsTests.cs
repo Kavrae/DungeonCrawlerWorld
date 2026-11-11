@@ -177,7 +177,7 @@ public sealed class ItemDropsTests
     {
         var harness = CreateHarness();
         var stackId = harness.GiveItem(Guid.NewGuid(), quantity: 1);
-        harness.Components.Merge(harness.PlayerEntityId, new PendingWindupComponent(ActivatableReference.ItemStack(stackId), default, readyAtFrame: 100));
+        harness.Components.Merge(harness.PlayerEntityId, PendingWindupComponent.ForItem(stackId, TestContent.Item(BuiltInItemIds.HealthPotion), activatedFromSlot: null, default, readyAtFrame: 100));
 
         Assert.AreEqual(ItemDropRefusal.StackInUse, harness.Drops.TryDrop(harness.PlayerEntityId, ItemDrop.WholeStackOf(stackId), AdjacentTile));
     }

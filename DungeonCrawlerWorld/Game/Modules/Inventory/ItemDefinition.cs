@@ -42,4 +42,6 @@ public sealed record ItemDefinition(
     : ActivatableDefinition(Id, Name, SpriteName, Glyph, GlyphColor, Activator is null ? Tags : Tags.Union(Activator.ImpliedTags), Effects, Description, Summary, Toggle)
 {
     public override GameplayTagSet DeclaredTags { get; } = Tags;
+
+    public override IActionActivator? ActivatorOrNone => Activator;
 }

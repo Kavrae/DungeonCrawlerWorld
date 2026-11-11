@@ -15,7 +15,7 @@ public sealed class GameViews
     {
         var componentManager = context.ComponentManager;
 
-        MapView = new MapViewQuery(world, componentManager, context.Actions, context.Terrain, context.Definitions, context.SimulationClock, context.Items);
+        MapView = new MapViewQuery(world, componentManager, context.Terrain, context.Definitions, context.SimulationClock);
         EntityBodyParts = EntityBodyParts.For(componentManager, context.Definitions);
         EntityActions = EntityActions.For(componentManager, context.Actions, context.Definitions);
         EntityNaming = EntityNaming.For(componentManager, context.Definitions);
@@ -28,7 +28,7 @@ public sealed class GameViews
         StatModifierView = new StatModifierView(componentManager);
         AbilityScoreView = new AbilityScoreView(componentManager);
         ActionStateView = new ActionStateView(componentManager, EntityActions, context.Items, localTierRoster, context.EffectServices, context.Toggles, context.SimulationClock);
-        TargetingView = new TargetingView(context.TargetResolution, EntityActions, context.Items, componentManager);
+        TargetingView = new TargetingView(context.TargetResolution);
         TransformView = new TransformView(componentManager);
         AuraView = new AuraView(context.AuraField, context.Auras);
         ActionSourceNaming = new ActionSourceNaming(context.Terrain, context.Auras, context.EntityKeys);

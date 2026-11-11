@@ -6,8 +6,8 @@ namespace Presentation.UI.Content;
 
 /// <summary>
 /// Composes one GridControl above an InventoryGridContent for a single Inventory tab -- wires
-/// each Toggle's own onToggled delegate straight to InventoryGridContent's HideDisabled/
-/// GroupDivergedStacks properties at Configure time, translates GridControl's still-generic
+/// each Toggle's own onToggled delegate straight to InventoryGridContent's
+/// GroupDivergedStacks property at Configure time, translates GridControl's still-generic
 /// SortOptionCycled/SearchFilterChanged events into SortOrder/NameFilter, and pushes
 /// VisibleItemCount back into GridControl's count display every Update. GridControl itself has no
 /// idea any of this is about items -- see its own doc comment. Mirrors InventoryGridContent's own
@@ -51,7 +51,6 @@ public sealed class InventoryTabContent(ElementPoolService elementPoolService, I
         _gridControl.Configure(
             SortOptionLabels,
             [
-                ("Hide Disabled", true, isOn => gridContent.HideDisabled = isOn),
                 ("Stack Diverged", true, isOn => gridContent.GroupDivergedStacks = isOn),
             ],
             SearchGhostText);

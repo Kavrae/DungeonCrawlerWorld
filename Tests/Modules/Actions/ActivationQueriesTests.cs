@@ -1,4 +1,5 @@
 using Engine.ECS.Components;
+using Engine.Tags;
 using Engine.ECS.Entities;
 using Engine.Events;
 using Game.Effects.Entries;
@@ -74,6 +75,16 @@ public sealed class ActivationQueriesTests
         TestActionEffects.Services(componentManager, new EntityKeys(), new EventBus(), new MathUtility(new SeededRandom((ulong)1)), statModifiers: componentManager.GetMultiPool<StatModifierComponent>(), mana: componentManager.GetPackedPool<ManaComponent>());
 
     private static ActivationBlocker BlockerOf(ComponentManager componentManager, ActionDefinition action) => BlockerOf(componentManager, action, action.Activator);
+
+    [TestMethod]
+    public void ASpell_WhileItsUserIsDisabledFromSpells_IsBlockedAsDisabled_BeforeItsCost()
+    {
+        var componentManager = Components(currentMana: 0f);
+        DisabledActivations.Grant(componentManager.GetMultiPool<DisabledActivationComponent>(), EntityId, GameplayTagQuery.Any([GameTags.Spell]), expiresAtFrame: 200);
+
+        Assert.AreEqual(ActivationBlocker.Disabled, BlockerOf(componentManager, Spell(manaCost: 5)));
+        Assert.AreEqual(ActivationBlocker.None, BlockerOf(componentManager, FreeCast(cooldownFrames: 0)), "A rule disables only what its query matches.");
+    }
 
     [TestMethod]
     public void ZeroCostNonMeleeAction_IsNotBlocked()

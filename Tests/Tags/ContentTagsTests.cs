@@ -78,22 +78,22 @@ public sealed class ContentTagsTests
     [TestMethod]
     public void EachActivator_ImpliesItsClassification()
     {
-        Assert.IsTrue(ActionTagged([], new SpellActivator(SelfTargeting, ImmediateTiming)).Tags.HasExact(GameTags.ActionSpell));
+        Assert.IsTrue(ActionTagged([], new SpellActivator(SelfTargeting, ImmediateTiming)).Tags.HasExact(GameTags.Spell));
         Assert.IsTrue(ItemTagged([]).Tags.IsEmpty, "No activator implies nothing.");
         Assert.IsTrue(TestContent.Item(BuiltInItemIds.HealthPotion).Tags.HasExact(GameTags.ItemConsumablePotion));
         Assert.IsTrue(TestContent.Item(BuiltInItemIds.HealthPotion).Tags.Has(GameTags.ItemConsumable));
         Assert.IsTrue(TestContent.Item(BuiltInItemIds.ScrollOfHealing).Tags.HasExact(GameTags.ItemConsumableScroll));
         Assert.IsTrue(TestContent.Item(BuiltInItemIds.WandOfFireball).Tags.HasExact(GameTags.ItemWand));
-        Assert.IsFalse(ActionTagged([], new DirectAction(SelfTargeting, ImmediateTiming)).Tags.Has(GameTags.ActionSpell));
+        Assert.IsFalse(ActionTagged([], new DirectAction(SelfTargeting, ImmediateTiming)).Tags.Has(GameTags.Spell));
     }
 
     [TestMethod]
     public void DeclaringAnImpliedTagByHand_DoesNotDuplicateIt()
     {
-        var action = ActionTagged([GameTags.ActionSpell], new SpellActivator(SelfTargeting, ImmediateTiming));
+        var action = ActionTagged([GameTags.Spell], new SpellActivator(SelfTargeting, ImmediateTiming));
 
         Assert.AreEqual(2, action.Tags.Count);
-        Assert.AreEqual<GameplayTagSet>([GameTags.ActionSpell, GameTags.Magic], action.Tags);
+        Assert.AreEqual<GameplayTagSet>([GameTags.Spell, GameTags.Magic], action.Tags);
     }
 
     [TestMethod]

@@ -55,7 +55,7 @@ internal static class TestActionEffects
         PackedComponentPool<ManaComponent>? mana = null,
         FloatingTextFeed? floatingTextFeed = null,
         ResolvedTargets resolved = default) =>
-        ActionEffectResolver.Apply(action, sourceEntityId, targetTiles, resolved,
+        ActivationEffectResolver.Apply(action, sourceEntityId, targetTiles, resolved,
             Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, mana, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed),
             mapQuery, now,
             dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
@@ -144,7 +144,8 @@ internal static class TestActionEffects
             sources,
             new AuraAnchors(componentManager, new EntityManager(componentManager, initialCapacity: 16), sources, NoAnchorSpawner),
             floatingTextFeed ?? EmptyPools.FloatingTextFeed(),
-            world ?? TestWorlds.Create(Game.Bootstrap.GameBuildPass.CreatePlaceholderMap(), eventBus: eventBus, entityKeys: entityKeys));
+            world ?? TestWorlds.Create(Game.Bootstrap.GameBuildPass.CreatePlaceholderMap(), eventBus: eventBus, entityKeys: entityKeys),
+            componentManager.IsRegistered<DisabledActivationComponent>() ? componentManager.GetMultiPool<DisabledActivationComponent>() : EmptyPools.Multi<DisabledActivationComponent>());
     }
 
     /// <summary>A test built without an entity factory can't place an aura anchor: one that tries fails loudly rather than placing nothing.</summary>

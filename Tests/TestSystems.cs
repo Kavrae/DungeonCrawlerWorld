@@ -229,7 +229,7 @@ internal static class TestSystems
         ProcessingTierEvents? processingTierEvents = null,
         BlueprintRegistry? creatures = null,
         FloatingTextFeed? floatingTextFeed = null) =>
-        WithServices(TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, null, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed, actions: actionCatalog), services => new DelayedActionSystem(pendingActions, actions,
+        WithServices(TestActionEffects.Services(componentManager, entityKeys, eventBus, mathUtility, health, playerQuery, statusEffectAppliers, statModifiers, deadEntities, abilityScores, null, hotkeyExpansionUnlocks, auraSources, auras, bodyParts, creatures, floatingTextFeed, actions: actionCatalog), services => new DelayedActionSystem(pendingActions,
             services,
             actionCatalog, mapQuery,
             dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
@@ -256,6 +256,7 @@ internal static class TestSystems
         PackedComponentPool<AbilityScoresComponent>? abilityScores = null,
         StatusEffectApplierRegistry? statusEffectAppliers = null,
         PackedComponentPool<MeleeDisabledComponent>? meleeDisabled = null,
+        PackedComponentPool<DodgingComponent>? dodgingEntities = null,
         IPlayerQuery? playerQuery = null,
         MultiComponentPool<AuraSourceComponent>? auraSources = null,
         AuraCatalog? auras = null,
@@ -268,9 +269,9 @@ internal static class TestSystems
             services,
             itemCatalog, actionCatalog, mapQuery,
             meleeDisabled ?? EmptyPools.Packed<MeleeDisabledComponent>(),
+            dodgingEntities ?? EmptyPools.Packed<DodgingComponent>(),
             itemHotkeyBindings ?? EmptyPools.Multi<ItemHotkeyBindingComponent>(),
             processingTiers ?? EmptyPools.Tiers(),
-            TogglesOver(services),
             services.ComponentManager.GetPackedPool<PendingWindupComponent>(),
             TargetResolutionOver(services, mapQuery),
             new ToggleItemGroundPlacement()));

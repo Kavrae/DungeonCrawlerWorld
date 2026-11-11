@@ -1,4 +1,6 @@
 using Engine.ECS.Components;
+using Engine.Tags;
+using Game.Tags;
 using Engine.ECS.Context;
 using Engine.ECS.Systems;
 using Engine.Math;
@@ -454,6 +456,127 @@ public sealed class ToggleItemTests
 
         Assert.AreEqual(1, harness.LitIdolStack(player).Quantity);
         Assert.AreEqual(2, harness.IdolCount(player));
+        Assert.IsTrue(harness.IsPlayerLocked);
+    }
+
+    [TestMethod]
+    public void DisabledStatus_EndsAMatchingWindupAndLitToggle_RefusesNewUses_AndLiftsWhenItExpires()
+    {
+        var harness = BuildWithIdols(2);
+        var player = harness.PlayerEntityId;
+        harness.Light(player);
+        harness.LockPlayerUntil(0);
+        harness.QueueActivation(harness.PlainIdolStackId(player));
+        harness.Frame();
+        Assert.IsTrue(harness.Components.GetPackedPool<PendingWindupComponent>().Has(player), "The Toxic Idol is Delayed: lighting the second winds up.");
+        Assert.AreEqual(1, harness.ActiveToggleCount(player));
+
+        var rules = harness.Components.GetMultiPool<DisabledActivationComponent>();
+        DisabledActivations.Grant(rules, player, GameplayTagQuery.Any([GameTags.ItemToggle]), FrameDeadline.After(harness.CurrentFrame, 30));
+
+        Assert.IsFalse(harness.Components.GetPackedPool<PendingWindupComponent>().Has(player), "A matching windup is cancelled the moment the rule lands.");
+        Assert.AreEqual(0, harness.ActiveToggleCount(player), "A matching lit toggle is switched off.");
+        Assert.IsFalse(harness.StacksOf(player).Any(Harness.IsLit));
+
+        harness.LockPlayerUntil(0);
+        harness.QueueActivation(harness.PlainIdolStackId(player));
+        harness.Frame();
+        Assert.IsFalse(harness.Components.GetPackedPool<PendingWindupComponent>().Has(player), "While Disabled, lighting one is refused.");
+
+        for (var frame = 0; frame < 31; frame++)
+        {
+            harness.Frame();
+        }
+
+        Assert.AreEqual(0, rules.CountForEntity(player), "The rule ends when it expires.");
+        harness.LockPlayerUntil(0);
+        harness.QueueActivation(harness.PlainIdolStackId(player));
+        harness.Frame();
+        Assert.IsTrue(harness.Components.GetPackedPool<PendingWindupComponent>().Has(player));
+    }
+
+    [TestMethod]
+    public void ToggleItemWithACooldown_EachUnitCoolsOnItsOwn_RefusesUntilItEnds_AndMergesBackAfter()
+    {
+        var harness = Build();
+        var player = harness.PlayerEntityId;
+        var coolingIdol = TestContent.Item(BuiltInItemIds.ToxicIdol) with { Activator = new ToggleItemActivator(new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 1, CooldownFrames: 60)) };
+        var readyStackId = InventoryActions.AddItemWithOverride(harness.Components, player, coolingIdol, quantity: 2);
+        harness.LockPlayerUntil(0);
+        List<InventoryItemStackComponent> CoolingStacks() => harness.StacksOf(player).Where(stack => stack.CooldownReadyAtFrame != FrameDeadline.Never).ToList();
+
+        harness.QueueActivation(readyStackId);
+        harness.Frame();
+
+        var firstCooling = CoolingStacks().Single();
+        Assert.IsTrue(Harness.IsLit(firstCooling));
+        Assert.AreEqual(1, harness.StacksOf(player).Single(stack => stack.StackInstanceId == readyStackId).Quantity, "The ready unit stays in its own stack, still usable.");
+
+        harness.Frame();
+        harness.QueueActivation(readyStackId);
+        harness.Frame();
+
+        Assert.AreEqual(2, CoolingStacks().Count(Harness.IsLit), "The second unit lights at once: the first unit's cooldown is its own.");
+
+        harness.Frame();
+        harness.QueueActivation(firstCooling.StackInstanceId);
+        harness.Frame();
+
+        Assert.AreEqual(2, CoolingStacks().Count(Harness.IsLit), "A cooling unit can't be put out until its cooldown ends.");
+
+        for (var frame = 0; frame < 60; frame++)
+        {
+            harness.Frame();
+        }
+
+        Assert.IsEmpty(CoolingStacks());
+        var litStacks = harness.StacksOf(player).Where(stack => Harness.IsLit(stack) && stack.Override?.Activator?.Timing.CooldownFrames == 60).ToList();
+        Assert.HasCount(1, litStacks, "Once cooled, the two lit units are interchangeable again and share a stack.");
+        Assert.AreEqual(2, litStacks[0].Quantity);
+    }
+
+    [TestMethod]
+    public void DelayedToggleItem_WhoseCooldownEndsBeforeItsWindup_StillLightsAUnit()
+    {
+        var harness = Build();
+        var player = harness.PlayerEntityId;
+        var slowIdol = TestContent.Item(BuiltInItemIds.ToxicIdol) with { Activator = new ToggleItemActivator(new ActionTiming(ActionTimingCategory.Delayed, ActionLockFrames: 30, CooldownFrames: 10)) };
+        var readyStackId = InventoryActions.AddItemWithOverride(harness.Components, player, slowIdol, quantity: 2);
+        harness.LockPlayerUntil(0);
+
+        harness.QueueActivation(readyStackId);
+        harness.Frame();
+        Assert.IsTrue(harness.Components.GetPackedPool<PendingWindupComponent>().Has(player));
+
+        for (var frame = 0; frame < 31; frame++)
+        {
+            harness.Frame();
+        }
+
+        Assert.IsFalse(harness.Components.GetPackedPool<PendingWindupComponent>().Has(player));
+        Assert.AreEqual(1, harness.StacksOf(player).Where(Harness.IsLit).Sum(stack => stack.Quantity), "The cooling stack merged back mid-windup, and the windup followed its unit.");
+    }
+
+    [TestMethod]
+    public void ImmediateToggleItem_PuttingItOut_WaitsForTheActionLock_AndSetsIt()
+    {
+        var harness = Build();
+        var player = harness.PlayerEntityId;
+        var immediateIdol = TestContent.Item(BuiltInItemIds.ToxicIdol) with { Activator = new ToggleItemActivator(new ActionTiming(ActionTimingCategory.Immediate)) };
+        InventoryActions.AddDivergentItem(harness.Components, player, immediateIdol);
+        var litStackId = InventoryActions.AddDivergentItem(harness.Components, player, immediateIdol with { Activator = new ToggleItemActivator(new ActionTiming(ActionTimingCategory.Immediate), IsToggledOn: true) });
+        harness.LockPlayerUntil(1000);
+
+        harness.QueueActivation(litStackId);
+        harness.Frame();
+
+        Assert.AreEqual(1, harness.LitIdolStack(player).Quantity, "Putting an Immediate toggle out waits for the lock, as an action's does.");
+
+        harness.LockPlayerUntil(0);
+        harness.QueueActivation(litStackId);
+        harness.Frame();
+
+        Assert.IsFalse(harness.StacksOf(player).Any(Harness.IsLit));
         Assert.IsTrue(harness.IsPlayerLocked);
     }
 

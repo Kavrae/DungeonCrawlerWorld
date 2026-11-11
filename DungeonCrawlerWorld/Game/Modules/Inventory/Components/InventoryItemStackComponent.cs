@@ -1,11 +1,13 @@
+using Engine.ECS.Components;
+using Engine.ECS.Systems;
+
 namespace Game.Modules.Inventory.Components;
 
 /// <summary>
 /// One stack of identical items in an entity's inventory -- entities own zero or more of these
-/// via a MultiComponentPool (see InventoryModule). IsDisabled marks this specific stack as
-/// unavailable (e.g. a starting item withheld until some later trigger) -- distinct from
-/// InventoryDisabledComponent, which disables an entity's whole inventory. Quantity is the
-/// "identical items grouped with a count" requirement.
+/// via a MultiComponentPool (see InventoryModule). Quantity is the "identical items grouped with a
+/// count" requirement. Whether its units can be used now is the user's blocker (ActivationQueries.GetBlocker,
+/// the Disabled status among them), never a flag on the stack.
 ///
 /// StackInstanceId is a stable per-stack identity assigned once, at construction, from a session
 /// counter -- an addressing key only (like an entity id), not simulation state, so it carries no
@@ -37,7 +39,13 @@ namespace Game.Modules.Inventory.Components;
 /// regardless of how long it sat in a corpse or another entity's inventory first. Powers the
 /// "recently acquired" sort (see InventorySortOrder.RecentlyAcquiredDescending).
 /// </summary>
-public struct InventoryItemStackComponent(Guid itemDefinitionId, ushort quantity, bool isDisabled = false, ItemDefinition? overrideDefinition = null, bool isDivergent = false)
+/// <remarks>
+/// CooldownReadyAtFrame is the units' own cooldown (ActionTiming.CooldownFrames): an item's rate limit belongs to
+/// the unit, not its user, so a unit just used moves to a stack cooling until then, and units cool together only
+/// when they end on the same frame. It is a scheduled timer: ItemCooldownSystem returns the stack's units to an
+/// interchangeable ready stack when it ends. FrameDeadline.Never when the units aren't cooling down.
+/// </remarks>
+public struct InventoryItemStackComponent(Guid itemDefinitionId, ushort quantity, ItemDefinition? overrideDefinition = null, bool isDivergent = false, uint cooldownReadyAtFrame = FrameDeadline.Never) : IKeyedScheduledTimer
 {
     /// <summary>Which item this is, as an interned 2-byte handle (see ItemIds).</summary>
     public ushort ItemId { get; } = ItemIds.IdFor(itemDefinitionId);
@@ -63,12 +71,27 @@ public struct InventoryItemStackComponent(Guid itemDefinitionId, ushort quantity
 
     public ushort Quantity { get; set; } = quantity;
 
-    public bool IsDisabled { get; set; } = isDisabled;
-
     public ItemDefinition? Override { get; set; } = overrideDefinition;
 
     public bool IsDivergent { get; set; } = isDivergent;
 
+    /// <summary>The frame the units' cooldown ends, or FrameDeadline.Never when they aren't cooling down.</summary>
+    public uint CooldownReadyAtFrame { get; set; } = cooldownReadyAtFrame;
+
+    private uint _timerWheelMark;
+
+    /// <summary>Whether the units are cooling down at frame now.</summary>
+    public readonly bool IsCoolingDown(long now) => CooldownReadyAtFrame != FrameDeadline.Never && !FrameDeadline.IsReached(CooldownReadyAtFrame, now);
+
+    /// <summary>Frames until the units' cooldown ends; 0 when they aren't cooling down.</summary>
+    public readonly int CooldownFramesRemaining(long now) => CooldownReadyAtFrame == FrameDeadline.Never ? 0 : FrameDeadline.Remaining(CooldownReadyAtFrame, now);
+
+    readonly int IKeyedScheduledTimer.TimerKey => (int)StackInstanceId;
+
+    uint IScheduledTimer.NextTickFrame { readonly get => CooldownReadyAtFrame; set => CooldownReadyAtFrame = value; }
+
+    uint IScheduledTimer.TimerWheelMark { readonly get => _timerWheelMark; set => _timerWheelMark = value; }
+
     public override readonly string ToString() =>
-        $"ItemDefinitionId : {ItemDefinitionId}\nStackInstanceId : {StackInstanceId}\nAcquiredSequence : {AcquiredSequence}\nQuantity : {Quantity}\nIsDisabled : {IsDisabled}\nIsDivergent : {IsDivergent}";
+        $"ItemDefinitionId : {ItemDefinitionId}\nStackInstanceId : {StackInstanceId}\nAcquiredSequence : {AcquiredSequence}\nQuantity : {Quantity}\nIsDivergent : {IsDivergent}\nCooldownReadyAtFrame : {CooldownReadyAtFrame}";
 }

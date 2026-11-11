@@ -124,7 +124,7 @@ public sealed class ActionTargetingController(
                 continue;
             }
 
-            var isDodgeable = targetingView.IsWindupDodgeable(entityId, in pending);
+            var isDodgeable = targetingView.IsWindupDodgeable(in pending);
             _pendingWindupTargetsBuffer.Add((entityId, tiles, isDodgeable));
         }
 
@@ -965,7 +965,7 @@ public sealed class ActionTargetingController(
         {
             // DodgeActivation's own effect (DodgingComponent) always applies to the caster, not to
             // "whoever occupies the resolved target tile" -- for a directional dodge that tile is the
-            // destination, where nobody stands yet when ActionEffectResolver.Apply looks for
+            // destination, where nobody stands yet when ActivationEffectResolver.Apply looks for
             // occupants, so the effect would never run. Aiming the effect at the caster's own
             // current tile guarantees an occupant is found there -- see DodgeActivation's own doc
             // comment for why it also reads SourceEntityId rather than TargetEntityId, in case

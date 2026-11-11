@@ -341,7 +341,7 @@ public sealed class NpcLootingTests
         session.Components.GetPackedPool<MovementComponent>().Remove(player);
         session.Build.World.PlayerEntityId = player;
         var looterAttacks = 0;
-        session.Build.EcsContext.EventBus.Subscribe<ActionActivatedEvent>(activated => looterAttacks += activated.EntityId == looter ? 1 : 0);
+        session.Build.EcsContext.EventBus.Subscribe<ActivationUsedEvent>(used => looterAttacks += used.EntityId == looter && used.Kind == Game.Modules.Actions.ActivatableKind.Action ? 1 : 0);
 
         for (var frame = 1L; frame <= 120; frame++)
         {

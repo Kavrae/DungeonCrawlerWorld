@@ -28,6 +28,35 @@ public sealed class SpellCasterAchievementTests
         return (build.EcsContext, build.Context.EventBus, build.World);
     }
 
+    private static ActivationUsedEvent UsedAction(int entityId, ActionDefinition action) =>
+        new(entityId, ActivatableKind.Action, action.Id, action.Tags);
+
+    [TestMethod]
+    public void PlayerReadsAScroll_UnlocksSpellCaster()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+        var scroll = TestContent.Item(BuiltInItemIds.ScrollOfHealing);
+
+        eventBus.Publish(new ActivationUsedEvent(playerEntityId, ActivatableKind.Item, scroll.Id, scroll.Tags));
+
+        Assert.IsTrue(AchievementQueries.HasEarned(ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(), playerEntityId, SpellCasterAchievementId));
+    }
+
+    [TestMethod]
+    public void PlayerDrinksAPotion_DoesNotUnlockSpellCaster()
+    {
+        var (ecsContext, eventBus, world) = Build();
+        var playerEntityId = ecsContext.EntityManager.CreateEntity();
+        world.PlayerEntityId = playerEntityId;
+        var potion = TestContent.Item(BuiltInItemIds.HealthPotion);
+
+        eventBus.Publish(new ActivationUsedEvent(playerEntityId, ActivatableKind.Item, potion.Id, potion.Tags));
+
+        Assert.IsFalse(AchievementQueries.HasEarned(ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(), playerEntityId, SpellCasterAchievementId));
+    }
+
     [TestMethod]
     public void PlayerActivatesSpellAction_UnlocksSpellCaster()
     {
@@ -35,7 +64,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new ActionActivatedEvent(playerEntityId, BuiltInActionIds.Heal));
+        eventBus.Publish(UsedAction(playerEntityId, TestContent.Action(BuiltInActionIds.Heal)));
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -50,7 +79,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new ActionActivatedEvent(playerEntityId, BuiltInActionIds.MagicMissile));
+        eventBus.Publish(UsedAction(playerEntityId, TestContent.Action(BuiltInActionIds.MagicMissile)));
 
         Assert.IsTrue(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -65,7 +94,7 @@ public sealed class SpellCasterAchievementTests
         var playerEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new ActionActivatedEvent(playerEntityId, BuiltInActionIds.QuickAttack));
+        eventBus.Publish(UsedAction(playerEntityId, TestContent.Action(BuiltInActionIds.QuickAttack)));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -81,7 +110,7 @@ public sealed class SpellCasterAchievementTests
         var npcEntityId = ecsContext.EntityManager.CreateEntity();
         world.PlayerEntityId = playerEntityId;
 
-        eventBus.Publish(new ActionActivatedEvent(npcEntityId, BuiltInActionIds.Heal));
+        eventBus.Publish(UsedAction(npcEntityId, TestContent.Action(BuiltInActionIds.Heal)));
 
         Assert.IsFalse(AchievementQueries.HasEarned(
             ecsContext.ComponentManager.GetMultiPool<AchievementUnlockedComponent>(),
@@ -105,7 +134,7 @@ public sealed class SpellCasterAchievementTests
             ScrollMasteryEffects.RecordUsage(componentManager, build.Context.EventBus, build.Context.Actions, scroll, playerEntityId, spellId);
         }
 
-        build.Context.EventBus.Publish(new ActionActivatedEvent(playerEntityId, spellId));
+        build.Context.EventBus.Publish(UsedAction(playerEntityId, build.Context.Actions.Get(spellId)));
 
         Assert.IsTrue(AchievementQueries.HasEarned(componentManager.GetMultiPool<AchievementUnlockedComponent>(), playerEntityId, SpellCasterAchievementId));
     }

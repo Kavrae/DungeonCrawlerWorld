@@ -27,77 +27,52 @@ using Game.World;
 
 namespace Game.Modules.Inventory.Systems;
 
-/// <summary>
-/// Consumes a PendingItemActivationComponent (queued by Presentation, never applied by it
-/// -- mirrors ActionActivationSystem/PendingActionActivationComponent exactly). Every
-/// item activation sets the shared ActionLock on the *activating* entity, the same as an
-/// Immediate action (see PotionActivator.Timing's own doc comment) -- only a toggle item is
-/// timed any other way (see below). Every request now names the exact stack being
-/// activated (StackInstanceId, not ItemDefinitionId -- see PendingItemActivationComponent's
-/// own doc comment); its effective ItemDefinition (its own Override if diverged, else the plain
-/// catalog lookup -- see InventoryQueries.TryResolveEffectiveItem) is what actually gets applied,
-/// so a diverged stack's own current state (a wand's remaining charges) is never bypassed by
-/// accidentally reading the catalog original instead.
-///
-/// Dispatches on item.Activator's concrete type. PotionActivator/ScrollActivator: the stack is
-/// ticked down (InventoryActions.RemoveOneUnit) before the effect applies, per
-/// spec order (see TryBeginActivation, shared by both). PotionActivator: PotionCooldownComponent
-/// -- and the punishment Poison stack/PotionCooldownAbusedEvent for activating it again too soon
-/// -- belongs to whoever actually receives the potion's effect (see ApplyPotionToTarget), not
-/// whoever drank/threw it. Drinking your own potion means those are the same entity; throwing one
-/// at a goblin means the goblin's own cooldown ticks, the thrower's does not. This stays this
-/// system's own kind-uniform logic rather than a composable IEffectEntry: it doesn't vary per potion
-/// (Constitution, the only varying input, is caster-side), so every potion already gets it
-/// automatically, and making it an entry every item's Effects list must remember to include
-/// (including mod-defined potions) would turn a currently-impossible-to-forget mechanic into a
-/// silently-omittable one.
-///
-/// ScrollActivator: no cooldown-abuse mechanic (potion-specific, never mentioned for scrolls) and
-/// no hard SimpleHealthComponent requirement on the target (see ApplyScrollToTarget) -- instead scales
-/// Range/AreaSize (already in the request's TargetSelection, see TargetResolution.EffectiveSpec and
-/// ScrollScalingEffects' own doc comment) and any duration the effect carries by the *caster's*
-/// Intelligence, then records the activation toward mastering the scroll's spell (see
-/// ScrollMasteryEffects).
-///
-/// WandActivator: not consumed from a shared stack at all -- each wand has its own remaining
-/// Charges, decremented via InventoryActions.MoveOneUnit (see PeelWandCharge) rather
-/// than InventoryActions.RemoveOneUnit, and (unlike Potion/Scroll) the peeled stack
-/// gets a *new* StackInstanceId once it's actually diverged -- so this slot's own
-/// ItemHotkeyBindingComponent is repointed to it afterward (see ItemHotkeyBindingActions.RepointAfterUnitMoved), the one
-/// piece of bookkeeping neither Potion nor Scroll ever needs. No mana cost, no cooldown-abuse
-/// mechanic, no Intelligence duration-scaling (that's scroll-specific) -- charges were already
-/// fixed once, at grant time (see Game.Modules.Inventory.WandGrantEffects).
-///
-/// ConsumableActivator: one unit is used up, as for a potion or scroll, and its effects land on whoever the
-/// targeting reaches, as a wand's do -- no rule of its own (a tome is one, its effect a SpellGrant).
-///
-/// ToggleItemActivator: consumes nothing and applies no effects here. The activation flips one
-/// unit between lit and unlit (ToggleItemActions.TryToggle); what the item holds while lit follows
-/// from the stack change (ToggleItemHolderSync). Timed by the activator's own Timing, the one kind
-/// that isn't always Immediate: FreeCast neither waits for the action lock nor sets it, anything
-/// else waits for it and sets it. A Delayed one that is off winds up instead, sharing the action
-/// windup (PendingWindupComponent), and is lit when that resolves; putting one out is at once.
-///
-/// Every kind takes the item's ActivationEffects (ActivationEffectsApplier) once its own checks pass
-/// and before anything else it does; a toggle takes them only when it is lit, not when put out.
-/// </summary>
+/// <summary>Consumes a PendingItemActivationComponent (queued by Presentation or an NPC, never applied by either) and uses the item through Activations.</summary>
 /// <remarks>
-/// Striped, not tiered, and deliberately so: this drains a queue of activations already committed
-/// to this frame (PendingItemActivationComponent, queued by the player's own input or by
-/// TestCombatBehaviorSystem's self-heal branch), so deferring one to a coarse tier's cadence would
-/// leave a drink the player already pressed sitting unresolved for up to a divisor's worth of
-/// frames. The population is bounded by "activations queued right now", not by entity count, so
-/// there is nothing for tiering to save. Same reasoning as ActionActivationSystem, which drains
-/// the equivalent queue for actions.
+/// <para>
+/// A request names the exact stack being used (StackInstanceId, not ItemDefinitionId -- see
+/// PendingItemActivationComponent); its effective ItemDefinition (its own Override if diverged, else the catalog's --
+/// InventoryQueries.TryResolveEffectiveItem) is what gets applied, so a diverged stack's own state (a wand's remaining
+/// charges) is never bypassed by reading the catalog original.
+/// </para>
+/// <para>
+/// Each request runs through Activations, the sequence an action's use runs through too (cooldown, blocker, lock, then
+/// the timing step), and ItemUse is the item's side of it. An item honours its activator's whole ActionTiming, as an
+/// action does: Immediate, Delayed or FreeCast, its lock, its cooldown and ReleasesActionLock. What a kind spends
+/// (TrySpend): a potion, scroll or consumable uses up one unit (InventoryActions.RemoveOneUnit); a wand one charge
+/// (PeelWandCharge), the peeled unit landing in a stack of its own, so the pressed slot is repointed to it
+/// (ItemHotkeyBindingActions.RepointAfterUnitMoved). A Delayed use spends when its windup starts and lands what it
+/// captured when it resolves (Resolve, the item windup resolver).
+/// </para>
+/// <para>
+/// What a kind does (ApplyItem) goes through ActivationEffectResolver, the walk an action's effects take, so Dodge,
+/// Stagger, the seam and corpses are reached the same way; a kind adds only its own rule. A potion lands only on
+/// something with health, and its cooldown -- with the abuse Poison for drinking again too soon -- belongs to whoever
+/// it lands on, not whoever drank or threw it (PotionTargetRule). That stays this system's own rule rather than an
+/// IEffectEntry: it doesn't vary per potion, so every potion, a mod's included, gets it without its Effects having to
+/// remember it. A scroll scales range and area (already in its TargetSelection, see ScrollScalingEffects) and
+/// durations by its reader's Intelligence, then records the read toward mastering its spell (ScrollMasteryEffects). A
+/// wand or a consumable has no rule of its own (a tome is a consumable, its effect a SpellGrant).
+/// </para>
+/// <para>
+/// A toggle item spends nothing: using it flips one unit between lit and unlit (ToggleItemActions.TryLight, which also
+/// puts it down in Ground mode, and TryToggle); what it holds while lit follows from the stack change
+/// (ToggleItemHolderSync).
+/// </para>
+/// <para>
+/// Striped, not tiered: this drains a queue of activations already committed to this frame, so deferring one to a
+/// coarse tier's cadence would leave a drink the player already pressed unresolved for up to a divisor's worth of
+/// frames. The population is bounded by the activations queued right now, not by entity count, so there is nothing for
+/// tiering to save -- the same reasoning as ActionActivationSystem, which drains the equivalent queue for actions.
+/// </para>
 /// </remarks>
-public sealed class ItemActivationSystem : ISystem
+public sealed class ItemActivationSystem : ISystem, IItemWindupResolver
 {
     private const byte StripeCountValue = 1;
 
     public byte StripeCount => StripeCountValue;
 
     private readonly PackedComponentPool<PendingItemActivationComponent> _pendingActivations;
-    private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly PackedComponentPool<PotionCooldownComponent> _potionCooldowns;
     private readonly PackedComponentPool<SimpleHealthComponent> _health;
     private readonly EffectServices _effectServices;
@@ -106,28 +81,19 @@ public sealed class ItemActivationSystem : ISystem
     private readonly IMapQuery _mapQuery;
     private readonly EventBus _eventBus;
     private readonly ComponentManager _componentManager;
-    private readonly EntityKeys _entityKeys;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
-    private readonly PackedComponentPool<ManaComponent> _mana;
-    private readonly MultiComponentPool<StatModifierComponent> _statModifiers;
-    private readonly PackedComponentPool<MeleeDisabledComponent> _meleeDisabled;
     private readonly PackedComponentPool<AbilityScoresComponent> _abilityScores;
-    private readonly IPlayerQuery _playerQuery;
     private readonly MultiComponentPool<ItemHotkeyBindingComponent> _itemHotkeyBindings;
     private readonly EntityBodyParts _bodyParts;
-    private readonly BlueprintRegistry _creatures;
-    private readonly List<int> _targetIdsScratch = [];
-    private readonly HashSet<int> _seenTargetIdsScratch = [];
     private readonly ProcessingTierQuery _processingTiers;
-    private readonly Toggles _toggles;
-    private readonly PackedComponentPool<PendingWindupComponent> _pendingWindups;
     private readonly TargetResolution _targetResolution;
     private readonly ToggleItemGroundPlacement _toggleItemGroundPlacement;
     private readonly List<Vector3Int> _targetTilesScratch = [];
 
-    /// <summary>Where the last CollectTargets call landed, for the entries placed once per activation (ApplyOnce).</summary>
-    private ResolvedTargets _lastResolved;
+    private readonly HashSet<int> _reachedScratch = [];
+    private readonly PackedComponentPool<DodgingComponent> _dodgingEntities;
     private readonly EntityStripeSet _stripeSet;
+    private readonly Activations _activations;
 
     /// <summary>The simulation frame of the Update in progress -- see Update.</summary>
     private long _now;
@@ -141,9 +107,9 @@ public sealed class ItemActivationSystem : ISystem
         ActionCatalog actionCatalog,
         IMapQuery mapQuery,
         PackedComponentPool<MeleeDisabledComponent> meleeDisabled,
+        PackedComponentPool<DodgingComponent> dodgingEntities,
         MultiComponentPool<ItemHotkeyBindingComponent> itemHotkeyBindings,
         ProcessingTierQuery processingTiers,
-        Toggles toggles,
         PackedComponentPool<PendingWindupComponent> pendingWindups,
         TargetResolution targetResolution,
         ToggleItemGroundPlacement toggleItemGroundPlacement)
@@ -151,7 +117,6 @@ public sealed class ItemActivationSystem : ISystem
         _toggleItemGroundPlacement = toggleItemGroundPlacement;
         _effectServices = effectServices;
         _pendingActivations = pendingActivations;
-        _actionLocks = actionLocks;
         _potionCooldowns = potionCooldowns;
         _health = effectServices.Health;
         _itemCatalog = itemCatalog;
@@ -159,22 +124,16 @@ public sealed class ItemActivationSystem : ISystem
         _mapQuery = mapQuery;
         _eventBus = effectServices.EventBus;
         _componentManager = effectServices.ComponentManager;
-        _entityKeys = effectServices.EntityKeys;
         _deadEntities = effectServices.DeadEntities;
-        _mana = effectServices.Mana;
-        _statModifiers = effectServices.StatModifiers;
-        _meleeDisabled = meleeDisabled;
+        _dodgingEntities = dodgingEntities;
         _abilityScores = effectServices.AbilityScores;
-        _playerQuery = effectServices.PlayerQuery;
         _itemHotkeyBindings = itemHotkeyBindings;
         _bodyParts = effectServices.BodyParts;
-        _creatures = effectServices.Definitions;
         _processingTiers = processingTiers;
-        _toggles = toggles;
-        _pendingWindups = pendingWindups;
         _targetResolution = targetResolution;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
+        _activations = new Activations(actionLocks, pendingWindups, meleeDisabled, effectServices);
     }
 
     public void Update(EngineTime time, byte stripeIndex)
@@ -187,6 +146,7 @@ public sealed class ItemActivationSystem : ISystem
         {
             if (_deadEntities.Has(entityId))
             {
+                _pendingActivations.Remove(entityId);
                 continue;
             }
 
@@ -201,292 +161,200 @@ public sealed class ItemActivationSystem : ISystem
 
             if (!InventoryQueries.TryFindByStackInstanceId(_componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, request.StackInstanceId, out var stack) ||
                 !InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var item) ||
-                ActivationQueries.GetBlocker(entityId, item, item.Activator, item.Activator is ToggleItemActivator { IsToggledOn: true }, _meleeDisabled, _effectServices, _now) != ActivationBlocker.None)
+                item.Activator is not { } activator)
             {
                 continue;
             }
 
-            switch (item.Activator)
-            {
-                case PotionActivator potionActivator:
-                    if (!TryBeginActivation(entityId, request.StackInstanceId))
-                    {
-                        continue;
-                    }
-
-                    ActivationEffectsApplier.Apply(_effectServices, entityId, item, _now);
-                    ActivatePotion(item, entityId, request.Selection);
-                    ActionLockGate.Lock(_actionLocks, entityId, _now, LockFramesFor(entityId, potionActivator.Timing));
-                    break;
-
-                case ScrollActivator scrollActivator:
-                    if (!TryBeginActivation(entityId, request.StackInstanceId))
-                    {
-                        continue;
-                    }
-
-                    ActivationEffectsApplier.Apply(_effectServices, entityId, item, _now);
-                    ActivateScroll(item, scrollActivator, entityId, request.Selection);
-                    ActionLockGate.Lock(_actionLocks, entityId, _now, LockFramesFor(entityId, scrollActivator.Timing));
-                    break;
-
-                case WandActivator wandActivator:
-                    if (!TryBeginWandActivation(entityId, wandActivator.Charges))
-                    {
-                        continue;
-                    }
-
-                    ActivationEffectsApplier.Apply(_effectServices, entityId, item, _now);
-                    PeelWandCharge(entityId, stack, item, wandActivator, request.ActivatedFromSlot);
-                    ActivateOnTargets(item, entityId, request.Selection);
-                    ActionLockGate.Lock(_actionLocks, entityId, _now, LockFramesFor(entityId, wandActivator.Timing));
-                    break;
-
-                case ConsumableActivator consumableActivator:
-                    if (!TryBeginActivation(entityId, request.StackInstanceId))
-                    {
-                        continue;
-                    }
-
-                    ActivationEffectsApplier.Apply(_effectServices, entityId, item, _now);
-                    ActivateOnTargets(item, entityId, request.Selection);
-                    ActionLockGate.Lock(_actionLocks, entityId, _now, LockFramesFor(entityId, consumableActivator.Timing));
-                    break;
-
-                case ToggleItemActivator toggleActivator:
-                    var ignoresActionLock = toggleActivator.Timing.Category == ActionTimingCategory.FreeCast;
-                    if (!ignoresActionLock && ActionLockGate.IsBlocked(_actionLocks, entityId, _now))
-                    {
-                        continue;
-                    }
-
-                    // What turning on takes is applied before the unit is lit -- for Delayed, when the windup
-                    // starts, not given back if it is cancelled. The blocker check above has asked it.
-                    if (!toggleActivator.IsToggledOn)
-                    {
-                        ActivationEffectsApplier.Apply(_effectServices, entityId, item, _now);
-
-                        // Lit only when the windup resolves (ToggleItemWindupResolver); putting one out is at once.
-                        if (toggleActivator.Timing.Category == ActionTimingCategory.Delayed)
-                        {
-                            Windups.Begin(_actionLocks, _pendingWindups, entityId, _now, LockFramesFor(entityId, toggleActivator.Timing),
-                                PendingWindupComponent.ForItem(request.StackInstanceId, request.ActivatedFromSlot, request.Selection, readyAtFrame: 0));
-                            break;
-                        }
-                    }
-
-                    if (!ToggleItemActions.TryToggle(_componentManager, _itemCatalog, entityId, request.StackInstanceId, out var flippedStackInstanceId, request.ActivatedFromSlot))
-                    {
-                        continue;
-                    }
-
-                    if (!ignoresActionLock)
-                    {
-                        ActionLockGate.Lock(_actionLocks, entityId, _now, LockFramesFor(entityId, toggleActivator.Timing));
-                    }
-
-                    // Lit in Ground mode, the unit is put down where the holder stands (ToggleItemGroundPlacement).
-                    if (!toggleActivator.IsToggledOn)
-                    {
-                        _toggleItemGroundPlacement.PutDownIfGround(entityId, flippedStackInstanceId, request.Selection);
-                    }
-
-                    break;
-            }
+            var use = new ItemUse(this, entityId, stack, item, activator, request);
+            _activations.TryUse(entityId, ref use, _now);
         }
     }
 
-    /// <summary>The lock the item's timing states, or the entity's standard lock when it states none.</summary>
-    private ushort LockFramesFor(int entityId, ActionTiming timing) =>
-        StandardActionLockFrames.ResolveForEntity(_abilityScores, _statModifiers, entityId, timing.ActionLockFrames);
-
-    /// <summary>Shared pre-checks + stack consumption for Potion/Scroll -- still holds the stack, action lock isn't currently blocking, then consumes one unit (per spec order, before the effect applies). Returns false (nothing consumed) if either check fails.</summary>
-    private bool TryBeginActivation(int entityId, uint stackInstanceId)
+    /// <summary>Resolves an item's windup with the definition it captured: a toggle lights one unit if the holder still has it unlit; anything else applies its effects, its unit or charge having been spent when the windup began.</summary>
+    public void Resolve(int entityId, in PendingWindupComponent windup, long now)
     {
-        if (!InventoryQueries.TryFindByStackInstanceId(_componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stackInstanceId, out _))
+        _now = now;
+        var item = (ItemDefinition)windup.Definition;
+
+        if (item.Activator is not ToggleItemActivator)
         {
-            return false;
-        }
-
-        if (ActionLockGate.IsBlocked(_actionLocks, entityId, _now))
-        {
-            return false;
-        }
-
-        InventoryActions.RemoveOneUnit(_componentManager, entityId, stackInstanceId);
-        return true;
-    }
-
-    /// <summary>Wand counterpart to TryBeginActivation -- no stack to consume yet (see PeelWandCharge, called separately once this passes), just the two gates: charges remaining, and the shared ActionLock isn't currently blocking.</summary>
-    private bool TryBeginWandActivation(int entityId, ushort charges) =>
-        charges > 0 && !ActionLockGate.IsBlocked(_actionLocks, entityId, _now);
-
-    /// <summary>Whether a consumable landing on targetEntityId's tile reaches it: not while it is frozen, the same seam ActionEffectResolver keeps -- nothing targets across the simulated/frozen boundary.</summary>
-    private bool IsTargetable(int targetEntityId) => _processingTiers.IsSimulated(targetEntityId);
-
-    /// <summary>Every targetable entity selection reaches for item, once each, in the order first reached: the marked entity alone for a MarkedOnly item in Target mode, otherwise everyone a projectile's path hit, then everyone on the resolved tiles.</summary>
-    /// <remarks>A multi-tile entity occupies every cell of its footprint, so a shape covering several of them reaches it once per cell; a consumable affects it once.</remarks>
-    private List<int> CollectTargets(ItemDefinition item, int sourceEntityId, TargetSelection selection)
-    {
-        _targetIdsScratch.Clear();
-        _seenTargetIdsScratch.Clear();
-
-        var resolved = _targetResolution.Resolve(sourceEntityId, item.Activator!.Targeting, selection, _targetTilesScratch);
-        _lastResolved = resolved;
-        if (resolved.MarkedOnly)
-        {
-            if (resolved.MarkedEntityId is { } markedEntityId && IsTargetable(markedEntityId))
-            {
-                _targetIdsScratch.Add(markedEntityId);
-            }
-
-            return _targetIdsScratch;
-        }
-
-        foreach (var targetEntityId in resolved.PathHitEntityIds)
-        {
-            if (IsTargetable(targetEntityId) && _seenTargetIdsScratch.Add(targetEntityId))
-            {
-                _targetIdsScratch.Add(targetEntityId);
-            }
-        }
-
-        foreach (var tile in _targetTilesScratch)
-        {
-            foreach (var targetEntityId in _mapQuery.GetOccupantEntityIdSpanAt(tile))
-            {
-                if (IsTargetable(targetEntityId) && _seenTargetIdsScratch.Add(targetEntityId))
-                {
-                    _targetIdsScratch.Add(targetEntityId);
-                }
-            }
-        }
-
-        return _targetIdsScratch;
-    }
-
-    private void ActivatePotion(ItemDefinition item, int sourceEntityId, TargetSelection selection)
-    {
-        foreach (var targetEntityId in CollectTargets(item, sourceEntityId, selection))
-        {
-            ApplyPotionToTarget(item, sourceEntityId, targetEntityId);
-        }
-
-        ApplyOnce(item, sourceEntityId);
-    }
-
-    /// <summary>Applies item's entries placed once per activation (EffectSequence.ApplyOnce) and on each tile (EffectSequence.ApplyOnEachTile), where the last CollectTargets call landed.</summary>
-    /// <remarks>A marked entity that isn't targetable receives none of them; only the AtLocation ones are placed.</remarks>
-    private void ApplyOnce(ItemDefinition item, int sourceEntityId, float durationScaleMultiplier = 1.0f)
-    {
-        var context = BuildContext(item, sourceEntityId, EffectContext.NoTargetEntity, durationScaleMultiplier);
-        if (_lastResolved.MarkedEntityId is { } markedEntityId && !IsTargetable(markedEntityId))
-        {
-            EffectSequence.ApplyAtLocation(item.Effects, context, _lastResolved.Centre);
-        }
-        else
-        {
-            EffectSequence.ApplyOnce(item.Effects, context, _lastResolved.MarkedEntityId, _lastResolved.Centre);
-        }
-
-        EffectSequence.ApplyOnEachTile(item.Effects, context, _targetTilesScratch);
-    }
-
-    /// <summary>
-    /// Requires health -- Simple or Complex -- to be considered a valid target at all (the same
-    /// "is this a real, alive target" gate this method has always used), checked by presence
-    /// across both pools rather than hard-requiring SimpleHealthComponent specifically -- a Complex
-    /// target with no pool a given entry actually needs (e.g. no ManaComponent for a Mana Potion)
-    /// still counts as legitimately hit for the cooldown-abuse/reset bookkeeping below, since each
-    /// entry no-ops gracefully on its own missing pool. Skipped entirely for a dead target -- "the
-    /// target of a potion" means it landed on them, not just that a target tile happened to
-    /// contain them. The cooldown-abuse check and PotionCooldownComponent reset both key off
-    /// targetEntityId, not sourceEntityId -- see this class's own doc comment for why -- but the abuse poison is
-    /// credited to sourceEntityId: whoever used the potion caused it, so a thrown potion's poison is the
-    /// thrower's damage (and kill), and a drunk one's is the drinker's own. The
-    /// cooldown's own duration is computed from the target's Constitution
-    /// (PotionCooldownEffects.ComputeDurationFrames), falling back to the un-scaled
-    /// PotionCooldownEffects.DurationFrames when _abilityScores isn't wired or the target has no
-    /// Constitution score.
-    /// </summary>
-    private void ApplyPotionToTarget(ItemDefinition item, int sourceEntityId, int targetEntityId)
-    {
-        if (_deadEntities.Has(targetEntityId) || (!_health.Has(targetEntityId) && !_bodyParts.Has(targetEntityId)))
-        {
+            ApplyItem(entityId, item, windup.Selection);
             return;
         }
 
-        var durationFrames = AbilityScoreQueries.TryGetComponent(_abilityScores, targetEntityId, AbilityScoreType.Constitution, out var constitution)
-            ? PotionCooldownEffects.ComputeDurationFrames(constitution.Total)
-            : PotionCooldownEffects.DurationFrames;
-
-        if (_potionCooldowns.TryGetReadonly(targetEntityId, out var cooldown) && PotionCooldownEffects.FramesRemaining(cooldown, _now) > 0)
+        var stackInstanceId = windup.Activatable.StackInstanceId;
+        if (InventoryQueries.TryFindByStackInstanceId(_componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stackInstanceId, out var stack) &&
+            InventoryQueries.TryResolveEffectiveItem(_itemCatalog, in stack, out var heldItem) &&
+            heldItem.Activator is ToggleItemActivator { IsToggledOn: false })
         {
-            new StatusEffectGrant(StatusEffectType.Poison, DurationTicks: PotionCooldownEffects.ComputeAbusePoisonDurationTicks(durationFrames)).Apply(BuildContext(item, sourceEntityId, targetEntityId));
-            _eventBus.Publish(new PotionCooldownAbusedEvent(targetEntityId));
+            TryLightUnit(entityId, heldItem, stackInstanceId, windup.ActivatedFromSlot, windup.Selection);
         }
-
-        EffectSequence.ApplyOnEachTarget(item.Effects, BuildContext(item, sourceEntityId, targetEntityId));
-
-        PotionCooldownEffects.Reset(_componentManager, targetEntityId, durationFrames, _now);
     }
 
-    private void ActivateScroll(ItemDefinition item, ScrollActivator scrollActivator, int sourceEntityId, TargetSelection selection)
+    /// <summary>What a potion, scroll, wand or consumable does when used, now or when its windup resolves: its effects where selection lands, through the walk actions share, with its kind's own rule.</summary>
+    /// <remarks>A potion lands only on something with health and keeps its cooldown (PotionTargetRule); a scroll scales its durations by its reader's Intelligence and records the read toward mastering its spell.</remarks>
+    private void ApplyItem(int entityId, ItemDefinition item, TargetSelection selection)
     {
-        var durationScaleMultiplier = ComputeScrollScaleMultiplier(sourceEntityId);
+        var resolved = _targetResolution.Resolve(entityId, item.Activator!.Targeting, selection, _targetTilesScratch);
 
-        foreach (var targetEntityId in CollectTargets(item, sourceEntityId, selection))
+        switch (item.Activator)
         {
-            ApplyScrollToTarget(item, sourceEntityId, targetEntityId, durationScaleMultiplier);
+            case PotionActivator:
+                var potionRule = new PotionTargetRule(this);
+                ActivationEffectResolver.Apply(item, ActivatableKind.Item, entityId, _targetTilesScratch, resolved, _effectServices, _mapQuery, _now, _dodgingEntities, _processingTiers, _reachedScratch, ref potionRule);
+                break;
+
+            case ScrollActivator scrollActivator:
+                var scrollRule = default(EveryTargetRule);
+                ActivationEffectResolver.Apply(item, ActivatableKind.Item, entityId, _targetTilesScratch, resolved, _effectServices, _mapQuery, _now, _dodgingEntities, _processingTiers, _reachedScratch, ref scrollRule, ComputeScrollScaleMultiplier(entityId));
+                ScrollMasteryEffects.RecordUsage(_componentManager, _eventBus, _actionCatalog, item, entityId, scrollActivator.SpellId);
+                break;
+
+            case WandActivator or ConsumableActivator:
+                var everyTarget = default(EveryTargetRule);
+                ActivationEffectResolver.Apply(item, ActivatableKind.Item, entityId, _targetTilesScratch, resolved, _effectServices, _mapQuery, _now, _dodgingEntities, _processingTiers, _reachedScratch, ref everyTarget);
+                break;
+        }
+    }
+
+    /// <summary>What using item takes besides its activation effects: one unit of a potion, scroll or consumable, one charge of a wand. False, taking nothing, for a wand with no charges left.</summary>
+    /// <param name="usedUnitStackInstanceId">The stack the used unit is in afterwards: a wand's peeled unit, 0 for one used up.</param>
+    private bool TrySpend(int entityId, InventoryItemStackComponent stack, ItemDefinition item, HotkeySlot? activatedFromSlot, out uint usedUnitStackInstanceId)
+    {
+        usedUnitStackInstanceId = stack.StackInstanceId;
+        switch (item.Activator)
+        {
+            case WandActivator wandActivator:
+                if (wandActivator.Charges == 0)
+                {
+                    return false;
+                }
+
+                usedUnitStackInstanceId = PeelWandCharge(entityId, stack, item, wandActivator, activatedFromSlot);
+                return true;
+
+            case PotionActivator or ScrollActivator or ConsumableActivator:
+                InventoryActions.RemoveOneUnit(_componentManager, entityId, stack.StackInstanceId);
+                usedUnitStackInstanceId = 0;
+                return true;
+
+            default:
+                return true;
+        }
+    }
+
+    /// <summary>Moves the used unit, in stack unitStackInstanceId, to a stack cooling for cooldownFrames. Returns the stack it is in afterwards.</summary>
+    /// <remarks>A slot follows the unit only when the stack it was bound to is gone, so a slot on a stack of several keeps using the ready ones.</remarks>
+    private uint StartUnitCooldown(int entityId, uint unitStackInstanceId, ushort cooldownFrames, long now)
+    {
+        var coolingStackInstanceId = InventoryActions.MoveOneUnitIntoCooldown(_componentManager, entityId, unitStackInstanceId, FrameDeadline.After(now, cooldownFrames));
+        if (coolingStackInstanceId == 0)
+        {
+            return unitStackInstanceId;
         }
 
-        ApplyOnce(item, sourceEntityId, durationScaleMultiplier);
+        var oldStackStillHeld = InventoryQueries.TryFindByStackInstanceId(_componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, unitStackInstanceId, out _);
+        ItemHotkeyBindingActions.RepointAfterUnitMoved(_itemHotkeyBindings, entityId, unitStackInstanceId, coolingStackInstanceId, activatedFromSlot: null, oldStackStillHeld);
+        return coolingStackInstanceId;
+    }
 
-        ScrollMasteryEffects.RecordUsage(_componentManager, _eventBus, _actionCatalog, item, sourceEntityId, scrollActivator.SpellId);
+    /// <summary>Lights one unit (putting it down in Ground mode) and publishes the use. False when nothing was lit.</summary>
+    private bool TryLightUnit(int entityId, ItemDefinition item, uint stackInstanceId, HotkeySlot? activatedFromSlot, TargetSelection selection)
+    {
+        if (!ToggleItemActions.TryLight(_componentManager, _itemCatalog, _toggleItemGroundPlacement, entityId, stackInstanceId, activatedFromSlot, selection))
+        {
+            return false;
+        }
+
+        _eventBus.Publish(new ActivationUsedEvent(entityId, ActivatableKind.Item, item.Id, item.Tags));
+        return true;
+    }
+
+    /// <summary>Puts one lit unit out and publishes the use. False when nothing was put out.</summary>
+    private bool TryPutOutUnit(int entityId, ItemDefinition item, uint stackInstanceId, HotkeySlot? activatedFromSlot)
+    {
+        if (!ToggleItemActions.TryToggle(_componentManager, _itemCatalog, entityId, stackInstanceId, out _, activatedFromSlot))
+        {
+            return false;
+        }
+
+        _eventBus.Publish(new ActivationUsedEvent(entityId, ActivatableKind.Item, item.Id, item.Tags));
+        return true;
+    }
+
+    /// <summary>An item's side of the activation sequence: what it spends is a unit or a charge, its cooldown is the used unit's own, what it does depends on its activator, and a toggle flips one unit.</summary>
+    /// <remarks>Follows the used unit from stack to stack as the sequence spends it and starts its cooldown, so the flip and the windup name the stack it is in by then.</remarks>
+    private struct ItemUse(ItemActivationSystem system, int entityId, InventoryItemStackComponent stack, ItemDefinition item, IActionActivator activator, PendingItemActivationComponent request) : IActivationUse
+    {
+        private uint _unitStackInstanceId = request.StackInstanceId;
+
+        public readonly ActivatableDefinition Definition => item;
+
+        public readonly ActionTiming Timing => activator.Timing;
+
+        public readonly bool IsToggle => activator is ToggleItemActivator;
+
+        public readonly bool IsToggledOn => activator is ToggleItemActivator { IsToggledOn: true };
+
+        public readonly bool IsOnCooldown(long now) => stack.IsCoolingDown(now);
+
+        public void StartCooldown(long now)
+        {
+            if (activator.Timing.CooldownFrames is { } cooldownFrames && _unitStackInstanceId != 0)
+            {
+                _unitStackInstanceId = system.StartUnitCooldown(entityId, _unitStackInstanceId, cooldownFrames, now);
+            }
+        }
+
+        public bool TrySpend(long now) => system.TrySpend(entityId, stack, item, request.ActivatedFromSlot, out _unitStackInstanceId);
+
+        public readonly void ApplyNow(long now) => system.ApplyItem(entityId, item, request.Selection);
+
+        public readonly void TurnOn(long now) => system.TryLightUnit(entityId, item, _unitStackInstanceId, request.ActivatedFromSlot, request.Selection);
+
+        public readonly void TurnOff(long now) => system.TryPutOutUnit(entityId, item, _unitStackInstanceId, request.ActivatedFromSlot);
+
+        public readonly PendingWindupComponent CreateWindup() => PendingWindupComponent.ForItem(_unitStackInstanceId, item, request.ActivatedFromSlot, request.Selection, readyAtFrame: 0);
+    }
+
+    /// <summary>
+    /// A potion's rule at each target it reaches. It lands only on something with health -- Simple or Complex,
+    /// alive or dead -- checked by presence across both pools: a target with no pool a given entry needs (no
+    /// ManaComponent for a Mana Potion) still counts as hit for the cooldown, since each entry no-ops on its own
+    /// missing pool. The cooldown belongs to whoever the potion lands on, not whoever drank or threw it (see this
+    /// class's own doc comment); the abuse poison is credited to the user, since whoever used the potion caused it,
+    /// so a thrown potion's poison is the thrower's damage (and kill), and a drunk one's the drinker's own. The
+    /// cooldown's length comes from the target's Constitution (PotionCooldownEffects.ComputeDurationFrames), or
+    /// PotionCooldownEffects.DurationFrames when it has none.
+    /// </summary>
+    private struct PotionTargetRule(ItemActivationSystem system) : IActivationTargetRule
+    {
+        private ushort _cooldownFrames;
+
+        public readonly bool Admits(int targetEntityId) => system._health.Has(targetEntityId) || system._bodyParts.Has(targetEntityId);
+
+        public void BeforeEffects(int targetEntityId, in EffectContext context)
+        {
+            _cooldownFrames = AbilityScoreQueries.TryGetComponent(system._abilityScores, targetEntityId, AbilityScoreType.Constitution, out var constitution)
+                ? PotionCooldownEffects.ComputeDurationFrames(constitution.Total)
+                : PotionCooldownEffects.DurationFrames;
+
+            if (system._potionCooldowns.TryGetReadonly(targetEntityId, out var cooldown) && PotionCooldownEffects.FramesRemaining(cooldown, system._now) > 0)
+            {
+                new StatusEffectGrant(StatusEffectType.Poison, DurationTicks: PotionCooldownEffects.ComputeAbusePoisonDurationTicks(_cooldownFrames)).Apply(context);
+                system._eventBus.Publish(new PotionCooldownAbusedEvent(targetEntityId));
+            }
+        }
+
+        public readonly void AfterEffects(int targetEntityId) =>
+            PotionCooldownEffects.Reset(system._componentManager, targetEntityId, _cooldownFrames, system._now);
     }
 
     private float ComputeScrollScaleMultiplier(int sourceEntityId) =>
         AbilityScoreQueries.TryGetComponent(_abilityScores, sourceEntityId, AbilityScoreType.Intelligence, out var intelligence)
             ? ScrollScalingEffects.ComputeScaleMultiplier(intelligence.Total)
             : 1.0f;
-
-    /// <summary>
-    /// Unlike ApplyPotionToTarget, doesn't hard-require a SimpleHealthComponent on the target -- each
-    /// effect entry already no-ops gracefully when its required component/pool is missing (the
-    /// same "immortal but affectable" targeting melee already uses), and a scroll effect (e.g.
-    /// TorchMarkEffectEntry) may not need Health at all. Skipped only for a dead target.
-    /// </summary>
-    private void ApplyScrollToTarget(ItemDefinition item, int sourceEntityId, int targetEntityId, float durationScaleMultiplier)
-    {
-        if (_deadEntities.Has(targetEntityId))
-        {
-            return;
-        }
-
-        EffectSequence.ApplyOnEachTarget(item.Effects, BuildContext(item, sourceEntityId, targetEntityId, durationScaleMultiplier));
-    }
-
-    /// <summary>A wand's or a consumable's effects on everyone selection reaches, then those placed once.</summary>
-    private void ActivateOnTargets(ItemDefinition item, int sourceEntityId, TargetSelection selection)
-    {
-        foreach (var targetEntityId in CollectTargets(item, sourceEntityId, selection))
-        {
-            ApplyToLivingTarget(item, sourceEntityId, targetEntityId);
-        }
-
-        ApplyOnce(item, sourceEntityId);
-    }
-
-    /// <summary>Same "immortal but affectable" treatment as ApplyScrollToTarget -- no hard SimpleHealthComponent requirement, each effect entry no-ops gracefully on its own missing pool. Skipped only for a dead target.</summary>
-    private void ApplyToLivingTarget(ItemDefinition item, int sourceEntityId, int targetEntityId)
-    {
-        if (_deadEntities.Has(targetEntityId))
-        {
-            return;
-        }
-
-        EffectSequence.ApplyOnEachTarget(item.Effects, BuildContext(item, sourceEntityId, targetEntityId));
-    }
 
     /// <summary>
     /// Decrements this specific wand's own Charges by one, uniformly whether it's the first shot
@@ -501,23 +369,21 @@ public sealed class ItemActivationSystem : ISystem
     /// at the same charge count) -- without this repoint, every subsequent press would peel a
     /// fresh wand off the original stack instead of depleting the one already in the slot.
     /// </summary>
-    private void PeelWandCharge(int entityId, InventoryItemStackComponent stack, ItemDefinition item, WandActivator wandActivator, HotkeySlot? activatedFromSlot)
+    /// <returns>The stack the peeled unit landed in; 0 when its last charge destroyed it.</returns>
+    private uint PeelWandCharge(int entityId, InventoryItemStackComponent stack, ItemDefinition item, WandActivator wandActivator, HotkeySlot? activatedFromSlot)
     {
         var newCharges = (ushort)(wandActivator.Charges - 1);
 
         if (newCharges == 0)
         {
             InventoryActions.RemoveOneUnit(_componentManager, entityId, stack.StackInstanceId);
-            return;
+            return 0;
         }
 
         var newOverride = item with { Activator = wandActivator with { Charges = newCharges } };
         var newStackInstanceId = InventoryActions.MoveOneUnit(_componentManager, entityId, stack.StackInstanceId, newOverride);
         var oldStackStillHeld = InventoryQueries.TryFindByStackInstanceId(_componentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stack.StackInstanceId, out _);
         ItemHotkeyBindingActions.RepointAfterUnitMoved(_itemHotkeyBindings, entityId, stack.StackInstanceId, newStackInstanceId, activatedFromSlot, oldStackStillHeld);
+        return newStackInstanceId;
     }
-
-    /// <summary>The EffectContext for one target of an item's activation; only a scroll sets DurationScaleMultiplier away from 1.</summary>
-    private EffectContext BuildContext(ItemDefinition item, int sourceEntityId, int targetEntityId, float durationScaleMultiplier = 1.0f) =>
-        EffectContext.FromEntity(_effectServices, sourceEntityId, targetEntityId, item, _now, durationScaleMultiplier);
 }

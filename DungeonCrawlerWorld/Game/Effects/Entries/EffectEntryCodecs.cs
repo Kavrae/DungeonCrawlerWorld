@@ -1,4 +1,5 @@
 using Engine.Content;
+using Engine.Tags;
 using Game.Content;
 using Game.Modules.Health;
 using Game.Modules.StatModifiers;
@@ -19,6 +20,7 @@ internal static class EffectEntryCodecs
         contentTypes.RegisterPolymorphic<IEffectEntry, StatModifierGrant>(nameof(StatModifierGrant), new StatModifierGrantCodec());
         contentTypes.RegisterPolymorphic<IEffectEntry, StatusEffectGrant>(nameof(StatusEffectGrant), new StatusEffectGrantCodec());
         contentTypes.RegisterPolymorphic<IEffectEntry, StatusEffectImmunityGrant>(nameof(StatusEffectImmunityGrant), new StatusEffectImmunityGrantCodec());
+        contentTypes.RegisterPolymorphic<IEffectEntry, ActivationDisableGrant>(nameof(ActivationDisableGrant), new ActivationDisableGrantCodec());
         contentTypes.RegisterPolymorphic<IEffectEntry, StatusEffectRemoval>(nameof(StatusEffectRemoval), new StatusEffectRemovalCodec());
         contentTypes.RegisterPolymorphic<IEffectEntry, ChainedEffect>(nameof(ChainedEffect), new ChainedEffectCodec());
         contentTypes.RegisterPolymorphic<IEffectEntry, TerrainChange>(nameof(TerrainChange), new TerrainChangeCodec());
@@ -194,6 +196,40 @@ internal static class EffectEntryCodecs
 
         public override StatusEffectImmunityGrant Read(ContentObject element) =>
             new(element.Enum<StatusEffectType>("ty"), ContentNumbers.UInt16(element.OptionalInteger("d"), "d"));
+    }
+
+    /// <summary>The query is three tag lists -- all of, any of, none of -- each omitted when empty; it is read into one shared instance per entry.</summary>
+    private sealed class ActivationDisableGrantCodec : ContentCodec<ActivationDisableGrant>
+    {
+        public override ContentSchema Schema { get; } = new(nameof(ActivationDisableGrant),
+        [
+            ContentField.TagSet("all", "Disables what has all of"),
+            ContentField.TagSet("any", "Disables what has any of"),
+            ContentField.TagSet("none", "Except what has any of"),
+            ContentField.Integer("d", "Duration in frames", 1, ushort.MaxValue),
+            ContentField.Boolean("fd", "Duration is fixed (never scaled)"),
+        ]);
+
+        public override void WriteProperties(ContentWriter writer, ActivationDisableGrant value)
+        {
+            writer.Tags("all", value.Query.RequireAll);
+            writer.Tags("any", value.Query.RequireAny);
+            writer.Tags("none", value.Query.Exclude);
+            writer.Integer("d", value.DurationFrames);
+            writer.Boolean("fd", value.FixedDuration);
+        }
+
+        /// <exception cref="ContentFormatException">The record names no tag at all: its query would match, and so disable, every action and item.</exception>
+        public override ActivationDisableGrant Read(ContentObject element)
+        {
+            var query = new GameplayTagQuery(element.Tags("all"), element.Tags("any"), element.Tags("none"));
+            if (query.RequireAll.IsEmpty && query.RequireAny.IsEmpty && query.Exclude.IsEmpty)
+            {
+                throw new ContentFormatException("An ActivationDisableGrant names no tag in \"all\", \"any\" or \"none\": it would disable every action and item.");
+            }
+
+            return new(query, ContentNumbers.UInt16(element.Integer("d"), "d"), element.Boolean("fd"));
+        }
     }
 
     private sealed class StatusEffectRemovalCodec : ContentCodec<StatusEffectRemoval>

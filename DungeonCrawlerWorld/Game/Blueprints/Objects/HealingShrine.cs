@@ -1,24 +1,12 @@
-using Engine.ECS.Systems;
-using Game.Effects;
-using Game.Effects.Entries;
 using Game.Modules.Auras;
-using Game.Modules.Health;
-using Game.Modules.Health.Components;
-using Game.Modules.StatModifiers;
-using Game.Modules.StatusEffects;
-using Game.Modules.StatusEffects.Components;
-using Game.Tags;
-using Game.World;
 using Microsoft.Xna.Framework;
 
 namespace Game.Blueprints.Objects;
 
 /// <summary>A stationary shrine that heals whatever stands near it.</summary>
 /// <remarks>
-/// A prop like TreasureChest: simple health, no race, no movement, so it never moves once spawned
-/// and is always built at spawn. It radiates a healing aura (Auras). It takes
-/// half damage from everything, none from fire -- so it can stand in lava -- and is immune to
-/// Burning, Poison and Paralysis. It can be destroyed, and DeathSystem ends its aura when it is.
+/// A prop like TreasureChest: no race, no movement, so it never moves once spawned and is always built at spawn. It
+/// radiates a healing aura (Auras), and is as durable as every shrine (ShrineDurability).
 /// </remarks>
 public static class HealingShrine
 {
@@ -28,14 +16,10 @@ public static class HealingShrine
 
     private const string Description = "A weathered shrine. The air around it eases wounds.";
 
-    private const float MaximumHealth = 100;
-
     /// <summary>16 at the shrine, then 13, 10, 7 and 4 a tile further each (Linear over HealingAuraSize).</summary>
     private const ushort HealingAuraPower = 16;
 
     private const byte HealingAuraSize = 4;
-
-    private const float DamageResistance = 0.5f;
 
     /// <remarks>
     /// Its aura (BuiltInAuraIds.HealingShrine, in the Auras table) heals a flat amount per point of power, so
@@ -45,27 +29,8 @@ public static class HealingShrine
     /// </remarks>
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
-        Build = Build,
+        Build = ShrineDurability.Build,
         Auras = [new AuraGrant(BuiltInAuraIds.HealingShrine, HealingAuraPower, HealingAuraSize)],
         Appearance = new() { Name = Name, Description = Description, Glyph = "+", GlyphColor = Color.White, SpriteName = "Shrine" }
     };
-
-    private static void Build(BlueprintContext context)
-    {
-        var componentManager = context.ComponentManager;
-        var entityId = context.EntityId;
-
-        componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
-
-        var actionSource = context.PartSource();
-        StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: false, -DamageResistance, FrameDeadline.Never, actionSource);
-        StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
-            canModify: false, -1f, FrameDeadline.Never, actionSource, GameTags.DamageFire);
-
-        var immunities = componentManager.GetMultiPool<StatusEffectImmunityComponent>();
-        StatusEffectImmunityEffects.GrantPermanent(immunities, entityId, StatusEffectType.Burning);
-        StatusEffectImmunityEffects.GrantPermanent(immunities, entityId, StatusEffectType.Poison);
-        StatusEffectImmunityEffects.GrantPermanent(immunities, entityId, StatusEffectType.Paralysis);
-    }
 }

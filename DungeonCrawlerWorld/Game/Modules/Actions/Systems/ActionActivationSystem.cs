@@ -2,7 +2,6 @@ using Engine.ECS.Components.Stores;
 using Engine.ECS.Systems;
 using Engine.Math;
 using Game.Effects;
-using Game.Modules.AbilityScores;
 using Game.Modules.Actions.Components;
 using Game.Modules.BodyPartEffects.Components;
 using Game.Modules.Core.Components;
@@ -12,7 +11,7 @@ using Game.World;
 
 namespace Game.Modules.Actions.Systems;
 
-/// <summary> Consumes a PendingActionActivationComponent (queued by Presentation) and dispatches by the action's ActionTimingCategory </summary>
+/// <summary>Consumes a PendingActionActivationComponent (queued by Presentation or an NPC) and uses the action through Activations.</summary>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class ActionActivationSystem : ISystem
 {
@@ -21,19 +20,18 @@ public sealed class ActionActivationSystem : ISystem
     public byte StripeCount => StripeCountValue;
 
     private readonly PackedComponentPool<PendingActionActivationComponent> _pendingActivations;
-    private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly EntityActions _actions;
-    private readonly PackedComponentPool<PendingWindupComponent> _pendingWindups;
     private readonly EffectServices _effectServices;
     private readonly IMapQuery _mapQuery;
     private readonly PackedComponentPool<DeadComponent> _deadEntities;
-    private readonly PackedComponentPool<MeleeDisabledComponent> _meleeDisabled;
     private readonly PackedComponentPool<DodgingComponent> _dodgingEntities;
     private readonly ProcessingTierQuery _processingTiers;
     private readonly Toggles _toggles;
     private readonly TargetResolution _targetResolution;
     private readonly List<Vector3Int> _targetTilesScratch = [];
+    private readonly HashSet<int> _reachedScratch = [];
     private readonly EntityStripeSet _stripeSet;
+    private readonly Activations _activations;
 
     public ActionActivationSystem(
         PackedComponentPool<PendingActionActivationComponent> pendingActivations,
@@ -50,32 +48,20 @@ public sealed class ActionActivationSystem : ISystem
     {
         _effectServices = effectServices;
         _pendingActivations = pendingActivations;
-        _actionLocks = actionLocks;
         _actions = actions;
-        _pendingWindups = pendingWindups;
         _mapQuery = mapQuery;
         _deadEntities = effectServices.DeadEntities;
-        _meleeDisabled = meleeDisabled;
         _dodgingEntities = dodgingEntities;
         _processingTiers = processingTiers;
         _toggles = toggles;
         _targetResolution = targetResolution;
 
         _stripeSet = EntityStripeSet.CreateAndWire(StripeCount, pendingActivations);
+        _activations = new Activations(actionLocks, pendingWindups, meleeDisabled, effectServices);
     }
 
-    /// <summary>Activate the pending actions for the entities in the specified entity stripe</summary>
-    /// <remarks>
-    /// Routes actions between the Immediate, Delayed, and FreeCast categories.
-    /// Anything but FreeCast waits for the action lock; a use that is blocked or waiting takes nothing and starts no cooldown.
-    /// A use that goes ahead takes its activation effects (a cost among them) first -- a Delayed one's when its windup starts -- unless it turns a toggle off.
-    ///
-    /// Immediate actions are applied immediately, and the action lock is applied.
-    /// Delayed actions apply the action lock and are queued to activate at the end of it.
-    /// FreeCast actions ignore the action lock and are activated immediately.
-    /// </remarks>
-    /// <param name="time"></param>
-    /// <param name="stripeIndex"></param>
+    /// <summary>Activates the pending actions for the entities in the specified entity stripe.</summary>
+    /// <remarks>Each request runs through Activations, the sequence an item's use runs through too: cooldown, blocker, lock, activation effects, then its timing.</remarks>
     public void Update(EngineTime time, byte stripeIndex)
     {
         foreach (var entityId in _stripeSet.GetBucket(stripeIndex))
@@ -100,113 +86,65 @@ public sealed class ActionActivationSystem : ISystem
                 continue;
             }
 
-            if (_actions.IsOnCooldown(entityId, request.ActionId, time.FrameCount))
-            {
-                continue;
-            }
-
             var toggleKey = 0u;
-            var isToggle = action.Toggle is not null;
-            var isToggledOn = isToggle && _toggles.TryGetKey(entityId, ActivatableReference.Action(action.Id), out toggleKey);
-
-            var now = time.FrameCount;
-            if (ActivationQueries.GetBlocker(entityId, action, action.Activator, isToggledOn, _meleeDisabled, _effectServices, now) != ActivationBlocker.None)
-            {
-                continue;
-            }
-
-            var timing = action.Activator.Timing;
-            if (timing.Category != ActionTimingCategory.FreeCast && ActionLockGate.IsBlocked(_actionLocks, entityId, now))
-            {
-                continue;
-            }
-
-            // Turning a toggle off takes nothing.
-            if (!isToggledOn)
-            {
-                ActivationEffectsApplier.Apply(_effectServices, entityId, action, now);
-            }
-
-            if (isToggle)
-            {
-                FlipToggle(entityId, action, isToggledOn, toggleKey, request.Selection, now);
-            }
-            else
-            {
-                switch (timing.Category)
-                {
-                    case ActionTimingCategory.Immediate:
-                        ApplyNow(entityId, action, request.Selection, now);
-                        ActionLockGate.Lock(_actionLocks, entityId, now, LockFramesFor(entityId, timing));
-                        break;
-                    case ActionTimingCategory.Delayed:
-                        Windups.Begin(_actionLocks, _pendingWindups, entityId, now, LockFramesFor(entityId, timing), PendingWindupComponent.ForAction(action.Id, request.Selection, readyAtFrame: 0));
-                        break;
-                    case ActionTimingCategory.FreeCast:
-                        ApplyNow(entityId, action, request.Selection, now);
-                        break;
-                }
-            }
-
-            StartCooldownIfAny(entityId, action, now);
-
-            if (timing.ReleasesActionLock)
-            {
-                WindupCancel.TryCancel(_pendingWindups, _actionLocks, entityId, now, releaseLock: false);
-                ActionLockGate.Release(_actionLocks, entityId, now);
-            }
+            var isToggledOn = action.Toggle is not null && _toggles.TryGetKey(entityId, ActivatableReference.Action(action.Id), out toggleKey);
+            var use = new ActionUse(this, entityId, action, request.Selection, isToggledOn, toggleKey);
+            _activations.TryUse(entityId, ref use, time.FrameCount);
         }
     }
-
-    /// <summary>Switches a toggle action on or off in place of applying its effects: its Effects are what it holds while on (Toggles), and it applies to the entity itself.</summary>
-    /// <remarks>
-    /// The caller has checked the lock and taken the activation effects. A Delayed toggle that is off
-    /// winds up instead (Windups.Begin) and goes on only when the windup resolves (DelayedActionSystem);
-    /// turning one off is at once, as Immediate. FreeCast leaves the lock alone; anything else sets it.
-    /// ActionActivatedEvent is published when the toggle actually flips, as for any action.
-    /// </remarks>
-    private void FlipToggle(int entityId, ActionDefinition action, bool isToggledOn, uint toggleKey, TargetSelection selection, long now)
-    {
-        var timing = action.Activator.Timing;
-        if (!isToggledOn && timing.Category == ActionTimingCategory.Delayed)
-        {
-            Windups.Begin(_actionLocks, _pendingWindups, entityId, now, LockFramesFor(entityId, timing), PendingWindupComponent.ForAction(action.Id, selection, readyAtFrame: 0));
-            return;
-        }
-
-        _effectServices.EventBus.Publish(new ActionActivatedEvent(entityId, action.Id));
-
-        if (isToggledOn)
-        {
-            _toggles.TurnOff(entityId, toggleKey, action, now);
-        }
-        else
-        {
-            _toggles.TurnOn(entityId, ActivatableReference.Action(action.Id), action, now, placesAtHolderTile: selection.Mode == TargetingMode.Ground);
-        }
-
-        if (timing.Category != ActionTimingCategory.FreeCast)
-        {
-            ActionLockGate.Lock(_actionLocks, entityId, now, LockFramesFor(entityId, timing));
-        }
-    }
-
-    /// <summary>The lock the action's timing states, or the entity's standard lock when it states none.</summary>
-    private ushort LockFramesFor(int entityId, ActionTiming timing) =>
-        StandardActionLockFrames.ResolveForEntity(_effectServices.AbilityScores, _effectServices.StatModifiers, entityId, timing.ActionLockFrames);
 
     /// <summary>Resolves the selection into tiles now and applies the action there: an Immediate or FreeCast activation lands where its target is at the moment it is confirmed, whatever the mode.</summary>
     private void ApplyNow(int entityId, ActionDefinition action, TargetSelection selection, long now)
     {
         var resolved = _targetResolution.Resolve(entityId, action.Activator.Targeting, selection, _targetTilesScratch);
-        ActionEffectResolver.Apply(action, entityId, _targetTilesScratch, resolved, _effectServices, _mapQuery, now, _dodgingEntities, _processingTiers);
+        var everyTarget = default(EveryTargetRule);
+        ActivationEffectResolver.Apply(action, ActivatableKind.Action, entityId, _targetTilesScratch, resolved, _effectServices, _mapQuery, now, _dodgingEntities, _processingTiers, _reachedScratch, ref everyTarget);
     }
 
-    private void StartCooldownIfAny(int entityId, ActionDefinition action, long now)
+    /// <summary>A toggle action's flip: its Effects are what it holds while on (Toggles), applied to the entity itself. ActivationUsedEvent is published when it actually flips, as for any action.</summary>
+    private void FlipToggle(int entityId, ActionDefinition action, bool turnOn, uint toggleKey, TargetSelection selection, long now)
     {
-        if (action.Activator.Timing.CooldownFrames is { } cooldownFrames)
+        _effectServices.EventBus.Publish(new ActivationUsedEvent(entityId, ActivatableKind.Action, action.Id, action.Tags));
+
+        if (turnOn)
         {
-            _actions.SetCooldown(entityId, action.Id, cooldownFrames, now);
+            _toggles.TurnOn(entityId, ActivatableReference.Action(action.Id), action, now, placesAtHolderTile: selection.Mode == TargetingMode.Ground);
         }
+        else
+        {
+            _toggles.TurnOff(entityId, toggleKey, action, now);
+        }
+    }
+
+    /// <summary>An action's side of the activation sequence: its cooldown is the entity's for that action, it spends nothing but its activation effects, and it applies through ActivationEffectResolver.</summary>
+    private readonly struct ActionUse(ActionActivationSystem system, int entityId, ActionDefinition action, TargetSelection selection, bool isToggledOn, uint toggleKey) : IActivationUse
+    {
+        public ActivatableDefinition Definition => action;
+
+        public ActionTiming Timing => action.Activator.Timing;
+
+        public bool IsToggle => action.Toggle is not null;
+
+        public bool IsToggledOn => isToggledOn;
+
+        public bool IsOnCooldown(long now) => system._actions.IsOnCooldown(entityId, action.Id, now);
+
+        public void StartCooldown(long now)
+        {
+            if (action.Activator.Timing.CooldownFrames is { } cooldownFrames)
+            {
+                system._actions.SetCooldown(entityId, action.Id, cooldownFrames, now);
+            }
+        }
+
+        public bool TrySpend(long now) => true;
+
+        public void ApplyNow(long now) => system.ApplyNow(entityId, action, selection, now);
+
+        public void TurnOn(long now) => system.FlipToggle(entityId, action, turnOn: true, toggleKey, selection, now);
+
+        public void TurnOff(long now) => system.FlipToggle(entityId, action, turnOn: false, toggleKey, selection, now);
+
+        public PendingWindupComponent CreateWindup() => PendingWindupComponent.ForAction(action, selection, readyAtFrame: 0);
     }
 }

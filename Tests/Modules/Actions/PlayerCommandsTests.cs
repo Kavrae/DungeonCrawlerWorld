@@ -30,7 +30,6 @@ public sealed class PlayerCommandsTests
     private static readonly Vector3Int PlayerPosition = new(5, 5, 0);
     private static readonly Vector3Int North = new(5, 4, 0);
     private static readonly Guid SelfActionId = Guid.Parse("7d1b6b8e-3f0a-4a57-9a55-1c2f3e4d5a61");
-    private const uint StackInstanceId = 1;
 
     private sealed class Harness
     {
@@ -41,6 +40,7 @@ public sealed class PlayerCommandsTests
         public required ComponentManager ComponentManager { get; init; }
         public required EventBus EventBus { get; init; }
         public required EntityActions Actions { get; init; }
+        public required uint PotionStackInstanceId { get; init; }
 
         private KeyboardState _previous;
 
@@ -98,6 +98,8 @@ public sealed class PlayerCommandsTests
                 new ActionTiming(ActionTimingCategory.Immediate, ActionLockFrames: 30, CooldownFrames: null))));
         actionCatalog.Register(TestContent.Action(BuiltInActionIds.Dodge));
 
+        var potionStackInstanceId = InventoryActions.AddItemWithOverride(componentManager, PlayerEntityId, TestContent.Item(BuiltInItemIds.HealthPotion), quantity: 1);
+
         var clock = new SimulationClock();
         var eventBus = new EventBus();
         var entityActions = TestActionStateViews.EntityActions(componentManager, actionCatalog);
@@ -138,6 +140,7 @@ public sealed class PlayerCommandsTests
             ComponentManager = componentManager,
             EventBus = eventBus,
             Actions = entityActions,
+            PotionStackInstanceId = potionStackInstanceId,
         };
     }
 
@@ -197,7 +200,7 @@ public sealed class PlayerCommandsTests
     {
         var harness = Build();
         harness.Clock.Advance(50);
-        Assert.IsTrue(harness.Buffer.QueueItemActivation(StackInstanceId, TestSelections.At(PlayerPosition)));
+        Assert.IsTrue(harness.Buffer.QueueItemActivation(harness.PotionStackInstanceId, TestSelections.At(PlayerPosition)));
         harness.Actions.SetCooldown(PlayerEntityId, SelfActionId, (ushort)(PlayerCommands.ExpiryFrames + 5), now: 50);
 
         Assert.IsFalse(harness.Buffer.CanQueueAction(SelfActionId));
@@ -215,12 +218,12 @@ public sealed class PlayerCommandsTests
         harness.Clock.Advance(LockEndsAtFrame - PlayerCommands.ExpiryFrames);
 
         Assert.IsFalse(harness.Buffer.QueueAction(SelfActionId, TestSelections.At(PlayerPosition)));
-        Assert.IsFalse(harness.Buffer.QueueItemActivation(StackInstanceId, TestSelections.At(PlayerPosition)));
+        Assert.IsFalse(harness.Buffer.QueueItemActivation(harness.PotionStackInstanceId, TestSelections.At(PlayerPosition)));
 
         harness.Clock.Advance(LockEndsAtFrame - PlayerCommands.ExpiryFrames + 1);
 
         Assert.IsTrue(harness.Buffer.CanQueueAction(SelfActionId));
-        Assert.IsTrue(harness.Buffer.CanQueueItemActivation(StackInstanceId));
+        Assert.IsTrue(harness.Buffer.CanQueueItemActivation(harness.PotionStackInstanceId));
     }
 
     [TestMethod]
@@ -296,7 +299,7 @@ public sealed class PlayerCommandsTests
 
         harness.ConfirmSelfAction(50);
         harness.Clock.Advance(55);
-        harness.Buffer.QueueItemActivation(StackInstanceId, TestSelections.At(PlayerPosition));
+        harness.Buffer.QueueItemActivation(harness.PotionStackInstanceId, TestSelections.At(PlayerPosition));
         harness.Frame(59);
         Assert.IsFalse(harness.HasPendingItemActivation);
 
@@ -395,7 +398,7 @@ public sealed class PlayerCommandsTests
 
         harness.EventBus.Publish(new EntityStaggeredEvent(PlayerEntityId, ActionSource.AI));
         harness.ComponentManager.GetPackedPool<PendingActionActivationComponent>().Remove(PlayerEntityId);
-        harness.EventBus.Publish(new ActionActivatedEvent(PlayerEntityId, BuiltInActionIds.Dodge));
+        harness.EventBus.Publish(new ActivationUsedEvent(PlayerEntityId, ActivatableKind.Action, BuiltInActionIds.Dodge, TestContent.Action(BuiltInActionIds.Dodge).Tags));
 
         Assert.AreEqual(new Vector3Int(6, 5, 0), harness.NextMapPosition);
     }

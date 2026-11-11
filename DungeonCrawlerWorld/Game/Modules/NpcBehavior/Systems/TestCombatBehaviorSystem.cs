@@ -274,7 +274,7 @@ public sealed class TestCombatBehaviorSystem : ITieredSystem
     /// exercise PowerAttack's telegraph/Dodge interaction too, not just the player (Combat
     /// Overhaul: Dodge, TODO.md). Queues the whole resolved Adjacent footprint (now excluding the
     /// entity's own tiles, see TargetShapeResolver) rather than a single target tile --
-    /// ActionEffectResolver figures out who's actually there, the same "let the resolver sort it
+    /// ActivationEffectResolver figures out who's actually there, the same "let the resolver sort it
     /// out" pattern ActionTargetingController.TryActivateWithAutoTarget already uses for
     /// player-driven Adjacent actions.
     /// </summary>

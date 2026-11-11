@@ -340,50 +340,39 @@ public sealed class BlueprintTests
 
         var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.HealthPotion);
         Assert.AreEqual(5, healthPotionStack.Quantity);
-        Assert.IsFalse(healthPotionStack.IsDisabled);
 
         var manaPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ManaPotion);
         Assert.AreEqual(5, manaPotionStack.Quantity);
-        Assert.IsFalse(manaPotionStack.IsDisabled);
 
         var hotkeyExpansionPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.HotkeyExpansionPotion);
         Assert.AreEqual(4, hotkeyExpansionPotionStack.Quantity);
-        Assert.IsFalse(hotkeyExpansionPotionStack.IsDisabled);
 
         var damagePotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.DamagePotion);
         Assert.AreEqual(5, damagePotionStack.Quantity);
-        Assert.IsFalse(damagePotionStack.IsDisabled);
 
         var toxicPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ToxicPotion);
         Assert.AreEqual(5, toxicPotionStack.Quantity);
-        Assert.IsFalse(toxicPotionStack.IsDisabled);
 
         var toxicIdolStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ToxicIdol);
         Assert.AreEqual(1, toxicIdolStack.Quantity);
-        Assert.IsFalse(toxicIdolStack.IsDisabled);
 
         var scrollOfHealingStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ScrollOfHealing);
         Assert.AreEqual(5, scrollOfHealingStack.Quantity);
-        Assert.IsFalse(scrollOfHealingStack.IsDisabled);
 
         var scrollOfTorchStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ScrollOfTorch);
         Assert.AreEqual(5, scrollOfTorchStack.Quantity);
-        Assert.IsFalse(scrollOfTorchStack.IsDisabled);
 
         var immunityTestPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ImmunityTestPotion);
         Assert.AreEqual(5, immunityTestPotionStack.Quantity);
-        Assert.IsFalse(immunityTestPotionStack.IsDisabled);
 
         var resistanceTestPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.ResistanceTestPotion);
         Assert.AreEqual(5, resistanceTestPotionStack.Quantity);
-        Assert.IsFalse(resistanceTestPotionStack.IsDisabled);
 
         var wandOfFireballStacks = stacks.Where(stack => stack.ItemDefinitionId == BuiltInItemIds.WandOfFireball).ToList();
         Assert.HasCount(2, wandOfFireballStacks);
 
         var plainWandStack = wandOfFireballStacks.Single(stack => !stack.IsDivergent);
         Assert.AreEqual(10, plainWandStack.Quantity);
-        Assert.IsFalse(plainWandStack.IsDisabled);
         Assert.IsNotNull(plainWandStack.Override);
         Assert.IsInstanceOfType<WandActivator>(plainWandStack.Override!.Activator);
 

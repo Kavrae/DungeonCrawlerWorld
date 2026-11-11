@@ -95,7 +95,7 @@ public sealed class DirectDamageTests
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(meleeContext);
         Assert.AreEqual(78f, melee.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "20 * 1.10 = 22 melee damage.");
 
-        var (spell, spellContext) = Build([GameTags.ActionSpell, GameTags.ActionAttack]);
+        var (spell, spellContext) = Build([GameTags.Spell, GameTags.ActionAttack]);
         spell.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
             StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: 0.10f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(SourceEntityId), GameTags.DeliveryMelee));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(spellContext);
@@ -111,7 +111,7 @@ public sealed class DirectDamageTests
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(meleeContext);
         Assert.AreEqual(86f, melee.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "20 * 0.70 = 14 melee damage taken.");
 
-        var (spell, spellContext) = Build([GameTags.ActionSpell, GameTags.ActionAttack]);
+        var (spell, spellContext) = Build([GameTags.Spell, GameTags.ActionAttack]);
         spell.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
             StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.30f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId), GameTags.DeliveryMelee));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(spellContext);
@@ -127,7 +127,7 @@ public sealed class DirectDamageTests
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(meleeContext);
         Assert.AreEqual(81f, melee.GetPackedPool<SimpleHealthComponent>().GetReadonly(TargetEntityId).CurrentHealth, "20 * 0.95 = 19 melee damage taken.");
 
-        var (spell, spellContext) = Build([GameTags.ActionSpell, GameTags.ActionAttack]);
+        var (spell, spellContext) = Build([GameTags.Spell, GameTags.ActionAttack]);
         spell.GetMultiPool<StatModifierComponent>().Add(TargetEntityId, new StatModifierComponent(
             StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: false, magnitude: -0.05f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(TargetEntityId)));
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20).Apply(spellContext);
@@ -165,7 +165,7 @@ public sealed class DirectDamageTests
     [TestMethod]
     public void Apply_NoMeleeTag_MeleeConditionalOutgoingDamageDebuffHasNoEffect()
     {
-        var (componentManager, context) = Build([GameTags.ActionSpell, GameTags.ActionAttack]);
+        var (componentManager, context) = Build([GameTags.Spell, GameTags.ActionAttack]);
         componentManager.GetMultiPool<StatModifierComponent>().Add(SourceEntityId, new StatModifierComponent(
             StatModifierTarget.OutgoingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, canModify: false, magnitude: -0.5f, expiresAtFrame: FrameDeadline.Never, TestSources.Entity(SourceEntityId), GameTags.DeliveryMelee));
 

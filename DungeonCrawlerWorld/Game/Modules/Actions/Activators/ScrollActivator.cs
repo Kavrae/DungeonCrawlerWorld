@@ -10,7 +10,7 @@ namespace Game.Modules.Actions.Activators;
 /// <cleanupVersion>1</cleanupVersion>
 public sealed record ScrollActivator(TargetingSpec Targeting, ActionTiming Timing, Guid SpellId) : IActionActivator
 {
-    private static readonly GameplayTagSet ScrollImpliedTags = [GameTags.ItemConsumableScroll, GameTags.Magic];
+    private static readonly GameplayTagSet ScrollImpliedTags = [GameTags.ItemConsumableScroll, GameTags.Spell, GameTags.Magic];
 
     public GameplayTagSet ImpliedTags => ScrollImpliedTags;
 }

@@ -769,16 +769,6 @@ The IDE's Error List shows severity, description, table, record, field and layer
 
 ### High Priority
 
-#### ItemActivationSystem.Update: one method per activator?
-
-`ItemActivationSystem.Update` is one loop with a `switch` on the item's activator (potion, scroll, wand, consumable,
-toggle item, ...), each case doing its own checks, costs, lock and windup; the toggle item case is the worst (FreeCast
-lock bypass, activation effects only when turning on, a Delayed windup, the flip, then the Ground-mode drop). Decide
-whether it is worth moving each case into a private method (`ActivatePotion`, `ActivateToggleItem`, ...) with the loop
-left as dispatch -- and whether the shared steps (still holds the stack, lock check, activation effects, lock) can be
-one helper rather than repeated per case. Measure nothing changes: the system runs per stripe every frame, so keep the
-cases free of new allocations, and keep the existing activation tests passing unchanged as the proof.
-
 #### Resolve highest performance costs
 
 Find and fix what costs the most per frame. Headless Release, seed 1, frames 600-3600, map 3072 (2026-10-29,
@@ -1118,7 +1108,7 @@ fix, already landed; tiering cut the per-frame *visit* cost, this entry is about
 For an entity outside Local processing tier (`ProcessingTierLevel.Local` -- `ActionTargetingController
 .AllPendingDelayedActionTargets` already treats this as the visibility boundary for its own
 telegraph), resolve its actions immediately instead of queuing a Delayed windup at all: skip
-`ActionLockGate.Lock`/`PendingDelayedActionComponent` and call `ActionEffectResolver.Apply` right
+`ActionLockGate.Lock`/`PendingDelayedActionComponent` and call `ActivationEffectResolver.Apply` right
 away, the same as an `Immediate` action. Shrinks `DelayedActionSystem`'s/`ActionLockSystem`'s own
 per-frame population directly, without touching on-screen combat's telegraph/timing at all. Open
 question: check tier at decision time (`TestCombatBehaviorSystem.TryDecideMeleeAttack`, cheaper --
@@ -1720,15 +1710,13 @@ An item with `ItemDefinition.CanTrade` false (a loot box) can never be destroyed
 
 #### Item activator behaviour on the activators, not in ItemActivationSystem
 
-Investigate. `ItemActivationSystem` switches on `item.Activator`'s concrete type and holds each kind's
-rules as private methods: `PeelWandCharge`, `ActivatePotion`/`ApplyPotionToTarget` (cooldown and the
-cooldown-abuse Poison), `ActivateScroll`/`ApplyScrollToTarget` (Intelligence scaling, mastery),
-`ActivateWand`, the toggle branch. A new activator kind -- a mod's included -- means editing the system.
-Look at whether each activator (or a per-kind handler registered by activator type, as `WindupResolvers`
-and `IToggleOwner` are) can own what using it does: how the unit is spent (`RemoveOneUnit`, a charge
-via `MoveOneUnit`, nothing), what gates it (`TryBeginActivation`/`TryBeginWandActivation`, the lock or
-FreeCast), and how its effects are applied per target. The system would keep what every kind shares:
-the request queue, the blocker check, activation effects, the action lock. Decide where the per-kind
+Investigate. The sequence every use runs is shared (`Activations`, `ActivationEffectResolver`), but
+`ItemActivationSystem` still switches on `item.Activator`'s concrete type for what a kind spends
+(`TrySpend`: a unit, a wand charge via `PeelWandCharge`) and what it does (`ApplyItem`: `PotionTargetRule`
+for the cooldown and its abuse Poison, the scroll's Intelligence scaling and mastery). A new activator
+kind -- a mod's included -- means editing the system. Look at whether each activator (or a per-kind
+handler registered by activator type, as `WindupResolvers` and `IToggleOwner` are) can own those two
+steps and its `IActivationTargetRule`, leaving the system the request queue and its `ItemUse`. Decide where the per-kind
 state a handler needs (pools, catalogs, `EffectServices`, the clock) comes from, since activators are
 immutable content records today.
 
@@ -3745,7 +3733,7 @@ are the standard model.
 
 Spell-equivalent of the inventory menu, mirroring `InventoryWindowController`'s Button+pooled-Window+
 `TabbedContent` pattern. "Known spells" isn't a tracked concept -- just a `MultiComponentPool<ActionInstanceComponent>`
-query filtered by `Action.Spell`, which `SpellActivator` implies, so it can't drift from what the action is.
+query filtered by `Spell`, which `SpellActivator` and `ScrollActivator` imply, so it can't drift from what the action is.
 
 #### Comprehensive control-selection feature
 

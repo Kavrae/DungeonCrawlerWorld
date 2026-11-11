@@ -21,6 +21,7 @@ public static class ActivationBlockerText
         ActivationBlocker.NoHealth => "Needs health",
         ActivationBlocker.NotEnoughHealth => "Not enough health",
         ActivationBlocker.SpellAlreadyKnown => "Spell already known",
+        ActivationBlocker.Disabled => "Disabled",
         _ => string.Empty,
     };
 

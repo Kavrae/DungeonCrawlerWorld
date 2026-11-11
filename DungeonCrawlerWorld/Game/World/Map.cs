@@ -34,7 +34,7 @@ namespace Game.World;
 /// Dictionary&lt;int, List&lt;int&gt;&gt;. The dictionary charged a full hash lookup for every query,
 /// including the overwhelming majority that find nothing; MapWindow issues one per visible tile
 /// per frame (measured at ~9ms of a 1000ms/sec budget), and MovementSystem,
-/// AuraSystem, ActionEffectResolver and TestCombatBehaviorSystem all query it on hot
+/// AuraSystem, ActivationEffectResolver and TestCombatBehaviorSystem all query it on hot
 /// paths. The array makes the empty-cell case a single read: measured 63-74ns per dictionary
 /// lookup against 29-32ns per array lookup over scattered whole-map lookups. It is a primitive
 /// array rather than List&lt;int&gt;?[] because an array of millions of references is scanned in full
@@ -367,7 +367,7 @@ public sealed class Map
     /// <summary>Resolves position to its occupant list, or false when the cell is empty or off the map.</summary>
     /// <remarks>
     /// The off-map check is deliberate rather than incidental: callers rely on an off-map position
-    /// answering as empty (ActionEffectResolver and TestCombatBehaviorSystem both walk resolved
+    /// answering as empty (ActivationEffectResolver and TestCombatBehaviorSystem both walk resolved
     /// target tiles without re-checking bounds first). Each coordinate is checked on its own, so an
     /// out-of-range coordinate never aliases into some other valid cell. Most cells asked about are
     /// empty, so the column's layer mask -- a byte per column, a twelfth the size of the per-cell index

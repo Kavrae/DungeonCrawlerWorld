@@ -16,6 +16,6 @@ public interface IActionActivator
     ActionTiming Timing { get; }
 
     /// <summary>Tags every definition using this kind of activator carries, whether or not it declares them.</summary>
-    /// <remarks>What makes a classification such as Action.Spell impossible to forget: it follows from the activator rather than being listed by hand.</remarks>
+    /// <remarks>What makes a classification such as Spell impossible to forget: it follows from the activator rather than being listed by hand.</remarks>
     GameplayTagSet ImpliedTags => GameplayTagSet.Empty;
 }

@@ -66,8 +66,13 @@ public sealed class ActionStateView(ComponentManager componentManager, EntityAct
     public ActivationBlocker GetItemBlocker(int entityId, uint stackInstanceId) =>
         InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, entityId, stackInstanceId, out var stack) &&
         InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item)
-            ? ActivationQueries.GetBlocker(entityId, item, item.Activator, item.Activator is ToggleItemActivator { IsToggledOn: true }, _meleeDisabled, effectServices, Now)
+            ? GetItemBlocker(entityId, item)
             : ActivationBlocker.None;
+
+    /// <inheritdoc cref="ActivationQueries.GetBlocker"/>
+    /// <remarks>For a caller that already holds the effective item of a stack entityId holds, so no stack is looked up.</remarks>
+    public ActivationBlocker GetItemBlocker(int entityId, ItemDefinition item) =>
+        ActivationQueries.GetBlocker(entityId, item, item.Activator, item.Activator is ToggleItemActivator { IsToggledOn: true }, _meleeDisabled, effectServices, Now);
 
     /// <inheritdoc cref="ActivationCosts.Of"/>
     /// <remarks>Reads the entity's effective action. An action the entity doesn't have costs nothing, and neither does one that is on: turning a toggle off takes nothing.</remarks>
@@ -95,6 +100,18 @@ public sealed class ActionStateView(ComponentManager componentManager, EntityAct
     public int FramesUntilReady(int entityId, Guid actionId, long now) =>
         entityActions.TryGetEffectiveAction(entityId, actionId, out var action)
             ? ActivationQueries.FramesUntilReady(entityId, action, entityActions, _actionLocks, now)
+            : 0;
+
+    /// <summary>Frames until the unit in entityId's stack stackInstanceId ends its own cooldown; 0 when it isn't cooling down or the entity doesn't hold the stack.</summary>
+    public int ItemCooldownFramesRemaining(int entityId, uint stackInstanceId) =>
+        InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, entityId, stackInstanceId, out var stack) ? stack.CooldownFramesRemaining(Now) : 0;
+
+    /// <inheritdoc cref="InventoryQueries.FramesUntilReady"/>
+    /// <remarks>Reads the stack's effective item. A stack the entity doesn't hold is 0.</remarks>
+    public int FramesUntilItemReady(int entityId, uint stackInstanceId, long now) =>
+        InventoryQueries.TryFindByStackInstanceId(_inventoryStacks, entityId, stackInstanceId, out var stack) &&
+        InventoryQueries.TryResolveEffectiveItem(itemCatalog, in stack, out var item)
+            ? InventoryQueries.FramesUntilReady(entityId, in stack, item, _actionLocks, now)
             : 0;
 
     /// <summary>The Delayed action entityId is winding up, if any.</summary>

@@ -46,4 +46,7 @@ public abstract record ActivatableDefinition(
 
     /// <summary>The tags the definition itself declares, without its activator's implied ones -- what a content file holds, so implied tags never outlive a change of activator.</summary>
     public abstract GameplayTagSet DeclaredTags { get; }
+
+    /// <summary>How it is activated: an action always has an activator, an item may have none.</summary>
+    public abstract IActionActivator? ActivatorOrNone { get; }
 }

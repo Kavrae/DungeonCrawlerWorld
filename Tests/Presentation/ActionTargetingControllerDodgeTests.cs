@@ -18,7 +18,7 @@ namespace Tests.Presentation;
 
 /// <summary>
 /// A directional Dodge steps through MovementComponent.NextMapPosition, the path ordinary movement uses, and never
-/// moves the entity directly. PlayerCommands writes the step only once the Dodge's ActionActivatedEvent arrives,
+/// moves the entity directly. PlayerCommands writes the step only once the Dodge's ActivationUsedEvent arrives,
 /// which ActivateDodge stands in for here -- these tests cover the Presentation side, not MovementSystem itself (see
 /// MovementSystemTests for that).
 /// </summary>
@@ -88,7 +88,7 @@ public sealed class ActionTargetingControllerDodgeTests
     private static void ActivateDodge(ComponentManager componentManager, EventBus eventBus)
     {
         componentManager.GetPackedPool<PendingActionActivationComponent>().Remove(PlayerEntityId);
-        eventBus.Publish(new Game.World.ActionActivatedEvent(PlayerEntityId, BuiltInActionIds.Dodge));
+        eventBus.Publish(new Game.World.ActivationUsedEvent(PlayerEntityId, Game.Modules.Actions.ActivatableKind.Action, BuiltInActionIds.Dodge, TestContent.Action(BuiltInActionIds.Dodge).Tags));
     }
 
     [TestMethod]
@@ -138,7 +138,7 @@ public sealed class ActionTargetingControllerDodgeTests
         componentManager.GetPackedPool<PendingActionActivationComponent>().Remove(PlayerEntityId);
         clock.Advance(1);
         playerMovement.HandleInput(new KeyboardState(), new KeyboardState(), new HashSet<Keys>());
-        eventBus.Publish(new Game.World.ActionActivatedEvent(PlayerEntityId, BuiltInActionIds.Dodge));
+        eventBus.Publish(new Game.World.ActivationUsedEvent(PlayerEntityId, Game.Modules.Actions.ActivatableKind.Action, BuiltInActionIds.Dodge, TestContent.Action(BuiltInActionIds.Dodge).Tags));
 
         Assert.IsNull(componentManager.GetPackedPool<MovementComponent>().GetReadonly(PlayerEntityId).NextMapPosition);
     }
@@ -185,7 +185,7 @@ public sealed class ActionTargetingControllerDodgeTests
     /// Regression coverage for a second, real bug found once the above fix landed: with the move
     /// only queued (not yet applied), the *destination* tile is empty at the moment
     /// ActionActivationSystem processes the activation -- if PendingActionActivationComponent.
-    /// TargetTiles named that empty destination, ActionEffectResolver.Apply's own occupant lookup
+    /// TargetTiles named that empty destination, ActivationEffectResolver.Apply's own occupant lookup
     /// would find nobody there and DodgeActivation would never run at all (confirmed live: no
     /// DodgingComponent ever granted for a directional dodge). The stored TargetTiles must instead
     /// name the caster's own *current* tile, which is guaranteed occupied by the caster right now.

@@ -32,7 +32,7 @@ topics; don't duplicate what a `PLAN-*.md` already records in full (link to it i
   of the catalog definition (any field, not just damage), resolved via
   `ActionInstanceQueries.TryResolveEffectiveAction` (Override if set, else `ActionCatalog.TryGet`).
   `ActionActivationSystem`/`DelayedActionSystem` resolve `instance` first, then the effective `action`
-  off it -- `ActionEffectResolver.Apply` no longer takes `instance` at all, and
+  off it -- `ActivationEffectResolver.Apply` no longer takes `instance` at all, and
   `EffectContext.DamageOverride` is gone (a fixed value is now just `DirectDamage` with
   `MinFlatDamage == MaxFlatDamage` baked into the granted `Override`, built via
   `ActionOverrideEffects.OverrideFlatDamage` so a targeted `with` on the matched entry can't silently
@@ -63,7 +63,7 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
   `QuickAttackAction` (Immediate, replaces `PunchAction` in place, same catalog `Id`, default R key),
   `PowerAttackAction` (new, `Delayed`, 1s windup, default Q key), `DodgeAction` (new, `FreeCast`, own
   flat 4s `CooldownFrames`, default F key). All three tagged `Dodgeable` except Magic Missile/AOE-style
-  effects, which stay untagged (undodgeable) -- `Tag.Dodgeable` gates `ActionEffectResolver.Apply`'s
+  effects, which stay untagged (undodgeable) -- `Tag.Dodgeable` gates `ActivationEffectResolver.Apply`'s
   per-occupant skip against a target holding `DodgingComponent`. Dodge is gated by its own cooldown, not
   an increased shared-lock multiplier -- a `FreeCastLockMultiplier` seam on `ActionTiming` was tried and
   removed; `ActionTiming.CooldownFrames` (already shared by every other `FreeCast` action) covers this
@@ -77,7 +77,7 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
   status cue this brief -- the same ring technique `DrawSelectedTileGlow` already uses) while active
   -- a sprite-opacity fade was tried first and read as the entity vanishing outright rather than as a
   status cue (confirmed live). A third, deeper bug briefly made the glow not appear *at all* even
-  after the opacity->glow switch, for directional dodges specifically: `ActionEffectResolver.Apply`
+  after the opacity->glow switch, for directional dodges specifically: `ActivationEffectResolver.Apply`
   only ever invokes an action's effects against entities `IMapQuery.GetOccupantEntityIdsAt` finds
   occupying the *resolved target tile* -- but the caster's step only goes through
   `MovementComponent.NextMapPosition` (see below), so at the moment `ActionActivationSystem` processes
@@ -404,7 +404,7 @@ looting corpses").
   pathing to corpses.
 - **Looted marking**: opening a corpse marks it looted, player or NPC, even with nothing taken. The loot
   bag shows while a corpse or container holds a stack or any currency.
-- **Potion-abuse poison** is credited to whoever used the potion (`ItemActivationSystem.ApplyPotionToTarget`),
+- **Potion-abuse poison** is credited to whoever used the potion (`ItemActivationSystem.PotionTargetRule`),
   not its target: a thrown potion landing on a target still on its potion cooldown is the thrower's damage
   and kill. Crediting the target made every such death read as "killed by itself" (found with a temporary
   Debug self-kill stack trace, since removed).
@@ -865,7 +865,7 @@ Decisions (don't re-litigate):
    timer before the entity rejoins the simulation.
 4. No targeting across the simulated/frozen boundary; the player only interacts with Local. NPCs
    can reach the seam, so every tile-targeted effect skips frozen occupants: actions
-   (`ActionEffectResolver`), NPC target choice (`TestCombatBehaviorSystem`), and potions, scrolls and
+   (`ActivationEffectResolver`), NPC target choice (`TestCombatBehaviorSystem`), and potions, scrolls and
    wands (`ItemActivationSystem`, added 2026-09-26 after a potion reached an unbuilt skeleton).
 5. Exact timers at every simulated tier. Neighborhood speed 1/8, settled in-game.
 6. Other MapLayers take the (x, y) neighborhood's tier but are never Local.
@@ -926,12 +926,12 @@ buffer). Decisions, so they aren't re-asked:
   a no-op still falls through to the corpse context menu.
 - `ActionTiming.ReleasesActionLock` (Dodge only): a successful activation cancels the caster's windup and
   releases its lock, whatever set it, for NPCs too. No penalty beyond Dodge's own cooldown. The Dodge's step is
-  written by the buffer only on the player's `ActionActivatedEvent` for that Dodge, so a failed Dodge (on
+  written by the buffer only on the player's `ActivationUsedEvent` for that Dodge, so a failed Dodge (on
   cooldown) no longer gives a free step.
 - `MovementSystem` moves the player every frame (`BeginFrame`) and skips them in its tiered buckets --
   otherwise the player was only visited every 15 frames and a step (Dodge's included) landed up to 0.25s late.
 - Stagger = cancelling a buffered action. `Tag.Staggering` (PowerAttack only; keep it rare) makes
-  `ActionEffectResolver.Apply` publish `EntityStaggeredEvent` per target hit, after the dodge skip and never
+  `ActivationEffectResolver.Apply` publish `EntityStaggeredEvent` per target hit, after the dodge skip and never
   for the source. `ActionsModule` cancels the target's windup and **keeps** its lock (the windup's time is
   lost -- that cost is what justifies windup attacks' power); `PlayerCommands` clears its slot. A pending
   Dodge step survives a Stagger, and held movement isn't staggered (a deliberate choice for now: a key held
@@ -1959,7 +1959,7 @@ Level Up and Skill Up join later as new `FloatingTextKind` values.
 - **Not a particle system.** There is no second consumer; `FloatingTextMotion` and the pooled instance
   array are the pieces one would take over.
 - **Found along the way: multi-tile targets were hit once per covered cell.** A multi-tile entity is in
-  the occupant index of every cell of its footprint, and `ActionEffectResolver` plus potion, scroll and
+  the occupant index of every cell of its footprint, and `ActivationEffectResolver` plus potion, scroll and
   wand activation applied their effects once per cell the shape covered. Each now resolves a target once
   per activation. This changed gameplay: the seed-1 headless fingerprint moved, and disabling only the
   resolver fix restores the old one exactly.
@@ -2076,7 +2076,7 @@ types, so a future Magic Menu gets them free. Frame counts always shown as secon
   then display name. Other tags (Self, Healing, Fire, Magic) are never tabs; see "Gameplay tags".
   `TabbedContent` supports scrollable, runtime-rebuildable tabs. User-reordering and a custom-tag
   trailing tab still open (see TODO.md).
-- `InventoryGridContent.SortOrder`/`NameFilter`/`HideDisabled`, driven by `GridControl` -- a fully
+- `InventoryGridContent.SortOrder`/`NameFilter`, driven by `GridControl` -- a fully
   generic (non-Inventory-specific) row of grid controls (count, sort, `DebouncedTextFilter` search,
   toggle list) via `InventoryTabContent`.
 - Tab search: debounced (300ms) ghost-text box (`TextBox.GhostText`); shared logic lives in
@@ -2603,7 +2603,7 @@ after") became three Id-keyed lists; see CLAUDE.md's Modding section for the rul
   NpcBehavior still runs before Movement, or the step would be taken before it is cleared.
 - **Latent bugs the stricter signatures exposed.** `BurningSystem`/`PoisonSystem` passed no dead
   pool to `HealthDamage`, so a dead complex entity that kept burning republished `EntityDiedEvent`
-  on each tick that hit a zeroed vital part. Actions resolved through `ActionEffectResolver` had no
+  on each tick that hit a zeroed vital part. Actions resolved through `ActivationEffectResolver` had no
   mana pool, so a mana-restoring ability would have done nothing (only the Mana Potion restores
   mana today, through `ItemActivationSystem`).
 - **Checking behavior stayed the same.** `--headless --seed=1 --benchmark-frames=60-120` prints a
@@ -2872,8 +2872,8 @@ Replaced the flat `Tag` enum (the plan, now deleted, landed in four phases on 20
   `Magic` goes with anything, `Damage.*` is only the damage type. A fireball hit is `Damage.Fire` +
   `Magic`, a torch hit `Damage.Fire`, Magic Missile `Damage.Energy` + `Magic`; "magical fire only" is a
   query, not a tag.
-- **Implied tags:** `IActionActivator.ImpliedTags` (Spell → `Action.Spell` + `Magic`, Scroll →
-  `Item.Consumable.Scroll` + `Magic`, Potion → `Item.Consumable.Potion`, Wand → `Item.Wand` + `Magic`)
+- **Implied tags:** `IActionActivator.ImpliedTags` (Spell → `Spell` + `Magic`, Scroll →
+  `Item.Consumable.Scroll` + `Spell` + `Magic`, Potion → `Item.Consumable.Potion`, Wand → `Item.Wand` + `Magic`)
   are unioned in by `ActionDefinition`/`ItemDefinition` at construction, so every copy of a definition
   carries them, including ones never registered in a catalog. A `with` that swaps the activator kind
   keeps the old kind's implied tags. A mastered scroll's spell drops the scroll's `Item.*` tags.
@@ -3018,7 +3018,7 @@ TODO.md "Aura follow-ups".
 What changed:
 - **A cell's occupants are read as a span** (`IMapQuery.GetOccupantEntityIdSpanAt`), valid until that
   cell's occupants change. A reader that runs open-ended code per occupant copies first
-  (`ActionEffectResolver`, `ProcessingTierSystem`, `TerrainContactSystem`): a stale span fails
+  (`ActivationEffectResolver`, `ProcessingTierSystem`, `TerrainContactSystem`): a stale span fails
   silently where the old list threw. The frame's moves are read the same way
   (`FrameEventBuffer.ItemSpan`).
 - **A source is scanned by its own reach, and a move scans only the cells that changed sides.** An

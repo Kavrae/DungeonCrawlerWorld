@@ -24,12 +24,16 @@ namespace Game.Modules.Actions.Components;
 /// </para>
 /// </remarks>
 /// <param name="activatable">What the windup resolves into: the action, or the item stack.</param>
+/// <param name="definition">The definition as it was when the windup started, which is what resolving it applies.</param>
 /// <param name="selection">What the caster aimed at.</param>
 /// <param name="readyAtFrame">The frame the windup ends and resolves -- the lock's own UnlockedAtFrame.</param>
-public struct PendingWindupComponent(ActivatableReference activatable, TargetSelection selection, uint readyAtFrame) : IScheduledTimer
+public struct PendingWindupComponent(ActivatableReference activatable, ActivatableDefinition definition, TargetSelection selection, uint readyAtFrame) : IScheduledTimer
 {
     /// <summary>What the windup resolves into.</summary>
     public ActivatableReference Activatable { get; set; } = activatable;
+
+    /// <summary>The definition captured when the windup started: what it resolves with, and what its telegraph and dodge cue read, even if an override changes or the item stack is used up meanwhile.</summary>
+    public ActivatableDefinition Definition { get; set; } = definition;
 
     /// <summary>What the caster aimed at, resolved into tiles when the windup ends (TargetResolution), so a Target-mode windup lands wherever its target is then.</summary>
     public TargetSelection Selection { get; set; } = selection;
@@ -43,12 +47,12 @@ public struct PendingWindupComponent(ActivatableReference activatable, TargetSel
     private uint _timerWheelMark;
 
     /// <summary>A windup that resolves into the action actionId.</summary>
-    public static PendingWindupComponent ForAction(Guid actionId, TargetSelection selection, uint readyAtFrame) =>
-        new(ActivatableReference.Action(actionId), selection, readyAtFrame);
+    public static PendingWindupComponent ForAction(ActionDefinition action, TargetSelection selection, uint readyAtFrame) =>
+        new(ActivatableReference.Action(action.Id), action, selection, readyAtFrame);
 
     /// <summary>A windup that resolves into activating the stack stackInstanceId.</summary>
-    public static PendingWindupComponent ForItem(uint stackInstanceId, HotkeySlot? activatedFromSlot, TargetSelection selection, uint readyAtFrame) =>
-        new(ActivatableReference.ItemStack(stackInstanceId), selection, readyAtFrame) { ActivatedFromSlot = activatedFromSlot };
+    public static PendingWindupComponent ForItem(uint stackInstanceId, ActivatableDefinition item, HotkeySlot? activatedFromSlot, TargetSelection selection, uint readyAtFrame) =>
+        new(ActivatableReference.ItemStack(stackInstanceId), item, selection, readyAtFrame) { ActivatedFromSlot = activatedFromSlot };
 
     uint IScheduledTimer.NextTickFrame { readonly get => ReadyAtFrame; set => ReadyAtFrame = value; }
 

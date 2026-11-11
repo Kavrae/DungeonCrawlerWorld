@@ -64,7 +64,7 @@ public static class ScrollMasteryEffects
         eventBus.Publish(new ScrollMasteredEvent(entityId, spellId));
     }
 
-    /// <summary>The spell a mastered scroll becomes: the scroll's content, with its Item tags dropped (the SpellActivator adds Action.Spell and Magic).</summary>
+    /// <summary>The spell a mastered scroll becomes: the scroll's content, with its Item tags dropped (the SpellActivator adds Spell and Magic).</summary>
     /// <remarks>No activation effects, so it costs nothing: a placeholder -- see MasteryThreshold's own doc comment for the same power-scaling TODO.</remarks>
     private static ActionDefinition SynthesizeSpellFromScroll(ItemDefinition scroll, Guid spellId) => new(
         Id: spellId,

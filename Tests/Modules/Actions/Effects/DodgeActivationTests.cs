@@ -21,7 +21,7 @@ namespace Tests.Modules.Actions.Effects;
 /// MovementComponent.NextMapPosition move (see ActionTargetingController.TryRelocateForDodge's own
 /// doc comment), the caster is usually still standing somewhere else -- for a directional dodge the
 /// "target tile" is the *destination*, which is empty until MovementSystem later applies the queued
-/// move, so ActionEffectResolver.Apply's own occupant lookup never even calls this effect at all
+/// move, so ActivationEffectResolver.Apply's own occupant lookup never even calls this effect at all
 /// (confirmed live: no DodgingComponent ever granted for a directional dodge). Dodge's benefit must
 /// always land on SourceEntityId (the caster), regardless of what TargetEntityId happens to resolve
 /// to for this one activation.

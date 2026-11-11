@@ -119,7 +119,7 @@ public sealed class EntityTeleporterTests
             TargetMapPosition = origin with { X = origin.X + 5 },
             NextMapPosition = origin with { X = origin.X + 1 },
         });
-        componentManager.Merge(session.PlayerEntityId, PendingWindupComponent.ForAction(Guid.NewGuid(), TestSelections.At(origin with { X = origin.X + 1 }), 1_000));
+        componentManager.Merge(session.PlayerEntityId, PendingWindupComponent.ForAction(TestContent.Action(Game.Modules.Actions.BuiltInActionIds.QuickAttack), TestSelections.At(origin with { X = origin.X + 1 }), 1_000));
 
         session.Teleporter.TryTeleport(session.PlayerEntityId, FreeCellNear(session, origin.X + 300, origin.Y));
 

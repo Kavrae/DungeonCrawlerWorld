@@ -258,7 +258,7 @@ public sealed class TargetResolutionTests
         var tiles = new List<Vector3Int>();
         var resolved = session.Resolution.Resolve(session.CasterId, action.Activator.Targeting, selection, tiles);
 
-        ActionEffectResolver.Apply(action, session.CasterId, tiles, resolved, session.Build.Context.EffectServices, session.Build.World, Now,
+        ActivationEffectResolver.Apply(action, session.CasterId, tiles, resolved, session.Build.Context.EffectServices, session.Build.World, Now,
             session.Components.GetPackedPool<Game.Modules.Actions.Components.DodgingComponent>(),
             new Game.Modules.ProcessingTier.ProcessingTierQuery(session.Components.GetDirectPool<Game.Modules.ProcessingTier.Components.ProcessingTierComponent>()));
 

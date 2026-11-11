@@ -106,12 +106,14 @@ public sealed class DelayedActionSystemTests
     }
 
     /// <summary>Sets up a caster mid-windup, its effect due on ReadyAtFrame.</summary>
-    private static void ArmWindup(ComponentManager componentManager, FakeMapQuery mapQuery, ActionCatalog actionCatalog)
+    private static ActionDefinition ArmWindup(ComponentManager componentManager, FakeMapQuery mapQuery, ActionCatalog actionCatalog)
     {
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ActionId, 15));
-        componentManager.Merge(CasterEntityId, PendingWindupComponent.ForAction(ActionId, TestSelections.At(TargetTile), ReadyAtFrame));
+        var instance = FixedDamageInstance(actionCatalog, ActionId, 15);
+        componentManager.Merge(CasterEntityId, instance);
+        componentManager.Merge(CasterEntityId, PendingWindupComponent.ForAction(instance.Override!, TestSelections.At(TargetTile), ReadyAtFrame));
+        return instance.Override!;
     }
 
     private static void Run(DelayedActionSystem system, long from, long to)
@@ -139,6 +141,19 @@ public sealed class DelayedActionSystemTests
         };
 
         resolver.EnsureTiered(CasterEntityId, position);
+    }
+
+    [TestMethod]
+    public void AnOverrideAppliedMidWindup_ChangesOnlyTheNextUse_TheWindupLandsWhatItCaptured()
+    {
+        var (system, componentManager, mapQuery, actionCatalog, _) = Build();
+        ArmWindup(componentManager, mapQuery, actionCatalog);
+
+        Run(system, 0, 10);
+        componentManager.Merge(CasterEntityId, FixedDamageInstance(actionCatalog, ActionId, 40));
+        Run(system, 11, ReadyAtFrame);
+
+        Assert.AreEqual(85, HealthOf(componentManager, TargetEntityId));
     }
 
     /// <summary>A windup is cancelled the moment its owner freezes: its target is either frozen too, and so untargetable across the seam, or simulated and long gone by the time the owner thaws.</summary>
@@ -238,10 +253,10 @@ public sealed class DelayedActionSystemTests
     public void ReQueuedWithALaterDeadline_ResolvesOnTheNewFrameOnly()
     {
         var (system, componentManager, mapQuery, actionCatalog, _) = Build();
-        ArmWindup(componentManager, mapQuery, actionCatalog);
+        var armedAction = ArmWindup(componentManager, mapQuery, actionCatalog);
 
         Run(system, 0, 10);
-        componentManager.Merge(CasterEntityId, PendingWindupComponent.ForAction(ActionId, TestSelections.At(TargetTile), readyAtFrame: 90));
+        componentManager.Merge(CasterEntityId, PendingWindupComponent.ForAction(armedAction, TestSelections.At(TargetTile), readyAtFrame: 90));
 
         Run(system, 11, ReadyAtFrame);
         Assert.AreEqual(100, HealthOf(componentManager, TargetEntityId), "The old frame passed, but this windup now ends later.");

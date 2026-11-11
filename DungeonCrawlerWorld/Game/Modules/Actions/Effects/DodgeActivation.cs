@@ -19,7 +19,7 @@ namespace Game.Modules.Actions.Effects;
 /// Deliberately does not move the caster: DodgeAction's targeting (SingleTarget,
 /// Range 1, the 3x3 block) resolves to exactly one destination tile chosen at confirm time, and Presentation
 /// (PlayerCommands) writes that step to MovementComponent.NextMapPosition once it sees this
-/// activation's ActionActivatedEvent. DodgeAction's ReleasesActionLock frees the caster in the same
+/// activation's ActivationUsedEvent. DodgeAction's ReleasesActionLock frees the caster in the same
 /// frame, so MovementSystem takes the step on its next pass (or leaves the entity in place if the
 /// destination turns out occupied), with the same occupancy/wall validation normal movement has.
 /// IEffectEntry only ever sees IMapQuery (read-only, mod-safe), never a map-mutating move

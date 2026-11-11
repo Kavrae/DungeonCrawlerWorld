@@ -13,9 +13,9 @@ public sealed class ActivationMenuLabelsTests
     public void TheArmedSlotsVerb_FollowsItsTags()
     {
         Assert.AreEqual("Drink", ActivationMenuLabels.UseVerbFor([GameTags.ItemConsumablePotion]));
-        Assert.AreEqual("Cast", ActivationMenuLabels.UseVerbFor([GameTags.ItemConsumableScroll, GameTags.Magic]));
-        Assert.AreEqual("Cast", ActivationMenuLabels.UseVerbFor([GameTags.ActionSpell, GameTags.Magic]));
-        Assert.AreEqual("Activate", ActivationMenuLabels.UseVerbFor([GameTags.ItemWand, GameTags.ActionSpell, GameTags.Magic]), "A wand stays Activate, whatever it holds.");
+        Assert.AreEqual("Cast", ActivationMenuLabels.UseVerbFor([GameTags.ItemConsumableScroll, GameTags.Spell, GameTags.Magic]));
+        Assert.AreEqual("Cast", ActivationMenuLabels.UseVerbFor([GameTags.Spell, GameTags.Magic]));
+        Assert.AreEqual("Activate", ActivationMenuLabels.UseVerbFor([GameTags.ItemWand, GameTags.Spell, GameTags.Magic]), "A wand stays Activate, whatever it holds.");
         Assert.AreEqual("Activate", ActivationMenuLabels.UseVerbFor(GameplayTagSet.Empty));
     }
 

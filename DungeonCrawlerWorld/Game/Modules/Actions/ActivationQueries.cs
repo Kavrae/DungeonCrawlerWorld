@@ -15,10 +15,11 @@ public static class ActivationQueries
     /// <remarks>
     /// Checked structural first: no activator, then melee disabled, then the activation effects (a cost among
     /// them) -- regaining mana wouldn't help an entity with no usable arms or hands. Turning a toggle off takes
-    /// nothing, so one that is on is blocked by nothing -- not a cost, not disabled arms. The activation effects
-    /// block with the first refusal's own blocker (BlockerFor). A consumable reaching only its user then asks its
-    /// effects of that user too, so one that would do nothing (a tome of a spell already known) is refused rather
-    /// than used up.
+    /// nothing, so one that is on is blocked by nothing -- not a cost, not disabled arms, not the Disabled status. Then the
+    /// Disabled status (DisabledActivations), still before costs: regaining mana wouldn't help. The activation effects
+    /// block with the first refusal's own blocker (BlockerFor). Anything reaching only its user -- an action or an item -- then asks its
+    /// effects of that user too, so a use that would do nothing (a tome of a spell already known) is refused rather
+    /// than spent.
     /// </remarks>
     /// <param name="isToggledOn">Whether the toggle is on now, so this use would turn it off. Ignored for a definition that isn't a toggle.</param>
     public static ActivationBlocker GetBlocker(
@@ -45,8 +46,13 @@ public static class ActivationQueries
             return ActivationBlocker.None;
         }
 
+        if (DisabledActivations.IsDisabled(effectServices.DisabledActivations, entityId, definition))
+        {
+            return ActivationBlocker.Disabled;
+        }
+
         var activationRefusal = ActivationEffectsApplier.GetRefusal(effectServices, entityId, definition, now);
-        if (activationRefusal != EffectRefusal.None || activator is not ConsumableActivator { ReachesOnlyUser: true })
+        if (activationRefusal != EffectRefusal.None || !activator.Targeting.IsSelfOnly)
         {
             return BlockerFor(activationRefusal);
         }
@@ -73,11 +79,21 @@ public static class ActivationQueries
         ActionDefinition action,
         EntityActions actions,
         PackedComponentPool<ActionLockComponent> actionLocks,
+        long now) =>
+        FramesUntilReady(entityId, action.Activator.Timing, actions.CooldownFramesRemaining(entityId, action.Id, now), actionLocks, now);
+
+    /// <summary>Frames until entityId could use something timed by timing whose own cooldown has cooldownFramesRemaining left: the later of that and, unless it's FreeCast, the action lock. 0 when ready.</summary>
+    /// <remarks>The one rule an action and an item are both ready by; only where the cooldown is held differs (the entity's action, the item's unit).</remarks>
+    public static int FramesUntilReady(
+        int entityId,
+        ActionTiming timing,
+        int cooldownFramesRemaining,
+        PackedComponentPool<ActionLockComponent> actionLocks,
         long now)
     {
-        var framesUntilReady = actions.CooldownFramesRemaining(entityId, action.Id, now);
+        var framesUntilReady = cooldownFramesRemaining;
 
-        if (action.Activator.Timing.Category != ActionTimingCategory.FreeCast)
+        if (timing.Category != ActionTimingCategory.FreeCast)
         {
             var lockFramesRemaining = actionLocks.TryGetReadonly(entityId, out var actionLock)
                 ? ActionLockGate.FramesRemaining(actionLock, now)

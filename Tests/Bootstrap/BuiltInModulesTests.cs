@@ -115,6 +115,7 @@ public sealed class BuiltInModulesTests
             "DelayedActionSystem",
             "ActionActivationSystem",
             "ToggleUpkeepSystem",
+            "DisabledActivationSystem",
             "StatusEffectImmunityExpirySystem",
             "StatModifierExpirySystem",
             "BodyPartEffectsSystem",
@@ -128,6 +129,7 @@ public sealed class BuiltInModulesTests
             "AuraAnchorEndingSystem",
             "AchievementPollingSystem",
             "ItemActivationSystem",
+            "ItemCooldownSystem",
             "ContainerDestructionSystem",
             "ItemPileEndingSystem",
         ];

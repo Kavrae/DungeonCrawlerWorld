@@ -95,7 +95,7 @@ public sealed class ItemWindowCoordinatorTests
         var entityNaming = EntityNaming.For(componentManager, definitions);
         var healthView = new HealthView(componentManager, Game.Modules.Health.EntityBodyParts.For(componentManager, definitions));
         var terrain = new Game.Terrain.TerrainRegistry();
-        var mapView = new MapViewQuery(world, componentManager, new ActionCatalog(), terrain, definitions, new SimulationClock());
+        var mapView = new MapViewQuery(world, componentManager, terrain, definitions, new SimulationClock());
         var contextMenuController = shellServices.ContextMenuController;
 
         elementPool.RegisterFactory<Tooltip>(() => new Tooltip(TestElementServices.For(elementPool, fontService)));
