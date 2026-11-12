@@ -20,12 +20,13 @@ public sealed class TieredEntityStripeSetTests
     public void Constructor_SeedsMembersViaLookupDelegate_TierBucketsReflectPerTierCadence()
     {
         // baseStripeCount 1, divisors [1, 2] -- tier 0 (entities 0,1) is due every frameCount;
-        // tier 1 (entities 10,11) has its own internal stripeCount of 2, so only half its
-        // members are due on any given frameCount, split by entityId % 2.
-        var tieredSet = new TieredEntityStripeSet(1, [1, 2], [0, 1, 10, 11], entityId => entityId < 2 ? (byte)0 : (byte)1);
+        // tier 1 (entities in blocks 2 and 3) has its own internal stripeCount of 2, so only half its
+        // members are due on any given frameCount, split by their id block.
+        const int B = EntityStripeSet.BlockSize;
+        var tieredSet = new TieredEntityStripeSet(1, [1, 2], [0, 1, 2 * B, 3 * B], entityId => entityId < 2 ? (byte)0 : (byte)1);
 
-        CollectionAssert.AreEquivalent(new[] { 0, 1, 10 }, Collect(tieredSet, 0));
-        CollectionAssert.AreEquivalent(new[] { 0, 1, 11 }, Collect(tieredSet, 1));
+        CollectionAssert.AreEquivalent(new[] { 0, 1, 2 * B }, Collect(tieredSet, 0));
+        CollectionAssert.AreEquivalent(new[] { 0, 1, 3 * B }, Collect(tieredSet, 1));
     }
 
     [TestMethod]
@@ -64,7 +65,7 @@ public sealed class TieredEntityStripeSetTests
     {
         var tieredSet = new TieredEntityStripeSet(1, [1, 2], [0], entityId => 0);
 
-        // Entity 0 moves from tier 0 (always due) to tier 1 (stripeCount 2; 0 % 2 == 0 -> due
+        // Entity 0 moves from tier 0 (always due) to tier 1 (stripeCount 2; block 0 -> due
         // only on even frameCount values).
         tieredSet.OnEntityTierChanged(0, 1);
 

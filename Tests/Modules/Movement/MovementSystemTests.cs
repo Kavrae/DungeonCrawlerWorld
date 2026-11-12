@@ -271,9 +271,10 @@ public sealed class MovementSystemTests
     public void Update_Player_MovesOnAFrameTheirStripeIsNotDue_WhileOthersWaitForTheirs()
     {
         const int playerEntityId = 1;
-        const int otherEntityId = 2;
-        var transformPool = CreateTransformPool();
-        var actionLockPool = CreateActionLockPool();
+        const int otherEntityId = 2 * EntityStripeSet.BlockSize;
+        const int poolCapacity = otherEntityId + 1;
+        var transformPool = CreateTransformPool(poolCapacity);
+        var actionLockPool = CreateActionLockPool(poolCapacity);
         var movementPool = CreateMovementPool();
         var world = TestWorlds.Create(new Map(new Vector3Int(5, 5, 1)));
 
@@ -286,11 +287,11 @@ public sealed class MovementSystemTests
             movementPool.Add(entityId, new MovementComponent(MovementMode.PlayerControlled, null, new Vector3Int(2, row, 0)));
         }
 
-        var system = TestSystems.MovementSystem(transformPool, actionLockPool, movementPool, world, new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), new TestPlayerQuery(playerEntityId), CreateProcessingTierPool(), new ProcessingTierEvents());
+        var system = TestSystems.MovementSystem(transformPool, actionLockPool, movementPool, world, new EventBus(), new WorldEventSync(world), new FrameEventBuffer<EntityMovedEvent>(), new TestPlayerQuery(playerEntityId), CreateProcessingTierPool(poolCapacity), new ProcessingTierEvents());
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);
 
         Assert.AreEqual(new Vector3Int(2, 1, 0), transformPool.GetReadonly(playerEntityId).Position);
-        Assert.AreEqual(new Vector3Int(1, 3, 0), transformPool.GetReadonly(otherEntityId).Position, "Entity 2 is only due on frames where FrameCount % 15 == 2.");
+        Assert.AreEqual(new Vector3Int(1, 3, 0), transformPool.GetReadonly(otherEntityId).Position, "The other entity's block is only due on frames where FrameCount % 15 == 2.");
     }
 
     [TestMethod]

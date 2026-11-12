@@ -3,7 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace UIEngine.Rendering;
 
-/// <summary>What everything in the UI draws with: the device, the one SpriteEffectBatch, the unit rectangle, and the render-state stack that scrolled and clipped content pushes and pops.</summary>
+/// <summary>What everything in the UI draws with: the device, the one SpriteEffectBatch, and the render-state stack that scrolled and clipped content pushes and pops.</summary>
 /// <remarks>
 /// <para>
 /// One per host, built by UiEngineBootstrapper and filled once by Initialize from the host's LoadContent; until then (and in a
@@ -56,17 +56,14 @@ public sealed class UiRenderService
     /// <summary>What every draw in the UI goes through, between BeginFrame and EndFrame.</summary>
     public SpriteEffectBatch Batch { get; private set; } = null!;
 
-    public Texture2D UnitRectangle { get; private set; } = null!;
-
     /// <summary>The state draws are under now; Element.Draw composes each scope's from it (ClippedTo, a new DrawOffset).</summary>
     public RenderState CurrentRenderState => _currentRenderState;
 
     /// <summary>Captures the device and what draws with it -- called once, from the host's LoadContent, after all of them exist.</summary>
-    public void Initialize(GraphicsDevice graphicsDevice, SpriteEffectBatch batch, Texture2D unitRectangle)
+    public void Initialize(GraphicsDevice graphicsDevice, SpriteEffectBatch batch)
     {
         GraphicsDevice = graphicsDevice;
         Batch = batch;
-        UnitRectangle = unitRectangle;
     }
 
     /// <summary>Begins the frame's pass under the root state -- no offset, no clip -- which every nested Push/PopRenderState unwinds back to. Called once per frame, from the host's Draw.</summary>

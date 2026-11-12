@@ -29,11 +29,11 @@ public sealed class UiEngineContext(
 
     /// <summary>
     /// Fills RenderService with the device and what draws with it -- called once, from the host's LoadContent, after
-    /// GraphicsDevice/unitRectangle both exist. Hands it this context's sprite effect batch, so a host crosses into the
+    /// GraphicsDevice exists. Hands it this context's sprite effect batch, so a host crosses into the
     /// framework once, through this one call.
     /// </summary>
-    public void LoadContent(GraphicsDevice graphicsDevice, Texture2D unitRectangle) =>
-        RenderService.Initialize(graphicsDevice, spriteEffectBatch, unitRectangle);
+    public void LoadContent(GraphicsDevice graphicsDevice) =>
+        RenderService.Initialize(graphicsDevice, spriteEffectBatch);
 
     /// <summary>Registers the element factories of every control UIEngine itself defines, so no host repeats the list.</summary>
     /// <remarks>
@@ -65,7 +65,6 @@ public sealed class UiEngineContext(
         pool.RegisterFactory(() => new Toggle(services));
         pool.RegisterFactory(() => new ToggleList(services));
         pool.RegisterFactory(() => new TextDivider(services));
-        pool.RegisterFactory(() => new SeparatorBar(services));
         pool.RegisterFactory(() => new FractionBarElement(services));
     }
 }

@@ -29,7 +29,7 @@ internal static class TestInventoryServices
             new ShopCommands(componentManager, itemCatalog, eventBus ?? new EventBus(), playerQuery),
             new CurrencyCommands(componentManager),
             TestGameplayTags.BuiltIn,
-            itemHoverDetails ?? new ItemHoverDetails(new CursorLabelContent(new PointerState(), TestFonts.Shared)),
+            itemHoverDetails ?? new ItemHoverDetails(new CursorTextContent(new PointerState(), TestFonts.Shared)),
             playerItemDrops ?? new TestPlayerItemDrops(),
             new LootCommands(componentManager, itemCatalog, playerQuery));
 }

@@ -22,13 +22,13 @@ public sealed class MultiComponentPoolTests
         var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
 
         // denseCapacity(4) * (sizeof(TestComponent)=4 + entityId int=4 + version uint=4 + next int=4 + previous int=4)
-        // + one page-table slot (8); no page yet.
-        Assert.AreEqual(4 * (4 + 4 + 4 + 4 + 4) + 8, pool.EstimatedBytes);
+        // + one page-table slot (8) and its held count (4); no page yet.
+        Assert.AreEqual(4 * (4 + 4 + 4 + 4 + 4) + 12, pool.EstimatedBytes);
 
         pool.Add(0, new TestComponent { Value = 1 });
 
         // + the first page: 1024 * (firstDenseIndex int=4 + count int=4 + version uint=4)
-        Assert.AreEqual(4 * (4 + 4 + 4 + 4 + 4) + 8 + 1024 * (4 + 4 + 4), pool.EstimatedBytes);
+        Assert.AreEqual(4 * (4 + 4 + 4 + 4 + 4) + 12 + 1024 * (4 + 4 + 4), pool.EstimatedBytes);
     }
 
     [TestMethod]
@@ -150,17 +150,22 @@ public sealed class MultiComponentPoolTests
     }
 
     [TestMethod]
-    public void EntityVersion_IncrementsOnAddAndRemove()
+    public void EntityVersion_ChangesOnAddAndRemove()
     {
         var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
 
         pool.Add(0, new TestComponent { Value = 1 });
-        var versionAfterAdd = pool.GetEntityVersion(0);
-
+        var versionAfterFirstAdd = pool.GetEntityVersion(0);
+        pool.Add(0, new TestComponent { Value = 2 });
+        var versionAfterSecondAdd = pool.GetEntityVersion(0);
+        pool.RemoveFirst(0, new ValueMatcher(2));
+        var versionAfterPartialRemove = pool.GetEntityVersion(0);
         pool.Remove(0);
-        var versionAfterRemove = pool.GetEntityVersion(0);
 
-        Assert.IsGreaterThan(versionAfterAdd, versionAfterRemove);
+        Assert.AreNotEqual(0u, versionAfterFirstAdd);
+        Assert.AreNotEqual(versionAfterFirstAdd, versionAfterSecondAdd);
+        Assert.AreNotEqual(versionAfterSecondAdd, versionAfterPartialRemove);
+        Assert.AreEqual(0u, pool.GetEntityVersion(0), "An entity holding nothing reads 0.");
     }
 
     [TestMethod]
@@ -254,17 +259,20 @@ public sealed class MultiComponentPoolTests
 
     /// <summary>A consumer caching an entity version must never see it repeat, including across the entity holding nothing in between.</summary>
     [TestMethod]
-    public void EntityVersion_KeepsCountingUpAfterTheLastInstanceIsRemovedAndAnotherAdded()
+    public void EntityVersion_NeverRepeatsAfterTheLastInstanceIsRemovedAndAnotherAdded()
     {
         var pool = new MultiComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 4);
         pool.Add(3, new TestComponent { Value = 1 });
+        var versionBeforeEmpty = pool.GetEntityVersion(3);
         pool.Remove(3);
         var versionWhileEmpty = pool.GetEntityVersion(3);
 
         pool.Add(3, new TestComponent { Value = 1 });
+        var versionAfterReAdd = pool.GetEntityVersion(3);
 
-        Assert.IsGreaterThan(versionWhileEmpty, pool.GetEntityVersion(3));
-        Assert.IsGreaterThan(0u, versionWhileEmpty);
+        Assert.AreEqual(0u, versionWhileEmpty);
+        Assert.AreNotEqual(versionBeforeEmpty, versionAfterReAdd);
+        Assert.AreNotEqual(versionWhileEmpty, versionAfterReAdd);
     }
 
     [TestMethod]

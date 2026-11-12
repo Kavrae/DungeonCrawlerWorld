@@ -21,49 +21,53 @@ public static class ResourceBarRenderer
     /// <param name="hasResource">False draws NoResourceColor instead of fractionColor(fraction) -- e.g. "no SimpleHealthComponent at all," not merely "empty."</param>
     /// <param name="outlineColor">This resource's own outline/tick color -- see HealthBarPalette.OutlineColor/ManaBarPalette.OutlineColor.</param>
     /// <param name="fractionColor">This resource's own fraction-to-fill-color mapping -- see HealthBarPalette.FractionColor/ManaBarPalette.FractionColor.</param>
-    public static void Draw(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle bar, float fraction, bool hasResource, Color outlineColor, Func<float, Color> fractionColor)
+    public static void Draw<TTarget>(TTarget spriteBatch, Rectangle bar, float fraction, bool hasResource, Color outlineColor, Func<float, Color> fractionColor)
+        where TTarget : ISpriteDrawTarget
     {
-        spriteBatch.Draw(unitRectangle, bar, outlineColor);
+        spriteBatch.FillRectangle(bar, outlineColor);
 
         var fillColor = hasResource ? fractionColor(fraction) : NoResourceColor;
 
         var innerWidth = (int)((bar.Width - 2) * fraction);
         if (innerWidth > 0)
         {
-            spriteBatch.Draw(unitRectangle, new Rectangle(bar.X + 1, bar.Y + 1, innerWidth, bar.Height - 2), fillColor);
+            spriteBatch.FillRectangle(new Rectangle(bar.X + 1, bar.Y + 1, innerWidth, bar.Height - 2), fillColor);
         }
 
-        DrawTicks(spriteBatch, unitRectangle, bar, outlineColor);
+        DrawTicks(spriteBatch, bar, outlineColor);
     }
 
     /// <summary>Draws valueText centred on bar in outlined white, on top of whatever Draw put there.</summary>
-    /// <remarks>Centred vertically on font.LineHeight, as LabelRenderer centres a row: MeasureString's height ends at the digits' baseline, which centred them low.</remarks>
+    /// <remarks>Centred as a line (LabelRenderer.GetLineCenteredPosition), not on its ink.</remarks>
     /// <param name="valueTextWidth">valueText's measured width, from the caller's TextSizeCache.</param>
-    public static void DrawCenteredValueText(SpriteEffectBatch spriteBatch, SpriteFontBase font, Rectangle bar, string valueText, float valueTextWidth)
+    public static void DrawCenteredValueText<TTarget>(TTarget spriteBatch, SpriteFontBase font, Rectangle bar, string valueText, float valueTextWidth)
+        where TTarget : ISpriteDrawTarget
     {
-        var position = new Vector2(bar.X + (bar.Width - valueTextWidth) / 2f, bar.Y + (bar.Height - font.LineHeight) / 2f);
+        var position = LabelRenderer.GetLineCenteredPosition(font, valueTextWidth, new Vector2(bar.X, bar.Y), new Vector2(bar.Width, bar.Height));
         ContrastTextRenderer.Draw(spriteBatch, font, valueText, position);
     }
 
     /// <summary>Major ticks (half bar height) at the 1/4, 1/2, 3/4 marks; minor ticks (quarter bar height) at the 1/8, 3/8, 5/8, 7/8 marks -- both flush with the bar's bottom edge (ruler-style graduations), drawn over the fill.</summary>
-    private static void DrawTicks(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle bar, Color outlineColor)
+    private static void DrawTicks<TTarget>(TTarget spriteBatch, Rectangle bar, Color outlineColor)
+        where TTarget : ISpriteDrawTarget
     {
         foreach (var fraction in MajorTickFractions)
         {
-            DrawTick(spriteBatch, unitRectangle, bar, fraction, bar.Height / 2, outlineColor);
+            DrawTick(spriteBatch, bar, fraction, bar.Height / 2, outlineColor);
         }
 
         foreach (var fraction in MinorTickFractions)
         {
-            DrawTick(spriteBatch, unitRectangle, bar, fraction, bar.Height / 4, outlineColor);
+            DrawTick(spriteBatch, bar, fraction, bar.Height / 4, outlineColor);
         }
     }
 
-    private static void DrawTick(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle bar, float widthFraction, int tickHeight, Color outlineColor)
+    private static void DrawTick<TTarget>(TTarget spriteBatch, Rectangle bar, float widthFraction, int tickHeight, Color outlineColor)
+        where TTarget : ISpriteDrawTarget
     {
         var tickX = bar.X + (int)(bar.Width * widthFraction);
         var tickY = bar.Bottom - tickHeight;
 
-        spriteBatch.Draw(unitRectangle, new Rectangle(tickX, tickY, 1, tickHeight), outlineColor);
+        spriteBatch.FillRectangle(new Rectangle(tickX, tickY, 1, tickHeight), outlineColor);
     }
 }

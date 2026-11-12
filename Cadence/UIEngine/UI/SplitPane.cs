@@ -149,5 +149,5 @@ public sealed class SplitPane(ElementServices services)
     protected override void OnPointerDragEndedAction() => _dragStartSizedPaneSize = null;
 
     public override void DrawContent(GameTime gameTime) =>
-        Render.Batch.Draw(Render.UnitRectangle, ToContentLocal(SplitterRectangle), SplitterColor);
+        Render.Batch.FillRectangle(ToContentLocal(SplitterRectangle), SplitterColor);
 }

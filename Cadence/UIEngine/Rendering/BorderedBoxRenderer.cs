@@ -11,14 +11,15 @@ namespace UIEngine.Rendering;
 /// </summary>
 public static class BorderedBoxRenderer
 {
-    public static void Draw(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, float outerSize, float borderThickness, Color borderColor, Color fillColor)
+    public static void Draw<TTarget>(TTarget spriteBatch, Vector2 origin, float outerSize, float borderThickness, Color borderColor, Color fillColor)
+        where TTarget : ISpriteDrawTarget
     {
-        spriteBatch.Draw(unitRectangle, PixelRectangle.Snapped(origin, new Vector2(outerSize, outerSize)), borderColor);
+        spriteBatch.FillRectangle(PixelRectangle.Snapped(origin, new Vector2(outerSize, outerSize)), borderColor);
 
         var innerSize = outerSize - borderThickness * 2;
         if (innerSize > 0)
         {
-            spriteBatch.Draw(unitRectangle, PixelRectangle.Snapped(origin + new Vector2(borderThickness, borderThickness), new Vector2(innerSize, innerSize)), fillColor);
+            spriteBatch.FillRectangle(PixelRectangle.Snapped(origin + new Vector2(borderThickness, borderThickness), new Vector2(innerSize, innerSize)), fillColor);
         }
     }
 }

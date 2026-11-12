@@ -78,4 +78,10 @@ public static class LabelRenderer
     public static void DrawLeftAligned<TTarget>(TTarget target, SpriteFontBase font, string text, Vector2 footprintTopLeft, Vector2 footprintSize, Color color)
         where TTarget : ISpriteDrawTarget =>
         Draw(target, font, text, GetLeftAlignedPosition(font, footprintTopLeft, footprintSize), color);
+
+    /// <summary>Where a line of text must be drawn so its line box is centred in footprintSize both ways -- GetRightAlignedPosition's rule with the width split either side.</summary>
+    /// <remarks>For text read as a line (a bar's "12 / 30"), which keeps its baseline whatever it says; GetCenteredPosition centres one glyph's ink instead.</remarks>
+    /// <param name="textWidth">text's measured width; see GetRightAlignedPosition.</param>
+    public static Vector2 GetLineCenteredPosition(SpriteFontBase font, float textWidth, Vector2 footprintTopLeft, Vector2 footprintSize) =>
+        footprintTopLeft + new Vector2((footprintSize.X - textWidth) / 2f, (footprintSize.Y - font.LineHeight) / 2f);
 }

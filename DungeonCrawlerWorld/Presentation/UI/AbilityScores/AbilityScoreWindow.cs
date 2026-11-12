@@ -38,8 +38,10 @@ public sealed class AbilityScoreWindow(ElementServices services, AbilityScoreVie
     /// <summary>Between adjacent columns.</summary>
     private const float ColumnGap = 3f;
 
-    /// <summary>See SeparatorBar -- the divider itself is drawn at 75% width; this is just the element's own full-width, 1px-tall footprint in the vertical tile chain.</summary>
+    /// <summary>The separator's own full-width, 1px-tall footprint in the vertical tile chain; the line itself is drawn at SeparatorWidthFraction of it.</summary>
     private const float SeparatorHeight = 1f;
+
+    private const float SeparatorWidthFraction = 0.75f;
 
     public static readonly Color ColumnColor = GameWindowPalette.AbilityScoreColumnBackground;
 
@@ -316,13 +318,13 @@ public sealed class AbilityScoreWindow(ElementServices services, AbilityScoreVie
         {
             if (NeedsSeparatorBefore(lines, lineIndex))
             {
-                var separator = ElementPoolService.CreateElement<SeparatorBar>(listWindow, new ElementOptions
+                var separator = ElementPoolService.CreateElement<TextDivider>(listWindow, new ElementOptions
                 {
                     Layout = new ElementLayoutOptions { Size = new Vector2(listWindow.ContentSize.X, SeparatorHeight), DisplayMode = ElementDisplayMode.Fixed },
                     Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
                     Content = new ElementContentOptions { ContentColor = ColumnColor },
                 });
-                separator.Configure(WindowPalette.TitleTextColor);
+                separator.ConfigureAsLine(WindowPalette.TitleTextColor, SeparatorWidthFraction);
                 listWindow.AddChild(separator);
             }
 

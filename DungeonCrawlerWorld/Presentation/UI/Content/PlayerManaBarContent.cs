@@ -79,7 +79,6 @@ public sealed class PlayerManaBarContent(World world, ActionStateView actionStat
     public void DrawContent(GameTime gameTime)
     {
         var spriteBatch = _hostWindow.Render.Batch;
-        var unitRectangle = _hostWindow.Render.UnitRectangle;
 
         // ContentSize, not the static Size -- Size is the window's outer bounds (used by
         // ShellBootstrapper to position/size the host window itself); the actual drawable
@@ -87,7 +86,7 @@ public sealed class PlayerManaBarContent(World world, ActionStateView actionStat
         // off ContentSize to fit inside the border rather than drawing over it.
         var outerRectangle = _hostWindow.LocalContentRectangle;
 
-        ResourceBarRenderer.Draw(spriteBatch, unitRectangle, outerRectangle, _manaFraction, _hasMana, ManaBarPalette.OutlineColor, ManaBarPalette.FractionColor);
+        ResourceBarRenderer.Draw(spriteBatch, outerRectangle, _manaFraction, _hasMana, ManaBarPalette.OutlineColor, ManaBarPalette.FractionColor);
 
         if (_hasMana)
         {

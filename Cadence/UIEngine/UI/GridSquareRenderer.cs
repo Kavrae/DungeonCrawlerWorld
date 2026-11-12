@@ -19,21 +19,23 @@ public enum GridSquareState
 /// </summary>
 public static class GridSquareRenderer
 {
-    public static void DrawBase(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Color? baseColorOverride = null)
+    public static void DrawBase<TTarget>(TTarget spriteBatch, Rectangle bounds, Color? baseColorOverride = null)
+        where TTarget : ISpriteDrawTarget
     {
-        spriteBatch.Draw(unitRectangle, bounds, baseColorOverride ?? WindowPalette.GridSquareBase);
+        spriteBatch.FillRectangle(bounds, baseColorOverride ?? WindowPalette.GridSquareBase);
     }
 
-    public static void DrawStateOverlay(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, GridSquareState state)
+    public static void DrawStateOverlay<TTarget>(TTarget spriteBatch, Rectangle bounds, GridSquareState state)
+        where TTarget : ISpriteDrawTarget
     {
         switch (state)
         {
             case GridSquareState.Hovered:
-                GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, WindowPalette.Hover, GlowMode.InteriorFull);
+                GlowRenderer.Draw(spriteBatch, bounds, WindowPalette.Hover, GlowMode.InteriorFull);
                 break;
             case GridSquareState.Selected:
-                GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, WindowPalette.AttentionGlow, GlowMode.ExteriorFade);
-                GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, WindowPalette.AttentionGlow, GlowMode.InteriorFade);
+                GlowRenderer.Draw(spriteBatch, bounds, WindowPalette.AttentionGlow, GlowMode.ExteriorFade);
+                GlowRenderer.Draw(spriteBatch, bounds, WindowPalette.AttentionGlow, GlowMode.InteriorFade);
                 break;
         }
     }

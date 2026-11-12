@@ -83,7 +83,7 @@ public static class LineOfSight
             return true;
         }
 
-        var (rise, run, offset) = BresenhamLine(depth, column, depthAlongX);
+        var (rise, run, offset) = BresenhamLine(depth, column);
         line = new DigitalLine(from, octant, rise, run, offset);
         if (walls is null || IsClear(line, depth, walls))
         {
@@ -101,26 +101,15 @@ public static class LineOfSight
 
     /// <summary>The digital line Bresenham's line (GridLineStepper, which a Line shape is laid out along) draws to (depth, column): the first line sight tries, and the one a path follows when nothing gets through.</summary>
     /// <remarks>
-    /// Bresenham's line rounds each step to the nearest column, breaking a half-tile tie one way or the other depending on
-    /// which axis is the longer, so it is the digital line of slope column / depth whose offset is half the depth, rounded
-    /// one way or the other; the tie-break is read off by stepping it once. Carried on past (depth, column), it stays the
+    /// Bresenham's line rounds each step to the nearest column and a half-tile tie up, whichever axis is the longer
+    /// (GridLineStepper steps its shorter axis when twice its error equals the longer delta), so it is the digital line of
+    /// slope column / depth whose offset is half the depth, rounded down. Carried on past (depth, column), it stays the
     /// line GridLineStepper carries on along.
     /// </remarks>
-    private static (long Rise, long Run, long Offset) BresenhamLine(int depth, int column, bool depthAlongX)
+    private static (long Rise, long Run, long Offset) BresenhamLine(int depth, int column)
     {
-        var halfUpOffset = depth / 2;
-        var halfDownOffset = (depth - 1) / 2;
-        var through = depthAlongX ? new Vector3Int(depth, column, 0) : new Vector3Int(column, depth, 0);
-        var stepper = new GridLineStepper(default, through);
-        var roundsHalfUp = true;
-        for (var step = 1; step <= depth && roundsHalfUp; step++)
-        {
-            var tile = stepper.Next();
-            roundsHalfUp = (depthAlongX ? tile.Y : tile.X) == ((long)column * step + halfUpOffset) / depth;
-        }
-
         var divisor = GreatestCommonDivisor(column, depth);
-        return (column / divisor, depth / divisor, (roundsHalfUp ? halfUpOffset : halfDownOffset) / divisor);
+        return (column / divisor, depth / divisor, depth / 2 / divisor);
     }
 
     private static int GreatestCommonDivisor(int a, int b)

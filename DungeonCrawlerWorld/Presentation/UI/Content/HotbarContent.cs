@@ -552,17 +552,17 @@ public sealed class HotbarContent(
     }
 
     /// <summary>Draws slot within bounds, in its element's local coordinates -- the binding's icon and numbers, the border, the armed and selected glows, the key label, and the invitation to drop while a bindable drag is held.</summary>
-    internal void DrawSlot(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, HotkeySlot slot, Rectangle bounds)
+    internal void DrawSlot(SpriteEffectBatch spriteBatch, HotkeySlot slot, Rectangle bounds)
     {
-        DrawSlot(spriteBatch, unitRectangle, world.PlayerEntityId, slot, bounds);
+        DrawSlot(spriteBatch, world.PlayerEntityId, slot, bounds);
 
         if (IsAcceptingDrag)
         {
-            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, WindowPalette.AttentionGlow);
+            GlowRenderer.Draw(spriteBatch, bounds, WindowPalette.AttentionGlow);
         }
     }
 
-    private void DrawSlot(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, int playerEntityId, HotkeySlot slot, Rectangle bounds)
+    private void DrawSlot(SpriteEffectBatch spriteBatch, int playerEntityId, HotkeySlot slot, Rectangle bounds)
     {
         var contentBounds = BorderThickness.Inset(bounds, SlotBorderThickness);
         var isActive = IsSlotActive(slot);
@@ -570,26 +570,26 @@ public sealed class HotbarContent(
 
         if (hotkeyBindingView.TryGetBoundAction(playerEntityId, slot, out var actionId) && actionStateView.TryGetEffectiveAction(playerEntityId, actionId, out var action))
         {
-            DrawSlotVisual(spriteBatch, unitRectangle, slot, bounds, contentBounds, BuildActionVisual(playerEntityId, action, isActive), alpha);
+            DrawSlotVisual(spriteBatch, slot, bounds, contentBounds, BuildActionVisual(playerEntityId, action, isActive), alpha);
 
             if (actionStateView.IsActionToggledOn(playerEntityId, actionId))
             {
-                ToggleActiveMarker.Draw(spriteBatch, unitRectangle, contentBounds, alpha);
+                ToggleActiveMarker.Draw(spriteBatch, contentBounds, alpha);
             }
         }
         else if (hotkeyBindingView.TryGetBoundItem(playerEntityId, slot, out var stackInstanceId) && TryResolveBoundItem(playerEntityId, stackInstanceId, out var item, out var stack))
         {
-            DrawSlotVisual(spriteBatch, unitRectangle, slot, bounds, contentBounds, BuildItemVisual(playerEntityId, slot, item, stack, isActive), alpha);
+            DrawSlotVisual(spriteBatch, slot, bounds, contentBounds, BuildItemVisual(playerEntityId, slot, item, stack, isActive), alpha);
 
             if (ToggleText.IsLit(item))
             {
-                ToggleActiveMarker.Draw(spriteBatch, unitRectangle, contentBounds, alpha);
+                ToggleActiveMarker.Draw(spriteBatch, contentBounds, alpha);
             }
 
             if (stackInstanceId == mapViewState.SelectedItemStackInstanceId)
             {
-                GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, WindowPalette.AttentionGlow, GlowMode.ExteriorFade);
-                GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, WindowPalette.AttentionGlow, GlowMode.InteriorFade);
+                GlowRenderer.Draw(spriteBatch, bounds, WindowPalette.AttentionGlow, GlowMode.ExteriorFade);
+                GlowRenderer.Draw(spriteBatch, bounds, WindowPalette.AttentionGlow, GlowMode.InteriorFade);
             }
         }
         else
@@ -598,21 +598,21 @@ public sealed class HotbarContent(
             // RadialFillRenderer never runs for this branch, so this is the only place that needs
             // to fill the slot's own background (DrawSlotVisual's own RadialFillRenderer.Draw call
             // already fills contentBounds with this same color for the two branches above).
-            spriteBatch.Draw(unitRectangle, contentBounds, WindowPalette.ControlBackground * alpha);
+            spriteBatch.FillRectangle(contentBounds, WindowPalette.ControlBackground * alpha);
         }
 
         // Every slot -- bound or not -- gets this same inward-fading white vignette layered on top
         // of its own background/icon, framing the slot. Drawn after DrawSlotVisual (not before) so
         // a bound slot's opaque icon background doesn't immediately paint over it.
-        GlowRenderer.Draw(spriteBatch, unitRectangle, contentBounds, WindowPalette.Hover, GlowMode.InteriorFade, alpha);
+        GlowRenderer.Draw(spriteBatch, contentBounds, WindowPalette.Hover, GlowMode.InteriorFade, alpha);
 
         var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(bounds, SlotBorderThickness);
-        BorderRenderer.Draw(spriteBatch, unitRectangle, BorderStyle.FlatContrast, Color.White, top, bottom, left, right, alpha);
+        BorderRenderer.Draw(spriteBatch, BorderStyle.FlatContrast, Color.White, top, bottom, left, right, alpha);
 
         if (mapViewState.ArmedSlot == slot)
         {
-            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, WindowPalette.AttentionGlow, GlowMode.ExteriorFade);
-            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, WindowPalette.AttentionGlow, GlowMode.InteriorFade);
+            GlowRenderer.Draw(spriteBatch, bounds, WindowPalette.AttentionGlow, GlowMode.ExteriorFade);
+            GlowRenderer.Draw(spriteBatch, bounds, WindowPalette.AttentionGlow, GlowMode.InteriorFade);
         }
 
         DrawKeyLabel(spriteBatch, bounds, slot, alpha);
@@ -692,7 +692,7 @@ public sealed class HotbarContent(
     }
 
     /// <summary>The one place a SlotVisual actually gets drawn -- radial fill/icon, then its costs (bottom-left), its quantity (bottom-center) and countdown, if any. Shared by both BuildActionVisual and BuildItemVisual outputs, regardless of which kind produced them.</summary>
-    private void DrawSlotVisual(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, HotkeySlot slot, Rectangle bounds, Rectangle contentBounds, SlotVisual visual, float alpha)
+    private void DrawSlotVisual(SpriteEffectBatch spriteBatch, HotkeySlot slot, Rectangle bounds, Rectangle contentBounds, SlotVisual visual, float alpha)
     {
         _radialFill.Sprite = visual.SpriteName is not null && spriteSheetService.Sprites.TryGetFirst(visual.SpriteName, out var sprite) ? sprite : null;
         _radialFill.SpriteTint = Color.White;
@@ -700,7 +700,7 @@ public sealed class HotbarContent(
         _radialFill.GlyphColor = visual.GlyphColor;
         _radialFill.BackgroundColor = WindowPalette.ControlBackground;
         _radialFill.FillPercentage = visual.FillPercentage;
-        _radialFill.Draw(spriteBatch, unitRectangle, _glyphFontMeasurer, contentBounds, alpha);
+        _radialFill.Draw(spriteBatch, _glyphFontMeasurer, contentBounds, alpha);
 
         if (!visual.Costs.IsFree)
         {

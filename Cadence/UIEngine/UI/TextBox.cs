@@ -116,12 +116,10 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     /// <summary>True to show text the user can select and copy but not change: typing, Backspace, Delete, Cut and Paste do nothing, and SetText still replaces it.</summary>
     public bool IsReadOnly { get; set; }
 
-    /// <summary>A disabled box keeps its text, draws its content background darkened (WindowPalette.DisabledBackground), and is never hit-tested, so it can't be focused, typed into or selected.</summary>
-    public bool Enabled { get; set; } = true;
-
     /// <summary>Whether typing, Backspace, Delete, Cut and Paste change the text: enabled and not read-only.</summary>
     protected bool AcceptsEdits => Enabled && !IsReadOnly;
 
+    /// <summary>A disabled box keeps its text, draws its content background darkened (WindowPalette.DisabledBackground), and is never hit-tested, so it can't be focused, typed into or selected.</summary>
     protected override bool IsHitTestable => base.IsHitTestable && Enabled;
 
     protected override Color ContentBackgroundColor => Enabled ? base.ContentBackgroundColor : WindowPalette.DisabledBackground(base.ContentBackgroundColor);
@@ -942,7 +940,6 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
 
         if (string.IsNullOrEmpty(OriginalText) && !IsFocused && !string.IsNullOrEmpty(GhostText))
         {
@@ -950,7 +947,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
             return;
         }
 
-        DrawSelectionIfAny(spriteBatch, unitRectangle);
+        DrawSelectionIfAny(spriteBatch);
 
         if (_multiline || string.IsNullOrEmpty(DisplayText.FormattedText))
         {
@@ -963,12 +960,12 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
             LabelRenderer.Draw(spriteBatch, ContentFont, visibleText, new Vector2(LinePadding, LinePadding), TextColor);
         }
 
-        DrawCaretIfFocused(spriteBatch, unitRectangle);
+        DrawCaretIfFocused(spriteBatch);
     }
 
     /// <summary>Draws a translucent highlight behind the current selection, if any -- called before the text itself so the highlight sits behind the glyphs, not on top of them.</summary>
     /// <remarks>Drawn in DrawContent's local coordinates. The rectangles are kept until the text, its wrapping, the selection, the scroll, the width or the font changes.</remarks>
-    private void DrawSelectionIfAny(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawSelectionIfAny(SpriteEffectBatch spriteBatch)
     {
         if (_selectionAnchor is not { } anchor || anchor == _caretIndex)
         {
@@ -987,7 +984,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
 
         foreach (var rectangle in selectionRectangles)
         {
-            spriteBatch.Draw(unitRectangle, rectangle, SelectionColor);
+            spriteBatch.FillRectangle(rectangle, SelectionColor);
         }
     }
 
@@ -1113,7 +1110,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     /// rather than one fixed color that might blend into either.
     /// </summary>
     /// <remarks>The offset from the content origin is kept until the text, its wrapping, the scroll, the caret or the font changes.</remarks>
-    private void DrawCaretIfFocused(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawCaretIfFocused(SpriteEffectBatch spriteBatch)
     {
         if (!IsFocused || !_caretVisible)
         {
@@ -1126,7 +1123,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
             static (_, textBox) => textBox.ComputeCaretOffset());
         var position = caretOffset;
         var caretRectangle = new Rectangle((int)MathF.Round(position.X), (int)MathF.Round(position.Y), CaretWidth, (int)ContentFont.LineHeight);
-        spriteBatch.Draw(unitRectangle, caretRectangle, TextColor);
+        spriteBatch.FillRectangle(caretRectangle, TextColor);
     }
 
     /// <summary>
@@ -1192,8 +1189,6 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
     /// </summary>
     public override void ReformatDisplayText()
     {
-        _lineSpans.Clear();
-
         // Single-line boxes (every search box today) never wrap onto a second visual line
         // regardless of width -- matching every standard single-line text input, which
         // overflows/scrolls horizontally instead of growing taller. Multiline is the only mode
@@ -1201,6 +1196,25 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
         // is gated behind _multiline, see OnHotkeysAction), so the segment loop below still only
         // ever produces one segment for a single-line box.
         var maximumWidth = _multiline ? _contentState.Size.X - ContentPadding.X * 2 : float.MaxValue;
+        DisplayText = _wrappedLines.Get(
+            (OriginalText, ContentFont, maximumWidth),
+            this,
+            static (key, textBox) => textBox.WrapOriginalText(key.MaximumWidth));
+
+        if (!_multiline)
+        {
+            EnsureCaretVisible();
+        }
+    }
+
+    /// <summary>ReformatDisplayText's last wrap, kept with the _lineSpans it filled until the text, the font or the width changes.</summary>
+    private readonly KeyedCache<(string Text, SpriteFontBase Font, float MaximumWidth), DisplayText> _wrappedLines = new();
+
+    /// <summary>Refills _lineSpans from OriginalText wrapped to maximumWidth and returns the lines joined for drawing.</summary>
+    private DisplayText WrapOriginalText(float maximumWidth)
+    {
+        _lineSpans.Clear();
+
         var spaceWidth = ContentTextMeasurer.MeasureWidth(" ");
         var segmentStart = 0;
 
@@ -1228,12 +1242,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
             stringBuilder.Append(OriginalText, start, length);
         }
 
-        DisplayText = new DisplayText(stringBuilder.ToString(), _lineSpans.Count);
-
-        if (!_multiline)
-        {
-            EnsureCaretVisible();
-        }
+        return new DisplayText(stringBuilder.ToString(), _lineSpans.Count);
     }
 
     /// <summary>
@@ -1348,13 +1357,7 @@ public class TextBox(ElementServices services, CursorTextContent? cursorTextCont
             return;
         }
 
-        var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
-
         var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(Rectangle, FocusIndicatorThickness);
-        spriteBatch.Draw(unitRectangle, top, FocusIndicatorColor);
-        spriteBatch.Draw(unitRectangle, bottom, FocusIndicatorColor);
-        spriteBatch.Draw(unitRectangle, left, FocusIndicatorColor);
-        spriteBatch.Draw(unitRectangle, right, FocusIndicatorColor);
+        BorderRenderer.Draw(Render.Batch, BorderStyle.Flat, FocusIndicatorColor, top, bottom, left, right);
     }
 }

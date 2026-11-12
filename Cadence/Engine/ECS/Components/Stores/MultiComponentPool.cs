@@ -5,10 +5,10 @@ namespace Engine.ECS.Components.Stores;
 /// <summary> Packed multi-value component storage. </summary>
 /// <remarks>
 /// Allows an entity to own 0..N components of the same type while keeping dense global iteration, via an intrusive doubly-linked chain through the dense array per entity.
-/// Each entity's chain head, count and version live in a paged index (see EntityPages), so a pool costs the id ranges its holders fall in rather than the world's entity capacity; dense storage grows geometrically (see DenseCapacityGrowth).
+/// Each entity's chain head, count and version live in a paged index (see EntityPages), held while the entity holds an instance, so a pool costs the id ranges its holders currently fall in rather than the world's entity capacity; dense storage grows geometrically (see DenseCapacityGrowth).
 /// </remarks>
-/// <cleanupVersion>1</cleanupVersion>
-public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool, IObservableComponentPool where T : struct
+/// <cleanupVersion>2</cleanupVersion>
+public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool, IObservableComponentPool, IMembershipMaskedComponentPool where T : struct
 {
     private static readonly EntityChain EmptyChain = new(-1, 0, 0);
 
@@ -18,13 +18,29 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     private uint[] _denseVersions;
 
     // Linked chains through dense storage, one per entity
-    private int[] _denseNext;
-    private int[] _densePrevious;
+    private DenseLink[] _denseLinks;
 
     // Per-entity chain head, count and version
     private readonly EntityPages<EntityChain> _chains;
 
     private int _count;
+
+    /// <summary>The last entity version handed out; every change to any entity's instances takes the next one.</summary>
+    private uint _lastEntityVersion;
+
+    private ComponentMembershipMasks? _membershipMasks;
+    private int _membershipBit;
+
+    /// <inheritdoc/>
+    void IMembershipMaskedComponentPool.AttachMembershipMasks(ComponentMembershipMasks membershipMasks, int membershipBit)
+    {
+        _membershipMasks = membershipMasks;
+        _membershipBit = membershipBit;
+    }
+
+    /// <summary>The next entity version: never 0, which an entity holding nothing reads.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private uint NextEntityVersion() => ++_lastEntityVersion is var version and not 0 ? version : ++_lastEntityVersion;
 
     /// <summary>Held by the single timer wheel driving this pool, if any -- see TimerWheelClaim for why there can only be one.</summary>
     private TimerWheelClaim _timerWheelClaim;
@@ -50,9 +66,9 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <summary> The number of components in the pool, across every entity. </summary>
     public int Count => _count;
 
-    /// <summary> Estimated bytes across the dense (_denseComponents/_denseIndexToEntityIdMap/_denseVersions/_denseNext/_densePrevious) arrays and the per-entity chain index's allocated pages. </summary>
+    /// <summary> Estimated bytes across the dense (_denseComponents/_denseIndexToEntityIdMap/_denseVersions/_denseLinks) arrays and the per-entity chain index's allocated pages. </summary>
     public long EstimatedBytes =>
-        (long)_denseComponents.Length * (Unsafe.SizeOf<T>() + sizeof(int) + sizeof(uint) + sizeof(int) + sizeof(int)) +
+        (long)_denseComponents.Length * (Unsafe.SizeOf<T>() + sizeof(int) + sizeof(uint) + Unsafe.SizeOf<DenseLink>()) +
         _chains.EstimatedBytes;
 
     /// <summary> A read-only span of the components in the pool, packed contiguously by dense index. </summary>
@@ -140,12 +156,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         _denseComponents = new T[initialCapacity];
         _denseIndexToEntityIdMap = new int[initialCapacity];
         _denseVersions = new uint[initialCapacity];
-        _denseNext = new int[initialCapacity];
-        _densePrevious = new int[initialCapacity];
-
-        Array.Fill(_denseIndexToEntityIdMap, -1);
-        Array.Fill(_denseNext, -1);
-        Array.Fill(_densePrevious, -1);
+        _denseLinks = new DenseLink[initialCapacity];
 
         _count = 0;
         Observation = typeof(IScheduledTimer).IsAssignableFrom(typeof(T))
@@ -198,7 +209,12 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     public int CountForEntity(int entityId) => ChainOf(entityId).Count;
 
     /// <summary> Gets the entity-scoped version for the specified entity. </summary>
-    /// <remarks>Distinct from a single component's own dense-index version: this increments on any Add/Remove/update affecting any of entityId's instances, so a consumer only interested in "did anything about this entity's instances change" doesn't need to track every dense index individually.</remarks>
+    /// <remarks>
+    /// Distinct from a single component's own dense-index version: this changes on any Add/Remove/update affecting any of entityId's instances,
+    /// so a consumer only interested in "did anything about this entity's instances change" doesn't need to track every dense index individually.
+    /// Each change takes the next value of one counter for the whole pool, and an entity holding nothing reads 0: its slot is released with its
+    /// last instance, so a version it held before can never come round again for it.
+    /// </remarks>
     /// <param name="entityId">The ID of the entity to check.</param>
     /// <returns>The entity-scoped version.</returns>
     public uint GetEntityVersion(int entityId) => ChainOf(entityId).Version;
@@ -211,31 +227,30 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     {
         Guard(entityId);
         ThrowIfWriteScopeOpen();
-        ref var chain = ref _chains.GetWritable(entityId);
-
         EnsureDenseCapacityForOneMore();
 
+        var previousFirst = _chains.Get(entityId).FirstDenseIndex;
+        ref var chain = ref previousFirst == -1 ? ref _chains.Claim(entityId) : ref _chains.GetExisting(entityId);
         var newDenseIndex = _count++;
-        var previousFirst = chain.FirstDenseIndex;
 
         _denseComponents[newDenseIndex] = component;
         _denseIndexToEntityIdMap[newDenseIndex] = entityId;
         _denseVersions[newDenseIndex] = 1;
 
-        _denseNext[newDenseIndex] = previousFirst;
-        _densePrevious[newDenseIndex] = -1;
+        _denseLinks[newDenseIndex] = new DenseLink(previousFirst, -1);
 
         if (previousFirst != -1)
         {
-            _densePrevious[previousFirst] = newDenseIndex;
+            _denseLinks[previousFirst].Previous = newDenseIndex;
         }
 
         chain.FirstDenseIndex = newDenseIndex;
         chain.Count++;
-        chain.Version++;
+        chain.Version = NextEntityVersion();
 
         if (previousFirst == -1)
         {
+            _membershipMasks?.Set(entityId, _membershipBit);
             EntityAdded?.Invoke(entityId);
         }
 
@@ -247,13 +262,12 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <returns>True if at least one component was removed, false if the entity had none.</returns>
     public bool Remove(int entityId)
     {
-        var denseIndex = _chains.Get(entityId).FirstDenseIndex;
-        if (denseIndex == -1)
+        if (_chains.Get(entityId).FirstDenseIndex == -1)
         {
             return false;
         }
 
-        while (_chains.Get(entityId).FirstDenseIndex is var first && first != -1)
+        while (_chains.Get(entityId).FirstDenseIndex is var first and not -1)
         {
             RemoveDenseIndexInternal(first);
         }
@@ -270,7 +284,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     {
         for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1;)
         {
-            var next = _denseNext[denseIndex];
+            var next = _denseLinks[denseIndex].Next;
 
             if (matcher.Matches(in _denseComponents[denseIndex]))
             {
@@ -305,7 +319,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <summary> Gets the dense index of the next component instance in the same entity's chain. </summary>
     /// <param name="denseIndex">The dense index to advance from.</param>
     /// <returns>The dense index of the next instance, or -1 if denseIndex was the chain's last.</returns>
-    public int GetNextDenseIndex(int denseIndex) => _denseNext[denseIndex];
+    public int GetNextDenseIndex(int denseIndex) => _denseLinks[denseIndex].Next;
 
     /// <summary>Opens a write to the component instance at the given dense index; disposing it versions and observes the write.</summary>
     /// <param name="denseIndex">The dense index of the component instance.</param>
@@ -322,7 +336,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <param name="matcher">Which component to write.</param>
     public MultiComponentWrite<T> TryWriteFirst<TMatcher>(int entityId, TMatcher matcher) where TMatcher : unmanaged, IComponentMatcher<T>
     {
-        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseNext[denseIndex])
+        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseLinks[denseIndex].Next)
         {
             if (matcher.Matches(in _denseComponents[denseIndex]))
             {
@@ -406,7 +420,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     private void MarkChanged(int entityId, int denseIndex)
     {
         _denseVersions[denseIndex]++;
-        _chains.GetWritable(entityId).Version++;
+        _chains.GetExisting(entityId).Version = NextEntityVersion();
         _componentChanged?.Invoke(entityId, denseIndex);
     }
 
@@ -429,7 +443,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         where TMatcher : unmanaged, IComponentMatcher<T>
         where TUpdater : unmanaged, IComponentUpdater<T>
     {
-        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseNext[denseIndex])
+        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseLinks[denseIndex].Next)
         {
             ref var component = ref _denseComponents[denseIndex];
             if (matcher.Matches(in component))
@@ -447,7 +461,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <remarks>Walks the dense per-entity chain in insertion order, same as every other matcher-based lookup on this type -- see TryUpdateFirst/RemoveFirst.</remarks>
     public bool TryGetFirst<TMatcher>(int entityId, TMatcher matcher, out T result) where TMatcher : unmanaged, IComponentMatcher<T>
     {
-        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseNext[denseIndex])
+        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseLinks[denseIndex].Next)
         {
             ref readonly var component = ref _denseComponents[denseIndex];
             if (matcher.Matches(in component))
@@ -466,7 +480,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     public int CountMatching<TMatcher>(int entityId, TMatcher matcher) where TMatcher : unmanaged, IComponentMatcher<T>
     {
         var matchCount = 0;
-        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseNext[denseIndex])
+        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseLinks[denseIndex].Next)
         {
             if (matcher.Matches(in _denseComponents[denseIndex]))
             {
@@ -484,7 +498,7 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         ArgumentNullException.ThrowIfNull(destination);
 
         destination.Clear();
-        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseNext[denseIndex])
+        for (var denseIndex = ChainOf(entityId).FirstDenseIndex; denseIndex != -1; denseIndex = _denseLinks[denseIndex].Next)
         {
             destination.Add(_denseComponents[denseIndex]);
         }
@@ -495,11 +509,6 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     {
         ThrowIfWriteScopeOpen();
         Array.Clear(_denseComponents, 0, _count);
-        Array.Fill(_denseIndexToEntityIdMap, -1, 0, _count);
-        Array.Fill(_denseVersions, (uint)0, 0, _count);
-        Array.Fill(_denseNext, -1, 0, _count);
-        Array.Fill(_densePrevious, -1, 0, _count);
-
         _chains.Clear();
 
         _count = 0;
@@ -513,9 +522,8 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         var ownerEntityId = _denseIndexToEntityIdMap[denseIndex];
         _componentRemoving?.Invoke(ownerEntityId, denseIndex);
 
-        var prev = _densePrevious[denseIndex];
-        var next = _denseNext[denseIndex];
-        ref var ownerChain = ref _chains.GetWritable(ownerEntityId);
+        var (next, prev) = _denseLinks[denseIndex];
+        ref var ownerChain = ref _chains.GetExisting(ownerEntityId);
 
         if (prev == -1)
         {
@@ -523,20 +531,23 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
         }
         else
         {
-            _denseNext[prev] = next;
+            _denseLinks[prev].Next = next;
         }
 
         if (next != -1)
         {
-            _densePrevious[next] = prev;
+            _denseLinks[next].Previous = prev;
         }
 
-        ownerChain.Count--;
-        ownerChain.Version++;
-
-        if (ownerChain.Count == 0)
+        if (--ownerChain.Count == 0)
         {
+            _chains.Release(ownerEntityId);
+            _membershipMasks?.Clear(ownerEntityId, _membershipBit);
             EntityRemoved?.Invoke(ownerEntityId);
+        }
+        else
+        {
+            ownerChain.Version = NextEntityVersion();
         }
 
         var lastDenseIndex = _count - 1;
@@ -551,11 +562,6 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
             _denseComponents[lastDenseIndex] = default;
         }
 
-        _denseIndexToEntityIdMap[lastDenseIndex] = -1;
-        _denseVersions[lastDenseIndex] = 0;
-        _denseNext[lastDenseIndex] = -1;
-        _densePrevious[lastDenseIndex] = -1;
-
         _count--;
     }
 
@@ -564,27 +570,26 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     private void MoveDenseEntry(int fromDenseIndex, int toDenseIndex)
     {
         var movedEntityId = _denseIndexToEntityIdMap[fromDenseIndex];
-        var movedPrev = _densePrevious[fromDenseIndex];
-        var movedNext = _denseNext[fromDenseIndex];
+        var movedLink = _denseLinks[fromDenseIndex];
+        var (movedNext, movedPrev) = movedLink;
 
         _denseComponents[toDenseIndex] = _denseComponents[fromDenseIndex];
         _denseIndexToEntityIdMap[toDenseIndex] = movedEntityId;
         _denseVersions[toDenseIndex] = _denseVersions[fromDenseIndex];
-        _denseNext[toDenseIndex] = movedNext;
-        _densePrevious[toDenseIndex] = movedPrev;
+        _denseLinks[toDenseIndex] = movedLink;
 
         if (movedPrev == -1)
         {
-            _chains.GetWritable(movedEntityId).FirstDenseIndex = toDenseIndex;
+            _chains.GetExisting(movedEntityId).FirstDenseIndex = toDenseIndex;
         }
         else
         {
-            _denseNext[movedPrev] = toDenseIndex;
+            _denseLinks[movedPrev].Next = toDenseIndex;
         }
 
         if (movedNext != -1)
         {
-            _densePrevious[movedNext] = toDenseIndex;
+            _denseLinks[movedNext].Previous = toDenseIndex;
         }
     }
 
@@ -612,19 +617,15 @@ public sealed class MultiComponentPool<T> : IReadOnlyMultiComponentPool<T>, IIns
     /// <summary>One entity's chain through dense storage: its head, how many instances it holds, and its entity-scoped version.</summary>
     private record struct EntityChain(int FirstDenseIndex, int Count, uint Version);
 
+    /// <summary>A dense instance's neighbours in its entity's chain, -1 at either end; one element, so unlinking reads and writes one cache line per index.</summary>
+    private record struct DenseLink(int Next, int Previous);
+
+    /// <remarks>Slots at or past Count are never read, so neither growth nor removal resets them.</remarks>
     private void GrowDenseTo(int newSize)
     {
         Array.Resize(ref _denseComponents, newSize);
         Array.Resize(ref _denseIndexToEntityIdMap, newSize);
         Array.Resize(ref _denseVersions, newSize);
-        Array.Resize(ref _denseNext, newSize);
-        Array.Resize(ref _densePrevious, newSize);
-
-        for (var i = _count; i < newSize; i++)
-        {
-            _denseIndexToEntityIdMap[i] = -1;
-            _denseNext[i] = -1;
-            _densePrevious[i] = -1;
-        }
+        Array.Resize(ref _denseLinks, newSize);
     }
 }

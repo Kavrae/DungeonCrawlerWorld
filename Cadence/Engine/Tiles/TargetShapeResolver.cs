@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Engine.Math;
 
 namespace Engine.Tiles;
@@ -35,6 +36,10 @@ public static class TargetShapeResolver
 {
     /// <summary>The shapes that face from the caster toward the aimed tile.</summary>
     private const TargetShape DirectionalShapes = TargetShape.Cone | TargetShape.Line | TargetShape.Wall | TargetShape.Sweep;
+
+    /// <summary>The shapes that, laid out around the caster, can cover tiles of its own footprint.</summary>
+    /// <remarks>A Line and a Cone leave the footprint out as they are laid out, and Adjacent and Sweep are the ring around it.</remarks>
+    private const TargetShape FootprintCoveringShapes = TargetShape.Circle | TargetShape.Ring | TargetShape.Square | TargetShape.Cross | TargetShape.Wall;
 
     /// <summary>The caster's own WxH footprint size, as a single point</summary>
     /// <remarks>See ResolveAdjacent's fast path, and every shape anchored on the one end tile.</remarks>
@@ -257,17 +262,18 @@ public static class TargetShapeResolver
     /// <summary>Keeps, in order from firstIndex on, the tiles in visible (when given) that walls (when given) doesn't block.</summary>
     private static void KeepAimableTiles(TileMarkGrid? visible, ISightBlockers? walls, int firstIndex, List<Vector3Int> results)
     {
+        var tiles = CollectionsMarshal.AsSpan(results);
         var writeIndex = firstIndex;
-        for (var readIndex = firstIndex; readIndex < results.Count; readIndex++)
+        for (var readIndex = firstIndex; readIndex < tiles.Length; readIndex++)
         {
-            var tile = results[readIndex];
+            var tile = tiles[readIndex];
             if ((visible is null || visible.Contains(tile)) && (walls is null || !walls.BlocksSight(tile.X, tile.Y, tile.Z)))
             {
-                results[writeIndex++] = tile;
+                tiles[writeIndex++] = tile;
             }
         }
 
-        results.RemoveRange(writeIndex, results.Count - writeIndex);
+        CollectionsMarshal.SetCount(results, writeIndex);
     }
 
     /// <summary>What sweeping one tile costs, in steps of a ray: measured, so a Circle past radius 3 or a filled Square is swept and a Line, a Cone or a small Circle is tested ray by ray.</summary>
@@ -282,10 +288,11 @@ public static class TargetShapeResolver
     /// </remarks>
     private static void RemoveHiddenFrom(Vector3Int origin, Vector2Byte originSize, ISightBlockers walls, int firstIndex, List<Vector3Int> results)
     {
+        var tiles = CollectionsMarshal.AsSpan(results);
         var farthest = 0;
-        for (var index = firstIndex; index < results.Count; index++)
+        for (var index = firstIndex; index < tiles.Length; index++)
         {
-            farthest = System.Math.Max(farthest, GridDistance.ChebyshevDistance(origin, originSize, results[index], SingleTileFootprint));
+            farthest = System.Math.Max(farthest, GridDistance.ChebyshevDistance(origin, originSize, tiles[index], SingleTileFootprint));
         }
 
         var sweepRadius = farthest + System.Math.Max(originSize.X, originSize.Y) - 1;
@@ -299,15 +306,16 @@ public static class TargetShapeResolver
         }
 
         var writeIndex = firstIndex;
-        for (var readIndex = firstIndex; readIndex < results.Count; readIndex++)
+        for (var readIndex = firstIndex; readIndex < tiles.Length; readIndex++)
         {
-            if (LineOfSight.IsVisibleFromFootprint(origin, originSize, results[readIndex], walls))
+            var tile = tiles[readIndex];
+            if (LineOfSight.IsVisibleFromFootprint(origin, originSize, tile, walls))
             {
-                results[writeIndex++] = results[readIndex];
+                tiles[writeIndex++] = tile;
             }
         }
 
-        results.RemoveRange(writeIndex, results.Count - writeIndex);
+        CollectionsMarshal.SetCount(results, writeIndex);
     }
 
     /// <summary>
@@ -387,7 +395,10 @@ public static class TargetShapeResolver
 
         resolvedGroupCount += AppendDirectionless(shape & ~TargetShape.Self, origin, originSize, ranges.AreaSize, bounds, results);
         resolvedGroupCount += AppendFacing(shape, origin, originSize, nearestFootprintTile, directionX, directionY, ranges.AreaSize, bounds, results);
-        RemoveFootprint(origin, originSize, firstAppended, results);
+        if ((shape & FootprintCoveringShapes) != 0)
+        {
+            RemoveFootprint(origin, originSize, firstAppended, results);
+        }
 
         if ((shape & TargetShape.Self) != 0)
         {
@@ -613,20 +624,21 @@ public static class TargetShapeResolver
         var firstAppended = results.Count;
         AppendAdjacent(anchor, anchorSize, bounds, results);
 
+        var tiles = CollectionsMarshal.AsSpan(results);
         var writeIndex = firstAppended;
-        for (var readIndex = firstAppended; readIndex < results.Count; readIndex++)
+        for (var readIndex = firstAppended; readIndex < tiles.Length; readIndex++)
         {
-            var tile = results[readIndex];
+            var tile = tiles[readIndex];
             var sideX = tile.X < anchor.X ? -1 : tile.X >= anchor.X + anchorSize.X ? 1 : 0;
             var sideY = tile.Y < anchor.Y ? -1 : tile.Y >= anchor.Y + anchorSize.Y ? 1 : 0;
             var turnsApart = System.Math.Abs(OctantOfStep[(sideY + 1) * 3 + sideX + 1] - facingOctant);
             if (System.Math.Min(turnsApart, OctantCount - turnsApart) <= 1)
             {
-                results[writeIndex++] = tile;
+                tiles[writeIndex++] = tile;
             }
         }
 
-        results.RemoveRange(writeIndex, results.Count - writeIndex);
+        CollectionsMarshal.SetCount(results, writeIndex);
     }
 
     /// <summary>The eighth of a turn, counted as OctantOfStep counts them, nearest the direction (directionX, directionY), not both zero.</summary>
@@ -647,16 +659,18 @@ public static class TargetShapeResolver
     /// <summary>Removes, from firstIndex on, every tile of the footprint at origin, keeping the rest in order.</summary>
     private static void RemoveFootprint(Vector3Int origin, Vector2Byte originSize, int firstIndex, List<Vector3Int> results)
     {
+        var tiles = CollectionsMarshal.AsSpan(results);
         var writeIndex = firstIndex;
-        for (var readIndex = firstIndex; readIndex < results.Count; readIndex++)
+        for (var readIndex = firstIndex; readIndex < tiles.Length; readIndex++)
         {
-            if (!IsWithinFootprint(results[readIndex], origin, originSize))
+            var tile = tiles[readIndex];
+            if (!IsWithinFootprint(tile, origin, originSize))
             {
-                results[writeIndex++] = results[readIndex];
+                tiles[writeIndex++] = tile;
             }
         }
 
-        results.RemoveRange(writeIndex, results.Count - writeIndex);
+        CollectionsMarshal.SetCount(results, writeIndex);
     }
 
     /// <summary>Every tile from MinimumRange to MaximumRange of originSize's footprint at origin, with or without the footprint itself.</summary>
@@ -666,16 +680,18 @@ public static class TargetShapeResolver
     /// <summary>Removes, from firstIndex on, every tile nearer than ranges.MinimumRange to the footprint, keeping the rest in order.</summary>
     private static void RemoveNearerThanMinimum(Vector3Int origin, Vector2Byte originSize, TargetRanges ranges, int firstIndex, List<Vector3Int> results)
     {
+        var tiles = CollectionsMarshal.AsSpan(results);
         var writeIndex = firstIndex;
-        for (var readIndex = firstIndex; readIndex < results.Count; readIndex++)
+        for (var readIndex = firstIndex; readIndex < tiles.Length; readIndex++)
         {
-            if (!ranges.IsNearerThanMinimum(origin, originSize, results[readIndex]))
+            var tile = tiles[readIndex];
+            if (!ranges.IsNearerThanMinimum(origin, originSize, tile))
             {
-                results[writeIndex++] = results[readIndex];
+                tiles[writeIndex++] = tile;
             }
         }
 
-        results.RemoveRange(writeIndex, results.Count - writeIndex);
+        CollectionsMarshal.SetCount(results, writeIndex);
     }
 
     /// <summary>Every tile within a rounded circle of radius around originSize's footprint at origin, with or without the footprint itself.</summary>
@@ -745,9 +761,17 @@ public static class TargetShapeResolver
     /// <summary>Appends the tiles from firstX to lastX, both included, of row y; nothing when lastX is before firstX.</summary>
     private static void AddRow(int firstX, int lastX, int y, int z, List<Vector3Int> results)
     {
-        for (var x = firstX; x <= lastX; x++)
+        if (lastX < firstX)
         {
-            results.Add(new Vector3Int(x, y, z));
+            return;
+        }
+
+        var firstAppended = results.Count;
+        CollectionsMarshal.SetCount(results, firstAppended + lastX - firstX + 1);
+        var row = CollectionsMarshal.AsSpan(results)[firstAppended..];
+        for (var index = 0; index < row.Length; index++)
+        {
+            row[index] = new Vector3Int(firstX + index, y, z);
         }
     }
 
@@ -757,16 +781,18 @@ public static class TargetShapeResolver
     {
         var seen = (_dedupeScratch ??= new TileMarkGrid()).ResetAround(results, firstIndex: 0);
 
+        var tiles = CollectionsMarshal.AsSpan(results);
         var writeIndex = 0;
-        for (var readIndex = 0; readIndex < results.Count; readIndex++)
+        for (var readIndex = 0; readIndex < tiles.Length; readIndex++)
         {
-            if (seen.TryAdd(results[readIndex]))
+            var tile = tiles[readIndex];
+            if (seen.TryAdd(tile))
             {
-                results[writeIndex++] = results[readIndex];
+                tiles[writeIndex++] = tile;
             }
         }
 
-        results.RemoveRange(writeIndex, results.Count - writeIndex);
+        CollectionsMarshal.SetCount(results, writeIndex);
         seen.Release();
     }
 

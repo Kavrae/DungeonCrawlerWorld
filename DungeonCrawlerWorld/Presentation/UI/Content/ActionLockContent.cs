@@ -62,7 +62,6 @@ public sealed class ActionLockContent(World world, ActionStateView actionStateVi
         }
 
         var spriteBatch = _hostWindow.Render.Batch;
-        var unitRectangle = _hostWindow.Render.UnitRectangle;
 
         _radialFill.Glyph = _glyph;
         _radialFill.GlyphColor = _glyphColor;
@@ -72,6 +71,6 @@ public sealed class ActionLockContent(World world, ActionStateView actionStateVi
         var contentSize = _hostWindow.ContentSize;
         var bounds = new Rectangle(ContentInset, ContentInset, (int)contentSize.X - ContentInset * 2, (int)contentSize.Y - ContentInset * 2);
 
-        _radialFill.Draw(spriteBatch, unitRectangle, _glyphFontMeasurer, bounds);
+        _radialFill.Draw(spriteBatch, _glyphFontMeasurer, bounds);
     }
 }

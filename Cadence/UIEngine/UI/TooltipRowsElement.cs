@@ -10,10 +10,8 @@ namespace UIEngine.UI;
 public sealed class TooltipRowsElement(ElementServices services)
     : Element(services)
 {
-    private readonly List<TooltipRow> _rows = [];
-    private readonly List<float> _rightTextWidths = [];
+    private readonly TooltipRowBlock _rowBlock = new();
     private SpriteFontBase _font = null!;
-    private float _middleColumnLeft;
     private GlowPulseClock _rowGlowPulse;
 
     /// <summary>The height rows take in the default font.</summary>
@@ -24,25 +22,18 @@ public sealed class TooltipRowsElement(ElementServices services)
     public void Configure(IReadOnlyList<TooltipRow> rows)
     {
         _font = FontService.GetFont(FontChrome.DefaultFontSize);
-        _rows.Clear();
-        for (var index = 0; index < rows.Count; index++)
-        {
-            _rows.Add(rows[index]);
-        }
-
-        _middleColumnLeft = TooltipRowDrawing.MeasureMiddleColumnLeft(_font, _rows);
-        TooltipRowDrawing.MeasureRightTextWidths(_font, _rows, _rightTextWidths);
+        _rowBlock.Set(_font, rows);
         _rowGlowPulse.Restart();
     }
 
     public override void DrawContent(GameTime gameTime)
     {
-        if (_rows.Count == 0)
+        if (_rowBlock.Count == 0)
         {
             return;
         }
 
         _rowGlowPulse.StartPendingAt(gameTime.TotalGameTime);
-        TooltipRowDrawing.Draw(Render.Batch, Render.UnitRectangle, _font, _rows, _rightTextWidths, _middleColumnLeft, Vector2.Zero, LocalContentRectangle.Width, _rowGlowPulse.ElapsedAt(gameTime.TotalGameTime));
+        _rowBlock.Draw(Render.Batch, _font, Vector2.Zero, LocalContentRectangle.Width, _rowGlowPulse.ElapsedAt(gameTime.TotalGameTime));
     }
 }

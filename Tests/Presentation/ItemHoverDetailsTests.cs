@@ -39,9 +39,9 @@ public sealed class ItemHoverDetailsTests
         public IReadOnlyList<TooltipRow>? ShopPricingRowsFor(in ItemHoverTarget target) => null;
     }
 
-    private static (ItemHoverDetails Hover, CursorLabelContent Label, RecordingPopup Popup) Build()
+    private static (ItemHoverDetails Hover, CursorTextContent Label, RecordingPopup Popup) Build()
     {
-        var label = new CursorLabelContent(new PointerState(), TestFonts.Shared);
+        var label = new CursorTextContent(new PointerState(), TestFonts.Shared);
         var popup = new RecordingPopup();
         return (new ItemHoverDetails(label) { Popup = popup }, label, popup);
     }
@@ -53,7 +53,7 @@ public sealed class ItemHoverDetailsTests
 
         hover.Hover(this, Potion, ItemHoverDetails.DetailsDelayFrames - 1, new NoShopPricing());
 
-        Assert.AreEqual("Test Potion", label.ShownText);
+        Assert.AreEqual("Test Potion", label.ShownLabelText);
         Assert.IsNull(popup.Shown);
     }
 
@@ -65,7 +65,7 @@ public sealed class ItemHoverDetailsTests
         hover.Hover(this, Potion, ItemHoverDetails.DetailsDelayFrames, new NoShopPricing());
 
         Assert.AreEqual(Potion, popup.Shown);
-        Assert.AreEqual(string.Empty, label.ShownText);
+        Assert.AreEqual(string.Empty, label.ShownLabelText);
     }
 
     [TestMethod]
@@ -77,7 +77,7 @@ public sealed class ItemHoverDetailsTests
         hover.Hover(this, Potion, ItemHoverDetails.DetailsDelayFrames * 2, new NoShopPricing());
 
         Assert.IsNull(popup.Shown);
-        Assert.AreEqual("Test Potion", label.ShownText);
+        Assert.AreEqual("Test Potion", label.ShownLabelText);
     }
 
     [TestMethod]
@@ -104,7 +104,7 @@ public sealed class ItemHoverDetailsTests
         hover.Hover(this, Potion, ItemHoverDetails.DetailsDelayFrames * 2, new NoShopPricing());
 
         Assert.IsNull(popup.Shown);
-        Assert.AreEqual("Test Potion", label.ShownText);
+        Assert.AreEqual("Test Potion", label.ShownLabelText);
     }
 
     [TestMethod]
@@ -144,6 +144,6 @@ public sealed class ItemHoverDetailsTests
 
         hover.EndHover(new object());
 
-        Assert.AreEqual("Test Potion", label.ShownText);
+        Assert.AreEqual("Test Potion", label.ShownLabelText);
     }
 }

@@ -61,23 +61,22 @@ public sealed class TargetShapePreviewElement(ElementServices services)
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
 
         foreach (var offset in _offsets)
         {
-            DrawCell(spriteBatch, unitRectangle, offset);
+            DrawCell(spriteBatch, offset);
         }
 
-        DrawPlayerMarker(spriteBatch, unitRectangle);
+        DrawPlayerMarker(spriteBatch);
     }
 
-    private void DrawCell(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Point offset)
+    private void DrawCell(SpriteEffectBatch spriteBatch, Point offset)
     {
         var cellOrigin = new Vector2((offset.X - _minX) * _cellSize, (offset.Y - _minY) * _cellSize);
         var outerSize = _cellSize - CellGap;
 
         var fillColor = _highlightedOffsets?.Contains(offset) == true ? HighlightedCellFillColor : CellFillColor;
-        BorderedBoxRenderer.Draw(spriteBatch, unitRectangle, cellOrigin, outerSize, CellBorderThickness, CellBorderColor, fillColor);
+        BorderedBoxRenderer.Draw(spriteBatch, cellOrigin, outerSize, CellBorderThickness, CellBorderColor, fillColor);
 
         DrawDistanceNumber(spriteBatch, offset, cellOrigin, outerSize);
     }
@@ -95,7 +94,7 @@ public sealed class TargetShapePreviewElement(ElementServices services)
     }
 
     /// <summary>The caster's own cell (0,0) -- always present, whether or not it's also one of the targeted _offsets (Self, alone or combined e.g. Adjacent | Self, targets it; most other shapes don't; either way the circle marks it).</summary>
-    private void DrawPlayerMarker(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawPlayerMarker(SpriteEffectBatch spriteBatch)
     {
         var cellOrigin = new Vector2((0 - _minX) * _cellSize, (0 - _minY) * _cellSize);
         var center = cellOrigin + new Vector2(_cellSize / 2f, _cellSize / 2f);
@@ -105,11 +104,11 @@ public sealed class TargetShapePreviewElement(ElementServices services)
             return;
         }
 
-        DrawCircle(spriteBatch, unitRectangle, center, radius, PlayerMarkerColor);
+        DrawCircle(spriteBatch, center, radius, PlayerMarkerColor);
     }
 
     /// <summary>Same "sweep thin rotated rectangles around a center" technique RadialFillRenderer.DrawRadialMask already uses for its own cooldown wheel -- reimplemented directly rather than reused, since that method draws a translucent cooldown mask over an icon (a different composite), not a plain solid circle in an arbitrary color.</summary>
-    private static void DrawCircle(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 center, float radius, Color color)
+    private static void DrawCircle(SpriteEffectBatch spriteBatch, Vector2 center, float radius, Color color)
     {
         var sliverThickness = MathF.Max(1f, MathF.Tau * radius / CircleSliverCount * 1.5f);
         var sliverSize = new Vector2(radius, sliverThickness);
@@ -118,7 +117,7 @@ public sealed class TargetShapePreviewElement(ElementServices services)
 
         for (var i = 0; i < CircleSliverCount; i++)
         {
-            spriteBatch.Draw(unitRectangle, center, null, color, angle, new Vector2(0f, 0.5f), sliverSize, SpriteEffects.None);
+            spriteBatch.FillRectangle(center, sliverSize, angle, new Vector2(0f, 0.5f), color, SpriteDrawStyle.Plain);
             angle -= angleStep;
         }
     }

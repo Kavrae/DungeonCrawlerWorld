@@ -38,12 +38,12 @@ public sealed class SpriteCellDrawer(SpriteSheetService spriteSheetService, Func
     }
 
     /// <summary>A flat rectangle's outline, thickness pixels wide, inside it.</summary>
-    public static void DrawOutline<TTarget>(TTarget target, Texture2D unitRectangle, Rectangle rectangle, Color color, int thickness)
+    public static void DrawOutline<TTarget>(TTarget target, Rectangle rectangle, Color color, int thickness)
         where TTarget : ISpriteDrawTarget
     {
-        target.Draw(unitRectangle, new Rectangle(rectangle.X, rectangle.Y, rectangle.Width, thickness), null, color, SpriteDrawStyle.Plain);
-        target.Draw(unitRectangle, new Rectangle(rectangle.X, rectangle.Bottom - thickness, rectangle.Width, thickness), null, color, SpriteDrawStyle.Plain);
-        target.Draw(unitRectangle, new Rectangle(rectangle.X, rectangle.Y, thickness, rectangle.Height), null, color, SpriteDrawStyle.Plain);
-        target.Draw(unitRectangle, new Rectangle(rectangle.Right - thickness, rectangle.Y, thickness, rectangle.Height), null, color, SpriteDrawStyle.Plain);
+        target.FillRectangle(new Rectangle(rectangle.X, rectangle.Y, rectangle.Width, thickness), color, SpriteDrawStyle.Plain);
+        target.FillRectangle(new Rectangle(rectangle.X, rectangle.Bottom - thickness, rectangle.Width, thickness), color, SpriteDrawStyle.Plain);
+        target.FillRectangle(new Rectangle(rectangle.X, rectangle.Y, thickness, rectangle.Height), color, SpriteDrawStyle.Plain);
+        target.FillRectangle(new Rectangle(rectangle.Right - thickness, rectangle.Y, thickness, rectangle.Height), color, SpriteDrawStyle.Plain);
     }
 }

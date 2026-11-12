@@ -17,57 +17,61 @@ public static class BorderRenderer
     private static readonly Color ContrastOuterColor = Color.Black;
 
     /// <summary>flatColor only affects BorderStyle.Flat -- Outset/Inset/FlatContrast always use their own fixed color pairs, an independent two-color shading effect rather than a single overridable color. alphaMultiplier defaults to fully opaque -- HotbarContent's disabled-slot treatment is the one caller that passes a lower value, to fade a FlatContrast slot border along with everything else on that slot.</summary>
-    public static void Draw(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, BorderStyle style, Color flatColor, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier = 1f)
+    public static void Draw<TTarget>(TTarget spriteBatch, BorderStyle style, Color flatColor, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier = 1f)
+        where TTarget : ISpriteDrawTarget
     {
         switch (style)
         {
             case BorderStyle.Flat:
-                DrawFlat(spriteBatch, unitRectangle, flatColor, top, bottom, left, right, alphaMultiplier);
+                DrawFlat(spriteBatch, flatColor, top, bottom, left, right, alphaMultiplier);
                 break;
 
             case BorderStyle.FlatContrast:
-                DrawFlatContrast(spriteBatch, unitRectangle, top, bottom, left, right, alphaMultiplier);
+                DrawFlatContrast(spriteBatch, top, bottom, left, right, alphaMultiplier);
                 break;
 
             case BorderStyle.Inset:
-                DrawInset(spriteBatch, unitRectangle, top, bottom, left, right, alphaMultiplier);
+                DrawInset(spriteBatch, top, bottom, left, right, alphaMultiplier);
                 break;
 
             case BorderStyle.Outset:
-                DrawOutset(spriteBatch, unitRectangle, top, bottom, left, right, alphaMultiplier);
+                DrawOutset(spriteBatch, top, bottom, left, right, alphaMultiplier);
                 break;
         }
     }
 
-    private static void DrawFlat(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Color flatColor, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
+    private static void DrawFlat<TTarget>(TTarget spriteBatch, Color flatColor, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
+        where TTarget : ISpriteDrawTarget
     {
         var borderColor = flatColor * alphaMultiplier;
-        spriteBatch.Draw(unitRectangle, top, borderColor);
-        spriteBatch.Draw(unitRectangle, bottom, borderColor);
-        spriteBatch.Draw(unitRectangle, left, borderColor);
-        spriteBatch.Draw(unitRectangle, right, borderColor);
+        spriteBatch.FillRectangle(top, borderColor);
+        spriteBatch.FillRectangle(bottom, borderColor);
+        spriteBatch.FillRectangle(left, borderColor);
+        spriteBatch.FillRectangle(right, borderColor);
     }
 
     /// <summary>Raised look: light catches the top-left as if lit from above, dark shadows the bottom-right.</summary>
-    private static void DrawOutset(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
+    private static void DrawOutset<TTarget>(TTarget spriteBatch, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
+        where TTarget : ISpriteDrawTarget
     {
         var light = LightBevelColor * alphaMultiplier;
         var dark = DarkBevelColor * alphaMultiplier;
-        spriteBatch.Draw(unitRectangle, top, light);
-        spriteBatch.Draw(unitRectangle, left, light);
-        spriteBatch.Draw(unitRectangle, bottom, dark);
-        spriteBatch.Draw(unitRectangle, right, dark);
+        spriteBatch.FillRectangle(top, light);
+        spriteBatch.FillRectangle(left, light);
+        spriteBatch.FillRectangle(bottom, dark);
+        spriteBatch.FillRectangle(right, dark);
     }
 
     /// <summary>Pressed look: same lighting as Outset, reversed -- top-left now in shadow, bottom-right catching light.</summary>
-    private static void DrawInset(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
+    private static void DrawInset<TTarget>(TTarget spriteBatch, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
+        where TTarget : ISpriteDrawTarget
     {
         var dark = DarkBevelColor * alphaMultiplier;
         var light = LightBevelColor * alphaMultiplier;
-        spriteBatch.Draw(unitRectangle, top, dark);
-        spriteBatch.Draw(unitRectangle, left, dark);
-        spriteBatch.Draw(unitRectangle, bottom, light);
-        spriteBatch.Draw(unitRectangle, right, light);
+        spriteBatch.FillRectangle(top, dark);
+        spriteBatch.FillRectangle(left, dark);
+        spriteBatch.FillRectangle(bottom, light);
+        spriteBatch.FillRectangle(right, light);
     }
 
     /// <summary>
@@ -77,25 +81,26 @@ public static class BorderRenderer
     /// Assumes an even thickness (2px is this style's whole point) -- an odd thickness still
     /// renders, just with the inner half getting the extra pixel rather than throwing.
     /// </summary>
-    private static void DrawFlatContrast(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
+    private static void DrawFlatContrast<TTarget>(TTarget spriteBatch, Rectangle top, Rectangle bottom, Rectangle left, Rectangle right, float alphaMultiplier)
+        where TTarget : ISpriteDrawTarget
     {
         var outer = ContrastOuterColor * alphaMultiplier;
         var inner = ContrastInnerColor * alphaMultiplier;
 
         var topOuterHeight = top.Height / 2;
-        spriteBatch.Draw(unitRectangle, new Rectangle(top.X, top.Y, top.Width, topOuterHeight), outer);
-        spriteBatch.Draw(unitRectangle, new Rectangle(top.X, top.Y + topOuterHeight, top.Width, top.Height - topOuterHeight), inner);
+        spriteBatch.FillRectangle(new Rectangle(top.X, top.Y, top.Width, topOuterHeight), outer);
+        spriteBatch.FillRectangle(new Rectangle(top.X, top.Y + topOuterHeight, top.Width, top.Height - topOuterHeight), inner);
 
         var bottomInnerHeight = bottom.Height / 2;
-        spriteBatch.Draw(unitRectangle, new Rectangle(bottom.X, bottom.Y, bottom.Width, bottomInnerHeight), inner);
-        spriteBatch.Draw(unitRectangle, new Rectangle(bottom.X, bottom.Y + bottomInnerHeight, bottom.Width, bottom.Height - bottomInnerHeight), outer);
+        spriteBatch.FillRectangle(new Rectangle(bottom.X, bottom.Y, bottom.Width, bottomInnerHeight), inner);
+        spriteBatch.FillRectangle(new Rectangle(bottom.X, bottom.Y + bottomInnerHeight, bottom.Width, bottom.Height - bottomInnerHeight), outer);
 
         var leftOuterWidth = left.Width / 2;
-        spriteBatch.Draw(unitRectangle, new Rectangle(left.X, left.Y, leftOuterWidth, left.Height), outer);
-        spriteBatch.Draw(unitRectangle, new Rectangle(left.X + leftOuterWidth, left.Y, left.Width - leftOuterWidth, left.Height), inner);
+        spriteBatch.FillRectangle(new Rectangle(left.X, left.Y, leftOuterWidth, left.Height), outer);
+        spriteBatch.FillRectangle(new Rectangle(left.X + leftOuterWidth, left.Y, left.Width - leftOuterWidth, left.Height), inner);
 
         var rightInnerWidth = right.Width / 2;
-        spriteBatch.Draw(unitRectangle, new Rectangle(right.X, right.Y, rightInnerWidth, right.Height), inner);
-        spriteBatch.Draw(unitRectangle, new Rectangle(right.X + rightInnerWidth, right.Y, right.Width - rightInnerWidth, right.Height), outer);
+        spriteBatch.FillRectangle(new Rectangle(right.X, right.Y, rightInnerWidth, right.Height), inner);
+        spriteBatch.FillRectangle(new Rectangle(right.X + rightInnerWidth, right.Y, right.Width - rightInnerWidth, right.Height), outer);
     }
 }

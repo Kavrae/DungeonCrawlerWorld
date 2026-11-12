@@ -5,7 +5,7 @@ namespace Engine.ECS.Components.Stores;
 /// <summary> Sparse-set component storage for rare components, where a direct pool would waste index space. </summary>
 /// <remarks> The entity index is paged (see EntityPages), so a pool costs the id ranges its holders fall in rather than the world's entity capacity; dense storage grows geometrically (see DenseCapacityGrowth). </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool, IObservableComponentPool where T : struct
+public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool, IEntityMembershipPool, IMemoryReportingComponentPool, IObservableComponentPool, IMembershipMaskedComponentPool where T : struct
 {
     private readonly EntityPages<int> _denseIndexByEntity;
     private int[] _denseIndexToEntityIdMap;
@@ -37,6 +37,16 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         return _denseIndexByEntity.Get(entityId);
     }
 
+
+    private ComponentMembershipMasks? _membershipMasks;
+    private int _membershipBit;
+
+    /// <inheritdoc/>
+    void IMembershipMaskedComponentPool.AttachMembershipMasks(ComponentMembershipMasks membershipMasks, int membershipBit)
+    {
+        _membershipMasks = membershipMasks;
+        _membershipBit = membershipBit;
+    }
 
     /// <summary> The number of components in the pool. </summary>
     public int Count => _count;
@@ -126,7 +136,6 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         _denseComponents = new T[initialCapacity];
         _denseVersions = new uint[initialCapacity];
         _denseIndexToEntityIdMap = new int[initialCapacity];
-        Array.Fill(_denseIndexToEntityIdMap, -1);
 
         _mergeImplementation = mergeImplementation;
         _count = 0;
@@ -177,8 +186,7 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
     {
         Guard(entityId);
         ThrowIfWriteScopeOpen();
-        ref var denseIndex = ref _denseIndexByEntity.GetWritable(entityId);
-        if (denseIndex >= 0)
+        if (_denseIndexByEntity.Get(entityId) >= 0)
         {
             ComponentPoolThrows.DuplicateComponent<T>(entityId);
         }
@@ -187,9 +195,10 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
 
         _denseComponents[_count] = newComponent;
         _denseIndexToEntityIdMap[_count] = entityId;
-        denseIndex = _count;
+        _denseIndexByEntity.Claim(entityId) = _count;
         _denseVersions[_count] = 1;
         _count++;
+        _membershipMasks?.Set(entityId, _membershipBit);
 
         EntityAdded?.Invoke(entityId);
         _componentChanged?.Invoke(entityId, _count - 1);
@@ -433,19 +442,18 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
             _denseIndexToEntityIdMap[denseIndex] = movedEntityId;
             _denseVersions[denseIndex] = _denseVersions[lastDenseIndex];
 
-            _denseIndexByEntity.GetWritable(movedEntityId) = denseIndex;
+            _denseIndexByEntity.GetExisting(movedEntityId) = denseIndex;
         }
 
-        _denseIndexByEntity.GetWritable(entityId) = -1;
+        _denseIndexByEntity.Release(entityId);
 
         if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
         {
             _denseComponents[lastDenseIndex] = default;
         }
 
-        _denseIndexToEntityIdMap[lastDenseIndex] = -1;
-        _denseVersions[lastDenseIndex] = 0;
         _count--;
+        _membershipMasks?.Clear(entityId, _membershipBit);
 
         EntityRemoved?.Invoke(entityId);
 
@@ -473,15 +481,11 @@ public sealed class PackedComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         GrowDenseTo(DenseCapacityGrowth.Next(_denseComponents.Length));
     }
 
+    /// <remarks>Slots at or past Count are never read, so neither growth nor removal resets them.</remarks>
     private void GrowDenseTo(int newSize)
     {
         Array.Resize(ref _denseComponents, newSize);
         Array.Resize(ref _denseIndexToEntityIdMap, newSize);
         Array.Resize(ref _denseVersions, newSize);
-
-        for (var i = _count; i < newSize; i++)
-        {
-            _denseIndexToEntityIdMap[i] = -1;
-        }
     }
 }

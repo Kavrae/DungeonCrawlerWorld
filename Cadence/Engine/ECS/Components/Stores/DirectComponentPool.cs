@@ -5,8 +5,18 @@ namespace Engine.ECS.Components.Stores;
 /// <summary> Entity-indexed component storage for near-universal components. </summary>
 /// <remarks> Storage index == entityId. Best for components present on most entities, where direct lookup beats sparse-set indirection. </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool, IMemoryReportingComponentPool where T : struct
+public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspectableComponentPool, IMemoryReportingComponentPool, IMembershipMaskedComponentPool where T : struct
 {
+    private ComponentMembershipMasks? _membershipMasks;
+    private int _membershipBit;
+
+    /// <inheritdoc/>
+    void IMembershipMaskedComponentPool.AttachMembershipMasks(ComponentMembershipMasks membershipMasks, int membershipBit)
+    {
+        _membershipMasks = membershipMasks;
+        _membershipBit = membershipBit;
+    }
+
     private T[] _components;
     private byte[] _present;
     private uint[] _versions;
@@ -90,6 +100,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         _present[entityId] = 1;
         _versions[entityId] = 1;
         _count++;
+        _membershipMasks?.Set(entityId, _membershipBit);
     }
 
     /// <summary> Merges a component with the existing component for the specified entity. </summary>
@@ -293,6 +304,7 @@ public sealed class DirectComponentPool<T> : IReadOnlyComponentPool<T>, IInspect
         _present[entityId] = 0;
         _versions[entityId] = 0;
         _count--;
+        _membershipMasks?.Clear(entityId, _membershipBit);
         return true;
     }
 

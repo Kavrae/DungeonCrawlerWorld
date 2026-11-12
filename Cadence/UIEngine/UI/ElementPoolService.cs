@@ -1,4 +1,5 @@
 using Engine.Collections;
+using System.Buffers;
 using System.Reflection;
 
 namespace UIEngine.UI;
@@ -33,7 +34,7 @@ public sealed class ElementPoolService
             throw new InvalidOperationException($"{typeof(TElement).Name} already has an element factory; a type has one pool and one factory.");
         }
 
-        _elementPoolsByType[typeof(TElement)] = new ObjectPool<Element>(() => CreateExactly(factory), static element => element.IsVisible = false);
+        _elementPoolsByType[typeof(TElement)] = new ObjectPool<Element>(() => CreateExactly(factory), static element => element.HideForPool());
     }
 
     /// <summary>Whether TElement has a factory registered.</summary>
@@ -74,14 +75,24 @@ public sealed class ElementPoolService
     /// </remarks>
     public void CloseElement(Element element)
     {
+        if (TryTearDown(element))
+        {
+            element.ParentElement?.RemoveChild(element);
+        }
+    }
+
+    /// <summary>Closes element's subtree and returns it to its pool, leaving it in its parent's child list; false when it is already pooled.</summary>
+    /// <remarks>Its own children are detached with no layout: the element is leaving, so nothing reads where they were.</remarks>
+    private bool TryTearDown(Element element)
+    {
         if (!_pooledElements.Add(element))
         {
-            return;
+            return false;
         }
 
         element.PoolReturnCount++;
         CloseAllTitleButtons(element);
-        CloseAllChildren(element);
+        CloseAllChildren(element, parentRelaysOut: false);
         ClearEventSubscriptions(element);
         element.OnClosed();
 
@@ -94,7 +105,7 @@ public sealed class ElementPoolService
             _pooledElements.Remove(element);
         }
 
-        element.ParentElement?.RemoveChild(element.ElementId);
+        return true;
     }
 
     /// <summary>Nulls every event field declared anywhere in element's type hierarchy before it goes back into its pool.</summary>
@@ -154,11 +165,49 @@ public sealed class ElementPoolService
     }
 
     /// <summary>Closes every child of parent, each returning to its own type's pool.</summary>
-    public void CloseAllChildren(Element parent)
+    /// <remarks>
+    /// Each child leaves parent's child list as it is pooled, and parent lays itself out once, after the last, rather than
+    /// once a child. A child added to parent while they close is not one of them and stays.
+    /// </remarks>
+    public void CloseAllChildren(Element parent) => CloseAllChildren(parent, parentRelaysOut: true);
+
+    private void CloseAllChildren(Element parent, bool parentRelaysOut)
     {
-        foreach (var child in parent.ChildElements.ToArray())
+        var children = parent.ChildElements;
+        if (children.Count == 0)
         {
-            CloseElement(child);
+            return;
+        }
+
+        var closingChildren = ArrayPool<Element>.Shared.Rent(children.Count);
+        var closingChildCount = children.Count;
+        for (var childIndex = 0; childIndex < closingChildCount; childIndex++)
+        {
+            closingChildren[childIndex] = children[childIndex];
+        }
+
+        var detachedAny = false;
+        try
+        {
+            for (var childIndex = 0; childIndex < closingChildCount; childIndex++)
+            {
+                var child = closingChildren[childIndex];
+                var closedNow = TryTearDown(child);
+                if ((closedNow || _pooledElements.Contains(child)) && parent.DetachChildWithoutLayout(child))
+                {
+                    detachedAny = true;
+                }
+            }
+        }
+        finally
+        {
+            Array.Clear(closingChildren, 0, closingChildCount);
+            ArrayPool<Element>.Shared.Return(closingChildren);
+
+            if (detachedAny)
+            {
+                parent.OnChildrenDetached(parentRelaysOut);
+            }
         }
     }
 }

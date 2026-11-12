@@ -40,11 +40,10 @@ public sealed class AbilityScoreColumnHeader(ElementServices services)
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
 
         if (IsPointerOver)
         {
-            spriteBatch.Draw(unitRectangle, LocalContentRectangle, WindowPalette.HighlightColor);
+            spriteBatch.FillRectangle(LocalContentRectangle, WindowPalette.HighlightColor);
         }
 
         var stripSize = new Vector2(ContentSize.X, ContentSize.Y / 2f);

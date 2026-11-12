@@ -487,7 +487,7 @@ public sealed class UiInputController
     /// <summary>Whether element -- via its root ancestor, the granularity UiLayerStack's own menu-window/exempt registries track -- is part of what's currently interactive while menu mode is active: an open menu window, a menu-mode-exempt element, or already in the always-reachable Tooltip/User tier. Shared by TryHitTestInteraction (mouse) and RouteHotkeysToFocusedElement (keyboard) so the two can't drift out of sync about what "reachable during menu mode" means.</summary>
     private bool IsReachableDuringMenuMode(Element element)
     {
-        var root = GetRootAncestor(element);
+        var root = element.RootElement;
         return _layers.IsMenuWindow(root) || _layers.IsMenuModeExempt(root) || _layers.LayerOf(root) is UiLayer.Tooltip or UiLayer.User;
     }
 
@@ -910,18 +910,15 @@ public sealed class UiInputController
     /// <summary>Offers this click to element, then each ancestor, until one handles it, and remembers that one so a second click can pair with it; returns whether one did.</summary>
     private bool TryDispatchClick(Element? element, Point mousePosition)
     {
-        for (var candidate = element; candidate is not null; candidate = candidate.ParentElement)
+        if (element?.FirstSelfOrAncestor(mousePosition, static (candidate, position) => candidate.HandleClick(position)) is not { } handler)
         {
-            if (candidate.HandleClick(mousePosition))
-            {
-                _lastClickHandler = candidate;
-                _lastClickHandlerPoolReturnCount = candidate.PoolReturnCount;
-                _lastClickFrame = _frameCounter;
-                return true;
-            }
+            return false;
         }
 
-        return false;
+        _lastClickHandler = handler;
+        _lastClickHandlerPoolReturnCount = handler.PoolReturnCount;
+        _lastClickFrame = _frameCounter;
+        return true;
     }
 
     /// <summary>Offers this click as a double-click, from element up to the one that handled the last click, when it pairs with that click; returns whether one took it.</summary>
@@ -955,18 +952,8 @@ public sealed class UiInputController
         return false;
     }
 
-    private static bool IsSelfOrAncestor(Element ancestor, Element? element)
-    {
-        for (var candidate = element; candidate is not null; candidate = candidate.ParentElement)
-        {
-            if (ReferenceEquals(candidate, ancestor))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private static bool IsSelfOrAncestor(Element ancestor, Element? element) =>
+        element?.FirstSelfOrAncestor(ancestor, static (candidate, sought) => ReferenceEquals(candidate, sought)) is not null;
 
     /// <summary>Whether a content-drag payload is captured (see TryStartContentDrag) and the left press has become a drag -- a release then drops it rather than clicking the source.</summary>
     private bool IsContentDragPastTapThreshold => _contentDrag is not null && _leftGesture.IsDrag;
@@ -1178,13 +1165,7 @@ public sealed class UiInputController
         }
         else
         {
-            for (var candidate = _rightDragElement; candidate is not null; candidate = candidate.ParentElement)
-            {
-                if (candidate.HandleRightClickTap(releasePosition))
-                {
-                    break;
-                }
-            }
+            _rightDragElement?.FirstSelfOrAncestor(releasePosition, static (candidate, position) => candidate.HandleRightClickTap(position));
         }
 
         _rightDragElement = null;
@@ -1196,7 +1177,7 @@ public sealed class UiInputController
     /// CanUserScrollVertical/Horizontal (see Window.ScrollBy) -- if the element directly under
     /// the cursor can't scroll itself, walks up ParentElement to the nearest ancestor that can
     /// (e.g. hovering a non-scrollable inspector component box inside a scrollable inspection
-    /// container scrolls the container), the same walk-up shape GetRootAncestor already uses,
+    /// container scrolls the container), the same walk up the parents Element.RootElement makes,
     /// just stopping early at the first scrollable ancestor instead of going all the way to
     /// root. A chain with no scrollable element anywhere (the pre-existing behavior for a lone
     /// non-scrollable window) is still a no-op. Independent of ActiveInteraction, so scrolling
@@ -1276,18 +1257,8 @@ public sealed class UiInputController
     }
 
     /// <summary>Starts at element itself (so an already-scrollable hit is unchanged) and walks ParentElement upward, returning the first element that opts into CanUserScrollVertical/Horizontal, or null if nothing in the chain does.</summary>
-    private static Element? FindScrollableAncestor(Element element)
-    {
-        for (var candidate = (Element?)element; candidate is not null; candidate = candidate.ParentElement)
-        {
-            if (candidate.CanUserScrollVertical || candidate.CanUserScrollHorizontal)
-            {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
+    private static Element? FindScrollableAncestor(Element element) =>
+        element.FirstSelfOrAncestor(false, static (candidate, _) => candidate.CanUserScrollVertical || candidate.CanUserScrollHorizontal);
 
     /// <summary>Tooltip/User both sit structurally above DynamicHud, where every menu window lives today -- see the menu-mode branch of TryHitTestInteraction for why hit-testing still reaches them while menu mode is active. Dropdown is deliberately not in this array -- see TryHitTestInteraction's own doc comment for why it needs checking even earlier than this.</summary>
     private static readonly UiLayer[] LayersAboveMenuMode = [UiLayer.User, UiLayer.Tooltip];
@@ -1331,11 +1302,19 @@ public sealed class UiInputController
     }
 
     /// <summary>The topmost element at position in any layer, whatever menu mode allows.</summary>
-    private ElementInteraction TryHitTestEveryLayer(Point position)
+    private ElementInteraction TryHitTestEveryLayer(Point position) => TryHitTestWhere(position, predicate: null);
+
+    /// <summary>What a content drag at position would land on: the hovered element, or -- where menu mode leaves nothing hovered -- whatever is drawn there.</summary>
+    /// <remarks>Menu mode keeps clicks off everything behind the open menus, but carrying an item out of one onto the world (a chest on the map) is what dragging is for.</remarks>
+    private Element? DropElementAt(Element? hoveredElement, Point position) =>
+        hoveredElement ?? (_layers.IsMenuModeActive ? TryHitTestEveryLayer(position).Element : null);
+
+    /// <summary>Hit-tests every layer descending, topmost-drawn-first within each, but only elements matching predicate -- a non-matching sibling sharing the same layer (a folder icon beside the popup it opened, both DynamicHud) is skipped entirely, never even hit-tested into its own children. Shared by TryHitTestInteraction's two menu-mode cases: UiLayerStack.IsMenuWindow (the open menu-window set) and UiLayerStack.IsMenuModeExempt (everything opted out of menu mode's blocking without itself being a menu window).</summary>
+    private ElementInteraction TryHitTestWhere(Point position, Func<Element, bool>? predicate)
     {
         foreach (var layer in UiLayerStack.LayersDescending())
         {
-            var interaction = TryHitTestInList(_layers[layer], position);
+            var interaction = TryHitTestInList(_layers[layer], position, predicate);
             if (interaction.Element is not null)
             {
                 return interaction;
@@ -1345,39 +1324,16 @@ public sealed class UiInputController
         return ElementInteraction.NotHit;
     }
 
-    /// <summary>What a content drag at position would land on: the hovered element, or -- where menu mode leaves nothing hovered -- whatever is drawn there.</summary>
-    /// <remarks>Menu mode keeps clicks off everything behind the open menus, but carrying an item out of one onto the world (a chest on the map) is what dragging is for.</remarks>
-    private Element? DropElementAt(Element? hoveredElement, Point position) =>
-        hoveredElement ?? (_layers.IsMenuModeActive ? TryHitTestEveryLayer(position).Element : null);
-
-    /// <summary>Hit-tests every layer descending, topmost-drawn-first within each, but only elements matching predicate -- a non-matching sibling sharing the same layer (a folder icon beside the popup it opened, both DynamicHud) is skipped entirely, never even hit-tested into its own children. Shared by TryHitTestInteraction's two menu-mode cases: UiLayerStack.IsMenuWindow (the open menu-window set) and UiLayerStack.IsMenuModeExempt (everything opted out of menu mode's blocking without itself being a menu window).</summary>
-    private ElementInteraction TryHitTestWhere(Point position, Func<Element, bool> predicate)
-    {
-        foreach (var layer in UiLayerStack.LayersDescending())
-        {
-            var elements = _layers[layer];
-            for (var index = elements.Count - 1; index >= 0; index--)
-            {
-                if (!predicate(elements[index]))
-                {
-                    continue;
-                }
-
-                var interaction = elements[index].TryHitTestInteraction(position);
-                if (interaction.Element is not null)
-                {
-                    return interaction;
-                }
-            }
-        }
-
-        return ElementInteraction.NotHit;
-    }
-
-    private static ElementInteraction TryHitTestInList(IReadOnlyList<Element> elements, Point position)
+    /// <summary>The topmost hit among elements, last first; with a predicate, only among those it holds for.</summary>
+    private static ElementInteraction TryHitTestInList(IReadOnlyList<Element> elements, Point position, Func<Element, bool>? predicate = null)
     {
         for (var index = elements.Count - 1; index >= 0; index--)
         {
+            if (predicate is not null && !predicate(elements[index]))
+            {
+                continue;
+            }
+
             var interaction = elements[index].TryHitTestInteraction(position);
             if (interaction.Element is not null)
             {
@@ -1400,7 +1356,7 @@ public sealed class UiInputController
     {
         element.RaiseToFront();
 
-        var rootAncestor = GetRootAncestor(element);
+        var rootAncestor = element.RootElement;
         _layers.RaiseToFront(rootAncestor);
         SetActiveWindow(rootAncestor);
     }
@@ -1440,18 +1396,6 @@ public sealed class UiInputController
         {
             _activeWindow = null;
         }
-    }
-
-    /// <summary>Walks up ParentElement to the top-level ancestor -- shared by RaiseToFront and CycleFocus, both of which operate on whichever tier-root element a given element belongs to, not the element itself.</summary>
-    private static Element GetRootAncestor(Element element)
-    {
-        var rootAncestor = element;
-        while (rootAncestor.ParentElement is not null)
-        {
-            rootAncestor = rootAncestor.ParentElement;
-        }
-
-        return rootAncestor;
     }
 
     /// <summary>
@@ -1634,7 +1578,7 @@ public sealed class UiInputController
         }
 
         var currentRoot = _focusedElement is not null
-            ? GetRootAncestor(_focusedElement)
+            ? _focusedElement.RootElement
             : null;
         var currentIndex = currentRoot is not null
             ? focusableElements.IndexOf(currentRoot)
@@ -1913,18 +1857,8 @@ public sealed class UiInputController
     }
 
     /// <summary>Whether element or any of its ancestors counts as inside lightDismissable -- nothing hit counts as outside.</summary>
-    private static bool IsInsideLightDismiss(ILightDismissable lightDismissable, Element? element)
-    {
-        for (var candidate = element; candidate is not null; candidate = candidate.ParentElement)
-        {
-            if (lightDismissable.CountsAsInside(candidate))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private static bool IsInsideLightDismiss(ILightDismissable lightDismissable, Element? element) =>
+        element?.FirstSelfOrAncestor(lightDismissable, static (candidate, dismissable) => dismissable.CountsAsInside(candidate)) is not null;
 
     /// <summary>
     /// True while the hovered element is something an input handler says refuses to be used right now (see

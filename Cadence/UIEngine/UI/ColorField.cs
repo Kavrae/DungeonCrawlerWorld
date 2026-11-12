@@ -55,11 +55,10 @@ public sealed class ColorField(ElementServices services, CursorTextContent? curs
         base.DrawContent(gameTime);
 
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
         var side = LocalContentRectangle.Height - SwatchInset * 2;
         var swatch = new Rectangle(LocalContentRectangle.Right - SwatchInset - side, SwatchInset, side, side);
-        spriteBatch.Draw(unitRectangle, swatch, WindowPalette.BorderColor);
-        spriteBatch.Draw(unitRectangle, new Rectangle(swatch.X + 1, swatch.Y + 1, swatch.Width - 2, swatch.Height - 2), Value);
+        spriteBatch.FillRectangle(swatch, WindowPalette.BorderColor);
+        spriteBatch.FillRectangle(new Rectangle(swatch.X + 1, swatch.Y + 1, swatch.Width - 2, swatch.Height - 2), Value);
     }
 
     /// <summary>Reads RRGGBB or RRGGBBAA, with or without a leading #.</summary>

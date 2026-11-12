@@ -130,7 +130,13 @@ public class TextWindow(ElementServices services) : Window(services)
         UpdateScrollBounds();
     }
 
-    private float WidestLineWidth() => StringUtility.WidestLineWidth(FontService.GetTextMeasurer(ContentFont), DisplayText.FormattedText);
+    private float WidestLineWidth() => _widestLineWidth.Get(
+        (ContentFont, DisplayText.FormattedText),
+        FontService,
+        static (key, fontService) => StringUtility.WidestLineWidth(fontService.GetTextMeasurer(key.Font), key.FormattedText));
+
+    /// <summary>WidestLineWidth's last answer, kept until the wrapped text or the font changes.</summary>
+    private readonly KeyedCache<(SpriteFontBase Font, string FormattedText), float> _widestLineWidth = new();
 
     private void UpdateScrollBounds()
     {
@@ -166,12 +172,18 @@ public class TextWindow(ElementServices services) : Window(services)
         // RecalculateWrapContentSize's own maximumContentWidth/maximumContentHeight already
         // guard against.
         var maximumPixelWidth = System.Math.Max(0f, _contentState.Size.X - ContentPadding.X * 2);
-        DisplayText = StringUtility.FormatText(new FormatTextCriteria(
-            FontService.GetTextMeasurer(ContentFont),
-            maximumPixelWidth,
-            OriginalText,
-            FormatTextMode.Wordwrap));
+        DisplayText = _wrappedText.Get(
+            (OriginalText, ContentFont, maximumPixelWidth),
+            FontService,
+            static (key, fontService) => StringUtility.FormatText(new FormatTextCriteria(
+                fontService.GetTextMeasurer(key.Font),
+                key.MaximumPixelWidth,
+                key.Text,
+                FormatTextMode.Wordwrap)));
     }
+
+    /// <summary>ReformatDisplayText's last wrap, kept until the text, the font or the width changes: a measure that changes none of them wraps nothing.</summary>
+    private readonly KeyedCache<(string Text, SpriteFontBase Font, float MaximumPixelWidth), DisplayText> _wrappedText = new();
 
     /// <summary>Shows newText, re-wrapping and re-laying-out the window -- a no-op when it's the text already shown, so a caller can push the same text every refresh without paying for the layout.</summary>
     public void UpdateText(string newText)

@@ -13,7 +13,7 @@ namespace UIEngine.UI;
 public sealed class TooltipController
 {
     private Tooltip _tooltip = null!;
-    private object? _currentOwner;
+    private PopupOwnership _ownership;
 
     /// <summary>Stands in for the graphics device's viewport, which a headless test has none of -- the same seam as ContextMenuController.ScreenBoundsOverrideForTests.</summary>
     internal Rectangle? ScreenBoundsOverrideForTests { get; set; }
@@ -40,7 +40,7 @@ public sealed class TooltipController
     /// </summary>
     public void Show(object owner, Rectangle target, PopupAnchor anchor, Vector2 gap, Vector2 maximumSize, string bodyText, string? titleText = null, IReadOnlyList<TooltipRow>? rows = null, bool useFixedWidth = false)
     {
-        _currentOwner = owner;
+        _ownership.Take(owner);
         _tooltip.SetMaximumSize(maximumSize);
         _tooltip.UseFixedWidth = useFixedWidth;
         _tooltip.ShowNear(target, anchor, gap, bodyText, titleText, rows, ScreenBoundsOverrideForTests);
@@ -53,12 +53,9 @@ public sealed class TooltipController
     /// </summary>
     public void Hide(object owner)
     {
-        if (!ReferenceEquals(owner, _currentOwner))
+        if (_ownership.TryRelease(owner))
         {
-            return;
+            _tooltip.Hide();
         }
-
-        _currentOwner = null;
-        _tooltip.Hide();
     }
 }

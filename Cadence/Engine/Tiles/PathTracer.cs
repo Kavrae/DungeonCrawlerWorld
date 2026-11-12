@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Engine.Math;
 
@@ -229,7 +230,12 @@ public struct PathTracer
                 return false;
             }
 
-            var beforeStep = _stepper;
+            Unsafe.SkipInit(out DigitalLineStepper beforeStep);
+            if (_bouncesLeft > 0)
+            {
+                beforeStep = _stepper;
+            }
+
             var next = _stepper.Next();
             if (!_bounds.Contains(next.X, next.Y))
             {

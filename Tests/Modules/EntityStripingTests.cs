@@ -35,8 +35,8 @@ public sealed class EntityStripingTests
     /// Deep correctness check against the real SimpleHealthRegenSystem: a population that
     /// doesn't divide evenly by StripeCount (133 entities, 60 stripes -- StripeCount is a full
     /// second's worth of frames, see SimpleHealthRegenSystem's own doc comment) must still have every
-    /// entity touched exactly once per full cycle, with each individual frame touching only
-    /// ceil(133/60)=3 or floor(133/60)=2 entities -- never the whole population at once.
+    /// entity touched exactly once per full cycle, with each individual frame touching at most
+    /// one round of whole id blocks (EntityStripeSet.BlockSize each) -- never the whole population at once.
     /// </summary>
     [TestMethod]
     public void HealthRegenSystem_OverOneFullCycle_TouchesEveryEntityExactlyOnceWithBoundedPerFrameWork()
@@ -63,6 +63,8 @@ public sealed class EntityStripingTests
         var system = TestSystems.SimpleHealthRegenSystem(pool, processingTiers, new ProcessingTierEvents(), abilityScores: abilityScores);
         var touchCountByEntityId = new int[entityCount];
         var previousHealth = new float[entityCount];
+        var blockCount = (entityCount + EntityStripeSet.BlockSize - 1) / EntityStripeSet.BlockSize;
+        var maximumPerFrame = (blockCount + system.StripeCount - 1) / system.StripeCount * EntityStripeSet.BlockSize;
 
         for (var frame = 0; frame < system.StripeCount; frame++)
         {
@@ -80,7 +82,7 @@ public sealed class EntityStripingTests
                 }
             }
 
-            Assert.IsTrue(touchedThisFrame is 2 or 3, $"Frame {frame} touched {touchedThisFrame} entities; expected 2 or 3 (bounded to Count/StripeCount).");
+            Assert.IsTrue(touchedThisFrame <= maximumPerFrame, $"Frame {frame} touched {touchedThisFrame} entities; expected at most {maximumPerFrame} (whole id blocks, dealt round-robin).");
         }
 
         for (var entityId = 0; entityId < entityCount; entityId++)
@@ -94,39 +96,37 @@ public sealed class EntityStripingTests
     /// an entity from a not-yet-visited stripe mid-cycle used to be able (under the old
     /// dense-index striding) to relocate a different, already-visited entity into that
     /// stripe's index range via PackedComponentPool.Remove's swap-with-last, causing a
-    /// double-process. Entities 9 and 69 are both in stripe 9 (entityId % 60 -- StripeCount is
-    /// 60, see SimpleHealthRegenSystem's own doc comment); entity 9 is removed after stripes 0-8 have
-    /// already fired this cycle but before stripe 9 fires. EntityStripeSet buckets by entityId,
-    /// so removing 9 can only ever affect stripe 9's own bucket -- entity 69 must still be
-    /// touched exactly once when stripe 9 fires, not zero and not twice, and entities 0-8 (in
-    /// unrelated stripes) must be completely unaffected.
+    /// double-process. The removed entity (block 9) and its partner (block 69) are both in stripe 9
+    /// (block % 60 -- StripeCount is 60, see SimpleHealthRegenSystem's own doc comment); the removed
+    /// one goes after stripes 0-8 have already fired this cycle but before stripe 9 fires.
+    /// EntityStripeSet buckets by entity id, so the removal can only ever affect stripe 9's own
+    /// bucket -- the partner must still be touched exactly once when stripe 9 fires, not zero and
+    /// not twice, and the entities in blocks 0-8 (unrelated stripes) must be completely unaffected.
     /// </summary>
     [TestMethod]
     public void HealthRegenSystem_EntityRemovedMidCycle_DoesNotCorruptOtherStripes()
     {
-        var pool = new PackedComponentPool<SimpleHealthComponent>(100, 100,
+        const int B = EntityStripeSet.BlockSize;
+        const int removedEntityId = 9 * B;
+        const int partnerEntityId = 69 * B;
+        const int capacity = partnerEntityId + 1;
+        var pool = new PackedComponentPool<SimpleHealthComponent>(capacity, capacity,
             static (ref existing, incoming) => existing = incoming);
 
-        var abilityScores = AbilityScoreTestPools.CreatePool(100, 100);
+        var abilityScores = AbilityScoreTestPools.CreatePool(capacity, capacity);
         // Pinned to Local for every entity below -- see the previous test's own comment on why.
-        var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: 100, static (ref existing, incoming) => existing = incoming);
-        for (var entityId = 0; entityId < 10; entityId++)
+        var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: capacity, static (ref existing, incoming) => existing = incoming);
+        var unrelatedEntityIds = Enumerable.Range(0, 9).Select(block => block * B).ToArray();
+        foreach (var entityId in unrelatedEntityIds.Append(removedEntityId).Append(partnerEntityId))
         {
             pool.Add(entityId, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 1000));
             abilityScores.Add(entityId, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 300, total: 300));
             processingTiers.Add(entityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         }
-        pool.Add(69, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 1000)); // Stripe 9 (69 % 60), alongside entity 9.
-        abilityScores.Add(69, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 300, total: 300));
-        processingTiers.Add(69, new ProcessingTierComponent(ProcessingTierLevel.Local));
 
         var system = TestSystems.SimpleHealthRegenSystem(pool, processingTiers, new ProcessingTierEvents(), abilityScores: abilityScores);
         var touchCountByEntityId = new Dictionary<int, int>();
-        var previousHealth = new Dictionary<int, float> { [69] = 0 };
-        for (var entityId = 0; entityId < 10; entityId++)
-        {
-            previousHealth[entityId] = 0;
-        }
+        var previousHealth = unrelatedEntityIds.Append(removedEntityId).Append(partnerEntityId).ToDictionary(entityId => entityId, _ => 0f);
 
         void RecordTouches()
         {
@@ -152,16 +152,15 @@ public sealed class EntityStripingTests
             RecordTouches();
         }
 
-        // Entity 9 has already had its stripe (9) skipped so far this cycle -- it hasn't
-        // fired yet. Remove it now, before stripe 9 runs.
-        pool.Remove(9);
+        // The removed entity's stripe (9) hasn't fired yet this cycle. Remove it now, before stripe 9 runs.
+        pool.Remove(removedEntityId);
 
         system.Update(new EngineTime(default, default, false, FrameCount: 9), stripeIndex: 9);
         RecordTouches();
 
-        Assert.IsFalse(pool.Has(9));
-        Assert.AreEqual(1, touchCountByEntityId.GetValueOrDefault(69), "Entity 69 (same stripe as the removed entity) must be touched exactly once, not skipped or double-processed.");
-        for (var entityId = 0; entityId < 9; entityId++)
+        Assert.IsFalse(pool.Has(removedEntityId));
+        Assert.AreEqual(1, touchCountByEntityId.GetValueOrDefault(partnerEntityId), "The partner (same stripe as the removed entity) must be touched exactly once, not skipped or double-processed.");
+        foreach (var entityId in unrelatedEntityIds)
         {
             Assert.AreEqual(1, touchCountByEntityId.GetValueOrDefault(entityId), $"Entity {entityId} in an unrelated stripe must be unaffected by the removal.");
         }

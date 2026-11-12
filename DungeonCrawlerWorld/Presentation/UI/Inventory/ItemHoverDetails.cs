@@ -46,7 +46,7 @@ public interface IItemDetailsPopup
 /// (Escape, Stop Comparison), it stays closed until the hover ends or starts over. Updates hovered while the popup is held
 /// back don't count toward the delay, so a hover still on its cell when a drag ends waits the whole delay again.
 /// </remarks>
-public sealed class ItemHoverDetails(CursorLabelContent cursorLabel)
+public sealed class ItemHoverDetails(CursorTextContent cursorLabel)
 {
     public static readonly int DetailsDelayFrames = GameTiming.FramesForSeconds(1.5f);
 
@@ -72,19 +72,19 @@ public sealed class ItemHoverDetails(CursorLabelContent cursorLabel)
 
         if (Popup is { } popup && popup.IsShowing(target))
         {
-            cursorLabel.Hide(owner);
+            cursorLabel.HideLabel(owner);
             return;
         }
 
         if (hoveredFrames >= DetailsDelayFrames && !HasOpened(owner, target) && Popup is { } openingPopup && openingPopup.OpensFor(target))
         {
-            cursorLabel.Hide(owner);
+            cursorLabel.HideLabel(owner);
             _openedHover = (owner, target);
             openingPopup.OpenAtCursor(target, shopPricing);
             return;
         }
 
-        cursorLabel.Show(owner, target.Definition.Name);
+        cursorLabel.ShowLabel(owner, target.Definition.Name);
     }
 
     /// <summary>An item cell's "Compare": starts compare mode on entityId's stack, priced by the grid it was chosen in.</summary>
@@ -99,7 +99,7 @@ public sealed class ItemHoverDetails(CursorLabelContent cursorLabel)
             _heldBackHover = null;
         }
 
-        cursorLabel.Hide(owner);
+        cursorLabel.HideLabel(owner);
     }
 
     /// <summary>hoveredFrames less the updates owner's hover spent with the popup held back -- 0 while it is held back.</summary>

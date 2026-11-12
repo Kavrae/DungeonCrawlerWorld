@@ -16,6 +16,7 @@ public static class MenuModeDimRenderer
     private const float DimAlpha = 0.55f;
     private static readonly Color DimColor = Color.Black;
 
-    public static void Draw(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, GraphicsDevice graphicsDevice)
-        => spriteBatch.Draw(unitRectangle, graphicsDevice.Viewport.Bounds, DimColor * DimAlpha);
+    public static void Draw<TTarget>(TTarget spriteBatch, GraphicsDevice graphicsDevice)
+        where TTarget : ISpriteDrawTarget
+        => spriteBatch.FillRectangle(graphicsDevice.Viewport.Bounds, DimColor * DimAlpha);
 }

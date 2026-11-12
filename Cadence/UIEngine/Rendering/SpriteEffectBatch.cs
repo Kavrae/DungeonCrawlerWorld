@@ -44,6 +44,9 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
 
     /// <summary>One transparent texel: what lit draws read when the batch has no glow, so they come out unlit, and what a tile overlay draw reads with no overlay.</summary>
     private readonly Texture2D _noGlowTexture;
+
+    /// <summary>One white texel: what FillRectangle draws, tinted by its colour.</summary>
+    private readonly Texture2D _whiteTexture;
     private readonly DynamicVertexBuffer _vertexBuffer;
     private readonly IndexBuffer _indexBuffer;
 
@@ -77,6 +80,8 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
         _pass = spriteEffect.CurrentTechnique.Passes[0];
         _noGlowTexture = new Texture2D(graphicsDevice, 1, 1);
         _noGlowTexture.SetData([Color.Transparent]);
+        _whiteTexture = new Texture2D(graphicsDevice, 1, 1);
+        _whiteTexture.SetData([Color.White]);
         _vertexBuffer = new DynamicVertexBuffer(graphicsDevice, SpriteEffectVertex.Declaration, QuadsPerDrawBuffer * SpriteEffectQuads.VerticesPerQuad, BufferUsage.WriteOnly);
         _indexBuffer = new IndexBuffer(graphicsDevice, IndexElementSize.SixteenBits, QuadsPerDrawBuffer * SpriteEffectQuads.IndicesPerQuad, BufferUsage.WriteOnly);
         _indexBuffer.SetData(SpriteEffectQuads.Indices(QuadsPerDrawBuffer));
@@ -193,6 +198,12 @@ public sealed class SpriteEffectBatch : ISpriteDrawTarget, IFontStashRenderer
         var normalizedOrigin = new Vector2(sourceSize.X == 0f ? 0f : origin.X / sourceSize.X, sourceSize.Y == 0f ? 0f : origin.Y / sourceSize.Y);
         AddQuad(texture, position, sourceSize * scale, rotation, normalizedOrigin, SpriteEffectQuads.NormalizedSource(source, new Point(texture.Width, texture.Height)), color, effects, style);
     }
+
+    public void FillRectangle(Rectangle destination, Color color, SpriteDrawStyle style) =>
+        AddQuad(_whiteTexture, new Vector2(destination.X, destination.Y), new Vector2(destination.Width, destination.Height), 0f, Vector2.Zero, SpriteEffectQuads.NormalizedSource(null, new Point(1, 1)), color, SpriteEffects.None, style);
+
+    public void FillRectangle(Vector2 position, Vector2 size, float rotation, Vector2 normalizedOrigin, Color color, SpriteDrawStyle style) =>
+        AddQuad(_whiteTexture, position, size, rotation, normalizedOrigin, SpriteEffectQuads.NormalizedSource(null, new Point(1, 1)), color, SpriteEffects.None, style);
 
     /// <summary>Draws text starting on a whole screen pixel -- see OnWholeScreenPixel; its glyphs keep their own places within the string.</summary>
     /// <remarks>Rounded once for the string, after DrawOffset: the atlas is point sampled, so text at a fractional screen position -- inside a window placed on a half pixel -- loses a row of its ink, while rounding each glyph apart would scatter them by a pixel.</remarks>

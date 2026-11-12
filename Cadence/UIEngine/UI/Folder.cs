@@ -106,11 +106,10 @@ public sealed class Folder : Element
     protected override void DrawHeader(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
 
         if (!IsTransparent)
         {
-            spriteBatch.Draw(unitRectangle, HeaderRectangle, _backgroundColor);
+            spriteBatch.FillRectangle(HeaderRectangle, _backgroundColor);
         }
 
         // The header grows wider than the icon once expanded (see

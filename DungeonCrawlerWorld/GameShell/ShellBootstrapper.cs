@@ -47,7 +47,7 @@ public static class ShellBootstrapper
         var commands = gameSession.Commands;
 
         var pointerState = new PointerState();
-        var cursorLabelContent = new CursorLabelContent(pointerState, uiEngine.FontService);
+        var cursorTextContent = new CursorTextContent(pointerState, uiEngine.FontService);
         var shellServices = new ShellServices(
             new UiLayerStack(),
             new MapViewState { ReservedEntityIds = worldSession.ReservedEntityIds },
@@ -55,9 +55,8 @@ public static class ShellBootstrapper
             new ContextMenuController(new DropdownController(uiEngine.ElementPoolService, uiEngine.RenderService)),
             new TooltipController(),
             pointerState,
-            new CursorTextContent(pointerState, uiEngine.FontService),
-            cursorLabelContent,
-            new ItemHoverDetails(cursorLabelContent));
+            cursorTextContent,
+            new ItemHoverDetails(cursorTextContent));
         var uiLayers = shellServices.Layers;
         var mapViewState = shellServices.MapViewState;
         var contextMenuController = shellServices.ContextMenuController;
@@ -95,7 +94,7 @@ public static class ShellBootstrapper
         var (notificationCenter, healthController) = BuildDynamicHudWindows(uiEngine, world, ecsContext.EventBus, contextMenuController, uiLayers);
         var itemWindows = new ItemWindowCoordinator(uiEngine.ElementPoolService, shellServices, world, mapWindow, actionTargetingController, views.InventoryView, catalogs.ItemCatalog, catalogs.LootboxCatalog, commands.LootCommands, commands.LootboxCommands, worldSession.ReservedEntityIds);
         var hotbarController = BuildHotbarController(mapViewState, hotbarContent, actionTargetingController, tooltipController, contextMenuController);
-        BuildUserWindows(uiEngine, [dragGhostContent, shellServices.CursorTextContent, shellServices.CursorLabelContent], uiLayers);
+        BuildUserWindows(uiEngine, [dragGhostContent, shellServices.CursorTextContent], uiLayers);
 
         var abilityScoreController = BuildAbilityScoreWindowController(uiEngine, world, views.InventoryView, itemWindows.Inventory, mapWindow, contextMenuController, uiLayers, tooltipController);
         var diagnosticsController = BuildDiagnosticsWindowController(uiEngine, ecsContext, diagnostics, uiLayers);

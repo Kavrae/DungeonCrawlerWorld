@@ -6,8 +6,9 @@ namespace Engine.ECS.Systems;
 /// <remarks>
 /// Entities are divided into buckets by tier, and each tier's own bucket is striped independently of the others.
 /// Whenever an entity is added, removed, or has its tier changed, the appropriate tier's own EntityStripeSet is updated accordingly.
+/// An entity is in one tier at a time, so the tiers share one index-in-bucket table: a tier change reads and writes one page, and an entity costs one slot however many tiers it has passed through.
 /// </remarks>
-/// <cleanupVersion>1</cleanupVersion>
+/// <cleanupVersion>2</cleanupVersion>
 public sealed class TieredEntityStripeSet
 {
     private const byte NotAMember = byte.MaxValue;
@@ -28,10 +29,11 @@ public sealed class TieredEntityStripeSet
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(tierDivisors.Length, (int)NotAMember);
 
         _currentTierIndexLookup = currentTierIndexLookup;
+        var indexInBucketByEntityId = new EntityPages<int>(entityCapacity: 1, empty: -1);
         _tierBuckets = new EntityStripeSet[tierDivisors.Length];
         for (var i = 0; i < tierDivisors.Length; i++)
         {
-            _tierBuckets[i] = new EntityStripeSet((ushort)(baseStripeCount * tierDivisors[i]), []);
+            _tierBuckets[i] = new EntityStripeSet((ushort)(baseStripeCount * tierDivisors[i]), indexInBucketByEntityId);
         }
 
         foreach (var entityId in existingEntityIds)
@@ -44,14 +46,13 @@ public sealed class TieredEntityStripeSet
     /// <remarks>An entity already in the set stays where it is.</remarks>
     public void OnMemberAdded(int entityId)
     {
-        ref var memberTierIndex = ref _memberTierIndexByEntityId.GetWritable(entityId);
-        if (memberTierIndex != NotAMember)
+        if (_memberTierIndexByEntityId.Get(entityId) != NotAMember)
         {
             return;
         }
 
         var tierIndex = _currentTierIndexLookup(entityId);
-        memberTierIndex = tierIndex;
+        _memberTierIndexByEntityId.Claim(entityId) = tierIndex;
         _tierBuckets[tierIndex].OnEntityAdded(entityId);
     }
 
@@ -65,7 +66,7 @@ public sealed class TieredEntityStripeSet
             return;
         }
 
-        _memberTierIndexByEntityId.GetWritable(entityId) = NotAMember;
+        _memberTierIndexByEntityId.Release(entityId);
         _tierBuckets[tierIndex].OnEntityRemoved(entityId);
     }
 
@@ -82,7 +83,7 @@ public sealed class TieredEntityStripeSet
 
         _tierBuckets[oldTierIndex].OnEntityRemoved(entityId);
         _tierBuckets[newTierIndex].OnEntityAdded(entityId);
-        _memberTierIndexByEntityId.GetWritable(entityId) = newTierIndex;
+        _memberTierIndexByEntityId.GetExisting(entityId) = newTierIndex;
     }
 
     /// <summary>How many tiers this set was constructed with.</summary>

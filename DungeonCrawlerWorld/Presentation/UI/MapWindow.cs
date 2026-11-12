@@ -226,12 +226,11 @@ public sealed class MapWindow : Window, IContentDropTarget
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
 
         OverhangFade.CollectWatchedEntities(_watchedEntityIds, _mapView.PlayerEntityId, _mapViewState.InspectionMode, _mapViewState.InspectedEntityId);
         _overlay.CollectGroundMarks(_groundMarks);
         _renderer.Draw(_mapViewState.CurrentMapLayer, _watchedEntityIds, _groundMarks);
-        _overlay.Draw(spriteBatch, unitRectangle);
+        _overlay.Draw(spriteBatch);
         _floatingTextRenderer.Draw(spriteBatch, _mapViewState.CurrentMapLayer);
     }
 

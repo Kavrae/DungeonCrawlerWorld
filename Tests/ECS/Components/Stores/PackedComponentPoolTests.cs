@@ -24,15 +24,15 @@ public sealed class PackedComponentPoolTests
     {
         var pool = new PackedComponentPool<TestComponent>(entityCapacity: 10, initialCapacity: 2, AverageMerge);
 
-        // One page-table slot (8) + denseCapacity(2) * (sizeof(TestComponent)=4 + entityId int=4 + version uint=4); no page yet.
-        Assert.AreEqual(8 + 2 * (4 + 4 + 4), pool.EstimatedBytes);
+        // One page-table slot (8) and its held count (4) + denseCapacity(2) * (sizeof(TestComponent)=4 + entityId int=4 + version uint=4); no page yet.
+        Assert.AreEqual(12 + 2 * (4 + 4 + 4), pool.EstimatedBytes);
 
         pool.Add(0, new TestComponent { Value = 1 });
         pool.Add(1, new TestComponent { Value = 2 });
         pool.Add(2, new TestComponent { Value = 3 });
 
         // First page allocated (1024 ints); dense storage grew once, by the 16-slot minimum, to 18.
-        Assert.AreEqual(8 + 1024 * 4 + 18 * (4 + 4 + 4), pool.EstimatedBytes);
+        Assert.AreEqual(12 + 1024 * 4 + 18 * (4 + 4 + 4), pool.EstimatedBytes);
     }
 
     [TestMethod]

@@ -12,6 +12,6 @@ public static class ToggleActiveMarker
 {
     private const float GlowStrength = 1.6f;
 
-    public static void Draw(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, float alpha = 1f) =>
-        GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, GameWindowPalette.ToggleActiveGlow, GlowMode.InteriorFade, GlowStrength * alpha);
+    public static void Draw(SpriteEffectBatch spriteBatch, Rectangle bounds, float alpha = 1f) =>
+        GlowRenderer.Draw(spriteBatch, bounds, GameWindowPalette.ToggleActiveGlow, GlowMode.InteriorFade, GlowStrength * alpha);
 }

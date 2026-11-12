@@ -55,11 +55,10 @@ public sealed class AbilityScoreModifierRow(ElementServices services)
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
 
         if (IsPointerOver && Source is not null)
         {
-            spriteBatch.Draw(unitRectangle, LocalContentRectangle, WindowPalette.HighlightColor);
+            spriteBatch.FillRectangle(LocalContentRectangle, WindowPalette.HighlightColor);
         }
 
         var footprintSize = new Vector2(ContentSize.X - Padding, ContentSize.Y);

@@ -180,10 +180,9 @@ public sealed class DiagnosticsTimelineView(ElementServices services)
     public override void DrawContent(GameTime gameTime)
     {
         var batch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
         var width = (int)ContentSize.X;
         var frameBand = new Rectangle(0, 0, width, (int)DebugTabChrome.FrameBandHeight);
-        batch.Draw(unitRectangle, frameBand, DebugTabChrome.GraphBackground);
+        batch.FillRectangle(frameBand, DebugTabChrome.GraphBackground);
 
         var frameMaximum = System.Math.Max(MaximumOf(_updateMilliseconds), DebugTabChrome.FrameBudgetMilliseconds * 1.25);
         for (var column = 0; column < width; column++)
@@ -201,10 +200,10 @@ public sealed class DiagnosticsTimelineView(ElementServices services)
 
             var top = YOf(frameBand, value, 0, frameMaximum);
             var color = value > DebugTabChrome.FrameBudgetMilliseconds ? DebugTabChrome.SpikeSeries : DebugTabChrome.FrameSeries;
-            batch.Draw(unitRectangle, new Rectangle(column, top, 1, frameBand.Bottom - top), color);
+            batch.FillRectangle(new Rectangle(column, top, 1, frameBand.Bottom - top), color);
         }
 
-        batch.Draw(unitRectangle, new Rectangle(0, YOf(frameBand, DebugTabChrome.FrameBudgetMilliseconds, 0, frameMaximum), width, 1), DebugTabChrome.FrameBudgetLine);
+        batch.FillRectangle(new Rectangle(0, YOf(frameBand, DebugTabChrome.FrameBudgetMilliseconds, 0, frameMaximum), width, 1), DebugTabChrome.FrameBudgetLine);
         LabelRenderer.Draw(batch, _font, _frameLabel, new Vector2(4, 2), DebugTabChrome.GraphLabel);
 
         var bandTop = DebugTabChrome.FrameBandHeight + DebugTabChrome.BandGap;
@@ -239,18 +238,17 @@ public sealed class DiagnosticsTimelineView(ElementServices services)
         var height = (int)ContentSize.Y;
         if (selection.FirstRecord == selection.LastRecord)
         {
-            Render.Batch.Draw(Render.UnitRectangle, new Rectangle(firstColumn, 0, 1, height), DebugTabChrome.Cursor);
+            Render.Batch.FillRectangle(new Rectangle(firstColumn, 0, 1, height), DebugTabChrome.Cursor);
             return;
         }
 
-        Render.Batch.Draw(Render.UnitRectangle, new Rectangle(firstColumn, 0, lastColumn - firstColumn + 1, height), DebugTabChrome.SelectionWash);
+        Render.Batch.FillRectangle(new Rectangle(firstColumn, 0, lastColumn - firstColumn + 1, height), DebugTabChrome.SelectionWash);
     }
 
     private void DrawGaugeBand(Rectangle band, double[] values, bool isCumulative, string label)
     {
         var batch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
-        batch.Draw(unitRectangle, band, DebugTabChrome.GraphBackground);
+        batch.FillRectangle(band, DebugTabChrome.GraphBackground);
         var statistics = GaugeWindowStatistics.Of(values.AsSpan(0, _copiedCount));
         var padding = statistics.Maximum == statistics.Minimum ? System.Math.Max(1, System.Math.Abs(statistics.Maximum) * 0.01) : 0;
         var minimum = isCumulative ? 0 : statistics.Minimum - padding;
@@ -275,7 +273,7 @@ public sealed class DiagnosticsTimelineView(ElementServices services)
             {
                 if (value > 0)
                 {
-                    batch.Draw(unitRectangle, new Rectangle(band.X + column, y, 1, band.Bottom - y), DebugTabChrome.CumulativeSeries);
+                    batch.FillRectangle(new Rectangle(band.X + column, y, 1, band.Bottom - y), DebugTabChrome.CumulativeSeries);
                 }
 
                 continue;
@@ -283,7 +281,7 @@ public sealed class DiagnosticsTimelineView(ElementServices services)
 
             var top = previousY < 0 ? y : System.Math.Min(previousY, y);
             var bottom = previousY < 0 ? y : System.Math.Max(previousY, y);
-            batch.Draw(unitRectangle, new Rectangle(band.X + column, top, 1, bottom - top + 1), DebugTabChrome.LevelSeries);
+            batch.FillRectangle(new Rectangle(band.X + column, top, 1, bottom - top + 1), DebugTabChrome.LevelSeries);
             previousY = y;
         }
 

@@ -980,7 +980,9 @@ Landed 2026-09-18 as phases 0-1 of "Deferred-build NPCs and shared definition da
   are compared field by field: a bitwise comparison read padding bytes as changes
   (`AbilityScoreComponent` showed 98.7% changed instead of 0%).
 - **Paged entity index:** Packed and Multi pools index entities through `EntityPages` (1024 ids per
-  page, allocated on first write, never freed so a Multi pool's entity version keeps counting).
+  page; since 2026-11-11 a page is freed with its last holder into spares the next claim reuses, and a
+  Multi pool's entity versions come from one counter per pool, so a released entity reads 0 and never
+  sees an earlier version again).
   `maximumEntityCount` registration overrides were removed; `ResizeEntityCapacity` only grows page
   tables for them. Direct pools stay flat.
 - **Dense growth:** x1.5 (`DenseCapacityGrowth`, minimum 16) from `InitialComponentCapacity` (1024) or
@@ -2251,6 +2253,86 @@ after attach").
 - **The quest composer is WrapContent.** Its old Fixed popup resized itself to the box plus a
   hard-coded 30 px of chrome. The real chrome is 32 px, so every clamp shrank it 2 px further, down to
   its title bar.
+
+### Layout passes: what a move, a scroll and a close cost (2026-11-11)
+
+From a review of UIEngine for frame rate. Tests: `LayoutPassEfficiencyTests`.
+- **A move arranges, it does not measure.** `SetRelativePosition` does nothing for the position the
+  element already has, and otherwise arranges the subtree and tells the parent
+  (`OnChildLayoutChanged`). It measures only when the move changed the space offered to the element
+  (`OfferedAvailableSize`): a child of a parent that doesn't scroll is offered what is left past its
+  position, so moving it can still clamp it. A root and a scrolling parent's child never re-measure
+  on a move. Before, a window drag measured the whole window every held frame, mouse moving or not.
+  - `SetSize` is still the way to force a re-measure after a chrome setter.
+- **Wrapped text is kept** (`TextWindow._wrappedText`, `TextBox._wrappedLines`, `_widestLineWidth`,
+  `Window._titleTextSize`) until the text, font or width changes, so a measure that changes none of
+  them wraps and measures nothing. `TextBox` keeps `_lineSpans` with the wrap that filled it.
+- **A scroll range that leaves the offset where it is arranges nothing.** `SetMaxScrollOffset`
+  recalculates only the scrollbar rectangles then; `ScrollBy` returns when the clamped offset is
+  unchanged. Before, every measure of a scrolling element arranged its subtree part-way through the
+  measure, once a settle pass, nested scrollers multiplying it.
+- **Closing several children lays the parent out once.** `ElementPoolService.CloseAllChildren` pools
+  each child and takes it out of the parent's list in the same step
+  (`Element.DetachChildWithoutLayout`), then tells the parent once (`OnChildrenDetached`), in a
+  `finally` so a throw part-way still reports what left. A parent that is itself closing is not laid
+  out at all. The pool's reset hides an element with `HideForPool`, which tells no parent: the
+  `IsVisible` setter used to lay the parent out a second time for every child closed.
+  - No child can be left behind: a child is detached exactly when it was pooled by this call or is
+    already in the pool, and the pooled set still stops a second return.
+- **A scrolling element draws only the children inside its clip** (`Element.DrawsWithin`: the child's
+  rectangle grown by an exterior glow's reach). Anything a child draws further outside its own
+  rectangle than that is not drawn while the child itself is out of view.
+- **Ink centres are found by reference first** (`FontStashTextMeasurer`: 256 slots by object
+  identity, then the dictionary by content) and the dictionary is emptied at
+  `MaximumKeptInkCenters`, since centred text that keeps changing was kept for the session.
+- **Not changed:** `Element.TreeVersion` is still one process-wide counter, so any child added,
+  removed, shown or hidden anywhere re-tests what is under a still cursor. Narrowing it to changes
+  under the cursor needs the cursor's position inside the element tree.
+
+### UIEngine duplicates folded together (2026-11-11)
+
+From the same review.
+- **`Element.Enabled`** is on every element, true from each `Build`. `Element` does nothing with it:
+  each element decides what disabled means. `Button`, `Toggle` and `TextBox` behave as they did
+  (greyed, never hit-tested); no other element reads it yet.
+- **One glow type, held twice** (`ElementGlow`: on/off, colour, mode, animation, pulse clock, `Draw`):
+  the border glow and the overlay glow. `Element`'s `SetGlow`/`SetOverlayGlow` surface is unchanged.
+- **`Viewport` and `CameraTransform` are gone.** `ContentDrawOrigin` is the content rectangle's corner
+  less the scroll, which is all either was read for.
+- **One walk into the children** (`Element.HitTestInsideChrome`): the resize band asks it for a
+  scrollbar instead of a second walk (`TryHitTestScrollbar`, removed). The band now gives way only to
+  a scrollbar that is the topmost thing there, not one under a covering sibling.
+- **Walking up the parents** is `Element.FirstSelfOrAncestor(state, matches)` and
+  `Element.RootElement`. `OfferMouseWheel`, `TryDispatchDoubleClick` and `FindDropTarget` keep their
+  own loops: each stops for two different reasons or returns something other than the element.
+- **`Element.ScrollIntoView(top, bottom, pinnedTopHeight)`** is what `Dropdown` and `ListView` each
+  had a copy of.
+- **`PopupOwnership`** is the owner-checked show and hide the tooltip, the cursor's held message and
+  the cursor's label each need.
+- **`CursorTextContent` is everything written at the cursor**: the brief message, the held message
+  (`ShowPersistent(owner, text)` / `HidePersistent(owner)`, now owner-checked) and the label above
+  the cursor (`ShowLabel` / `HideLabel`, which was `CursorLabelContent`). One User-tier window hosts
+  it, not two.
+- **`TooltipRowBlock`** is the rows a tooltip shows with what was measured from them; `Tooltip` and
+  `TooltipRowsElement` each hold one.
+- **`SeparatorBar` is `TextDivider.ConfigureAsLine`**: a divider with no label is one unbroken line.
+- **A solid rectangle is `FillRectangle` on the draw target.** `ISpriteDrawTarget` has
+  `FillRectangle(rectangle, colour, style)` and a turned form for lines; `SpriteEffectBatch` brings
+  its own white texel. No helper takes a `Texture2D unitRectangle`, `UiRenderService.UnitRectangle`
+  is gone and a host no longer makes the texture. Every static drawing helper takes any
+  `ISpriteDrawTarget` (`BorderRenderer`, `ResourceBarRenderer`, `SparklineRenderer`, `CrossRenderer`,
+  `BorderedBoxRenderer`, `GridSquareRenderer`, `MenuModeDimRenderer` took the batch itself).
+- **Left as they are, on purpose:**
+  - **Title buttons stay a list of their own on `Window`.** As children they would sit in the content
+    area: scrolled, clipped, counted in the scroll range and a WrapContent size, tiled, and closed by
+    every `CloseAllChildren(host)` that rebuilds content. Exempting them from all of that is what the
+    separate list already is.
+  - **Two centring rules.** A glyph in a box is centred on its ink (`GetCenteredPosition`); text read
+    as a line is centred on the font's line height so its baseline holds whatever it says
+    (`GetLineCenteredPosition`, which the bar value text now shares with the left and right rules).
+  - **`TextSizeCache` and the measurer's ink centres.** A site that owns state keeps one size beside
+    it (the `KeyedCache` rule); `LabelRenderer.DrawCentered` is static with nowhere to keep one, so
+    its answers live on the font's measurer.
 
 ### Tall sprites, wall faces and tops, and the sprite manifest
 

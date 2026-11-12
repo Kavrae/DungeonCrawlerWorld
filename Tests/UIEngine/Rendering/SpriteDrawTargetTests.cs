@@ -23,6 +23,7 @@ public sealed class SpriteDrawTargetTests
 
         public void Draw(Texture2D texture, Vector2 position, Rectangle? source, Color color, float rotation, Vector2 origin, Vector2 scale, SpriteEffects effects, SpriteDrawStyle style) =>
             TransformedDraws.Add((position, source, color, rotation, origin, scale, effects, style));
+public void FillRectangle(Rectangle destination, Color color, SpriteDrawStyle style) =>            Rectangles.Add((destination, null, color, style));        public void FillRectangle(Vector2 position, Vector2 size, float rotation, Vector2 normalizedOrigin, Color color, SpriteDrawStyle style) =>            TransformedDraws.Add((position, null, color, rotation, normalizedOrigin, size, SpriteEffects.None, style));
 
         public void DrawString(SpriteFontBase font, string text, Vector2 position, Color color, SpriteDrawStyle style) =>
             Strings.Add((text, position, color, style));
@@ -142,7 +143,7 @@ public sealed class SpriteDrawTargetTests
         var target = new RecordingDrawTarget();
         var litStyle = Style.WithGlowAtPixel();
 
-        GlowRenderer.Draw(target, null!, new Rectangle(10, 20, 32, 16), Color.LightGreen, GlowMode.InteriorFade, 0.5f, litStyle);
+        GlowRenderer.Draw(target, new Rectangle(10, 20, 32, 16), Color.LightGreen, GlowMode.InteriorFade, 0.5f, litStyle);
 
         Assert.AreEqual(
             (new Rectangle(10, 20, 32, 16), (Rectangle?)null, Color.LightGreen * 0.25f, litStyle with { Mode = SpriteDrawMode.FadeInward, FadeDepthPixels = GlowRenderer.FadeRingCount }),
@@ -155,7 +156,7 @@ public sealed class SpriteDrawTargetTests
         var target = new RecordingDrawTarget();
         var depth = GlowRenderer.FadeRingCount;
 
-        GlowRenderer.Draw(target, null!, new Rectangle(10, 20, 32, 16), Color.Gold, GlowMode.ExteriorFade);
+        GlowRenderer.Draw(target, new Rectangle(10, 20, 32, 16), Color.Gold, GlowMode.ExteriorFade);
 
         Assert.AreEqual(
             (new Rectangle(10 - depth, 20 - depth, 32 + depth * 2, 16 + depth * 2), (Rectangle?)null, Color.Gold * 0.5f, new SpriteDrawStyle(SpriteDrawMode.FadeOutward, FadeDepthPixels: (byte)depth)),
@@ -167,7 +168,7 @@ public sealed class SpriteDrawTargetTests
     {
         var target = new RecordingDrawTarget();
 
-        GlowRenderer.Draw(target, null!, new Rectangle(10, 20, 32, 16), Color.Gold, GlowMode.InteriorFull, style: Style);
+        GlowRenderer.Draw(target, new Rectangle(10, 20, 32, 16), Color.Gold, GlowMode.InteriorFull, style: Style);
 
         Assert.AreEqual((new Rectangle(10, 20, 32, 16), (Rectangle?)null, Color.Gold * 0.5f, Style), target.Rectangles.Single());
     }
@@ -178,7 +179,7 @@ public sealed class SpriteDrawTargetTests
         var target = new RecordingDrawTarget();
         var pulse = GlowAnimation.Pulse(TimeSpan.FromSeconds(2));
 
-        GlowRenderer.Draw(target, null!, new Rectangle(10, 20, 32, 16), Color.Gold, GlowMode.InteriorFull, pulse, TimeSpan.FromSeconds(1), style: Style);
+        GlowRenderer.Draw(target, new Rectangle(10, 20, 32, 16), Color.Gold, GlowMode.InteriorFull, pulse, TimeSpan.FromSeconds(1), style: Style);
 
         Assert.AreEqual(Color.Gold * (GlowRenderer.FadeMaximumAlpha * GlowAnimation.DefaultPulseMinimumStrength), target.Rectangles.Single().Color);
     }
@@ -189,7 +190,7 @@ public sealed class SpriteDrawTargetTests
         var target = new RecordingDrawTarget();
         var pulse = GlowAnimation.Pulse(TimeSpan.FromSeconds(2));
 
-        GlowRenderer.Draw(target, null!, new Rectangle(10, 20, 32, 16), Color.Gold, GlowMode.InteriorFull, pulse, TimeSpan.FromSeconds(11), style: Style);
+        GlowRenderer.Draw(target, new Rectangle(10, 20, 32, 16), Color.Gold, GlowMode.InteriorFull, pulse, TimeSpan.FromSeconds(11), style: Style);
 
         Assert.AreEqual(Color.Gold * GlowRenderer.FadeMaximumAlpha, target.Rectangles.Single().Color);
     }

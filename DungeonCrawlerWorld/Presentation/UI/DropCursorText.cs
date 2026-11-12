@@ -67,10 +67,10 @@ public sealed class DropCursorText
         _shownText = text;
         if (text is null)
         {
-            _cursorText.HidePersistent();
+            _cursorText.HidePersistent(this);
             return;
         }
 
-        _cursorText.ShowPersistent(text);
+        _cursorText.ShowPersistent(this, text);
     }
 }

@@ -100,14 +100,13 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
     public void DrawContent(GameTime gameTime)
     {
         var spriteBatch = _hostWindow.Render.Batch;
-        var unitRectangle = _hostWindow.Render.UnitRectangle;
 
         // BarRectangle(), not the static Size -- Size is the window's outer bounds (used by
         // ShellBootstrapper to position/size the host window itself); the actual drawable
         // area is whatever's left after its border insets that, so the bar has to size itself
         // off ContentSize to fit inside the border rather than drawing over it.
         var barRectangle = _hostWindow.ToContentLocal(BarRectangle());
-        ResourceBarRenderer.Draw(spriteBatch, unitRectangle, barRectangle, _healthFraction, _hasHealth, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor);
+        ResourceBarRenderer.Draw(spriteBatch, barRectangle, _healthFraction, _hasHealth, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor);
 
         if (_hasHealth)
         {

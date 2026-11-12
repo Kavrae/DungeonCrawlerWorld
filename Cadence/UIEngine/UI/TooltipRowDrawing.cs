@@ -48,7 +48,7 @@ public static class TooltipRowDrawing
     /// RightText is inset from the row's right edge by the glow's width, on every row so the column lines up, so it never sits under the glow's brightest ring.
     /// A null elapsedSinceRowGlowPulseStart draws every row's glow steady, whatever its GlowAnimation.
     /// </remarks>
-    public static void Draw<TTarget>(TTarget target, Texture2D unitRectangle, SpriteFontBase font, IReadOnlyList<TooltipRow> rows, IReadOnlyList<float> rightTextWidths, float middleColumnLeft, Vector2 topLeft, float rowWidth, TimeSpan? elapsedSinceRowGlowPulseStart)
+    public static void Draw<TTarget>(TTarget target, SpriteFontBase font, IReadOnlyList<TooltipRow> rows, IReadOnlyList<float> rightTextWidths, float middleColumnLeft, Vector2 topLeft, float rowWidth, TimeSpan? elapsedSinceRowGlowPulseStart)
         where TTarget : ISpriteDrawTarget
     {
         var rowSize = new Vector2(rowWidth, font.LineHeight);
@@ -63,7 +63,7 @@ public static class TooltipRowDrawing
             if (row.IsDivider)
             {
                 var lineRectangle = new Rectangle(rowBounds.X, rowBounds.Y + rowBounds.Height / 2, rowBounds.Width, 1);
-                target.Draw(unitRectangle, lineRectangle, row.Color);
+                target.FillRectangle(lineRectangle, row.Color);
                 continue;
             }
 
@@ -85,11 +85,11 @@ public static class TooltipRowDrawing
 
             if (elapsedSinceRowGlowPulseStart is { } elapsed)
             {
-                GlowRenderer.Draw(target, unitRectangle, rowBounds, glowColor, GlowMode.InteriorFade, row.GlowAnimation, elapsed);
+                GlowRenderer.Draw(target, rowBounds, glowColor, GlowMode.InteriorFade, row.GlowAnimation, elapsed);
                 continue;
             }
 
-            GlowRenderer.Draw(target, unitRectangle, rowBounds, glowColor, GlowMode.InteriorFade);
+            GlowRenderer.Draw(target, rowBounds, glowColor, GlowMode.InteriorFade);
         }
     }
 }

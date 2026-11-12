@@ -80,7 +80,6 @@ public sealed class PlayerHealthHoverContent(
         }
 
         var spriteBatch = _hostWindow.Render.Batch;
-        var unitRectangle = _hostWindow.Render.UnitRectangle;
         var contentWidth = _hostWindow.ContentSize.X;
 
         LabelRenderer.DrawLeftAligned(spriteBatch, _font, regenerationText, Vector2.Zero, new Vector2(contentWidth, RowHeight), HealthBarPalette.RegenerationTextColor);
@@ -89,7 +88,7 @@ public sealed class PlayerHealthHoverContent(
         for (var rowIndex = 0; rowIndex < _scratchRows.Count; rowIndex++)
         {
             var row = _scratchRows[rowIndex];
-            DrawBodyPartRow(spriteBatch, unitRectangle, contentWidth, (rowIndex + 1) * RowHeight, row.Name, row.Fraction, row.HasResource);
+            DrawBodyPartRow(spriteBatch, contentWidth, (rowIndex + 1) * RowHeight, row.Name, row.Fraction, row.HasResource);
         }
     }
 
@@ -114,7 +113,7 @@ public sealed class PlayerHealthHoverContent(
 
     internal readonly record struct RowData(string Name, float Fraction, bool HasResource);
 
-    private void DrawBodyPartRow(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, float contentWidth, float rowTop, string name, float fraction, bool hasResource)
+    private void DrawBodyPartRow(SpriteEffectBatch spriteBatch, float contentWidth, float rowTop, string name, float fraction, bool hasResource)
     {
         var barX = contentWidth - BarWidth;
         var nameWidth = System.Math.Max(0f, barX - NameBarGap);
@@ -123,6 +122,6 @@ public sealed class PlayerHealthHoverContent(
 
         var barY = rowTop + (RowHeight - BarHeight) / 2f;
         var barRectangle = new Rectangle((int)barX, (int)barY, (int)BarWidth, (int)BarHeight);
-        ResourceBarRenderer.Draw(spriteBatch, unitRectangle, barRectangle, fraction, hasResource, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor);
+        ResourceBarRenderer.Draw(spriteBatch, barRectangle, fraction, hasResource, HealthBarPalette.OutlineColor, HealthBarPalette.FractionColor);
     }
 }

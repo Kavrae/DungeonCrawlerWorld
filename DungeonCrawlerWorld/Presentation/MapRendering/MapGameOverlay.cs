@@ -63,7 +63,7 @@ public sealed class MapGameOverlay : IDisposable
     }
 
     /// <summary>Draws the targeting highlights as one tile overlay, then Dodge's letters.</summary>
-    public void Draw(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
+    public void Draw(SpriteEffectBatch spriteBatch)
     {
         _texels.Begin(_camera.CurrentScrollPosition, _camera.TileColumns, _camera.TileRows);
         AddTargetingHighlights();
@@ -71,7 +71,7 @@ public sealed class MapGameOverlay : IDisposable
 
         if (!_texels.IsEmpty)
         {
-            DrawTileOverlay(spriteBatch, unitRectangle);
+            DrawTileOverlay(spriteBatch);
         }
 
         DrawDodgeDirectionalHints(spriteBatch);
@@ -86,7 +86,7 @@ public sealed class MapGameOverlay : IDisposable
         }
     }
 
-    private void DrawTileOverlay(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawTileOverlay(SpriteEffectBatch spriteBatch)
     {
         var texture = _textures[_nextTextureIndex];
         if (texture is null || texture.Width != _texels.Width || texture.Height != _texels.Height)
@@ -105,7 +105,7 @@ public sealed class MapGameOverlay : IDisposable
         spriteBatch.TileOverlay = SpriteEffectTileOverlay.OverTileGrid(texture, tileSize, gridOrigin);
         try
         {
-            spriteBatch.Draw(unitRectangle, gridOrigin, null, Color.White, 0f, Vector2.Zero, gridSize, SpriteEffects.None, new SpriteDrawStyle(SpriteDrawMode.TileOverlay));
+            spriteBatch.FillRectangle(gridOrigin, gridSize, 0f, Vector2.Zero, Color.White, new SpriteDrawStyle(SpriteDrawMode.TileOverlay));
         }
         finally
         {

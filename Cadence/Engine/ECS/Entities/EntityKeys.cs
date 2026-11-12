@@ -48,7 +48,10 @@ public sealed class EntityKeys
             Array.Resize(ref _keyByEntityId, System.Math.Max(entityId + 1, System.Math.Max(16, _keyByEntityId.Length * 2)));
         }
 
-        Release(entityId);
+        if (_keyByEntityId[entityId] != 0)
+        {
+            Release(entityId);
+        }
 
         var key = ++_lastIssued;
         _keyByEntityId[entityId] = key;

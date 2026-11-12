@@ -77,7 +77,7 @@ public sealed class ComponentManagerTests
         manager.GetMultiPool<MultiTestComponent>().Add(49, new MultiTestComponent { Value = 1 });
     }
 
-    /// <summary>ResizeEntityCapacity grows a Packed or Multi pool's page table only -- a flat entity index would grow by thousands of bytes here, the page table by a few pointers.</summary>
+    /// <summary>ResizeEntityCapacity grows a Packed or Multi pool's page table only -- a flat entity index would grow by thousands of bytes here, the page table by a pointer and a count per page.</summary>
     [TestMethod]
     public void ResizeEntityCapacity_AllocatesNoEntityPagesForPackedOrMultiPools()
     {
@@ -91,8 +91,8 @@ public sealed class ComponentManagerTests
 
         manager.ResizeEntityCapacity(100_000);
 
-        Assert.IsLessThan(1_000, packed.EstimatedBytes - packedBytes);
-        Assert.IsLessThan(1_000, multi.EstimatedBytes - multiBytes);
+        Assert.IsLessThan(2_000, packed.EstimatedBytes - packedBytes);
+        Assert.IsLessThan(2_000, multi.EstimatedBytes - multiBytes);
     }
 
     [TestMethod]

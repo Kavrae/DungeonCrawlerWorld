@@ -15,9 +15,8 @@ public static class SparklineRenderer
     /// <param name="maximumValue">The value at the graph's top edge; a value above it is drawn at the top.</param>
     /// <param name="style">Bars rise from the bottom edge; Line draws each column's step from the previous column's value.</param>
     /// <param name="referenceValue">Draws a 1 px horizontal line at this value when it is inside the graph's range, e.g. a frame budget.</param>
-    public static void Draw(
-        SpriteEffectBatch spriteBatch,
-        Texture2D unitRectangle,
+    public static void Draw<TTarget>(
+        TTarget spriteBatch,
         Rectangle area,
         ReadOnlySpan<double> values,
         double minimumValue,
@@ -27,8 +26,9 @@ public static class SparklineRenderer
         Color backgroundColor,
         double? referenceValue = null,
         Color referenceColor = default)
+        where TTarget : ISpriteDrawTarget
     {
-        spriteBatch.Draw(unitRectangle, area, backgroundColor);
+        spriteBatch.FillRectangle(area, backgroundColor);
         if (values.IsEmpty || area.Width <= 0 || area.Height <= 0)
         {
             return;
@@ -55,21 +55,21 @@ public static class SparklineRenderer
             {
                 if (y < area.Bottom)
                 {
-                    spriteBatch.Draw(unitRectangle, new Rectangle(x, y, 1, area.Bottom - y), seriesColor);
+                    spriteBatch.FillRectangle(new Rectangle(x, y, 1, area.Bottom - y), seriesColor);
                 }
             }
             else
             {
                 var top = previousY < 0 ? y : Math.Min(previousY, y);
                 var bottom = previousY < 0 ? y : Math.Max(previousY, y);
-                spriteBatch.Draw(unitRectangle, new Rectangle(x, top, 1, bottom - top + 1), seriesColor);
+                spriteBatch.FillRectangle(new Rectangle(x, top, 1, bottom - top + 1), seriesColor);
                 previousY = y;
             }
         }
 
         if (referenceValue is { } reference && reference >= minimumValue && reference <= maximumValue)
         {
-            spriteBatch.Draw(unitRectangle, new Rectangle(area.X, YOf(area, reference, minimumValue, valueRange), area.Width, 1), referenceColor);
+            spriteBatch.FillRectangle(new Rectangle(area.X, YOf(area, reference, minimumValue, valueRange), area.Width, 1), referenceColor);
         }
     }
 

@@ -138,7 +138,6 @@ public sealed class DiagnosticsGaugeList(ElementServices services)
     public override void DrawContent(GameTime gameTime)
     {
         var batch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
         var width = ContentSize.X;
         var rowHeight = DebugTabChrome.GaugeListRowHeight;
         if (_gauges.Count == 0)
@@ -161,7 +160,7 @@ public sealed class DiagnosticsGaugeList(ElementServices services)
 
             if (_selectedGaugeIndexes.Contains(gaugeIndex))
             {
-                batch.Draw(unitRectangle, new Rectangle(0, (int)top, (int)width, (int)rowHeight), DebugTabChrome.SelectedRow);
+                batch.FillRectangle(new Rectangle(0, (int)top, (int)width, (int)rowHeight), DebugTabChrome.SelectedRow);
             }
 
             LabelRenderer.DrawLeftAligned(batch, _font, _gauges[gaugeIndex].Name, new Vector2(ColumnX[0], top), new Vector2(ColumnX[1] - ColumnX[0], rowHeight), WindowPalette.BodyTextColor);
@@ -196,19 +195,19 @@ public sealed class DiagnosticsGaugeList(ElementServices services)
         var statistics = GaugeWindowStatistics.Of(values);
         if (_gauges[gaugeIndex].Kind is GaugeKind.Cumulative)
         {
-            SparklineRenderer.Draw(Render.Batch, Render.UnitRectangle, area, values, 0, System.Math.Max(statistics.Maximum, 1), SparklineStyle.Bars, DebugTabChrome.CumulativeSeries, DebugTabChrome.GraphBackground);
+            SparklineRenderer.Draw(Render.Batch, area, values, 0, System.Math.Max(statistics.Maximum, 1), SparklineStyle.Bars, DebugTabChrome.CumulativeSeries, DebugTabChrome.GraphBackground);
             return;
         }
 
         var padding = statistics.Maximum == statistics.Minimum ? System.Math.Max(1, System.Math.Abs(statistics.Maximum) * 0.01) : 0;
-        SparklineRenderer.Draw(Render.Batch, Render.UnitRectangle, area, values, statistics.Minimum - padding, statistics.Maximum + padding, SparklineStyle.Line, DebugTabChrome.LevelSeries, DebugTabChrome.GraphBackground);
+        SparklineRenderer.Draw(Render.Batch, area, values, statistics.Minimum - padding, statistics.Maximum + padding, SparklineStyle.Line, DebugTabChrome.LevelSeries, DebugTabChrome.GraphBackground);
     }
 
     /// <summary>Drawn last, over any row scrolled up beneath it, at the top of what is shown.</summary>
     private void DrawColumnHeadings(float width)
     {
         var top = ScrollOffset.Y;
-        Render.Batch.Draw(Render.UnitRectangle, new Rectangle(0, (int)top, (int)width, (int)DebugTabChrome.GaugeListRowHeight), WindowPalette.ControlBackground);
+        Render.Batch.FillRectangle(new Rectangle(0, (int)top, (int)width, (int)DebugTabChrome.GaugeListRowHeight), WindowPalette.ControlBackground);
         for (var columnIndex = 0; columnIndex < ColumnHeadings.Length; columnIndex++)
         {
             LabelRenderer.DrawLeftAligned(Render.Batch, _font, ColumnHeadings[columnIndex], new Vector2(ColumnX[columnIndex], top), new Vector2(90, DebugTabChrome.GaugeListRowHeight), WindowPalette.ControlLabelTextColor);

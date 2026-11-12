@@ -77,7 +77,7 @@ public sealed class ItemComparisonController(
 
         IsComparing = true;
         mapViewState.CompareRequiredActivatorType = activator.GetType();
-        cursorTextContent.ShowPersistent(CompareModeMessage);
+        cursorTextContent.ShowPersistent(this, CompareModeMessage);
         if (windowHoldingItemsOf(entityId) is { } besideWindow)
         {
             itemDetails.PinBeside(besideWindow);
@@ -94,7 +94,7 @@ public sealed class ItemComparisonController(
 
         IsComparing = false;
         mapViewState.CompareRequiredActivatorType = null;
-        cursorTextContent.HidePersistent();
+        cursorTextContent.HidePersistent(this);
         itemDetails.Close();
         comparisonPopup.Close();
     }

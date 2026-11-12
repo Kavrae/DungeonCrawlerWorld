@@ -77,7 +77,7 @@ public sealed class ItemWindowCoordinatorTests
         var layers = new UiLayerStack();
         var pointerState = new PointerState();
         var tooltipController = new TooltipController();
-        var cursorLabelContent = new CursorLabelContent(pointerState, fontService);
+        var cursorTextContent = new CursorTextContent(pointerState, fontService);
         var shellServices = new ShellServices(
             layers,
             mapViewState,
@@ -85,9 +85,8 @@ public sealed class ItemWindowCoordinatorTests
             TestElementPoolServiceFactory.CreateContextMenuController(elementPool, layers),
             tooltipController,
             pointerState,
-            new CursorTextContent(pointerState, fontService),
-            cursorLabelContent,
-            new ItemHoverDetails(cursorLabelContent));
+            cursorTextContent,
+            new ItemHoverDetails(cursorTextContent));
 
         var eventBus = new EventBus();
         var inventoryServices = TestInventoryServices.Over(componentManager, itemCatalog, world, eventBus, shellServices.ItemHoverDetails);

@@ -14,68 +14,84 @@ namespace Tests.ECS.Systems;
 [TestClass]
 public sealed class EntityStripeSetTests
 {
+    private const int B = EntityStripeSet.BlockSize;
+
     [TestMethod]
     public void Constructor_SeedsFromExistingEntityIds()
     {
-        var stripeSet = new EntityStripeSet(3, [0, 1, 2, 3, 4, 5]);
+        var stripeSet = new EntityStripeSet(3, [0, 1, B, B + 1, 2 * B, 3 * B]);
 
-        CollectionAssert.AreEquivalent(new[] { 0, 3 }, stripeSet.GetBucket(0).ToArray());
-        CollectionAssert.AreEquivalent(new[] { 1, 4 }, stripeSet.GetBucket(1).ToArray());
-        CollectionAssert.AreEquivalent(new[] { 2, 5 }, stripeSet.GetBucket(2).ToArray());
+        CollectionAssert.AreEquivalent(new[] { 0, 1, 3 * B }, stripeSet.GetBucket(0).ToArray());
+        CollectionAssert.AreEquivalent(new[] { B, B + 1 }, stripeSet.GetBucket(1).ToArray());
+        CollectionAssert.AreEquivalent(new[] { 2 * B }, stripeSet.GetBucket(2).ToArray());
     }
 
     [TestMethod]
-    public void OnEntityAdded_AssignsByEntityIdModuloStripeCount()
+    public void OnEntityAdded_AssignsByIdBlockRoundRobin()
     {
         var stripeSet = new EntityStripeSet(3, []);
 
-        stripeSet.OnEntityAdded(7);
+        stripeSet.OnEntityAdded(7 * B + 5);
 
-        CollectionAssert.AreEquivalent(new[] { 7 }, stripeSet.GetBucket(1).ToArray());
+        CollectionAssert.AreEquivalent(new[] { 7 * B + 5 }, stripeSet.GetBucket(1).ToArray());
+    }
+
+    [TestMethod]
+    public void OnEntityAdded_ABlockSharesOneStripe()
+    {
+        var stripeSet = new EntityStripeSet(3, []);
+
+        for (var entityId = 2 * B; entityId < 3 * B; entityId++)
+        {
+            stripeSet.OnEntityAdded(entityId);
+        }
+
+        Assert.AreEqual(0, stripeSet.GetBucket(0).Length);
+        Assert.AreEqual(0, stripeSet.GetBucket(1).Length);
+        Assert.AreEqual(B, stripeSet.GetBucket(2).Length);
     }
 
     [TestMethod]
     public void OnEntityRemoved_OnlyAffectsTheRemovedEntitysOwnBucket()
     {
-        var stripeSet = new EntityStripeSet(3, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-        // Bucket 0: {0,3,6,9}. Bucket 1: {1,4,7}. Bucket 2: {2,5,8}.
+        var stripeSet = new EntityStripeSet(3, [0, 1, B, B + 1, 2 * B, 2 * B + 1, 3 * B]);
 
         stripeSet.OnEntityRemoved(0);
 
-        CollectionAssert.AreEquivalent(new[] { 3, 6, 9 }, stripeSet.GetBucket(0).ToArray());
+        CollectionAssert.AreEquivalent(new[] { 1, 3 * B }, stripeSet.GetBucket(0).ToArray());
         // Neither sibling bucket was touched by a removal from bucket 0's own internal swap.
-        CollectionAssert.AreEquivalent(new[] { 1, 4, 7 }, stripeSet.GetBucket(1).ToArray());
-        CollectionAssert.AreEquivalent(new[] { 2, 5, 8 }, stripeSet.GetBucket(2).ToArray());
+        CollectionAssert.AreEquivalent(new[] { B, B + 1 }, stripeSet.GetBucket(1).ToArray());
+        CollectionAssert.AreEquivalent(new[] { 2 * B, 2 * B + 1 }, stripeSet.GetBucket(2).ToArray());
     }
 
     [TestMethod]
     public void OnEntityRemoved_ThenReAdded_AssignsBackToItsOwnBucket()
     {
-        var stripeSet = new EntityStripeSet(3, [0, 1, 2, 3]);
+        var stripeSet = new EntityStripeSet(3, [0, B, 2 * B, 3 * B]);
 
-        stripeSet.OnEntityRemoved(3);
-        stripeSet.OnEntityAdded(3);
+        stripeSet.OnEntityRemoved(3 * B);
+        stripeSet.OnEntityAdded(3 * B);
 
-        CollectionAssert.AreEquivalent(new[] { 0, 3 }, stripeSet.GetBucket(0).ToArray());
+        CollectionAssert.AreEquivalent(new[] { 0, 3 * B }, stripeSet.GetBucket(0).ToArray());
     }
 
     [TestMethod]
     public void OnEntityRemoved_Unknown_DoesNotThrowOrAffectAnyBucket()
     {
-        var stripeSet = new EntityStripeSet(3, [0, 1, 2]);
+        var stripeSet = new EntityStripeSet(3, [0, B, 2 * B]);
 
-        stripeSet.OnEntityRemoved(999);
+        stripeSet.OnEntityRemoved(999 * B);
 
         CollectionAssert.AreEquivalent(new[] { 0 }, stripeSet.GetBucket(0).ToArray());
-        CollectionAssert.AreEquivalent(new[] { 1 }, stripeSet.GetBucket(1).ToArray());
-        CollectionAssert.AreEquivalent(new[] { 2 }, stripeSet.GetBucket(2).ToArray());
+        CollectionAssert.AreEquivalent(new[] { B }, stripeSet.GetBucket(1).ToArray());
+        CollectionAssert.AreEquivalent(new[] { 2 * B }, stripeSet.GetBucket(2).ToArray());
     }
 
     /// <summary>
     /// The exact scenario that broke dense-index striding: heavy churn (repeated add/remove,
     /// including removing entities the swap-with-last logic would have relocated under the
     /// old scheme) followed by a full audit that every currently-live entity appears in
-    /// exactly one bucket, and every bucket's entities are still where entityId % StripeCount
+    /// exactly one bucket, and every bucket's entities are still where EntityStripeSet.StripeOf
     /// says they should be.
     /// </summary>
     [TestMethod]
@@ -113,7 +129,7 @@ public sealed class EntityStripeSetTests
         {
             foreach (var entityId in stripeSet.GetBucket(stripe))
             {
-                Assert.AreEqual((int)stripe, entityId % stripeCount, $"Entity {entityId} is in bucket {stripe} but should be in {entityId % stripeCount}.");
+                Assert.AreEqual((int)stripe, EntityStripeSet.StripeOf(entityId, stripeCount), $"Entity {entityId} is in bucket {stripe} but should be in {EntityStripeSet.StripeOf(entityId, stripeCount)}.");
                 Assert.IsTrue(seenEntityIds.Add(entityId), $"Entity {entityId} appears in more than one bucket.");
             }
         }

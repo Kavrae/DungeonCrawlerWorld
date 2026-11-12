@@ -244,12 +244,11 @@ public sealed class MapRenderer : IDisposable
 
     private void DrawMap(SpriteEffectBatch batch, MapImageKey key, IReadOnlyList<int> watchedEntityIds, IReadOnlyList<MapGroundMark> groundMarks)
     {
-        var unitRectangle = _renderService.UnitRectangle;
         var litAtPixel = SpriteDrawStyle.Plain.WithGlowAtPixel();
 
         if (_groundCache?.Draw(batch, key, -_camera.RenderPixelOffset, litAtPixel) != true)
         {
-            batch.Draw(unitRectangle, new Rectangle(0, 0, key.TileColumns * key.TileSize.X, key.TileRows * key.TileSize.Y), null, MapFillColor, litAtPixel);
+            batch.FillRectangle(new Rectangle(0, 0, key.TileColumns * key.TileSize.X, key.TileRows * key.TileSize.Y), MapFillColor, litAtPixel);
             DrawGroundDirectly(batch, key, _camera.RenderPixelOffset, SpriteGlow.AtPixel);
         }
         else if (!_plannedWalls.IsCurrentFor(key))
@@ -264,7 +263,7 @@ public sealed class MapRenderer : IDisposable
             DrawCachedTops(batch, key, _camera.RenderPixelOffset);
         }
 
-        DrawOccupants(batch, unitRectangle, key, watchedEntityIds);
+        DrawOccupants(batch, key, watchedEntityIds);
     }
 
     /// <summary>
@@ -316,7 +315,7 @@ public sealed class MapRenderer : IDisposable
 
                 if (!_terrainCells.IsOnMap(mapNodeX, mapNodeY))
                 {
-                    batch.Draw(_renderService.UnitRectangle, new Rectangle((int)tileOrigin.X, (int)tileOrigin.Y, tileSize.X, tileSize.Y), null, OffMapColor, SpriteDrawStyle.Plain);
+                    batch.FillRectangle(new Rectangle((int)tileOrigin.X, (int)tileOrigin.Y, tileSize.X, tileSize.Y), OffMapColor, SpriteDrawStyle.Plain);
                     continue;
                 }
 
@@ -386,7 +385,7 @@ public sealed class MapRenderer : IDisposable
     /// column-major was measured to make no difference against the same warm cache. SpriteEffectBatch draws in call
     /// order with no depth buffer, so the plan's order is the draw order.
     /// </remarks>
-    private void DrawOccupants(SpriteEffectBatch batch, Texture2D unitRectangle, MapImageKey key, IReadOnlyList<int> watchedEntityIds)
+    private void DrawOccupants(SpriteEffectBatch batch, MapImageKey key, IReadOnlyList<int> watchedEntityIds)
     {
         var scroll = key.Scroll;
         _drawOrder.Plan(_mapView, scroll, key.TileColumns, key.TileRows, key.MapLayer, _mapView.Bounds.Depth, _wallPlan.Overhangs);
@@ -404,7 +403,7 @@ public sealed class MapRenderer : IDisposable
             {
                 case MapDrawItemKind.Corpse:
                     TryDrawEntityVisual(batch, item.EntityId, FontMeasurerForSize(item.Size.X), footprintTopLeft, footprintSize, item.Size, GroundRowY(footprintTopLeft, footprintSize, key.TileSize));
-                    DrawCorpseMarker(batch, unitRectangle, footprintTopLeft, footprintSize, key.TileSize);
+                    DrawCorpseMarker(batch, footprintTopLeft, footprintSize, key.TileSize);
                     DrawLootBagBadge(batch, _mapView.GetStatus(item.EntityId).LootBag, footprintTopLeft, footprintSize, key.TileSize);
                     break;
 
@@ -428,7 +427,7 @@ public sealed class MapRenderer : IDisposable
                     break;
 
                 case MapDrawItemKind.Blocking:
-                    DrawPrimaryOccupant(batch, unitRectangle, item.EntityId, item.Size, footprintTopLeft, footprintSize, key.TileSize);
+                    DrawPrimaryOccupant(batch, item.EntityId, item.Size, footprintTopLeft, footprintSize, key.TileSize);
                     break;
 
                 case MapDrawItemKind.Phasing:
@@ -520,13 +519,13 @@ public sealed class MapRenderer : IDisposable
     }
 
     /// <summary>A Blocking occupant, its health bar and loot badge, its charging badge and its dodge glow. The health bar and charging badge follow the drawn sprite (a tall sprite's head would otherwise cover them); the loot badge and dodge glow are about the footprint and stay on it.</summary>
-    private void DrawPrimaryOccupant(SpriteEffectBatch batch, Texture2D unitRectangle, int entityId, Vector2Byte size, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize)
+    private void DrawPrimaryOccupant(SpriteEffectBatch batch, int entityId, Vector2Byte size, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize)
     {
         var status = _mapView.GetStatus(entityId);
 
         TryDrawEntityVisual(batch, entityId, FontMeasurerForSize(size.X), footprintTopLeft, footprintSize, size, GroundRowY(footprintTopLeft, footprintSize, tileSize), out var drawnTop);
         var cueTop = SpritePlacementMath.CueTop(drawnTop, footprintTopLeft.Y);
-        DrawEntityIcons(batch, unitRectangle, entityId, status, footprintTopLeft, footprintSize, tileSize, cueTop);
+        DrawEntityIcons(batch, entityId, status, footprintTopLeft, footprintSize, tileSize, cueTop);
 
         // Unlike DrawEntityIcons (health bar/loot badge), the charging badge must show for the
         // player too -- drawn here, directly, rather than inside DrawEntityIcons' own early
@@ -544,16 +543,16 @@ public sealed class MapRenderer : IDisposable
         // as too subtle to notice at the un-boosted default.
         if (status.IsDodging)
         {
-            GlowRenderer.Draw(batch, unitRectangle, new Rectangle((int)footprintTopLeft.X, (int)footprintTopLeft.Y, (int)footprintSize.X, (int)footprintSize.Y), DodgingGlowColor, GlowMode.InteriorFade, DodgingGlowAlphaMultiplier);
+            GlowRenderer.Draw(batch, new Rectangle((int)footprintTopLeft.X, (int)footprintTopLeft.Y, (int)footprintSize.X, (int)footprintSize.Y), DodgingGlowColor, GlowMode.InteriorFade, DodgingGlowAlphaMultiplier);
         }
     }
 
     /// <summary>A red X across a corpse's footprint, unlit, under its loot badge; scaled by the tile, so a large corpse's lines are no thicker than a small one's.</summary>
-    private static void DrawCorpseMarker(SpriteEffectBatch batch, Texture2D unitRectangle, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize)
+    private static void DrawCorpseMarker(SpriteEffectBatch batch, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize)
     {
         var tileExtent = Math.Min(tileSize.X, tileSize.Y);
         var thickness = Math.Max(1f, tileExtent * CorpseMarkerThicknessFraction);
-        CrossRenderer.Draw(batch, unitRectangle, footprintTopLeft, footprintSize, tileExtent * CorpseMarkerInsetFraction, thickness, CorpseMarkerColor, SpriteDrawStyle.Plain);
+        CrossRenderer.Draw(batch, footprintTopLeft, footprintSize, tileExtent * CorpseMarkerInsetFraction, thickness, CorpseMarkerColor, SpriteDrawStyle.Plain);
     }
 
     /// <summary>
@@ -600,7 +599,7 @@ public sealed class MapRenderer : IDisposable
         SpriteOrGlyphRenderer.Draw(batch, _spriteSheetService, actionSprite, _badgeFontMeasurer, action.Glyph, action.GlyphColor, badgePosition, badgeSize, Color.White, outline: true);
     }
 
-    private void DrawEntityIcons(SpriteEffectBatch batch, Texture2D unitRectangle, int entityId, EntityStatusView status, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize, float cueTop)
+    private void DrawEntityIcons(SpriteEffectBatch batch, int entityId, EntityStatusView status, Vector2 footprintTopLeft, Vector2 footprintSize, Point tileSize, float cueTop)
     {
         if (entityId == _mapView.PlayerEntityId)
         {
@@ -609,7 +608,7 @@ public sealed class MapRenderer : IDisposable
 
         if (status.HealthFraction is { } healthFraction)
         {
-            DrawHealthBar(batch, unitRectangle, healthFraction, footprintTopLeft, footprintSize, cueTop);
+            DrawHealthBar(batch, healthFraction, footprintTopLeft, footprintSize, cueTop);
         }
 
         // A container is lootable while alive, unlike a creature (only lootable once dead, see
@@ -623,19 +622,19 @@ public sealed class MapRenderer : IDisposable
     }
 
     /// <summary>Thin bar at cueTop -- the top of the drawn sprite, or of the footprint if that is higher -- only drawn below full health (EntityStatusView.HealthFraction is null otherwise). Black backdrop doubles as the outline and the "missing health" portion; the fill rect insets 1px and its width (not the outline's) scales with the health fraction.</summary>
-    private static void DrawHealthBar(SpriteEffectBatch batch, Texture2D unitRectangle, float healthFraction, Vector2 footprintTopLeft, Vector2 footprintSize, float cueTop)
+    private static void DrawHealthBar(SpriteEffectBatch batch, float healthFraction, Vector2 footprintTopLeft, Vector2 footprintSize, float cueTop)
     {
         var barWidth = footprintSize.X * HealthBarWidthFraction;
         var barX = footprintTopLeft.X + (footprintSize.X - barWidth) / 2f;
         var barY = cueTop;
 
         var outerRectangle = new Rectangle((int)barX, (int)barY, (int)barWidth, HealthBarHeightPixels);
-        batch.Draw(unitRectangle, outerRectangle, null, HealthBarPalette.OutlineColor, SpriteDrawStyle.Plain);
+        batch.FillRectangle(outerRectangle, HealthBarPalette.OutlineColor);
 
         var innerWidth = (int)((outerRectangle.Width - 2) * healthFraction);
         if (innerWidth > 0)
         {
-            batch.Draw(unitRectangle, new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, innerWidth, HealthBarHeightPixels - 2), null, HealthBarPalette.FractionColor(healthFraction), SpriteDrawStyle.Plain);
+            batch.FillRectangle(new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, innerWidth, HealthBarHeightPixels - 2), HealthBarPalette.FractionColor(healthFraction));
         }
     }
 

@@ -44,23 +44,22 @@ public sealed class SpritePlacementPreview(ElementServices services)
 
     public override void DrawContent(GameTime gameTime)
     {
-        var unitRectangle = Render.UnitRectangle;
         var tilePixels = Math.Max(1, (int)Math.Min(ContentSize.X / ColumnCount, ContentSize.Y / RowCount));
-        DrawPreview(Render.Batch, unitRectangle, tilePixels);
+        DrawPreview(Render.Batch, tilePixels);
     }
 
-    private void DrawPreview(SpriteEffectBatch batch, Texture2D unitRectangle, int tilePixels)
+    private void DrawPreview(SpriteEffectBatch batch, int tilePixels)
     {
-        batch.Draw(unitRectangle, new Rectangle(0, 0, (int)ContentSize.X, (int)ContentSize.Y), null, BackgroundColor, SpriteDrawStyle.Plain);
-        batch.Draw(unitRectangle, ToPixels(new SpriteTileArea(0, 0, FootprintTiles, FootprintTiles), tilePixels), null, FootprintColor, SpriteDrawStyle.Plain);
+        batch.FillRectangle(new Rectangle(0, 0, (int)ContentSize.X, (int)ContentSize.Y), BackgroundColor, SpriteDrawStyle.Plain);
+        batch.FillRectangle(ToPixels(new SpriteTileArea(0, 0, FootprintTiles, FootprintTiles), tilePixels), FootprintColor, SpriteDrawStyle.Plain);
         for (var column = 0; column <= ColumnCount; column++)
         {
-            batch.Draw(unitRectangle, new Rectangle(column * tilePixels, 0, 1, RowCount * tilePixels), null, GridColor, SpriteDrawStyle.Plain);
+            batch.FillRectangle(new Rectangle(column * tilePixels, 0, 1, RowCount * tilePixels), GridColor, SpriteDrawStyle.Plain);
         }
 
         for (var row = 0; row <= RowCount; row++)
         {
-            batch.Draw(unitRectangle, new Rectangle(0, row * tilePixels, ColumnCount * tilePixels, 1), null, GridColor, SpriteDrawStyle.Plain);
+            batch.FillRectangle(new Rectangle(0, row * tilePixels, ColumnCount * tilePixels, 1), GridColor, SpriteDrawStyle.Plain);
         }
 
         var reachBox = ToPixels(SpritePlacementTiles.ReachBox(FootprintTiles), tilePixels);
@@ -68,14 +67,14 @@ public sealed class SpritePlacementPreview(ElementServices services)
         {
             foreach (var part in entry.Parts)
             {
-                DrawPart(batch, unitRectangle, part, tilePixels, reachBox);
+                DrawPart(batch, part, tilePixels, reachBox);
             }
         }
 
-        SpriteCellDrawer.DrawOutline(batch, unitRectangle, reachBox, ReachBoxColor, 2);
+        SpriteCellDrawer.DrawOutline(batch, reachBox, ReachBoxColor, 2);
     }
 
-    private void DrawPart(SpriteEffectBatch batch, Microsoft.Xna.Framework.Graphics.Texture2D unitRectangle, SpriteEntryPartView part, int tilePixels, Rectangle reachBox)
+    private void DrawPart(SpriteEffectBatch batch, SpriteEntryPartView part, int tilePixels, Rectangle reachBox)
     {
         if (part.PreviewCell is not { } cell)
         {
@@ -88,14 +87,14 @@ public sealed class SpritePlacementPreview(ElementServices services)
 
         if (!reachBox.Contains(drawn))
         {
-            SpriteCellDrawer.DrawOutline(batch, unitRectangle, drawn, BreachColor, 2);
+            SpriteCellDrawer.DrawOutline(batch, drawn, BreachColor, 2);
         }
 
         if (placement is not null)
         {
             var pivot = ToPixels(new SpriteTileArea(FootprintTiles / 2f, FootprintTiles - part.RaisedRows, FootprintTiles / 2f, FootprintTiles - part.RaisedRows), tilePixels);
-            batch.Draw(unitRectangle, new Rectangle(pivot.X - CrosshairHalfLength, pivot.Y, CrosshairHalfLength * 2 + 1, 1), null, PivotColor, SpriteDrawStyle.Plain);
-            batch.Draw(unitRectangle, new Rectangle(pivot.X, pivot.Y - CrosshairHalfLength, 1, CrosshairHalfLength * 2 + 1), null, PivotColor, SpriteDrawStyle.Plain);
+            batch.FillRectangle(new Rectangle(pivot.X - CrosshairHalfLength, pivot.Y, CrosshairHalfLength * 2 + 1, 1), PivotColor, SpriteDrawStyle.Plain);
+            batch.FillRectangle(new Rectangle(pivot.X, pivot.Y - CrosshairHalfLength, 1, CrosshairHalfLength * 2 + 1), PivotColor, SpriteDrawStyle.Plain);
         }
     }
 

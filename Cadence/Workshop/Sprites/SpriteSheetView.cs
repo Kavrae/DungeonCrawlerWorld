@@ -66,8 +66,7 @@ public sealed class SpriteSheetView(ElementServices services)
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
-        spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, (int)ContentSize.X, (int)ContentSize.Y), BackgroundColor);
+        spriteBatch.FillRectangle(new Rectangle(0, 0, (int)ContentSize.X, (int)ContentSize.Y), BackgroundColor);
 
         if (_sheetPath is null || _drawer.TextureOf(_sheetPath) is not { } texture)
         {
@@ -81,19 +80,19 @@ public sealed class SpriteSheetView(ElementServices services)
         {
             for (var x = 0; x <= texture.Width; x += _gridCellSize.X)
             {
-                spriteBatch.Draw(unitRectangle, new Rectangle(origin.X + x * _zoom, origin.Y, 1, texture.Height * _zoom), GridColor);
+                spriteBatch.FillRectangle(new Rectangle(origin.X + x * _zoom, origin.Y, 1, texture.Height * _zoom), GridColor);
             }
 
             for (var y = 0; y <= texture.Height; y += _gridCellSize.Y)
             {
-                spriteBatch.Draw(unitRectangle, new Rectangle(origin.X, origin.Y + y * _zoom, texture.Width * _zoom, 1), GridColor);
+                spriteBatch.FillRectangle(new Rectangle(origin.X, origin.Y + y * _zoom, texture.Width * _zoom, 1), GridColor);
             }
         }
 
         foreach (var (cell, color) in _markedCells)
         {
             var source = cell.SourceRectangle;
-            SpriteCellDrawer.DrawOutline(spriteBatch, unitRectangle, new Rectangle(origin.X + source.X * _zoom, origin.Y + source.Y * _zoom, source.Width * _zoom, source.Height * _zoom), color, CellOutlineThickness);
+            SpriteCellDrawer.DrawOutline(spriteBatch, new Rectangle(origin.X + source.X * _zoom, origin.Y + source.Y * _zoom, source.Width * _zoom, source.Height * _zoom), color, CellOutlineThickness);
         }
     }
 

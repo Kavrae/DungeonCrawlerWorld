@@ -110,11 +110,10 @@ public class ShopItemStackCell(ElementServices services, SpriteSheetService spri
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
         var bounds = LocalContentRectangle;
         var spriteSize = new Vector2(ContentSize.Y, ContentSize.Y);
 
-        var isGreyedOut = DrawBaseAndIcon(spriteBatch, unitRectangle, bounds, spriteSize);
+        var isGreyedOut = DrawBaseAndIcon(spriteBatch, bounds, spriteSize);
 
         var textColor = isGreyedOut ? Color.Gray : Color.White;
         var textLeft = spriteSize.X + TextPadding;

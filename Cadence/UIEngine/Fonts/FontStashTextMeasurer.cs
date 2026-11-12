@@ -1,6 +1,7 @@
 using Engine.Utilities;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace UIEngine.Fonts;
@@ -16,9 +17,21 @@ public sealed class FontStashTextMeasurer(SpriteFontBase font) : ITextMeasurer
 {
     private readonly StringBuilder _measuredText = new();
 
+    /// <summary>How many strings' ink centres are kept before all are forgotten: text that keeps changing (a count, a price) would otherwise be kept for the session.</summary>
+    internal const int MaximumKeptInkCenters = 2048;
+
+    private const int RecentInkCenterSlots = 256;
+
     // TextBounds is a pure function of the font and the exact string, and the same glyphs repeat every frame across
     // the visible map, so each is measured once.
     private readonly Dictionary<string, Vector2> _inkCentersAtOrigin = [];
+
+    // The same string instance is asked for every frame it is drawn, so it is found here by reference before its
+    // characters are hashed for the dictionary.
+    private readonly (string? Text, Vector2 InkCenter)[] _recentInkCenters = new (string? Text, Vector2 InkCenter)[RecentInkCenterSlots];
+
+    /// <summary>How many strings' ink centres are kept now.</summary>
+    internal int KeptInkCenterCount => _inkCentersAtOrigin.Count;
 
     /// <summary>The font this measures.</summary>
     public SpriteFontBase Font { get; } = font;
@@ -32,14 +45,26 @@ public sealed class FontStashTextMeasurer(SpriteFontBase font) : ITextMeasurer
     /// <summary>The centre of glyph's tight ink bounding box if drawn at (0,0) -- TextBounds translates linearly with position, so this alone is enough to centre it in any footprint.</summary>
     public Vector2 GetInkCenterAtOrigin(string glyph)
     {
-        if (_inkCentersAtOrigin.TryGetValue(glyph, out var cached))
+        ref var recent = ref _recentInkCenters[RuntimeHelpers.GetHashCode(glyph) & (RecentInkCenterSlots - 1)];
+        if (ReferenceEquals(recent.Text, glyph))
         {
-            return cached;
+            return recent.InkCenter;
         }
 
-        var bounds = Font.TextBounds(glyph, Vector2.Zero, null, 0f, 0f);
-        var inkCenter = new Vector2((bounds.X + bounds.X2) / 2f, (bounds.Y + bounds.Y2) / 2f);
-        _inkCentersAtOrigin[glyph] = inkCenter;
+        if (!_inkCentersAtOrigin.TryGetValue(glyph, out var inkCenter))
+        {
+            if (_inkCentersAtOrigin.Count >= MaximumKeptInkCenters)
+            {
+                _inkCentersAtOrigin.Clear();
+                Array.Clear(_recentInkCenters);
+            }
+
+            var bounds = Font.TextBounds(glyph, Vector2.Zero, null, 0f, 0f);
+            inkCenter = new Vector2((bounds.X + bounds.X2) / 2f, (bounds.Y + bounds.Y2) / 2f);
+            _inkCentersAtOrigin[glyph] = inkCenter;
+        }
+
+        recent = (glyph, inkCenter);
         return inkCenter;
     }
 }

@@ -22,6 +22,6 @@ public sealed class EmptyTradeSlotCell(ElementServices services)
     public override void DrawContent(GameTime gameTime)
     {
         var bounds = LocalContentRectangle;
-        GlowRenderer.Draw(Render.Batch, Render.UnitRectangle, bounds, Color.White, GlowMode.InteriorFade);
+        GlowRenderer.Draw(Render.Batch, bounds, Color.White, GlowMode.InteriorFade);
     }
 }

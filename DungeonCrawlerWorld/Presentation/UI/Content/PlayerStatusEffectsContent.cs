@@ -185,26 +185,25 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
         }
 
         var spriteBatch = _hostWindow.Render.Batch;
-        var unitRectangle = _hostWindow.Render.UnitRectangle;
         var origin = Vector2.Zero;
         var iconSize = new Vector2(_hostWindow.ContentSize.Y, _hostWindow.ContentSize.Y);
 
         for (var i = 0; i < _activeEffectTypes.Count; i++)
         {
             var iconOrigin = origin + new Vector2((iconSize.X + IconSpacing) * i, 0);
-            DrawIcon(spriteBatch, unitRectangle, iconOrigin, iconSize, _activeEffectTypes[i]);
+            DrawIcon(spriteBatch, iconOrigin, iconSize, _activeEffectTypes[i]);
         }
 
         if (_hasPotionCooldown)
         {
             var iconOrigin = origin + new Vector2((iconSize.X + IconSpacing) * _activeEffectTypes.Count, 0);
-            DrawPotionCooldownIcon(spriteBatch, unitRectangle, iconOrigin, iconSize, _potionCooldownFramesRemaining);
+            DrawPotionCooldownIcon(spriteBatch, iconOrigin, iconSize, _potionCooldownFramesRemaining);
         }
     }
 
-    private void DrawIcon(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size, StatusEffectType effectType)
+    private void DrawIcon(SpriteEffectBatch spriteBatch, Vector2 origin, Vector2 size, StatusEffectType effectType)
     {
-        DrawIconBackground(spriteBatch, unitRectangle, origin, size);
+        DrawIconBackground(spriteBatch, origin, size);
 
         LabelRenderer.DrawCentered(spriteBatch, _glyphFontMeasurer, GetGlyph(effectType), origin, size, GetColor(effectType));
 
@@ -214,9 +213,9 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
         }
     }
 
-    private void DrawPotionCooldownIcon(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size, int framesRemaining)
+    private void DrawPotionCooldownIcon(SpriteEffectBatch spriteBatch, Vector2 origin, Vector2 size, int framesRemaining)
     {
-        DrawIconBackground(spriteBatch, unitRectangle, origin, size);
+        DrawIconBackground(spriteBatch, origin, size);
 
         if (itemCatalog.TryGet(BuiltInItemIds.HealthPotion, out var healthPotion))
         {
@@ -250,11 +249,11 @@ public sealed class PlayerStatusEffectsContent(World world, ActionStateView acti
     }
 
     /// <summary>The square white tile with a 1px black border shared by every status/cooldown icon here -- DrawIcon and DrawPotionCooldownIcon otherwise only differ in what's drawn on top of it.</summary>
-    private static void DrawIconBackground(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Vector2 origin, Vector2 size)
+    private static void DrawIconBackground(SpriteEffectBatch spriteBatch, Vector2 origin, Vector2 size)
     {
         var outerRectangle = new Rectangle((int)origin.X, (int)origin.Y, (int)size.X, (int)size.Y);
-        spriteBatch.Draw(unitRectangle, outerRectangle, Color.Black);
-        spriteBatch.Draw(unitRectangle, new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, outerRectangle.Width - 2, outerRectangle.Height - 2), Color.White);
+        spriteBatch.FillRectangle(outerRectangle, Color.Black);
+        spriteBatch.FillRectangle(new Rectangle(outerRectangle.X + 1, outerRectangle.Y + 1, outerRectangle.Width - 2, outerRectangle.Height - 2), Color.White);
     }
 
     /// <summary>Looks up each effect module's own registered glyph (see IStatusEffectDisplay). "?" is an intentionally-visible fallback for any active effect type with no registered display, rather than throwing mid-draw.</summary>

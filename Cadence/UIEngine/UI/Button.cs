@@ -33,11 +33,25 @@ public sealed class Button(ElementServices services, SpriteSheetService? spriteS
 
     public SpriteFontBase ContentFont { get; set; } = services.FontService.GetFont(FontChrome.DefaultFontSize);
 
+    /// <summary>ContentFont's text measurer, looked up again only when ContentFont changes.</summary>
+    private FontStashTextMeasurer ContentTextMeasurer
+    {
+        get
+        {
+            if (_contentTextMeasurer is null || !ReferenceEquals(_contentTextMeasurer.Font, ContentFont))
+            {
+                _contentTextMeasurer = FontService.GetTextMeasurer(ContentFont);
+            }
+
+            return _contentTextMeasurer;
+        }
+    }
+
+    private FontStashTextMeasurer? _contentTextMeasurer;
+
     public string LeftText { get; set; } = string.Empty;
 
     public string? RightText { get; set; }
-
-    public bool Enabled { get; set; } = true;
 
     /// <summary>Defaults to WindowPalette.BodyTextColor (black) -- overridable via Text.TextColor, e.g. GridControl's sort tile needs white text against its own dark ContentColor.</summary>
     public Color TextColor { get; set; }
@@ -178,16 +192,15 @@ public sealed class Button(ElementServices services, SpriteSheetService? spriteS
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
 
         if (IsHovered || IsHighlighted)
         {
-            spriteBatch.Draw(unitRectangle, LocalContentRectangle, HoverOverlayColor);
+            spriteBatch.FillRectangle(LocalContentRectangle, HoverOverlayColor);
         }
 
         if (IsMarked)
         {
-            spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, MarkerWidth, LocalContentRectangle.Height), WindowPalette.FocusAccentColor);
+            spriteBatch.FillRectangle(new Rectangle(0, 0, MarkerWidth, LocalContentRectangle.Height), WindowPalette.FocusAccentColor);
         }
 
         var textColor = Enabled ? TextColor : Color.Gray;
@@ -201,7 +214,7 @@ public sealed class Button(ElementServices services, SpriteSheetService? spriteS
         if (_hasSpriteIcon && spriteSheetService is not null)
         {
             var spriteTint = Enabled ? Color.White : Color.Gray;
-            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, _sprite, FontService.GetTextMeasurer(ContentFont), LeftText, textColor, Vector2.Zero, ContentSize, spriteTint);
+            SpriteOrGlyphRenderer.Draw(spriteBatch, spriteSheetService, _sprite, ContentTextMeasurer, LeftText, textColor, Vector2.Zero, ContentSize, spriteTint);
         }
         else if (string.IsNullOrEmpty(RightText) && !LeftAlign)
         {
@@ -212,7 +225,7 @@ public sealed class Button(ElementServices services, SpriteSheetService? spriteS
             // MeasureString's line box is a poor stand-in for a glyph's actual rendered ink.
             if (!string.IsNullOrEmpty(LeftText))
             {
-                LabelRenderer.DrawCentered(spriteBatch, FontService.GetTextMeasurer(ContentFont), LeftText, Vector2.Zero, ContentSize, textColor);
+                LabelRenderer.DrawCentered(spriteBatch, ContentTextMeasurer, LeftText, Vector2.Zero, ContentSize, textColor);
             }
         }
         else

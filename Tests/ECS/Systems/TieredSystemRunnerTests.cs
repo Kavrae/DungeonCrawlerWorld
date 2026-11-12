@@ -11,7 +11,7 @@ public sealed class TieredSystemRunnerTests
         public RecordingTieredSystem(byte baseStripeCount, byte[] tierDivisors, int[] entityIdsByTier)
         {
             // entityIdsByTier[t] is placed in tier t. Which of them is due on a given frame is the
-            // ordinary stripe rule: entityId % (baseStripeCount * divisor) == frame % that.
+            // ordinary stripe rule: EntityStripeSet.StripeOf(entityId, baseStripeCount * divisor) == frame % that.
             var tierOf = new Dictionary<int, byte>();
             for (byte tier = 0; tier < entityIdsByTier.Length; tier++)
             {
@@ -66,7 +66,8 @@ public sealed class TieredSystemRunnerTests
     [TestMethod]
     public void Run_HandsEachTierItsOwnFramesPerVisit()
     {
-        var system = new RecordingTieredSystem(2, [1, 16, 32, 64], [0, 1, 2, 3]);
+        const int B = EntityStripeSet.BlockSize;
+        var system = new RecordingTieredSystem(2, [1, 16, 32, 64], [0, B, 2 * B, 3 * B]);
 
         // Frame 0 is due for bucket 0 of every tier; entity 0 is the only one in a bucket 0.
         TieredSystemRunner.Run(system, Frame(0));

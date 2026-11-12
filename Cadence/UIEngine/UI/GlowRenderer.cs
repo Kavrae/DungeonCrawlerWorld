@@ -27,27 +27,27 @@ public static class GlowRenderer
     /// <summary>The glow colour's alpha at its strongest -- public so something drawing the same glow another way (the map's tile overlay ring) matches it.</summary>
     public const float FadeMaximumAlpha = 0.5f;
 
-    public static void Draw<TTarget>(TTarget target, Texture2D unitRectangle, Rectangle bounds, Color glowColor, GlowMode mode = GlowMode.ExteriorFade, float alphaMultiplier = 1f, SpriteDrawStyle style = default)
+    public static void Draw<TTarget>(TTarget target, Rectangle bounds, Color glowColor, GlowMode mode = GlowMode.ExteriorFade, float alphaMultiplier = 1f, SpriteDrawStyle style = default)
         where TTarget : ISpriteDrawTarget
     {
         var color = glowColor * (FadeMaximumAlpha * alphaMultiplier);
         switch (mode)
         {
             case GlowMode.InteriorFull:
-                target.Draw(unitRectangle, bounds, null, color, style);
+                target.FillRectangle(bounds, color, style);
                 break;
             case GlowMode.InteriorFade:
-                target.Draw(unitRectangle, bounds, null, color, style.WithFade(SpriteDrawMode.FadeInward, FadeRingCount));
+                target.FillRectangle(bounds, color, style.WithFade(SpriteDrawMode.FadeInward, FadeRingCount));
                 break;
             case GlowMode.ExteriorFade:
                 var grownBounds = new Rectangle(bounds.X - FadeRingCount, bounds.Y - FadeRingCount, bounds.Width + FadeRingCount * 2, bounds.Height + FadeRingCount * 2);
-                target.Draw(unitRectangle, grownBounds, null, color, style.WithFade(SpriteDrawMode.FadeOutward, FadeRingCount));
+                target.FillRectangle(grownBounds, color, style.WithFade(SpriteDrawMode.FadeOutward, FadeRingCount));
                 break;
         }
     }
 
     /// <summary>Draws the glow at animation's strength this long after its pulse started.</summary>
-    public static void Draw<TTarget>(TTarget target, Texture2D unitRectangle, Rectangle bounds, Color glowColor, GlowMode mode, GlowAnimation animation, TimeSpan elapsedSincePulseStart, float alphaMultiplier = 1f, SpriteDrawStyle style = default)
+    public static void Draw<TTarget>(TTarget target, Rectangle bounds, Color glowColor, GlowMode mode, GlowAnimation animation, TimeSpan elapsedSincePulseStart, float alphaMultiplier = 1f, SpriteDrawStyle style = default)
         where TTarget : ISpriteDrawTarget =>
-        Draw(target, unitRectangle, bounds, glowColor, mode, alphaMultiplier * animation.StrengthAt(elapsedSincePulseStart), style);
+        Draw(target, bounds, glowColor, mode, alphaMultiplier * animation.StrengthAt(elapsedSincePulseStart), style);
 }

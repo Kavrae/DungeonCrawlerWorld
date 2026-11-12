@@ -19,5 +19,4 @@ public sealed record ShellServices(
     TooltipController TooltipController,
     PointerState PointerState,
     CursorTextContent CursorTextContent,
-    CursorLabelContent CursorLabelContent,
     ItemHoverDetails ItemHoverDetails);

@@ -121,12 +121,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
     protected override void LoadContent()
     {
-        // Local, not a field -- nothing outside this method reads it anymore. ElementPoolService
-        // keeps it (see UiEngineContext.LoadContent), and every element and UiLayerHost draw with it.
-        var unitRectangle = new Texture2D(GraphicsDevice, 1, 1);
-        unitRectangle.SetData([Color.White]);
-
-        _uiEngine.LoadContent(GraphicsDevice, unitRectangle);
+        _uiEngine.LoadContent(GraphicsDevice);
 
         base.LoadContent();
     }

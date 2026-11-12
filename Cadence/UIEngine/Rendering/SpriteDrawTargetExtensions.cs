@@ -35,4 +35,8 @@ public static class SpriteDrawTargetExtensions
     public static void DrawString<TTarget>(this TTarget target, SpriteFontBase font, string text, Vector2 position, Color color)
         where TTarget : ISpriteDrawTarget =>
         target.DrawString(font, text, position, color, SpriteDrawStyle.Plain);
+
+    public static void FillRectangle<TTarget>(this TTarget target, Rectangle destination, Color color)
+        where TTarget : ISpriteDrawTarget =>
+        target.FillRectangle(destination, color, SpriteDrawStyle.Plain);
 }

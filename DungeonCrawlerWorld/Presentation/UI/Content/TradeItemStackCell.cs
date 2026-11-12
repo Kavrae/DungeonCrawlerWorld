@@ -36,10 +36,9 @@ public sealed class TradeItemStackCell(ElementServices services, SpriteSheetServ
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
         var bounds = LocalContentRectangle;
 
-        DrawBaseAndIcon(spriteBatch, unitRectangle, bounds, ContentSize);
+        DrawBaseAndIcon(spriteBatch, bounds, ContentSize);
 
         if (_quantity <= 0)
         {

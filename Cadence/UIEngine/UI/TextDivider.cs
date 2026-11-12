@@ -7,9 +7,9 @@ using UIEngine.UI.Chrome;
 namespace UIEngine.UI;
 
 /// <summary>
-/// A horizontal divider like SeparatorBar, but with a caller-positioned label interrupting the
-/// line instead of no text support at all. The whole control spans widthFraction of its own
-/// content width, centered (same centering idea as SeparatorBar.WidthFraction); textPosition
+/// A horizontal divider, optionally with a caller-positioned label interrupting the line
+/// (ConfigureAsLine for none). The whole control spans widthFraction of its own
+/// content width, centered; textPosition
 /// (0..1, a fraction of the *full* content width, not of that centered span) places the text's
 /// left edge, with the divider line filling whatever's left on either side of it within the span.
 /// textPosition 0 collapses the left segment away entirely (text starts right at the span's own
@@ -43,6 +43,9 @@ public sealed class TextDivider(ElementServices services)
         _textWidth = _font.MeasureString(_text).X;
     }
 
+    /// <summary>Shows an unbroken line with no label, spanning widthFraction of the content width, centred -- between groups of rows, say.</summary>
+    public void ConfigureAsLine(Color color, float widthFraction) => Configure(string.Empty, color, widthFraction, textPosition: 0f);
+
     public override void DrawContent(GameTime gameTime)
     {
         var margin = (1f - _widthFraction) / 2f * ContentSize.X;
@@ -50,6 +53,12 @@ public sealed class TextDivider(ElementServices services)
         var textEnd = textStart + _textWidth;
         var rightEdge = ContentSize.X - margin;
         var lineY = (ContentSize.Y - LineHeight) / 2f;
+
+        if (_text.Length == 0)
+        {
+            DrawLine(margin, rightEdge - margin, lineY);
+            return;
+        }
 
         // MeasureString's bounding box runs right up against the last glyph's own ink -- without
         // this gap the right-side line rendered as if it were touching/overlapping the text.
@@ -75,6 +84,6 @@ public sealed class TextDivider(ElementServices services)
 
     private void DrawLine(float startX, float width, float y)
     {
-        Render.Batch.Draw(Render.UnitRectangle, new Rectangle((int)startX, (int)y, (int)width, (int)LineHeight), _color);
+        Render.Batch.FillRectangle(new Rectangle((int)startX, (int)y, (int)width, (int)LineHeight), _color);
     }
 }

@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Engine.Math;
 
 namespace Engine.Tiles;
@@ -44,9 +45,8 @@ internal sealed class TileMarkGrid
         var minY = int.MaxValue;
         var maxX = int.MinValue;
         var maxY = int.MinValue;
-        for (var index = firstIndex; index < tiles.Count; index++)
+        foreach (var tile in CollectionsMarshal.AsSpan(tiles)[firstIndex..])
         {
-            var tile = tiles[index];
             minX = System.Math.Min(minX, tile.X);
             minY = System.Math.Min(minY, tile.Y);
             maxX = System.Math.Max(maxX, tile.X);

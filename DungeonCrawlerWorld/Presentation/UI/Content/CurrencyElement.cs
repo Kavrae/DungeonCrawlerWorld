@@ -69,11 +69,10 @@ public sealed class CurrencyElement(ElementServices services, SpriteSheetService
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
         var bounds = LocalContentRectangle;
 
-        GridSquareRenderer.DrawBase(spriteBatch, unitRectangle, bounds);
-        GridSquareRenderer.DrawStateOverlay(spriteBatch, unitRectangle, bounds, IsPointerOver ? GridSquareState.Hovered : GridSquareState.Normal);
+        GridSquareRenderer.DrawBase(spriteBatch, bounds);
+        GridSquareRenderer.DrawStateOverlay(spriteBatch, bounds, IsPointerOver ? GridSquareState.Hovered : GridSquareState.Normal);
 
         var (label, spriteName, glyph, glyphColor) = TypeDisplay;
 

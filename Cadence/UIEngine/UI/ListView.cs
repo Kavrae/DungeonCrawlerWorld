@@ -187,7 +187,7 @@ public sealed class ListView(ElementServices services)
         SelectedRow = row;
         if (row is not null && scrollIntoView)
         {
-            ScrollIntoView(Array.IndexOf(_order, IndexOfRow(row)));
+            ScrollRowIntoView(Array.IndexOf(_order, IndexOfRow(row)));
         }
 
         SelectionChanged?.Invoke(row);
@@ -301,25 +301,15 @@ public sealed class ListView(ElementServices services)
 
     private void UpdateScrollBounds() => SetMaxScrollOffset(new Vector2(0, System.Math.Max(0, HeaderHeight + _rows.Count * RowHeight - ContentSize.Y)));
 
-    private void ScrollIntoView(int displayIndex)
+    private void ScrollRowIntoView(int displayIndex)
     {
         if (displayIndex < 0)
         {
             return;
         }
 
-        var rowTop = displayIndex * RowHeight;
-        var visibleRowsHeight = ContentSize.Y - HeaderHeight;
-        if (rowTop < ScrollOffset.Y)
-        {
-            ScrollTo(new Vector2(0, rowTop));
-            return;
-        }
-
-        if (rowTop + RowHeight > ScrollOffset.Y + visibleRowsHeight)
-        {
-            ScrollTo(new Vector2(0, rowTop + RowHeight - visibleRowsHeight));
-        }
+        var rowTop = HeaderHeight + displayIndex * RowHeight;
+        ScrollIntoView(rowTop, rowTop + RowHeight, pinnedTopHeight: HeaderHeight);
     }
 
     protected override bool OnContentClickAction(Point mousePosition)
@@ -402,7 +392,6 @@ public sealed class ListView(ElementServices services)
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
         var width = ContentSize.X;
 
         var firstVisible = System.Math.Max(0, (int)(ScrollOffset.Y / RowHeight));
@@ -414,15 +403,15 @@ public sealed class ListView(ElementServices services)
             var top = HeaderHeight + displayIndex * RowHeight;
             if (ReferenceEquals(row, SelectedRow))
             {
-                spriteBatch.Draw(unitRectangle, new Rectangle(0, (int)top, (int)width, (int)RowHeight), SelectedRowColor);
+                spriteBatch.FillRectangle(new Rectangle(0, (int)top, (int)width, (int)RowHeight), SelectedRowColor);
             }
             else if (_rowColors.TryGetValue(row, out var rowColor))
             {
-                spriteBatch.Draw(unitRectangle, new Rectangle(0, (int)top, (int)width, (int)RowHeight), rowColor);
+                spriteBatch.FillRectangle(new Rectangle(0, (int)top, (int)width, (int)RowHeight), rowColor);
             }
             else if (displayIndex % 2 == 1)
             {
-                spriteBatch.Draw(unitRectangle, new Rectangle(0, (int)top, (int)width, (int)RowHeight), AlternateRowColor);
+                spriteBatch.FillRectangle(new Rectangle(0, (int)top, (int)width, (int)RowHeight), AlternateRowColor);
             }
 
             var x = 0f;
@@ -448,21 +437,21 @@ public sealed class ListView(ElementServices services)
             }
         }
 
-        DrawHeader(spriteBatch, unitRectangle, width);
+        DrawHeader(spriteBatch, width);
     }
 
     /// <summary>Drawn last, over any row scrolled up beneath it, at the top of what is shown.</summary>
-    private void DrawHeader(SpriteEffectBatch spriteBatch, Microsoft.Xna.Framework.Graphics.Texture2D unitRectangle, float width)
+    private void DrawHeader(SpriteEffectBatch spriteBatch, float width)
     {
         var top = ScrollOffset.Y;
-        spriteBatch.Draw(unitRectangle, new Rectangle(0, (int)top, (int)width, (int)HeaderHeight), HeaderColor);
+        spriteBatch.FillRectangle(new Rectangle(0, (int)top, (int)width, (int)HeaderHeight), HeaderColor);
 
         var x = _showIconColumn ? IconColumnWidth : 0f;
         for (var columnIndex = 0; columnIndex < _columns.Count; columnIndex++)
         {
             var columnWidth = _columnWidths[columnIndex];
             LabelRenderer.DrawLeftAligned(spriteBatch, _font, _drawnHeaders[columnIndex], new Vector2(x + CellInset, top), new Vector2(columnWidth - CellInset * 2, HeaderHeight), HeaderTextColor);
-            spriteBatch.Draw(unitRectangle, new Rectangle((int)(x + columnWidth) - 1, (int)top + 3, 1, (int)HeaderHeight - 6), WindowPalette.ScrollbarThumbColor);
+            spriteBatch.FillRectangle(new Rectangle((int)(x + columnWidth) - 1, (int)top + 3, 1, (int)HeaderHeight - 6), WindowPalette.ScrollbarThumbColor);
             x += columnWidth;
         }
     }

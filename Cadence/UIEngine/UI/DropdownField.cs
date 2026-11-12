@@ -123,7 +123,6 @@ public sealed class DropdownField(ElementServices services, DropdownController d
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
 
         var text = SelectedLabel ?? Placeholder;
         var textColor = SelectedLabel is null ? WindowPalette.GhostText : WindowPalette.BodyTextColor;
@@ -134,11 +133,11 @@ public sealed class DropdownField(ElementServices services, DropdownController d
             LabelRenderer.DrawLeftAligned(spriteBatch, _font, text, textPosition, textSize, textColor);
         }
 
-        DrawArrow(spriteBatch, unitRectangle);
+        DrawArrow(spriteBatch);
     }
 
     /// <summary>A downward triangle of shrinking rows at the right edge -- drawn, since the font has no arrow glyph.</summary>
-    private void DrawArrow(SpriteEffectBatch spriteBatch, Microsoft.Xna.Framework.Graphics.Texture2D unitRectangle)
+    private void DrawArrow(SpriteEffectBatch spriteBatch)
     {
         var content = LocalContentRectangle;
         var left = content.Right - ArrowRightInset - ArrowWidth;
@@ -146,7 +145,7 @@ public sealed class DropdownField(ElementServices services, DropdownController d
         var top = content.Y + (content.Height - rows) / 2;
         for (var row = 0; row < rows; row++)
         {
-            spriteBatch.Draw(unitRectangle, new Rectangle(left + row, top + row, ArrowWidth - row * 2, 1), WindowPalette.BodyTextColor);
+            spriteBatch.FillRectangle(new Rectangle(left + row, top + row, ArrowWidth - row * 2, 1), WindowPalette.BodyTextColor);
         }
     }
 }

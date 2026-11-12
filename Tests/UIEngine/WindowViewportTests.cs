@@ -4,16 +4,7 @@ using UIEngine.UI;
 
 namespace Tests.UIEngine;
 
-/// <summary>
-/// Regression test for a bug found while visually verifying Window Chrome Phase C
-/// (drag-to-move): Window.Initialize used to set WindowViewport exactly once, from
-/// _contentState.Rectangle at that moment, and never again -- so DrawContent (which renders
-/// through WindowViewport, see Window.Draw) kept painting content at the window's original
-/// screen position even after SetRelativePosition/SetSize/SetBounds moved every other
-/// rectangle (title, border, content background) to the new one. Border/title track position
-/// live because RecalculateRectangles recomputes them on every Arrange; WindowViewport now
-/// does too.
-/// </summary>
+/// <summary>Content is drawn where the content rectangle is, wherever a move or a resize has put it.</summary>
 [TestClass]
 [DoNotParallelize]
 public sealed class WindowViewportTests
@@ -21,7 +12,7 @@ public sealed class WindowViewportTests
     private static ElementPoolService CreateWindowService() => TestElementPoolServiceFactory.Create(TestFonts.Shared);
 
     [TestMethod]
-    public void SetRelativePosition_UpdatesWindowViewportToMatchContentRectangle()
+    public void SetRelativePosition_MovesTheContentDrawOriginWithTheContentRectangle()
     {
         var windowService = CreateWindowService();
         var window = windowService.CreateElement<Window>(null, new ElementOptions
@@ -33,11 +24,11 @@ public sealed class WindowViewportTests
 
         window.SetRelativePosition(new Vector2(300, 250));
 
-        Assert.AreEqual(window.ContentRectangle, window.Viewport.Bounds);
+        Assert.AreEqual(new Vector2(window.ContentRectangle.X, window.ContentRectangle.Y), window.ContentDrawOrigin);
     }
 
     [TestMethod]
-    public void SetSize_UpdatesWindowViewportToMatchContentRectangle()
+    public void SetSize_KeepsTheContentDrawOriginOnTheContentRectangle()
     {
         var windowService = CreateWindowService();
         var window = windowService.CreateElement<Window>(null, new ElementOptions
@@ -52,7 +43,7 @@ public sealed class WindowViewportTests
 
         window.SetSize(new Vector2(400, 300));
 
-        Assert.AreEqual(window.ContentRectangle, window.Viewport.Bounds);
+        Assert.AreEqual(new Vector2(window.ContentRectangle.X, window.ContentRectangle.Y), window.ContentDrawOrigin);
     }
 
     /// <summary>

@@ -50,8 +50,6 @@ public sealed class Toggle(ElementServices services)
     public bool IsOn { get; private set; }
 
     /// <summary>A disabled toggle keeps its state, draws its checkbox darkened (WindowPalette.DisabledBackground) with its mark, border and label dimmed, and is never hit-tested, so a click can't flip it.</summary>
-    public bool Enabled { get; set; } = true;
-
     protected override bool IsHitTestable => base.IsHitTestable && Enabled;
 
     /// <summary>Shows isOn without notifying onToggled -- for a caller that keeps several toggles in step (an "All" toggle and the ones it covers).</summary>
@@ -82,22 +80,21 @@ public sealed class Toggle(ElementServices services)
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
 
         var (checkboxRectangle, labelRectangle) = ComputeLayout();
 
         var opacity = Enabled ? 1f : DisabledOpacity;
         var checkboxColor = IsOn ? _onColor : _offColor;
-        spriteBatch.Draw(unitRectangle, checkboxRectangle, Enabled ? checkboxColor : WindowPalette.DisabledBackground(checkboxColor));
+        spriteBatch.FillRectangle(checkboxRectangle, Enabled ? checkboxColor : WindowPalette.DisabledBackground(checkboxColor));
 
         var borderStyle = IsOn ? BorderStyle.Inset : BorderStyle.Outset;
         var thickness = BorderThickness.Uniform(Vector2.One);
         var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(checkboxRectangle, thickness);
-        BorderRenderer.Draw(spriteBatch, unitRectangle, borderStyle, Color.White * opacity, top, bottom, left, right);
+        BorderRenderer.Draw(spriteBatch, borderStyle, Color.White * opacity, top, bottom, left, right);
 
         if (IsOn)
         {
-            DrawCheckMark(spriteBatch, unitRectangle, checkboxRectangle, CheckMarkColor * opacity);
+            DrawCheckMark(spriteBatch, checkboxRectangle, CheckMarkColor * opacity);
         }
 
         if (!string.IsNullOrWhiteSpace(_label))
@@ -107,8 +104,8 @@ public sealed class Toggle(ElementServices services)
     }
 
     /// <summary>Two diagonals corner-to-corner across checkboxRectangle, inset so the mark's own endpoints don't touch the checkbox's border.</summary>
-    private static void DrawCheckMark(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle checkboxRectangle, Color color) =>
-        CrossRenderer.Draw(spriteBatch, unitRectangle, new Vector2(checkboxRectangle.X, checkboxRectangle.Y), new Vector2(checkboxRectangle.Width, checkboxRectangle.Height), CheckMarkInset, CheckMarkThickness, color);
+    private static void DrawCheckMark(SpriteEffectBatch spriteBatch, Rectangle checkboxRectangle, Color color) =>
+        CrossRenderer.Draw(spriteBatch, new Vector2(checkboxRectangle.X, checkboxRectangle.Y), new Vector2(checkboxRectangle.Width, checkboxRectangle.Height), CheckMarkInset, CheckMarkThickness, color);
 
     /// <summary>
     /// Splits ContentRectangle into the checkbox square (fixed CheckboxSize, on the edge

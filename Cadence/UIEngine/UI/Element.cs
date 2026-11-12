@@ -97,6 +97,54 @@ public class Element(ElementServices services)
     protected Element? _parent;
     public Element? ParentElement => _parent;
 
+    /// <summary>The top-level ancestor of this element; itself when it has no parent.</summary>
+    public Element RootElement
+    {
+        get
+        {
+            var rootElement = this;
+            while (rootElement._parent is not null)
+            {
+                rootElement = rootElement._parent;
+            }
+
+            return rootElement;
+        }
+    }
+
+    /// <summary>This element, or the nearest ancestor, that matches holds for; null when none does.</summary>
+    /// <remarks>How an input is offered up the tree: to what was hit, then to each ancestor until one takes it. matches should be a static lambda, with what it needs passed as state.</remarks>
+    public Element? FirstSelfOrAncestor<TState>(TState state, Func<Element, TState, bool> matches)
+    {
+        for (var candidate = this; candidate is not null; candidate = candidate._parent)
+        {
+            if (matches(candidate, state))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Scrolls vertically, as little as it takes, so the span from top to bottom of this element's content is in view.</summary>
+    /// <param name="top">The span's top, in content coordinates before scrolling.</param>
+    /// <param name="bottom">The span's bottom, in the same coordinates.</param>
+    /// <param name="pinnedTopHeight">The height of anything drawn fixed over the top of the content (a list's header row), which the span must clear.</param>
+    public void ScrollIntoView(float top, float bottom, float pinnedTopHeight = 0f)
+    {
+        if (top - pinnedTopHeight < _scrollOffset.Y)
+        {
+            ScrollTo(new Vector2(_scrollOffset.X, top - pinnedTopHeight));
+            return;
+        }
+
+        if (bottom > _scrollOffset.Y + _contentState.Size.Y)
+        {
+            ScrollTo(new Vector2(_scrollOffset.X, bottom - _contentState.Size.Y));
+        }
+    }
+
     protected bool _canContainChildren;
     public bool CanContainChildren => _canContainChildren;
 
@@ -169,6 +217,19 @@ public class Element(ElementServices services)
     /// <summary>Set when this element was attached or moved since its parent last heard of it, so its next MeasureAndArrange reports it even if its size is unchanged.</summary>
     private bool _hasUnreportedLayoutChange;
 
+    /// <summary>Hides this element as it goes back to its pool, laying out nothing.</summary>
+    /// <remarks>Its parent is told once that it left (RemoveChild, or OnChildrenDetached after several), not again for the hiding.</remarks>
+    internal void HideForPool()
+    {
+        if (!_isVisible)
+        {
+            return;
+        }
+
+        _isVisible = false;
+        MarkTreeChanged();
+    }
+
     /// <summary>Whether the pointer is over this element or one of its descendants, as UiInputController's hit test last found it -- topmost only, so an element under another window, outside its scrolled viewport or behind menu mode is never over.</summary>
     /// <remarks>Set by UiInputController for the hovered element and every ancestor; not refreshed during a window move, resize or scrollbar drag. Cleared when the element is built from its pool.</remarks>
     public bool IsPointerOver { get; internal set; }
@@ -199,73 +260,45 @@ public class Element(ElementServices services)
     protected bool _isTransparent;
     public bool IsTransparent => _isTransparent;
 
-    protected bool _isGlowing;
-    public bool IsGlowing => _isGlowing;
+    /// <summary>Whether this element can be used; true from each Build until something disables it.</summary>
+    /// <remarks>Element itself does nothing with it: each element decides what being disabled means (a Button, Toggle or TextBox greys itself and is never hit).</remarks>
+    public bool Enabled { get; set; } = true;
 
-    protected Color _glowColor = Color.Gold;
-    public Color GlowColor => _glowColor;
-
-    protected GlowMode _glowMode = GlowMode.ExteriorFade;
-    public GlowMode GlowMode => _glowMode;
-
-    protected GlowAnimation _glowAnimation;
-    public GlowAnimation GlowAnimation => _glowAnimation;
-
-    private GlowPulseClock _glowPulse;
+    private ElementGlow _glow;
+    public bool IsGlowing => _glow.IsGlowing;
+    public Color GlowColor => _glow.Color;
+    public GlowMode GlowMode => _glow.Mode;
+    public GlowAnimation GlowAnimation => _glow.Animation;
 
     /// <summary>Turns the glow (see GlowRenderer) on/off around this window's border -- e.g. a folder with something unread. Drawn before the content background fill/DrawContent/children (see Draw), so an interior-facing mode here would just get painted over -- use SetOverlayGlow instead for a glow that needs to sit on top of content.</summary>
     /// <remarks>A pulse starts when the glow turns on or its animation changes; setting the same glow again leaves it running. RestartGlowPulse starts it over.</remarks>
-    public void SetGlow(bool isGlowing, Color? color = null, GlowMode mode = GlowMode.ExteriorFade, GlowAnimation animation = default)
-    {
-        var restartsPulse = (isGlowing && !_isGlowing) || animation != _glowAnimation;
-        _isGlowing = isGlowing;
-        _glowColor = color ?? Color.Gold;
-        _glowMode = mode;
-        _glowAnimation = animation;
-        if (restartsPulse)
-        {
-            _glowPulse.Restart();
-        }
-    }
+    public void SetGlow(bool isGlowing, Color? color = null, GlowMode mode = GlowMode.ExteriorFade, GlowAnimation animation = default) =>
+        _glow.Set(isGlowing, color, mode, animation);
 
     /// <summary>Starts the glow's pulse over, from the next draw -- something new arrived while it was already glowing.</summary>
-    public void RestartGlowPulse() => _glowPulse.Restart();
+    public void RestartGlowPulse() => _glow.RestartPulse();
 
     /// <summary>Starts the glow's pulse at presentationTime if it is waiting to start, as Draw does before drawing the glow.</summary>
-    public void StartPendingGlowPulseAt(TimeSpan presentationTime) => _glowPulse.StartPendingAt(presentationTime);
+    public void StartPendingGlowPulseAt(TimeSpan presentationTime) => _glow.StartPendingPulseAt(presentationTime);
 
     /// <summary>The glow's strength at presentationTime; full while its pulse waits to start.</summary>
-    public float GlowStrengthAt(TimeSpan presentationTime) => _glowAnimation.StrengthAt(_glowPulse.ElapsedAt(presentationTime));
+    public float GlowStrengthAt(TimeSpan presentationTime) => _glow.StrengthAt(presentationTime);
 
-    protected bool _isOverlayGlowing;
-    protected Color _overlayGlowColor = Color.Gold;
-    protected GlowMode _overlayGlowMode = GlowMode.InteriorFade;
-    protected GlowAnimation _overlayGlowAnimation;
-    private GlowPulseClock _overlayGlowPulse;
+    private ElementGlow _overlayGlow;
 
     /// <summary>Turns a glow drawn over this element's content area on/off, after the content background fill and every child has drawn (see Draw) -- e.g. column panels, where a white InteriorFade vignette needs to sit on top of the dark panel fill and its rows, not get erased by them.</summary>
     /// <remarks>Its pulse starts and restarts as SetGlow's does.</remarks>
-    public void SetOverlayGlow(bool isGlowing, Color? color = null, GlowMode mode = GlowMode.InteriorFade, GlowAnimation animation = default)
-    {
-        var restartsPulse = (isGlowing && !_isOverlayGlowing) || animation != _overlayGlowAnimation;
-        _isOverlayGlowing = isGlowing;
-        _overlayGlowColor = color ?? Color.Gold;
-        _overlayGlowMode = mode;
-        _overlayGlowAnimation = animation;
-        if (restartsPulse)
-        {
-            _overlayGlowPulse.Restart();
-        }
-    }
+    public void SetOverlayGlow(bool isGlowing, Color? color = null, GlowMode mode = GlowMode.InteriorFade, GlowAnimation animation = default) =>
+        _overlayGlow.Set(isGlowing, color, mode, animation);
 
     /// <summary>Starts the overlay glow's pulse over, from the next draw.</summary>
-    public void RestartOverlayGlowPulse() => _overlayGlowPulse.Restart();
+    public void RestartOverlayGlowPulse() => _overlayGlow.RestartPulse();
 
     /// <summary>Starts the overlay glow's pulse at presentationTime if it is waiting to start, as Draw does before drawing the overlay glow.</summary>
-    public void StartPendingOverlayGlowPulseAt(TimeSpan presentationTime) => _overlayGlowPulse.StartPendingAt(presentationTime);
+    public void StartPendingOverlayGlowPulseAt(TimeSpan presentationTime) => _overlayGlow.StartPendingPulseAt(presentationTime);
 
     /// <summary>The overlay glow's strength at presentationTime; full while its pulse waits to start.</summary>
-    public float OverlayGlowStrengthAt(TimeSpan presentationTime) => _overlayGlowAnimation.StrengthAt(_overlayGlowPulse.ElapsedAt(presentationTime));
+    public float OverlayGlowStrengthAt(TimeSpan presentationTime) => _overlayGlow.StrengthAt(presentationTime);
 
     /*========Focus========*/
     public event Action<Element>? FocusChanged;
@@ -422,13 +455,6 @@ public class Element(ElementServices services)
     /// <summary>Changes the gap tiled after this element (see RetileChildren) after creation -- ElementLayoutOptions.SpacingAfter only ever sets it once, at CreateElement time; this is for a pooled/reused element whose spacing needs to change later.</summary>
     public void SetSpacingAfter(float spacingAfter) => _geometry.SpacingAfter = spacingAfter;
 
-    /*========Viewport========*/
-    private Viewport _viewport;
-    public Viewport Viewport => _viewport;
-
-    private Matrix _cameraTransform;
-    public Matrix CameraTransform => _cameraTransform;
-
     /*========User Controls========*/
     public bool CanUserMove { get; set; }
     public bool CanUserResize { get; set; }
@@ -516,16 +542,9 @@ public class Element(ElementServices services)
 
         // Pooled windows must not inherit a stale glow from whatever they were last used for --
         // same rationale as _isFocused reset below.
-        _isGlowing = false;
-        _glowColor = Color.Gold;
-        _glowMode = GlowMode.ExteriorFade;
-        _glowAnimation = GlowAnimation.Static;
-        _glowPulse.Reset();
-        _isOverlayGlowing = false;
-        _overlayGlowColor = Color.Gold;
-        _overlayGlowMode = GlowMode.InteriorFade;
-        _overlayGlowAnimation = GlowAnimation.Static;
-        _overlayGlowPulse.Reset();
+        _glow.Reset(GlowMode.ExteriorFade);
+        _overlayGlow.Reset(GlowMode.InteriorFade);
+        Enabled = true;
 
         /*========Focus========*/
         // Pooled windows (see WindowService) must not inherit a stale focused look from
@@ -576,8 +595,6 @@ public class Element(ElementServices services)
         // Measure/Arrange pass reaches it. Under a WrapContent parent it also re-fits the parent.
         MeasureAndArrange();
 
-        RecalculateCameraTransform();
-
         InitializeHeaderExtras();
 
         foreach (var childElement in _children)
@@ -603,24 +620,29 @@ public class Element(ElementServices services)
     /// CanUserScrollHorizontal/Vertical doesn't allow is held at zero regardless of delta, so
     /// a window that only opts into vertical scrolling (the common case -- see TextWindow,
     /// where word-wrap already keeps lines within the content width) simply ignores any
-    /// horizontal delta a caller passes. Folded into CameraTransform (see
-    /// RecalculateCameraTransform) rather than requiring every DrawContent implementation to
-    /// manually offset its own draw calls -- content keeps drawing in the same local
-    /// coordinates it always has; RequiresContentViewport's draw offset (see Draw) picks the
-    /// scroll up automatically.
+    /// horizontal delta a caller passes. Folded into ContentDrawOrigin rather than requiring every
+    /// DrawContent implementation to manually offset its own draw calls -- content keeps drawing in
+    /// the same local coordinates it always has.
     /// </summary>
-    public void ScrollBy(Vector2 delta)
+    public void ScrollBy(Vector2 delta) => TryApplyScrollOffset(_scrollOffset + delta);
+
+    /// <summary>Moves ScrollOffset to desiredOffset, clamped as ScrollBy clamps; returns whether it changed.</summary>
+    /// <remarks>An unchanged offset arranges nothing: no child moved.</remarks>
+    private bool TryApplyScrollOffset(Vector2 desiredOffset)
     {
-        var desiredOffset = _scrollOffset + delta;
-        _scrollOffset = new Vector2(
+        var clampedOffset = new Vector2(
             CanUserScrollHorizontal
                 ? MathHelper.Clamp(desiredOffset.X, 0, _maxScrollOffset.X)
                 : 0,
             CanUserScrollVertical
                 ? MathHelper.Clamp(desiredOffset.Y, 0, _maxScrollOffset.Y)
                 : 0);
+        if (clampedOffset == _scrollOffset)
+        {
+            return false;
+        }
 
-        RecalculateCameraTransform();
+        _scrollOffset = clampedOffset;
 
         // Child windows (as opposed to DrawContent, e.g. TextWindow's own wrapped text) aren't
         // drawn at the content's offset at all -- see Draw's child-window loop, which keeps the
@@ -628,6 +650,7 @@ public class Element(ElementServices services)
         // ScrollOffset only moves them at all because RecalculateAbsolutePositions folds it in
         // directly. Re-arranging here is what actually pushes a scroll into their positions.
         Arrange();
+        return true;
     }
 
     /// <summary>
@@ -636,21 +659,20 @@ public class Element(ElementServices services)
     /// or content size changes, since a resize or text update can shrink MaxScrollOffset below
     /// wherever the window was previously scrolled to.
     /// </summary>
+    /// <remarks>A range that leaves ScrollOffset where it is moves no child, so only the scrollbar thumbs are recalculated.</remarks>
     protected void SetMaxScrollOffset(Vector2 maxScrollOffset)
     {
-        _maxScrollOffset = Vector2.Max(Vector2.Zero, maxScrollOffset);
-        ScrollBy(Vector2.Zero);
-    }
+        var clampedMaxScrollOffset = Vector2.Max(Vector2.Zero, maxScrollOffset);
+        if (clampedMaxScrollOffset == _maxScrollOffset)
+        {
+            return;
+        }
 
-    /// <summary>
-    /// -ScrollOffset as a translation: content drawn in local coordinates (RequiresContentViewport's
-    /// scope, see Draw) shifts by this as well as by the viewport's origin, which is what makes scrolling
-    /// work without any DrawContent implementation needing to know about ScrollOffset itself.
-    /// No rotation or zoom.
-    /// </summary>
-    private void RecalculateCameraTransform()
-    {
-        _cameraTransform = Matrix.CreateTranslation(-_scrollOffset.X, -_scrollOffset.Y, 0);
+        _maxScrollOffset = clampedMaxScrollOffset;
+        if (!TryApplyScrollOffset(_scrollOffset))
+        {
+            RecalculateScrollbarRectangles();
+        }
     }
 
     public virtual void Update(GameTime gameTime)
@@ -690,7 +712,7 @@ public class Element(ElementServices services)
         }
     }
 
-    /// <summary>Reads the batch and UnitRectangle from Render rather than taking them as parameters -- every override, and every recursive child Draw call below, does the same.</summary>
+    /// <summary>Reads the batch from Render rather than taking it as a parameter -- every override, and every recursive child Draw call below, does the same.</summary>
     public virtual void Draw(GameTime gameTime)
     {
         if (!_isVisible)
@@ -699,18 +721,13 @@ public class Element(ElementServices services)
         }
 
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
 
         if (_border.Show)
         {
-            BorderRenderer.Draw(spriteBatch, unitRectangle, _border.Style, _border.Color, _border.TopRectangle, _border.BottomRectangle, _border.LeftRectangle, _border.RightRectangle);
+            BorderRenderer.Draw(spriteBatch, _border.Style, _border.Color, _border.TopRectangle, _border.BottomRectangle, _border.LeftRectangle, _border.RightRectangle);
         }
 
-        if (_isGlowing)
-        {
-            StartPendingGlowPulseAt(gameTime.TotalGameTime);
-            GlowRenderer.Draw(spriteBatch, unitRectangle, _geometry.Rectangle, _glowColor, _glowMode, GlowStrengthAt(gameTime.TotalGameTime));
-        }
+        _glow.Draw(spriteBatch, _geometry.Rectangle, gameTime.TotalGameTime);
 
         if ((_geometry.DisplayMode != ElementDisplayMode.Minimized && _headerState.ShowHeader) || (_geometry.DisplayMode == ElementDisplayMode.Minimized && _headerState.ShowHeaderWhenMinimized))
         {
@@ -726,13 +743,13 @@ public class Element(ElementServices services)
                 // that area (see ElementContentState's own doc comment), so filling just Rectangle
                 // would leave the padding band itself unpainted, a visible gap of whatever's behind
                 // this element between its border and its (deliberately smaller) content fill.
-                spriteBatch.Draw(unitRectangle, _contentState.BackgroundRectangle, ContentBackgroundColor);
+                spriteBatch.FillRectangle(_contentState.BackgroundRectangle, ContentBackgroundColor);
             }
 
             // The content is drawn in local coordinates, offset to ContentDrawOrigin, and a scrollable element's is
             // clipped to its viewport within whatever clip is already in force. Pushed/popped through Render, so an
             // Element nested inside another hands back the exact state it inherited.
-            var contentRenderState = RequiresContentViewport ? Render.CurrentRenderState.ClippedTo(Viewport.Bounds) : Render.CurrentRenderState;
+            var contentRenderState = RequiresContentViewport ? Render.CurrentRenderState.ClippedTo(_contentState.Rectangle) : Render.CurrentRenderState;
             Render.PushRenderState(contentRenderState with { DrawOffset = ContentDrawOrigin });
             DrawContent(gameTime);
             Render.PopRenderState();
@@ -743,11 +760,16 @@ public class Element(ElementServices services)
                 // their positions), so they keep the inherited offset and only need clipping -- a child scrolled out of
                 // view would otherwise draw in full wherever that puts it. Intersected with whatever clip is already in
                 // force, since scrollable windows nest (TabbedContent's scrollable body hosting a scrollable grid).
-                Render.PushRenderState(Render.CurrentRenderState.ClippedTo(_contentState.Rectangle));
+                var childrenRenderState = Render.CurrentRenderState.ClippedTo(_contentState.Rectangle);
+                var childrenClipRectangle = childrenRenderState.ClipRectangle ?? _contentState.Rectangle;
+                Render.PushRenderState(childrenRenderState);
 
                 foreach (var childElement in _children)
                 {
-                    childElement.Draw(gameTime);
+                    if (childElement.DrawsWithin(childrenClipRectangle))
+                    {
+                        childElement.Draw(gameTime);
+                    }
                 }
 
                 Render.PopRenderState();
@@ -760,36 +782,43 @@ public class Element(ElementServices services)
                 }
             }
 
-            if (_isOverlayGlowing)
-            {
-                StartPendingOverlayGlowPulseAt(gameTime.TotalGameTime);
-                GlowRenderer.Draw(spriteBatch, unitRectangle, _contentState.Rectangle, _overlayGlowColor, _overlayGlowMode, OverlayGlowStrengthAt(gameTime.TotalGameTime));
-            }
+            _overlayGlow.Draw(spriteBatch, _contentState.Rectangle, gameTime.TotalGameTime);
 
             if (_scrollbars.ShowVertical || _scrollbars.ShowHorizontal)
             {
-                DrawScrollbars(spriteBatch, unitRectangle);
+                DrawScrollbars(spriteBatch);
             }
         }
     }
 
-    private void DrawScrollbars(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
+    /// <summary>Whether any of this element, with an exterior glow's reach around it, lies inside clipRectangle.</summary>
+    /// <remarks>A scrolling parent draws only the children this holds for, so a row scrolled out of view costs nothing. Anything a child draws further outside its own rectangle than a glow reaches is not counted.</remarks>
+    internal bool DrawsWithin(Rectangle clipRectangle)
+    {
+        var rectangle = _geometry.Rectangle;
+        return rectangle.Right + GlowRenderer.FadeRingCount > clipRectangle.Left
+            && rectangle.Left - GlowRenderer.FadeRingCount < clipRectangle.Right
+            && rectangle.Bottom + GlowRenderer.FadeRingCount > clipRectangle.Top
+            && rectangle.Top - GlowRenderer.FadeRingCount < clipRectangle.Bottom;
+    }
+
+    private void DrawScrollbars(SpriteEffectBatch spriteBatch)
     {
         if (_scrollbars.ShowVertical)
         {
-            spriteBatch.Draw(unitRectangle, _scrollbars.VerticalTrackRectangle, WindowPalette.ScrollbarTrackColor);
-            spriteBatch.Draw(unitRectangle, _scrollbars.VerticalThumbRectangle, GetScrollbarThumbColor(ScrollbarPart.VerticalThumb));
+            spriteBatch.FillRectangle(_scrollbars.VerticalTrackRectangle, WindowPalette.ScrollbarTrackColor);
+            spriteBatch.FillRectangle(_scrollbars.VerticalThumbRectangle, GetScrollbarThumbColor(ScrollbarPart.VerticalThumb));
         }
 
         if (_scrollbars.ShowHorizontal)
         {
-            spriteBatch.Draw(unitRectangle, _scrollbars.HorizontalTrackRectangle, WindowPalette.ScrollbarTrackColor);
-            spriteBatch.Draw(unitRectangle, _scrollbars.HorizontalThumbRectangle, GetScrollbarThumbColor(ScrollbarPart.HorizontalThumb));
+            spriteBatch.FillRectangle(_scrollbars.HorizontalTrackRectangle, WindowPalette.ScrollbarTrackColor);
+            spriteBatch.FillRectangle(_scrollbars.HorizontalThumbRectangle, GetScrollbarThumbColor(ScrollbarPart.HorizontalThumb));
         }
 
         if (_scrollbars.ShowVertical && _scrollbars.ShowHorizontal)
         {
-            spriteBatch.Draw(unitRectangle, _scrollbars.CornerRectangle, WindowPalette.ScrollbarTrackColor);
+            spriteBatch.FillRectangle(_scrollbars.CornerRectangle, WindowPalette.ScrollbarTrackColor);
         }
     }
 
@@ -841,34 +870,6 @@ public class Element(ElementServices services)
         }
 
         return ScrollbarPart.None;
-    }
-
-    /// <summary>The topmost scrollbar anywhere in this element's subtree under position, or NotHit.</summary>
-    /// <remarks>An element's own bars are checked before its children's, the same order TryHitTestInteraction uses: they sit in its gutter, outside the content area its children are clipped to.</remarks>
-    internal ElementInteraction TryHitTestScrollbar(Point position)
-    {
-        if (!IsHitTestable || !_geometry.Rectangle.Contains(position))
-        {
-            return ElementInteraction.NotHit;
-        }
-
-        var ownPart = GetScrollbarPartAt(position);
-        if (ownPart != ScrollbarPart.None)
-        {
-            return ElementInteraction.Scrollbar(this, ownPart);
-        }
-
-        var childCount = _geometry.DisplayMode == ElementDisplayMode.Minimized ? 0 : _children.Count;
-        for (var index = childCount - 1; index >= 0; index--)
-        {
-            var childInteraction = _children[index].TryHitTestScrollbar(position);
-            if (childInteraction.Element is not null)
-            {
-                return childInteraction;
-            }
-        }
-
-        return ElementInteraction.NotHit;
     }
 
     /// <summary>Scrolls to an absolute offset, clamped the same way ScrollBy clamps.</summary>
@@ -930,7 +931,7 @@ public class Element(ElementServices services)
 
     /// <summary>Where DrawContent's (0, 0) is on screen: the content area's top-left, less the scroll for a scrollable element.</summary>
     public Vector2 ContentDrawOrigin => RequiresContentViewport
-        ? new Vector2(Viewport.X + CameraTransform.Translation.X, Viewport.Y + CameraTransform.Translation.Y)
+        ? new Vector2(_contentState.Rectangle.X - _scrollOffset.X, _contentState.Rectangle.Y - _scrollOffset.Y)
         : ContentAbsolutePosition;
 
     /// <summary>The content area in DrawContent's local coordinates: at (0, 0), ContentRectangle's size.</summary>
@@ -1278,7 +1279,7 @@ public class Element(ElementServices services)
                 // A scrollbar near this element's edge (its own, or a child column's) sits inside
                 // the resize grab band and would be ungrabbable if resize always won -- the bar is
                 // the thing actually drawn there. Corners stay resize: two-axis resize lives there.
-                if (!IsResizeCorner(edges) && TryHitTestScrollbar(position) is { Element: not null } scrollbarInteraction)
+                if (!IsResizeCorner(edges) && HitTestInsideChrome(position) is { ScrollbarPart: not ScrollbarPart.None } scrollbarInteraction)
                 {
                     return scrollbarInteraction;
                 }
@@ -1287,6 +1288,13 @@ public class Element(ElementServices services)
             }
         }
 
+        return HitTestInsideChrome(position);
+    }
+
+    /// <summary>What is at position inside this element's header and resize band: its own scrollbars, its drag handle, its children topmost first, then its own content.</summary>
+    /// <remarks>The one walk into the children: the resize band asks it too, to find a scrollbar drawn there.</remarks>
+    private ElementInteraction HitTestInsideChrome(Point position)
+    {
         var ownScrollbarPart = GetScrollbarPartAt(position);
         if (ownScrollbarPart != ScrollbarPart.None)
         {
@@ -1418,18 +1426,40 @@ public class Element(ElementServices services)
     /// <summary>Removes the child, then retiles the remaining ones so later siblings close the gap instead of keeping the removed window's slot as dead space.</summary>
     public void RemoveChild(Guid elementId)
     {
-        var childElementIndex = _children.FindIndex(childElement => childElement.ElementId == elementId);
-        if (childElementIndex < 0)
+        for (var childElementIndex = 0; childElementIndex < _children.Count; childElementIndex++)
         {
-            return;
+            if (_children[childElementIndex].ElementId == elementId)
+            {
+                RemoveChild(_children[childElementIndex]);
+                return;
+            }
         }
+    }
 
-        _children.RemoveAt(childElementIndex);
+    /// <summary>Removes child, then retiles the remaining ones; nothing happens when it isn't a child.</summary>
+    public void RemoveChild(Element child)
+    {
+        if (DetachChildWithoutLayout(child))
+        {
+            OnChildrenDetached(relaysOut: true);
+        }
+    }
+
+    /// <summary>Takes child out of the child list and lays out nothing; returns whether it was a child.</summary>
+    /// <remarks>For ElementPoolService closing several children at once: OnChildrenDetached follows, once, after the last.</remarks>
+    internal bool DetachChildWithoutLayout(Element child) => _children.Remove(child);
+
+    /// <summary>Tells this element that children were detached with DetachChildWithoutLayout.</summary>
+    /// <param name="relaysOut">False when this element is itself closing, so the layout would be thrown away.</param>
+    /// <remarks>Later siblings close the gap, a WrapContent element shrinks around what is left, and the scroll range shrinks with it.</remarks>
+    internal void OnChildrenDetached(bool relaysOut)
+    {
         MarkTreeChanged();
 
-        // Later siblings close the gap, a WrapContent element shrinks around what is left, and
-        // the scroll range shrinks with it.
-        OnChildLayoutChanged();
+        if (relaysOut)
+        {
+            OnChildLayoutChanged();
+        }
     }
 
     /// <summary>Depth of nested BeginLayoutBatch scopes currently open on this element -- 0 means none.</summary>
@@ -1612,11 +1642,7 @@ public class Element(ElementServices services)
         }
 
         var previousSize = _geometry.CurrentSize;
-        var availableSize = _parent is null
-            ? MaximumSize
-            : ComputeChildAvailableSize(_parent, this, _parent.ContentSizeOfferedToChildren());
-
-        Measure(availableSize);
+        Measure(OfferedAvailableSize());
         Arrange();
 
         if (_parent is null || (_geometry.CurrentSize == previousSize && !_hasUnreportedLayoutChange))
@@ -2031,7 +2057,6 @@ public class Element(ElementServices services)
         _headerState.Rectangle = new Rectangle((int)_headerState.AbsolutePosition.X, (int)_headerState.AbsolutePosition.Y, (int)_headerState.Size.X, (int)_headerState.Size.Y);
         _contentState.Rectangle = new Rectangle((int)_contentState.AbsolutePosition.X, (int)_contentState.AbsolutePosition.Y, (int)_contentState.Size.X, (int)_contentState.Size.Y);
         _contentState.BackgroundRectangle = new Rectangle((int)_contentState.BackgroundAbsolutePosition.X, (int)_contentState.BackgroundAbsolutePosition.Y, (int)_contentState.BackgroundSize.X, (int)_contentState.BackgroundSize.Y);
-        _viewport = new Viewport(_contentState.Rectangle);
 
         RecalculateBorderRectangles();
         RecalculateScrollbarRectangles();
@@ -2138,11 +2163,45 @@ public class Element(ElementServices services)
     /// For chrome behaviors that need to move an element --
     /// Resized/Moved fire automatically through MeasureAndArrange.
     /// </summary>
+    /// <remarks>
+    /// The position it already has does nothing. A move that leaves the space offered to this element as it was (a root's,
+    /// a scrolling parent's child's) changes no size, so the subtree is arranged and not measured.
+    /// </remarks>
     public void SetRelativePosition(Vector2 relativePosition)
     {
+        if (_geometry.RelativePosition == relativePosition)
+        {
+            return;
+        }
+
         SetRelativePositionField(relativePosition);
-        MeasureAndArrange();
+
+        if (_parent is { DisplayMode: ElementDisplayMode.Minimized })
+        {
+            return;
+        }
+
+        if (OfferedAvailableSize() != _geometry.AvailableSize)
+        {
+            MeasureAndArrange();
+            return;
+        }
+
+        Arrange();
+
+        if (_parent is null)
+        {
+            return;
+        }
+
+        _hasUnreportedLayoutChange = false;
+        _parent.OnChildLayoutChanged();
     }
+
+    /// <summary>The space this element's parent offers it now, or its MaximumSize for a root: what MeasureAndArrange measures against.</summary>
+    private Vector2 OfferedAvailableSize() => _parent is null
+        ? MaximumSize
+        : ComputeChildAvailableSize(_parent, this, _parent.ContentSizeOfferedToChildren());
 
     /// <summary>Writes RelativePosition, noting a real move so the next MeasureAndArrange reports it to the parent (its scroll range and wrap-around depend on where children are).</summary>
     private void SetRelativePositionField(Vector2 relativePosition)

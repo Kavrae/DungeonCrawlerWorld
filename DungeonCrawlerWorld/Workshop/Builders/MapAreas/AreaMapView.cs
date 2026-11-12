@@ -164,19 +164,18 @@ public sealed class AreaMapView(ElementServices services, SpriteSheetService spr
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
         if (_renderer is { } renderer && _camera is { } camera && _scene is { } scene)
         {
-            DrawScene(spriteBatch, unitRectangle, renderer, camera, scene);
+            DrawScene(spriteBatch, renderer, camera, scene);
         }
 
         if (LoadingText is { } loadingText)
         {
-            DrawLoading(spriteBatch, unitRectangle, loadingText, gameTime);
+            DrawLoading(spriteBatch, loadingText, gameTime);
         }
         else if (MessageText is { } messageText)
         {
-            DrawMessage(spriteBatch, unitRectangle, messageText);
+            DrawMessage(spriteBatch, messageText);
         }
     }
 
@@ -198,37 +197,37 @@ public sealed class AreaMapView(ElementServices services, SpriteSheetService spr
 
     protected override void OnRightDragEndAction() => _camera?.EndDrag();
 
-    private void DrawScene(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, MapRenderer renderer, MapCamera camera, IMapPreviewScene scene)
+    private void DrawScene(SpriteEffectBatch spriteBatch, MapRenderer renderer, MapCamera camera, IMapPreviewScene scene)
     {
         renderer.Draw((int)Layer, NoWatchedEntities, NoGroundMarks);
 
         if (scene.Area is { } area)
         {
-            DrawAreaCells(spriteBatch, unitRectangle, camera, area);
+            DrawAreaCells(spriteBatch, camera, area);
         }
         else
         {
-            DrawInstanceOutlines(spriteBatch, unitRectangle, camera, scene.Stamp);
+            DrawInstanceOutlines(spriteBatch, camera, scene.Stamp);
         }
 
         foreach (var marker in scene.Stamp.Markers)
         {
             if (marker.Position.Z == (int)Layer && camera.TryGetTileRectangle(marker.Position.X, marker.Position.Y, out var tile))
             {
-                DrawMarker(spriteBatch, unitRectangle, tile, marker.Marker.MarkerId);
+                DrawMarker(spriteBatch, tile, marker.Marker.MarkerId);
             }
         }
 
         if (_hoveredPosition is { } hovered && camera.TryGetTileRectangle(hovered.X, hovered.Y, out var hoveredTile))
         {
-            DrawOutline(spriteBatch, unitRectangle, hoveredTile, HoverColor, 1);
+            DrawOutline(spriteBatch, hoveredTile, HoverColor, 1);
         }
     }
 
     /// <summary>A dimmed view with a ring of dots turning about its centre, and the text under it.</summary>
-    private void DrawLoading(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, string text, GameTime gameTime)
+    private void DrawLoading(SpriteEffectBatch spriteBatch, string text, GameTime gameTime)
     {
-        spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, (int)ContentSize.X, (int)ContentSize.Y), LoadingDimColor);
+        spriteBatch.FillRectangle(new Rectangle(0, 0, (int)ContentSize.X, (int)ContentSize.Y), LoadingDimColor);
         var centre = ContentSize / 2;
         var lit = (int)(gameTime.TotalGameTime.TotalSeconds * SpinnerStepsPerSecond) % SpinnerDotCount;
         for (var dot = 0; dot < SpinnerDotCount; dot++)
@@ -237,16 +236,16 @@ public sealed class AreaMapView(ElementServices services, SpriteSheetService spr
             var position = centre + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * SpinnerRadius;
             var stepsBehind = (lit - dot + SpinnerDotCount) % SpinnerDotCount;
             var brightness = 1f - stepsBehind / (float)SpinnerDotCount * SpinnerTrailFade;
-            spriteBatch.Draw(unitRectangle, new Rectangle((int)position.X - SpinnerDotPixels / 2, (int)position.Y - SpinnerDotPixels / 2, SpinnerDotPixels, SpinnerDotPixels), Color.White * brightness);
+            spriteBatch.FillRectangle(new Rectangle((int)position.X - SpinnerDotPixels / 2, (int)position.Y - SpinnerDotPixels / 2, SpinnerDotPixels, SpinnerDotPixels), Color.White * brightness);
         }
 
         var textSize = _areaLabelFont.MeasureString(text);
         LabelRenderer.Draw(spriteBatch, _areaLabelFont, text, new Vector2(centre.X - textSize.X / 2, centre.Y + SpinnerRadius + SpinnerDotPixels * 2), Color.White, outline: true);
     }
 
-    private void DrawMessage(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, string text)
+    private void DrawMessage(SpriteEffectBatch spriteBatch, string text)
     {
-        spriteBatch.Draw(unitRectangle, new Rectangle(0, 0, (int)ContentSize.X, (int)ContentSize.Y), LoadingDimColor);
+        spriteBatch.FillRectangle(new Rectangle(0, 0, (int)ContentSize.X, (int)ContentSize.Y), LoadingDimColor);
         var textSize = _areaLabelFont.MeasureString(text);
         LabelRenderer.Draw(spriteBatch, _areaLabelFont, text, (ContentSize - textSize) / 2, Color.White, outline: true);
     }
@@ -262,7 +261,7 @@ public sealed class AreaMapView(ElementServices services, SpriteSheetService spr
         HoveredPositionChanged?.Invoke(position);
     }
 
-    private void DrawAreaCells(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, MapCamera camera, AreaInstance instance)
+    private void DrawAreaCells(SpriteEffectBatch spriteBatch, MapCamera camera, AreaInstance instance)
     {
         var area = instance.Definition;
         var rows = area.Layers.RowsOf(Layer);
@@ -277,19 +276,19 @@ public sealed class AreaMapView(ElementServices services, SpriteSheetService spr
 
                 if (rows is null || rows[y][x] == AreaDefinition.TransparentSymbol)
                 {
-                    DrawHatching(spriteBatch, unitRectangle, tile);
+                    DrawHatching(spriteBatch, tile);
                 }
 
                 if (ShowsGrid)
                 {
-                    DrawOutline(spriteBatch, unitRectangle, tile, GridColor, 1);
+                    DrawOutline(spriteBatch, tile, GridColor, 1);
                 }
             }
         }
     }
 
     /// <summary>Each stamped instance's box, its name inside its top-left corner; the hovered one brighter.</summary>
-    private void DrawInstanceOutlines(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, MapCamera camera, AreaStampResult stamp)
+    private void DrawInstanceOutlines(SpriteEffectBatch spriteBatch, MapCamera camera, AreaStampResult stamp)
     {
         var hoveredInstance = _hoveredPosition is { } hovered ? InstanceAt(hovered) : null;
         var tileSize = camera.CurrentTileSize;
@@ -303,13 +302,13 @@ public sealed class AreaMapView(ElementServices services, SpriteSheetService spr
             }
 
             var color = ReferenceEquals(instance, hoveredInstance) ? HoveredAreaOutlineColor : AreaOutlineColor;
-            DrawOutline(spriteBatch, unitRectangle, box, color, AreaOutlinePixels);
+            DrawOutline(spriteBatch, box, color, AreaOutlinePixels);
             LabelRenderer.Draw(spriteBatch, _areaLabelFont, instance.Definition.Name, new Vector2(box.X + AreaOutlinePixels + 2, box.Y + AreaOutlinePixels + 2), color, outline: true);
         }
     }
 
     /// <summary>Diagonal rows of dots across the tile: reads as hatching over any terrain.</summary>
-    private static void DrawHatching(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle tile)
+    private static void DrawHatching(SpriteEffectBatch spriteBatch, Rectangle tile)
     {
         for (var offset = -tile.Height; offset < tile.Width; offset += HatchSpacingPixels)
         {
@@ -318,26 +317,26 @@ public sealed class AreaMapView(ElementServices services, SpriteSheetService spr
                 var x = tile.X + offset + step;
                 if (x >= tile.X && x + HatchDotPixels <= tile.Right)
                 {
-                    spriteBatch.Draw(unitRectangle, new Rectangle(x, tile.Y + step, HatchDotPixels, HatchDotPixels), HatchColor);
+                    spriteBatch.FillRectangle(new Rectangle(x, tile.Y + step, HatchDotPixels, HatchDotPixels), HatchColor);
                 }
             }
         }
     }
 
-    private void DrawMarker(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle tile, string label)
+    private void DrawMarker(SpriteEffectBatch spriteBatch, Rectangle tile, string label)
     {
         var size = System.Math.Max((int)(tile.Width * MarkerBadgeFraction), 3);
         var badge = new Rectangle(tile.Center.X - size / 2, tile.Center.Y - size / 2, size, size);
-        spriteBatch.Draw(unitRectangle, badge, MarkerColor * 0.8f);
-        DrawOutline(spriteBatch, unitRectangle, badge, Color.Black, 1);
+        spriteBatch.FillRectangle(badge, MarkerColor * 0.8f);
+        DrawOutline(spriteBatch, badge, Color.Black, 1);
         LabelRenderer.Draw(spriteBatch, _markerFont, label, new Vector2(tile.X, tile.Bottom), MarkerLabelColor, outline: true);
     }
 
-    private static void DrawOutline(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle rectangle, Color color, int thickness)
+    private static void DrawOutline(SpriteEffectBatch spriteBatch, Rectangle rectangle, Color color, int thickness)
     {
-        spriteBatch.Draw(unitRectangle, new Rectangle(rectangle.X, rectangle.Y, rectangle.Width, thickness), color);
-        spriteBatch.Draw(unitRectangle, new Rectangle(rectangle.X, rectangle.Bottom - thickness, rectangle.Width, thickness), color);
-        spriteBatch.Draw(unitRectangle, new Rectangle(rectangle.X, rectangle.Y, thickness, rectangle.Height), color);
-        spriteBatch.Draw(unitRectangle, new Rectangle(rectangle.Right - thickness, rectangle.Y, thickness, rectangle.Height), color);
+        spriteBatch.FillRectangle(new Rectangle(rectangle.X, rectangle.Y, rectangle.Width, thickness), color);
+        spriteBatch.FillRectangle(new Rectangle(rectangle.X, rectangle.Bottom - thickness, rectangle.Width, thickness), color);
+        spriteBatch.FillRectangle(new Rectangle(rectangle.X, rectangle.Y, thickness, rectangle.Height), color);
+        spriteBatch.FillRectangle(new Rectangle(rectangle.Right - thickness, rectangle.Y, thickness, rectangle.Height), color);
     }
 }

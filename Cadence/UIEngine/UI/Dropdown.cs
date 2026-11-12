@@ -176,7 +176,7 @@ public sealed class Dropdown(ElementServices services)
             if (IsChoosable(candidate))
             {
                 SetHighlight(candidate);
-                ScrollIntoView(candidate);
+                ScrollOptionIntoView(candidate);
                 return;
             }
         }
@@ -208,25 +208,14 @@ public sealed class Dropdown(ElementServices services)
         }
     }
 
-    private void ScrollIntoView(int optionIndex)
+    private void ScrollOptionIntoView(int optionIndex)
     {
         if (_optionRows[optionIndex] is not { } row)
         {
             return;
         }
 
-        var rowTop = row.RelativePosition.Y;
-        var rowBottom = rowTop + RowHeight;
-        if (rowTop < ScrollOffset.Y)
-        {
-            ScrollTo(new Vector2(0, rowTop));
-            return;
-        }
-
-        if (rowBottom > ScrollOffset.Y + ContentSize.Y)
-        {
-            ScrollTo(new Vector2(0, rowBottom - ContentSize.Y));
-        }
+        ScrollIntoView(row.RelativePosition.Y, row.RelativePosition.Y + RowHeight);
     }
 
     public void Hide()

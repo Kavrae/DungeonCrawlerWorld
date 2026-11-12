@@ -33,7 +33,7 @@ public sealed class HotbarSlotElement(ElementServices services)
         _dropTarget = new HotbarSlotDropTarget(hotbar, slot);
     }
 
-    public override void DrawContent(GameTime gameTime) => _hotbar.DrawSlot(Render.Batch, Render.UnitRectangle, Slot, LocalContentRectangle);
+    public override void DrawContent(GameTime gameTime) => _hotbar.DrawSlot(Render.Batch, Slot, LocalContentRectangle);
 
     protected override bool OnContentClickAction(Point mousePosition)
     {

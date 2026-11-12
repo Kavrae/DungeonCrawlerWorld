@@ -1,3 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
+using System.Runtime.CompilerServices;
 using Engine.ECS.Components.Stores;
 using Engine.ECS.Entities;
 using Engine.ECS.Relationships;
@@ -18,6 +21,20 @@ public sealed class ComponentManager
     private readonly HashSet<Type> _pendingObservationRequests = [];
     private bool _observationRequestsClosed;
 
+    /// <summary>Each registered type's pool by its ComponentTypeSlot, so a typed lookup is an array read rather than a hash of its Type.</summary>
+    private SlotEntry[] _slotEntries = [];
+
+    private static int _nextComponentTypeSlot;
+
+    /// <summary>A process-wide index per component type, the same in every manager; a manager's table covers only the slots it registered.</summary>
+    private static class ComponentTypeSlot<T> where T : struct
+    {
+        public static readonly int Index = Interlocked.Increment(ref _nextComponentTypeSlot) - 1;
+    }
+
+    /// <summary>A registered type's pool, and whether it is a relationship's target side, which only the relationship writes.</summary>
+    private readonly record struct SlotEntry(IComponentPool? Pool, bool IsRelatedSource);
+
     /// <summary>Initializes a new instance of the <see cref="ComponentManager"/> class.</summary>
     /// <param name="initialEntityCapacity">The initial capacity for indexing component pools based on the estimated number of entities with the component.</param>
     /// <param name="initialComponentCapacity">The dense storage a Packed or Multi pool starts with when its registration gives none; it grows geometrically from there.</param>
@@ -28,7 +45,11 @@ public sealed class ComponentManager
 
         _initialEntityCapacity = initialEntityCapacity;
         _initialComponentCapacity = initialComponentCapacity;
+        _membershipMasks = new ComponentMembershipMasks(initialEntityCapacity);
     }
+
+    /// <summary>Which pools hold each entity, each pool's bit its index in registration order: what RemoveAllComponents visits.</summary>
+    private readonly ComponentMembershipMasks _membershipMasks;
 
     /// <summary>Every entity's stable key -- see EntityKeys. EntityManager issues and releases them; relationships resolve links through it.</summary>
     public EntityKeys Keys { get; } = new();
@@ -40,14 +61,14 @@ public sealed class ComponentManager
     internal HashSet<int> DestroyingEntityIds { get; } = [];
 
     /// <summary>Returns true if the component type is registered to a pool.</summary>
-    public bool IsRegistered<T>() where T : struct => _componentPools.ContainsKey(typeof(T));
+    public bool IsRegistered<T>() where T : struct => EntryOf<T>().Pool is not null;
 
     /// <summary>Registers a direct component pool for the specified component type.</summary>
     /// <remarks>Direct component pools are suitable for components that are expected to be present on most entities.</remarks>
     public void RegisterDirectPool<T>(MergeAction<T> mergeAction) where T : struct
     {
         ThrowIfAlreadyRegistered(typeof(T));
-        AddPool(typeof(T), new DirectComponentPool<T>(_initialEntityCapacity, mergeAction));
+        AddPool<T>(new DirectComponentPool<T>(_initialEntityCapacity, mergeAction));
     }
 
     /// <summary>Registers a packed component pool for the specified component type.</summary>
@@ -62,7 +83,7 @@ public sealed class ComponentManager
     public void RegisterPackedPool<T>(MergeAction<T> mergeAction, int? initialCapacity = null, ComponentChangeObservation observation = ComponentChangeObservation.Unobserved) where T : struct
     {
         ThrowIfAlreadyRegistered(typeof(T));
-        AddPool(typeof(T), new PackedComponentPool<T>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity, mergeAction, observation));
+        AddPool<T>(new PackedComponentPool<T>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity, mergeAction, observation));
     }
 
     /// <summary>Registers a multi component pool for the specified component type.</summary>
@@ -73,7 +94,7 @@ public sealed class ComponentManager
     public void RegisterMultiPool<T>(int? initialCapacity = null, ComponentChangeObservation observation = ComponentChangeObservation.Unobserved) where T : struct
     {
         ThrowIfAlreadyRegistered(typeof(T));
-        AddPool(typeof(T), new MultiComponentPool<T>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity, observation));
+        AddPool<T>(new MultiComponentPool<T>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity, observation));
     }
 
     /// <summary>Registers a relationship type: a Packed pool of TLink (the links) and a Multi pool of RelatedSourceComponent&lt;TLink&gt; (each target's sources), kept in step by a Relationship.</summary>
@@ -90,8 +111,8 @@ public sealed class ComponentManager
 
         var links = new PackedComponentPool<TLink>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity, static (ref existing, incoming) => existing = incoming, ComponentChangeObservation.Observed);
         var relatedSources = new MultiComponentPool<RelatedSourceComponent<TLink>>(_initialEntityCapacity, initialCapacity ?? _initialComponentCapacity);
-        AddPool(typeof(TLink), links);
-        AddPool(typeof(RelatedSourceComponent<TLink>), relatedSources);
+        AddPool<TLink>(links);
+        AddPool<RelatedSourceComponent<TLink>>(relatedSources, isRelatedSource: true);
 
         var relationship = new Relationship<TLink>(spec, links, relatedSources, Keys, DestroyingEntityIds, _initialEntityCapacity);
         _relationshipsByLinkType.Add(typeof(TLink), relationship);
@@ -104,14 +125,6 @@ public sealed class ComponentManager
         _relationshipsByLinkType.TryGetValue(typeof(TLink), out var relationship)
             ? (Relationship<TLink>)relationship
             : throw new InvalidOperationException($"No relationship with {typeof(TLink).Name} links is registered.");
-
-    private void ThrowIfRelatedSourceComponentType(Type componentType)
-    {
-        if (Relationships.IsRelatedSourceComponentType(componentType))
-        {
-            throw new InvalidOperationException($"{componentType.Name} is kept by its relationship and can't be written directly; write the link, and read a target's sources through GetRelationship.");
-        }
-    }
 
     /// <summary>Makes T's Packed or Multi pool Observed, whichever module registers it, so the caller can subscribe to its ComponentChanged and ComponentRemoving.</summary>
     /// <remarks>
@@ -147,15 +160,36 @@ public sealed class ComponentManager
         }
     }
 
-    private void AddPool(Type componentType, IComponentPool pool)
+    private void AddPool<T>(IComponentPool pool, bool isRelatedSource = false) where T : struct
     {
+        var componentType = typeof(T);
         _componentPools.Add(componentType, pool);
+        var membershipBit = _poolsInRegistrationOrder.Count;
         _poolsInRegistrationOrder.Add(pool);
+        _membershipMasks.EnsureBitCount(_poolsInRegistrationOrder.Count);
+        ((IMembershipMaskedComponentPool)pool).AttachMembershipMasks(_membershipMasks, membershipBit);
+
+        var slot = ComponentTypeSlot<T>.Index;
+        if (slot >= _slotEntries.Length)
+        {
+            Array.Resize(ref _slotEntries, System.Math.Max(slot + 1, System.Math.Max(16, _slotEntries.Length * 2)));
+        }
+
+        _slotEntries[slot] = new SlotEntry(pool, isRelatedSource);
 
         if (_pendingObservationRequests.Remove(componentType))
         {
             MarkObserved(componentType, pool);
         }
+    }
+
+    /// <summary>T's registration here, or an empty entry when T has none: an array read by T's process-wide slot.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private SlotEntry EntryOf<T>() where T : struct
+    {
+        var slot = ComponentTypeSlot<T>.Index;
+        var entries = _slotEntries;
+        return (uint)slot < (uint)entries.Length ? entries[slot] : default;
     }
 
     private static void MarkObserved(Type componentType, IComponentPool pool)
@@ -178,18 +212,47 @@ public sealed class ComponentManager
         }
     }
 
+    [DoesNotReturn]
+    private static void ThrowNotRegistered<T>() => throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered.");
+
+    [DoesNotReturn]
+    private static void ThrowRegisteredAsOther<T>(string poolKind) => throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered as a {poolKind} component pool.");
+
+    [DoesNotReturn]
+    private static void ThrowRelatedSourceComponentType<T>() => throw new InvalidOperationException($"{typeof(T).Name} is kept by its relationship and can't be written directly; write the link, and read a target's sources through GetRelationship.");
+
+    /// <summary>T's pool, throwing when T is unregistered or is a relationship's target side, which only its relationship writes.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private IComponentPool WritablePoolOf<T>() where T : struct
+    {
+        var entry = EntryOf<T>();
+        if (entry.IsRelatedSource)
+        {
+            ThrowRelatedSourceComponentType<T>();
+        }
+
+        if (entry.Pool is null)
+        {
+            ThrowNotRegistered<T>();
+        }
+
+        return entry.Pool;
+    }
+
     /// <summary>Retrieves the direct component pool for the specified component type.</summary>
     /// <remarks>Used when the component is known to be registered to a direct pool.</remarks>
     public DirectComponentPool<T> GetDirectPool<T>() where T : struct
     {
-        if (!_componentPools.TryGetValue(typeof(T), out var componentPool))
+        var pool = EntryOf<T>().Pool;
+        if (pool is null)
         {
-            throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered.");
+            ThrowNotRegistered<T>();
         }
 
-        if (componentPool is not DirectComponentPool<T> typedStore)
+        if (pool is not DirectComponentPool<T> typedStore)
         {
-            throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered as a direct component pool.");
+            ThrowRegisteredAsOther<T>("direct");
+            return null;
         }
 
         return typedStore;
@@ -199,14 +262,16 @@ public sealed class ComponentManager
     /// <remarks>Used when the component is known to be registered to a packed pool.</remarks>
     public PackedComponentPool<T> GetPackedPool<T>() where T : struct
     {
-        if (!_componentPools.TryGetValue(typeof(T), out var componentPool))
+        var pool = EntryOf<T>().Pool;
+        if (pool is null)
         {
-            throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered.");
+            ThrowNotRegistered<T>();
         }
 
-        if (componentPool is not PackedComponentPool<T> typedStore)
+        if (pool is not PackedComponentPool<T> typedStore)
         {
-            throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered as a packed component pool.");
+            ThrowRegisteredAsOther<T>("packed");
+            return null;
         }
 
         return typedStore;
@@ -216,56 +281,42 @@ public sealed class ComponentManager
     /// <remarks>Used when the component is known to be registered to a multi pool.</remarks>
     public MultiComponentPool<T> GetMultiPool<T>() where T : struct
     {
-        ThrowIfRelatedSourceComponentType(typeof(T));
-
-        if (!_componentPools.TryGetValue(typeof(T), out var componentPool))
+        if (WritablePoolOf<T>() is not MultiComponentPool<T> typedStore)
         {
-            throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered.");
-        }
-
-        if (componentPool is not MultiComponentPool<T> typedStore)
-        {
-            throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered as a multi component pool.");
+            ThrowRegisteredAsOther<T>("multi");
+            return null;
         }
 
         return typedStore;
     }
 
     /// <summary>Retrieves the read-only component pool for the specified component type regardless of its registration type.</summary>
-    /// <typeparam name="T"></typeparam>
-    /// <returns></returns>
-    /// <exception cref="InvalidOperationException"></exception>
+    /// <exception cref="InvalidOperationException">T is not registered.</exception>
     public IReadOnlyComponentPool<T> GetReadOnlyPool<T>() where T : struct
     {
-        if (!_componentPools.TryGetValue(typeof(T), out var store))
+        var pool = EntryOf<T>().Pool;
+        if (pool is null)
         {
-            throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered.");
+            ThrowNotRegistered<T>();
         }
 
-        return (IReadOnlyComponentPool<T>)store;
+        return (IReadOnlyComponentPool<T>)pool;
     }
 
     /// <summary> Adds or merges a component without the caller needing to know which pool type T was registered as</summary>
     /// <remarks>Direct and Packed pools merge with any existing component; Multi pools have no single existing value to merge into, so every call is an Add.</remarks>
     public void Merge<T>(int entityId, T component) where T : struct
     {
-        ThrowIfRelatedSourceComponentType(typeof(T));
-
-        if (!_componentPools.TryGetValue(typeof(T), out var pool))
+        switch (WritablePoolOf<T>())
         {
-            throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered.");
-        }
-
-        switch (pool)
-        {
-            case DirectComponentPool<T> direct:
-                direct.Merge(entityId, component);
-                break;
             case PackedComponentPool<T> packed:
                 packed.Merge(entityId, component);
                 break;
             case MultiComponentPool<T> multi:
                 multi.Add(entityId, component);
+                break;
+            case DirectComponentPool<T> direct:
+                direct.Merge(entityId, component);
                 break;
             default:
                 throw new InvalidOperationException($"Component type {typeof(T).Name} is registered as an unsupported pool type for Merge.");
@@ -287,19 +338,14 @@ public sealed class ComponentManager
         {
             componentPool.Resize(newMaximumEntityCount);
         }
+
+        _membershipMasks.EnsureEntityCapacity(newMaximumEntityCount);
     }
 
     /// <summary>Removes a component of the specified type from the entity</summary>
     public bool RemoveComponent<T>(int entityId) where T : struct
     {
-        ThrowIfRelatedSourceComponentType(typeof(T));
-
-        if (!_componentPools.TryGetValue(typeof(T), out var componentPool))
-        {
-            throw new InvalidOperationException($"Component type {typeof(T).Name} is not registered.");
-        }
-
-        return componentPool.Remove(entityId);
+        return WritablePoolOf<T>().Remove(entityId);
     }
 
     /// <summary>Grows every pool's dense storage, where smaller, to hold its current count times factor, so that much growth later never reallocates mid-game.</summary>
@@ -325,13 +371,25 @@ public sealed class ComponentManager
         }
     }
 
-    /// <summary>Removes every component the entity holds, in every pool.</summary>
+    /// <summary>Removes every component the entity holds, in every pool, in registration order.</summary>
+    /// <remarks>
+    /// Visits only the pools the entity's membership mask names. The mask is read again after each removal, from the
+    /// next pool on, so a removal handler that adds the entity to a later pool is still followed -- what visiting every
+    /// pool in order would have done.
+    /// </remarks>
     public void RemoveAllComponents(int entityId)
     {
         var pools = _poolsInRegistrationOrder;
-        for (var index = 0; index < pools.Count; index++)
+        var membershipMasks = _membershipMasks;
+        for (var wordIndex = 0; wordIndex < membershipMasks.WordsPerEntity; wordIndex++)
         {
-            pools[index].Remove(entityId);
+            var pending = membershipMasks.WordAt(entityId, wordIndex);
+            while (pending != 0)
+            {
+                var bitInWord = BitOperations.TrailingZeroCount(pending);
+                pools[(wordIndex << 6) + bitInWord].Remove(entityId);
+                pending = bitInWord == 63 ? 0 : membershipMasks.WordAt(entityId, wordIndex) & (ulong.MaxValue << (bitInWord + 1));
+            }
         }
     }
 }

@@ -209,6 +209,36 @@ public sealed class PathTracerTests
     }
 
     [TestMethod]
+    public void EveryAim_FollowsTheLineGridLineStepperLaysALineShapeAlong()
+    {
+        const int reach = 40;
+        var caster = Tile(50, 50);
+        var ranges = new TargetRanges(reach, AreaSize: reach);
+        var pathTiles = new List<Vector3Int>();
+        var metEntities = new List<int>();
+        var lineTiles = new List<Vector3Int>();
+
+        for (var offsetX = -reach; offsetX <= reach; offsetX++)
+        {
+            for (var offsetY = -reach; offsetY <= reach; offsetY++)
+            {
+                if (offsetX == 0 && offsetY == 0)
+                {
+                    continue;
+                }
+
+                var aim = Tile(caster.X + offsetX, caster.Y + offsetY);
+                var request = new TargetPathRequest(TargetPath.Projectile, ProjectilePathEnd.AtMaximumRange, 0, PathWallRule.StopsAtWall, 0, caster, SingleTile, aim, ranges);
+
+                PathTracer.Trace(in request, walls: null, Bounds, occupants: null, pathTiles, metEntities);
+                TargetShapeResolver.Resolve(TargetShape.Line, TargetAnchor.Caster, caster, SingleTile, aim, ranges, Bounds, lineTiles);
+
+                CollectionAssert.AreEqual(lineTiles, pathTiles, $"aimed at offset ({offsetX}, {offsetY})");
+            }
+        }
+    }
+
+    [TestMethod]
     public void AWall_StopsThePathOnTheLastOpenTileBeforeIt()
     {
         var (trace, tiles, _) = Run(Projectile(Tile(16, 10), hitCount: 0), new Walls((13, 10)));

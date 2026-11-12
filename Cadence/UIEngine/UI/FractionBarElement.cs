@@ -1,3 +1,4 @@
+using FontStashSharp;
 using Microsoft.Xna.Framework;
 using UIEngine.Fonts;
 using UIEngine.Rendering;
@@ -21,6 +22,7 @@ public sealed class FractionBarElement(ElementServices services)
     private readonly KeyedCache<(int Current, int Maximum), string> _valueTextCache = new();
     private string _valueText = string.Empty;
     private readonly TextSizeCache _valueTextSize = new();
+    private readonly KeyedCache<int, SpriteFontBase> _valueFont = new();
     private bool _showValueText;
 
     /// <summary>The "current / maximum" text the bar draws, or null when Configure was given no displayedValues.</summary>
@@ -45,11 +47,11 @@ public sealed class FractionBarElement(ElementServices services)
     {
         var bar = LocalContentRectangle;
 
-        ResourceBarRenderer.Draw(Render.Batch, Render.UnitRectangle, bar, _fraction, _hasResource, _outlineColor, _fractionColor);
+        ResourceBarRenderer.Draw(Render.Batch, bar, _fraction, _hasResource, _outlineColor, _fractionColor);
 
         if (_showValueText)
         {
-            var valueFont = FontService.GetFont((int)(bar.Height * FontChrome.ResourceBarValueFontFraction));
+            var valueFont = _valueFont.Get(bar.Height, FontService, static (barHeight, fontService) => fontService.GetFont((int)(barHeight * FontChrome.ResourceBarValueFontFraction)));
             ResourceBarRenderer.DrawCenteredValueText(Render.Batch, valueFont, bar, _valueText, _valueTextSize.SizeOf(valueFont, _valueText).X);
         }
     }

@@ -67,6 +67,9 @@ public class Window : Element
     /// <summary>The geometry title (the title plus this window's position and size, WindowDebugChrome), rebuilt only when one of those changes -- see GeometryTitleText.</summary>
     private readonly KeyedCache<(string Title, Vector2 Position, Vector2 Size), string> _geometryTitle = new();
 
+    /// <summary>The title's measured size, kept until the title changes: every WrapContent or Minimized measure asks for it.</summary>
+    private readonly TextSizeCache _titleTextSize = new();
+
     public Vector2 TitlePadding { get; set; } = new(5, 2);
 
     private string _titleText = string.Empty;
@@ -314,11 +317,10 @@ public class Window : Element
     protected override void DrawHeader(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
 
         if (!_isTransparent)
         {
-            spriteBatch.Draw(unitRectangle, HeaderRectangle, _titleColor);
+            spriteBatch.FillRectangle(HeaderRectangle, _titleColor);
         }
         var titleText = WindowDebugChrome.ShowsGeometryInTitles ? GeometryTitleText() : _titleText;
 
@@ -505,7 +507,6 @@ public class Window : Element
     /// </summary>
     protected override float MinimumHeaderWidth()
     {
-        var textSize = TitleFont.MeasureString(_titleText);
-        return textSize.X + TitlePadding.X * 2 + TotalTitleButtonsWidth();
+        return _titleTextSize.SizeOf(TitleFont, _titleText).X + TitlePadding.X * 2 + TotalTitleButtonsWidth();
     }
 }

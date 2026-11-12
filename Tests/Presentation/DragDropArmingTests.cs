@@ -205,7 +205,7 @@ public sealed class DragDropArmingTests
     public void AnotherPersistentMessage_IsNeverHiddenByTheDropText()
     {
         var fixture = Build();
-        fixture.CursorText.ShowPersistent("Select next item...");
+        fixture.CursorText.ShowPersistent(new object(), "Select next item...");
 
         fixture.Handler.OnDragEnded(fixture.FromInventory);
 

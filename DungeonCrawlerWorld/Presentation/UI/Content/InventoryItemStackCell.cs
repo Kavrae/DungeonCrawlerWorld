@@ -213,10 +213,9 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
     public override void DrawContent(GameTime gameTime)
     {
         var spriteBatch = Render.Batch;
-        var unitRectangle = Render.UnitRectangle;
         var bounds = LocalContentRectangle;
 
-        DrawBaseAndIcon(spriteBatch, unitRectangle, bounds, ContentSize);
+        DrawBaseAndIcon(spriteBatch, bounds, ContentSize);
 
         if (_quantity > 1)
         {
@@ -230,7 +229,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
             ContrastTextRenderer.Draw(spriteBatch, _badgeFont, MergedStackBadgeText, badgePosition);
         }
 
-        DrawGroupBorder(spriteBatch, unitRectangle);
+        DrawGroupBorder(spriteBatch);
     }
 
     /// <summary>
@@ -242,15 +241,15 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
     /// their own layout. Returns isGreyedOut so a caller's own trailing text (name/price/quantity)
     /// can match this same disabled/ineligible tint without recomputing the same condition itself.
     /// </summary>
-    protected bool DrawBaseAndIcon(SpriteEffectBatch spriteBatch, Texture2D unitRectangle, Rectangle bounds, Vector2 iconSize)
+    protected bool DrawBaseAndIcon(SpriteEffectBatch spriteBatch, Rectangle bounds, Vector2 iconSize)
     {
-        GridSquareRenderer.DrawBase(spriteBatch, unitRectangle, bounds);
-        GridSquareRenderer.DrawStateOverlay(spriteBatch, unitRectangle, bounds, IsSelected ? GridSquareState.Selected : IsPointerOver ? GridSquareState.Hovered : GridSquareState.Normal);
+        GridSquareRenderer.DrawBase(spriteBatch, bounds);
+        GridSquareRenderer.DrawStateOverlay(spriteBatch, bounds, IsSelected ? GridSquareState.Selected : IsPointerOver ? GridSquareState.Hovered : GridSquareState.Normal);
 
         if (CompareState == CellCompareState.Eligible)
         {
-            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, CompareEligibleGlowColor, GlowMode.ExteriorFade);
-            GlowRenderer.Draw(spriteBatch, unitRectangle, bounds, CompareEligibleGlowColor, GlowMode.InteriorFade);
+            GlowRenderer.Draw(spriteBatch, bounds, CompareEligibleGlowColor, GlowMode.ExteriorFade);
+            GlowRenderer.Draw(spriteBatch, bounds, CompareEligibleGlowColor, GlowMode.InteriorFade);
         }
 
         var isGreyedOut = IsBlocked || CompareState == CellCompareState.Ineligible || !ShopTradeEligible;
@@ -261,7 +260,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
 
         if (IsToggledOn)
         {
-            ToggleActiveMarker.Draw(spriteBatch, unitRectangle, bounds);
+            ToggleActiveMarker.Draw(spriteBatch, bounds);
         }
 
         return isGreyedOut;
@@ -273,7 +272,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
     /// alongside it -- a solid black line only on the group's outer perimeter edges, so two
     /// adjacent member cells share a clean, unbroken join with no border between them at all.
     /// </summary>
-    private void DrawGroupBorder(SpriteEffectBatch spriteBatch, Texture2D unitRectangle)
+    private void DrawGroupBorder(SpriteEffectBatch spriteBatch)
     {
         if (!_groupBorderTop && !_groupBorderBottom && !_groupBorderLeft && !_groupBorderRight)
         {
@@ -285,7 +284,7 @@ public class InventoryItemStackCell(ElementServices services, SpriteSheetService
         var (top, bottom, left, right) = BorderThickness.GetEdgeRectangles(bounds, thickness);
 
         BorderRenderer.Draw(
-            spriteBatch, unitRectangle, BorderStyle.Flat, GroupBorderColor,
+            spriteBatch, BorderStyle.Flat, GroupBorderColor,
             _groupBorderTop ? top : Rectangle.Empty,
             _groupBorderBottom ? bottom : Rectangle.Empty,
             _groupBorderLeft ? left : Rectangle.Empty,

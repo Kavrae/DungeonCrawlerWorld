@@ -198,7 +198,7 @@ public sealed class Relationship<TLink> : IRelationship where TLink : struct, IR
             Detach(sourceEntityId, previousTargetEntityId, in link, UnlinkReason.Retargeted);
         }
 
-        _targetEntityIdBySourceEntityId.GetWritable(sourceEntityId) = targetEntityId;
+        _targetEntityIdBySourceEntityId.Claim(sourceEntityId) = targetEntityId;
         _relatedSources.Add(targetEntityId, new RelatedSourceComponent<TLink>(sourceEntityId));
     }
 
@@ -217,7 +217,7 @@ public sealed class Relationship<TLink> : IRelationship where TLink : struct, IR
     private void Detach(int sourceEntityId, int targetEntityId, in TLink link, UnlinkReason reason)
     {
         var unlinkedLink = link;
-        _targetEntityIdBySourceEntityId.GetWritable(sourceEntityId) = -1;
+        _targetEntityIdBySourceEntityId.Release(sourceEntityId);
         _relatedSources.RemoveFirst(targetEntityId, new SourceMatcher(sourceEntityId));
         SourceUnlinked?.Invoke(sourceEntityId, targetEntityId, in unlinkedLink, reason);
     }

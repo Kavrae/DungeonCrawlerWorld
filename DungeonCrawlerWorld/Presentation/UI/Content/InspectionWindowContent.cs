@@ -48,7 +48,7 @@ namespace Presentation.UI.Content;
 /// A single subject's block (icon+name/race/class rows, HP bar, description) is shared by both
 /// modes via BuildSubjectBlock. Every child tiles vertically via the host window's own
 /// ChildElementTileMode.Vertical (see ShellBootstrapper) rather than manual Y math; a spacer
-/// (with a centered 1px SeparatorBar) after each subject's block supplies the padding between
+/// (with a centered 1px TextDivider line) after each subject's block supplies the padding between
 /// one subject's section and the next.
 /// </summary>
 /// <remarks>
@@ -79,6 +79,7 @@ public sealed class InspectionWindowContent(
     private const float BarWidthFraction = 0.75f;
     private const float BlockPadding = 12f;
     private const float SeparatorHeight = 1f;
+    private const float SeparatorWidthFraction = 0.75f;
 
     /// <summary>Same cadence SelectionWindowContent's own per-component refresh used -- most components update every 10 frames, so more frequent text refreshes are wasted work.</summary>
     private const int AdminDumpRefreshInterval = 10;
@@ -541,8 +542,8 @@ public sealed class InspectionWindowContent(
     }
 
     /// <summary>
-    /// Padding between one subject's section and the next, with a 1px divider (SeparatorBar's own
-    /// 75%-width centering -- the same fraction the HP row above uses) vertically centered within
+    /// Padding between one subject's section and the next, with a 1px divider (a TextDivider line at
+    /// SeparatorWidthFraction of the width -- the same fraction the HP row above uses) vertically centered within
     /// it. spacer's outer height grows by WindowChrome.Padding on top and bottom (not externally
     /// constrained, unlike its width) so BlockPadding still means exactly what it always did --
     /// spacer's own padded content height -- and the vertical-centering math below is unaffected.
@@ -561,13 +562,13 @@ public sealed class InspectionWindowContent(
         _hostWindow.AddChild(spacer);
 
         var availableWidth = blockWidth - WindowChrome.Padding * 2;
-        var separator = elementPoolService.CreateElement<SeparatorBar>(spacer, new ElementOptions
+        var separator = elementPoolService.CreateElement<TextDivider>(spacer, new ElementOptions
         {
             Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
             Layout = new ElementLayoutOptions { RelativePosition = new Vector2(0, (BlockPadding - SeparatorHeight) / 2f), Size = new Vector2(availableWidth, SeparatorHeight), DisplayMode = ElementDisplayMode.Fixed },
             Chrome = new ElementChromeOptions { ShowBorder = false, ShowTitle = false, CanUserFocus = false },
         });
-        separator.Configure(WindowPalette.TitleTextColor);
+        separator.ConfigureAsLine(WindowPalette.TitleTextColor, SeparatorWidthFraction);
         spacer.AddChild(separator);
     }
 

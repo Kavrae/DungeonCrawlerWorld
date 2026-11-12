@@ -54,7 +54,7 @@ public sealed class SpriteLinkPreview(ElementServices services)
 
     private void DrawLayout(SpriteEffectBatch batch, SpriteEntryView entry, int tilePixels)
     {
-        batch.Draw(Render.UnitRectangle, new Rectangle(0, 0, TestLayout[0].Length * tilePixels, TestLayout.Length * tilePixels), null, FloorColor, SpriteDrawStyle.Plain);
+        batch.FillRectangle(new Rectangle(0, 0, TestLayout[0].Length * tilePixels, TestLayout.Length * tilePixels), FloorColor, SpriteDrawStyle.Plain);
 
         var face = entry.Kind == SpriteEntryKind.Wall ? entry.Parts[0] : null;
         var joined = entry.Kind == SpriteEntryKind.Wall ? entry.Parts[1] : entry.Parts[0];

@@ -75,7 +75,7 @@ public sealed class Tooltip(ElementServices services)
         {
             _headerState.ShowHeader = titleText is not null;
             TitleText = titleText ?? string.Empty;
-            CopyRows(rows);
+            _rowBlock.Set(ContentFont, rows);
             OriginalText = bodyText;
 
             // Not UpdateText: the body may be unchanged while the title, rows or sizing changed, and this is the one
@@ -102,35 +102,14 @@ public sealed class Tooltip(ElementServices services)
         _headerState.ShowHeader == (titleText is not null) &&
         TitleText == (titleText ?? string.Empty) &&
         OriginalText == bodyText &&
-        RowsEqual(_rows, rows);
-
-    private static bool RowsEqual(List<TooltipRow>? shownRows, IReadOnlyList<TooltipRow>? rows)
-    {
-        var shownCount = shownRows?.Count ?? 0;
-        if (shownCount != (rows?.Count ?? 0))
-        {
-            return false;
-        }
-
-        for (var index = 0; index < shownCount; index++)
-        {
-            if (shownRows![index] != rows![index])
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+        _rowBlock.Shows(rows);
 
     private bool _hasLaidOut;
     private Vector2 _laidOutMaximumSize;
     private bool _laidOutUseFixedWidth;
 
-    private List<TooltipRow>? _rows;
-
-    /// <summary>Where every row's MiddleText starts: past the widest LeftText among rows that have one, plus MiddleColumnGap -- measured once per SetRows, not per draw.</summary>
-    private float _middleColumnLeft;
+    /// <summary>The rows shown below the body text, with what was measured from them.</summary>
+    private readonly TooltipRowBlock _rowBlock = new();
 
     /// <summary>
     /// Extra lines drawn below the wrapped body text, one per TooltipRow, each in its own color -- a table
@@ -143,36 +122,15 @@ public sealed class Tooltip(ElementServices services)
     /// </summary>
     public void SetRows(IReadOnlyList<TooltipRow>? rows)
     {
-        if (RowsEqual(_rows, rows))
+        if (_rowBlock.Shows(rows))
         {
             return;
         }
 
-        CopyRows(rows);
+        _rowBlock.Set(ContentFont, rows);
         RelayoutText();
     }
 
-    /// <remarks>Copied into a list this popup owns, so a caller reusing and refilling its own list can't change what was laid out behind its back.</remarks>
-    private void CopyRows(IReadOnlyList<TooltipRow>? rows)
-    {
-        _ownedRows.Clear();
-        if (rows is { Count: > 0 })
-        {
-            for (var index = 0; index < rows.Count; index++)
-            {
-                _ownedRows.Add(rows[index]);
-            }
-        }
-
-        _rows = _ownedRows.Count > 0 ? _ownedRows : null;
-        _middleColumnLeft = TooltipRowDrawing.MeasureMiddleColumnLeft(ContentFont, _ownedRows);
-        TooltipRowDrawing.MeasureRightTextWidths(ContentFont, _ownedRows, _rightTextWidths);
-    }
-
-    private readonly List<TooltipRow> _ownedRows = [];
-
-    /// <summary>Each row's RightText width, measured once per SetRows, not per draw; parallel to _ownedRows.</summary>
-    private readonly List<float> _rightTextWidths = [];
 
     /// <summary>
     /// True pins width to MaximumSize.X, only height auto-grows -- for a summary popup
@@ -207,9 +165,9 @@ public sealed class Tooltip(ElementServices services)
         // never Y. RowPadding's own top+bottom contribution here is exactly the "4px taller"
         // this needed -- ExtraWidthForRows carries the analogous width-side growth instead of
         // adding a second flat height constant here.
-        if (_rows is { } rows)
+        if (_rowBlock.Count > 0)
         {
-            var rowsHeight = LinePadding + RowPadding * 2 + ContentFont.LineHeight * rows.Count;
+            var rowsHeight = LinePadding + RowPadding * 2 + ContentFont.LineHeight * _rowBlock.Count;
             _contentState.Size.Y += rowsHeight;
             _contentState.BackgroundSize.Y += rowsHeight;
             _geometry.CurrentSize.Y += rowsHeight;
@@ -242,20 +200,15 @@ public sealed class Tooltip(ElementServices services)
     /// more line per row directly beneath it, each RowPadding-inset from the block's own left/right
     /// edges: LeftText/RightText flush to either inset edge for a plain row (RightText empty draws
     /// as a single-column line), a thin horizontal rule for IsDivider, and an inner-fade glow around
-    /// the row's own bounds when GlowColor is set. See _rows' own doc comment for why this bypasses
+    /// the row's own bounds when GlowColor is set. See SetRows' own doc comment for why this bypasses
     /// TextWindow's single-TextColor DrawContent pipeline instead of extending it.
     /// </summary>
     public override void DrawContent(GameTime gameTime)
     {
         base.DrawContent(gameTime);
 
-        if (_rows is not { } rows)
-        {
-            return;
-        }
-
         var blockTopLeft = new Vector2(LinePadding + RowPadding, ContentFont.LineHeight * DisplayText.LineCount + LinePadding + RowPadding);
         var rowWidth = System.Math.Max(0f, _contentState.Size.X - (LinePadding + RowPadding) * 2);
-        TooltipRowDrawing.Draw(Render.Batch, Render.UnitRectangle, ContentFont, rows, _rightTextWidths, _middleColumnLeft, blockTopLeft, rowWidth, elapsedSinceRowGlowPulseStart: null);
+        _rowBlock.Draw(Render.Batch, ContentFont, blockTopLeft, rowWidth, elapsedSinceRowGlowPulseStart: null);
     }
 }
