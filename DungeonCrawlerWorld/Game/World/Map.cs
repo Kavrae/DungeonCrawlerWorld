@@ -23,15 +23,17 @@ namespace Game.World;
 ///         below, precisely because that O(1) read matters on the movement hot path.
 ///     Occupant creature index (any number of entities per (x,y,MapLayer), Blocking entities
 ///         included) -- the "who is actually standing here" answer. Split across a per-cell
-///         index array and a dense list-of-lists, plus a per-column layer bitmask answering "is
+///         slot array and a dense list-of-lists, plus a per-column layer bitmask answering "is
 ///         any other layer of this column occupied" without a query per layer.
 ///     Terrain (the floor beneath UnderGround/Ground -- Flying has none): a TerrainCell per
 ///         (x, y, TerrainLayer), 3 bytes each, not an entity -- see TerrainDefinition.
 ///     Structures (walls standing on a MapLayer): a TerrainCell per (x, y, MapLayer), the same
 ///         definitions as terrain, independent of both the floor and the creatures.
 ///
-/// The occupant index is a per-cell int array into a dense list-of-lists rather than a
-/// Dictionary&lt;int, List&lt;int&gt;&gt;. The dictionary charged a full hash lookup for every query,
+/// The occupant index is a per-cell int array rather than a Dictionary&lt;int, List&lt;int&gt;&gt;: a slot
+/// holds its cell's one occupant itself, and only a cell holding several points into a dense
+/// list-of-lists, so a cell with one occupant -- nearly every occupied cell -- costs no object.
+/// The dictionary charged a full hash lookup for every query,
 /// including the overwhelming majority that find nothing; MapWindow issues one per visible tile
 /// per frame (measured at ~9ms of a 1000ms/sec budget), and MovementSystem,
 /// AuraSystem, ActivationEffectResolver and TestCombatBehaviorSystem all query it on hot
@@ -51,11 +53,9 @@ public sealed class Map
     /// <summary>Maximum map depth GetOccupiedLayerMask's own byte-per-column encoding can represent -- one bit per MapLayer. MapLayer has three values today, so this is deliberately generous headroom rather than a live constraint; the constructor enforces it so a genuinely deeper map fails loudly here instead of silently losing its upper layers' badges.</summary>
     private const int MaximumMaskableLayers = 8;
 
-    private const int NoOccupantListIndex = -1;
+    private const int NoOccupant = -1;
 
     private const int CellMask = Neighborhoods.SizeTiles - 1;
-
-    private static readonly List<int> EmptyEntityIds = [];
 
     /// <summary>The tiles the map covers: a bounded map's declared rectangle, or the smallest rectangle holding every loaded neighborhood of an unbounded one.</summary>
     /// <remarks>A rectangle, so it can hold unloaded neighborhoods too; Contains is the authoritative on-the-map test.</remarks>
@@ -331,70 +331,75 @@ public sealed class Map
         return true;
     }
 
-    /// <summary>Every entity occupying position, Blocking or not -- empty if none. </summary>
-    /// <remarks>Includes the (at most one) Blocking entity GetBlockingEntityId also answers for the same position -- this is the "who is actually standing here" answer, GetBlockingEntityId is the O(1) fast-path "is this cell blocked" one.</remarks>
-    /// <param name="position">The position to query.</param>
-    public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) =>
-        TryGetOccupantList(position, out var entityIds) ? entityIds : EmptyEntityIds;
-
-    /// <summary>
-    /// The same occupants GetOccupantEntityIdsAt answers with, as a span rather than an
-    /// interface -- for the per-frame draw path, which reads this for every visible tile.
-    /// </summary>
+    /// <summary>A copy of every entity occupying position, Blocking or not -- empty if none.</summary>
     /// <remarks>
-    /// foreach over an IReadOnlyList&lt;int&gt; binds to IEnumerable&lt;int&gt;.GetEnumerator and so boxes
-    /// List&lt;int&gt;'s struct enumerator on the heap -- measured at 40 bytes per call on a non-empty
-    /// list (an empty one is free, the BCL hands back a shared instance). MapWindow read this
-    /// three times per occupied tile per frame, so at a few thousand visible tiles that was
-    /// thousands of short-lived allocations a frame, against the heap this game's entity-indexed
-    /// component arrays already live on. Indexing through the interface avoids the allocation but
-    /// still pays an interface dispatch per element; a span avoids both.
-    ///
-    /// The span is only valid until the next mutation of this cell's own list (Add/Remove
-    /// OccupantEntityId), which is the same constraint any direct List access would carry --
-    /// callers here are read-only per-frame draw passes, not anything that moves entities.
+    /// Includes the (at most one) Blocking entity GetBlockingEntityId also answers for the same position -- this is the "who is actually standing here" answer, GetBlockingEntityId is the O(1) fast-path "is this cell blocked" one.
+    /// Allocates the copy, so it is for tools, inspection and tests; anything that runs per frame reads GetOccupantEntityIdSpanAt.
     /// </remarks>
     /// <param name="position">The position to query.</param>
-    public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position) =>
-        TryGetOccupantList(position, out var entityIds)
-            ? System.Runtime.InteropServices.CollectionsMarshal.AsSpan(entityIds)
-            : ReadOnlySpan<int>.Empty;
+    public IReadOnlyList<int> GetOccupantEntityIdsAt(Vector3Int position) => GetOccupantEntityIdSpanAt(position).ToArray();
 
-    /// <summary>True if any entity occupies position -- the same answer as GetOccupantEntityIdsAt(position).Count &gt; 0, without going through the list at all.</summary>
+    /// <summary>Every entity occupying position, Blocking or not, in the order they arrived -- empty if none or off the map.</summary>
+    /// <remarks>
+    /// A cell's one occupant is read straight from the cell's slot and several from the cell's list, so
+    /// nothing is allocated and no interface is dispatched through.
+    ///
+    /// The span is only valid until the next change to this cell's occupants (Add/Remove
+    /// OccupantEntityId, TryMoveSoleOccupant): a reader that may move, place or remove an entity
+    /// while walking it copies it first.
+    /// </remarks>
+    /// <param name="position">The position to query.</param>
+    public ReadOnlySpan<int> GetOccupantEntityIdSpanAt(Vector3Int position)
+    {
+        if (!TryGetOccupiedCell(position, out var neighborhood, out var cellIndex))
+        {
+            return ReadOnlySpan<int>.Empty;
+        }
+
+        ref var slot = ref neighborhood.OccupantSlotByCell[cellIndex];
+        if (slot >= 0)
+        {
+            return System.Runtime.InteropServices.MemoryMarshal.CreateReadOnlySpan(ref slot, 1);
+        }
+
+        return System.Runtime.InteropServices.CollectionsMarshal.AsSpan(neighborhood.OccupantLists[OccupantListIndexOf(slot)]);
+    }
+
+    /// <summary>True if any entity occupies position.</summary>
     /// <param name="position">The position to test.</param>
-    public bool HasOccupantAt(Vector3Int position) => TryGetOccupantList(position, out _);
+    public bool HasOccupantAt(Vector3Int position) => TryGetOccupiedCell(position, out _, out _);
 
-    /// <summary>Resolves position to its occupant list, or false when the cell is empty or off the map.</summary>
+    /// <summary>Resolves position to its neighborhood and cell, or false when the cell is empty or off the map.</summary>
     /// <remarks>
     /// The off-map check is deliberate rather than incidental: callers rely on an off-map position
     /// answering as empty (ActivationEffectResolver and TestCombatBehaviorSystem both walk resolved
     /// target tiles without re-checking bounds first). Each coordinate is checked on its own, so an
     /// out-of-range coordinate never aliases into some other valid cell. Most cells asked about are
-    /// empty, so the column's layer mask -- a byte per column, a twelfth the size of the per-cell index
-    /// and so far more often in cache -- answers those before the index is read.
+    /// empty, so the column's layer mask -- a byte per column, a twelfth the size of the per-cell slots
+    /// and so far more often in cache -- answers those before a slot is read.
     /// </remarks>
-    private bool TryGetOccupantList(Vector3Int position, out List<int> entityIds)
+    private bool TryGetOccupiedCell(Vector3Int position, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out MapNeighborhood? neighborhood, out int cellIndex)
     {
-        if ((uint)position.Z >= (uint)_depth ||
-            NeighborhoodAt(position.X, position.Y) is not { } neighborhood ||
+        cellIndex = 0;
+        neighborhood = (uint)position.Z < (uint)_depth ? NeighborhoodAt(position.X, position.Y) : null;
+        if (neighborhood is null ||
             (position.X & CellMask) >= neighborhood.Width ||
             (position.Y & CellMask) >= neighborhood.Height ||
             (neighborhood.OccupiedLayerMaskByColumn[ColumnIndex(neighborhood, position.X, position.Y)] & LayerBit(position.Z)) == 0)
         {
-            entityIds = EmptyEntityIds;
+            neighborhood = null;
             return false;
         }
 
-        var listIndex = neighborhood.OccupantListIndexByCell[CellIndex(neighborhood, position)];
-        if (listIndex == NoOccupantListIndex)
-        {
-            entityIds = EmptyEntityIds;
-            return false;
-        }
-
-        entityIds = neighborhood.OccupantLists[listIndex];
-        return true;
+        cellIndex = CellIndex(neighborhood, position);
+        return neighborhood.OccupantSlotByCell[cellIndex] != NoOccupant;
     }
+
+    /// <summary>The slot value of a cell whose occupants are OccupantLists[listIndex].</summary>
+    private static int OccupantListSlot(int listIndex) => -2 - listIndex;
+
+    /// <summary>The OccupantLists index a slot below NoOccupant holds.</summary>
+    private static int OccupantListIndexOf(int slot) => -2 - slot;
 
     /// <summary>Adds an entity to the occupant index at the specified position.</summary>
     /// <param name="position">The position to add the entity to.</param>
@@ -402,11 +407,18 @@ public sealed class Map
     public void AddOccupantEntityId(Vector3Int position, int entityId)
     {
         var neighborhood = LoadedNeighborhoodAt(position.X, position.Y);
-        var cellIndex = CellIndex(neighborhood, position);
-        var listIndex = neighborhood.OccupantListIndexByCell[cellIndex];
+        ref var slot = ref neighborhood.OccupantSlotByCell[CellIndex(neighborhood, position)];
 
-        if (listIndex == NoOccupantListIndex)
+        if (slot == NoOccupant)
         {
+            slot = entityId;
+            neighborhood.OccupiedLayerMaskByColumn[ColumnIndex(neighborhood, position.X, position.Y)] |= LayerBit(position.Z);
+            return;
+        }
+
+        if (slot >= 0)
+        {
+            int listIndex;
             if (neighborhood.FreeOccupantListIndices.Count > 0)
             {
                 listIndex = neighborhood.FreeOccupantListIndices.Pop();
@@ -417,19 +429,21 @@ public sealed class Map
                 neighborhood.OccupantLists.Add([]);
             }
 
-            neighborhood.OccupantListIndexByCell[cellIndex] = listIndex;
+            var sharedCellEntityIds = neighborhood.OccupantLists[listIndex];
+            sharedCellEntityIds.Add(slot);
+            sharedCellEntityIds.Add(entityId);
+            slot = OccupantListSlot(listIndex);
+            return;
         }
 
-        neighborhood.OccupantLists[listIndex].Add(entityId);
-        neighborhood.OccupiedLayerMaskByColumn[ColumnIndex(neighborhood, position.X, position.Y)] |= LayerBit(position.Z);
+        neighborhood.OccupantLists[OccupantListIndexOf(slot)].Add(entityId);
     }
 
     /// <summary>Moves entityId from oldPosition to newPosition in one step when it is oldPosition's only occupant, newPosition holds nobody, and both are in the same loaded neighborhood -- a lone creature's step. Returns false, changing nothing, otherwise.</summary>
     /// <remarks>
-    /// Hands oldPosition's occupant list to newPosition rather than emptying it and taking a slot again --
-    /// the same state RemoveOccupantEntityId then AddOccupantEntityId would leave, since the slot that
-    /// empties is the one the add would pop -- and moves the Blocking slot and layer bits with it. A
-    /// Blocking slot at oldPosition is cleared only if it records entityId, as ClearBlockingIfOccupiedBy does.
+    /// Leaves the state RemoveOccupantEntityId then AddOccupantEntityId would, and moves the Blocking
+    /// slot and layer bits with it. A Blocking slot at oldPosition is cleared only if it records
+    /// entityId, as ClearBlockingIfOccupiedBy does.
     /// </remarks>
     public bool TryMoveSoleOccupant(Vector3Int oldPosition, Vector3Int newPosition, int entityId, bool isBlocking)
     {
@@ -441,20 +455,13 @@ public sealed class Map
 
         var oldCellIndex = CellIndex(neighborhood, oldPosition);
         var newCellIndex = CellIndex(neighborhood, newPosition);
-        var listIndex = neighborhood.OccupantListIndexByCell[oldCellIndex];
-        if (listIndex == NoOccupantListIndex || neighborhood.OccupantListIndexByCell[newCellIndex] != NoOccupantListIndex)
+        if (neighborhood.OccupantSlotByCell[oldCellIndex] != entityId || neighborhood.OccupantSlotByCell[newCellIndex] != NoOccupant)
         {
             return false;
         }
 
-        var entityIds = neighborhood.OccupantLists[listIndex];
-        if (entityIds.Count != 1 || entityIds[0] != entityId)
-        {
-            return false;
-        }
-
-        neighborhood.OccupantListIndexByCell[oldCellIndex] = NoOccupantListIndex;
-        neighborhood.OccupantListIndexByCell[newCellIndex] = listIndex;
+        neighborhood.OccupantSlotByCell[oldCellIndex] = NoOccupant;
+        neighborhood.OccupantSlotByCell[newCellIndex] = entityId;
         neighborhood.OccupiedLayerMaskByColumn[ColumnIndex(neighborhood, oldPosition.X, oldPosition.Y)] &= (byte)~LayerBit(oldPosition.Z);
         neighborhood.OccupiedLayerMaskByColumn[ColumnIndex(neighborhood, newPosition.X, newPosition.Y)] |= LayerBit(newPosition.Z);
 
@@ -484,26 +491,33 @@ public sealed class Map
             return;
         }
 
-        var cellIndex = CellIndex(neighborhood, position);
-        var listIndex = neighborhood.OccupantListIndexByCell[cellIndex];
-        if (listIndex == NoOccupantListIndex)
+        ref var slot = ref neighborhood.OccupantSlotByCell[CellIndex(neighborhood, position)];
+        if (slot == NoOccupant)
         {
             return;
         }
 
+        if (slot >= 0)
+        {
+            if (slot == entityId)
+            {
+                slot = NoOccupant;
+                neighborhood.OccupiedLayerMaskByColumn[ColumnIndex(neighborhood, position.X, position.Y)] &= (byte)~LayerBit(position.Z);
+            }
+
+            return;
+        }
+
+        var listIndex = OccupantListIndexOf(slot);
         var entityIds = neighborhood.OccupantLists[listIndex];
         entityIds.Remove(entityId);
-        if (entityIds.Count == 0)
+        if (entityIds.Count == 1)
         {
-            // The list stays attached to its slot rather than being handed back separately -- it is
-            // already empty, and keeping it means the next cell to claim this slot inherits its
-            // backing array and Capacity for free.
-            neighborhood.OccupantListIndexByCell[cellIndex] = NoOccupantListIndex;
+            // The emptied list stays in its slot, so the next cell to gain a second occupant
+            // inherits its backing array.
+            slot = entityIds[0];
+            entityIds.Clear();
             neighborhood.FreeOccupantListIndices.Push(listIndex);
-
-            // Cleared only when the cell empties completely -- the bit means "this cell has at
-            // least one occupant," so it must survive a removal that leaves others behind.
-            neighborhood.OccupiedLayerMaskByColumn[ColumnIndex(neighborhood, position.X, position.Y)] &= (byte)~LayerBit(position.Z);
         }
     }
 

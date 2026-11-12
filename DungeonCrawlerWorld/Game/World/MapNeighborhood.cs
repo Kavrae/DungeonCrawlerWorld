@@ -10,7 +10,7 @@ namespace Game.World;
 /// </remarks>
 internal sealed class MapNeighborhood
 {
-    private const int NoOccupantListIndex = -1;
+    private const int NoOccupant = -1;
 
     private static readonly int TerrainLayerCount = Enum.GetValues<TerrainLayer>().Length;
 
@@ -26,8 +26,8 @@ internal sealed class MapNeighborhood
         BlockingEntityIds = new int[volume];
         Array.Fill(BlockingEntityIds, -1);
 
-        OccupantListIndexByCell = new int[volume];
-        Array.Fill(OccupantListIndexByCell, NoOccupantListIndex);
+        OccupantSlotByCell = new int[volume];
+        Array.Fill(OccupantSlotByCell, NoOccupant);
 
         OccupiedLayerMaskByColumn = new byte[PlaneSize];
 
@@ -48,12 +48,12 @@ internal sealed class MapNeighborhood
 
     public int[] BlockingEntityIds { get; }
 
-    /// <summary>Per-cell index into OccupantLists, or -1 when the cell holds nobody -- see Map's remarks on the occupant index.</summary>
-    public int[] OccupantListIndexByCell { get; }
+    /// <summary>Per cell: -1 when it holds nobody, its one occupant's entity id, or below -1 an index into OccupantLists (Map.OccupantListIndexOf) when it holds several -- see Map's remarks on the occupant index.</summary>
+    public int[] OccupantSlotByCell { get; }
 
     public List<List<int>> OccupantLists { get; } = [];
 
-    /// <summary>Slots in OccupantLists whose cell has emptied, ready for the next cell that gains an occupant.</summary>
+    /// <summary>Slots in OccupantLists whose cell is back to one occupant or none, ready for the next cell that gains a second.</summary>
     public Stack<int> FreeOccupantListIndices { get; } = new();
 
     public byte[] OccupiedLayerMaskByColumn { get; }

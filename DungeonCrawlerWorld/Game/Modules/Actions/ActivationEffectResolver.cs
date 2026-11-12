@@ -141,8 +141,10 @@ public static class ActivationEffectResolver
             }
         }
 
-        foreach (var tile in targetTiles)
+        for (var tileIndex = 0; tileIndex < targetTiles.Count; tileIndex++)
         {
+            var tile = targetTiles[tileIndex];
+
             // Copied first: applying an effect can change who occupies the tile.
             var occupantIds = mapQuery.GetOccupantEntityIdSpanAt(tile);
             var targetEntityIds = occupantIds.Length <= occupantIdBuffer.Length ? occupantIdBuffer[..occupantIds.Length] : new int[occupantIds.Length];

@@ -897,9 +897,38 @@ Decisions (don't re-litigate):
 Measured at the end (headless Release, seed 12345, 3072², teleporting 70 tiles into the next column
 of neighborhoods at frames 700 and 1400): first shift worst frame 32-35 ms (the teleport frame itself),
 second shift worst 12-15 ms with none over 16.67 ms; a shift takes 8-17 s. Steady state
-`EcsContext.Update` 1.34 ms/frame. Remaining: occasional ~17-19 ms gen-1 GC frames (`TODO.md`). A
-further 17-24 ms frame near a background gen-2 GC was a runtime wait rounded up to Windows' 15.6 ms
-timer tick; SDL3 sets a 1 ms timer in the windowed game, and the headless benchmark now does too.
+`EcsContext.Update` 1.34 ms/frame. Remaining then: occasional ~17-19 ms gen-1 GC frames (next
+paragraphs). A further 17-24 ms frame near a background gen-2 GC was a runtime wait rounded up to
+Windows' 15.6 ms timer tick; SDL3 sets a 1 ms timer in the windowed game, and the headless benchmark
+now does too.
+
+**Gen-1 pauses during a shift** (closed 2026-11-12, same measurement, world fingerprint unchanged). A
+gen-1 pause tracks how many objects survive, not how many bytes: every gen-1 during a shift promotes
+about 15 MB, and pauses ran from 1 ms after a burst of large arrays to 10-21 ms after 80-200 frames
+of small per-entity objects alone.
+- **A cell's one occupant lives in the cell's own slot** (`MapNeighborhood.OccupantSlotByCell`: -1
+  empty, an entity id, or below -1 an index into the lists a cell holding several uses). Each
+  occupied cell used to hold a `List<int>` and its backing array -- about 216k lists and 258k small
+  arrays per 150k skeletons spawned, all kept. Gen-1 pauses went from 5.7-6.7 ms on average (worst
+  10-21) to 2.5-2.8 (never over 6.0 in ten runs), the two-shift run from 579 to 525 MB allocated and
+  its mean frame from 1.70 to 1.54 ms.
+- **Per-frame garbage removed, with no effect on pauses** (it died young): the status-effect damage
+  label built on every Burning and Poison tick is cached, and the boxed enumerators in
+  `EntityBuilder`, `ManaUse` and `ActivationEffectResolver` are index loops. Steady allocation
+  107 -> 62 MB over frames 700-3600 with no shift.
+- **Left as they are:** `TimerWheel` slot lists (`TimerEntry[]`, 54 of those 62 MB, kept; promotion
+  falls away after frame 4100, which fits each 4096-slot wheel filling once), and about one string
+  per spawned skeleton whose source was not found. Server GC and a 256 MB gen-0 budget were tried
+  earlier and were worse (55-120 ms pauses).
+- **The session's first streamed load** (30 updates after the first teleport) is still 10-29 ms
+  headless and was left: 4.8-7.2 ms is the JIT compiling the streamed-load path's 11 methods on the
+  main thread, once a session, and 0.7-9 ms is waiting for the plan worker, which happens only
+  headless (30 updates pass in 35-90 ms of wall time there, 500 ms windowed).
+- **Measuring a shift:** nothing scripts a teleport. A temporary probe in `HeadlessBenchmark` called
+  `GameSession.Internals.Teleporter.TryTeleport` before a frame's update, logged
+  `GC.GetGCMemoryInfo` per collection and counted `GCAllocationTick` samples by type, beside the
+  benchmark skill's `-Gauges`. Three loads take about 750 frames and a shift with evictions about
+  2100, so teleport at frames 700 and 1600 over 600-4200.
 
 ### Input buffering, instant Dodge, and Stagger
 
@@ -3489,7 +3518,7 @@ and UIEngine only, added to the game's IDE by its App after Map (`--tab=Sprites`
 - **Scopes are main-thread only.** A scope is a write made now, on the thread running the system. A write recorded on a
   worker and applied later by the main thread in a fixed order would be an updater: a plain value, and `unmanaged`, so
   it holds no pool, bus or reference and its result depends only on the component and its own fields. Nothing records
-  one yet (TODO.md "Research multithreading").
+  one yet (`PLAN-multithreading.md`).
 - **Reference-typed fields** (an override definition) are written through a scope; an `unmanaged` updater can't carry
   one. Anything else an updater needs is read before it is built: `HealthDamage` and `ManaCost`/`ManaRestore` resolve
   the effective maximum first.

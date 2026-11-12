@@ -15,67 +15,6 @@ Global), each split High/Medium/Low priority. Landed work lives in `IMPLEMENTATI
 
 ### High Priority
 
-#### Research multithreading: change detection, deferred structural changes and parallel systems as one design
-
-"Change detection" (Medium), "Deferred structural changes" (Medium) and "Parallel system execution" (Low) are pieces of
-one change, worth researching and planning together. What ties them: every write to an observed pool fires
-`ComponentChanged` synchronously inside the write, which can't happen from several threads at once, and systems running
-at the same time can't spawn, destroy, add or remove directly.
-- **Change notification across threads:** per-thread change queues drained at a sync point, polled versions (a
-  per-component tick, or a dirty bit set per `EntityPages` page), or both. Sort consumers by what they need: timer
-  wheels, relationships and `ToggleItemHolderSync` need every write, in order; HUD refresh and Presentation caches need
-  only "changed since I last looked". A version bumped on write access, as in DOTS, is enough for the second kind and
-  wrong for the first.
-- **Structural changes:** a command queue with ids reserved at once, applied at sync points in request order. Which
-  systems must see a change the frame it was queued (input, deaths, dodge windows), and where sync points go so they
-  still do.
-- **Scheduling:** declared pool access per system, a report of conflicting systems with no defined order, and parallel
-  loops inside a stripe when per-entity work writes only that entity's components.
-- **Write scopes are main-thread only:** a `using var write = pool.Write(id)` scope writes and notifies at once, and its
-  Debug open-scope count is a plain field. A worker's in-place write would be a recorded `unmanaged` struct updater,
-  applied by the main thread in a fixed order (IMPLEMENTATION-NOTES "Component writes: write scopes and struct
-  updaters").
-- **Determinism:** seeds and benchmarks reproduce regardless of thread timing. Random streams are already per key;
-  check what else appends to shared state in completion order (`FrameEventBuffer`, the event bus, the Debug
-  `SkeletonAccessGuard`).
-- **Where it pays:** profile which systems are heavy enough. Scheduling a job costs about 1-5 µs, so systems under about
-  50 µs a frame stay serial. Estimate before measuring: 2-6x on the heaviest independent systems on 8 cores. Deferral
-  taken alone is a regression: about 2x per structural change, applied a sync point late.
-- **Outcome:** one plan replacing the three items, which leave this file when it lands.
-
-**Unity reference:** DOTS jobs declare read or write access per component type, and a safety system refuses conflicting
-schedules. `EntityCommandBuffer` records structural changes for playback at a sync point. Change filters
-(`WithChangeFilter<T>`, `DidChange`) poll per-chunk versions; there are no change callbacks.
-**Unreal reference:** Mass processors ask an `FMassEntityQuery` for fragment views, the processing phases run them in
-parallel by declared requirements, and `Context.Defer()` queues structural changes. `UMassObserverProcessor` fires on
-fragment add and remove only, never on a value change. Bevy's equivalents are in the three items.
-
-#### Research generated component property access -- Workshop, saves and diagnostics
-
-Nothing reads or writes a runtime component's fields without knowing its type. Content has hand-written codecs and a
-`ContentSchema` the inspector is generated from; runtime components have nothing like that, so inspection
-(`InspectionWindowContent`), diagnostics, and any save of runtime state are each hand-built per type.
-- **Shape:** a Roslyn source generator over component structs, emitting per-type property tables (name, type, getter, and
-  a setter that writes through the pool -- `TrySet`, or a write scope -- so observation still fires). No runtime
-  reflection.
-- **Consumers to design against:** a Workshop live component inspector that edits values; undo/redo; per-pool
-  serializers for "Data storage" and "Entity storage" (Global) and "Save and load Beyond neighborhoods"; diagnostics
-  showing any pool; "Debug drawing and an AI debugger" (Presentation).
-- **Relation to codecs:** whether the generator also writes `ContentCodec<T>` boilerplate, or the two stay apart
-  (content is authored, components are runtime state).
-- **Mods:** a mod's components get tables generated in its own assembly and join every consumer by registering them.
-- **Hot path:** zero as long as gameplay never calls it. An architecture test keeps systems off it, the way
-  `PresentationStoreAccessArchitectureTests` keeps Presentation off the store. Runtime-reflection access (about 50-500 ns
-  per access) is what this avoids.
-
-**Unity reference:** `SerializedObject`/`SerializedProperty` drive the inspector, undo, prefab overrides and multi-object
-editing through one reflected path.
-**Unreal reference:** `FProperty` reflection over `UPROPERTY` fields, with specifiers that opt fields into saves
-(`SaveGame`) or route reflected writes through code (`Setter`/`Getter`); the editor wraps writes in `Modify()` for undo
-and reports them with `PostEditChangeProperty`.
-**Godot reference:** `get_property_list` and `set(StringName)` serve the inspector, serialization and animation alike, and
-the editor records writes through `EditorUndoRedoManager`. Bevy's `Reflect` is in "Data storage".
-
 #### Class exceptions: runtime class grants
 
 NPC classes come from spawn rules and fit two fixed class slots. The player's don't: a first class on
@@ -108,6 +47,10 @@ class-selection UI, the advancement rules themselves, the residue roll. Ends wit
 a `phase-performance-testing` A/B.
 
 #### Workshop: edit Items
+
+**Planned:** `PLAN-workshop-edit-items.md` (2026-11-12; decisions confirmed the same day, 12 and 13 as an interim
+until blueprints and terrain are content). Starts after
+`PLAN-npc-behavior-composition.md`, before `PLAN-generated-component-property-access.md`.
 
 Cadence Workshop's tabs are view-only (`PLAN-ide-shell-and-actions-items-tab.md`, landed through Phase 4). This is that
 plan's Phase 5: the generic editing machinery, first used by the Items tab. Its design is the plan's "The editor",
@@ -365,8 +308,8 @@ now *Messages* (`MessageWriter<T>`/`MessageReader<T>`): each reader keeps its ow
 lives for two frame updates so a reader running earlier in the next frame still sees it, and nothing
 is ever dropped for a reader that runs every frame. Immediate, handler-style events are *Events*,
 delivered to observers when triggered (see "Component lifecycle hooks and observers", above). That
-split is a reasonable target for `FrameEventBuffer` vs `EventBus` here. Pairs with "Deferred
-structural changes" (above), which removes the other reason for same-cycle recording hazards.
+split is a reasonable target for `FrameEventBuffer` vs `EventBus` here. It stands on its own: a general
+queue for structural changes was decided against (`PLAN-multithreading.md`, decision 3).
 
 #### Console variables and console commands
 
@@ -418,7 +361,8 @@ CLAUDE.md); a `Relationship` observes its link pool's events today and would mov
   (this corpse's contents change, update the open loot window). Presentation subscribes to
   observers rather than Game pushing to it.
 - **Order and cost:** hooks run synchronously during the write, so they must be cheap and not make
-  structural changes directly (see "Deferred structural changes", below). A pool with no hooks pays
+  structural changes directly (there is no command queue to defer them to: `PLAN-multithreading.md`,
+  decision 3). A pool with no hooks pays
   one null check.
 - **Components that can only be replaced, not edited in place:** a component marked this way can only
   change through a whole-value write, so its insert/replace hooks see every change. Candidates:
@@ -435,45 +379,6 @@ structural changes directly. Observers (`app.add_observer(|event: On<Add, Burnin
 events, and also handle custom events, with optional propagation up a relationship (a click bubbling
 from a child to its parent). `#[component(immutable)]` (0.16) makes a component replace-only, so hooks
 see every change. `#[require(B)]` (0.15) inserts `B` with its default whenever `A` is added.
-
-#### Change detection
-
-Two tools exist today. Every pool keeps a per-entity version counter (`GetVersion`, Multi's
-`GetEntityVersion`, `GetVersionByDenseIndex`), bumped by every write scope, updater, add and removal;
-a reader that remembers one entity's last version can ask "did it change since I looked" -- the
-inventory, ability score and stat modifier views hand it to their windows that way. And an Observed
-Packed or Multi pool raises `ComponentChanged`/`ComponentRemoving` on every write, a delegate call
-per write per subscriber, fixed for the build. What neither gives:
-- A question across entities: a counter is per entity, so "which entities changed since frame N"
-  means remembering a version for each one and visiting them all.
-- Added versus changed, and removals at all: a counter bumps the same for each, and a removed
-  component's entity reads as unchanged once its version is gone.
-- A change that matters versus a routine write: `HealthWindow` stopped watching its pool's version
-  because every tick's stack decrement bumped it, and now compares which effects are present instead.
-- Perception that could skip recomputing when nothing nearby moved has no cheap way to ask.
-- **Per-component change ticks:** each pool stores, per entity, the frame the component was added and
-  the frame it last changed, alongside or instead of the version counter. Every write through the
-  pool's write paths stamps it; no subscriber exists.
-- **Queries:** "added since frame N", "changed since frame N", and a reader for "removed since frame
-  N" (a per-pool list of removals, kept for a frame or two). A system or window remembers the frame
-  it last ran and asks about everything since.
-- **Write only when different:** an update helper that compares and skips the write (and the stamp)
-  when the value didn't change, so a system that rewrites the same value every visit doesn't count as
-  a change. It doesn't help a reader like `HealthWindow`, whose writes really change the value; that
-  reader keeps comparing what it shows.
-- **Cost:** one `uint` per entity per pool that opts in, written on every write (the versions already
-  pay this once). Measure it on the
-  hottest pools with the `phase-performance-testing` skill before turning it on everywhere; opt-in
-  per pool is the fallback.
-- Events stay the tool for "something happened" (damage, death), and for the timer wheels, which need
-  every write.
-
-**Bevy reference:** every component stores `added` and `changed` ticks. `Mut<T>` marks a component
-changed when it's dereferenced mutably, `Ref<T>::is_added`/`is_changed` and the `Added<T>`/`Changed<T>`
-query filters compare against the tick the system last ran at, and `RemovedComponents<T>` reads a
-per-type buffer of removals. `set_if_neq` writes (and marks) only when the value differs. Bevy pays the
-tick cost on every component by default and considers it cheap relative to the systems it lets skip
-work.
 
 #### Named schedules, system sets and run conditions
 
@@ -504,30 +409,6 @@ system or set can be ordered `.before()`/`.after()` another. `.run_if(condition)
 returns `bool` (`in_state(GameState::Playing)`, `on_message::<T>`, `resource_changed::<R>`); conditions
 on a set are evaluated once per frame for the set. Plugins add systems into the app's schedules
 without knowing about each other, which is the property wanted for mods here.
-
-#### Deferred structural changes
-
-Spawning, destroying and adding or removing components happen immediately, wherever they're called
-from, and each hazard this causes is handled separately: `SpawnMoves` defers a spawn's move to "this
-frame if the moves are still unread, otherwise next frame", `FrameEventBuffer` throws on a second
-same-cycle `Record`, `NeighborhoodStreamer` orders evictions ahead of promotions, and a system
-iterating a stripe set has to be careful about entities it destroys mid-iteration.
-- **A command queue:** structural changes requested during a system go into a queue and are applied
-  at defined points (between phases, or at the end of the system), in the order requested. Plain
-  value writes to existing components stay immediate.
-- **Ids immediately:** spawning through the queue reserves the entity id at once, so the caller can
-  refer to the new entity (write further components into the queue for it) before it exists.
-- **Deterministic:** application order is request order, so seeds and benchmarks still reproduce.
-- **Outside systems** (Presentation between frames, bootstrapping) changes can still apply directly,
-  or queue and apply at frame start.
-- Needed before "Parallel system execution" (Low): parallel systems can't all make structural changes
-  directly. Pairs with "FrameEventBuffer double-buffering" (above).
-
-**Bevy reference:** `Commands` queue spawns, despawns, inserts and removes, applied at `ApplyDeferred`
-sync points that the scheduler inserts automatically between a system that queues commands and any
-system ordered after it. `commands.spawn(...)` reserves the `Entity` immediately (`reserve_entity`).
-Exclusive systems (`&mut World`) are the escape hatch that applies changes directly.
-`DeferredWorld` (what hooks get) can queue commands but not change structure.
 
 #### Workshop Debug tab: launch options
 
@@ -680,34 +561,6 @@ feature, built on Dioxus's `subsecond`), for changed system function bodies -- n
 or changed layouts. Both point the same way as Unreal: reload data
 freely, reload code only at a boundary.
 
-#### Parallel system execution
-
-`SystemManager.Update` runs every system one after another on the main thread; only neighborhood
-planning uses workers. Systems that touch different pools (regen and NPC decisions, say) could run at
-the same time, and a heavy per-entity loop could split across cores. Only worth it if a profile shows
-the simulation, not rendering or GC, is what's over budget.
-- **Declared access:** each system declares which pools it reads and which it writes. The scheduler
-  runs two systems at once only if neither writes what the other touches, and keeps the declared order
-  otherwise.
-- **Ambiguity detection:** report pairs of systems with conflicting access and no defined order. Even
-  single-threaded that's useful: such pairs are where a harmless-looking registration change alters
-  results.
-- **Parallel loops inside a system:** split a stripe's entity list across workers when per-entity
-  work only writes that entity's own components.
-- **Determinism:** results must not depend on thread timing, so seeds and benchmarks still reproduce.
-  Parallel loops can't draw from a shared random sequence (per-entity reseeding already solves this
-  for builds) or append to shared lists in completion order.
-- **Prerequisites:** "Deferred structural changes" (Medium, above), because systems running at once
-  can't spawn or destroy directly; event publishing that is safe from several threads; and the Debug
-  `SkeletonAccessGuard` becoming thread-safe.
-
-**Bevy reference:** the `MultiThreadedExecutor` reads each system's parameters (`Query<&A, &mut B>`,
-`Res<R>`, `ResMut<R>`) to know its access and runs non-conflicting systems in parallel on the
-`ComputeTaskPool`; exclusive systems (`&mut World`) run alone. `ScheduleBuildSettings {
-ambiguity_detection: LogLevel::Warn }` reports conflicting unordered systems. `query.par_iter_mut()`
-splits one query across threads in batches. Bevy's results can still depend on the order of
-ambiguous systems, which is why the ambiguity report matters as much as the speedup.
-
 #### Content-only mods -- overriding files by path
 
 Mods are DLLs only: `ModuleLoader` looks for `*.dll` and constructs `IModule` types. Replacing a
@@ -797,7 +650,7 @@ sampler's bias, the probes): that section.
   - If small moving carried auras come to dominate, consider a hybrid: large static auras stay in the field, small
     moving ones push timed effects to the entities in their radius (a stacking and credit decision, not only
     performance).
-  - Worker threads (see "Research multithreading"): only the scans could split -- the power each cell of a source's
+  - Worker threads (see `PLAN-multithreading.md`): only the scans could split -- the power each cell of a source's
     diamond gets is pure reads of the map and the source, then added into `AuraField`'s totals on the main thread in a
     fixed order. Exposure ticks can't: an effect writes health through `HealthDamage`/`HealthHeal`, the ledger and the
     event bus. At 0.26 ms/frame (2026-11-06) the scans are too small to pay for a fork-join (~5-20 µs); revisit only
@@ -1193,8 +1046,7 @@ Two multipliers on top of that. Dense growth is linear (`_denseGrowthAmount` = 2
 7.27M takes ~33 `Array.Resize` passes -- ~5.7 GB copied, ending on a ~350 MB LOH array -- during
 initial population, before the startup reserve exists to help. And `BodyPartComponent` holds a
 `string Name`, so all ~520 MB is traced by every gen-2 GC, where the reference-free
-`SimpleHealthComponent[]` is skipped outright. See "Component size audit" and "Gen-1 GC frames during
-a window shift" below.
+`SimpleHealthComponent[]` is skipped outright. See "Component size audit" below.
 
 **CPU is the cheap half.** Only Local plus the centre neighborhood simulate
 (`SimulatedTierCount = 2`), so the health systems see ~10.8k entity-visits/sec whatever the world
@@ -1547,43 +1399,6 @@ Open questions: how many states, and whether they're a ladder (each worse than t
 flags; whether Simple-health entities get any of it; how a state interacts with Maximum Health changes
 (`MaximumHealthShift`).
 
-#### Gen-1 GC frames during a window shift
-
-While `NeighborhoodStreamer` populates newly loaded neighborhoods, gen-1 collections occasionally
-produce frames of ~17-19 ms (headless Release, seed 12345, 3072², with the 1 ms timer the windowed
-game has). Gen-1 frames during a shift run 12-17 ms, varying run to run; the over-budget ones show up
-mainly in the first shift of a session, while the population grows to its settled size. Measured by
-teleporting the player 70 tiles into the next column of neighborhoods at frames 700 and 1400 of a
-headless run (3 loads, then 3 loads plus 3 evictions); see "World scaling" in `IMPLEMENTATION-NOTES.md`.
-Named gauges now record GC collections, pause time, allocation, streamer queues and built/skeleton
-counts per frame: the benchmark skill's `-Gauges` lists them on the slowest frames.
-
-What's known:
-- **Pause cost tracks what population keeps.** Before the 7d allocation cuts, each gen-1 pause was
-  8-25 ms and promoted 10-16 MB, nearly everything population had allocated. Sharing wand loot
-  definitions and race attack overrides, caching `AbilityScoreType` values and removing a capturing
-  closure in `InventoryActions.AddItem` took steady-state population to 469 bytes allocated and ~340
-  kept per entity, and shift 2 from 9 frames over budget to 0.
-- **Remaining per-creature allocations** (sampled with a `GCAllocationTick` listener): occupant
-  `List<int>`s in `MapNeighborhood` (one per occupied cell, new for every loaded neighborhood),
-  `EntityStripeSet`/`TieredEntityStripeSet` dictionary growth, and `TimerWheel` slot lists.
-- **Per-frame gameplay garbage** in the same window, short-lived but part of every gen-0/gen-1:
-  `EffectContext`, strings. The `ManhattanCellVisitor` closures and the boxed enumerators over a
-  cell's occupants and the frame's moves are gone (2026-10-02; steady allocation down 11%, 229.7 to
-  204.2 MB over frames 600-3600), leaving about 68 KB a frame whose sources have not been sampled since.
-- **Tried and worse:** Server GC, and a 256 MB gen-0 budget (55-120 ms pauses). Pre-sizing every
-  stripe-set and aura-grid dictionary didn't change the spike frames.
-
-Options to measure:
-- Occupant lists: keep a single occupant inline per cell and spill to a list only for a second one, or
-  recycle an unloaded neighborhood's `MapNeighborhood` (arrays and lists) for the next load.
-- Stripe sets: an entity-indexed location array shared across a tiered set's tiers, instead of five
-  dictionaries per set.
-- Remove the per-frame allocations above.
-
-Acceptance: no frame over 16.67 ms during either shift of that teleport measurement, other than the
-teleport frame itself.
-
 #### Component size audit
 
 Measured with `Unsafe.SizeOf`. Every loaded entity pays for these, and a neighborhood streams in about
@@ -1607,7 +1422,7 @@ Where the bytes are (memory report of 2026-10-25, 662,885 entities, 184 MB of po
   `GlyphComponent` are per-instance overrides with no instances in a normal session; names and
   descriptions are held once per definition, and `EntityIdentities` interns source names. String
   literals live on the frozen heap, which no GC scans, so moving them to localization files is for
-  translation, never memory. Per-frame string garbage is "Gen-1 GC frames during window shifts".
+  translation, never memory.
 - **The other reference-holding pools are tiny** (`ShopComponent`, `ActionInstanceComponent`,
   `UnclaimedAchievementLootboxComponent`: under ten instances each). `PendingWindupComponent` is 72 B
   with no references and ~1.4k instances; its `ActivatableReference` carries a `Guid` action id where a
@@ -1803,6 +1618,32 @@ a white flash on the hit sprite (a `CanvasItem` shader parameter or `modulate` t
 decayed by a tween), and hit-stop (a few frames of reduced `Engine.time_scale` -- here, a presentation
 freeze, never a simulation one). `MapCamera` has zoom levels but no offset or smoothing to shake with;
 adding a decaying offset is the smallest piece.
+
+#### Terrain as content
+
+After `PLAN-workshop-edit-items.md` (its "Code-held references" section). `TerrainDefinition` is already declarative
+(key, sprite, link group, `TerrainAura`, `TerrainContact` with its `Effect` lists, which have codecs) but is declared
+in C#, so the Workshop can't edit it and has to treat what it names as code-held.
+- A `Terrain.jsonl` table and codec, a Guid beside the key, `TerrainRegistry` filled from content, mods replacing by
+  Guid as they do an aura.
+- Its aura and contact references become schema `Reference` fields, so terrain leaves `ICodeHeldReferences` and the
+  Workshop's Cascade can disable it.
+- A Terrain tab from a `ContentTableDescription`: the first new table on the editing machinery, so the first test of
+  the template beyond Actions and Auras.
+- Checks: `ContentManifestExporter` output loads to the same world fingerprint; change lava's burn in the Workshop and
+  see it in the game; disabling the lava aura lists lava as a content dependent, not code.
+
+#### Blueprints as content
+
+After `PLAN-npc-behavior-composition.md` and `PLAN-workshop-edit-items.md`. Needs a plan of its own. A blueprint's
+facets are declarative (`Includes`, `Race`, `Class`, `Appearance`, `Actions`, `Auras`, `UsesActions`/`UsesItems`,
+`Behaviors` once the NPC plan lands), but its `Build` step is code, and that is the question to settle: a record names
+a registered step by Guid, or what the steps do becomes declarative entries.
+- Removes the last of `ICodeHeldReferences`, and with it the "code" marker, Cascade's refusal and the catalog index's
+  part in the Workshop's reference question (edit Items' Decisions 12 and 13).
+- Gives `BehaviorGrant`/`BehaviorModifier` and the consideration family their codecs and a Creatures tab (the NPC
+  plan's deferred follow-up).
+- Weigh against "Data tables for content", which says blueprints stay C#, and "Organize blueprints".
 
 #### Data tables for content
 
@@ -2603,7 +2444,7 @@ navigation" (High) -- today's Engage/Flee steps get stuck on walls -- and "can I
 of view and perception" (High). "Where to go" (flee to which tile, which shop, which corpse) is
 "Spatial queries for NPC decisions" (Medium).
 
-**Design the decide step to run on worker threads** (the first system where "Research multithreading" pays): it is
+**Design the decide step to run on worker threads** (the first system `PLAN-multithreading.md` expects to fork): it is
 mostly reads -- dead, transform, movement gate, action lock, health totals, inventory, neighbours, race -- ending in one
 queued activation or step, so it splits into a parallel decide that records each entity's choice and a serial apply.
 `TestCombatBehaviorSystem` is the largest system today (0.42 ms of 1.13 ms/frame, 2026-11-06), still far below needing

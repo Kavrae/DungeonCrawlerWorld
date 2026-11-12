@@ -91,8 +91,9 @@ Related TODO items that this plan does not need, but which will improve its beha
 "Grid pathfinding and navigation" (Engage/Flee step one tile and can get cornered), "Field of view
 and perception" (line of sight now exists per pair, which this plan uses; a full field of view and
 memory of what was seen don't), "Spatial queries for NPC decisions" (where to flee to, ranged targets
-other than the player), and "Research multithreading" (decisions on workers; see "Shaped for workers,
-not threaded" below -- the TODO entry this plan replaces asks for the shape to be built in now).
+other than the player), and `PLAN-multithreading.md` (decisions on workers; see "Shaped for workers,
+not threaded" below -- the TODO entry this plan replaces asks for the shape to be built in now, and
+that plan's forked sections come after this plan's Phase 5).
 
 ## Research: how other games do it
 
@@ -181,9 +182,10 @@ turn.
   same way: the step update finds nothing and does nothing.
 - **Why the chokepoint matters beyond the step rule:** a write scope is main-thread only, and a write
   recorded on a worker and applied later must be an `unmanaged` updater or an add (IMPLEMENTATION-NOTES,
-  "Scopes are main-thread only"). Every NPC intent goes through these methods, so if decisions ever
-  move to workers ("Research multithreading"), only `IntentWriter` changes -- `Idle` becomes a recorded
-  updater -- and no behavior does.
+  "Scopes are main-thread only"). Every NPC intent goes through these methods, and they are only
+  ever called from `Act`, which stays on the main thread when choosing moves to workers
+  (`PLAN-multithreading.md`: workers only read, the main thread writes in order) -- so neither
+  `IntentWriter` nor any behavior changes then.
 
 **C. Owned gameplay tags, as Unreal's GAS does** (`ActivationOwnedTags`/`ActivationBlockedTags`): an
 activation adds "turn claimed" to its owner, and anything can check it.
@@ -293,7 +295,32 @@ contract gives that shape:
 | Every roll draws from one shared sequence, so drawing in parallel would tie a seeded world to thread timing | **Each decision's rolls are derived, not drawn**: the system reseeds one sequence per decision from `SeedMix` of the behavior stream's seed (`RandomStreams.SeedFor(BehaviorRandomStream)`), the entity's key and the frame. `NextUnitRandom()` and every roll a behavior makes in `Act` (which attack, which mode, which tile) read that sequence. An entity's choice no longer depends on who decided before it |
 | Shared scratch (`_adjacentTilesBuffer`, `TargetResolution`'s buffers) | Scratch belongs to the context's owner (the system: one set today, one per worker later). The arbiter's candidate buffer is per arbiter instance for the same reason |
 | Acting while deciding (`NpcLooting` moves stacks and writes its retry mid-search) | `Evaluate` and considerations only read. Everything written is written by `Act`, through `IntentWriter` or a Game command (looting), on the winner only |
-| Writes from a worker | `Decide` splits cleanly at "pick": the first half is reads, the second is `Act`. A threaded version records each entity's pick and runs `Act` serially in entity order; nothing in a behavior changes |
+| Writes from a worker | The arbiter has two entry points, `Choose` (reads, ends at the pick) and `Act` (the winner writes). The system runs them as **two passes over each bucket**: every due entity chooses, then every choice acts, in entity order. A threaded version forks the first pass and changes nothing else |
+
+**Two passes from Phase 4 on, single-threaded** (settled 2026-11-12, with `PLAN-multithreading.md`).
+If each creature chose and acted in turn, creature B would choose after creature A acted, and a later
+fork -- where the whole bucket chooses against the state before anyone acted -- would change every
+seeded world. Choosing the whole bucket first makes the single-threaded order the forked order, so
+the fork changes no result and worker count never matters. What it takes:
+- **The choice is a record**: an `unmanaged` value per due entity (`NpcDecisionRecord`: the entity
+  id, the arbiter's `BehaviorChoice`, the context's findings, the decision's roll sequence as it
+  stood after the pick), appended to a list the system owns and reuses. The act pass walks it front
+  to back.
+- **What `Evaluate` finds for `Act` is a plain value** (`NpcDecisionFindings`, `unmanaged`): entity
+  keys, stack instance ids and tiles -- never a dense index or a span, which the acts before it may
+  have invalidated. The act pass builds a fresh context for the entity and puts the findings back,
+  so `Act` still never searches again.
+- **`Act` re-checks what an earlier act this pass could have taken.** Every `Act` but one only
+  queues an intent (an activation, a step, an idle wait), which changes nothing another creature's
+  choice or act reads. Looting is the one that changes the world at once, so `LootNearby.Act`
+  resolves its target again (the key still resolves, it still holds something this creature can
+  carry, it isn't reserved) and idles when it doesn't: a creature can lose a visit to a neighbour
+  that looted first. Two creatures stepping to one tile are already settled by `MovementSystem`'s
+  order.
+- **Nothing is written while choosing**: in Debug the context refuses `IntentWriter` and looting
+  until the act pass, so an `Evaluate` or a consideration that writes fails where it does so.
+- **Cost**: each due entity's data is fetched in two passes instead of one. Phase 4's benchmark
+  reports it separately from the framework's own cost.
 
 Deriving the rolls changes which roll each creature gets, so a seeded world plays differently from
 Phase 4 on -- which Phase 4 does anyway (one weighted draw replaces the chain's coin flips). Movement
@@ -411,10 +438,20 @@ an item, `Area.Testing` can't condition a stat modifier, and `Damage.Fire` can't
 
 ### The arbiter
 
-`BehaviorArbiter<TContext>.Decide(ref context, set, in commitment, trace)` reads the commitment as a
-value and returns a `BehaviorDecision`: what it did, and a new commitment if one started. It never holds
-a pool or a `ref` into one -- the engine has no raw mutable `ref` to hand it, and the caller decides how
-to write. Its options (`BehaviorArbiterOptions`) are the game's: the cutoff fraction (0.25).
+The arbiter has two entry points, so a caller can choose for many entities before any of them acts
+(see "Shaped for workers, not threaded"):
+- `Choose(ref context, set, in commitment, trace)` reads the commitment as a value, evaluates, and
+  returns a `BehaviorChoice` (`unmanaged`: the picked entry's place in the set, or none; its rank;
+  whether it continues the commitment). It calls no `Act` and writes nothing.
+- `Act(ref context, set, in choice, in commitment)` calls the chosen behavior's `Act` and returns a
+  `BehaviorDecision`: what it did, and a new commitment if one started.
+- `Decide(ref context, set, in commitment, trace)` is `Choose` then `Act`, for a caller with one
+  entity (tests, a game with no need for two passes).
+
+It never holds a pool or a `ref` into one -- the engine has no raw mutable `ref` to hand it, and the
+caller decides how to write. Its options (`BehaviorArbiterOptions`) are the game's: the cutoff
+fraction (0.25). The pseudocode is `Decide`; `Choose` ends where it says "act on it" or
+`pick.Behavior.Act`, returning that entry instead.
 
 ```
 if commitment is live (deadline not reached, and set still holds that behavior):
@@ -550,7 +587,8 @@ queries, `IntentWriter`, plus **lazily cached perception**, each computed on fir
 All reads go through `GetReadonly`/`TryGetReadonly` and `GetOccupantEntityIdSpanAt`; the context writes
 nothing itself -- every write is `IntentWriter`'s, or looting's in `LootNearby.Act`. What `Evaluate`
 finds for `Act` (the corpse or pile, the potion's stack, the hostile to step away from) is kept on
-the context, so `Act` never searches again. `IsHostileTo`/`IsAllyOf` hold today's race rule
+the context as one `unmanaged` value, `NpcDecisionFindings` (entity keys, stack instance ids, tiles),
+which the system carries from the choose pass to the act pass, so `Act` never searches again. `IsHostileTo`/`IsAllyOf` hold today's race rule
 (simulated, not dead, a different primary race) in one place for factions later. Behaviors ask the
 entity what it has (`EntityActions`, its inventory stacks), never a whole catalog, so by-id content
 loading holds: a behavior finds content by tag among what the entity already holds -- whose
@@ -854,6 +892,8 @@ Stop after each phase for in-game testing. Each ends with what to check.
    candidate; commitment: no re-roll against same-rank rivals, a higher rank interrupts, ends early at
    weight 0, ends at the deadline, a stale commitment to a behavior the set no longer holds is ignored,
    the target `Act` set is stored and handed back on each continue and cleared before a fresh pick;
+   `Choose` calls no `Act` (the fake behaviors count their calls) and `Choose` then `Act` gives what
+   `Decide` gives, for a fresh pick, an interrupt and a continued commitment;
    a lone candidate draws nothing; `Evaluate` is never given a chance to roll (the fake context
    throws on a draw before the pick); the catalog refuses `Register` after `Freeze` and issues ids in
    registration order; no allocation per `Decide`.
@@ -894,12 +934,14 @@ Stop after each phase for in-game testing. Each ends with what to check.
    considerations); Heal granted to Goblin (with 2 mana) and Fairy; the test dummy gets a race and
    an EngageMelee grant, and `TestDummyAttackSystem` and `TestDummyComponent` are deleted.
 5. `NpcDecisionSystem` replaces `TestCombatBehaviorSystem` (deleted), wired to the
-   `NpcDecisionComponent` pool, with the per-decision derived rolls and the `NpcBehavior` gauges; the
+   `NpcDecisionComponent` pool, with the per-decision derived rolls and the `NpcBehavior` gauges; it
+   runs each bucket as two passes (every due entity chooses into the system's `NpcDecisionRecord`
+   list, then each record acts in order), and in Debug the context refuses a write while choosing. The
    module no longer reads the Health Potion at wiring. `MovementMode` is removed.
    `GameViews.NpcDecisions` and the Admin Mode decision block in the inspection window, between the
    description and the components (what it is doing, its behavior set, the last decision's trace).
-   IMPLEMENTATION-NOTES' stand-in entry is rewritten; the TODO.md entry is deleted, with what it says
-   about worker threads moved to "Research multithreading"; TODO's "Resolve highest performance
+   IMPLEMENTATION-NOTES' stand-in entry is rewritten; the TODO.md entry is deleted, what it says
+   about worker threads being covered by `PLAN-multithreading.md`; TODO's "Resolve highest performance
    costs" and CLAUDE.md name the new system.
 6. Tests: **parity per situation, not per roll sequence.** Rolls are derived per decision and drawn
    in a different pattern (one weighted draw instead of a coin flip, none for a lone candidate), so a
@@ -908,8 +950,11 @@ Stop after each phase for in-game testing. Each ends with what to check.
    player in range and in sight, the player in range behind a wall, a lootable corpse beside it, a
    reserved corpse beside it, an item pile beside it, nothing near), the same decision, or the same
    choices at the same rates over many seeded trials (QuickAttack/PowerAttack, Target/Ground,
-   idle/step). Also: a creature's decision is the same whatever order the bucket is visited in and
-   whoever decided before it; SelfHeal uses the stronger spell before the weaker, any spell before any
+   idle/step). Also: a creature's choice is the same whatever order the bucket is visited in and
+   whoever chose before it; no creature acts until every due creature in the bucket has chosen; two
+   creatures that both choose the same corpse or pile: the first loots, the second idles and writes
+   nothing else, and a corpse the first only partly emptied is still looted by the second; an
+   `Evaluate` that queues an intent throws in Debug; SelfHeal uses the stronger spell before the weaker, any spell before any
    consumable, and the stronger consumable before the weaker, rolling nothing; it skips the scroll in
    Anti-Literacy, the scroll and the spell in Anti-Magic, and the spell without mana, and ignores a
    healing item not tagged `Targeting.Self`; a Goblin's 2 mana pays for one Heal, and a Fairy's 17
@@ -926,7 +971,8 @@ Stop after each phase for in-game testing. Each ends with what to check.
    decision never evaluates EngageMelee or LootNearby past the gate; `BlueprintSkeletonTests` and
    `SpawnRecordRebuilderTests` still pass (grants are on the definition, nothing new per entity).
 7. Benchmark A/B (headless, fixed seed): `NpcDecisionSystem` against `TestCombatBehaviorSystem`'s
-   row, per frame and per decision; then save the new baseline.
+   row, per frame and per decision, with the two passes' cost told apart from the framework's (one
+   run acting straight after each choice, for the comparison only); then save the new baseline.
 8. In-game check: goblins wander, fight adjacent enemies with both attacks and loot corpses; below
    half health a goblin drinks a potion, reads a Scroll of Healing or casts Heal (once, then waits
    for mana); drop an item beside a goblin and it picks it up; a Fairy casts Magic Missile at the
@@ -998,6 +1044,10 @@ build on this.
 - Built for a later parallel decide, not threaded: `Evaluate` and considerations only read, `Act` is
   the only writer, and each decision's rolls are derived from the entity's key and the frame
   (confirmed 2026-11-11; from the TODO entry's "design the decide step to run on worker threads").
+- Choosing and acting are two passes over each bucket from Phase 4 on, single-threaded: the arbiter
+  has `Choose` and `Act`, what `Evaluate` finds travels as an `unmanaged` value, and `LootNearby.Act`
+  re-checks its target and idles when a neighbour took it. A creature can lose a visit that way; in
+  exchange a later fork (`PLAN-multithreading.md`) changes no seeded world (2026-11-12).
 - What a creature does is its grants, and what it does it with is found by tag among what it holds
   (confirmed 2026-11-11): no behavior names an action or item by Guid.
 - Stationary creatures fight. Who decides is `NpcDecisionComponent` (the behavior set id and the

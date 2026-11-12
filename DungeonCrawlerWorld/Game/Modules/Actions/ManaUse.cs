@@ -13,10 +13,12 @@ public static class ManaUse
 
     private static bool HoldsManaDrain(IReadOnlyList<Effect> effects)
     {
-        foreach (var effect in effects)
+        for (var effectIndex = 0; effectIndex < effects.Count; effectIndex++)
         {
-            foreach (var entry in effect.Entries)
+            var entries = effects[effectIndex].Entries;
+            for (var entryIndex = 0; entryIndex < entries.Count; entryIndex++)
             {
+                var entry = entries[entryIndex];
                 if (entry is IResourceDrain { Resource: DrainedResource.Mana } || HoldsManaDrain(entry.NestedEffects))
                 {
                     return true;

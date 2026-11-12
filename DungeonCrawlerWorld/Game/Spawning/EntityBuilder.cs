@@ -69,9 +69,10 @@ public sealed class EntityBuilder
             componentManager.Merge(entityId, new TransformComponent(TransformComponent.UnplacedOn(resolved.Layer), resolved.Size));
         }
 
-        foreach (var kind in resolved.NonBlocking)
+        var nonBlockingKinds = resolved.NonBlocking;
+        for (var index = 0; index < nonBlockingKinds.Count; index++)
         {
-            componentManager.Merge(entityId, new NonBlockingComponent(kind));
+            componentManager.Merge(entityId, new NonBlockingComponent(nonBlockingKinds[index]));
         }
 
         componentManager.Merge(entityId, new SpawnRecordComponent(blueprintId, flags, seed));
@@ -85,9 +86,10 @@ public sealed class EntityBuilder
         _random.Reseed(seed);
         var context = new BlueprintContext(componentManager, entityId, _rolls, _entityKeys, seed, _definitions, _actions, _items);
 
-        foreach (var partId in resolved.BuildOrder)
+        var buildOrder = resolved.BuildOrder;
+        for (var index = 0; index < buildOrder.Count; index++)
         {
-            BuildPart(context, partId);
+            BuildPart(context, buildOrder[index]);
         }
 
         GrantManaIfAnyActionDrainsIt(componentManager, entityId, resolved.Actions);
