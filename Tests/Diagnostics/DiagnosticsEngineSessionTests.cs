@@ -104,6 +104,44 @@ public sealed class DiagnosticsEngineSessionTests
         Assert.IsGreaterThanOrEqualTo(0, IndexOfGauge(tracker, "Entities", "Living"));
     }
 
+    private sealed class AllocatingSystem : ISystem
+    {
+        public int BytesPerFrame { get; set; }
+
+        public byte[]? LastAllocation { get; private set; }
+
+        public byte StripeCount => 1;
+
+        public void Update(EngineTime time, byte stripeIndex) =>
+            LastAllocation = BytesPerFrame > 0 ? new byte[BytesPerFrame] : null;
+    }
+
+    [TestMethod]
+    public void Gauges_FrameAllocatedBytes_CountsWhatTheFrameAllocates_NotWhatHappensBetweenFrames()
+    {
+        const int OneMegabyte = 1 << 20;
+        using var engine = new DiagnosticsEngine(DiagnosticsFeatures.Gauges, writesPeriodicReports: false);
+        engine.Start();
+        using var session = CreateContext();
+        var allocatingSystem = new AllocatingSystem();
+        session.SystemManager.Register(allocatingSystem);
+        session.BeginSession();
+        var tracker = engine.Gauges!;
+        var frameAllocatedBytes = IndexOfGauge(tracker, "Frame", "AllocatedBytes");
+
+        allocatingSystem.BytesPerFrame = OneMegabyte;
+        RunFrames(session, 2);
+        Assert.IsGreaterThanOrEqualTo(OneMegabyte, tracker.GetLatestValue(frameAllocatedBytes));
+
+        allocatingSystem.BytesPerFrame = 0;
+        RunFrames(session, 1);
+        var betweenFrames = new byte[OneMegabyte];
+        RunFrames(session, 1);
+
+        Assert.IsLessThan(1024, tracker.GetLatestValue(frameAllocatedBytes));
+        GC.KeepAlive(betweenFrames);
+    }
+
     [TestMethod]
     public void Gauges_AContextThatNeverBeganASession_IsNotSampled()
     {

@@ -6,8 +6,8 @@ namespace Workshop.Tests;
 [TestClass]
 public sealed class ReportComparisonTests
 {
-    private static LiveDiagnosticsSession SessionWith(DiagnosticsReport? report = null, DiagnosticsStartupReport? startup = null, bool frameCostsArePerFrame = false) =>
-        LiveDiagnosticsSession.Recorded("file.json", new DiagnosticsLinkHello(1, 0, 1, "All"), [], null, report, startup, frameCostsArePerFrame);
+    private static LiveDiagnosticsSession SessionWith(DiagnosticsReport? report = null, DiagnosticsStartupReport? startup = null, bool frameCostsArePerFrame = false, DiagnosticsRunConditions? runConditions = null) =>
+        LiveDiagnosticsSession.Recorded("file.json", new DiagnosticsLinkHello(1, 0, 1, "All"), [], null, report, startup, frameCostsArePerFrame, runConditions);
 
     private static DiagnosticsReport ReportWith(IReadOnlyList<DiagnosticsReportLeak>? leaks = null, double auraMillisecondsPerSecond = 0) =>
         DiagnosticsReportWriter.Build(DateTime.UtcNow, DiagnosticsFeatures.All, 1,
@@ -49,6 +49,35 @@ public sealed class ReportComparisonTests
         var tab = comparison.TabFor(LiveView.FrameCosts);
         Assert.IsEmpty(tab.Rows);
         StringAssert.StartsWith(tab.Unavailable, "Not comparable");
+    }
+
+    [TestMethod]
+    public void BenchmarksRunUnderDifferentConditions_AreNotCompared_SayingHowTheyDiffer()
+    {
+        var headlessRelease = new DiagnosticsRunConditions("None", IsHeadless: true, HasLink: false, "Release");
+        var headlessDebug = headlessRelease with { BuildConfiguration = "Debug" };
+
+        var tab = ReportComparison.Compare(
+            "release.json", SessionWith(ReportWith(auraMillisecondsPerSecond: 0.4), frameCostsArePerFrame: true, runConditions: headlessRelease),
+            "debug.json", SessionWith(ReportWith(auraMillisecondsPerSecond: 0.9), frameCostsArePerFrame: true, runConditions: headlessDebug),
+            20).TabFor(LiveView.FrameCosts);
+
+        Assert.IsEmpty(tab.Rows);
+        Assert.AreEqual("Not comparable: the runs measured under different conditions (build Release vs Debug).", tab.Unavailable);
+    }
+
+    [TestMethod]
+    public void ABenchmarkFromBeforeConditionsWereKept_StillCompares()
+    {
+        var headlessRelease = new DiagnosticsRunConditions("None", IsHeadless: true, HasLink: false, "Release");
+
+        var tab = ReportComparison.Compare(
+            "old.json", SessionWith(ReportWith(auraMillisecondsPerSecond: 0.4), frameCostsArePerFrame: true),
+            "new.json", SessionWith(ReportWith(auraMillisecondsPerSecond: 0.9), frameCostsArePerFrame: true, runConditions: headlessRelease),
+            20).TabFor(LiveView.FrameCosts);
+
+        Assert.IsNull(tab.Unavailable);
+        Assert.IsNotEmpty(tab.Rows);
     }
 
     [TestMethod]

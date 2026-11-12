@@ -24,7 +24,7 @@ public static class DiagnosticsReportFiles
             case DiagnosticsReportKind.Benchmark:
             {
                 var report = DiagnosticsReportReader.ReadBenchmarkReport(json.Span);
-                return Recorded(entry, report.RandomSeed, nameof(DiagnosticsFeatures.FrameBudget), report.ProcessId, PerFrameReport(report.TimestampUtc, report.RandomSeed, DiagnosticsReportReader.MillisecondsPerFrameOf(report)), frameCostsArePerFrame: true);
+                return Recorded(entry, report.RandomSeed, nameof(DiagnosticsFeatures.FrameBudget), report.ProcessId, PerFrameReport(report.TimestampUtc, report.RandomSeed, DiagnosticsReportReader.MillisecondsPerFrameOf(report)), frameCostsArePerFrame: true, runConditions: report.Conditions);
             }
 
             case DiagnosticsReportKind.SavedRun:
@@ -185,7 +185,8 @@ public static class DiagnosticsReportFiles
         DiagnosticsStartupReport? startupReport = null,
         IReadOnlyList<DiagnosticsLinkGaugeDescriptor>? gauges = null,
         DiagnosticsFrameHistory? history = null,
-        bool frameCostsArePerFrame = false) =>
+        bool frameCostsArePerFrame = false,
+        DiagnosticsRunConditions? runConditions = null) =>
         LiveDiagnosticsSession.Recorded(
             entry.FilePath,
             new DiagnosticsLinkHello(DiagnosticsLinkProtocol.Version, processId, seed ?? entry.Seed, features),
@@ -193,5 +194,6 @@ public static class DiagnosticsReportFiles
             history,
             periodicReport,
             startupReport,
-            frameCostsArePerFrame);
+            frameCostsArePerFrame,
+            runConditions);
 }

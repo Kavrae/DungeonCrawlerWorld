@@ -74,6 +74,8 @@ public sealed class MapRenderer : IDisposable
     /// <summary>What a tile off the loaded map is drawn as, so the edge of the world reads as an edge rather than as floor with nothing on it.</summary>
     private static readonly Color OffMapColor = Color.Black;
 
+    private static readonly FrameCostRowId TerrainCacheRebuildFrameCostRow = FrameCostRowIds.Of(FrameCostCategory.Update, "Map", "Terrain cache rebuild");
+
     private readonly IMapViewQuery _mapView;
     private readonly AuraView _auraView;
     private readonly MapCamera _camera;
@@ -281,7 +283,7 @@ public sealed class MapRenderer : IDisposable
     /// </remarks>
     private void DrawGroundIntoCache(SpriteEffectBatch batch, MapImageKey key)
     {
-        using (EngineHooks.FrameCost(FrameCostCategory.Update, "Map", "Terrain cache rebuild"))
+        using (EngineHooks.FrameCost(TerrainCacheRebuildFrameCostRow))
         {
             DrawGroundDirectly(batch, key, Vector2.Zero, SpriteGlow.None);
         }

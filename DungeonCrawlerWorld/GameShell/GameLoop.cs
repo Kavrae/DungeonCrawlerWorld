@@ -33,6 +33,10 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
     internal const int MinCrawlerNumber = 1;
     internal const int CrawlerNumberBits = 24;
 
+    private static readonly FrameCostRowId ShellUpdateFrameCostRow = FrameCostRowIds.Of(FrameCostCategory.Update, "GameLoop", "Shell.Update");
+    private static readonly FrameCostRowId ShellDrawFrameCostRow = FrameCostRowIds.Of(FrameCostCategory.Draw, "GameLoop", "Shell.Draw");
+    private static readonly FrameCostRowId SpriteBatchEndFrameCostRow = FrameCostRowIds.Of(FrameCostCategory.Draw, "GameLoop", "SpriteBatch.End");
+
     private readonly GraphicsDeviceManager _graphics;
 
     private WorldSessionContext _worldSession = null!;
@@ -139,7 +143,7 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
         EngineHooks.HostFrames.Listener?.HostUpdated(simulates);
 
-        using (EngineHooks.FrameCost(FrameCostCategory.Update, "GameLoop", "Shell.Update"))
+        using (EngineHooks.FrameCost(ShellUpdateFrameCostRow))
         {
             _shell.Update(gameTime);
         }
@@ -170,12 +174,12 @@ public sealed class GameLoop : Microsoft.Xna.Framework.Game
 
         _uiEngine.RenderService.BeginFrame();
 
-        using (EngineHooks.FrameCost(FrameCostCategory.Draw, "GameLoop", "Shell.Draw"))
+        using (EngineHooks.FrameCost(ShellDrawFrameCostRow))
         {
             _shell.Draw(gameTime);
         }
 
-        using (EngineHooks.FrameCost(FrameCostCategory.Draw, "GameLoop", "SpriteBatch.End"))
+        using (EngineHooks.FrameCost(SpriteBatchEndFrameCostRow))
         {
             _uiEngine.RenderService.EndFrame();
         }

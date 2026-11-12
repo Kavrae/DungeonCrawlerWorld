@@ -102,16 +102,16 @@ public sealed class DiagnosticsReportReaderTests
         for (var frame = 1; frame < 3; frame++)
         {
             benchmark.SimulationFrameStarting(frame);
-            benchmark.Record(FrameCostCategory.Update, "SystemManager", "AuraSystem", TimeSpan.FromMilliseconds(2));
-            benchmark.Record(FrameCostCategory.Update, "Map", "Renderer.Update (probe)", TimeSpan.FromMilliseconds(1));
-            benchmark.Record(FrameCostCategory.Draw, "GameLoop", "Shell.Draw", TimeSpan.FromMilliseconds(4));
+            benchmark.Record(FrameCostRowIds.Of(FrameCostCategory.Update, "SystemManager", "AuraSystem"), TimeSpan.FromMilliseconds(2));
+            benchmark.Record(FrameCostRowIds.Of(FrameCostCategory.Update, "Map", "Renderer.Update (probe)"), TimeSpan.FromMilliseconds(1));
+            benchmark.Record(FrameCostRowIds.Of(FrameCostCategory.Draw, "GameLoop", "Shell.Draw"), TimeSpan.FromMilliseconds(4));
             benchmark.SimulationFrameEnded(frame);
         }
 
         var outputDirectory = Path.Combine(Path.GetTempPath(), $"benchmark-report-{Guid.NewGuid():N}");
         try
         {
-            var report = DiagnosticsReportReader.ReadBenchmarkReport(File.ReadAllBytes(benchmark.WriteReport(outputDirectory, randomSeed: 7)));
+            var report = DiagnosticsReportReader.ReadBenchmarkReport(File.ReadAllBytes(benchmark.WriteReport(outputDirectory, randomSeed: 7, new DiagnosticsRunConditions("None", IsHeadless: true, HasLink: false, "Release"))));
 
             Assert.AreEqual(7, report.RandomSeed);
             Assert.AreEqual(1, report.StartFrame);

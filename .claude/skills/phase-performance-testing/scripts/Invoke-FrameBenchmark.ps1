@@ -219,6 +219,14 @@ function Invoke-BenchmarkRun {
     if ($RunHeadless -and $null -eq $fingerprint) {
         throw "Headless run pid $($process.Id) printed no fingerprint."
     }
+    if ($null -ne $report.Conditions) {
+        if ($report.Conditions.BuildConfiguration -ne $Configuration) {
+            throw "$($benchmarkFile.Name) was measured on a $($report.Conditions.BuildConfiguration) build; expected $Configuration ($Exe)."
+        }
+        if ([bool]$report.Conditions.IsHeadless -ne $RunHeadless) {
+            throw "$($benchmarkFile.Name) says headless=$($report.Conditions.IsHeadless); this run asked for headless=$RunHeadless."
+        }
+    }
 
     $perFrame = Get-PerFrameMap -Report $report
     if ($perFrame.Count -eq 0) {

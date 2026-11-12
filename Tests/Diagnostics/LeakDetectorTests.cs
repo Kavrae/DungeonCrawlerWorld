@@ -30,4 +30,26 @@ public sealed class LeakDetectorTests
 
         Assert.IsEmpty(detector.Findings);
     }
+
+    [TestMethod]
+    [DoNotParallelize]
+    public void Tick_SamplesTheHeapAsTheLastCollectionLeftIt_NotWhatHasBeenAllocatedSince()
+    {
+        var componentManager = new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10);
+        var entityManager = new EntityManager(componentManager, initialCapacity: 10);
+        var detector = new LeakDetector(entityManager, componentManager, populations: null);
+        GC.Collect();
+        var lastCollection = GC.GetGCMemoryInfo(GCKind.Any);
+        var garbageSinceTheCollection = new byte[64 * 1024];
+
+        detector.Tick();
+
+        if (GC.GetGCMemoryInfo(GCKind.Any).Index != lastCollection.Index)
+        {
+            Assert.Inconclusive("Another collection ran while sampling.");
+        }
+
+        Assert.AreEqual(lastCollection.HeapSizeBytes - lastCollection.FragmentedBytes, detector.History.Single().HeapBytesAfterLastCollection);
+        GC.KeepAlive(garbageSinceTheCollection);
+    }
 }

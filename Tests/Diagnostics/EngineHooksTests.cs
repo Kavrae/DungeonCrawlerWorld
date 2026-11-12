@@ -54,26 +54,40 @@ public sealed class EngineHooksTests
 
     private sealed class FrameCostRecorder : IFrameCostRecorder
     {
-        public List<(FrameCostCategory Category, string GroupName, string ItemName, TimeSpan Elapsed)> Records { get; } = [];
+        public List<(FrameCostRowName Name, TimeSpan Elapsed)> Records { get; } = [];
 
-        public void Record(FrameCostCategory category, string groupName, string itemName, TimeSpan elapsed) =>
-            Records.Add((category, groupName, itemName, elapsed));
+        public void Record(FrameCostRowId row, TimeSpan elapsed) => Records.Add((row.Name, elapsed));
     }
 
     [TestMethod]
-    public void FrameCost_Disposed_RecordsOnceWithItsCategoryGroupAndItem()
+    public void FrameCost_Disposed_RecordsOnceWithItsRow()
     {
         var recorder = new FrameCostRecorder();
         using var subscription = EngineHooks.FrameCosts.Subscribe(recorder);
 
-        using (EngineHooks.FrameCost(FrameCostCategory.Draw, "GameLoop", "Shell.Draw"))
+        using (EngineHooks.FrameCost(FrameCostRowIds.Of(FrameCostCategory.Draw, "GameLoop", "Shell.Draw")))
         {
         }
 
         Assert.HasCount(1, recorder.Records);
-        var (category, groupName, itemName, elapsed) = recorder.Records[0];
-        Assert.AreEqual((FrameCostCategory.Draw, "GameLoop", "Shell.Draw"), (category, groupName, itemName));
+        var (name, elapsed) = recorder.Records[0];
+        Assert.AreEqual(new FrameCostRowName(FrameCostCategory.Draw, "GameLoop", "Shell.Draw"), name);
         Assert.IsGreaterThanOrEqualTo(TimeSpan.Zero, elapsed);
+    }
+
+    [TestMethod]
+    public void FrameCostRowIds_TheSameNameTwice_IsOneId_AndNamesItBack()
+    {
+        var first = FrameCostRowIds.Of(FrameCostCategory.Update, "EngineHooksTests", "Row");
+        var second = FrameCostRowIds.Of(FrameCostCategory.Update, "EngineHooksTests", new string("Row".AsSpan()));
+        var otherCategory = FrameCostRowIds.Of(FrameCostCategory.Draw, "EngineHooksTests", "Row");
+
+        Assert.AreEqual(first, second);
+        Assert.AreNotEqual(first, otherCategory);
+        Assert.AreEqual(new FrameCostRowName(FrameCostCategory.Update, "EngineHooksTests", "Row"), first.Name);
+        Assert.IsTrue(FrameCostRowIds.TryFind(FrameCostCategory.Draw, "EngineHooksTests", "Row", out var found));
+        Assert.AreEqual(otherCategory, found);
+        Assert.IsFalse(FrameCostRowIds.TryFind(FrameCostCategory.Update, "EngineHooksTests", "Never issued", out _));
     }
 
     [TestMethod]
@@ -81,7 +95,7 @@ public sealed class EngineHooksTests
     {
         var recorder = new FrameCostRecorder();
 
-        using (EngineHooks.FrameCost(FrameCostCategory.Update, "GameLoop", "Shell.Update"))
+        using (EngineHooks.FrameCost(FrameCostRowIds.Of(FrameCostCategory.Update, "GameLoop", "Shell.Update")))
         {
             using var subscription = EngineHooks.FrameCosts.Subscribe(recorder);
         }

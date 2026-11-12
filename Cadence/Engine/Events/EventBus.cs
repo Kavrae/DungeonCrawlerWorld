@@ -16,7 +16,6 @@ public sealed class EventBus
 
     private Delegate?[] _subscribersBySlot = [];
     private object?[] _bufferedQueuesBySlot = [];
-    private string?[] _eventTypeNamesBySlot = [];
 
     /// <summary>Subscribes to events of type T.</summary>
     /// <typeparam name="T">The type of the event.</typeparam>
@@ -96,8 +95,8 @@ public sealed class EventBus
 
         if (EngineHooks.FrameCosts.Listener is { } frameCostRecorder)
         {
-            var eventTypeName = EventTypeNameOf<T>();
-            frameCostRecorder.Begin(FrameCostCategory.Update, "EventBus", eventTypeName);
+            var frameCostRow = EventTypeFrameCostRow<T>.Row;
+            frameCostRecorder.Begin(frameCostRow);
             var start = Stopwatch.GetTimestamp();
             try
             {
@@ -105,7 +104,7 @@ public sealed class EventBus
             }
             finally
             {
-                frameCostRecorder.Record(FrameCostCategory.Update, "EventBus", eventTypeName, Stopwatch.GetElapsedTime(start));
+                frameCostRecorder.Record(frameCostRow, Stopwatch.GetElapsedTime(start));
             }
         }
         else
@@ -152,13 +151,6 @@ public sealed class EventBus
         return (Queue<T>)(_bufferedQueuesBySlot[slot] ??= new Queue<T>());
     }
 
-    private string EventTypeNameOf<T>()
-    {
-        var slot = EventTypeSlot<T>.Index;
-        EnsureSlot(ref _eventTypeNamesBySlot, slot);
-        return _eventTypeNamesBySlot[slot] ??= typeof(T).Name;
-    }
-
     private static void EnsureSlot<TEntry>(ref TEntry?[] entriesBySlot, int slot)
     {
         if (slot < entriesBySlot.Length)
@@ -169,9 +161,15 @@ public sealed class EventBus
         Array.Resize(ref entriesBySlot, System.Math.Max(slot + 1, System.Math.Max(16, entriesBySlot.Length * 2)));
     }
 
-    /// <summary>The slot every EventBus keeps T's subscribers, queue and name in: assigned once per process, the first time any bus meets T.</summary>
+    /// <summary>The slot every EventBus keeps T's subscribers and queue in: assigned once per process, the first time any bus meets T.</summary>
     private static class EventTypeSlot<T>
     {
         public static readonly int Index = Interlocked.Increment(ref _nextEventTypeSlot) - 1;
+    }
+
+    /// <summary>T's frame-cost row, named after its type: issued once per process, the first time a dispatch of T is measured.</summary>
+    private static class EventTypeFrameCostRow<T>
+    {
+        public static readonly FrameCostRowId Row = FrameCostRowIds.Of(FrameCostCategory.Update, "EventBus", typeof(T).Name);
     }
 }

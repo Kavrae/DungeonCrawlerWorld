@@ -7,11 +7,11 @@ internal sealed class SystemOrderRecorder : IFrameCostRecorder
 {
     public List<string> SystemNames { get; } = [];
 
-    public void Record(FrameCostCategory category, string groupName, string itemName, TimeSpan elapsed)
+    public void Record(FrameCostRowId row, TimeSpan elapsed)
     {
-        if (groupName == "SystemManager")
+        if (row.Name.GroupName == "SystemManager")
         {
-            SystemNames.Add(itemName);
+            SystemNames.Add(row.Name.ItemName);
         }
     }
 }

@@ -5,15 +5,15 @@ namespace Engine.Diagnostics;
 /// <cleanupVersion>1</cleanupVersion>
 internal sealed class CompositeFrameCostRecorder(IFrameCostRecorder first, IFrameCostRecorder second) : IFrameCostRecorder
 {
-    public void Begin(FrameCostCategory category, string groupName, string itemName)
+    public void Begin(FrameCostRowId row)
     {
-        first.Begin(category, groupName, itemName);
-        second.Begin(category, groupName, itemName);
+        first.Begin(row);
+        second.Begin(row);
     }
 
-    public void Record(FrameCostCategory category, string groupName, string itemName, TimeSpan elapsed)
+    public void Record(FrameCostRowId row, TimeSpan elapsed)
     {
-        first.Record(category, groupName, itemName, elapsed);
-        second.Record(category, groupName, itemName, elapsed);
+        first.Record(row, elapsed);
+        second.Record(row, elapsed);
     }
 }

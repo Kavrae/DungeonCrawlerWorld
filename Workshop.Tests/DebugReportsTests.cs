@@ -30,12 +30,12 @@ public sealed class DebugReportsTests
         for (var frame = 600; frame < 602; frame++)
         {
             benchmark.SimulationFrameStarting(frame);
-            benchmark.Record(FrameCostCategory.Update, "SystemManager", "AuraSystem", TimeSpan.FromMilliseconds(0.5));
-            benchmark.Record(FrameCostCategory.Update, "SystemManager", "MovementSystem", TimeSpan.FromMilliseconds(0.2));
+            benchmark.Record(FrameCostRowIds.Of(FrameCostCategory.Update, "SystemManager", "AuraSystem"), TimeSpan.FromMilliseconds(0.5));
+            benchmark.Record(FrameCostRowIds.Of(FrameCostCategory.Update, "SystemManager", "MovementSystem"), TimeSpan.FromMilliseconds(0.2));
             benchmark.SimulationFrameEnded(frame);
         }
 
-        benchmark.WriteReport(_directory, randomSeed: 1);
+        benchmark.WriteReport(_directory, randomSeed: 1, new DiagnosticsRunConditions(nameof(DiagnosticsFeatures.FrameBudget), IsHeadless: true, HasLink: false, "Release"));
 
         var reading = 0.0;
         var tracker = new GaugeTracker([new Gauge("Streamer", "QueuedBytes", GaugeKind.Level, () => reading)]);

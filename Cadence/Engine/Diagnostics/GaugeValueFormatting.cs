@@ -2,16 +2,19 @@ using System.Globalization;
 
 namespace Engine.Diagnostics;
 
-/// <summary>How a gauge's value is shown, by its unit: bytes in MB, milliseconds in ms, anything else as a count -- the one formatting every diagnostics view uses.</summary>
+/// <summary>How a gauge's value is shown, by its unit: bytes in MB (KB under a megabyte), milliseconds in ms, anything else as a count -- the one formatting every diagnostics view uses.</summary>
 /// <cleanupVersion>1</cleanupVersion>
 public static class GaugeValueFormatting
 {
+    private const double BytesPerKilobyte = 1024;
     private const double BytesPerMegabyte = 1024 * 1024;
 
-    /// <summary>value in unit: "12.3 MB", "4.56 ms", "1,024", or "0.50" for a count that isn't whole.</summary>
+    /// <summary>value in unit: "12.3 MB" or, under a megabyte, "58.2 KB"; "4.56 ms"; "1,024", or "0.50" for a count that isn't whole.</summary>
     public static string Format(GaugeUnit unit, double value) => unit switch
     {
-        GaugeUnit.Bytes => string.Create(CultureInfo.InvariantCulture, $"{value / BytesPerMegabyte:N1} MB"),
+        GaugeUnit.Bytes => System.Math.Abs(value) < BytesPerMegabyte
+            ? string.Create(CultureInfo.InvariantCulture, $"{value / BytesPerKilobyte:N1} KB")
+            : string.Create(CultureInfo.InvariantCulture, $"{value / BytesPerMegabyte:N1} MB"),
         GaugeUnit.Milliseconds => string.Create(CultureInfo.InvariantCulture, $"{value:N2} ms"),
         _ => value.ToString(value == System.Math.Floor(value) ? "N0" : "N2", CultureInfo.InvariantCulture),
     };

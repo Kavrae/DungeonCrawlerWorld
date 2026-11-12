@@ -10,6 +10,8 @@ public sealed class DebugRunTests
     private static readonly TimeSpan WaitTimeout = TimeSpan.FromSeconds(10);
     private static readonly string Cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
     private static readonly DebugLaunchOptions HeadlessOptions = DebugLaunchOptions.Default with { RunsBenchmark = true, Headless = true };
+    private static readonly FrameCostRowId AuraSystemRow = FrameCostRowIds.Of(FrameCostCategory.Update, "SystemManager", "AuraSystem");
+    private static readonly DiagnosticsRunConditions HeadlessConditions = new(nameof(DiagnosticsFeatures.None), IsHeadless: true, HasLink: true, "Release");
 
     private string _directory = null!;
     private string _optionsPath = null!;
@@ -119,11 +121,11 @@ public sealed class DebugRunTests
         for (var frame = 600; frame < 602; frame++)
         {
             benchmark.SimulationFrameStarting(frame);
-            benchmark.Record(FrameCostCategory.Update, "SystemManager", "AuraSystem", TimeSpan.FromMilliseconds(0.5));
+            benchmark.Record(AuraSystemRow, TimeSpan.FromMilliseconds(0.5));
             benchmark.SimulationFrameEnded(frame);
         }
 
-        var reportPath = benchmark.WriteReport(_directory, randomSeed: 5);
+        var reportPath = benchmark.WriteReport(_directory, randomSeed: 5, HeadlessConditions);
         using var harness = new DebugTabHarness(_optionsPath, [_directory], SleepingGame);
         harness.View.ShowSection(DebugSection.Reports);
         Launch(harness, HeadlessOptions);
@@ -157,9 +159,9 @@ public sealed class DebugRunTests
     {
         var benchmark = new FrameRangeBenchmark(new BenchmarkFrameRange(600, 601));
         benchmark.SimulationFrameStarting(600);
-        benchmark.Record(FrameCostCategory.Update, "SystemManager", "AuraSystem", TimeSpan.FromMilliseconds(0.5));
+        benchmark.Record(AuraSystemRow, TimeSpan.FromMilliseconds(0.5));
         benchmark.SimulationFrameEnded(600);
-        var reportPath = benchmark.WriteReport(_directory, randomSeed: 5);
+        var reportPath = benchmark.WriteReport(_directory, randomSeed: 5, HeadlessConditions);
         using var harness = new DebugTabHarness(_optionsPath, [_directory], SleepingGame);
         Launch(harness, HeadlessOptions);
         using var link = ConnectedLink(harness);

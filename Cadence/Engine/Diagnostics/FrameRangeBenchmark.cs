@@ -19,26 +19,24 @@ namespace Engine.Diagnostics;
 /// what WallClockMilliseconds in the report is for: well above FrameCount / 60 seconds means
 /// the run fell behind.
 ///
-/// Before the range opens, Record still adds each entry it sees, with nothing recorded, so the first
-/// frame inside the range runs no code for the first time (JIT) and grows no dictionary -- either
-/// would land in that frame's cost. An entry never recorded inside the range is left out of the
-/// report. After the range, Record costs one bool check.
+/// It tracks every measurement's nesting from the start, so a row open inside itself adds only its outermost
+/// measurement's time, and grows its row storage for every row it sees before the range opens, so nothing inside the
+/// range grows an array. An entry never recorded inside the range is left out of the report; each row's record count is
+/// written beside its time, so a row that got slower reads apart from one that ran more often. After the range, Begin
+/// and Record cost one bool check, and DiagnosticsEngine stops listening as soon as nothing else needs the channel.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
-public sealed class FrameRangeBenchmark : IFrameCostRecorder
+public sealed class FrameRangeBenchmark(BenchmarkFrameRange range) : IFrameCostRecorder
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    private readonly FrameCostRows<EntryTotals> _entryTotals = new();
+    private readonly FrameCostOpenMeasurements _openMeasurements = new();
+    private RowTotals[] _totalsByRow = new RowTotals[64];
+    private int _rowCountSeen;
     private long _recordingStartTimestamp;
     private TimeSpan _wallClockElapsed;
 
-    public FrameRangeBenchmark(BenchmarkFrameRange range)
-    {
-        Range = range;
-    }
-
-    public BenchmarkFrameRange Range { get; }
+    public BenchmarkFrameRange Range { get; } = range;
 
     /// <summary>True while the current simulation frame is inside Range.</summary>
     public bool IsRecording { get; private set; }
@@ -71,31 +69,56 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
         _wallClockElapsed = Stopwatch.GetElapsedTime(_recordingStartTimestamp);
     }
 
-    public void Record(FrameCostCategory category, string groupName, string itemName, TimeSpan elapsed)
+    public void Begin(FrameCostRowId row)
     {
         if (IsComplete)
         {
             return;
         }
 
-        ref var entryTotals = ref _entryTotals.GetOrAdd(category, groupName, itemName);
+        EnsureRow(row.Index);
+        _openMeasurements.Open(row.Index);
+    }
+
+    public void Record(FrameCostRowId row, TimeSpan elapsed)
+    {
+        if (IsComplete)
+        {
+            return;
+        }
+
+        var rowIndex = row.Index;
+        EnsureRow(rowIndex);
+        var isOutermost = _openMeasurements.Close(rowIndex);
         if (!IsRecording)
         {
             return;
         }
 
-        entryTotals.TotalMilliseconds += elapsed.TotalMilliseconds;
-        entryTotals.WorstMilliseconds = System.Math.Max(entryTotals.WorstMilliseconds, elapsed.TotalMilliseconds);
-        entryTotals.RecordCount++;
+        ref var totals = ref _totalsByRow[rowIndex];
+        totals.RecordCount++;
+        if (!isOutermost)
+        {
+            return;
+        }
+
+        var milliseconds = elapsed.TotalMilliseconds;
+        totals.TotalMilliseconds += milliseconds;
+        totals.WorstMilliseconds = System.Math.Max(totals.WorstMilliseconds, milliseconds);
     }
 
     /// <summary>Total milliseconds recorded for one entry so far; 0 if it never recorded inside the range.</summary>
     public double GetTotalMilliseconds(FrameCostCategory category, string groupName, string itemName) =>
-        _entryTotals.TryGetRowIndex(category, groupName, itemName, out var rowIndex) ? _entryTotals.TotalsAt(rowIndex).TotalMilliseconds : 0;
+        TotalsOf(category, groupName, itemName).TotalMilliseconds;
+
+    /// <summary>How many times one entry was recorded inside the range so far, nested measurements of itself included.</summary>
+    public int GetRecordCount(FrameCostCategory category, string groupName, string itemName) =>
+        TotalsOf(category, groupName, itemName).RecordCount;
 
     /// <summary>Writes benchmark-&lt;timestamp&gt;-&lt;pid&gt;.json to outputDirectory and returns its path.</summary>
     /// <param name="randomSeed">The seed of the session measured -- two reports are only comparable when it matches.</param>
-    public string WriteReport(string outputDirectory, int? randomSeed)
+    /// <param name="conditions">What the run measured under -- two reports are only comparable when they match too.</param>
+    public string WriteReport(string outputDirectory, int? randomSeed, DiagnosticsRunConditions conditions)
     {
         Directory.CreateDirectory(outputDirectory);
 
@@ -109,21 +132,39 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
             Range.FrameCount,
             _wallClockElapsed.TotalMilliseconds,
             GroupByCategory(FrameCostCategory.Update),
-            GroupByCategory(FrameCostCategory.Draw));
+            GroupByCategory(FrameCostCategory.Draw),
+            conditions);
 
         var path = Path.Combine(outputDirectory, $"benchmark-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{processId}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(report, JsonOptions));
         return path;
     }
 
+    private RowTotals TotalsOf(FrameCostCategory category, string groupName, string itemName) =>
+        FrameCostRowIds.TryFind(category, groupName, itemName, out var row) && row.Index < _rowCountSeen ? _totalsByRow[row.Index] : default;
+
+    private void EnsureRow(int rowIndex)
+    {
+        if (rowIndex < _rowCountSeen)
+        {
+            return;
+        }
+
+        _rowCountSeen = rowIndex + 1;
+        if (rowIndex >= _totalsByRow.Length)
+        {
+            Array.Resize(ref _totalsByRow, System.Math.Max(rowIndex + 1, _totalsByRow.Length * 2));
+        }
+    }
+
     private Dictionary<string, IReadOnlyList<DiagnosticsBenchmarkItem>> GroupByCategory(FrameCostCategory category)
     {
         var groups = new Dictionary<string, List<DiagnosticsBenchmarkItem>>();
-        for (var rowIndex = 0; rowIndex < _entryTotals.Count; rowIndex++)
+        for (var rowIndex = 0; rowIndex < _rowCountSeen; rowIndex++)
         {
-            var (entryCategory, groupName, itemName) = _entryTotals.NameAt(rowIndex);
-            var entryTotals = _entryTotals.TotalsAt(rowIndex);
-            if (entryCategory != category || entryTotals.RecordCount == 0)
+            var (entryCategory, groupName, itemName) = FrameCostRowIds.NameOf(new FrameCostRowId(rowIndex));
+            var totals = _totalsByRow[rowIndex];
+            if (entryCategory != category || totals.RecordCount == 0)
             {
                 continue;
             }
@@ -134,18 +175,18 @@ public sealed class FrameRangeBenchmark : IFrameCostRecorder
                 groups[groupName] = items;
             }
 
-            items.Add(new DiagnosticsBenchmarkItem(itemName, entryTotals.TotalMilliseconds, entryTotals.TotalMilliseconds / Range.FrameCount, entryTotals.WorstMilliseconds));
+            items.Add(new DiagnosticsBenchmarkItem(itemName, totals.TotalMilliseconds, totals.TotalMilliseconds / Range.FrameCount, totals.WorstMilliseconds, totals.RecordCount));
         }
 
         foreach (var items in groups.Values)
         {
-            items.Sort(static (a, b) => b.TotalMilliseconds.CompareTo(a.TotalMilliseconds));
+            items.Sort(static (first, second) => second.TotalMilliseconds.CompareTo(first.TotalMilliseconds));
         }
 
         return groups.ToDictionary(static group => group.Key, static group => (IReadOnlyList<DiagnosticsBenchmarkItem>)group.Value);
     }
 
-    private struct EntryTotals
+    private struct RowTotals
     {
         public double TotalMilliseconds;
         public double WorstMilliseconds;

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Engine.Diagnostics;
 using Engine.ECS.Systems;
 
@@ -6,11 +7,6 @@ namespace Tests.Diagnostics;
 [TestClass]
 public sealed class StartupProfilerTests
 {
-    // Tick()'s stability detection depends on real wall-clock gaps between calls, which isn't
-    // something to assert on in a fast unit test (same reasoning EventBusTests gives for not
-    // asserting on FrameBudgetTracker's real-time-driven Snapshot/TopEntries) -- these cover
-    // scope recording and WriteReport()'s output shape instead.
-
     private static void RecordScope(StartupProfiler profiler, DiagnosticScope scope, Action? inside = null)
     {
         profiler.ScopeStarted(in scope);
@@ -63,6 +59,83 @@ public sealed class StartupProfilerTests
 
         Assert.IsFalse(profiler.IsStable);
         Assert.IsNull(profiler.TimeToStable);
+    }
+
+    private static void TickWindows(StartupProfiler profiler, params double[] typicalMillisecondsByWindow)
+    {
+        foreach (var typicalMilliseconds in typicalMillisecondsByWindow)
+        {
+            for (var frameIndex = 0; frameIndex < StartupProfiler.WindowFrameCount; frameIndex++)
+            {
+                var spike = frameIndex % 20 == 7 ? 10 * typicalMilliseconds : 0;
+                profiler.Tick(TimeSpan.FromMilliseconds(typicalMilliseconds + spike + frameIndex % 3 * 0.01));
+            }
+        }
+    }
+
+    [TestMethod]
+    public void SteadyFrames_WithRegularSpikes_SettleOnceEnoughWindowsAgree()
+    {
+        var profiler = new StartupProfiler();
+
+        TickWindows(profiler, [.. Enumerable.Repeat(2.0, StartupProfiler.RequiredAgreeingWindows - 1)]);
+        Assert.IsFalse(profiler.IsStable);
+
+        TickWindows(profiler, 2.0);
+
+        Assert.IsTrue(profiler.IsStable);
+        Assert.IsNotNull(profiler.TimeToStable);
+    }
+
+    [TestMethod]
+    public void FramesStillGettingCheaper_NeverSettle()
+    {
+        var profiler = new StartupProfiler();
+
+        TickWindows(profiler, 10, 8, 6, 4, 3, 2);
+
+        Assert.IsFalse(profiler.IsStable);
+    }
+
+    [TestMethod]
+    public void WarmupThenSteady_SettlesAtTheFirstSteadyWindow_NotWhenItWasConfirmed()
+    {
+        var profiler = new StartupProfiler();
+        var constructed = Stopwatch.GetTimestamp();
+        TickWindows(profiler, 9, 6);
+        var steadyBegins = Stopwatch.GetElapsedTime(constructed);
+
+        for (var windowIndex = 0; windowIndex < StartupProfiler.RequiredAgreeingWindows; windowIndex++)
+        {
+            TickWindows(profiler, 2.0);
+            Thread.Sleep(100);
+        }
+
+        Assert.IsTrue(profiler.IsStable);
+        Assert.IsGreaterThanOrEqualTo(steadyBegins, profiler.TimeToStable!.Value);
+        Assert.IsLessThan(steadyBegins + TimeSpan.FromMilliseconds(200), profiler.TimeToStable.Value);
+    }
+
+    [TestMethod]
+    public void WriteReport_Twice_RewritesTheSameFile()
+    {
+        var profiler = new StartupProfiler();
+        RecordScope(profiler, new DiagnosticScope("World Build"));
+        var outputDirectory = Path.Combine(Path.GetTempPath(), $"StartupProfilerTests-{Guid.NewGuid():N}");
+        try
+        {
+            profiler.WriteReport(outputDirectory);
+            TickWindows(profiler, [.. Enumerable.Repeat(2.0, StartupProfiler.RequiredAgreeingWindows)]);
+            Thread.Sleep(TimeSpan.FromSeconds(1.1));
+            profiler.WriteReport(outputDirectory);
+
+            var file = Directory.GetFiles(outputDirectory, "startup-*.json").Single();
+            StringAssert.Contains(File.ReadAllText(file), "\"IsStable\": true");
+        }
+        finally
+        {
+            Directory.Delete(outputDirectory, recursive: true);
+        }
     }
 
     [TestMethod]
@@ -132,14 +205,31 @@ public sealed class StartupProfilerTests
 
     [TestMethod]
     [DoNotParallelize]
-    public void DiagnosticsEngine_WithStartup_ListensToScopes_UntilTheFirstSimulationFrame()
+    public void DiagnosticsEngine_WithStartup_ListensToScopes_UntilTheFirstSimulationFrame_ThenWritesThem()
     {
-        using var engine = new DiagnosticsEngine(DiagnosticsFeatures.Startup);
-        engine.Start();
-        Assert.IsNotNull(EngineHooks.DiagnosticScopes.Listener);
+        var outputDirectory = Path.Combine(Path.GetTempPath(), $"StartupProfilerTests-{Guid.NewGuid():N}");
+        try
+        {
+            using (var engine = new DiagnosticsEngine(DiagnosticsFeatures.Startup, writesPeriodicReports: false, outputDirectory: outputDirectory))
+            {
+                engine.Start();
+                Assert.IsNotNull(EngineHooks.DiagnosticScopes.Listener);
+                using (EngineHooks.DiagnosticScope("World Session Setup"))
+                {
+                }
 
-        new SystemManager().Update(new EngineTime(TimeSpan.Zero, TimeSpan.Zero, IsRunningSlowly: false, FrameCount: 1));
+                new SystemManager().Update(new EngineTime(TimeSpan.Zero, TimeSpan.Zero, IsRunningSlowly: false, FrameCount: 1));
 
-        Assert.IsNull(EngineHooks.DiagnosticScopes.Listener);
+                Assert.IsNull(EngineHooks.DiagnosticScopes.Listener);
+            }
+
+            var report = DiagnosticsReportReader.ReadStartupReport(File.ReadAllBytes(Directory.GetFiles(outputDirectory, "startup-*.json").Single()));
+            Assert.IsFalse(report.IsStable);
+            Assert.AreEqual("World Session Setup", report.Phases.Single().Name);
+        }
+        finally
+        {
+            Directory.Delete(outputDirectory, recursive: true);
+        }
     }
 }

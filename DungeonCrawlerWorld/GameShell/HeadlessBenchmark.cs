@@ -45,7 +45,7 @@ internal static class HeadlessBenchmark
     public static int Run(int randomSeed, BenchmarkFrameRange frameRange, IReadOnlyList<Engine.Settings.ISettingsSource> settingsSources, int? mapSizeOverride = null, DiagnosticsFeatures diagnosticsFeatures = DiagnosticsFeatures.None, System.Net.IPEndPoint? diagnosticsLink = null, string? saveName = null)
     {
         using var timerResolution = WindowsTimerResolution.Request(milliseconds: 1);
-        using var diagnostics = new DiagnosticsEngine(diagnosticsFeatures & (DiagnosticsFeatures.Memory | DiagnosticsFeatures.Gauges), randomSeed, frameRange, writesPeriodicReports: false, diagnosticsLink);
+        using var diagnostics = new DiagnosticsEngine(diagnosticsFeatures & (DiagnosticsFeatures.Memory | DiagnosticsFeatures.Gauges), randomSeed, frameRange, writesPeriodicReports: false, diagnosticsLink, isHeadless: true);
         diagnostics.Start();
         // Its own file, so benchmark runs never append to the real Log/player-activity.log.
         var activityLogTarget = new RollingLogTarget(Path.Combine(GameLoop.FindProjectRoot(), "Log", "diagnostics", "headless-activity.log"));

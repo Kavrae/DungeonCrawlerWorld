@@ -39,12 +39,14 @@ public sealed class SystemManager(SimulationClock? clock = null, int simulatedTi
     private bool _isRunOrderStale;
     private bool _isRegistrationClosed;
 
-    /// <summary>One registered system and its rotating stripe index.</summary>
+    /// <summary>One registered system, its frame-cost row and its rotating stripe index.</summary>
     private sealed class SystemEntry(ISystem system)
     {
         public ISystem System { get; } = system;
 
         public ITieredSystem? TieredSystem { get; } = system as ITieredSystem;
+
+        public FrameCostRowId FrameCostRow { get; } = FrameCostRowIds.Of(FrameCostCategory.Update, "SystemManager", system.GetType().Name);
 
         public byte CurrentStripe;
     }
@@ -158,8 +160,8 @@ public sealed class SystemManager(SimulationClock? clock = null, int simulatedTi
 
                 if (frameCostRecorder is not null)
                 {
-                    var systemName = entry.System.GetType().Name;
-                    frameCostRecorder.Begin(FrameCostCategory.Update, "SystemManager", systemName);
+                    var frameCostRow = entry.FrameCostRow;
+                    frameCostRecorder.Begin(frameCostRow);
                     var start = Stopwatch.GetTimestamp();
                     try
                     {
@@ -167,7 +169,7 @@ public sealed class SystemManager(SimulationClock? clock = null, int simulatedTi
                     }
                     finally
                     {
-                        frameCostRecorder.Record(FrameCostCategory.Update, "SystemManager", systemName, Stopwatch.GetElapsedTime(start));
+                        frameCostRecorder.Record(frameCostRow, Stopwatch.GetElapsedTime(start));
                     }
                 }
                 else

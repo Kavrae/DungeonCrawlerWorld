@@ -8,20 +8,16 @@ namespace Engine.Diagnostics;
 public readonly struct FrameCostHandle : IDisposable
 {
     private readonly IFrameCostRecorder? _recorder;
-    private readonly FrameCostCategory _category;
-    private readonly string _groupName;
-    private readonly string _itemName;
+    private readonly FrameCostRowId _row;
     private readonly long _startTimestamp;
 
-    internal FrameCostHandle(IFrameCostRecorder recorder, FrameCostCategory category, string groupName, string itemName)
+    internal FrameCostHandle(IFrameCostRecorder recorder, FrameCostRowId row)
     {
         _recorder = recorder;
-        _category = category;
-        _groupName = groupName;
-        _itemName = itemName;
-        recorder.Begin(category, groupName, itemName);
+        _row = row;
+        recorder.Begin(row);
         _startTimestamp = Stopwatch.GetTimestamp();
     }
 
-    public void Dispose() => _recorder?.Record(_category, _groupName, _itemName, Stopwatch.GetElapsedTime(_startTimestamp));
+    public void Dispose() => _recorder?.Record(_row, Stopwatch.GetElapsedTime(_startTimestamp));
 }

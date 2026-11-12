@@ -51,6 +51,12 @@ public sealed record ReportComparison(string PreviousName, string CurrentName, I
             return new ReportComparisonTab(LiveView.FrameCosts, [], "ms", "Not comparable: one holds milliseconds per frame (a benchmark run), the other per second (a periodic report).");
         }
 
+        if (previous.RunConditions is { } previousConditions && current.RunConditions is { } currentConditions
+            && previousConditions.DifferencesFrom(currentConditions) is { Count: > 0 } differences)
+        {
+            return new ReportComparisonTab(LiveView.FrameCosts, [], "ms", $"Not comparable: the runs measured under different conditions ({string.Join(", ", differences)}).");
+        }
+
         var arePerFrame = previous.FrameCostsArePerFrame || current.FrameCostsArePerFrame;
         return CompareMaps(LiveView.FrameCosts, arePerFrame ? "ms/frame" : "ms/s", arePerFrame ? BenchmarkComparison.DefaultMinimumMillisecondsPerFrame : 1.2, "frame costs", previousName, previousCosts, currentName, currentCosts, thresholdPercent);
     }

@@ -10,6 +10,7 @@ namespace Engine.Diagnostics;
 public sealed class GaugeTracker
 {
     /// <summary>The process-wide GC gauges, sampled beside every session's own.</summary>
+    /// <remarks>Process-wide: AllocatedBytes counts every thread's allocations between two frames' ends -- the host's draw, the diagnostics' own reports, workers -- not only the simulation's; DiagnosticsEngine's Frame/AllocatedBytes is the simulation frame's own.</remarks>
     public static readonly IReadOnlyList<Gauge> ProcessGauges =
     [
         new("Process", "HeapBytes", GaugeKind.Level, static () => GC.GetTotalMemory(forceFullCollection: false)),

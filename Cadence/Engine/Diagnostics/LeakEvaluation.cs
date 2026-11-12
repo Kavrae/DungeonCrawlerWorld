@@ -96,8 +96,8 @@ public static class LeakEvaluation
 
     private static void AddHeapFinding(int sampleCount, LeakSample oldest, LeakSample middle, LeakSample newest, PopulationGrowth livingGrowth, PopulationGrowth? partialGrowth, List<LeakFinding> findings)
     {
-        var heapGrowthRatio = GrowthRatio(oldest.TotalManagedBytes, newest.TotalManagedBytes);
-        var recentHeapGrowthRatio = GrowthRatio(middle.TotalManagedBytes, newest.TotalManagedBytes);
+        var heapGrowthRatio = GrowthRatio(oldest.HeapBytesAfterLastCollection, newest.HeapBytesAfterLastCollection);
+        var recentHeapGrowthRatio = GrowthRatio(middle.HeapBytesAfterLastCollection, newest.HeapBytesAfterLastCollection);
         if (heapGrowthRatio <= HeapGrowthThreshold || recentHeapGrowthRatio <= 0 || livingGrowth.GrowthRatio >= EntityCountFlatThreshold || partialGrowth is { GrowthRatio: >= EntityCountFlatThreshold })
         {
             return;

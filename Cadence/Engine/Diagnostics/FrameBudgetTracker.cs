@@ -2,134 +2,196 @@ using System.Diagnostics;
 
 namespace Engine.Diagnostics;
 
-/// <summary>Rolling once-per-second wall-clock cost tracker, keyed by (category, group, item).</summary>
+/// <summary>Rolling wall-clock cost tracker by frame-cost row: each row's milliseconds per second over the last window of about a second, and over a longer report interval.</summary>
 /// <remarks>
-/// Record(category, groupName, itemName, elapsed) once per occurrence, pairing it with
-/// Stopwatch.GetTimestamp()/GetElapsedTime() at the call site so the measurement itself
-/// allocates nothing.
+/// Snapshot holds the last closed window, sorted descending by cost, for a live readout (TopEntries collapses it to one
+/// "GroupName.ItemName" label per row). TakeIntervalSnapshot holds every window closed since the previous call, for a
+/// periodic report that must not miss what happened between its reports. Both are per second of the time they cover:
+/// a window closes on the first moment no measurement is open at least a second after it opened, so its length varies,
+/// and dividing by that length keeps a hitch or a long frame from reading as a costlier second. The first window opens
+/// at the first measurement, not at construction, so the time before anything was measured never dilutes it.
 ///
-/// Snapshot exposes the last full second's per-entry totals, sorted descending by cost --
-/// DiagnosticsReportWriter regroups this flat list into "Update vs Draw, then per group" for
-/// file output. TopEntries exposes the same ranking collapsed to a single "GroupName.ItemName"
-/// label per entry, for callers (a live readout) that just want the single largest
-/// overall contributor.
-///
-/// Intended as an opt-in diagnostic (see EngineHooks.FrameCosts, DiagnosticsEngine) for
-/// tracking frame budgets. Rows are found by their names' references (see FrameCostRows), and the
-/// second rolls over on a Stopwatch timestamp, so a Record on the hottest paths costs little of
-/// what it measures.
+/// A window closes only while no measurement is open (between frames, after a draw), so closing it -- sorting and
+/// copying the rows -- lands in no row, and a window never splits a measurement from the ones nested in it. A Record
+/// otherwise costs a few array writes; a row's time is added only by its outermost open measurement (see
+/// FrameCostOpenMeasurements), and its parents are what it was recorded directly inside.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class FrameBudgetTracker : IFrameCostRecorder
 {
-    private static readonly long TimestampTicksBetweenSamples = Stopwatch.Frequency;
+    private static readonly long WindowTimestampTicks = Stopwatch.Frequency;
 
-    private readonly FrameCostRows<EntryTotals> _entriesSinceLastSample = new();
+    private readonly FrameCostOpenMeasurements _openMeasurements = new();
     private readonly List<FrameCostEntry> _snapshot = [];
     private readonly List<(string Name, double MillisecondsPerSecond)> _topEntries = [];
 
-    /// <summary>Each row's "GroupName.ItemName" label, built the first time the row reaches a snapshot.</summary>
-    private readonly List<string> _labelsByRowIndex = [];
+    private RowTotals[] _windowTotalsByRow = new RowTotals[64];
+    private RowTotals[] _intervalTotalsByRow = new RowTotals[64];
+    private int[] _lastParentRowIndexPlusOneByRow = new int[64];
+    private List<int>?[] _parentRowIndexesByRow = new List<int>?[64];
+    private FrameCostRowName[]?[] _parentNamesByRow = new FrameCostRowName[]?[64];
+    private string?[] _labelsByRow = new string?[64];
+    private int _rowCountSeen;
 
-    /// <summary>The rows of the measurements open now, outermost first.</summary>
-    private readonly List<int> _openRowIndexes = [];
+    private bool _isWindowOpen;
+    private long _windowStartTimestamp;
+    private long _intervalTimestampTicks;
 
-    /// <summary>Each row's parents, as row indexes, and as names for a snapshot; a row recorded only at the top level has none.</summary>
-    private readonly List<List<int>?> _parentRowIndexesByRow = [];
-    private readonly List<FrameCostRowName[]?> _parentNamesByRow = [];
-
-    private long _lastSampleTimestamp = Stopwatch.GetTimestamp();
-
-    /// <summary>Every entry recorded over the last full second, descending by wall-clock cost.</summary>
-    /// <remarks>Empty until the first full second elapses.</remarks>
+    /// <summary>Every row recorded in the last closed window, per second of it, descending by cost.</summary>
+    /// <remarks>Empty until the first window closes.</remarks>
     public IReadOnlyList<FrameCostEntry> Snapshot => _snapshot;
 
     /// <summary>Same ranking as Snapshot, collapsed to a single "GroupName.ItemName" label per entry.</summary>
-    /// <remarks>[0] is always the single largest contributor. Empty until the first full second elapses.</remarks>
+    /// <remarks>[0] is always the single largest contributor. Empty until the first window closes.</remarks>
     public IReadOnlyList<(string Name, double MillisecondsPerSecond)> TopEntries => _topEntries;
 
-    /// <summary>Opens a measurement of one item: anything recorded before its Record ran inside it.</summary>
-    public void Begin(FrameCostCategory category, string groupName, string itemName) =>
-        _openRowIndexes.Add(_entriesSinceLastSample.GetOrAddRowIndex(category, groupName, itemName));
-
-    /// <summary>Records the elapsed time for one item, closing its measurement, and notes the measurement still open around it as its parent.</summary>
-    /// <remarks>A Record whose Begin is not the innermost open measurement closes everything opened inside it too, so one emit site that never records can't misplace the rest; a Record with no Begin closes nothing.</remarks>
-    public void Record(FrameCostCategory category, string groupName, string itemName, TimeSpan elapsed)
+    /// <summary>Opens a measurement of row: anything recorded before its Record ran inside it.</summary>
+    public void Begin(FrameCostRowId row)
     {
-        var rowIndex = _entriesSinceLastSample.GetOrAddRowIndex(category, groupName, itemName);
-        var openIndex = _openRowIndexes.LastIndexOf(rowIndex);
-        if (openIndex >= 0)
+        if (!_isWindowOpen)
         {
-            _openRowIndexes.RemoveRange(openIndex, _openRowIndexes.Count - openIndex);
+            OpenWindow(Stopwatch.GetTimestamp());
         }
 
-        ref var entryTotals = ref _entriesSinceLastSample.TotalsAt(rowIndex);
-        entryTotals.Milliseconds += elapsed.TotalMilliseconds;
-        entryTotals.RecordCount++;
-        if (InnermostOpenRowOtherThan(rowIndex) is { } parentRowIndex)
-        {
-            if (entryTotals.LastParentRowIndexPlusOne != parentRowIndex + 1)
-            {
-                entryTotals.LastParentRowIndexPlusOne = parentRowIndex + 1;
-                AddParent(rowIndex, parentRowIndex);
-            }
-        }
-
-        var currentTimestamp = Stopwatch.GetTimestamp();
-        if (currentTimestamp - _lastSampleTimestamp < TimestampTicksBetweenSamples)
-        {
-            return;
-        }
-
-        TakeSample();
-        _lastSampleTimestamp = currentTimestamp;
+        EnsureRow(row.Index);
+        _openMeasurements.Open(row.Index);
     }
 
-    private void TakeSample()
+    /// <summary>Records the elapsed time for row, closing its measurement, and notes the measurement still open around it as its parent.</summary>
+    public void Record(FrameCostRowId row, TimeSpan elapsed)
     {
-        _snapshot.Clear();
-        _topEntries.Clear();
-        for (var rowIndex = 0; rowIndex < _entriesSinceLastSample.Count; rowIndex++)
+        var rowIndex = row.Index;
+        EnsureRow(rowIndex);
+        var isOutermost = _openMeasurements.Close(rowIndex);
+
+        ref var windowTotals = ref _windowTotalsByRow[rowIndex];
+        windowTotals.RecordCount++;
+        if (isOutermost)
         {
-            var entryTotals = _entriesSinceLastSample.TotalsAt(rowIndex);
-            if (entryTotals.RecordCount == 0)
+            windowTotals.Milliseconds += elapsed.TotalMilliseconds;
+        }
+
+        var parentRowIndex = _openMeasurements.InnermostOpenRowIndexOtherThan(rowIndex);
+        if (parentRowIndex >= 0 && _lastParentRowIndexPlusOneByRow[rowIndex] != parentRowIndex + 1)
+        {
+            _lastParentRowIndexPlusOneByRow[rowIndex] = parentRowIndex + 1;
+            AddParent(rowIndex, parentRowIndex);
+        }
+
+        if (_openMeasurements.IsEmpty)
+        {
+            CloseWindowIfDue();
+        }
+    }
+
+    /// <summary>Every row recorded in the windows closed since the previous call, per second of them, descending by cost; empty when none closed.</summary>
+    /// <param name="intervalSeconds">How long those windows lasted together.</param>
+    public FrameCostEntry[] TakeIntervalSnapshot(out double intervalSeconds)
+    {
+        intervalSeconds = _intervalTimestampTicks / (double)Stopwatch.Frequency;
+        if (_intervalTimestampTicks == 0)
+        {
+            return [];
+        }
+
+        var entries = new List<FrameCostEntry>();
+        for (var rowIndex = 0; rowIndex < _rowCountSeen; rowIndex++)
+        {
+            var intervalTotals = _intervalTotalsByRow[rowIndex];
+            if (intervalTotals.RecordCount == 0)
             {
                 continue;
             }
 
-            var name = _entriesSinceLastSample.NameAt(rowIndex);
-            _snapshot.Add(new FrameCostEntry(name.Category, name.GroupName, name.ItemName, entryTotals.Milliseconds, ParentNamesOf(rowIndex)));
-            _topEntries.Add((LabelOf(rowIndex, name), entryTotals.Milliseconds));
+            var name = FrameCostRowIds.NameOf(new FrameCostRowId(rowIndex));
+            entries.Add(new FrameCostEntry(name.Category, name.GroupName, name.ItemName, intervalTotals.Milliseconds / intervalSeconds, ParentNamesOf(rowIndex)));
         }
 
-        _snapshot.Sort(static (a, b) => b.MillisecondsPerSecond.CompareTo(a.MillisecondsPerSecond));
-        _topEntries.Sort(static (a, b) => b.MillisecondsPerSecond.CompareTo(a.MillisecondsPerSecond));
-
-        _entriesSinceLastSample.ClearTotals();
+        entries.Sort(static (first, second) => second.MillisecondsPerSecond.CompareTo(first.MillisecondsPerSecond));
+        Array.Clear(_intervalTotalsByRow, 0, _rowCountSeen);
+        _intervalTimestampTicks = 0;
+        return [.. entries];
     }
 
-    /// <summary>The innermost open measurement of another row: one nested in a measurement of itself (an event published by its own handler) is parented where the outer one is, never under itself.</summary>
-    private int? InnermostOpenRowOtherThan(int rowIndex)
+    private void OpenWindow(long timestamp)
     {
-        for (var openIndex = _openRowIndexes.Count - 1; openIndex >= 0; openIndex--)
+        _isWindowOpen = true;
+        _windowStartTimestamp = timestamp;
+    }
+
+    private void CloseWindowIfDue()
+    {
+        var now = Stopwatch.GetTimestamp();
+        if (!_isWindowOpen)
         {
-            if (_openRowIndexes[openIndex] != rowIndex)
-            {
-                return _openRowIndexes[openIndex];
-            }
+            OpenWindow(now);
+            return;
         }
 
-        return null;
+        var windowTimestampTicks = now - _windowStartTimestamp;
+        if (windowTimestampTicks < WindowTimestampTicks)
+        {
+            return;
+        }
+
+        CloseWindow(windowTimestampTicks);
+        OpenWindow(now);
+    }
+
+    private void CloseWindow(long windowTimestampTicks)
+    {
+        var windowSeconds = windowTimestampTicks / (double)Stopwatch.Frequency;
+        _snapshot.Clear();
+        _topEntries.Clear();
+        for (var rowIndex = 0; rowIndex < _rowCountSeen; rowIndex++)
+        {
+            var windowTotals = _windowTotalsByRow[rowIndex];
+            if (windowTotals.RecordCount == 0)
+            {
+                continue;
+            }
+
+            ref var intervalTotals = ref _intervalTotalsByRow[rowIndex];
+            intervalTotals.Milliseconds += windowTotals.Milliseconds;
+            intervalTotals.RecordCount += windowTotals.RecordCount;
+
+            var name = FrameCostRowIds.NameOf(new FrameCostRowId(rowIndex));
+            var millisecondsPerSecond = windowTotals.Milliseconds / windowSeconds;
+            _snapshot.Add(new FrameCostEntry(name.Category, name.GroupName, name.ItemName, millisecondsPerSecond, ParentNamesOf(rowIndex)));
+            _topEntries.Add((LabelOf(rowIndex, name), millisecondsPerSecond));
+        }
+
+        _snapshot.Sort(static (first, second) => second.MillisecondsPerSecond.CompareTo(first.MillisecondsPerSecond));
+        _topEntries.Sort(static (first, second) => second.MillisecondsPerSecond.CompareTo(first.MillisecondsPerSecond));
+        Array.Clear(_windowTotalsByRow, 0, _rowCountSeen);
+        Array.Clear(_lastParentRowIndexPlusOneByRow, 0, _rowCountSeen);
+        _intervalTimestampTicks += windowTimestampTicks;
+    }
+
+    private void EnsureRow(int rowIndex)
+    {
+        if (rowIndex < _rowCountSeen)
+        {
+            return;
+        }
+
+        _rowCountSeen = rowIndex + 1;
+        if (rowIndex < _windowTotalsByRow.Length)
+        {
+            return;
+        }
+
+        var rowCapacity = System.Math.Max(rowIndex + 1, _windowTotalsByRow.Length * 2);
+        Array.Resize(ref _windowTotalsByRow, rowCapacity);
+        Array.Resize(ref _intervalTotalsByRow, rowCapacity);
+        Array.Resize(ref _lastParentRowIndexPlusOneByRow, rowCapacity);
+        Array.Resize(ref _parentRowIndexesByRow, rowCapacity);
+        Array.Resize(ref _parentNamesByRow, rowCapacity);
+        Array.Resize(ref _labelsByRow, rowCapacity);
     }
 
     private void AddParent(int rowIndex, int parentRowIndex)
     {
-        while (_parentRowIndexesByRow.Count <= rowIndex)
-        {
-            _parentRowIndexesByRow.Add(null);
-            _parentNamesByRow.Add(null);
-        }
-
         var parents = _parentRowIndexesByRow[rowIndex] ??= [];
         if (!parents.Contains(parentRowIndex))
         {
@@ -141,35 +203,20 @@ public sealed class FrameBudgetTracker : IFrameCostRecorder
     /// <summary>Every row rowIndex was recorded inside, by name; null for a top-level row. Rebuilt only when a parent is added.</summary>
     private FrameCostRowName[]? ParentNamesOf(int rowIndex)
     {
-        if (rowIndex >= _parentRowIndexesByRow.Count || _parentRowIndexesByRow[rowIndex] is not { } parents)
+        if (_parentRowIndexesByRow[rowIndex] is not { } parents)
         {
             return null;
         }
 
-        return _parentNamesByRow[rowIndex] ??= [.. parents.Select(_entriesSinceLastSample.NameAt)];
+        return _parentNamesByRow[rowIndex] ??= [.. parents.Select(static parentRowIndex => FrameCostRowIds.NameOf(new FrameCostRowId(parentRowIndex)))];
     }
 
-    private string LabelOf(int rowIndex, FrameCostRowName name)
-    {
-        while (_labelsByRowIndex.Count <= rowIndex)
-        {
-            _labelsByRowIndex.Add(string.Empty);
-        }
+    private string LabelOf(int rowIndex, FrameCostRowName name) =>
+        _labelsByRow[rowIndex] ??= $"{name.GroupName}.{name.ItemName}";
 
-        if (_labelsByRowIndex[rowIndex].Length == 0)
-        {
-            _labelsByRowIndex[rowIndex] = $"{name.GroupName}.{name.ItemName}";
-        }
-
-        return _labelsByRowIndex[rowIndex];
-    }
-
-    private struct EntryTotals
+    private struct RowTotals
     {
         public double Milliseconds;
         public int RecordCount;
-
-        /// <summary>The parent row the last Record found plus one, 0 for none yet this second: a Record under the same parent as the last skips the parent list.</summary>
-        public int LastParentRowIndexPlusOne;
     }
 }

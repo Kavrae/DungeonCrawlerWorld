@@ -7,6 +7,9 @@ public sealed class GaugeValueFormattingTests
 {
     [TestMethod]
     [DataRow("HeapBytes", 12.34 * 1024 * 1024, "12.3 MB")]
+    [DataRow("HeapBytes", 1024 * 1024, "1.0 MB")]
+    [DataRow("AllocatedBytes", 58.25 * 1024, "58.2 KB")]
+    [DataRow("AllocatedBytes", 0, "0.0 KB")]
     [DataRow("GcPauseMilliseconds", 2.345, "2.35 ms")]
     [DataRow("Living", 660_123.0, "660,123")]
     [DataRow("Living", 0.5, "0.50")]

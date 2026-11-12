@@ -8,7 +8,10 @@ namespace Engine.Diagnostics;
 /// Keeps a rolling history of LeakSamples and re-evaluates it with LeakEvaluation after each sample --
 /// see LeakEvaluation for what counts as a symptom and why findings are only indicators.
 ///
-/// Sampling GC.GetTotalMemory/CollectionCount and enumerating ComponentManager.AllPools (same
+/// The heap figure is what the latest collection left live, not GC.GetTotalMemory, whose reading rises through every
+/// gen-0 cycle and drops at each collection by more than a leak's threshold, depending only on when the sample landed.
+///
+/// Sampling the GC's figures and enumerating ComponentManager.AllPools (same
 /// pattern as ComponentMemoryTracker) are each O(pools), not O(entity count), so a sample stays
 /// cheap regardless of world size -- but still heavier than a single Stopwatch bracket, so Tick
 /// only re-samples once its sample interval has elapsed, not every frame.
@@ -56,7 +59,7 @@ public sealed class LeakDetector(EntityManager entityManager, ComponentManager c
 
         var sample = new LeakSample(
             DateTime.UtcNow,
-            GC.GetTotalMemory(forceFullCollection: false),
+            HeapBytesAfterLastCollection(),
             GC.CollectionCount(0),
             GC.CollectionCount(1),
             GC.CollectionCount(2),
@@ -72,5 +75,17 @@ public sealed class LeakDetector(EntityManager entityManager, ComponentManager c
         _history.Add(sample);
 
         LeakEvaluation.Evaluate(_history, populations, _findings);
+    }
+
+    /// <summary>The managed heap's live bytes as the latest collection left them; the current heap size before the first collection, when there is no such figure yet.</summary>
+    private static long HeapBytesAfterLastCollection()
+    {
+        var lastCollection = GC.GetGCMemoryInfo(GCKind.Any);
+        if (lastCollection.Index == 0)
+        {
+            return GC.GetTotalMemory(forceFullCollection: false);
+        }
+
+        return lastCollection.HeapSizeBytes - lastCollection.FragmentedBytes;
     }
 }

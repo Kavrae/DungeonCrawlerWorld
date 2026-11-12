@@ -1,34 +1,33 @@
+using System.Diagnostics;
+
 namespace Engine.Diagnostics;
 
-/// <summary>Generic rolling once-per-second rate counter.</summary>
+/// <summary>Generic rolling rate counter: ticks per second over the last window of about a second.</summary>
+/// <remarks>The window closes on the first tick at least a second after it opened, so its rate is divided by the window's real length -- a late tick never reads as a faster second. Timed on Stopwatch, which a clock change can't move.</remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class PerformanceCounter
 {
-    private static readonly long TicksBetweenSamples = TimeSpan.TicksPerSecond;
+    private static readonly long WindowTimestampTicks = Stopwatch.Frequency;
 
-    private long _lastSampleTicks;
-    private long _countSinceLastSample;
-
-    public PerformanceCounter()
-    {
-        _lastSampleTicks = DateTime.UtcNow.Ticks;
-    }
+    private long _windowStartTimestamp = Stopwatch.GetTimestamp();
+    private long _countSinceWindowStart;
 
     public double RatePerSecond { get; private set; }
 
-    /// <summary>Updates the performance counter since the last sample</summary>
+    /// <summary>Counts one occurrence, closing the window once a second has passed.</summary>
     public void Tick()
     {
-        _countSinceLastSample++;
+        _countSinceWindowStart++;
 
-        var currentTicks = DateTime.UtcNow.Ticks;
-        var elapsed = currentTicks - _lastSampleTicks;
-
-        if (elapsed >= TicksBetweenSamples)
+        var now = Stopwatch.GetTimestamp();
+        var windowTimestampTicks = now - _windowStartTimestamp;
+        if (windowTimestampTicks < WindowTimestampTicks)
         {
-            RatePerSecond = _countSinceLastSample;
-            _lastSampleTicks = currentTicks;
-            _countSinceLastSample = 0;
+            return;
         }
+
+        RatePerSecond = _countSinceWindowStart * (double)Stopwatch.Frequency / windowTimestampTicks;
+        _windowStartTimestamp = now;
+        _countSinceWindowStart = 0;
     }
 }

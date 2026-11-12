@@ -13,10 +13,10 @@ public static class EngineHooks
     /// <summary>Per-frame wall-clock costs of systems, event dispatch and windows.</summary>
     public static readonly EngineHookChannel<IFrameCostRecorder> FrameCosts = new(nameof(FrameCosts));
 
-    /// <summary>Times the work inside it onto the FrameCosts channel: `using (EngineHooks.FrameCost(FrameCostCategory.Draw, "Host", "Shell.Draw")) { ... }`.</summary>
-    /// <remarks>For code that runs a few times a frame. Its arguments are evaluated and a try/finally entered even with nothing listening, so a path that runs per system or per event branches on FrameCosts.Listener itself (SystemManager.Update, EventBus.Publish).</remarks>
-    public static FrameCostHandle FrameCost(FrameCostCategory category, string groupName, string itemName) =>
-        FrameCosts.Listener is { } frameCostRecorder ? new FrameCostHandle(frameCostRecorder, category, groupName, itemName) : default;
+    /// <summary>Times the work inside it onto the FrameCosts channel as row: `using (EngineHooks.FrameCost(ShellDrawRow)) { ... }`, row held from FrameCostRowIds.Of.</summary>
+    /// <remarks>For code that runs a few times a frame. A try/finally is entered even with nothing listening, so a path that runs per system or per event branches on FrameCosts.Listener itself (SystemManager.Update, EventBus.Publish).</remarks>
+    public static FrameCostHandle FrameCost(FrameCostRowId row) =>
+        FrameCosts.Listener is { } frameCostRecorder ? new FrameCostHandle(frameCostRecorder, row) : default;
 
     /// <summary>The start and end of every simulation frame, emitted by SystemManager.Update.</summary>
     public static readonly EngineHookChannel<ISimulationFrameListener> SimulationFrames = new(nameof(SimulationFrames));

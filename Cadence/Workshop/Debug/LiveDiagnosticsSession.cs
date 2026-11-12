@@ -65,9 +65,13 @@ public sealed class LiveDiagnosticsSession(int historyCapacity = DiagnosticsFram
     /// <summary>True when the frame costs' values are milliseconds per frame (a benchmark's), not per second.</summary>
     public bool FrameCostsArePerFrame { get; private set; }
 
+    /// <summary>What a recorded benchmark's measurements were taken under; null for anything else, and for a benchmark written before they were kept.</summary>
+    public DiagnosticsRunConditions? RunConditions { get; private set; }
+
     /// <summary>A session read from a report file rather than a game -- what the Reports section opens into the same views as Live. It is ended from the start and receives nothing.</summary>
     /// <param name="hello">Its features say what the file holds, so a view of something it lacks says so.</param>
     /// <param name="frameCostsArePerFrame">periodicReport's frame costs are milliseconds per frame.</param>
+    /// <param name="runConditions">What a benchmark's measurements were taken under, when the file says.</param>
     public static LiveDiagnosticsSession Recorded(
         string source,
         DiagnosticsLinkHello hello,
@@ -75,8 +79,10 @@ public sealed class LiveDiagnosticsSession(int historyCapacity = DiagnosticsFram
         DiagnosticsFrameHistory? history,
         DiagnosticsReport? periodicReport,
         DiagnosticsStartupReport? startupReport,
-        bool frameCostsArePerFrame = false) => new()
+        bool frameCostsArePerFrame = false,
+        DiagnosticsRunConditions? runConditions = null) => new()
         {
+            RunConditions = runConditions,
             Source = source,
             State = DiagnosticsConnectionState.Ended,
             Hello = hello,

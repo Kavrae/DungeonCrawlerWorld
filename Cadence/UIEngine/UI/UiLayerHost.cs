@@ -27,6 +27,9 @@ public sealed class UiLayerHost(UiLayerStack layers, UiRenderService renderServi
     /// <summary>A layer's windows copied before updating them, since a window's update can open or close windows in the same layer; reused every frame.</summary>
     private readonly List<Element> _updateSnapshot = [];
 
+    /// <summary>Each window type's frame-cost row per category and layer (MenuModeExempt draws keyed under a null layer), issued the first time it is measured.</summary>
+    private readonly Dictionary<(FrameCostCategory Category, UiLayer? Layer, Type WindowType), FrameCostRowId> _frameCostRows = [];
+
     public void Update(GameTime gameTime)
     {
         foreach (var layer in UiLayerStack.LayersAscending())
@@ -84,7 +87,7 @@ public sealed class UiLayerHost(UiLayerStack layers, UiRenderService renderServi
                 continue;
             }
 
-            using (EngineHooks.FrameCost(FrameCostCategory.Update, layer.ToString(), window.GetType().Name))
+            using (EngineHooks.FrameCost(FrameCostRowOf(FrameCostCategory.Update, layer, window)))
             {
                 window.Update(gameTime);
             }
@@ -113,7 +116,7 @@ public sealed class UiLayerHost(UiLayerStack layers, UiRenderService renderServi
 
                 for (var exemptIndex = 0; exemptIndex < _menuModeExemptElements.Count; exemptIndex++)
                 {
-                    DrawWindow(_menuModeExemptElements[exemptIndex], gameTime, MenuModeExemptRowName);
+                    DrawWindow(_menuModeExemptElements[exemptIndex], gameTime, null);
                 }
             }
 
@@ -121,7 +124,8 @@ public sealed class UiLayerHost(UiLayerStack layers, UiRenderService renderServi
         }
     }
 
-    private static void DrawWindow(Element window, GameTime gameTime, UiLayer layer)
+    /// <param name="layer">The layer whose row it is drawn under; null for a menu-mode-exempt element drawn above the dim.</param>
+    private void DrawWindow(Element window, GameTime gameTime, UiLayer? layer)
     {
         if (EngineHooks.FrameCosts.Listener is null)
         {
@@ -129,14 +133,22 @@ public sealed class UiLayerHost(UiLayerStack layers, UiRenderService renderServi
             return;
         }
 
-        DrawWindow(window, gameTime, layer.ToString());
-    }
-
-    private static void DrawWindow(Element window, GameTime gameTime, string tierName)
-    {
-        using (EngineHooks.FrameCost(FrameCostCategory.Draw, tierName, window.GetType().Name))
+        using (EngineHooks.FrameCost(FrameCostRowOf(FrameCostCategory.Draw, layer, window)))
         {
             window.Draw(gameTime);
         }
+    }
+
+    private FrameCostRowId FrameCostRowOf(FrameCostCategory category, UiLayer? layer, Element window)
+    {
+        var windowType = window.GetType();
+        var key = (category, layer, windowType);
+        if (!_frameCostRows.TryGetValue(key, out var row))
+        {
+            row = FrameCostRowIds.Of(category, layer?.ToString() ?? MenuModeExemptRowName, windowType.Name);
+            _frameCostRows.Add(key, row);
+        }
+
+        return row;
     }
 }
