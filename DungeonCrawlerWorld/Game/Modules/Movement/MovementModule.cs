@@ -48,8 +48,6 @@ public sealed class MovementModule : IGameModule
         var componentManager = registration.ComponentManager;
 
         var deadEntities = componentManager.GetPackedPool<DeadComponent>();
-        // Only used to widen MovementSystem's EventBus.Publish gate to an aura-carrying mover (see
-        // MovementSystem's own doc comment).
         var statModifiers = componentManager.GetMultiPool<StatModifierComponent>();
         var movementDisabled = componentManager.GetPackedPool<MovementDisabledComponent>();
 

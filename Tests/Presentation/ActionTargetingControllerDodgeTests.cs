@@ -28,13 +28,16 @@ public sealed class ActionTargetingControllerDodgeTests
     private const int PlayerEntityId = 1;
     private static readonly Vector3Int PlayerPosition = new(5, 5, 0);
 
-    private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager, PlayerMovementController PlayerMovement, SimulationClock Clock, EventBus EventBus) Build(Vector3Int? wallTile = null)
+    private static (ActionTargetingController ActionTargeting, MapViewState MapViewState, ComponentManager ComponentManager, PlayerMovementController PlayerMovement, SimulationClock Clock, EventBus EventBus) Build(params Vector3Int[] wallTiles)
     {
         var world = TestWorlds.Create(new Game.World.Map(new Vector3Int(20, 20, 1)), playerEntityId: PlayerEntityId);
-        if (wallTile is { } wallPosition)
+        if (wallTiles.Length > 0)
         {
             var wall = world.Terrain.Register(new Game.Terrain.TerrainDefinition("test:wall", "Wall", "", "#", Microsoft.Xna.Framework.Color.Gray, BlocksMovement: true));
-            world.SetStructure(wallPosition, new Game.Terrain.TerrainCell(wall));
+            foreach (var wallPosition in wallTiles)
+            {
+                world.SetStructure(wallPosition, new Game.Terrain.TerrainCell(wall));
+            }
         }
 
         var mapViewState = new MapViewState();
@@ -146,7 +149,7 @@ public sealed class ActionTargetingControllerDodgeTests
     [TestMethod]
     public void ArmingDodge_BesideAWall_LeavesTheWallOutOfTheTilesItsHintsAreDrawnOn()
     {
-        var (actionTargeting, mapViewState, _, _, _, _) = Build(wallTile: new Vector3Int(6, 5, 0));
+        var (actionTargeting, mapViewState, _, _, _, _) = Build(new Vector3Int(6, 5, 0));
 
         actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
 
@@ -156,9 +159,33 @@ public sealed class ActionTargetingControllerDodgeTests
     }
 
     [TestMethod]
+    public void ArmingDodge_InACornerOfWalls_LeavesTheDiagonalThroughTheCornerOut()
+    {
+        var (actionTargeting, mapViewState, _, _, _, _) = Build(new Vector3Int(6, 5, 0), new Vector3Int(5, 6, 0));
+
+        actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+        Assert.DoesNotContain(new Vector3Int(6, 6, 0), mapViewState.TargetableTiles, "Both tiles flanking the diagonal are walls, so MovementSystem would refuse the step.");
+        Assert.Contains(new Vector3Int(4, 4, 0), mapViewState.TargetableTiles);
+        Assert.Contains(PlayerPosition, mapViewState.TargetableTiles, "Dodging in place is always offered.");
+    }
+
+    [TestMethod]
+    public void ArmingDodge_BesideOneWall_StillOffersTheDiagonalPastIt()
+    {
+        var (actionTargeting, mapViewState, _, _, _, _) = Build(new Vector3Int(6, 5, 0));
+
+        actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+
+        Assert.IsNotNull(mapViewState.TargetableTiles);
+        Assert.Contains(new Vector3Int(6, 6, 0), mapViewState.TargetableTiles);
+    }
+
+    [TestMethod]
     public void TryClaimDodgeDirectionalKey_IntoAWall_QueuesNothing_AndStaysArmed()
     {
-        var (actionTargeting, mapViewState, componentManager, _, _, _) = Build(wallTile: new Vector3Int(6, 5, 0));
+        var (actionTargeting, mapViewState, componentManager, _, _, _) = Build(new Vector3Int(6, 5, 0));
         actionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
         var claimedKeys = new HashSet<Keys>();
 

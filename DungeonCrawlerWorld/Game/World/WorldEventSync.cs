@@ -8,7 +8,7 @@ namespace Game.World;
 /// bookkeeping, not an optional module reaction) instead of going through EventBus -- see
 /// IEntityMoveSync's own doc comment. Calls World.MoveEntityUnchecked, not the public
 /// MoveEntity, since the caller (MovementSystem) has already validated the destination
-/// footprint via its own CanMove moments earlier in the same call.
+/// footprint through MovementCandidates.CanOccupy moments earlier in the same call.
 /// </summary>
 public sealed class WorldEventSync(World world) : IEntityMoveSync
 {

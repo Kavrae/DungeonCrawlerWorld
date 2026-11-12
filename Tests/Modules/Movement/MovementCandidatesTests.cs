@@ -159,13 +159,42 @@ public sealed class MovementCandidatesTests
     }
 
     [TestMethod]
+    public void CanStep_DiagonalThroughACornerWithBothFlanksClosed_ReturnsFalse()
+    {
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+        mapQuery.BlockedCells.Add(new Vector3Int(3, 2, 0));
+        mapQuery.BlockedCells.Add(new Vector3Int(2, 3, 0));
+
+        Assert.IsFalse(MovementCandidates.CanStep(mapQuery, new Vector3Int(2, 2, 0), new Vector3Int(3, 3, 0), SingleTile, entityId: 0, isBlocking: true));
+    }
+
+    [TestMethod]
+    public void CanStep_DiagonalPastOneClosedFlank_ReturnsTrue()
+    {
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
+        mapQuery.BlockedCells.Add(new Vector3Int(3, 2, 0));
+
+        Assert.IsTrue(MovementCandidates.CanStep(mapQuery, new Vector3Int(2, 2, 0), new Vector3Int(3, 3, 0), SingleTile, entityId: 0, isBlocking: true));
+    }
+
+    [TestMethod]
+    [DataRow(2, 2, 0)]
+    [DataRow(4, 2, 0)]
+    [DataRow(3, 2, 1)]
+    public void CanStep_ToItsOwnTileOrNotAnAdjacentTileOnItsLayer_ReturnsFalse(int targetX, int targetY, int targetZ)
+    {
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 2));
+
+        Assert.IsFalse(MovementCandidates.CanStep(mapQuery, new Vector3Int(2, 2, 0), new Vector3Int(targetX, targetY, targetZ), SingleTile, entityId: 0, isBlocking: true));
+    }
+
+    [TestMethod]
     public void TryPickRandomAdjacentPosition_AllFourDirectionsBlocked_ReturnsFalse()
     {
         var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 1));
-        // Corner placement excludes North/East via map edges; the remaining two on-map
-        // directions (South/West) are occupied by other Blocking entities.
-        mapQuery.SetOccupant(new Vector3Int(0, 1, 0), entityId: 1); // South of (0,0)
-        mapQuery.SetOccupant(new Vector3Int(1, 0, 0), entityId: 2); // West of (0,0)
+        // In the map's corner, North and West are off the map; South and East are occupied by other Blocking entities.
+        mapQuery.SetOccupant(new Vector3Int(0, 1, 0), entityId: 1);
+        mapQuery.SetOccupant(new Vector3Int(1, 0, 0), entityId: 2);
         var mathUtility = new MathUtility(new SeededRandom((ulong)1));
 
         var found = MovementCandidates.TryPickRandomAdjacentPosition(mapQuery, mathUtility, entityId: 0, new Vector3Int(0, 0, 0), SingleTile, isBlocking: true, out _);

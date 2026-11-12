@@ -207,7 +207,7 @@ public sealed class MapGameOverlay : IDisposable
     /// instead of its own hotkey (ActionTargetingController.TryClaimDodgeDirectionalKey), so it
     /// needs its own affordance the player wouldn't otherwise expect. Diagonal neighbors are still
     /// reachable (click, or same-key-then-click), just not via a single key -- no hint drawn there.
-    /// A direction Dodge can't step to (a wall: not in TargetableTiles) gets no hint, as its key does nothing.
+    /// A direction Dodge can't step to (not in TargetableTiles: PlayerCommands.CanStepToward) gets no hint, as its key does nothing.
     /// </summary>
     private void DrawDodgeDirectionalHints(SpriteEffectBatch spriteBatch)
     {

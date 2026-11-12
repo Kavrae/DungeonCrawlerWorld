@@ -31,9 +31,10 @@ namespace Game.Modules.Actions;
 /// A move is buffered as a direction, not a tile, and resolved against the player's position when it is written. A
 /// move whose tile can't be occupied clears NextMapPosition rather than leaving an older step in place.
 ///
-/// An action can carry a step to take once it activates (Dodge's destination). The step is written to
-/// NextMapPosition only when the player's ActivationUsedEvent for that action arrives, so an activation that fails
-/// (on cooldown, say) never moves the player. A request the game consumed without that event drops its step.
+/// An action can carry a step to take once it activates (Dodge's direction). The step is resolved against the
+/// player's position and written to NextMapPosition only when the player's ActivationUsedEvent for that action
+/// arrives, so an activation that fails (on cooldown, say) never moves the player, and a move taken while it waited
+/// never turns it into a longer one. A request the game consumed without that event drops its step.
 ///
 /// A Stagger (EntityStaggeredEvent on the player) drops the buffered command. A Dodge's step waiting on its activation
 /// is kept: a Staggering hit can't land on a dodging player, and the step is taken at once.
@@ -71,10 +72,10 @@ public sealed class PlayerCommands
     private uint _stackInstanceId;
     private HotkeySlot? _activatedFromSlot;
     private TargetSelection _selection;
-    private Vector3Int? _stepOnActivation;
+    private Vector3Int? _stepDirectionOnActivation;
     private uint _expiresAtFrame;
 
-    private (Guid ActionId, Vector3Int Destination)? _pendingActivationStep;
+    private (Guid ActionId, Vector3Int Direction)? _pendingActivationStep;
 
     public PlayerCommands(
         World.World world,
@@ -116,8 +117,8 @@ public sealed class PlayerCommands
     }
 
     /// <summary>Buffers an activation of <paramref name="actionId"/> against <paramref name="selection"/>, replacing any buffered command. Returns false, buffering nothing, when <see cref="CanQueueAction"/> is false.</summary>
-    /// <remarks>An action that is ready now is written immediately. <paramref name="stepOnActivation"/> is a tile to step to once the action activates.</remarks>
-    public bool QueueAction(Guid actionId, TargetSelection selection, Vector3Int? stepOnActivation = null)
+    /// <remarks>An action that is ready now is written immediately. <paramref name="stepDirectionOnActivation"/> is a one-tile step, taken from wherever the player stands once the action activates.</remarks>
+    public bool QueueAction(Guid actionId, TargetSelection selection, Vector3Int? stepDirectionOnActivation = null)
     {
         if (!CanQueueAction(actionId))
         {
@@ -127,7 +128,7 @@ public sealed class PlayerCommands
         Buffer(CommandKind.Action);
         _actionId = actionId;
         _selection = selection;
-        _stepOnActivation = stepOnActivation;
+        _stepDirectionOnActivation = stepDirectionOnActivation;
         TryWriteBuffered();
         return true;
     }
@@ -172,7 +173,7 @@ public sealed class PlayerCommands
         var hadCommand = _kind != CommandKind.None;
         _kind = CommandKind.None;
         _selection = default;
-        _stepOnActivation = null;
+        _stepDirectionOnActivation = null;
         return hadCommand;
     }
 
@@ -180,7 +181,7 @@ public sealed class PlayerCommands
     public bool TryCancelWindup(long now) =>
         WindupCancel.TryCancel(_pendingWindups, _actionLocks, _world.PlayerEntityId, now, releaseLock: true);
 
-    /// <summary>Writes the buffered command, or else the held direction, into the game once the player's action lock has cleared.</summary>
+    /// <summary>Writes the buffered command once it is ready, or else, with nothing buffered, the held direction once the player's action lock has cleared.</summary>
     public void Flush(Vector3Int heldDirection)
     {
         var playerEntityId = _world.PlayerEntityId;
@@ -189,7 +190,7 @@ public sealed class PlayerCommands
             _pendingActivationStep = null;
         }
 
-        if (TryWriteBuffered() || heldDirection == new Vector3Int())
+        if (TryWriteBuffered() || _kind != CommandKind.None || heldDirection == new Vector3Int())
         {
             return;
         }
@@ -221,7 +222,10 @@ public sealed class PlayerCommands
         }
 
         _pendingActivationStep = null;
-        SetNextMapPosition(used.EntityId, step.Destination);
+        if (_transformPool.TryGetReadonly(used.EntityId, out var transform))
+        {
+            SetNextMapPosition(used.EntityId, transform.Position + step.Direction);
+        }
     }
 
     private void OnEntityStaggered(EntityStaggeredEvent staggered)
@@ -261,7 +265,7 @@ public sealed class PlayerCommands
 
         var kind = _kind;
         var selection = _selection;
-        var stepOnActivation = _stepOnActivation;
+        var stepDirectionOnActivation = _stepDirectionOnActivation;
         Clear();
 
         switch (kind)
@@ -270,7 +274,7 @@ public sealed class PlayerCommands
                 WriteMove(playerEntityId, _moveDirection);
                 break;
             case CommandKind.Action:
-                WriteAction(playerEntityId, _actionId, selection, stepOnActivation);
+                WriteAction(playerEntityId, _actionId, selection, stepDirectionOnActivation);
                 break;
             case CommandKind.Item:
                 WriteItemActivation(playerEntityId, _stackInstanceId, selection);
@@ -308,8 +312,7 @@ public sealed class PlayerCommands
         WithdrawActivationRequests(playerEntityId);
 
         Vector3Int? target = transform.Position + direction;
-        if (direction == new Vector3Int() ||
-            !MovementCandidates.CanOccupy(_world, target.Value, transform.Size, playerEntityId, _world.IsBlocking(playerEntityId)))
+        if (!MovementCandidates.CanStep(_world, transform.Position, target.Value, transform.Size, playerEntityId, _world.IsBlocking(playerEntityId)))
         {
             target = null;
         }
@@ -317,12 +320,20 @@ public sealed class PlayerCommands
         SetNextMapPosition(playerEntityId, target);
     }
 
-    private void WriteAction(int playerEntityId, Guid actionId, TargetSelection selection, Vector3Int? stepOnActivation)
+    /// <summary>Whether the player could step one tile in <paramref name="direction"/> from where it stands now, by the rule MovementSystem takes a step by (MovementCandidates.CanStep).</summary>
+    public bool CanStepToward(Vector3Int direction)
+    {
+        var playerEntityId = _world.PlayerEntityId;
+        return _transformPool.TryGetReadonly(playerEntityId, out var transform) &&
+            MovementCandidates.CanStep(_world, transform.Position, transform.Position + direction, transform.Size, playerEntityId, _world.IsBlocking(playerEntityId));
+    }
+
+    private void WriteAction(int playerEntityId, Guid actionId, TargetSelection selection, Vector3Int? stepDirectionOnActivation)
     {
         SetNextMapPosition(playerEntityId, null);
         WithdrawActivationRequests(playerEntityId);
         _pendingActions.Merge(playerEntityId, new PendingActionActivationComponent(actionId, selection));
-        _pendingActivationStep = stepOnActivation is { } destination ? (actionId, destination) : null;
+        _pendingActivationStep = stepDirectionOnActivation is { } direction ? (actionId, direction) : null;
     }
 
     private void WriteItemActivation(int playerEntityId, uint stackInstanceId, TargetSelection selection)

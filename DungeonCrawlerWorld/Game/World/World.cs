@@ -81,7 +81,7 @@ public sealed class World(
     /// internal, and safe ONLY when the caller has already validated the destination footprint
     /// moments earlier in the same single-threaded call with nothing else able to mutate the
     /// map in between (today: MoveEntity itself, immediately above, plus WorldEventSync.SyncMove,
-    /// invoked directly by MovementSystem immediately after MovementSystem.CanMove already
+    /// invoked directly by MovementSystem immediately after MovementCandidates.CanOccupy already
     /// checked this exact footprint). Any other caller -- a mod, a future spawner -- should use
     /// the public, defensive MoveEntity instead.
     /// </summary>

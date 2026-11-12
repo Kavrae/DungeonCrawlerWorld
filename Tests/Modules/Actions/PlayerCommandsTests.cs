@@ -293,6 +293,28 @@ public sealed class PlayerCommandsTests
     }
 
     [TestMethod]
+    public void HeldKey_DoesNotStepWhileABufferedActionWaitsOnItsCooldown()
+    {
+        var harness = Build(locked: false);
+        harness.Frame(9, Keys.W);
+        using (var takenStep = harness.ComponentManager.GetPackedPool<MovementComponent>().Write(PlayerEntityId))
+        {
+            takenStep.Value.NextMapPosition = null;
+        }
+
+        harness.Clock.Advance(10);
+        harness.Actions.SetCooldown(PlayerEntityId, SelfActionId, 5, now: 10);
+        Assert.IsTrue(harness.Buffer.QueueAction(SelfActionId, TestSelections.At(PlayerPosition)));
+
+        harness.Frame(11, Keys.W);
+        Assert.IsNull(harness.NextMapPosition);
+
+        harness.Frame(15, Keys.W);
+        Assert.AreEqual(SelfActionId, harness.PendingActionId);
+        Assert.IsNull(harness.NextMapPosition);
+    }
+
+    [TestMethod]
     public void ItemActivation_FollowsTheSameRules_AndReplacesABufferedAction()
     {
         var harness = Build();
@@ -401,5 +423,19 @@ public sealed class PlayerCommandsTests
         harness.EventBus.Publish(new ActivationUsedEvent(PlayerEntityId, ActivatableKind.Action, BuiltInActionIds.Dodge, TestContent.Action(BuiltInActionIds.Dodge).Tags));
 
         Assert.AreEqual(new Vector3Int(6, 5, 0), harness.NextMapPosition);
+    }
+
+    [TestMethod]
+    public void DodgeStep_IsTakenFromWhereThePlayerStandsWhenItActivates()
+    {
+        var harness = Build();
+        harness.Clock.Advance(50);
+        harness.ActionTargeting.HandleHotkeySlotPress(HotkeySlot.DefaultAttack);
+        harness.ActionTargeting.TryClaimDodgeDirectionalKey(new KeyboardState(Keys.D), new KeyboardState(), []);
+
+        TestTransforms.Set(harness.ComponentManager, PlayerEntityId, new TransformComponent(North, new Vector2Byte(1, 1)));
+        harness.EventBus.Publish(new ActivationUsedEvent(PlayerEntityId, ActivatableKind.Action, BuiltInActionIds.Dodge, TestContent.Action(BuiltInActionIds.Dodge).Tags));
+
+        Assert.AreEqual(new Vector3Int(6, 4, 0), harness.NextMapPosition);
     }
 }

@@ -127,6 +127,7 @@ public sealed class MovementSystemTests
         system.Update(default, 0);
 
         Assert.AreEqual(new Vector3Int(2, 2, 0), transformPool.GetReadonly(0).Position);
+        Assert.IsNull(movementPool.GetReadonly(0).NextMapPosition);
     }
 
     /// <summary>BodyPartEffectsSystem's own hard block (every Leg/Foot simultaneously disabled) -- MovementSystem must refuse the move outright, the same way it already refuses one for a dead entity.</summary>
@@ -150,6 +151,33 @@ public sealed class MovementSystemTests
         system.Update(default, 0);
 
         Assert.AreEqual(new Vector3Int(2, 2, 0), transformPool.GetReadonly(0).Position);
+        Assert.IsNull(movementPool.GetReadonly(0).NextMapPosition, "A step that can never be taken is cleared, so whatever decides the next one isn't left waiting on it.");
+    }
+
+    [TestMethod]
+    [DataRow(4, 2, 0)]
+    [DataRow(2, 4, 0)]
+    [DataRow(3, 2, 1)]
+    public void Update_StepThatIsNotToAnAdjacentTileOnItsLayer_IsRefusedAndCleared(int targetX, int targetY, int targetZ)
+    {
+        var transformPool = CreateTransformPool();
+        var actionLockPool = CreateActionLockPool();
+        var movementPool = CreateMovementPool();
+        var mapQuery = new FakeMapQuery(new Vector3Int(5, 5, 2));
+        var entityMoveSync = new RecordingEntityMoveSync();
+
+        var startPosition = new Vector3Int(2, 2, 0);
+        transformPool.Add(0, new TransformComponent(startPosition, new Vector2Byte(1, 1)));
+        actionLockPool.Add(0, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
+        movementPool.Add(0, new MovementComponent(MovementMode.PlayerControlled, null, new Vector3Int(targetX, targetY, targetZ)));
+
+        var system = TestSystems.MovementSystem(transformPool, actionLockPool, movementPool, mapQuery, new EventBus(), entityMoveSync, new FrameEventBuffer<EntityMovedEvent>(), null, CreateProcessingTierPool(), new ProcessingTierEvents());
+        system.Update(default, 0);
+
+        Assert.AreEqual(startPosition, transformPool.GetReadonly(0).Position);
+        Assert.IsNull(entityMoveSync.LastSynced);
+        Assert.IsNull(movementPool.GetReadonly(0).NextMapPosition);
+        Assert.AreEqual(0u, actionLockPool.GetReadonly(0).UnlockedAtFrame);
     }
 
     /// <summary>
@@ -350,6 +378,7 @@ public sealed class MovementSystemTests
         Assert.AreEqual(startPosition, entityMoveSync.LastSynced.Value.OldPosition);
         Assert.AreEqual(targetPosition, entityMoveSync.LastSynced.Value.NewPosition);
         Assert.AreEqual(targetPosition, transformPool.GetReadonly(0).Position);
+        Assert.IsNull(movementPool.GetReadonly(0).NextMapPosition, "A step taken is cleared with the move.");
 
         Assert.HasCount(1, movedEntities.Items);
         Assert.AreEqual(entityMoveSync.LastSynced.Value, movedEntities.Items[0]);

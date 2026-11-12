@@ -72,6 +72,20 @@ public static class MovementCandidates
         return occupyingEntityId == -1 || occupyingEntityId == entityId;
     }
 
+    /// <summary>Whether an entity at oldPosition may step to newPosition: the one rule every step is taken, written and offered by.</summary>
+    /// <remarks>newPosition must be one of the eight tiles around oldPosition on its layer, a tile the entity can occupy, and, for a diagonal, not a cut through a corner whose two flanking tiles are both closed. A move any longer is a teleport (EntityTeleporter), never a step.</remarks>
+    public static bool CanStep(IMapQuery mapQuery, Vector3Int oldPosition, Vector3Int newPosition, Vector2Byte size, int entityId, bool isBlocking) =>
+        IsOneTileStep(oldPosition, newPosition) &&
+        CanOccupy(mapQuery, newPosition, size, entityId, isBlocking) &&
+        IsDiagonalMoveClear(mapQuery, oldPosition, newPosition, size, entityId, isBlocking);
+
+    /// <summary>Whether newPosition is one of the eight tiles around oldPosition on the same layer.</summary>
+    public static bool IsOneTileStep(Vector3Int oldPosition, Vector3Int newPosition) =>
+        oldPosition.Z == newPosition.Z &&
+        oldPosition != newPosition &&
+        (uint)(newPosition.X - oldPosition.X + 1) <= 2u &&
+        (uint)(newPosition.Y - oldPosition.Y + 1) <= 2u;
+
     /// <summary>Determines whether a diagonal step from oldPosition to newPosition is legal.</summary>
     /// <remarks>Requires at least one of the two flanking orthogonal tiles to be occupiable.</remarks>
     /// <param name="mapQuery">The map query.</param>
@@ -108,25 +122,8 @@ public static class MovementCandidates
     /// <returns>True if a valid position was found.</returns>
     public static bool TryPickRandomAdjacentPosition(IMapQuery mapQuery, MathUtility mathUtility, int entityId, Vector3Int position, Vector2Byte size, bool isBlocking, out Vector3Int candidatePosition)
     {
-        Span<Direction> remaining = [Direction.North, Direction.South, Direction.East, Direction.West];
+        Span<Direction> remaining = [Direction.North, Direction.South, Direction.West, Direction.East];
         var remainingCount = 4;
-
-        if (position.Y == mapQuery.Bounds.MinY)
-        {
-            RemoveDirection(remaining, ref remainingCount, Direction.North);
-        }
-        else if (position.Y == mapQuery.Bounds.MaxY - size.Y)
-        {
-            RemoveDirection(remaining, ref remainingCount, Direction.South);
-        }
-        if (position.X == mapQuery.Bounds.MinX)
-        {
-            RemoveDirection(remaining, ref remainingCount, Direction.East);
-        }
-        else if (position.X == mapQuery.Bounds.MaxX - size.X)
-        {
-            RemoveDirection(remaining, ref remainingCount, Direction.West);
-        }
 
         while (remainingCount > 0)
         {
@@ -137,8 +134,8 @@ public static class MovementCandidates
             {
                 Direction.North => new Vector3Int(position.X, position.Y - 1, position.Z),
                 Direction.South => new Vector3Int(position.X, position.Y + 1, position.Z),
-                Direction.East => new Vector3Int(position.X - 1, position.Y, position.Z),
-                Direction.West => new Vector3Int(position.X + 1, position.Y, position.Z),
+                Direction.West => new Vector3Int(position.X - 1, position.Y, position.Z),
+                Direction.East => new Vector3Int(position.X + 1, position.Y, position.Z),
                 _ => position,
             };
 
@@ -153,18 +150,5 @@ public static class MovementCandidates
 
         candidatePosition = default;
         return false;
-    }
-
-    /// <summary> Swap-removes direction from the remaining candidate set, if present. </summary>
-    private static void RemoveDirection(Span<Direction> remaining, ref int remainingCount, Direction direction)
-    {
-        for (var i = 0; i < remainingCount; i++)
-        {
-            if (remaining[i] == direction)
-            {
-                remaining[i] = remaining[--remainingCount];
-                return;
-            }
-        }
     }
 }

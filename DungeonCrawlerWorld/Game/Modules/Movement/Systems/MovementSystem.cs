@@ -119,73 +119,56 @@ public sealed class MovementSystem : ITieredSystem
 
     /// <summary>One due entity's movement step.</summary>
     /// <remarks>
-    /// Both gates are deadlines, not countdowns: the retry backoff is MovementComponent.WaitUntilFrame
-    /// and the shared lock is ActionLockComponent.UnlockedAtFrame, both absolute frames compared
-    /// against `now`, so the step needs no scaling by how often the entity's tier is visited.
+    /// An entity with no step costs one lookup. A step that can never be taken -- the entity is dead,
+    /// movement-disabled or off the map, has already arrived, or the step is not to an adjacent tile on
+    /// its own layer -- is cleared, so whatever decides the next one is never left waiting on it.
+    /// The retry backoff (MovementComponent.WaitUntilFrame) and the shared lock
+    /// (ActionLockComponent.UnlockedAtFrame) are deadlines compared against now; a step waiting on
+    /// either is kept.
     /// </remarks>
     private void UpdateEntity(int entityId, long now)
     {
-        if (_deadEntities.Has(entityId) || _movementDisabled.Has(entityId))
-        {
-            return;
-        }
-
         ref readonly var movementComponent = ref _movementComponents.GetReadonly(entityId);
-
-        // The retry backoff is a deadline now (MovementComponent.WaitUntilFrame), so this is a pure
-        // read -- no owner, nothing to advance, and no way for two systems to burn it down twice as
-        // fast as intended the way they once did (see TestCombatBehaviorSystem's matching gate).
-        if (movementComponent.IsWaiting(now))
+        if (movementComponent.NextMapPosition is not { } nextPosition)
         {
             return;
         }
 
-        if (ActionLockGate.IsBlocked(_actionLocks, entityId, now) ||
-            !_transformComponents.TryGetReadonly(entityId, out var transformComponent))
+        if (_deadEntities.Has(entityId) ||
+            _movementDisabled.Has(entityId) ||
+            !_transformComponents.TryGetReadonly(entityId, out var transformComponent) ||
+            !_mapQuery.IsOnMap(transformComponent.Position))
+        {
+            ClearStep(entityId);
+            return;
+        }
+
+        if (movementComponent.IsWaiting(now) || ActionLockGate.IsBlocked(_actionLocks, entityId, now))
         {
             return;
         }
 
-        if (!_mapQuery.IsOnMap(transformComponent.Position))
-        {
-            return;
-        }
-
-        var justSelected = movementComponent.NextMapPosition == null || transformComponent.Position == movementComponent.NextMapPosition.Value;
-        if (justSelected)
-        {
-            ClearArrivedDestinationIfIdle(entityId);
-        }
-
-        if (movementComponent.NextMapPosition != null)
-        {
-            TryMoveToNextMapPosition(entityId, movementComponent, transformComponent, now);
-        }
+        TryMoveToNextMapPosition(entityId, nextPosition, transformComponent, now);
     }
 
-    /// <summary>Clears the movement destination.</summary>
-    /// <remarks>This is generally used for idle entities.</remarks>
-    /// <param name="entityId">The ID of the entity.</param>
-    private void ClearArrivedDestinationIfIdle(int entityId) =>
+    private void ClearStep(int entityId) =>
         _movementComponents.TryUpdate(entityId, new SetNextMapPositionUpdate(null));
 
-    /// <summary>Attempts to move the entity to its next map position.</summary>
-    /// <remarks>Blocking entities are gated by occupancy checks.</remarks>
+    /// <summary>Attempts to move the entity to newPosition by the step rule (MovementCandidates.CanStep), and clears the step whether or not it moves.</summary>
     /// <param name="entityId">The ID of the entity.</param>
-    /// <param name="movementComponent">The movement component of the entity.</param>
+    /// <param name="newPosition">The tile to step to.</param>
     /// <param name="transformComponent">The transform component of the entity.</param>
     /// <param name="now">The current simulation frame -- a completed move locks the entity until a deadline measured from it.</param>
-    private void TryMoveToNextMapPosition(int entityId, MovementComponent movementComponent, TransformComponent transformComponent, long now)
+    private void TryMoveToNextMapPosition(int entityId, Vector3Int newPosition, TransformComponent transformComponent, long now)
     {
-        var newPosition = movementComponent.NextMapPosition!.Value;
         var oldPosition = transformComponent.Position;
         var isBlocking = _mapQuery.IsBlocking(entityId);
         var isDiagonal = newPosition.X != oldPosition.X && newPosition.Y != oldPosition.Y;
 
-        if (!MovementCandidates.CanOccupy(_mapQuery, newPosition, transformComponent.Size, entityId, isBlocking) ||
-            (isDiagonal && !MovementCandidates.IsDiagonalMoveClear(_mapQuery, oldPosition, newPosition, transformComponent.Size, entityId, isBlocking)))
+        ClearStep(entityId);
+
+        if (!MovementCandidates.CanStep(_mapQuery, oldPosition, newPosition, transformComponent.Size, entityId, isBlocking))
         {
-            _movementComponents.TryUpdate(entityId, new SetNextMapPositionUpdate(null));
             return;
         }
 
