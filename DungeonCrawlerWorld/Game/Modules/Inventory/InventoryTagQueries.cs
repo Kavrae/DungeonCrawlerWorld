@@ -10,9 +10,10 @@ public static class InventoryTagQueries
 {
     /// <summary>For every item category entityId's stacks fall in, how many distinct stacks are in it, most populated first.</summary>
     /// <remarks>
-    /// A category is an Item.* tag. Each stack counts once under each of its Item.* tags and under every
-    /// ancestor of those below Item itself -- a Health Potion (Item.Consumable.Potion) counts under Potion and
-    /// Consumable. Every other tag (Self, Healing, Fire, Magic) is not a category. Ties are broken by display
+    /// A category is an Item category tag (GameTagDomains.ItemCategory) below the domain's root, Item. Each stack counts
+    /// once under each of its category tags and under every ancestor of those below Item itself -- a Health Potion
+    /// (Item.Consumable.Potion) counts under Potion and Consumable. Every other tag (Self, Healing, Fire, Magic) is not a
+    /// category. Ties are broken by display
     /// name, then full name, for a stable tab order. A category no stack falls in produces no entry, so it never
     /// gets a tab.
     /// </remarks>
@@ -34,7 +35,7 @@ public static class InventoryTagQueries
             stackCategories.Clear();
             foreach (var tag in definition.Tags)
             {
-                for (var category = tag; category.IsSelfOrDescendantOf(GameTags.Item) && category != GameTags.Item; category = category.Parent)
+                for (var category = tag; gameplayTags.AcceptsBelowItsRoots(GameTagDomains.ItemCategory, category); category = category.Parent)
                 {
                     stackCategories.Add(category);
                 }

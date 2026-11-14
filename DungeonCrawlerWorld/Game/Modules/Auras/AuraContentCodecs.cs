@@ -2,6 +2,7 @@ using Engine.Content;
 using Engine.Tiles;
 using Game.Content;
 using Game.Effects;
+using Game.Tags;
 
 namespace Game.Modules.Auras;
 
@@ -29,7 +30,7 @@ internal static class AuraContentCodecs
             ContentField.Text("d", "Description"),
             ContentField.Color("gc", "Glow colour"),
             ContentField.ListOf<Effect>("fx", "Effects each tick", ContentFieldKind.Object),
-            ContentField.TagSet("t", "Tags"),
+            ContentField.TagSet("t", "Tags", GameTagDomains.Activation),
             ContentField.Enum<AuraMagnitude>("mg", "Magnitude"),
             ContentField.Enum<AuraFalloff>("fo", "Falloff"),
             ContentField.Number("go", "Glow opacity multiplier", 0, 1),

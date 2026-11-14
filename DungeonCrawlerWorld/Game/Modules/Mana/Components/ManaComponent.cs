@@ -2,24 +2,21 @@ using Engine.Utilities;
 
 namespace Game.Modules.Mana.Components;
 
-/// <summary>
-/// An entity's mana bounds -- mirrors SimpleHealthComponent's shape (including its float storage, for
-/// the same exact-fractional-regen reason -- see that struct's own doc comment; Mana is in fact
-/// the case that made float storage necessary, since MaximumMana is typically only 2-12 for a
-/// starting roll, where a rounded regen tick either stalls for several seconds or never lands at
-/// all). No regen field here either, ManaRegenSystem computes it live each tick from the entity's
-/// Intelligence AbilityScoresComponent total. Not granted to every entity -- only entities that
-/// have gained an ability that drains its user's mana get one, via ManaGrant.EnsureManaComponentExists,
-/// with MaximumMana snapshotting that Intelligence total at grant time (the same
-/// one-time-bake-then-layer-modifiers-on-top pattern SimpleHealthComponent.MaximumHealth uses).
-/// </summary>
-public struct ManaComponent(float currentMana, float maximumMana)
+/// <summary>An entity's mana: what it has now, and its maximum before any MaximumMana modifier.</summary>
+/// <remarks>
+/// Float storage, as SimpleHealthComponent's, for exact fractional regeneration: a starting maximum is often 2-12, where a
+/// rounded regen tick would stall for seconds or never land. Regeneration isn't stored -- ManaRegenSystem derives it from
+/// Intelligence each tick. Only an entity that gains something draining its user's mana holds one
+/// (ManaGrant.EnsureManaComponentExists), its BaseMaximumMana then the Intelligence total. CurrentMana is held within the
+/// modified maximum; compare it only with that (ManaQueries.TryGetTotals), never with BaseMaximumMana.
+/// </remarks>
+public struct ManaComponent(float currentMana, float baseMaximumMana)
 {
     public float CurrentMana { get; set; } = currentMana;
-    public float MaximumMana { get; set; } = maximumMana;
+    public float BaseMaximumMana { get; set; } = baseMaximumMana;
 
     public override readonly string ToString() =>
-        MaximumMana > 0
-            ? $"{StringUtility.BuildPercentageBar("MP", (int)CurrentMana, (int)MaximumMana, 20)} {(int)CurrentMana}/{(int)MaximumMana}"
-            : $"Invalid MaximumMana: {MaximumMana}";
+        BaseMaximumMana > 0
+            ? $"{StringUtility.BuildPercentageBar("MP", (int)CurrentMana, (int)BaseMaximumMana, 20)} {(int)CurrentMana}/{(int)BaseMaximumMana} (base)"
+            : $"Invalid BaseMaximumMana: {BaseMaximumMana}";
 }

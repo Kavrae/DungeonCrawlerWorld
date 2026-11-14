@@ -68,6 +68,7 @@ public sealed class GameModuleContext
 
         MapQuery = world;
         PlayerQuery = world;
+        SightBlockers = world;
         EntityMoveSync = new WorldEventSync(world);
         ComponentManager = componentManager;
         EntityManager = entityManager;
@@ -93,6 +94,7 @@ public sealed class GameModuleContext
 
         ContentCatalogLoader = new ContentCatalogLoader(() => Content, Actions, Items, Auras, () => new ContentChecks(GameplayTags, Auras, Terrain, StatusEffectAppliers), failure => ReportContentFailures([failure]));
 
+        NpcDecisions = new Modules.NpcBehavior.NpcDecisionState(Definitions);
         Lootboxes = new LootboxCatalog(Items);
         Items.AddDefinitionSource(Lootboxes);
         LootboxOpener = new LootboxOpener(componentManager, Lootboxes, Items, RandomStreams.SeedFor(LootboxOpener.RandomStream));
@@ -113,6 +115,9 @@ public sealed class GameModuleContext
     private readonly Lazy<TargetResolution> _targetResolution;
 
     public IMapQuery MapQuery { get; }
+
+    /// <summary>What blocks sight on the map (World.BlocksSight), for a line-of-sight question outside targeting.</summary>
+    public Engine.Tiles.ISightBlockers SightBlockers { get; }
 
     /// <summary>Who the player is, for everything that treats the player differently.</summary>
     public IPlayerQuery PlayerQuery { get; }
@@ -258,6 +263,12 @@ public sealed class GameModuleContext
     public Terrain.TerrainRegistry Terrain { get; }
 
     public BlueprintRegistry Definitions { get; } = new();
+
+    /// <summary>The build's NPC decisions: the behaviors registered, the sets blueprints resolve to, the decision counters and the inspected entity's trace.</summary>
+    public Modules.NpcBehavior.NpcDecisionState NpcDecisions { get; }
+
+    /// <summary>Every behavior an NPC can be granted: a module registers its own, or replaces a built-in by Guid, in Configure.</summary>
+    public Engine.Decisions.BehaviorCatalog<Modules.NpcBehavior.NpcDecisionContext> NpcBehaviors => NpcDecisions.Behaviors;
 
     /// <summary>The build's one spawn path -- for a system or action that spawns an entity or applies a blueprint to one at runtime.</summary>
     /// <remarks>Spawn only once the build is complete: blueprints are resolved after every module's Configure.</remarks>

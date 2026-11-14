@@ -15,7 +15,7 @@ public sealed class ManaCostTests
     public void Take_ReducesCurrentManaByAmount()
     {
         var pool = CreatePool();
-        pool.Add(0, new ManaComponent(currentMana: 50, maximumMana: 100));
+        pool.Add(0, new ManaComponent(currentMana: 50, baseMaximumMana: 100));
 
         ManaCost.Take(pool, 0, 10, EmptyPools.Multi<StatModifierComponent>());
 
@@ -26,7 +26,7 @@ public sealed class ManaCostTests
     public void Take_ClampsAtZero()
     {
         var pool = CreatePool();
-        pool.Add(0, new ManaComponent(currentMana: 5, maximumMana: 100));
+        pool.Add(0, new ManaComponent(currentMana: 5, baseMaximumMana: 100));
 
         ManaCost.Take(pool, 0, 10, EmptyPools.Multi<StatModifierComponent>());
 
@@ -37,7 +37,7 @@ public sealed class ManaCostTests
     public void HasEnough_ExactlyTheAmountLeft_IsTrue()
     {
         var pool = CreatePool();
-        pool.Add(0, new ManaComponent(currentMana: 10, maximumMana: 100));
+        pool.Add(0, new ManaComponent(currentMana: 10, baseMaximumMana: 100));
 
         Assert.IsTrue(ManaCost.HasEnough(pool, 0, 10));
         Assert.IsFalse(ManaCost.HasEnough(pool, 0, 10.5f));

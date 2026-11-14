@@ -43,7 +43,11 @@ public sealed class ActionStateView(ComponentManager componentManager, EntityAct
     /// <inheritdoc cref="ItemDropRefusals.GetRefusal"/>
     public ItemDropRefusal GetDropRefusal(int entityId, in ItemDrop drop) => _dropRefusals.GetRefusal(entityId, in drop);
 
-    public bool TryGetMana(int entityId, out ManaComponent mana) => _mana.TryGetReadonly(entityId, out mana);
+    /// <inheritdoc cref="ManaQueries.TryGetTotals"/>
+    public bool TryGetManaTotals(int entityId, out float current, out float maximum) => ManaQueries.TryGetTotals(_mana, _statModifiers, entityId, out current, out maximum);
+
+    /// <inheritdoc cref="ManaQueries.TryGetBaseMaximum"/>
+    public bool TryGetBaseMaximumMana(int entityId, out float baseMaximum) => ManaQueries.TryGetBaseMaximum(_mana, entityId, out baseMaximum);
 
     /// <inheritdoc cref="ManaRegeneration.EffectivePerSecond"/>
     public float ManaRegenerationPerSecond(int entityId) => ManaRegeneration.EffectivePerSecond(_abilityScores, _statModifiers, entityId);

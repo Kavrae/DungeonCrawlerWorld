@@ -7,19 +7,19 @@ namespace Game.Modules.Health;
 
 /// <summary>The single chokepoint for "what's this entity's current/max HP", regardless of whether it's Simple or Complex.</summary>
 /// <remarks>
-/// Mirrors IMapQuery.IsBlocking's own single-chokepoint reasoning, applied here to
-/// Simple-vs-Complex. Deliberately does not fold in StatModifierMath's MaximumHealth modifier --
-/// callers that need the modifier-effective maximum (InspectionWindowContent, MapWindow.DrawHealthBar)
-/// apply StatModifierMath.GetEffectiveValue to the returned maximum themselves, same as they
-/// already do today against SimpleHealthComponent.MaximumHealth directly; this only owns the
-/// Simple-vs-Complex sum, not the modifier chain on top of it. See TryGetEffectiveMaximum below
-/// for the combined, modifier-effective version.
+/// Every maximum it hands out has the entity's MaximumHealth modifiers applied, because current health already has them
+/// (MaximumHealthShift moves it with them): a current health compared with a base maximum reads a Boss as 160% healthy.
+/// The base maximum is read only where it is the point -- MaximumHealthShift, the stored components -- under its own
+/// name (BaseMaximumHealth, EntityBodyParts.TryGetCurrentAndBaseMaximumTotals).
 /// </remarks>
 public static class HealthQueries
 {
+    /// <summary>Its current health and its maximum with its MaximumHealth modifiers applied; false for an entity with no health.</summary>
+    /// <remarks>For Complex health the modifiers apply to each part and the parts are summed, as each part's own maximum is read everywhere else: an additive modifier adds to every part.</remarks>
     public static bool TryGetTotals(
         PackedComponentPool<SimpleHealthComponent> simpleHealth,
         EntityBodyParts bodyParts,
+        MultiComponentPool<StatModifierComponent> statModifiers,
         int entityId,
         out float current,
         out float maximum)
@@ -27,36 +27,54 @@ public static class HealthQueries
         if (simpleHealth.TryGetReadonly(entityId, out var simple))
         {
             current = simple.CurrentHealth;
-            maximum = simple.MaximumHealth;
-            return true;
-        }
-
-        if (bodyParts.TryGetTotals(entityId, out current, out maximum))
-        {
+            maximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, simple.BaseMaximumHealth);
             return true;
         }
 
         current = 0f;
         maximum = 0f;
-        return false;
+        var any = false;
+        var additiveSum = 0f;
+        var multiplicativeSum = 0f;
+        foreach (var part in bodyParts.Parts(entityId))
+        {
+            if (!any)
+            {
+                StatModifierMath.GetSums(statModifiers, entityId, StatModifierTarget.MaximumHealth, out additiveSum, out multiplicativeSum);
+                any = true;
+            }
+
+            current += part.CurrentHealth;
+            maximum += StatModifierMath.CalculateTotal(part.BaseMaximumHealth, additiveSum, multiplicativeSum);
+        }
+
+        return any;
     }
 
-    /// <summary>TryGetTotals' own maximum, further scaled through StatModifierTarget.MaximumHealth -- the single place "this entity's real, modifier-effective max HP" is computed as one number regardless of Simple/Complex, used by both DirectDamage and DirectHeal's own percent-of-max-health calculations.</summary>
+    /// <summary>Its maximum health with its MaximumHealth modifiers applied -- what DirectDamage's and DirectHeal's percent-of-maximum amounts read.</summary>
     public static bool TryGetEffectiveMaximum(
         PackedComponentPool<SimpleHealthComponent> simpleHealth,
         EntityBodyParts bodyParts,
         MultiComponentPool<StatModifierComponent> statModifiers,
         int entityId,
-        out float effectiveMaximum)
+        out float effectiveMaximum) =>
+        TryGetTotals(simpleHealth, bodyParts, statModifiers, entityId, out _, out effectiveMaximum);
+
+    /// <summary>Its maximum health before any MaximumHealth modifier, summed across its parts for Complex health; false for an entity with no health.</summary>
+    /// <remarks>For what changes the base itself (a race applied or changed while modifiers are active), never for comparing with current health. A part's own base is BodyPartView.BaseMaximumHealth.</remarks>
+    public static bool TryGetBaseMaximum(PackedComponentPool<SimpleHealthComponent> simpleHealth, EntityBodyParts bodyParts, int entityId, out float baseMaximum) =>
+        TryGetCurrentAndBaseMaximum(simpleHealth, bodyParts, entityId, out _, out baseMaximum);
+
+    private static bool TryGetCurrentAndBaseMaximum(PackedComponentPool<SimpleHealthComponent> simpleHealth, EntityBodyParts bodyParts, int entityId, out float current, out float baseMaximum)
     {
-        if (!TryGetTotals(simpleHealth, bodyParts, entityId, out _, out var maximum))
+        if (simpleHealth.TryGetReadonly(entityId, out var simple))
         {
-            effectiveMaximum = 0f;
-            return false;
+            current = simple.CurrentHealth;
+            baseMaximum = simple.BaseMaximumHealth;
+            return true;
         }
 
-        effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, maximum);
-        return true;
+        return bodyParts.TryGetCurrentAndBaseMaximumTotals(entityId, out current, out baseMaximum);
     }
 
     /// <summary>Whether entityId has any health a heal could restore: below its modifier-effective maximum for Simple health, or any one body part below its own for Complex.</summary>
@@ -75,7 +93,7 @@ public static class HealthQueries
     {
         if (simpleHealth.TryGetReadonly(entityId, out var simple))
         {
-            return simple.CurrentHealth < StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, simple.MaximumHealth);
+            return simple.CurrentHealth < StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, simple.BaseMaximumHealth);
         }
 
         var modifiersSummed = false;
@@ -90,7 +108,7 @@ public static class HealthQueries
                 modifiersSummed = true;
             }
 
-            if (part.CurrentHealth < StatModifierMath.CalculateTotal(part.MaximumHealth, additiveSum, multiplicativeSum))
+            if (part.CurrentHealth < StatModifierMath.CalculateTotal(part.BaseMaximumHealth, additiveSum, multiplicativeSum))
             {
                 return true;
             }

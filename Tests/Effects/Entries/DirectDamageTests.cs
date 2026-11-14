@@ -36,7 +36,7 @@ public sealed class DirectDamageTests
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
 
         var health = componentManager.GetPackedPool<SimpleHealthComponent>();
-        health.Add(TargetEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(TargetEntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
 
         var context = TestActionEffects.Context(
             SourceEntityId: SourceEntityId,
@@ -145,7 +145,7 @@ public sealed class DirectDamageTests
         new DirectDamage(MinFlatDamage: 20, MaxFlatDamage: 20, BodyPartTargetMode: BodyPartTargetMode.All).Apply(context);
 
         var bodyParts = context.Services.BodyParts;
-        HealthQueries.TryGetTotals(componentManager.GetPackedPool<SimpleHealthComponent>(), bodyParts, TargetEntityId, out var current, out _);
+        HealthQueries.TryGetTotals(componentManager.GetPackedPool<SimpleHealthComponent>(), bodyParts, componentManager.GetMultiPool<StatModifierComponent>(), TargetEntityId, out var current, out _);
         Assert.AreEqual(80f, current, "20 total damage / 2 parts = 10 each, regardless of each part's own max health -- Head 40-10=30, Torso 60-10=50, total 80.");
     }
 

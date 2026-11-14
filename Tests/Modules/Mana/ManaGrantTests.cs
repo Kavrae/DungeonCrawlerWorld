@@ -27,7 +27,7 @@ public sealed class ManaGrantTests
         ManaGrant.EnsureManaComponentExists(manager, 0);
 
         var mana = manager.GetPackedPool<ManaComponent>().GetReadonly(0);
-        Assert.AreEqual((short)42, mana.MaximumMana);
+        Assert.AreEqual((short)42, mana.BaseMaximumMana);
         Assert.AreEqual((short)42, mana.CurrentMana);
     }
 
@@ -43,7 +43,7 @@ public sealed class ManaGrantTests
 
         var mana = manager.GetPackedPool<ManaComponent>().GetReadonly(0);
         Assert.AreEqual((short)5, mana.CurrentMana);
-        Assert.AreEqual((short)42, mana.MaximumMana);
+        Assert.AreEqual((short)42, mana.BaseMaximumMana);
     }
 
     [TestMethod]

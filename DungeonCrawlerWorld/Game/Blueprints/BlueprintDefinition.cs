@@ -1,3 +1,4 @@
+using Engine.Decisions;
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
@@ -60,6 +61,13 @@ public sealed record BlueprintDefinition(Guid Id, string Name)
     /// <summary>The auras every entity built with this definition radiates.</summary>
     /// <remarks>Declared rather than written by Build: an aura is the same for every entity of the definition, and declaring it lets a build that names an unregistered aura fail when it is configured rather than at its first spawn.</remarks>
     public IReadOnlyList<AuraGrant> Auras { get; init; } = [];
+
+    /// <summary>What every entity built with this definition can decide to do: a later part's grant of a behavior replaces an earlier one's, and Rank 0 takes it away (BehaviorSet).</summary>
+    /// <remarks>Declared rather than built, like Actions: every entity of a composition shares one resolved set (NpcBehaviorSets), so an entity stores only which set it decides with.</remarks>
+    public IReadOnlyList<NpcBehaviorGrant> Behaviors { get; init; } = [];
+
+    /// <summary>What scales the weight of the behaviors every entity built with this definition holds, by drive tag or by behavior.</summary>
+    public IReadOnlyList<BehaviorModifier> BehaviorModifiers { get; init; } = [];
 
     /// <summary>The MapLayer an entity of it spawns on when the spawn names none.</summary>
     public MapLayer? Layer { get; init; }

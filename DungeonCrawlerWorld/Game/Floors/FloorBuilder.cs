@@ -207,7 +207,7 @@ public static class FloorBuilder
         SpawnTestDummy(world, factory, sessionSeed, definitions, spawnPosition);
     }
 
-    /// <summary>TEMPORARY test seeding, alongside the Poison/ability-score seeding above -- a dedicated Dodge-practice target a few tiles from the player's own spawn. See TestDummyBlueprint/TestDummyAttackSystem.</summary>
+    /// <summary>TEMPORARY test seeding, alongside the Poison/ability-score seeding above -- a dedicated Dodge-practice target a few tiles from the player's own spawn. See TestDummyBlueprint.</summary>
     private const int TestDummySpawnOffsetColumns = 3;
 
     private static void SpawnTestDummy(Game.World.World world, EntityFactory factory, int sessionSeed, BlueprintRegistry definitions, Vector3Int playerSpawnPosition)

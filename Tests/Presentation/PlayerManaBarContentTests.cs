@@ -35,7 +35,7 @@ public sealed class PlayerManaBarContentTests
             componentManager.Merge(PlayerEntityId, playerMana);
         }
 
-        var content = new PlayerManaBarContent(world, TestActionStateViews.Over(componentManager), new StatModifierView(componentManager), fontService, new UiLayerStack());
+        var content = new PlayerManaBarContent(world, TestActionStateViews.Over(componentManager), fontService, new UiLayerStack());
         var hostWindow = windowService.CreateElement<Window>(null, new ElementOptions
         {
             Layout = new ElementLayoutOptions

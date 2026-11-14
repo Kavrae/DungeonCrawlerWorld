@@ -202,14 +202,15 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         BuildWrappingTextLine(host, width, definition.Description);
     }
 
-    /// <summary>A plain divider and the tags' display names, comma-separated.</summary>
+    /// <summary>A plain divider and the tags' display names, comma-separated, each tag's description in the line's tooltip.</summary>
     public void BuildTagsSection(Window host, ActivatableDefinition definition, float width) => BuildTagsSection(host, definition.Tags, width);
 
-    /// <summary>A plain divider and tags' display names, comma-separated.</summary>
+    /// <summary>A plain divider and tags' display names, comma-separated, each tag's description in the line's tooltip.</summary>
     public void BuildTagsSection(Window host, GameplayTagSet tags, float width)
     {
         BuildDivider(host, width);
-        BuildWrappingTextLine(host, width, TagDisplayText(tags));
+        var line = BuildWrappingTextLine(host, width, TagDisplayText(tags));
+        line.TooltipText = TagDescriptionText(tags);
     }
 
     public void BuildFixedTextLine(Window host, float width, string text, Color color)
@@ -227,7 +228,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
     }
 
     /// <summary>Description/Tags -- length varies, so these wrap and auto-size rather than clipping at a fixed RowHeight (mirrors InspectionWindowContent.BuildDescriptionRow).</summary>
-    public void BuildWrappingTextLine(Window host, float width, string text)
+    public TextWindow BuildWrappingTextLine(Window host, float width, string text)
     {
         var line = elementPoolService.CreateElement<TextWindow>(host, new ElementOptions
         {
@@ -239,6 +240,7 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         });
         line.ContentFont = BodyFont;
         host.AddChild(line);
+        return line;
     }
 
     /// <summary>Section-opening divider -- a single TextDivider row, always 95% width, in GameWindowPalette.HeaderTextColor. Plain (mirroring InspectionWindowContent.BuildSpacer) when label/textPosition are left at their defaults; labeled, with the line broken at textPosition, when a section has its own label.</summary>
@@ -265,6 +267,23 @@ public sealed class ActivatableDetailsSections(ElementPoolService elementPoolSer
         }
 
         return string.Join(", ", displayNames);
+    }
+
+    /// <summary>One line per tag: its display name and its description; null for no tags.</summary>
+    public string? TagDescriptionText(GameplayTagSet tags)
+    {
+        if (tags.IsEmpty)
+        {
+            return null;
+        }
+
+        var lines = new List<string>(tags.Count);
+        foreach (var tag in tags)
+        {
+            lines.Add($"{gameplayTags.GetDisplayName(tag)}: {gameplayTags.GetDescription(tag)}");
+        }
+
+        return string.Join('\n', lines);
     }
 
     private Window CreateRowWindow(Window host, float width, float rowHeight)

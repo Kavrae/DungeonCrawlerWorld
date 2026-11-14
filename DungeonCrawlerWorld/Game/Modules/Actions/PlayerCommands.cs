@@ -25,8 +25,9 @@ namespace Game.Modules.Actions;
 /// An action or item activation that couldn't be ready before it expired is refused rather than buffered: nothing is
 /// queued, whatever was buffered stays, and the caller is told, so a confirm is never silently dropped.
 ///
-/// Writing a command also withdraws whatever the player had asked for earlier and the game hasn't taken yet: an
-/// action or item activation clears a step still in NextMapPosition, and a move removes a pending activation request.
+/// Every write goes through IntentWriter, so writing a command also withdraws whatever the player had asked for earlier
+/// and the game hasn't taken yet: an action or item activation clears a step still in NextMapPosition and the other
+/// kind's pending request, and a move removes a pending activation request.
 ///
 /// A move is buffered as a direction, not a tile, and resolved against the player's position when it is written. A
 /// move whose tile can't be occupied clears NextMapPosition rather than leaving an older step in place.
@@ -57,6 +58,7 @@ public sealed class PlayerCommands
     private readonly World.World _world;
     private readonly DirectComponentPool<TransformComponent> _transformPool;
     private readonly PackedComponentPool<MovementComponent> _movementPool;
+    private readonly IntentWriter _intents;
     private readonly PackedComponentPool<ActionLockComponent> _actionLocks;
     private readonly PackedComponentPool<PendingActionActivationComponent> _pendingActions;
     private readonly PackedComponentPool<PendingItemActivationComponent> _pendingItemActivations;
@@ -94,6 +96,7 @@ public sealed class PlayerCommands
         _world = world;
         _transformPool = transformPool;
         _movementPool = movementPool;
+        _intents = new IntentWriter(movementPool, pendingActions, pendingItemActivations);
         _actionLocks = actionLocks;
         _pendingActions = pendingActions;
         _pendingItemActivations = pendingItemActivations;
@@ -224,7 +227,7 @@ public sealed class PlayerCommands
         _pendingActivationStep = null;
         if (_transformPool.TryGetReadonly(used.EntityId, out var transform))
         {
-            SetNextMapPosition(used.EntityId, transform.Position + step.Direction);
+            _intents.StepFromActivation(used.EntityId, transform.Position + step.Direction);
         }
     }
 
@@ -309,7 +312,7 @@ public sealed class PlayerCommands
             return;
         }
 
-        WithdrawActivationRequests(playerEntityId);
+        _pendingActivationStep = null;
 
         Vector3Int? target = transform.Position + direction;
         if (!MovementCandidates.CanStep(_world, transform.Position, target.Value, transform.Size, playerEntityId, _world.IsBlocking(playerEntityId)))
@@ -317,7 +320,7 @@ public sealed class PlayerCommands
             target = null;
         }
 
-        SetNextMapPosition(playerEntityId, target);
+        _intents.Step(playerEntityId, target);
     }
 
     /// <summary>Whether the player could step one tile in <paramref name="direction"/> from where it stands now, by the rule MovementSystem takes a step by (MovementCandidates.CanStep).</summary>
@@ -330,26 +333,13 @@ public sealed class PlayerCommands
 
     private void WriteAction(int playerEntityId, Guid actionId, TargetSelection selection, Vector3Int? stepDirectionOnActivation)
     {
-        SetNextMapPosition(playerEntityId, null);
-        WithdrawActivationRequests(playerEntityId);
-        _pendingActions.Merge(playerEntityId, new PendingActionActivationComponent(actionId, selection));
+        _intents.QueueAction(playerEntityId, actionId, selection);
         _pendingActivationStep = stepDirectionOnActivation is { } direction ? (actionId, direction) : null;
     }
 
     private void WriteItemActivation(int playerEntityId, uint stackInstanceId, TargetSelection selection)
     {
-        SetNextMapPosition(playerEntityId, null);
-        WithdrawActivationRequests(playerEntityId);
-        _pendingItemActivations.Merge(playerEntityId, new PendingItemActivationComponent(stackInstanceId, selection, _activatedFromSlot));
-    }
-
-    private void WithdrawActivationRequests(int playerEntityId)
-    {
-        _pendingActions.Remove(playerEntityId);
-        _pendingItemActivations.Remove(playerEntityId);
+        _intents.QueueItemActivation(playerEntityId, stackInstanceId, selection, _activatedFromSlot);
         _pendingActivationStep = null;
     }
-
-    private void SetNextMapPosition(int playerEntityId, Vector3Int? target) =>
-        _movementPool.TryUpdate(playerEntityId, new SetNextMapPositionUpdate(target));
 }

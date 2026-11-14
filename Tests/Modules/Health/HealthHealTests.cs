@@ -18,7 +18,7 @@ public sealed class HealthHealTests
     public void Apply_RaisesCurrentHealthByFractionOfMaximum()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
 
         TestHealth.Heal(pool, 0, 0.1f, now: 0);
 
@@ -29,7 +29,7 @@ public sealed class HealthHealTests
     public void Apply_ClampsAtMaximumHealth()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 95, maximumHealth: 100));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 95, baseMaximumHealth: 100));
 
         TestHealth.Heal(pool, 0, 0.5f, now: 0);
 
@@ -70,8 +70,8 @@ public sealed class HealthHealTests
     public void Apply_ReturnsWhetherTheTargetHadHealthToRestore()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
-        pool.Add(1, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
+        pool.Add(1, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         var damagedParts = BodyPartTestWorld.WithParts(2, ("Torso", BodyPartType.Torso, 50, 100, true)).BodyParts;
         var fullParts = BodyPartTestWorld.WithParts(3, ("Torso", BodyPartType.Torso, 100, 100, true)).BodyParts;
 
@@ -90,7 +90,7 @@ public sealed class HealthHealTests
     public void Apply_SimpleCorpse_HealsNothingAndPublishesNothing()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 100));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 0, baseMaximumHealth: 100));
         var deadEntities = EmptyPools.Packed<DeadComponent>();
         deadEntities.Add(0, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
         var eventBus = new EventBus();
@@ -126,7 +126,7 @@ public sealed class HealthHealTests
     public void Apply_SimpleTargetAtFullHealth_PublishesNothing()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         var eventBus = new EventBus();
         var published = false;
         eventBus.Subscribe<EntityHealedEvent>(_ => published = true);
@@ -155,7 +155,7 @@ public sealed class HealthHealTests
     public void Apply_PlayerIsTarget_PublishesEntityHealedEvent()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
         var eventBus = new EventBus();
         EntityHealedEvent? published = null;
         eventBus.Subscribe<EntityHealedEvent>(e => published = e);
@@ -172,7 +172,7 @@ public sealed class HealthHealTests
     public void Apply_PlayerNotInvolved_DoesNotPublishEntityHealedEvent()
     {
         var pool = CreatePool();
-        pool.Add(1, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
+        pool.Add(1, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
         var eventBus = new EventBus();
         var published = false;
         eventBus.Subscribe<EntityHealedEvent>(_ => published = true);
@@ -186,7 +186,7 @@ public sealed class HealthHealTests
     public void Apply_NoEventBusOrPlayerQuery_DoesNotThrow()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
 
         TestHealth.Heal(pool, 0, 0.1f, now: 0);
 

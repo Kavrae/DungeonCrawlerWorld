@@ -94,6 +94,7 @@ public static class BodyPartSelection
     {
         var bestPartId = -1;
         var bestFraction = float.MaxValue;
+        StatModifierMath.GetSums(statModifiers, entityId, StatModifierTarget.MaximumHealth, out var maximumHealthAdditive, out var maximumHealthMultiplicative);
 
         foreach (var part in bodyParts.Parts(entityId))
         {
@@ -102,7 +103,7 @@ public static class BodyPartSelection
                 continue;
             }
 
-            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+            var effectiveMaximumHealth = StatModifierMath.CalculateTotal(part.BaseMaximumHealth, maximumHealthAdditive, maximumHealthMultiplicative);
             var fraction = effectiveMaximumHealth > 0 ? part.CurrentHealth / effectiveMaximumHealth : 1f;
             if (fraction >= 1f)
             {

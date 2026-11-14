@@ -1,4 +1,5 @@
 using Engine.Modules;
+using Engine.Tags;
 
 namespace Engine.Content;
 
@@ -18,10 +19,13 @@ public sealed class ContentTypeRegistry
     private readonly Dictionary<IContentCodec, string> _moduleNamesByCodec = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<string, int> _contentVersionsByModuleName = new(StringComparer.Ordinal);
 
+    private ContentTypeRegistry(GameplayTagRegistry tags) => Tags = tags;
+
     /// <summary>Runs every module's DeclareContentTypes, in order.</summary>
-    public static ContentTypeRegistry Declare(IEnumerable<IModule> modules)
+    /// <param name="tags">The same modules' gameplay tags, which a tag field's domain is checked against as content is read.</param>
+    public static ContentTypeRegistry Declare(IEnumerable<IModule> modules, GameplayTagRegistry tags)
     {
-        var registry = new ContentTypeRegistry();
+        var registry = new ContentTypeRegistry(tags);
         foreach (var module in modules)
         {
             module.DeclareContentTypes(new ContentTypeDeclarations(registry, module.Name));
@@ -29,6 +33,9 @@ public sealed class ContentTypeRegistry
 
         return registry;
     }
+
+    /// <summary>The build's gameplay tags and domains: what a Tag or TagSet field's values are checked against on read.</summary>
+    public GameplayTagRegistry Tags { get; }
 
     /// <summary>The plain value types with a codec.</summary>
     public IEnumerable<Type> ValueTypes => _valueCodecsByType.Keys;

@@ -1,6 +1,7 @@
 # NPC Behavior Composition
 
-(Pre-implementation; checked against the code on 2026-11-11. Replaces TODO.md's "NPC behavior
+(Phases 1-6 built and checked 2026-11-13: the plan is complete. Its one deferred item, errands, waits on "NPCs use shops". Checked against the
+code on 2026-11-11. Replaces TODO.md's "NPC behavior
 composition + generalized "turn claimed" signal" entry, which is deleted when Phase 4 lands. Unblocks
 "NPCs use shops".)
 
@@ -364,11 +365,14 @@ and roots growing without an owner.
    and column, like every other content failure), so in the Workshop the record is left out and
    listed in the Error List with no Workshop code. The schema carrying the domain is what a tag
    picker will filter by once the Workshop edits content (its tabs are view-only today; editing is
-   in TODO.md).
+   in TODO.md). Built: `ContentTypeRegistry.Tags` carries the build's registry to the reader; a
+   rejected value's `ContentFormatException` names its key and JSON text, and `ContentTable` finds
+   that text in the record's source for the column.
 4. **A description per tag**, required at declaration, beside the display name
-   (`Declare(tag, description, displayName)`; today's `Declare(tag, displayName)` call sites --
-   `GameTags`, ExampleMod, the tag tests -- gain one). The Workshop shows it as the tooltip of a tag
-   wherever its detail windows list tags.
+   (`DeclareRoot(root, description, extensible)`, `Declare(tag, description, displayName,
+   extensible)`; ExampleMod declares no tags). The Workshop's detail windows show a tags line as
+   display names, comma-separated; built, hovering the line shows one row per tag -- its name and
+   description -- rather than a tooltip per tag, so the line keeps its layout.
 5. **A validator** (`GameplayTagRegistry.Declare`, after every module's `DeclareTags`): every declared
    tag is under an owned root, depth at most 4 (today's deepest is 3: `Item.Consumable.Potion`),
    PascalCase segments. Several modules may still declare the same tag (today's rule), as long as
@@ -376,31 +380,45 @@ and roots growing without an owner.
 
 #### Game: today's roots get owners
 
-| Root | Owner (today: all Core) | Extensible by other modules | Why |
+**Built (2026-11-12): Core owns every activation root, not the modules that read them.** Content
+every build decodes names them: the starting area's Anti-Magic and Anti-Literacy shrines are
+blueprints, so every build registers their auras, whose `ActivationDisableGrant`s name `Spell` and
+`Item.Consumable.*`. With `Spell` owned by Actions or `Item` by Inventory, a build without that
+module (the foundation-only builds tests use) would leave those tags undeclared -- the same reason
+`CoreModule` already declared every built-in tag. Ownership still decides who may declare under
+each root and which roots mods may extend; Area is the one built-in root a module other than Core
+owns, because only Areas reads area content.
+
+| Root | Owner | Extensible by other modules | Why |
 |---|---|---|---|
-| `Action` | Actions | No | Classification code reads (`Action.Attack`) |
-| `Spell` | Actions | No | A leaf: casting a spell or reading a scroll of one, implied by the activator (`ImpliedTags`) and matched by Anti-Magic |
-| `Delivery` | Actions | No | Melee/Ranged gate body-part effects and Dodge |
-| `Targeting` | Actions | No | `Targeting.Self` is checked exactly; a technical tag has no children |
-| `Trait` | Actions | Yes | Dodgeable, Staggering; a mod's own trait is reasonable |
-| `Effect` | Core (Effects) | Yes | `Effect.Healing`; new effect kinds are content |
-| `Damage` | Health | Yes | A mod's new damage type is the classic extension |
+| `Action` | Core | No | Classification code reads (`Action.Attack`) |
+| `Spell` | Core | No | A leaf: casting a spell or reading a scroll of one, implied by the activator (`ImpliedTags`) and matched by Anti-Magic |
+| `Delivery` | Core | No | Melee/Ranged gate body-part effects and Dodge |
+| `Targeting` | Core | No | `Targeting.Self` is checked exactly; a technical tag has no children |
+| `Trait` | Core | Yes | Dodgeable, Staggering; a mod's own trait is reasonable |
+| `Effect` | Core | Yes | `Effect.Healing`; new effect kinds are content |
+| `Damage` | Core | Yes | A mod's new damage type is the classic extension |
 | `Magic` | Core | No | A leaf, combined with others by design |
-| `Stats` | AbilityScores | No | `Stats.AbilityScore.*` maps one-to-one to the seven scores in code |
-| `Item` | Inventory | Yes | Each child is an inventory tab (`Item.Toggle` and `Item.Lootbox` included); a mod's new category gets a tab |
-| `Area` | Areas | Yes | Area classification is content |
-| `Behavior` | NpcBehavior | `Behavior.Drive` only | A mod's own drive |
+| `Stats` | Core | No | `Stats.AbilityScore.*` maps one-to-one to the seven scores in code |
+| `Item` | Core | Yes | Each child is an inventory tab (`Item.Toggle` and `Item.Lootbox` included); a mod's new category gets a tab |
+| `Area` | Areas | Yes | Area classification is content (`AreaTags`) |
+| `Behavior` | NpcBehavior (Phase 4) | `Behavior.Drive` only | A mod's own drive |
 
 #### Game: every tag field gets a domain
 
 | Domain | Accepts | Fields |
 |---|---|---|
-| **Activation** ("what a use of something is") | `Action`, `Spell`, `Delivery`, `Targeting`, `Trait`, `Effect`, `Damage`, `Magic`, `Stats`, `Item` | `ActivatableDefinition.Tags` (actions and items), `IActionActivator.ImpliedTags`, `AuraDefinition.Tags`, `TerrainContact.Tags` -- each becomes the activator tags an effect is applied with |
-| **Activation condition** | the Activation domain | `StatModifierGrant.ConditionTag` / `StatModifierComponent.ConditionTag`, and `ActivationDisableGrant`'s query (all / any / none): a condition can only name something an activation can carry, so it can never be unmatchable |
-| **Item category** | `Item` | Shop stock queries (`PotionShopStock.AcceptedItems`), inventory tabs (`InventoryTagQueries`, which filters by `GameTags.Item` today and reads the domain instead) |
-| **Ability score** | `Stats.AbilityScore` | `AbilityScoreTagBonus`'s table |
-| **Area** | `Area` | `AreaDefinition.Tags` |
-| **Behavior** | `Behavior` | `IBehavior.Tags`, `BehaviorModifier.Tag` |
+| **Activation** ("what a use of something is", extensible) | `Action`, `Spell`, `Delivery`, `Targeting`, `Trait`, `Effect`, `Damage`, `Magic`, `Stats`, `Item` | `ActivatableDefinition.Tags` (actions and items, implied tags included), `AuraDefinition.Tags`, `TerrainContact.Tags` -- each becomes the activator tags an effect is applied with -- and every condition on them: `StatModifierGrant.ConditionTag` and `ActivationDisableGrant`'s query (all / any / none). A condition can only name something an activation can carry, so it can never be unmatchable. Built as one domain rather than a separate "Activation condition" domain over the same roots: the two could only ever accept the same tags |
+| **Item category** | `Item` | Inventory tabs (`InventoryTagQueries`: a category is a tag below the domain's root, `AcceptsBelowItsRoots`) and shop stock queries -- a shop's query is set by its blueprint's build step, so nothing can read it before the shop is built; `BlueprintTests.EveryShopsAcceptedItems_AreItemCategoryTags` holds it |
+| **Ability score** | `Stats.AbilityScore` | `AbilityScoreTagBonus`'s table (`AbilityScoreTagBonus.Tags`, checked by `ContentTagValidation`) |
+| **Area** | `Area` (AreasModule's) | `AreaDefinition.Tags` |
+| **Behavior** | `Behavior` (Phase 4) | `IBehavior.Tags`, `BehaviorModifier.Tag` |
+
+The domains are identities in `GameTagDomains` (Game.Tags); what each accepts is declared per build
+(`DeclareDomain`, `AddToDomain`) and answered by the registry (`Accepts`, `ProblemWith`,
+`EnsureAccepts`). Every tag an effect entry names (`IEffectEntry.ReferencedTags`) is a condition, so
+all of them are checked against Activation; an entry naming a tag of another role would have to say
+which, and none does yet.
 
 - Content codecs name their field's domain, so `Items.jsonl`, `Actions.jsonl`, `Auras.jsonl`, the area
   files and the area palettes are checked on read, in every build and in a by-id game as each record
@@ -418,14 +436,17 @@ an item, `Area.Testing` can't condition a stat modifier, and `Damage.Fire` can't
 
 ### Catalog and resolved sets
 
-- **`BehaviorCatalog<TContext> : Catalog<IBehavior<TContext>>`**: re-registering a Guid replaces a
+- **`BehaviorCatalog<TContext>`** (built: it wraps a `Catalog<IBehavior<TContext>>` rather than
+  deriving from it, so `Register` can refuse once frozen without making `Catalog<T>.Register`
+  virtual): re-registering a Guid replaces a
   behavior in place (how a mod replaces "Flee"), and redirects work as for any catalog. Registration
   happens in `Configure` only; once the build resolves sets, the catalog is fixed for the session,
   like every definition. It also issues each behavior a session-local `ushort` id, which is what a
   commitment stores. Never persist one: a future world save stores the behavior's Guid. Ids are
-  issued when the catalog is frozen (`Freeze()`, called by the game before it resolves sets), in
-  registration order -- `Catalog<T>.Register` isn't virtual and needn't become so -- and `Register`
-  after that throws.
+  issued when the catalog is frozen (`Freeze(tags, behaviorDomain)`, called by the game before it
+  resolves sets), 1 up in registration order, and `Register` after that throws. `Freeze` checks every
+  behavior's tags against the domain; `BehaviorSet.Resolve` checks every modifier's tag against the
+  same one, and refuses a modifier naming both or neither of a tag and a behavior.
 - **`BehaviorSet<TContext>.Resolve(catalog, grantLists, modifiers)`** turns the grant lists of a
   composition (in order) and every modifier into one immutable set:
   1. Merge: a later grant of the same behavior id replaces an earlier one; `Rank = 0` removes it.
@@ -479,8 +500,8 @@ pick.Behavior.Act(ref context, pick.Grant)
 decision.NewCommitment = pick.Grant.CommitFrames > 0 ? (pick.SessionId, FrameDeadline.After(now, CommitFrames)) : none
 ```
 
-- A grant's rank is a **ceiling**: `Evaluate` may return it or lower, never higher. That's what makes
-  the early exit valid.
+- A grant's rank is a **ceiling**: `Evaluate` may return it or lower, never higher -- the arbiter
+  throws, naming the behavior, when one does. That's what makes the early exit valid.
 - **Weighted random, not argmax**, with a cutoff so a 2% option never wins a roll. A lone candidate
   draws nothing, so a creature with one thing to do doesn't advance the stream.
 - Considerations and the runtime multiplier are only computed once a candidate's intrinsic weight is
@@ -505,7 +526,9 @@ decision.NewCommitment = pick.Grant.CommitFrames > 0 ? (pick.SessionId, FrameDea
   committed hold one.
 - **`DecisionTrace`** (optional, null in normal play): records each evaluated entry's rank, intrinsic
   weight, resolved weight, considerations product, runtime multiplier, final weight, whether the cutoff
-  dropped it, and the pick. The game passes one only for the entity being inspected.
+  dropped it, and the pick. The game passes one only for the entity being inspected. Built: its
+  `Path` (Nothing, FreshPick, Interrupt, Continued) and one outcome per entry (DidNotApply, Vetoed,
+  Outranked, BelowCutoff, NotDrawn, Chosen) are what the Admin Mode decision block shows.
 
 ### Why commitment is in the engine
 
@@ -786,7 +809,7 @@ effects work since makes that unnecessary: CLAUDE.md's rule is that "a buff or p
 while an entity is in an area is ... a `StatModifierGrant` with `Stacking: RefreshFromSameSource`".
 
 - **Dread Aura** (`Auras.jsonl`, `BuiltInAuraIds.DreadAura`, its own Guid): one
-  `StatModifierGrant(BehaviorCaution, Multiplicative, +3 (x4), Debuff, 2 s, RefreshFromSameSource)`,
+  `StatModifierGrant(BehaviorCaution, Multiplicative, +3 (x4), Debuff, 2 s, RefreshFromAnySource)`,
   falloff `None` and `Flat` like the null zones -- a stat modifier's magnitude is never scaled by the
   aura's power anyway, so the table above holds at any distance. The aura ticks once a second, so
   the modifier stays while a creature is in reach and lapses up to 2 s after it leaves. One modifier
@@ -852,9 +875,9 @@ Stop after each phase for in-game testing. Each ends with what to check.
 1. Engine: `DeclareRoot` with ownership and extensibility, `GameplayTagDomain` and `DeclareDomain`,
    required descriptions, the validator (owned root, depth 4, PascalCase), and a domain on
    `ContentField.Tag`/`TagSet` enforced by the reader.
-2. Game: move each root to its owner (the roots table; `GameTags` stays the one list of constants,
-   each owner declaring its part of it) and give every existing tag a description; declare the
-   Activation, Activation condition, Item category, Ability score and Area domains; name the domain
+2. Game: give each root its owner (the roots table: Core for the activation roots, Areas for
+   `Area`, whose tags moved to `AreaTags`) and every existing tag a description; declare the
+   Activation, Item category, Ability score and Area domains; name the domain
    on every tag field's codec (`ActivatableDefinition`'s and the aura's `t`, the area's `tg`,
    `StatModifierGrant`'s `ct`, `ActivationDisableGrant`'s `all`/`any`/`none`); add domain checks to
    `ContentTagValidation`'s per-record forms and to what is still C#-declared; `InventoryTagQueries`,
@@ -900,8 +923,11 @@ Stop after each phase for in-game testing. Each ends with what to check.
 3. In-game check: nothing changes. Goblins behave exactly as before.
 
 ### Phase 3 -- one way to queue a turn
-1. `IntentWriter` (`QueueAction`, `QueueItemActivation`, `Step`, `StepFromActivation`, `Idle`), built
-   with `GameModuleContext` and reached from it; `PlayerCommands`, `TestCombatBehaviorSystem` and
+1. `IntentWriter` (`QueueAction`, `QueueItemActivation`, `Step`, `StepFromActivation`, `Idle`).
+   Built over its three pools (`IntentWriter.For(componentManager)`, as `EntityActions.For`) rather
+   than as a `GameModuleContext` member: the pending item pool is Inventory's, which a build without
+   Inventory lacks, and the writer holds nothing else, so an instance per user costs nothing.
+   `PlayerCommands` makes its own from the pools it is already given. `PlayerCommands`, `TestCombatBehaviorSystem` and
    `TestDummyAttackSystem` write through it and no longer hold a pending pool for writing
    (`PlayerCommands` still reads them in `Flush`). `ClearStep`, `SetIdle`, `WithdrawActivationRequests`'
    removals and `PlayerCommands`' own step writes go. IMPLEMENTATION-NOTES' "A queued activation
@@ -913,7 +939,11 @@ Stop after each phase for in-game testing. Each ends with what to check.
    without a step to clear; the existing input-buffer, Dodge and windup tests pass unchanged;
    `BuiltInModulesTests` still finds no newly observed pool.
 3. Benchmark A/B (headless, fixed seed): the world fingerprint and every row unchanged within the
-   run-to-run spread.
+   run-to-run spread. Built: the fingerprint was identical in two A/Bs against the last commit
+   (`6C2F46F7517E414C`, seed 1, frames 600-3600). Costs were inconclusive on a loaded machine (78%
+   CPU from other work): the first A/B moved every row ~15-20% together, the untouched
+   `AuraSystem` and `TerrainContactSystem` included; the second measured +1.5% overall with the
+   baseline's own spread at 39%. Re-measure on a quiet machine if a cost question comes up.
 4. In-game check: walking and attacking feel the same; hold a direction and tap an attack -- the
    attack lands and the walk resumes; a Dodge still steps, and a Dodge on cooldown doesn't; drink a
    potion mid-walk and the step stops; goblins still attack and drink potions without stepping on
@@ -985,6 +1015,31 @@ Stop after each phase for in-game testing. Each ends with what to check.
    locked) and its grants with ranks and weights, updating as it acts; turn Admin Mode off and the
    block is gone; inspect a shop and there is none.
 
+#### Phase 4 as built (2026-11-13)
+
+Where the build differs from the steps above, and what it measured:
+- **A set's id is its blueprint's id.** `NpcBehaviorSets` resolves one set per blueprint and keeps it by the blueprint's
+  session id, so `NpcDecisionComponent.BehaviorSetId` is that id; an entity with applied parts decides with the set of
+  `BlueprintRegistry.Compose(spawn, applied...)`, resolved once per distinct combination.
+- **The component is added by a build step.** `EntityBuilder` runs `IEntityBuildStep`s after a build and after each
+  `Apply` (`EntityFactory.AddBuildStep`; the rebuilder's builder copies the session's), and `NpcDecisionBuildStep` adds or
+  rewrites `NpcDecisionComponent` there -- an empty set holds none, so chests and shops are never visited.
+- **Idle is the context's, not `IntentWriter`'s:** it writes `NpcDecisionComponent.WaitUntilFrame`. `MovementComponent`
+  lost `WaitUntilFrame` with `MovementMode`.
+- **`LocalTierRoster` follows deciders** (`NpcDecisionComponent`), not movers: a stationary fighter winds up too, and the
+  map telegraphs only the Local windups the roster names (found in the in-game check: the dummy's Power Attack had no
+  shape). An open entity inspection follows Admin Mode (`MapViewState.EntityInspectionMode`).
+- **Admin inspection block:** `NpcDecisionView` (`GameViews.NpcDecisions`) and Presentation's `NpcDecisionText` -- the
+  gate, the last decision with its trace, any commitment, the grants with rank, weight and parameter -- between the
+  description and the components, Admin Mode only; inspecting names the one entity the system traces.
+- **Cost** (Release, headless, seed 1, A/B against HEAD `b24568ed` on a quiet machine): `NpcDecisionSystem` 0.44
+  ms/frame against `TestCombatBehaviorSystem`'s 0.31 (+0.13, +43%); `EcsContext.Update` 1.02 against 0.87 (the worlds
+  differ, so only roughly comparable). A one-pass variant read 0.42-0.49, so the two passes cost ~2% (noise). Per
+  decision in Debug: EngageMelee ~1.0 µs, RangedAttack 0.7, SelfHeal 0.4, LootNearby 0.2, the rest the arbiter's. About
+  560 decisions a frame. Reported, not chased.
+- **Tests** cover the situations above that a whole session shows (`NpcDecisionSystemTests`, `FairyMagicMissileTests`,
+  `NpcLootingTests`) and the framework's own (`Tests/Decisions`); the full parity-by-rates sweep was not written.
+
 ### Phase 5 -- modifiers, considerations, Flee, commitment
 1. Boss's `BehaviorModifiers` (Aggression x2, Caution x0.25).
 2. `NearbyAlliesFactor` and the context's cached ally/hostile counts.
@@ -1003,6 +1058,27 @@ Stop after each phase for in-game testing. Each ends with what to check.
    running for a few seconds; a pack of five holds; "Apply > Boss" to a fleeing goblin and it turns
    back to fight; a hurt goblin with an enemy on the far side of a wall doesn't run from it.
 
+
+#### Phase 5 as built (2026-11-13)
+
+- **A fresh Flee starts only with a hostile beside it** (`HasHostileAdjacent`), as the choice against EngageMelee; once
+  committed it keeps running while its target lives and any hostile is in sight within 3. As first written, a hostile
+  merely in sight 2-3 tiles away made Flee the only rank-3 candidate, which always wins -- every creature would run
+  from anything it saw, and with no approach behavior nothing would ever close to melee. The table above is the
+  adjacent case and holds as written.
+- **Cornered doesn't flee:** Flee applies only when a step takes it farther from what it runs from (the step is found in
+  `Evaluate` and carried in `NpcDecisionFindings.FleeStep`), so a cornered creature fights.
+- Perception on the context: `HostilesInSight` (radius `HostileSightRadius` = 3 from its footprint, line of sight over
+  `GameModuleContext.SightBlockers`, a creature larger than a tile counted once) with `NearestHostileInSight`, and
+  `AlliesWithin(radius)` (`NpcDecisionServices.IsAllyOf`, beside `IsHostileTo`), each read at most once a decision.
+- Grants: `StandardBehaviors` holds each grant and `Grants` (Flee added, weight 1); `GoblinGrants` is the goblin row
+  (Flee x3 with pack fear, EngageMelee with pack courage). Boss carries the two modifiers.
+- **Cost:** the machine was loaded for both runs (AuraSystem 0.58 and 0.91 ms against its usual ~0.26), so no absolute
+  figure; relative to AuraSystem the decision system is no dearer than in Phase 4 (1.5x it, against 1.7x then). The
+  in-sight scan runs only for a creature with a hostile beside it or a live Flee commitment.
+- Tests: `NpcFleeTests` (Boss by include and by Apply, ally counting, sight, the goblin table's rows sampled over 400
+  seeded decisions, stationary and two-tiles-away never fleeing, the commitment's target, its end on the target's
+  destruction, SelfHeal's interrupt).
 ### Phase 6 -- runtime drives, Dread Idol, inspection
 1. `StatModifierTarget.BehaviorAggression`/`BehaviorCaution` (appended), display names, and
    `NpcDrives`' table behind `RuntimeWeightMultiplier`; `StatModifierGrant.FixedDuration` with its
@@ -1019,6 +1095,28 @@ Stop after each phase for in-game testing. Each ends with what to check.
    and see the Caution x4 in its trace and in its HealthWindow debuffs; put the idol down in Ground
    mode and walk away -- goblins near it stay afraid, and the player's HealthWindow shows the modifier
    while standing in it.
+
+#### Phase 6 as built (2026-11-13)
+
+- `NpcDrives.RuntimeTargets` maps each drive to its stat target; `NpcDecisionContext.RuntimeWeightMultiplier`
+  multiplies the effective value (base 1, floored at 0) of every drive a behavior serves. Read only for a candidate
+  that already has weight. The trace and the decision block already carried the runtime multiplier from Phase 4, so
+  step 3 needed no change.
+- `StatModifierGrant.FixedDuration` (`fd`) skips every duration scaling, scroll scaling included, and declares no
+  duration modifiers. The Dread aura (`BuiltInAuraIds.DreadAura`) is `BehaviorCaution` x4 (magnitude 3), 120 frames,
+  `RefreshFromAnySource` (one modifier whichever idol is credited, so two idols never add), `Flat`, falloff `None`; the Dread Idol (`BuiltInItemIds.DreadIdol`) holds it at size 4, a
+  Delayed toggle like the Toxic Idol. Both records canonicalise unchanged through `ContentManifestExporter`.
+- **Bug found and fixed:** the decision's health fraction and SelfHeal's heal sizing read the stored maximum, not the
+  one with MaximumHealth modifiers. A Boss (health x2, current raised with it) read about 160% healthy, so it never
+  fled and healed itself only far too late. Both now read the modified maximum.
+- Goblin vital parts were raised before this phase (Head 90, Torso 100, Internal 90; total 390), so no hit short of a
+  crit kills a goblin from full health -- the Flee check needed goblins to live through half health.
+- **Cost:** headless Release, 3 runs: NpcDecisionSystem 0.68 ms against AuraSystem 0.35 (1.9x, against 1.5x in Phase
+  5). Not comparable: tougher goblins make a different world (fights last longer, so more creatures have a hostile
+  beside them and run the sight scan). Reported, not chased.
+- Tests: `NpcDreadTests` (a timed Caution modifier raises Flee and expires; the carried idol holds one modifier on
+  goblins in reach and none on the player; put down it reaches the player; put out, fear lapses within 2 s;
+  `FixedDuration` keeps it through x0.25 debuff duration; the Dread table's rows; an unhurt Boss reads full health).
 
 ### Deferred -- errands
 When "NPCs use shops" starts, a committed behavior remembers its shop through the commitment's

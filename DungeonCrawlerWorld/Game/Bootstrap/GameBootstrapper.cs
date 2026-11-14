@@ -2,6 +2,7 @@ using Engine.Bootstrap;
 using Engine.Content;
 using Engine.Diagnostics;
 using Engine.ECS.Context;
+using Engine.ECS.Entities;
 using Engine.Math;
 using Engine.Modules;
 using Engine.Persistence;
@@ -126,7 +127,7 @@ public static class GameBootstrapper
         var context = session.Context;
         var spawnRecordRebuilder = new SpawnRecordRebuilder(
             () => BuildSpawnRecordRebuilderStaging(builtInModules, validatedMods.Mods, content, settingsSources, collectsContentFailures, loadsContentById),
-            stagingKeys => new EntityBuilder(context.Definitions, context.Auras, context.Actions, context.Items, stagingKeys),
+            stagingKeys => CreateRebuildBuilder(context, session.Factory, stagingKeys),
             buildsStagingWorldOnFirstRebuild);
         var contentStore = save is null ? null : new ContentStore(context, save);
         return new GameSession(session, validatedMods.Failures, spawnRecordRebuilder, CreateTeleporter(session.World, session.EcsContext, session.Factory, session.Factory.Skeletons), contentStore);
@@ -143,6 +144,18 @@ public static class GameBootstrapper
             skeletons,
             componentManager.GetPackedPool<Modules.Movement.Components.MovementComponent>(),
             componentManager.GetPackedPool<Modules.Actions.Components.PendingWindupComponent>());
+    }
+
+    /// <summary>A builder into the staging world keyed by stagingKeys, over the session's own definitions and with every step the session's builds run, so a rebuilt record holds what the live entity was built with.</summary>
+    private static EntityBuilder CreateRebuildBuilder(GameModuleContext context, EntityFactory sessionFactory, EntityKeys stagingKeys)
+    {
+        var builder = new EntityBuilder(context.Definitions, context.Auras, context.Actions, context.Items, stagingKeys);
+        foreach (var step in sessionFactory.BuildSteps)
+        {
+            builder.AddStep(step);
+        }
+
+        return builder;
     }
 
     /// <summary>A separate build of every module, as the staging world SpawnRecordRebuilder rebuilds creatures in.</summary>

@@ -19,13 +19,14 @@ namespace Game.Modules.NpcBehavior;
 
 /// <summary>An NPC looting a corpse or an item pile it stands on or next to: everything it can carry, and all of its currency.</summary>
 /// <remarks>
-/// A candidate is simulated (nothing reaches across the frozen seam) and holds at least one stack or any currency: a corpse
-/// not yet looted, or an item pile. The first corpse the NPC has the rights to (LootRights) is opened -- marked looted, as
-/// the player's loot window marks a corpse it opens, whether or not anything fits -- and emptied into the NPC through
-/// InventoryActions.LootEveryStack, so its stacks merge into what the NPC already carries. When every corpse is reserved
-/// for someone else, the NPC tries no corpse again for RetryFrames. An item pile has no loot rights and is never marked
-/// looted: it is taken from whenever anything in it fits, and passed over when nothing does. Opportunistic only: nothing
-/// walks an NPC to either.
+/// In two steps, so a decision can choose before anything moves: TryFind only reads, naming the first candidate on or
+/// beside the looter's footprint, and TryLoot takes from it, asking again whether it still may -- another NPC may have
+/// looted it in between. A candidate is simulated (nothing reaches across the frozen seam) and holds at least one stack
+/// or any currency. A corpse is one the NPC has the rights to (LootRights): opening it marks it looted, as the player's
+/// loot window marks a corpse it opens, whether or not anything fits. When every corpse found is reserved for someone
+/// else, the NPC tries no corpse again for RetryFrames (RetryLater). An item pile has no loot rights and is never marked
+/// looted: it is a candidate while something in it fits the looter (InventoryActions.CanLootAny). Opportunistic only:
+/// nothing walks an NPC to either.
 /// </remarks>
 public sealed class NpcLooting(
     ComponentManager componentManager,
@@ -45,9 +46,9 @@ public sealed class NpcLooting(
     private readonly PackedComponentPool<CurrencyComponent> _currencies = componentManager.GetPackedPool<CurrencyComponent>();
     private readonly LootRights _lootRights = LootRights.For(componentManager, entityKeys);
 
-    /// <summary>Loots the first corpse looterEntityId may loot, or item pile it can take anything from, on or beside its footprint.</summary>
-    /// <returns>Whether it looted one -- its decision for this visit.</returns>
-    public bool TryLootNearby(int looterEntityId, TransformComponent looterTransform, long now)
+    /// <summary>The first corpse looterEntityId may loot, or item pile it can take anything from, on or beside its footprint; reads only.</summary>
+    /// <param name="everyCorpseReserved">Whether a corpse was found and every one found is reserved for someone else -- what RetryLater is for.</param>
+    public bool TryFind(int looterEntityId, TransformComponent looterTransform, long now, out EntityKey target, out bool everyCorpseReserved)
     {
         var waitsToRetryCorpses = _retries.TryGetReadonly(looterEntityId, out var retry) && retry.RetryAfterFrame > now;
         var looterEntityKey = entityKeys.GetKey(looterEntityId);
@@ -61,14 +62,11 @@ public sealed class NpcLooting(
             {
                 foreach (var occupantEntityId in mapQuery.GetOccupantEntityIdSpanAt(new Vector3Int(x, y, position.Z)))
                 {
-                    if (IsPileCandidate(occupantEntityId))
+                    if (IsPileCandidate(occupantEntityId, looterEntityId))
                     {
-                        if (TakeEverything(occupantEntityId, looterEntityId))
-                        {
-                            return true;
-                        }
-
-                        continue;
+                        target = entityKeys.GetKey(occupantEntityId);
+                        everyCorpseReserved = false;
+                        return true;
                     }
 
                     if (waitsToRetryCorpses || !IsCorpseCandidate(occupantEntityId))
@@ -82,19 +80,44 @@ public sealed class NpcLooting(
                         continue;
                     }
 
-                    LootCorpse(occupantEntityId, looterEntityId);
+                    target = entityKeys.GetKey(occupantEntityId);
+                    everyCorpseReserved = false;
                     return true;
                 }
             }
         }
 
-        if (foundReservedCorpse)
-        {
-            componentManager.Merge(looterEntityId, new CorpseLootRetryComponent(FrameDeadline.After(now, RetryFrames)));
-        }
-
+        target = EntityKey.None;
+        everyCorpseReserved = foundReservedCorpse;
         return false;
     }
+
+    /// <summary>Loots target into looterEntityId if it is still a candidate TryFind would name for it; false, taking nothing, when it no longer is.</summary>
+    public bool TryLoot(int looterEntityId, EntityKey target, long now)
+    {
+        if (!entityKeys.TryGetEntityId(target, out var targetEntityId))
+        {
+            return false;
+        }
+
+        if (IsPileCandidate(targetEntityId, looterEntityId))
+        {
+            return TakeEverything(targetEntityId, looterEntityId);
+        }
+
+        if (!IsCorpseCandidate(targetEntityId) || !_lootRights.CanLoot(targetEntityId, entityKeys.GetKey(looterEntityId), now))
+        {
+            return false;
+        }
+
+        componentManager.Merge(targetEntityId, new LootedComponent());
+        TakeEverything(targetEntityId, looterEntityId);
+        return true;
+    }
+
+    /// <summary>Has looterEntityId try no corpse again for RetryFrames.</summary>
+    public void RetryLater(int looterEntityId, long now) =>
+        componentManager.Merge(looterEntityId, new CorpseLootRetryComponent(FrameDeadline.After(now, RetryFrames)));
 
     /// <remarks>The tier first: a neighbouring tile can hold an unbuilt skeleton, whose other pools must not be read.</remarks>
     private bool IsCorpseCandidate(int entityId) =>
@@ -103,21 +126,15 @@ public sealed class NpcLooting(
         !_looted.Has(entityId) &&
         HoldsLoot(entityId);
 
-    private bool IsPileCandidate(int entityId) =>
+    private bool IsPileCandidate(int entityId, int looterEntityId) =>
         tierQuery.IsSimulated(entityId) &&
         _piles.Has(entityId) &&
-        HoldsLoot(entityId);
+        (HoldsCurrency(entityId) || InventoryActions.CanLootAny(componentManager, itemCatalog, entityId, looterEntityId, playerQuery));
 
-    private bool HoldsLoot(int entityId) =>
-        _inventoryStacks.Has(entityId) ||
-        (_currencies.TryGetReadonly(entityId, out var currency) && (currency.Gold > 0 || currency.Credits > 0));
+    private bool HoldsLoot(int entityId) => _inventoryStacks.Has(entityId) || HoldsCurrency(entityId);
 
-    /// <remarks>Marked first: a corpse whose loot is changing hands mid-scan is never a candidate again.</remarks>
-    private void LootCorpse(int corpseEntityId, int looterEntityId)
-    {
-        componentManager.Merge(corpseEntityId, new LootedComponent());
-        TakeEverything(corpseEntityId, looterEntityId);
-    }
+    private bool HoldsCurrency(int entityId) =>
+        _currencies.TryGetReadonly(entityId, out var currency) && (currency.Gold > 0 || currency.Credits > 0);
 
     /// <returns>Whether any stack or currency moved.</returns>
     private bool TakeEverything(int lootedEntityId, int looterEntityId)

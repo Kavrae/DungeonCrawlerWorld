@@ -1,4 +1,4 @@
-﻿using Engine.ECS.Systems;
+using Engine.ECS.Systems;
 using Game.Tags;
 using Game.Views;
 using Engine.ECS.Components;
@@ -73,7 +73,7 @@ public sealed class HealthWindowTests
     public void BuildBodyPartRows_SimpleHealthFixture_OneRowNamedHP()
     {
         var bodyPartWorld = new BodyPartTestWorld();
-        bodyPartWorld.Components.Merge(EntityId, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
+        bodyPartWorld.Components.Merge(EntityId, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
 
         List<HealthWindow.BodyPartRow> rows = [];
         BuildBodyPartRows(rows, bodyPartWorld);

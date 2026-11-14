@@ -23,9 +23,12 @@ public sealed class HealthView(ComponentManager componentManager, EntityBodyPart
     /// <summary>entityId's simple health, if it has simple rather than complex health.</summary>
     public bool TryGetSimpleHealth(int entityId, out SimpleHealthComponent health) => _simpleHealth.TryGetReadonly(entityId, out health);
 
+    /// <inheritdoc cref="HealthQueries.TryGetBaseMaximum"/>
+    public bool TryGetBaseMaximum(int entityId, out float baseMaximum) => HealthQueries.TryGetBaseMaximum(_simpleHealth, entityBodyParts, entityId, out baseMaximum);
+
     /// <inheritdoc cref="HealthQueries.TryGetTotals"/>
     public bool TryGetTotals(int entityId, out float current, out float maximum) =>
-        HealthQueries.TryGetTotals(_simpleHealth, entityBodyParts, entityId, out current, out maximum);
+        HealthQueries.TryGetTotals(_simpleHealth, entityBodyParts, _statModifiers, entityId, out current, out maximum);
 
     /// <inheritdoc cref="HealthRegeneration.LandedPerSecond"/>
     public float RegenerationPerSecond(int entityId) => HealthRegeneration.LandedPerSecond(_abilityScores, _statModifiers, entityId);

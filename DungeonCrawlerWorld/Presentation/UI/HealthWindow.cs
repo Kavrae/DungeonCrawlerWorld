@@ -1020,14 +1020,14 @@ public sealed class HealthWindow(
 
         if (healthView.TryGetSimpleHealth(entityId, out var health))
         {
-            var effectiveMaximum = statModifierView.GetEffectiveValue(entityId, StatModifierTarget.MaximumHealth, health.MaximumHealth);
+            var effectiveMaximum = statModifierView.GetEffectiveValue(entityId, StatModifierTarget.MaximumHealth, health.BaseMaximumHealth);
             destination.Add(new BodyPartRow("HP", health.CurrentHealth, effectiveMaximum, PartId: 0));
             return;
         }
 
         foreach (var part in bodyParts.Parts(entityId))
         {
-            var effectiveMaximum = statModifierView.GetEffectiveValue(entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+            var effectiveMaximum = statModifierView.GetEffectiveValue(entityId, StatModifierTarget.MaximumHealth, part.BaseMaximumHealth);
             destination.Add(new BodyPartRow(part.Name, part.CurrentHealth, effectiveMaximum, (byte)part.PartId));
         }
     }

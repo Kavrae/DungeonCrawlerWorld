@@ -90,8 +90,8 @@ public static class HealthDamage
         // Clamped against the effective (modifier-adjusted) max, not the raw stored field, so a
         // permanent +max-HP buff actually raises the ceiling damage is clamped against -- see
         // StatModifierMath's own doc comment for why this is recomputed here rather than baked
-        // into SimpleHealthComponent.MaximumHealth itself.
-        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, beforeHealth.MaximumHealth);
+        // into SimpleHealthComponent.BaseMaximumHealth itself.
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, beforeHealth.BaseMaximumHealth);
         health.UpdateByDenseIndex(healthDenseIndex, new ShiftCurrentHealthUpdate(-effectiveAmount, effectiveMaximumHealth));
 
         var updatedHealth = health.GetReadonlyByDenseIndex(healthDenseIndex);
@@ -124,7 +124,7 @@ public static class HealthDamage
         // its own doc comment), not simulation state, so it truncates the same way SimpleHealthComponent.
         // ToString() does rather than widening its contract to float for a fractional value
         // nothing reading this event needs.
-        var effectiveMaximumHealthForEvent = MathUtility.ClampUShort(StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, updatedHealth.MaximumHealth), 0, ushort.MaxValue);
+        var effectiveMaximumHealthForEvent = MathUtility.ClampUShort(StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, updatedHealth.BaseMaximumHealth), 0, ushort.MaxValue);
         eventBus.Publish(new EntityDamagedEvent(entityId, effectiveAmount, source, (ushort)updatedHealth.CurrentHealth, effectiveMaximumHealthForEvent, damageType));
     }
 

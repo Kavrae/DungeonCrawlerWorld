@@ -13,6 +13,7 @@ public sealed record ModuleDeclarations(SettingValues Settings, IReadOnlyList<Se
     public static ModuleDeclarations Declare(IReadOnlyList<IModule> modules, IReadOnlyList<ISettingsSource> settingsSources)
     {
         var settings = SettingsCatalog.Declare(modules).Resolve(settingsSources);
-        return new ModuleDeclarations(settings.Values, settings.Failures, GameplayTagRegistry.Declare(modules), ContentTypeRegistry.Declare(modules));
+        var tags = GameplayTagRegistry.Declare(modules);
+        return new ModuleDeclarations(settings.Values, settings.Failures, tags, ContentTypeRegistry.Declare(modules, tags));
     }
 }

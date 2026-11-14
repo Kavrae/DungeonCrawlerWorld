@@ -72,8 +72,21 @@ public sealed class NpcLootingTests
             deadPool.TrySet(corpse, deadPool.GetReadonly(corpse) with { LootOwnerEntityKey = Build.Context.EntityKeys.GetKey(lootOwner) });
         }
 
-        public bool TryLoot(int looter, long now) =>
-            Looting.TryLootNearby(looter, Components.GetDirectPool<TransformComponent>().GetReadonly(looter), now);
+        /// <summary>What LootNearby does across its Evaluate and Act: find a candidate, then loot it; with only reserved corpses found, wait to retry.</summary>
+        public bool TryLoot(int looter, long now)
+        {
+            if (Looting.TryFind(looter, Components.GetDirectPool<TransformComponent>().GetReadonly(looter), now, out var target, out var everyCorpseReserved))
+            {
+                return Looting.TryLoot(looter, target, now);
+            }
+
+            if (everyCorpseReserved)
+            {
+                Looting.RetryLater(looter, now);
+            }
+
+            return false;
+        }
 
         public ushort QuantityOf(int entityId, Guid itemId) =>
             InventoryQueries.TryGetStack(Stacks, entityId, itemId, out var stack) ? stack.Quantity : (ushort)0;
@@ -299,7 +312,6 @@ public sealed class NpcLootingTests
         var itemId = Guid.NewGuid();
         var corpse = session.SpawnCorpse(AdjacentPosition, itemId, itemQuantity: 3);
         var looter = session.SpawnEmptyGoblin(LooterPosition);
-        session.Components.GetPackedPool<MovementComponent>().TrySet(looter, session.Components.GetPackedPool<MovementComponent>().GetReadonly(looter) with { MovementMode = MovementMode.Random });
 
         for (var frame = 1L; frame <= 120 && !session.IsLooted(corpse); frame++)
         {
@@ -317,7 +329,6 @@ public sealed class NpcLootingTests
         build.Context.ProcessingTierResolver.SetReferencePosition(new Vector3Int(0, 0, (int)MapLayer.Ground));
         var session = new Session(build);
         var looter = session.SpawnEmptyGoblin(new Vector3Int(1023, 10, (int)MapLayer.Ground));
-        session.Components.GetPackedPool<MovementComponent>().TrySet(looter, session.Components.GetPackedPool<MovementComponent>().GetReadonly(looter) with { MovementMode = MovementMode.Random });
         var skeleton = build.Factory.Spawn(SpawnRequest.At(build.Context.Definitions.GetId(Goblin.Id), new Vector3Int(1024, 10, (int)MapLayer.Ground)) with { Seed = 3 });
         Assert.IsTrue(build.Factory.Skeletons.IsSkeleton(skeleton), "Sanity check: born across the boundary, into the frozen Borough tier.");
 
@@ -336,8 +347,7 @@ public sealed class NpcLootingTests
         var itemId = Guid.NewGuid();
         var corpse = session.SpawnCorpse(AdjacentPosition, itemId, itemQuantity: 3);
         var looter = session.SpawnEmptyGoblin(LooterPosition);
-        session.Components.GetPackedPool<MovementComponent>().TrySet(looter, session.Components.GetPackedPool<MovementComponent>().GetReadonly(looter) with { MovementMode = MovementMode.Random });
-        var player = session.Build.Factory.Spawn(SpawnRequest.At(session.Build.Context.Definitions.GetId(Player.Id), new Vector3Int(9, 10, (int)MapLayer.Ground)) with { Seed = 1 });
+        var player = session.Build.Factory.Spawn(SpawnRequest.At(session.Build.Context.Definitions.GetId(Player.Id), new Vector3Int(9, 10, (int)MapLayer.Ground)) with { Seed = 1, Size = new Vector2Byte(1, 1) });
         session.Components.GetPackedPool<MovementComponent>().Remove(player);
         session.Build.World.PlayerEntityId = player;
         var looterAttacks = 0;

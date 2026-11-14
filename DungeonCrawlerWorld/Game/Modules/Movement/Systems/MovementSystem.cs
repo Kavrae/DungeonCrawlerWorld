@@ -22,7 +22,7 @@ namespace Game.Modules.Movement.Systems;
 /// 
 /// Movement is divided into two phases : determining the next map tile and executing that movement.
 /// 
-/// Player movement is queued externally (Presentation input) while NPC wandering is decided upstream by TestCombatBehaviorSystem, which runs before this system each frame. This system only handles the actual movement and action lock timing.
+/// Player movement is queued externally (Presentation input) while NPC wandering is decided upstream by NpcDecisionSystem, which runs before this system each frame. This system only handles the actual movement and action lock timing.
 /// </remarks>
 /// <cleanupVersion>1</cleanupVersion>
 public sealed class MovementSystem : ITieredSystem
@@ -82,9 +82,7 @@ public sealed class MovementSystem : ITieredSystem
 
     /// <summary>Attempts to execute the movement if a destination is set and nothing is gating the entity</summary>
     /// <remarks>
-    /// All movement is gated by the ActionLock. Random movement is further gated by MovementComponent.WaitUntilFrame,
-    /// a retry backoff for when a move fails due to a lack of available tiles. Both are deadlines -- this system
-    /// compares them against the current frame and advances neither.
+    /// All movement is gated by the ActionLock, a deadline this system compares against the current frame and never advances.
     /// 
     /// Entities that are currently off the map cannot move and must instead be placed on the map by another system or event.
     /// </remarks>
@@ -122,9 +120,8 @@ public sealed class MovementSystem : ITieredSystem
     /// An entity with no step costs one lookup. A step that can never be taken -- the entity is dead,
     /// movement-disabled or off the map, has already arrived, or the step is not to an adjacent tile on
     /// its own layer -- is cleared, so whatever decides the next one is never left waiting on it.
-    /// The retry backoff (MovementComponent.WaitUntilFrame) and the shared lock
-    /// (ActionLockComponent.UnlockedAtFrame) are deadlines compared against now; a step waiting on
-    /// either is kept.
+    /// The shared lock (ActionLockComponent.UnlockedAtFrame) is a deadline compared against now; a step waiting on
+    /// it is kept.
     /// </remarks>
     private void UpdateEntity(int entityId, long now)
     {
@@ -143,7 +140,7 @@ public sealed class MovementSystem : ITieredSystem
             return;
         }
 
-        if (movementComponent.IsWaiting(now) || ActionLockGate.IsBlocked(_actionLocks, entityId, now))
+        if (ActionLockGate.IsBlocked(_actionLocks, entityId, now))
         {
             return;
         }

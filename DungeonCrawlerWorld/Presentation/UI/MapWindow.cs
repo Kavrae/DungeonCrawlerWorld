@@ -527,7 +527,7 @@ public sealed class MapWindow : Window, IContentDropTarget
             options.Add(new DropdownOption("Take All", null, CanTakeAll(in interaction), () => TryTakeAll(entityId)));
         }
 
-        options.Add(new DropdownOption("Inspect", null, !_playerActionGate.IsLocked, () => InspectEntity(entityId)));
+        options.Add(new DropdownOption("Inspect", null, IsInspectionFree || !_playerActionGate.IsLocked, () => InspectEntity(entityId)));
 
         if (AdminMode.IsOn)
         {
@@ -546,14 +546,21 @@ public sealed class MapWindow : Window, IContentDropTarget
         return interaction.AccessRefusal == ContainerAccessRefusal.LootReserved && !AdminMode.IsOn ? "Loot (reserved)" : "Loot";
     }
 
-    /// <summary>Details/Admin inspection's actual activation -- sets Detail or Admin mode (AdminMode.IsOn) on the shared entityId (see MapViewState.InspectedEntityId), starts the global cooldown (the same shared ActionLockComponent lock movement/melee/consumables already use), and un-minimizes InspectionWindow. Only ever reached via the "Inspect" DropdownOption above, which already gates on the cooldown being clear -- no redundant re-check here, matching how "Loot" above trusts its own Enabled gate instead of re-checking adjacency.</summary>
+    /// <summary>Details/Admin inspection's actual activation -- sets Detail or Admin mode (AdminMode.IsOn) on the shared entityId (see MapViewState.InspectedEntityId), starts the global cooldown (the same shared ActionLockComponent lock movement/melee/consumables already use) unless inspection is free (IsInspectionFree), and un-minimizes InspectionWindow. Only ever reached via the "Inspect" DropdownOption above, which already gates on the cooldown being clear or inspection being free -- no redundant re-check here, matching how "Loot" above trusts its own Enabled gate instead of re-checking adjacency.</summary>
     private void InspectEntity(int entityId)
     {
-        _mapViewState.InspectionMode = AdminMode.IsOn ? InspectionMode.Admin : InspectionMode.Detail;
+        _mapViewState.InspectionMode = MapViewState.EntityInspectionMode;
         _mapViewState.InspectedEntityId = entityId;
-        _playerActionGate.Lock();
+        if (!IsInspectionFree)
+        {
+            _playerActionGate.Lock();
+        }
+
         OnInspectionOpened?.Invoke();
     }
+
+    /// <summary>Whether inspecting costs the player nothing: in Admin Mode while paused, where the frozen clock would otherwise hold any lock forever.</summary>
+    private bool IsInspectionFree => AdminMode.IsOn && IsPaused;
 
     protected override void OnEscapeAction() => _actionTargeting.CancelArmedOrPendingAction();
 

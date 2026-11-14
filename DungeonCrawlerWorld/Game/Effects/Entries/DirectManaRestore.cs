@@ -13,13 +13,12 @@ public sealed record DirectManaRestore(float Fraction) : IEffectEntry
 
     public EffectOutcome Apply(in EffectContext context)
     {
-        if (Fraction <= 0 || !context.Services.Mana.TryGetReadonly(context.TargetEntityId, out var targetMana))
+        if (Fraction <= 0 || !ManaQueries.TryGetTotals(context.Services.Mana, context.Services.StatModifiers, context.TargetEntityId, out var currentMana, out var effectiveMaximumMana))
         {
             return EffectOutcome.NoEffect;
         }
 
-        var effectiveMaximumMana = StatModifierMath.GetEffectiveValue(context.Services.StatModifiers, context.TargetEntityId, StatModifierTarget.MaximumMana, targetMana.MaximumMana);
-        if (targetMana.CurrentMana >= effectiveMaximumMana)
+        if (currentMana >= effectiveMaximumMana)
         {
             return EffectOutcome.NoEffect;
         }

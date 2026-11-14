@@ -46,7 +46,7 @@ public sealed class AreaContentTests
             AreaId,
             "Test area",
             string.Empty,
-            tags ?? GameplayTagSet.Create([GameTags.AreaTesting]),
+            tags ?? GameplayTagSet.Create([AreaTags.AreaTesting]),
             width,
             height,
             new AreaLayers(ground ?? ["####", "#..#", "####"], Flying: flying),
@@ -303,6 +303,35 @@ public sealed class AreaContentTests
         var failures = Validate(Write(Area(tags: GameplayTagSet.Create([GameplayTag.Get("Area.NoSuchThing")]))));
 
         Single(failures, "Tag 'Area.NoSuchThing'");
+    }
+
+    [TestMethod]
+    public void AnAreaFile_WithATagOutsideTheAreaDomain_FailsAtTheTagsLineAndColumn()
+    {
+        var text = Write(Area(tags: GameplayTagSet.Create([GameTags.StatsAbilityScoreStrength])));
+        var failures = new List<ContentFailure>();
+
+        var record = ContentDocument.Read<AreaDefinition>(text, AreaFileName, GameContent.AreasTable, Types, NoContentReferences.Instance, failures);
+
+        Assert.IsNull(record);
+        var failure = Assert.ContainsSingle(failures);
+        var (line, column) = PositionOf(text, $"\"{GameTags.StatsAbilityScoreStrength.Name}\"");
+        Assert.AreEqual(AreaFileName, failure.File);
+        Assert.AreEqual(line, failure.Line);
+        Assert.AreEqual(column, failure.Column);
+        Assert.Contains(GameTagDomains.Area.Name, failure.Reason);
+    }
+
+    [TestMethod]
+    public void AnAreaBuiltInCode_WithATagOutsideTheAreaDomain_FailsValidation()
+    {
+        var catalog = new AreaCatalog();
+        catalog.Register(Area(tags: GameplayTagSet.Create([GameTags.StatsAbilityScoreStrength])));
+        var context = Build.Value.Context;
+
+        var failures = AreaContentValidation.Validate(catalog, context.Terrain, context.Definitions, context.GameplayTags);
+
+        Single(failures, $"'{GameTags.StatsAbilityScoreStrength.Name}' isn't an Area tag");
     }
 
     [TestMethod]

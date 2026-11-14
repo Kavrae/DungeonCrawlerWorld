@@ -155,24 +155,12 @@ games' own dodge timings -- the numbers used are TODO.md's own, not independentl
   gets its action's sprite/glyph badged above its footprint (`MapWindow.DrawChargingBadge`) -- item
   windups are out of scope, nothing today has a delayed/charging item activation. While Dodge is armed,
   its four cardinal reachable tiles are labeled with their WASD key (`DrawDodgeDirectionalHints`).
-- `TestDummyBlueprint`/`TestDummyComponent`/`TestDummyAttackSystem` (`Game/Blueprints/NPCs/Generic/`,
-  `Game/Modules/NpcBehavior/`): a stationary, high-regen (`Constitution` 300) practice target spawned a
-  few tiles from the player, unconditionally re-firing `PowerAttackAction` against its own Adjacent ring
-  whenever its `ActionLockComponent` clears -- no engage/chase logic, unlike `TestCombatBehaviorSystem`.
-  Grants its own `PowerAttackAction` override adding a flat `CooldownFrames` (windup + 3s) on top of the
-  base action's, so it idles 3s after the attack actually *lands*, not from windup start (`ActionInstanceComponent
-  .CooldownFramesRemaining` starts counting the instant activation begins, not once `DelayedActionSystem`
-  later applies the effect). Also explicitly grants `ProcessingTierComponent(Local)` -- a real, confirmed
-  bug otherwise: `ProcessingTierSystem`'s own membership is driven off `MovementComponent` (see its own
-  doc comment), so a `MovementComponent`-less entity like this one is never visited by it and never gets
-  a real tier computed, permanently reading as the `Beyond` fallback to every *other* tiered consumer
-  (`ProcessingTierWiring`'s "fail open to Beyond" default for "no component yet"). `ActionLockSystem`/
-  `ActionCooldownSystem`/`SimpleHealthRegenSystem` are all tiered off this component and each decrements
-  its own countdown by a flat per-visit amount sized for `Local`'s cadence -- at `Beyond`'s 8x-less-frequent
-  cadence (`ProcessingTierDivisors.ByTierIndex`), that same flat decrement ran every one of those
-  countdowns (this dummy's own windup/cooldown/regen) roughly 8x slower than intended. Hardcoding `Local`
-  (this dummy always spawns beside the player and never moves, so it's never actually wrong) sidesteps
-  the whole bug class without granting a real `MovementComponent` purely to be tracked.
+- `TestDummyBlueprint` (`Game/Blueprints/NPCs/Generic/`): a stationary, high-regen (`Constitution` 300) practice
+  target spawned a few tiles from the player. Since the NPC behavior plan's Phase 4 it decides like any creature: a race
+  of its own (an empty `RaceFacet`, so anything of another race is hostile to it) and one grant, `EngageMelee`, so it
+  winds up Power Attack only with a hostile beside it. No `MovementComponent`, so `MovementSystem` never visits it; its
+  `NpcDecisionComponent` puts it in `NpcDecisionSystem`'s stripe set. Its own `PowerAttack` override still adds a 3 s
+  cooldown after the attack lands. `TestDummyComponent` and `TestDummyAttackSystem` are gone.
 - `TestMapBuilder`'s population percentages (`GroundPopulationPercent`/`UnderGroundGhostPercent`/
   `FlyingFairyPercent`) halved again (5/3/3 -> 3/2/2) for the new deliberate, telegraphed combat pace --
   on top of, not instead of, the earlier FPS-driven halving already there.
@@ -269,7 +257,8 @@ alongside it, found while chasing the framerate regressions that surfaced during
   `BodyPartComponent` (`MultiComponentPool`, Complex -- Goblin only today). No marker component --
   decided by which components a blueprint grants.
 - `HealthQueries.TryGetTotals` is the one chokepoint for current/max HP (Simple first, else sums
-  parts). Doesn't fold in the `MaximumHealth` stat modifier -- callers apply that themselves.
+  parts). Its maximum has the `MaximumHealth` stat modifiers applied -- to each part, then summed, for
+  Complex -- so callers never apply them again; the base is read only as `TryGetBaseMaximum`.
 - Regen: Simple ticks its pool; Complex regens the single lowest-%-HP part per due entity.
 - Death: Simple at 0 HP. Complex the instant any Vital part hits 0 (Goblin: Head+Torso), independent
   of summed total.
@@ -768,12 +757,11 @@ Found while building:
 - Damage was cut to a whole number at five points, and a whole-body hit lost up to (parts - 1) points
   to integer division before being spread across the parts. Both went with the no-rounding rule.
 
-### Goblins attack adjacent targets (temporary stand-in)
+### NPC decisions (Engine.Decisions, Game.Modules.NpcBehavior)
 
-`TestCombatBehaviorSystem`: self-heal -> melee-adjacent-threat -> wander chain, generic to any
-`MovementMode.Random` entity with the right components (not Goblin-specific). Non-Blocking targets
-attackable too. Known gap: a Fairy attacks other Fairies (no same-race exclusion) -- left for the
-behavior-composition follow-up (see TODO.md).
+The temporary chain (`TestCombatBehaviorSystem`) is replaced by composed behaviors: what a creature does is its
+blueprint's `Behaviors` grants, chosen by the engine's dual-utility arbiter in `NpcDecisionSystem`. Design, decisions and
+measurements: `PLAN-npc-behavior-composition.md`.
 
 ### Stats / AbilityScores infra
 
@@ -2708,10 +2696,13 @@ after") became three Id-keyed lists; see CLAUDE.md's Modding section for the rul
   `BodyPartBurningTimerComponent`, a pool Burning registers. That check was already redundant apart
   from the ~1 s before a burn's first tick, since every tick resets the part's regen lockout for
   10 s. Burning now resets the lockout at ignition too, and Health's check is gone.
-- **A queued activation clears the step.** Whatever queues an action or consumable activation also
-  clears the entity's `NextMapPosition` in the same write (`PlayerCommands`,
-  `TestCombatBehaviorSystem.ClearStep`), so `MovementSystem` no longer reads either activation pool.
-  NpcBehavior still runs before Movement, or the step would be taken before it is cleared.
+- **A queued activation clears the step.** Every turn is queued through `IntentWriter`
+  (`Game.Modules.Actions`, 2026-11-12): queuing an action or item activation also withdraws the
+  other kind's pending request and clears the entity's `NextMapPosition`, whatever its timing; a step
+  withdraws both pending activations; the step an activation causes (Dodge's) is written once it is
+  used (`StepFromActivation`), touching no pending request. `PlayerCommands` and the NPC systems
+  write nothing else, so `MovementSystem` never reads either activation pool and the rule holds by
+  structure. NpcBehavior still runs before Movement, or the step would be taken before it is cleared.
 - **Latent bugs the stricter signatures exposed.** `BurningSystem`/`PoisonSystem` passed no dead
   pool to `HealthDamage`, so a dead complex entity that kept burning republished `EntityDiedEvent`
   on each tick that hit a zeroed vital part. Actions resolved through `ActivationEffectResolver` had no

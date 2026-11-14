@@ -1,7 +1,7 @@
 using Engine.Math;
 using Game.Modules.Containers.Components;
 using Game.Modules.Currency.Components;
-using Game.Modules.Health.Components;
+using Game.Modules.Health;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
 using Microsoft.Xna.Framework;
@@ -40,7 +40,7 @@ public static class Shop
         var componentManager = context.ComponentManager;
         var entityId = context.EntityId;
 
-        componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
+        MaximumHealthShift.MergeBaseMaximum(componentManager, entityId, MaximumHealth);
         componentManager.Merge(entityId, new ContainerComponent());
         componentManager.Merge(entityId, new CurrencyComponent(StartingGold, credits: 0));
 

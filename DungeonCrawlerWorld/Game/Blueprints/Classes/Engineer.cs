@@ -26,7 +26,7 @@ public static class Engineer
 
         if (!componentManager.GetPackedPool<ActionLockComponent>().Has(entityId))
         {
-            componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
+            componentManager.Merge(entityId, new MovementComponent(null, null));
             componentManager.Merge(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         }
 

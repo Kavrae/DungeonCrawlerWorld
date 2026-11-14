@@ -33,4 +33,7 @@ public static class BuiltInAuraIds
     public static readonly Guid AntiMagic = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000030a");
 
     public static readonly Guid AntiLiteracy = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000030b");
+
+    /// <summary>The Dread Idol's fear: each tick holds a fixed-length Caution x4 modifier on whoever stands in it, refreshed while they stay.</summary>
+    public static readonly Guid DreadAura = new("d9f6a1c4-8b2e-4f3a-9c1d-00000000030c");
 }

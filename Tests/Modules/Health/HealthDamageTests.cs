@@ -16,7 +16,7 @@ public sealed class HealthDamageTests
     public void Apply_ReducesCurrentHealthByAmount()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
 
         TestHealth.Damage(pool, new EventBus(), 0, 10, ActionSource.Admin, new TestPlayerQuery(0), "Status Effect (Burning)", now: 0);
 
@@ -27,7 +27,7 @@ public sealed class HealthDamageTests
     public void Apply_ClampsAtZero()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 5, maximumHealth: 100));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 5, baseMaximumHealth: 100));
 
         TestHealth.Damage(pool, new EventBus(), 0, 10, ActionSource.Admin, new TestPlayerQuery(0), "Status Effect (Burning)", now: 0);
 
@@ -46,7 +46,7 @@ public sealed class HealthDamageTests
     public void Apply_PlayerEntity_PublishesEntityDamagedWithPostDamageHealth()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
         var eventBus = new EventBus();
         EntityDamagedEvent? published = null;
         eventBus.Subscribe<EntityDamagedEvent>(e => published = e);
@@ -64,7 +64,7 @@ public sealed class HealthDamageTests
     public void Apply_NonPlayerEntity_DoesNotPublish()
     {
         var pool = CreatePool();
-        pool.Add(1, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
+        pool.Add(1, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
         var eventBus = new EventBus();
         var published = false;
         eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
@@ -78,7 +78,7 @@ public sealed class HealthDamageTests
     public void Apply_PlayerIsSource_NonPlayerTarget_PublishesEntityDamagedWithTargetHealth()
     {
         var pool = CreatePool();
-        pool.Add(1, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
+        pool.Add(1, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
         var eventBus = new EventBus();
         EntityDamagedEvent? published = null;
         eventBus.Subscribe<EntityDamagedEvent>(e => published = e);
@@ -95,7 +95,7 @@ public sealed class HealthDamageTests
     public void Apply_NeitherPlayerNorPlayerSourced_DoesNotPublish()
     {
         var pool = CreatePool();
-        pool.Add(1, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
+        pool.Add(1, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
         var eventBus = new EventBus();
         var published = false;
         eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
@@ -109,7 +109,7 @@ public sealed class HealthDamageTests
     public void Apply_NullPlayerQuery_DoesNotPublish()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
         var eventBus = new EventBus();
         var published = false;
         eventBus.Subscribe<EntityDamagedEvent>(_ => published = true);
@@ -123,7 +123,7 @@ public sealed class HealthDamageTests
     public void Apply_DamageBringsNonPlayerEntityToZero_PublishesEntityDiedWithSource()
     {
         var pool = CreatePool();
-        pool.Add(1, new SimpleHealthComponent(currentHealth: 5, maximumHealth: 100));
+        pool.Add(1, new SimpleHealthComponent(currentHealth: 5, baseMaximumHealth: 100));
         var eventBus = new EventBus();
         EntityDiedEvent? published = null;
         eventBus.Subscribe<EntityDiedEvent>(e => published = e);
@@ -140,7 +140,7 @@ public sealed class HealthDamageTests
     public void Apply_DamageDoesNotReachZero_DoesNotPublishEntityDied()
     {
         var pool = CreatePool();
-        pool.Add(1, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100));
+        pool.Add(1, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100));
         var eventBus = new EventBus();
         var published = false;
         eventBus.Subscribe<EntityDiedEvent>(_ => published = true);
@@ -155,7 +155,7 @@ public sealed class HealthDamageTests
     public void Apply_SecondHitAgainstAlreadyZeroEntity_DoesNotRepublishEntityDied()
     {
         var pool = CreatePool();
-        pool.Add(1, new SimpleHealthComponent(currentHealth: 5, maximumHealth: 100));
+        pool.Add(1, new SimpleHealthComponent(currentHealth: 5, baseMaximumHealth: 100));
         var eventBus = new EventBus();
         var publishCount = 0;
         eventBus.Subscribe<EntityDiedEvent>(_ => publishCount++);
@@ -171,7 +171,7 @@ public sealed class HealthDamageTests
     public void Apply_PlayerEntityAtExactlyZero_DoesNotPublishEntityDied()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 5, maximumHealth: 100));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 5, baseMaximumHealth: 100));
         var eventBus = new EventBus();
         var published = false;
         eventBus.Subscribe<EntityDiedEvent>(_ => published = true);

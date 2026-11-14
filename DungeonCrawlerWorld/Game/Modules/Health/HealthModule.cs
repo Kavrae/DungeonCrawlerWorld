@@ -35,11 +35,12 @@ public sealed class HealthModule : IGameModule
 
         componentManager.RegisterPackedPool<SimpleHealthComponent>(static (ref existing, incoming) =>
         {
-            // Floored at 0: a negative MaximumHealth here would make the Clamp below throw
-            // (min > max), and "negative max health" isn't a meaningful state regardless of how
-            // it arose (e.g. merging in a component that never validated Maximum* >= 0).
-            existing.MaximumHealth = MathUtility.Clamp((existing.MaximumHealth + incoming.MaximumHealth) / 2f, 0f, float.MaxValue);
-            existing.CurrentHealth = MathUtility.Clamp((existing.CurrentHealth + incoming.CurrentHealth) / 2f, 0f, existing.MaximumHealth);
+            // The bases merge; current health, which already includes the entity's MaximumHealth
+            // modifiers, moves by as far as the base did and is never compared with it. A merge has no
+            // entity to read modifiers for: MaximumHealthShift.MergeBaseMaximum adds their share.
+            var baseBefore = MathF.Max(0f, existing.BaseMaximumHealth);
+            existing.BaseMaximumHealth = MathF.Max(0f, (existing.BaseMaximumHealth + incoming.BaseMaximumHealth) / 2f);
+            existing.CurrentHealth = MathF.Max(0f, existing.CurrentHealth + existing.BaseMaximumHealth - baseBefore);
         });
 
         // Only an entity something has actually happened to holds one -- see BodyPartStateComponent.

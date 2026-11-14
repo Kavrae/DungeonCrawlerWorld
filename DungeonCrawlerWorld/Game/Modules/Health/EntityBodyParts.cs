@@ -9,17 +9,18 @@ using Game.Blueprints;
 namespace Game.Modules.Health;
 
 /// <summary>One body part of one entity, as EntityBodyParts hands it out: its race's template plus whatever has happened to it.</summary>
+/// <remarks>CurrentHealth already includes the entity's MaximumHealth modifiers; BaseMaximumHealth does not. Compare current health only with the modified maximum (StatModifierMath.CalculateTotal over the entity's MaximumHealth sums), never with BaseMaximumHealth.</remarks>
 /// <param name="PartId">The part's index in its entity's own body plan -- stable for the entity's lifetime, and what anything addressing one part names it by.</param>
 /// <cleanupVersion>1</cleanupVersion>
-public readonly record struct BodyPartView(int PartId, string Name, BodyPartType Type, byte VerticalPosition, float MaximumHealth, bool IsVital, float CurrentHealth, bool IsDisabled, uint RegenLockedUntilFrame)
+public readonly record struct BodyPartView(int PartId, string Name, BodyPartType Type, byte VerticalPosition, float BaseMaximumHealth, bool IsVital, float CurrentHealth, bool IsDisabled, uint RegenLockedUntilFrame)
 {
     /// <summary>True while this part is still inside its regen lockout as of now.</summary>
     public bool IsRegenLockedOut(long now) => !FrameDeadline.IsReached(RegenLockedUntilFrame, now);
 
     public override string ToString() =>
-        MaximumHealth > 0
-            ? $"{Engine.Utilities.StringUtility.BuildPercentageBar(Name, (int)CurrentHealth, (int)MaximumHealth, 20)} {(int)CurrentHealth}/{(int)MaximumHealth}"
-            : $"Invalid MaximumHealth: {MaximumHealth}";
+        BaseMaximumHealth > 0
+            ? $"{Engine.Utilities.StringUtility.BuildPercentageBar(Name, (int)CurrentHealth, (int)BaseMaximumHealth, 20)} {(int)CurrentHealth}/{(int)BaseMaximumHealth}"
+            : $"Invalid BaseMaximumHealth: {BaseMaximumHealth}";
 }
 
 /// <summary>
@@ -108,17 +109,18 @@ public sealed class EntityBodyParts(
     public void SetCurrentHealth(int entityId, int partId, float value) =>
         Update(entityId, new SetPartHealthUpdate(partId, value));
 
-    /// <summary>The entity's current and maximum health, summed across its parts.</summary>
-    public bool TryGetTotals(int entityId, out float current, out float maximum)
+    /// <summary>The entity's current health and its base maximum (before MaximumHealth modifiers), summed across its parts.</summary>
+    /// <remarks>The two are in different units -- current health already includes the modifiers -- so never compare them: HealthQueries.TryGetTotals gives the modified maximum.</remarks>
+    public bool TryGetCurrentAndBaseMaximumTotals(int entityId, out float current, out float baseMaximum)
     {
         current = 0f;
-        maximum = 0f;
+        baseMaximum = 0f;
 
         var any = false;
         foreach (var part in Parts(entityId))
         {
             current += part.CurrentHealth;
-            maximum += part.MaximumHealth;
+            baseMaximum += part.BaseMaximumHealth;
             any = true;
         }
 
@@ -160,7 +162,7 @@ public sealed class EntityBodyParts(
         var state = default(BodyPartStateComponent);
         for (var partId = 0; partId < count; partId++)
         {
-            state.SetCurrentHealth(partId, partId < first.Length ? first[partId].MaximumHealth : second[partId - first.Length].MaximumHealth);
+            state.SetCurrentHealth(partId, partId < first.Length ? first[partId].BaseMaximumHealth : second[partId - first.Length].BaseMaximumHealth);
         }
 
         states.Add(entityId, state);
@@ -172,11 +174,11 @@ public sealed class EntityBodyParts(
     {
         if (stateDenseIndex < 0)
         {
-            return new BodyPartView(partId, template.Name, template.Type, template.VerticalPosition, template.MaximumHealth, template.IsVital, template.MaximumHealth, IsDisabled: false, RegenLockedUntilFrame: 0);
+            return new BodyPartView(partId, template.Name, template.Type, template.VerticalPosition, template.BaseMaximumHealth, template.IsVital, template.BaseMaximumHealth, IsDisabled: false, RegenLockedUntilFrame: 0);
         }
 
         ref readonly var state = ref states.GetReadonlyByDenseIndex(stateDenseIndex);
-        return new BodyPartView(partId, template.Name, template.Type, template.VerticalPosition, template.MaximumHealth, template.IsVital, state.CurrentHealthOf(partId), state.IsDisabled(partId), state.RegenLockedUntilFrameOf(partId));
+        return new BodyPartView(partId, template.Name, template.Type, template.VerticalPosition, template.BaseMaximumHealth, template.IsVital, state.CurrentHealthOf(partId), state.IsDisabled(partId), state.RegenLockedUntilFrameOf(partId));
     }
 
     /// <summary>The entity's body plan: its first race's templates, then its second's.</summary>

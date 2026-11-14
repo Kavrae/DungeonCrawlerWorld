@@ -26,7 +26,7 @@ public sealed class LocalTierRosterTests
             Roster = new LocalTierRoster(Movers, Tiers, Events);
         }
 
-        public void AddMover(int entityId) => Movers.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
+        public void AddMover(int entityId) => Movers.Add(entityId, new MovementComponent(null, null));
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using Engine.Content;
 using Engine.Math;
 using Game.Content;
 using Game.Modules.Core.Components;
+using Game.Tags;
 
 namespace Game.Areas;
 
@@ -61,7 +62,7 @@ internal static class AreaContentCodecs
             ContentField.Guid(ContentTable.IdKey, "Id", isRequired: true),
             ContentField.Text("n", "Name", isRequired: true),
             ContentField.Text("d", "Description"),
-            ContentField.TagSet("tg", "Tags"),
+            ContentField.TagSet("tg", "Tags", GameTagDomains.Area),
             new ContentField("w", "Width", ContentFieldKind.Integer, IsRequired: true, Minimum: 1, Maximum: ushort.MaxValue),
             new ContentField("h", "Height", ContentFieldKind.Integer, IsRequired: true, Minimum: 1, Maximum: ushort.MaxValue),
             new ContentField("pal", "Palettes", ContentFieldKind.List, typeof(Guid), ContentFieldKind.Reference, ReferencedTable: GameContent.AreaPalettesTable),

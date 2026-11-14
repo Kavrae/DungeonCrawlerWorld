@@ -244,6 +244,12 @@ public sealed class EntityFactory
         _builder.Apply(_componentManager, entityId, blueprintId, classGrantedBy);
     }
 
+    /// <inheritdoc cref="EntityBuilder.AddStep"/>
+    public void AddBuildStep(IEntityBuildStep step) => _builder.AddStep(step);
+
+    /// <inheritdoc cref="EntityBuilder.Steps"/>
+    public IReadOnlyList<IEntityBuildStep> BuildSteps => _builder.Steps;
+
     /// <inheritdoc cref="EntityBuilder.BuildSkeleton"/>
     public void BuildSkeleton(ComponentManager componentManager, int entityId, ushort blueprintId, uint seed, SpawnFlags flags = SpawnFlags.None) =>
         _builder.BuildSkeleton(componentManager, entityId, blueprintId, seed, flags);

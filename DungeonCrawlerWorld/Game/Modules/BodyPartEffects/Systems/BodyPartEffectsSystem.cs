@@ -72,12 +72,13 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
     {
         foreach (var entityId in entityIds)
         {
-            SyncLegPenalty(entityId);
-            SyncArmPenalty(entityId);
+            StatModifierMath.GetSums(_statModifiers, entityId, StatModifierTarget.MaximumHealth, out var maximumHealthAdditive, out var maximumHealthMultiplicative);
+            SyncLegPenalty(entityId, maximumHealthAdditive, maximumHealthMultiplicative);
+            SyncArmPenalty(entityId, maximumHealthAdditive, maximumHealthMultiplicative);
         }
     }
 
-    private void SyncLegPenalty(int entityId)
+    private void SyncLegPenalty(int entityId, float maximumHealthAdditive, float maximumHealthMultiplicative)
     {
         var hasFunctionalWing = false;
         var anyLegOrFoot = false;
@@ -100,7 +101,7 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
 
             anyLegOrFoot = true;
             allDisabled &= part.IsDisabled;
-            combinedMultiplier *= MaxMovementLockMultiplierPerPart - HealthFraction(part) * (MaxMovementLockMultiplierPerPart - 1f);
+            combinedMultiplier *= MaxMovementLockMultiplierPerPart - HealthFraction(part, maximumHealthAdditive, maximumHealthMultiplicative) * (MaxMovementLockMultiplierPerPart - 1f);
         }
 
         // A winged entity flies regardless of its own Leg/Foot condition -- checked before the
@@ -127,7 +128,7 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
         SyncModifier(entityId, StatModifierTarget.MovementLockFrames, combinedMultiplier);
     }
 
-    private void SyncArmPenalty(int entityId)
+    private void SyncArmPenalty(int entityId, float maximumHealthAdditive, float maximumHealthMultiplicative)
     {
         var anyArmOrHand = false;
         var allDisabled = true;
@@ -143,7 +144,7 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
 
             anyArmOrHand = true;
             allDisabled &= part.IsDisabled;
-            combinedMultiplier *= HealthFraction(part);
+            combinedMultiplier *= HealthFraction(part, maximumHealthAdditive, maximumHealthMultiplicative);
         }
 
         if (!anyArmOrHand)
@@ -168,8 +169,12 @@ public sealed class BodyPartEffectsSystem : ITieredSystem
         SyncModifier(entityId, StatModifierTarget.OutgoingDamage, combinedMultiplier, GameTags.DeliveryMelee);
     }
 
-    private static float HealthFraction(in BodyPartView part) =>
-        part.MaximumHealth > 0 ? MathUtility.Clamp(part.CurrentHealth / part.MaximumHealth, 0f, 1f) : 0f;
+    /// <summary>The part's current health over its maximum with the entity's MaximumHealth modifiers applied, clamped to [0, 1].</summary>
+    private static float HealthFraction(in BodyPartView part, float maximumHealthAdditive, float maximumHealthMultiplicative)
+    {
+        var maximumHealth = StatModifierMath.CalculateTotal(part.BaseMaximumHealth, maximumHealthAdditive, maximumHealthMultiplicative);
+        return maximumHealth > 0 ? MathUtility.Clamp(part.CurrentHealth / maximumHealth, 0f, 1f) : 0f;
+    }
 
     /// <summary>Grants/updates/removes this system's own permanent multiplicative StatModifierComponent for target, so its effective value equals baseValue * combinedMultiplier (see StatModifierMath's own additive-then-multiplicative formula) -- StatModifierComponent's fields are get-only, so an actual change always means remove-then-re-add rather than an in-place magnitude edit.</summary>
     private void SyncModifier(int entityId, StatModifierTarget target, float combinedMultiplier, GameplayTag conditionTag = default)

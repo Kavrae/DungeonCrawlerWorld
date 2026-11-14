@@ -57,9 +57,10 @@ public static class GameBuildPass
         var context = build.Context;
         var componentManager = ecsContext.ComponentManager;
 
-        var localTierRoster = new LocalTierRoster(componentManager.GetPackedPool<MovementComponent>(), componentManager.GetDirectPool<ProcessingTierComponent>(), context.ProcessingTierEvents);
+        var localTierRoster = new LocalTierRoster(componentManager.GetPackedPool<Modules.NpcBehavior.Components.NpcDecisionComponent>(), componentManager.GetDirectPool<ProcessingTierComponent>(), context.ProcessingTierEvents);
 
         RegisterDiagnostics(ecsContext, context.EntityFactory.Skeletons, localTierRoster, context.ProcessingTierResolver, context.AuraField);
+        RegisterDecisionGauges(ecsContext, context.NpcDecisions);
         if (loadsContentById)
         {
             RegisterContentGauges(ecsContext, context.Content, context.ContentCatalogLoader);
@@ -183,6 +184,13 @@ public static class GameBuildPass
         ecsContext.Gauges.Register("Auras", "TotalsBytes", GaugeKind.Level, () => auraField.TotalsAllocatedBytes);
     }
 
+    /// <summary>The decision system's counters: decisions made and commitments started, per frame.</summary>
+    private static void RegisterDecisionGauges(EcsContext ecsContext, Modules.NpcBehavior.NpcDecisionState decisions)
+    {
+        ecsContext.Gauges.Register("NpcBehavior", "Decisions", GaugeKind.Cumulative, () => decisions.Decisions);
+        ecsContext.Gauges.Register("NpcBehavior", "CommitmentsStarted", GaugeKind.Cumulative, () => decisions.CommitmentsStarted);
+    }
+
     /// <summary>Gives diagnostics how many actions, items and auras a by-id session has decoded, and how many loads missed the plan -- decoded on the spot because no plan or startup kit named them.</summary>
     private static void RegisterContentGauges(EcsContext ecsContext, Content.GameContent content, Content.ContentCatalogLoader loader)
     {
@@ -203,6 +211,7 @@ public static class GameBuildPass
         var transforms = ecsContext.ComponentManager.GetDirectPool<TransformComponent>();
         var processingTierResolver = context.ProcessingTierResolver;
         var uniqueEntities = context.UniqueEntities;
+        var npcDecisions = context.NpcDecisions;
 
         ecsContext.EventBus.Subscribe<EntityDiedEvent>(died => uniqueEntities.EntityDied(died.EntityId));
         ecsContext.EntityManager.EntityDestroying += entityId =>
@@ -217,6 +226,7 @@ public static class GameBuildPass
 
             processingTierResolver.Forget(entityId);
             uniqueEntities.EntityDestroying(entityId);
+            npcDecisions.Release(entityId);
         };
     }
 
@@ -242,7 +252,7 @@ public sealed record GameModuleBuild(EcsContext EcsContext, World.World World, G
 /// <summary>Everything one GameBuildPass.Run produced.</summary>
 /// <param name="Modules">This build's own module instances, in the order their phases ran.</param>
 /// <param name="Declarations">Everything the modules declared, including the setting overrides that were rejected.</param>
-/// <param name="LocalTierRoster">The build's Local-tier movers -- see LocalTierRoster.</param>
+/// <param name="LocalTierRoster">The build's Local-tier creatures that decide -- see LocalTierRoster.</param>
 public sealed record GameBuildPassResult(
     EcsContext EcsContext,
     World.World World,

@@ -14,7 +14,7 @@ using Game.World;
 
 namespace Tests.Modules.NpcBehavior;
 
-/// <summary>TEMPORARY content, like TestCombatBehaviorSystem itself: Fairies wind up Magic Missile at the player, in Target or Ground mode at random.</summary>
+/// <summary>TEMPORARY content: Fairies wind up Magic Missile at the player (RangedAttack), in Target or Ground mode at random.</summary>
 [TestClass]
 public sealed class FairyMagicMissileTests
 {
@@ -64,7 +64,6 @@ public sealed class FairyMagicMissileTests
 
         var fairyId = build.Factory.Spawn(SpawnRequest.At(definitions.GetId(Fairy.Id), FairyPosition) with { Seed = 1 });
         var components = build.EcsContext.ComponentManager;
-        components.GetPackedPool<MovementComponent>().TrySet(fairyId, components.GetPackedPool<MovementComponent>().GetReadonly(fairyId) with { MovementMode = MovementMode.Random });
         if (fairyMana is { } mana)
         {
             components.GetPackedPool<ManaComponent>().TrySet(fairyId, components.GetPackedPool<ManaComponent>().GetReadonly(fairyId) with { CurrentMana = mana });
@@ -74,11 +73,11 @@ public sealed class FairyMagicMissileTests
     }
 
     [TestMethod]
-    public void Fairy_HasFifteenManaAndADelayedRangeEightMagicMissile()
+    public void Fairy_HasSeventeenManaAndADelayedRangeEightMagicMissile()
     {
         var session = BuildSession(new Vector3Int(4, 0, 0));
 
-        Assert.AreEqual(15f, session.Components.GetPackedPool<ManaComponent>().GetReadonly(session.FairyId).MaximumMana);
+        Assert.AreEqual(17f, session.Components.GetPackedPool<ManaComponent>().GetReadonly(session.FairyId).BaseMaximumMana);
         Assert.IsTrue(EntityActions.For(session.Components, session.Build.Context.Actions, session.Build.Context.Definitions).TryGetEffectiveAction(session.FairyId, BuiltInActionIds.MagicMissile, out var magicMissile));
         Assert.AreEqual(ActionTimingCategory.Delayed, magicMissile.Activator.Timing.Category);
         Assert.AreEqual(8, magicMissile.Activator.Targeting.MaximumRange);
@@ -123,7 +122,7 @@ public sealed class FairyMagicMissileTests
 
         var casts = session.RunCollectingCasts(20 * FramesPerSecond);
 
-        Assert.HasCount(3, casts, "15 mana is three Magic Missiles; regeneration doesn't buy a fourth in twenty seconds.");
+        Assert.HasCount(3, casts, "17 mana is three Magic Missiles and two over (a Heal, when hurt); regeneration doesn't buy a fourth missile in twenty seconds.");
     }
 
     [TestMethod]

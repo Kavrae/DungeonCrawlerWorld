@@ -1,3 +1,4 @@
+using Engine.Decisions;
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
@@ -12,8 +13,10 @@ public sealed class ResolvedBlueprint
 {
     private readonly ActionGrant[] _actions;
 
-    internal ResolvedBlueprint(BlueprintDefinition definition, ushort[] buildOrder, ushort[] races, ushort[] classes, ActionGrant[] actions, AuraGrant[] auras, NonBlockingKind[] nonBlocking, EntityAppearance appearance, MapLayer layer, Vector2Byte size, LootboxReward? lootbox, Guid[] contentActionIds, Guid[] contentItemIds)
+    internal ResolvedBlueprint(BlueprintDefinition definition, ushort[] buildOrder, ushort[] races, ushort[] classes, ActionGrant[] actions, AuraGrant[] auras, NonBlockingKind[] nonBlocking, EntityAppearance appearance, MapLayer layer, Vector2Byte size, LootboxReward? lootbox, Guid[] contentActionIds, Guid[] contentItemIds, NpcBehaviorGrant[][] behaviorGrantLists, BehaviorModifier[] behaviorModifiers)
     {
+        BehaviorGrantLists = behaviorGrantLists;
+        BehaviorModifiers = behaviorModifiers;
         ContentActionIds = contentActionIds;
         ContentItemIds = contentItemIds;
         Lootbox = lootbox;
@@ -51,6 +54,12 @@ public sealed class ResolvedBlueprint
 
     /// <summary>Every aura its definitions grant, one per aura: a later definition's grant of an aura replaces an earlier one's.</summary>
     public IReadOnlyList<AuraGrant> Auras { get; }
+
+    /// <summary>Each part's behavior grants, in build order, for every part that grants any: what NpcBehaviorSets resolves into the set an entity of it decides with.</summary>
+    public IReadOnlyList<IReadOnlyList<NpcBehaviorGrant>> BehaviorGrantLists { get; }
+
+    /// <summary>Every part's behavior modifiers, in build order.</summary>
+    public IReadOnlyList<BehaviorModifier> BehaviorModifiers { get; }
 
     /// <summary>Each occupancy kind a part declares, in build order.</summary>
     public IReadOnlyList<NonBlockingKind> NonBlocking { get; }

@@ -31,7 +31,7 @@ public sealed class GameSessionTests
     {
         var session = Build();
 
-        Assert.IsGreaterThan(0, session.Catalogs.ItemCatalog.Count);
+        Assert.IsGreaterThan(0, session.Catalogs.ItemCatalog.Summaries.Count);
         Assert.IsGreaterThan(0, session.Catalogs.LootboxCatalog.Count);
     }
 }

@@ -54,7 +54,7 @@ internal static class TestMapWindows
             var playerTransform = new TransformComponent(position, new Vector2Byte(1, 1));
             TestTransforms.Set(componentManager, PlayerEntityId, playerTransform);
             world.PlaceEntityOnMap(PlayerEntityId, position, ref playerTransform);
-            componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
+            componentManager.Merge(PlayerEntityId, new MovementComponent(null, null));
             // Fully unlocked -- these tests are about arm/target/confirm behavior, not the Expansion lock itself, so default to every slot being usable rather than incidentally locking out whichever slot a given test happens to bind to.
             componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 20));
             world.EntityKeys.Issue(PlayerEntityId);

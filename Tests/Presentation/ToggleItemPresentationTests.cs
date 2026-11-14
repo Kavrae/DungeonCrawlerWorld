@@ -92,7 +92,7 @@ public sealed class ToggleItemPresentationTests
 
         var playerEntityId = ecs.EntityManager.CreateEntity();
         session.Internals.ProcessingTierResolver.PinLocalAndNotify(playerEntityId);
-        session.Internals.Factory.Spawn(SpawnRequest.At(session.Catalogs.Definitions.GetId(Player.Id), Start) with { Seed = 1, ReservedEntityId = playerEntityId });
+        session.Internals.Factory.Spawn(SpawnRequest.At(session.Catalogs.Definitions.GetId(Player.Id), Start) with { Seed = 1, Size = new Vector2Byte(1, 1), ReservedEntityId = playerEntityId });
         world.PlayerEntityId = playerEntityId;
         components.Merge(playerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 10));
 
@@ -227,7 +227,7 @@ public sealed class ToggleItemPresentationTests
         var components = harness.Ecs.ComponentManager;
         components.GetMultiPool<ActionHotkeyBindingComponent>().Add(harness.PlayerEntityId, new ActionHotkeyBindingComponent(HotkeySlot.Slot8, BuiltInActionIds.ToxicAura));
         var manaPool = components.GetPackedPool<Game.Modules.Mana.Components.ManaComponent>();
-        manaPool.TrySet(harness.PlayerEntityId, manaPool.GetReadonly(harness.PlayerEntityId) with { MaximumMana = 50, CurrentMana = 50 });
+        manaPool.TrySet(harness.PlayerEntityId, manaPool.GetReadonly(harness.PlayerEntityId) with { BaseMaximumMana = 50, CurrentMana = 50 });
         harness.LockPlayer();
 
         harness.ActionTargeting.HandleHotkeySlotPress(HotkeySlot.Slot8);

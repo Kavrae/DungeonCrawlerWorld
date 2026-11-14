@@ -21,7 +21,7 @@ public static class ManaCost
     public static bool HasEnough(PackedComponentPool<ManaComponent> mana, int entityId, float amount) =>
         mana.TryGetReadonly(entityId, out var manaComponent) && manaComponent.CurrentMana >= amount;
 
-    /// <summary>Takes amount from entityId's CurrentMana, down to 0 at the least and the modifier-effective MaximumMana at the most.</summary>
+    /// <summary>Takes amount from entityId's CurrentMana, down to 0 at the least and its modified maximum at the most.</summary>
     /// <remarks>A no-op for an entity with no ManaComponent.</remarks>
     public static void Take(
         PackedComponentPool<ManaComponent> mana,
@@ -35,7 +35,7 @@ public static class ManaCost
             return;
         }
 
-        var effectiveMaximumMana = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumMana, mana.GetReadonlyByDenseIndex(denseIndex).MaximumMana);
+        var effectiveMaximumMana = ManaQueries.EffectiveMaximumAt(mana, statModifiers, entityId, denseIndex);
         mana.UpdateByDenseIndex(denseIndex, new ShiftCurrentManaUpdate(-amount, effectiveMaximumMana));
     }
 }

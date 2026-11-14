@@ -532,6 +532,45 @@ public static class InventoryActions
         return lootedStackCount;
     }
 
+    /// <summary>Whether LootEveryStack from sourceEntityId into destinationEntityId would move anything: some stack sourceEntityId holds can be traded and has room to go -- topping up an interchangeable stack under its cap, or a new stack.</summary>
+    /// <remarks>Reads only, so a decision can ask it before choosing to loot. Currency isn't asked: it always fits.</remarks>
+    public static bool CanLootAny(ComponentManager componentManager, ItemCatalog itemCatalog, int sourceEntityId, int destinationEntityId, IPlayerQuery playerQuery)
+    {
+        if (sourceEntityId == destinationEntityId)
+        {
+            return false;
+        }
+
+        var stacks = componentManager.GetMultiPool<InventoryItemStackComponent>();
+        var hasRoomForNewStack = InventoryCapacity.HasRoomForNewStack(componentManager, destinationEntityId, playerQuery);
+        var effectiveCap = GetEffectiveMaxStackSize(componentManager, destinationEntityId);
+        for (var sourceIndex = stacks.GetFirstDenseIndex(sourceEntityId); sourceIndex != -1; sourceIndex = stacks.GetNextDenseIndex(sourceIndex))
+        {
+            ref readonly var looted = ref stacks.GetReadonlyByDenseIndex(sourceIndex);
+            if (!CanTrade(itemCatalog, in looted))
+            {
+                continue;
+            }
+
+            if (hasRoomForNewStack)
+            {
+                return true;
+            }
+
+            var template = StackTemplate.Of(in looted);
+            for (var destinationIndex = stacks.GetFirstDenseIndex(destinationEntityId); destinationIndex != -1; destinationIndex = stacks.GetNextDenseIndex(destinationIndex))
+            {
+                ref readonly var held = ref stacks.GetReadonlyByDenseIndex(destinationIndex);
+                if (held.Quantity < effectiveCap && template.Matches(in held))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Adds looted's units to the stacks entityId already holds that are interchangeable with them, each up to entityId's stack size cap.</summary>
     /// <returns>The quantity that didn't fit.</returns>
     private static ushort TopUpInterchangeableStacks(ComponentManager componentManager, MultiComponentPool<InventoryItemStackComponent> stacks, int entityId, in InventoryItemStackComponent looted)

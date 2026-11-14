@@ -42,7 +42,7 @@ public sealed class ManaRegenSystemTests
     public void Update_RegeneratesManaByLiveComputedIntelligenceAmount()
     {
         var pool = CreatePool();
-        pool.Add(0, new ManaComponent(currentMana: 50, maximumMana: 200));
+        pool.Add(0, new ManaComponent(currentMana: 50, baseMaximumMana: 200));
         var system = TestSystems.ManaRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxIntelligence(0));
 
         system.Update(default, 0);
@@ -55,7 +55,7 @@ public sealed class ManaRegenSystemTests
     public void Update_ClampsAtMaximumMana()
     {
         var pool = CreatePool();
-        pool.Add(0, new ManaComponent(currentMana: 200, maximumMana: 200));
+        pool.Add(0, new ManaComponent(currentMana: 200, baseMaximumMana: 200));
         var system = TestSystems.ManaRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxIntelligence(0));
 
         system.Update(default, 0);
@@ -67,7 +67,7 @@ public sealed class ManaRegenSystemTests
     public void Update_DeadEntity_DoesNotRegenerate()
     {
         var pool = CreatePool();
-        pool.Add(0, new ManaComponent(currentMana: 0, maximumMana: 200));
+        pool.Add(0, new ManaComponent(currentMana: 0, baseMaximumMana: 200));
         var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         deadEntities.Add(0, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
         var system = TestSystems.ManaRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: null, deadEntities: deadEntities, abilityScores: CreateAbilityScoresPoolWithMaxIntelligence(0));
@@ -81,7 +81,7 @@ public sealed class ManaRegenSystemTests
     public void Update_NoAbilityScorePool_LeavesCurrentManaUnchanged()
     {
         var pool = CreatePool();
-        pool.Add(0, new ManaComponent(currentMana: 50, maximumMana: 200));
+        pool.Add(0, new ManaComponent(currentMana: 50, baseMaximumMana: 200));
         var system = TestSystems.ManaRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents());
 
         system.Update(default, 0);
@@ -93,7 +93,7 @@ public sealed class ManaRegenSystemTests
     public void Update_NoIntelligenceScoreForEntity_LeavesCurrentManaUnchanged()
     {
         var pool = CreatePool();
-        pool.Add(0, new ManaComponent(currentMana: 50, maximumMana: 200));
+        pool.Add(0, new ManaComponent(currentMana: 50, baseMaximumMana: 200));
         var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
         var system = TestSystems.ManaRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: abilityScores);
 
@@ -106,7 +106,7 @@ public sealed class ManaRegenSystemTests
     public void Update_LargeNegativeManaRegenModifier_ClampsToZeroInsteadOfUnderflowWrapping()
     {
         var pool = CreatePool();
-        pool.Add(0, new ManaComponent(currentMana: -32000, maximumMana: 200));
+        pool.Add(0, new ManaComponent(currentMana: -32000, baseMaximumMana: 200));
         var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
         abilityScores.Add(0, AbilityScoreTestPools.Score(AbilityScoreType.Intelligence, baseValue: 1, total: 1));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
@@ -134,7 +134,7 @@ public sealed class ManaRegenSystemTests
     public void Update_LowFractionalRate_AddsExactFractionalAmountImmediately()
     {
         var pool = CreatePool();
-        pool.Add(0, new ManaComponent(currentMana: 0, maximumMana: 6));
+        pool.Add(0, new ManaComponent(currentMana: 0, baseMaximumMana: 6));
         var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
         abilityScores.Add(0, AbilityScoreTestPools.Score(AbilityScoreType.Intelligence, baseValue: 6, total: 6));
         var system = TestSystems.ManaRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: abilityScores);
@@ -151,7 +151,7 @@ public sealed class ManaRegenSystemTests
     {
         var pool = CreatePool();
         var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
-        pool.Add(0, new ManaComponent(currentMana: 50, maximumMana: 200));
+        pool.Add(0, new ManaComponent(currentMana: 50, baseMaximumMana: 200));
         var system = TestSystems.ManaRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxIntelligence(0));
 
         system.Update(new EngineTime(default, default, false, FrameCount: 1), 0);
@@ -164,7 +164,7 @@ public sealed class ManaRegenSystemTests
     {
         var pool = CreatePool();
         var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
-        pool.Add(0, new ManaComponent(currentMana: 50, maximumMana: 200));
+        pool.Add(0, new ManaComponent(currentMana: 50, baseMaximumMana: 200));
         var system = TestSystems.ManaRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxIntelligence(0));
 
         system.Update(new EngineTime(default, default, false, FrameCount: 0), 0);

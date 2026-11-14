@@ -120,14 +120,13 @@ public static class ComplexHealthHeal
             return;
         }
 
-        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.BaseMaximumHealth);
         bodyParts.Heal(entityId, partId, amount, effectiveMaximumHealth);
     }
 
     private static void PublishAggregateHealEvent(EntityBodyParts bodyParts, PackedComponentPool<SimpleHealthComponent> health, EventBus eventBus, IPlayerQuery playerQuery, int entityId, int? sourceEntityId, float amount, string healType, MultiComponentPool<StatModifierComponent> statModifiers)
     {
-        HealthQueries.TryGetTotals(health, bodyParts, entityId, out var totalCurrent, out var totalMaximum);
-        var effectiveMaximumHealthForEvent = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, totalMaximum);
+        HealthQueries.TryGetTotals(health, bodyParts, statModifiers, entityId, out var totalCurrent, out var effectiveMaximumHealthForEvent);
         HealthHeal.PublishHealEvent(eventBus, playerQuery, entityId, sourceEntityId, amount, healType, totalCurrent, effectiveMaximumHealthForEvent);
     }
 }

@@ -62,7 +62,7 @@ public sealed class MapWindowTests
         return (world, mapViewState, mapWindow);
     }
 
-    /// <summary>Same as BuildMapWindow, plus a MovementMode.PlayerControlled player entity at playerPosition -- for exercising WASD movement/camera-follow, which need World.PlayerEntityId wired to something real.</summary>
+    /// <summary>Same as BuildMapWindow, plus a player entity at playerPosition -- for exercising WASD movement/camera-follow, which need World.PlayerEntityId wired to something real.</summary>
     private static (Game.World.World World, MapViewState MapViewState, MapWindow MapWindow, ComponentManager ComponentManager) BuildMapWindowWithPlayer(int mapSizeX, int mapSizeY, int mapSizeZ, Vector3Int playerPosition) =>
         BuildMapWindowCore(mapSizeX, mapSizeY, mapSizeZ, playerPosition);
 
@@ -277,7 +277,7 @@ public sealed class MapWindowTests
         Assert.AreEqual(new Vector3Int(102, 100, 0), movementPool.GetReadonly(PlayerEntityId).NextMapPosition);
     }
 
-    /// <summary>MovementSystem's TryMoveToNextMapPosition never re-validates bounds/occupancy for MovementMode.PlayerControlled -- PlayerCommands must reject an off-map candidate itself before ever writing NextMapPosition.</summary>
+    /// <summary>MovementSystem's TryMoveToNextMapPosition never re-validates bounds/occupancy for the player -- PlayerCommands must reject an off-map candidate itself before ever writing NextMapPosition.</summary>
     [TestMethod]
     public void HandleHotkeys_PressingA_AtMapEdge_DoesNotQueueAnOffMapMove()
     {

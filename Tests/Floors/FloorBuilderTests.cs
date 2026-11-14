@@ -53,8 +53,7 @@ public sealed class FloorBuilderTests
         Assert.IsTrue(world.IsOnMap(transform.Position));
         Assert.AreEqual(world.PlayerEntityId, world.GetEntityIdAt(transform.Position));
 
-        var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(world.PlayerEntityId);
-        Assert.AreEqual(MovementMode.PlayerControlled, movement.MovementMode);
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(world.PlayerEntityId));
 
         // The player is always a Crawler, numbered by the session rather than by what it is built from.
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<CrawlerComponent>().Has(world.PlayerEntityId));
@@ -228,13 +227,13 @@ public sealed class FloorBuilderTests
             }
         }
 
-        // Every mover born Local reached the roster without any TierChanged -- see
+        // Every creature that decides, born Local, reached the roster without any TierChanged -- see
         // LocalTierRoster.OnEntityAdded.
-        foreach (var moverId in movers.EntityIds)
+        foreach (var deciderId in ecsContext.ComponentManager.GetPackedPool<Game.Modules.NpcBehavior.Components.NpcDecisionComponent>().EntityIds)
         {
-            if (tiers.TryGetReadonly(moverId, out var tier) && tier.Tier == Game.Modules.ProcessingTier.Components.ProcessingTierLevel.Local)
+            if (tiers.TryGetReadonly(deciderId, out var tier) && tier.Tier == Game.Modules.ProcessingTier.Components.ProcessingTierLevel.Local)
             {
-                Assert.IsTrue(pass.LocalTierRoster.IsLocal(moverId), $"Mover {moverId} is Local but missing from LocalTierRoster.");
+                Assert.IsTrue(pass.LocalTierRoster.IsLocal(deciderId), $"Decider {deciderId} is Local but missing from LocalTierRoster.");
             }
         }
     }

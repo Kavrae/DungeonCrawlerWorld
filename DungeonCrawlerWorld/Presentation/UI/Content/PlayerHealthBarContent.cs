@@ -79,11 +79,8 @@ public sealed class PlayerHealthBarContent(World world, HealthView healthView, E
         else
         {
             _hasHealth = true;
-            var effectiveMaximumHealth = statModifierView.GetEffectiveValue(playerEntityId, StatModifierTarget.MaximumHealth, maximumHealth);
-            _healthFraction = effectiveMaximumHealth > 0
-                ? MathHelper.Clamp(currentHealth / effectiveMaximumHealth, 0f, 1f)
-                : 1f;
-            _valueText = _valueTextCache.Get((ResourceBarRounding.DisplayedHealth(currentHealth), ResourceBarRounding.DisplayedMaximum(effectiveMaximumHealth)), static key => ResourceBarValueText.Format(key.Current, key.Maximum));
+            _healthFraction = MathHelper.Clamp(currentHealth / maximumHealth, 0f, 1f);
+            _valueText = _valueTextCache.Get((ResourceBarRounding.DisplayedHealth(currentHealth), ResourceBarRounding.DisplayedMaximum(maximumHealth)), static key => ResourceBarValueText.Format(key.Current, key.Maximum));
         }
 
         var bodyPartCount = playerEntityId < 0 ? 0 : _bodyParts.Count(playerEntityId);

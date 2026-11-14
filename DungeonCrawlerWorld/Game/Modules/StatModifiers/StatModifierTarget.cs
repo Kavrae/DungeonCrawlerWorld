@@ -106,4 +106,10 @@ public enum StatModifierTarget : byte
 
     /// <summary>The entity's standard action lock, on top of its Dexterity-derived length (StandardActionLockFrames) -- every lock that doesn't state its own duration, steps included. Negative is faster.</summary>
     ActionLockFrames,
+
+    /// <summary>The weight of every NPC behavior serving the Aggression drive (NpcDrives.Aggression): fighting.</summary>
+    BehaviorAggression,
+
+    /// <summary>The weight of every NPC behavior serving the Caution drive (NpcDrives.Caution): healing, running away. The Dread Aura's fear.</summary>
+    BehaviorCaution,
 }

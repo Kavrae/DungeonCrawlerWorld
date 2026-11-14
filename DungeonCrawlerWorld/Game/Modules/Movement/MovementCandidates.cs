@@ -5,7 +5,7 @@ using Game.World;
 namespace Game.Modules.Movement;
 
 /// <summary> Shared position-candidate math for Random-mode wandering and move re-validation </summary>
-/// <remarks>Used by MovementSystem (re-validating an already-queued move) and TestCombatBehaviorSystem (deciding
+/// <remarks>Used by MovementSystem (re-validating an already-queued move) and NpcDecisionSystem (deciding
 /// a new wander destination, in a different module). Pure functions over IMapQuery/MathUtility,
 /// no component-pool writes of their own -- callers decide what to do with the answer.
 /// </remarks>
@@ -14,7 +14,7 @@ public static class MovementCandidates
 {
     private static readonly Vector2Byte TransformSize1 = new(1, 1);
 
-    /// <summary>How long a Random-mode entity waits before retrying after finding every direction blocked -- turned into an absolute MovementComponent.WaitUntilFrame at the moment the search fails (see TestCombatBehaviorSystem.SetIdle).</summary>
+    /// <summary>How long an NPC idles (NpcDecisionContext.Idle) when it chooses to, or finds every direction blocked.</summary>
     public const ushort FramesToWaitIfNoOptions = 120;
 
     /// <summary> Determines whether an entity of the given size could occupy the given position. </summary>

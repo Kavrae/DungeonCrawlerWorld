@@ -87,7 +87,7 @@ public sealed class ToggleActionTests
         {
             var pool = Components.GetPackedPool<ManaComponent>();
             var component = pool.GetReadonly(PlayerEntityId);
-            pool.TrySet(PlayerEntityId, component with { MaximumMana = MathF.Max(component.MaximumMana, mana), CurrentMana = mana });
+            pool.TrySet(PlayerEntityId, component with { BaseMaximumMana = MathF.Max(component.BaseMaximumMana, mana), CurrentMana = mana });
         }
 
         public void SetCurrentMana(float mana) =>

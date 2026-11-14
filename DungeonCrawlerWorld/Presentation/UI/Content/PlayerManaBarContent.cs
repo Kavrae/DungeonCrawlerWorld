@@ -1,4 +1,3 @@
-using Game.Modules.StatModifiers;
 using Game.Views;
 using Game.World;
 using Microsoft.Xna.Framework;
@@ -21,7 +20,7 @@ namespace Presentation.UI.Content;
 /// PlayerHealthBarContent gives a hypothetical SimpleHealthComponent-less player.
 /// </summary>
 /// <remarks>While the pointer is over its window, it drives a popup with the player's mana regeneration rate (PlayerManaHoverContent).</remarks>
-public sealed class PlayerManaBarContent(World world, ActionStateView actionStateView, StatModifierView statModifierView, FontService fontService, UiLayerStack layers) : IElementContent
+public sealed class PlayerManaBarContent(World world, ActionStateView actionStateView, FontService fontService, UiLayerStack layers) : IElementContent
 {
     public static readonly Vector2 Size = PlayerHealthBarContent.Size;
 
@@ -61,7 +60,7 @@ public sealed class PlayerManaBarContent(World world, ActionStateView actionStat
     private void UpdateMana()
     {
         var playerEntityId = world.PlayerEntityId;
-        if (playerEntityId < 0 || !actionStateView.TryGetMana(playerEntityId, out var mana) || mana.MaximumMana <= 0)
+        if (playerEntityId < 0 || !actionStateView.TryGetManaTotals(playerEntityId, out var currentMana, out var maximumMana) || maximumMana <= 0)
         {
             _hasMana = false;
             _manaFraction = 1f;
@@ -69,11 +68,8 @@ public sealed class PlayerManaBarContent(World world, ActionStateView actionStat
         }
 
         _hasMana = true;
-        var effectiveMaximumMana = statModifierView.GetEffectiveValue(playerEntityId, StatModifierTarget.MaximumMana, mana.MaximumMana);
-        _manaFraction = effectiveMaximumMana > 0
-            ? MathHelper.Clamp(mana.CurrentMana / effectiveMaximumMana, 0f, 1f)
-            : 1f;
-        _valueText = _valueTextCache.Get((ResourceBarRounding.DisplayedMana(mana.CurrentMana), ResourceBarRounding.DisplayedMaximum(effectiveMaximumMana)), static key => ResourceBarValueText.Format(key.Current, key.Maximum));
+        _manaFraction = MathHelper.Clamp(currentMana / maximumMana, 0f, 1f);
+        _valueText = _valueTextCache.Get((ResourceBarRounding.DisplayedMana(currentMana), ResourceBarRounding.DisplayedMaximum(maximumMana)), static key => ResourceBarValueText.Format(key.Current, key.Maximum));
     }
 
     public void DrawContent(GameTime gameTime)

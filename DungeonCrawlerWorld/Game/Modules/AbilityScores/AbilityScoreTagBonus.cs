@@ -26,6 +26,9 @@ public static class AbilityScoreTagBonus
         (GameTags.StatsAbilityScoreWisdom, AbilityScoreType.Wisdom),
     ];
 
+    /// <summary>The tags the bonus reads, one per ability score: each an Ability score tag (GameTagDomains.AbilityScore), which the build checks.</summary>
+    public static IEnumerable<GameplayTag> Tags => AbilityScoreTagScores.Select(entry => entry.Tag);
+
     public static ushort Compute(int sourceEntityId, GameplayTagSet tags, PackedComponentPool<AbilityScoresComponent> abilityScores)
     {
         ushort bonus = 0;

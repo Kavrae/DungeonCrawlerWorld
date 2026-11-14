@@ -65,6 +65,44 @@ public sealed class EntityActions(
         return actionCatalog.TryGet(actionId, out definition!);
     }
 
+    /// <summary>Fills destination with every action entityId can use, each once: its own grants, its applied parts', then its spawn blueprint's.</summary>
+    /// <remarks>Ids only; TryGetEffectiveAction gives the definition each resolves to. destination is cleared first.</remarks>
+    public void CopyActionIds(int entityId, List<Guid> destination)
+    {
+        destination.Clear();
+        for (var denseIndex = instances.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = instances.GetNextDenseIndex(denseIndex))
+        {
+            AddOnce(destination, instances.GetReadonlyByDenseIndex(denseIndex).ActionId);
+        }
+
+        for (var denseIndex = appliedParts.GetFirstDenseIndex(entityId); denseIndex != -1; denseIndex = appliedParts.GetNextDenseIndex(denseIndex))
+        {
+            if (creatures.TryGet(appliedParts.GetReadonlyByDenseIndex(denseIndex).BlueprintId, out var part))
+            {
+                foreach (var grant in part.Actions)
+                {
+                    AddOnce(destination, grant.ActionId);
+                }
+            }
+        }
+
+        if (spawnRecords.TryGetReadonly(entityId, out var record) && creatures.TryResolve(record.BlueprintId, out var blueprint))
+        {
+            foreach (var grant in blueprint.Actions)
+            {
+                AddOnce(destination, grant.ActionId);
+            }
+        }
+    }
+
+    private static void AddOnce(List<Guid> destination, Guid actionId)
+    {
+        if (!destination.Contains(actionId))
+        {
+            destination.Add(actionId);
+        }
+    }
+
     /// <summary>True while the entity's cooldown on actionId is still running at frame now.</summary>
     public bool IsOnCooldown(int entityId, Guid actionId, long now) =>
         TryGetCooldownDeadline(entityId, actionId, out var readyAtFrame) && !FrameDeadline.IsReached(readyAtFrame, now);

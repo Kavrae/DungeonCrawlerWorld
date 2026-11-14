@@ -69,11 +69,11 @@ public static class HealthHeal
 
         var healthBefore = 0f;
         var showsHealedText = floatingTextFeed.IsShownFor(entityId)
-            && HealthQueries.TryGetTotals(health, bodyParts, entityId, out healthBefore, out _);
+            && HealthQueries.TryGetTotals(health, bodyParts, statModifiers, entityId, out healthBefore, out _);
 
         ApplyHeal(health, entityId, percentOfMaxHealth, now, statModifiers, bodyParts, eventBus, playerQuery, flatAmount, sourceEntityId, activatorTags, targetMode, targetRule, mathUtility, healType, appliesHealingModifiers);
 
-        if (showsHealedText && HealthQueries.TryGetTotals(health, bodyParts, entityId, out var healthAfter, out _))
+        if (showsHealedText && HealthQueries.TryGetTotals(health, bodyParts, statModifiers, entityId, out var healthAfter, out _))
         {
             PublishHealed(floatingTextFeed, entityId, healthBefore, healthAfter, healCategory);
         }
@@ -131,7 +131,7 @@ public static class HealthHeal
             return;
         }
 
-        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, health.GetReadonlyByDenseIndex(healthDenseIndex).MaximumHealth);
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, health.GetReadonlyByDenseIndex(healthDenseIndex).BaseMaximumHealth);
 
         var amount = ComputeAmount(statModifiers, sourceEntityId, entityId, activatorTags, percentOfMaxHealth, flatAmount, effectiveMaximumHealth, appliesHealingModifiers);
 

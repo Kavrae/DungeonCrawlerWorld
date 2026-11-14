@@ -41,6 +41,7 @@ public sealed class EntityBuilder
     private readonly EntityKeys _entityKeys;
     private readonly SeededRandom _random = new();
     private readonly MathUtility _rolls;
+    private readonly List<IEntityBuildStep> _steps = [];
 
     public EntityBuilder(BlueprintRegistry definitions, AuraCatalog auras, ActionCatalog actions, ItemCatalog items, EntityKeys entityKeys)
     {
@@ -51,6 +52,12 @@ public sealed class EntityBuilder
         _entityKeys = entityKeys;
         _rolls = new MathUtility(_random);
     }
+
+    /// <summary>Has every later build and application run step after the blueprint's own parts.</summary>
+    public void AddStep(IEntityBuildStep step) => _steps.Add(step);
+
+    /// <summary>The steps every build runs after the blueprint's own parts, in the order they were added.</summary>
+    public IReadOnlyList<IEntityBuildStep> Steps => _steps;
 
     /// <summary>The skeleton, then everything else (BuildComplete).</summary>
     /// <param name="now">The frame the body is built on -- the action-lock stagger counts from it.</param>
@@ -100,6 +107,11 @@ public sealed class EntityBuilder
         {
             ActionLockGate.Lock(actionLocks, entityId, now, (ushort)_rolls.Next(0, MaximumStaggerFrames + 1));
         }
+
+        foreach (var step in _steps)
+        {
+            step.Built(componentManager, entityId);
+        }
     }
 
     /// <summary>Builds blueprintId's parts onto a built entity, skipping any it already has, and records each part it builds as an AppliedBlueprintComponent.</summary>
@@ -137,6 +149,11 @@ public sealed class EntityBuilder
             appliedParts.Add(entityId, new AppliedBlueprintComponent(partId, (ushort)appliedParts.CountForEntity(entityId)));
             GrantManaIfAnyActionDrainsIt(componentManager, entityId, definition.Actions);
             GrantAuras(componentManager, entityId, definition.Auras);
+        }
+
+        foreach (var step in _steps)
+        {
+            step.Applied(componentManager, entityId);
         }
     }
 

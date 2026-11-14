@@ -80,7 +80,7 @@ public sealed class EffectOriginTests
     private static Fixture WithSimpleHealth(float currentHealth = 100)
     {
         var fixture = new Fixture();
-        fixture.Health.Add(TargetEntityId, new SimpleHealthComponent(currentHealth, maximumHealth: 100));
+        fixture.Health.Add(TargetEntityId, new SimpleHealthComponent(currentHealth, baseMaximumHealth: 100));
         return fixture;
     }
 
@@ -466,6 +466,33 @@ public sealed class EffectOriginTests
 
         grant.Apply(fixture.Sourceless());
         grant.Apply(fixture.Sourceless() with { Now = 40 });
+
+        Assert.AreEqual(1, fixture.StatModifiers.CountForEntity(TargetEntityId));
+        Assert.AreEqual(140u, fixture.StatModifiers.GetReadonlyByDenseIndex(fixture.StatModifiers.GetFirstDenseIndex(TargetEntityId)).ExpiresAtFrame);
+    }
+
+    [TestMethod]
+    public void StatModifierGrant_RefreshFromSameSource_FromAnotherSource_HoldsTwo()
+    {
+        var fixture = WithSimpleHealth();
+        var grant = new StatModifierGrant(StatModifierTarget.BehaviorCaution, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, CanModify: true, Magnitude: 3f, DurationFrames: 100,
+            Stacking: StatModifierStacking.RefreshFromSameSource);
+
+        grant.Apply(fixture.Sourceless());
+        grant.Apply(fixture.Sourceless() with { Source = ActionSource.Admin });
+
+        Assert.AreEqual(2, fixture.StatModifiers.CountForEntity(TargetEntityId));
+    }
+
+    [TestMethod]
+    public void StatModifierGrant_RefreshFromAnySource_HoldsOneWhoeverGivesIt_AndMovesItsExpiry()
+    {
+        var fixture = WithSimpleHealth();
+        var grant = new StatModifierGrant(StatModifierTarget.BehaviorCaution, StatModifierOperation.Multiplicative, StatModifierPolarity.Debuff, CanModify: true, Magnitude: 3f, DurationFrames: 100,
+            Stacking: StatModifierStacking.RefreshFromAnySource);
+
+        grant.Apply(fixture.Sourceless());
+        grant.Apply(fixture.Sourceless() with { Source = ActionSource.Admin, Now = 40 });
 
         Assert.AreEqual(1, fixture.StatModifiers.CountForEntity(TargetEntityId));
         Assert.AreEqual(140u, fixture.StatModifiers.GetReadonlyByDenseIndex(fixture.StatModifiers.GetFirstDenseIndex(TargetEntityId)).ExpiresAtFrame);

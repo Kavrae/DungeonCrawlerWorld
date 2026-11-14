@@ -79,7 +79,7 @@ public sealed class EntityTeleporterTests
 
         session.Teleporter.TryTeleport(session.PlayerEntityId, destination);
 
-        CollectionAssert.Contains(session.Result.Internals.MovedEntities.Items.ToList(), new EntityMovedEvent(session.PlayerEntityId, origin, destination, new Vector2Byte(1, 1)));
+        CollectionAssert.Contains(session.Result.Internals.MovedEntities.Items.ToList(), new EntityMovedEvent(session.PlayerEntityId, origin, destination, session.Ecs.ComponentManager.GetDirectPool<TransformComponent>().GetReadonly(session.PlayerEntityId).Size));
     }
 
     [TestMethod]

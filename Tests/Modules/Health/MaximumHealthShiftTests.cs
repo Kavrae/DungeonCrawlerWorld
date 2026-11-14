@@ -31,7 +31,7 @@ public sealed class MaximumHealthShiftTests
     public void ApplyModifier_SimpleHealthAtFull_HealsByTheWholeIncrease()
     {
         var componentManager = CreateComponentManager();
-        componentManager.GetPackedPool<SimpleHealthComponent>().Add(EntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        componentManager.GetPackedPool<SimpleHealthComponent>().Add(EntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
 
         GrantFiftyPercentBuff(componentManager);
 
@@ -43,11 +43,60 @@ public sealed class MaximumHealthShiftTests
     public void ApplyModifier_SimpleHealthWhileHurt_KeepsTheSameAmountMissing()
     {
         var componentManager = CreateComponentManager();
-        componentManager.GetPackedPool<SimpleHealthComponent>().Add(EntityId, new SimpleHealthComponent(currentHealth: 60, maximumHealth: 100));
+        componentManager.GetPackedPool<SimpleHealthComponent>().Add(EntityId, new SimpleHealthComponent(currentHealth: 60, baseMaximumHealth: 100));
 
         GrantFiftyPercentBuff(componentManager);
 
         Assert.AreEqual(110f, componentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(EntityId).CurrentHealth, 0.001f);
+    }
+
+    [TestMethod]
+    public void MergeBaseMaximum_NoHealthYet_AddsItFull()
+    {
+        var componentManager = CreateComponentManager();
+
+        MaximumHealthShift.MergeBaseMaximum(componentManager, EntityId, 100f);
+
+        var health = componentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(EntityId);
+        Assert.AreEqual(100f, health.BaseMaximumHealth, 0.001f);
+        Assert.AreEqual(100f, health.CurrentHealth, 0.001f);
+    }
+
+    [TestMethod]
+    public void MergeBaseMaximum_UnderAModifier_MergesTheBaseAndAppliesTheModifierOnTop()
+    {
+        var componentManager = CreateComponentManager();
+        componentManager.GetPackedPool<SimpleHealthComponent>().Add(EntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
+        GrantFiftyPercentBuff(componentManager);
+
+        MaximumHealthShift.MergeBaseMaximum(componentManager, EntityId, 200f);
+
+        var health = componentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(EntityId);
+        Assert.AreEqual(150f, health.BaseMaximumHealth, 0.001f, "The bases average: 100 and 200.");
+        Assert.AreEqual(225f, health.CurrentHealth, 0.001f, "Full before, so full after: 150 x 1.5.");
+    }
+
+    [TestMethod]
+    public void MergeBaseMaximum_WhileHurtUnderAModifier_KeepsTheSameAmountMissing()
+    {
+        var componentManager = CreateComponentManager();
+        componentManager.GetPackedPool<SimpleHealthComponent>().Add(EntityId, new SimpleHealthComponent(currentHealth: 60, baseMaximumHealth: 100));
+        GrantFiftyPercentBuff(componentManager);
+
+        MaximumHealthShift.MergeBaseMaximum(componentManager, EntityId, 200f);
+
+        Assert.AreEqual(185f, componentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(EntityId).CurrentHealth, 0.001f, "40 short of 150 before, 40 short of 225 after.");
+    }
+
+    [TestMethod]
+    public void MergeBaseMaximum_FirstHealthOnAnEntityAlreadyModified_StartsAtTheModifiedMaximum()
+    {
+        var componentManager = CreateComponentManager();
+        GrantFiftyPercentBuff(componentManager);
+
+        MaximumHealthShift.MergeBaseMaximum(componentManager, EntityId, 100f);
+
+        Assert.AreEqual(150f, componentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(EntityId).CurrentHealth, 0.001f);
     }
 
     [TestMethod]
@@ -68,7 +117,7 @@ public sealed class MaximumHealthShiftTests
         var componentManager = CreateComponentManager();
         var eventBus = new EventBus();
         var health = componentManager.GetPackedPool<SimpleHealthComponent>();
-        health.Add(EntityId, new SimpleHealthComponent(currentHealth: 60, maximumHealth: 100));
+        health.Add(EntityId, new SimpleHealthComponent(currentHealth: 60, baseMaximumHealth: 100));
         var expiry = BuildExpirySystem(componentManager, eventBus);
 
         GrantFiftyPercentBuff(componentManager, expiresAtFrame: 10);
@@ -86,7 +135,7 @@ public sealed class MaximumHealthShiftTests
         var componentManager = CreateComponentManager();
         var eventBus = new EventBus();
         var health = componentManager.GetPackedPool<SimpleHealthComponent>();
-        health.Add(EntityId, new SimpleHealthComponent(currentHealth: 40, maximumHealth: 100));
+        health.Add(EntityId, new SimpleHealthComponent(currentHealth: 40, baseMaximumHealth: 100));
         var expiry = BuildExpirySystem(componentManager, eventBus);
 
         for (var cycle = 1; cycle <= 3; cycle++)
@@ -105,7 +154,7 @@ public sealed class MaximumHealthShiftTests
     {
         var componentManager = CreateComponentManager();
         var eventBus = new EventBus();
-        componentManager.GetPackedPool<SimpleHealthComponent>().Add(EntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        componentManager.GetPackedPool<SimpleHealthComponent>().Add(EntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         var expiry = BuildExpirySystem(componentManager, eventBus);
 
         var damageEvents = 0;
@@ -127,7 +176,7 @@ public sealed class MaximumHealthShiftTests
         var componentManager = CreateComponentManager();
         var eventBus = new EventBus();
         var health = componentManager.GetPackedPool<SimpleHealthComponent>();
-        health.Add(EntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(EntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         var expiry = BuildExpirySystem(componentManager, eventBus);
 
         GrantFiftyPercentBuff(componentManager, expiresAtFrame: 10);
@@ -145,7 +194,7 @@ public sealed class MaximumHealthShiftTests
         var componentManager = CreateComponentManager();
         var eventBus = new EventBus();
         var health = componentManager.GetPackedPool<SimpleHealthComponent>();
-        health.Add(EntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(EntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         var expiry = BuildExpirySystem(componentManager, eventBus);
 
         GrantFiftyPercentBuff(componentManager, expiresAtFrame: 10);

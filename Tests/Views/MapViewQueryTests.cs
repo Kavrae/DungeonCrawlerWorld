@@ -273,7 +273,7 @@ public sealed class MapViewQueryTests
     public void GetStatus_FullHealth_HidesTheBar()
     {
         var fixture = new Fixture();
-        fixture.Components.Merge(5, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        fixture.Components.Merge(5, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
 
         Assert.IsNull(fixture.Query.GetStatus(5).HealthFraction);
     }
@@ -282,7 +282,7 @@ public sealed class MapViewQueryTests
     public void GetStatus_Damaged_ReportsTheFraction()
     {
         var fixture = new Fixture();
-        fixture.Components.Merge(5, new SimpleHealthComponent(currentHealth: 25, maximumHealth: 100));
+        fixture.Components.Merge(5, new SimpleHealthComponent(currentHealth: 25, baseMaximumHealth: 100));
 
         Assert.AreEqual(0.25f, fixture.Query.GetStatus(5).HealthFraction);
     }

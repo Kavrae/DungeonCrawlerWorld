@@ -4,6 +4,7 @@ using Game.Content;
 using Game.Modules.Health;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffects;
+using Game.Tags;
 
 namespace Game.Effects.Entries;
 
@@ -125,8 +126,9 @@ internal static class EffectEntryCodecs
             ContentField.Boolean("cm", "Can be modified"),
             ContentField.Number("m", "Magnitude"),
             ContentField.Integer("d", "Duration in frames (none: permanent)", 0, ushort.MaxValue),
-            ContentField.Tag("ct", "Condition tag"),
+            ContentField.Tag("ct", "Condition tag", GameTagDomains.Activation),
             ContentField.Enum<StatModifierStacking>("st", "Stacking"),
+            ContentField.Boolean("fd", "Duration is fixed (never scaled)"),
         ]);
 
         public override void WriteProperties(ContentWriter writer, StatModifierGrant value)
@@ -139,6 +141,7 @@ internal static class EffectEntryCodecs
             writer.OptionalInteger("d", value.DurationFrames);
             writer.Tag("ct", value.ConditionTag);
             writer.Enum("st", value.Stacking, StatModifierStacking.Add);
+            writer.Boolean("fd", value.FixedDuration);
         }
 
         public override StatModifierGrant Read(ContentObject element) => new(
@@ -149,7 +152,8 @@ internal static class EffectEntryCodecs
             element.Number("m"),
             ContentNumbers.UInt16(element.OptionalInteger("d"), "d"),
             element.Tag("ct"),
-            element.Enum("st", StatModifierStacking.Add));
+            element.Enum("st", StatModifierStacking.Add),
+            element.Boolean("fd"));
     }
 
     private sealed class StatusEffectGrantCodec : ContentCodec<StatusEffectGrant>
@@ -203,9 +207,9 @@ internal static class EffectEntryCodecs
     {
         public override ContentSchema Schema { get; } = new(nameof(ActivationDisableGrant),
         [
-            ContentField.TagSet("all", "Disables what has all of"),
-            ContentField.TagSet("any", "Disables what has any of"),
-            ContentField.TagSet("none", "Except what has any of"),
+            ContentField.TagSet("all", "Disables what has all of", GameTagDomains.Activation),
+            ContentField.TagSet("any", "Disables what has any of", GameTagDomains.Activation),
+            ContentField.TagSet("none", "Except what has any of", GameTagDomains.Activation),
             ContentField.Integer("d", "Duration in frames", 1, ushort.MaxValue),
             ContentField.Boolean("fd", "Duration is fixed (never scaled)"),
         ]);

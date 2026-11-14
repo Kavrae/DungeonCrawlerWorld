@@ -148,7 +148,7 @@ public sealed class TerrainContactSystemTests
         var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
         var deadEntities = CreateDeadPool();
 
-        health.Add(MoverEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(MoverEntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         mapQuery.SetTerrain(OnHazard, terrain.Register(HazardTerrain("test:hazard")));
 
         var transforms = CreateTransformPool();
@@ -326,7 +326,7 @@ public sealed class TerrainContactSystemTests
         var hazardId = terrain.Register(HazardTerrain("test:hazard"));
         var exposures = CreateExposurePool();
         var health = CreateHealthPool();
-        health.Add(MoverEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(MoverEntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         exposures.Add(MoverEntityId, new TerrainContactExposureComponent(nextTickFrame: 60, hazardId));
         var clock = new SimulationClock();
         clock.Advance(630);
@@ -449,7 +449,7 @@ public sealed class TerrainContactSystemTests
         var mapQuery = new FakeMapQuery();
         var movedEntities = new FrameEventBuffer<EntityMovedEvent>();
         var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 200, initialCapacity: 4);
-        health.Add(MoverEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(MoverEntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         statModifiers.Add(MoverEntityId, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: true, magnitude: -0.5f, FrameDeadline.Never, ActionSource.Admin, GameTags.DamageFire));
         mapQuery.SetTerrain(OnHazard, terrain.Register(new TerrainDefinition("test:hazard", "Test hazard", "", ".", default,
             Contact: new TerrainContact([Damage(10)], Tags: damageIsFire ? [GameTags.DamageFire] : [GameTags.DamagePoison]))));
@@ -504,7 +504,7 @@ public sealed class TerrainContactSystemTests
         var health = components.GetPackedPool<SimpleHealthComponent>();
         var transforms = components.GetDirectPool<TransformComponent>();
         var floatingText = new TestFloatingText().Place(MoverEntityId, ProcessingTierLevel.Local);
-        health.Add(MoverEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(MoverEntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
 
         var system = TestSystems.TerrainContactSystem(terrain, exposures, health, eventBus, mapQuery, new TestPlayerQuery(MoverEntityId), movedEntities, new MathUtility(), new SimulationClock(),
             statModifiers: components.GetMultiPool<StatModifierComponent>(), floatingTextFeed: floatingText.Feed, transforms: transforms, statusEffectAppliers: statusEffectAppliers, componentManager: components);

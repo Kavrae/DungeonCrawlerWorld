@@ -622,11 +622,23 @@ The IDE's Error List shows severity, description, table, record, field and layer
 
 ### High Priority
 
+#### Remove gameplay limitations: Dodge cooldown, Inspect lock
+
+Restrictions whose only job is to stop the player doing something often cost them nothing but time they already
+pay. Take them out where the opportunity cost alone is enough.
+- **Dodge: no cooldown.** Drop its 4 s cooldown (`cd` in Dodge's record in `Actions.jsonl`) and the description
+  line saying it can't be used as safer movement. The player may spam it and dodge-move everywhere if they want:
+  the cost is that they can do nothing else while dodging.
+- **Inspect: no action lock or cooldown.** The map's "Inspect" option neither checks nor starts the action lock
+  (`MapWindow`'s `InspectEntity` and the option's Enabled, `IsInspectionFree`), so `PlayerActionGate` likely goes
+  with it. Simpler logic, and the player can check new targets as fast as they like: the cost is the time it takes
+  to read what it shows.
+
 #### Resolve highest performance costs
 
 Find and fix what costs the most per frame. Headless Release, seed 1, frames 600-3600, map 3072 (2026-10-29,
 fingerprint `816159193C649584`, after the combat scan, aura lookup and movement fixes -- IMPLEMENTATION-NOTES
-"Performance pass (2026-10-29)"): `EcsContext.Update` 1.15 ms/frame, of which `TestCombatBehaviorSystem` 0.40,
+"Performance pass (2026-10-29)"): `EcsContext.Update` 1.15 ms/frame, of which `TestCombatBehaviorSystem` (now `NpcDecisionSystem`) 0.40,
 `AuraSystem` 0.26, `MovementSystem` 0.14 and `BurningSystem` 0.07 (a quiet machine; a busy one reads ~10% higher on
 every row). Since Ghosts became immune to Burning and Poison the world differs (fingerprint `EA01C26D6323B7D0`):
 `BurningSystem` ~0.02, `AuraSystem` ~10% higher; save a fresh baseline before comparing. Run-to-run spread is ~1-5%, so a change must beat that to count. How to profile per method here (the
@@ -655,14 +667,16 @@ sampler's bias, the probes): that section.
     fixed order. Exposure ticks can't: an effect writes health through `HealthDamage`/`HealthHeal`, the ledger and the
     event bus. At 0.26 ms/frame (2026-11-06) the scans are too small to pay for a fork-join (~5-20 µs); revisit only
     if large or many moving sources make them heavy.
-- **TestCombatBehaviorSystem, further:** the shared nearby-occupant pass reads nine tiles a wanderer through the
+- **NpcDecisionSystem, further:** 0.44 ms/frame in Release (2026-11-12; the stand-in it replaced read 0.31 on the same
+  machine), ~560 decisions a frame through the arbiter, EngageMelee the dearest behavior (~1 µs a decision in Debug);
+  `PLAN-npc-behavior-composition.md` has the A/B. The shared nearby-occupant pass reads nine tiles a wanderer through the
   occupant index. A one-bit-per-cell occupancy map (`NeighborhoodBits`, ~128 KB a plane per neighborhood) or one
   neighborhood lookup per 3x3 block would cut it again.
 - **MovementSystem, further:** ~257 steps a frame, each still ~650 ns of scattered reads (the destination re-check,
-  blocking state, transform, lock, map indexes). The remaining lever is that `TestCombatBehaviorSystem` decides a step
+  blocking state, transform, lock, map indexes). The remaining lever is that `NpcDecisionSystem` decides a step
   and `MovementSystem` takes it in the same frame with hundreds of entities between, so each entity's data is fetched
   from memory twice. Deciding and stepping in one pass would halve that, but changes the order entities act in (and so
-  every seeded world): a decision for when NPC behaviour is reworked, not a performance patch.
+  every seeded world). Decided against in the NPC behavior plan: deciding and stepping stay two systems.
 - **BurningSystem, further:** with Ghosts immune, what is left is real burns (~540 ns a simple-health tick,
   ~400 ns a body part through `BodyPartBurningSystem`) and burns ticking on corpses (~40 k ticks in the range,
   ~0.007 ms/frame). Poison costs the same per tick on the same target, except a body-part creature (~870 ns: it goes
@@ -770,7 +784,7 @@ projectile and a creature can pass through each other without ever being on the 
 #### Melee targeting shapes -- Strike, Sweep and Whirlwind
 
 Every melee attack today is an Adjacent ring (`QuickAttackAction`, `PowerAttackAction`): it hits
-everyone around the attacker, and an NPC swings the whole ring (`TestCombatBehaviorSystem`). Give
+everyone around the attacker, and an NPC swings the whole ring (`EngageMelee`). Give
 melee three shapes, all reaching only the tiles adjacent to the attacker's footprint, so a melee
 action can be built to suit what it is:
 - **Strike** (single target): one adjacent tile -- a stab or a jab that hits only what it's aimed
@@ -792,7 +806,7 @@ action can be built to suit what it is:
 - **Content:** decide which shape QuickAttack and PowerAttack get, and whether more melee actions
   should show the other shapes.
 - **NPCs** choose between them (aim Strike and Sweep at the adjacent hostile, Whirlwind when several
-  are adjacent), so `TestCombatBehaviorSystem` stops always swinging the ring.
+  are adjacent), so `EngageMelee` stops always swinging the ring.
 
 Replaces the former "AOE vs targeted melee attacks (experimental)" entry, which kept melee Ground only.
 
@@ -964,7 +978,7 @@ telegraph), resolve its actions immediately instead of queuing a Delayed windup 
 `ActionLockGate.Lock`/`PendingDelayedActionComponent` and call `ActivationEffectResolver.Apply` right
 away, the same as an `Immediate` action. Shrinks `DelayedActionSystem`'s/`ActionLockSystem`'s own
 per-frame population directly, without touching on-screen combat's telegraph/timing at all. Open
-question: check tier at decision time (`TestCombatBehaviorSystem.TryDecideMeleeAttack`, cheaper --
+question: check tier at decision time (`EngageMelee`, cheaper --
 never queues a windup for an already-non-Local entity) vs. at activation time
 (`ActionActivationSystem.TryActivateDelayed`, also covers an entity that starts Local and drifts out
 mid-windup). Whether Dodge/Block eligibility should get the same non-Local-entities-skip-it
@@ -1054,7 +1068,7 @@ size. Measured per visit: `SimpleHealthRegenSystem` ~135 ns; `ComplexHealthRegen
 `BodyPartEffectsSystem` ~400 ns, which has no Simple counterpart -- **~7x per visit**. Extrapolated
 to the whole population: all Simple ~0.024 ms/frame, today 0.060, all Complex ~0.17, so +8% of the
 simulation budget at the top end. What rides along with it is worth more than the regen systems
-themselves: `TestCombatBehaviorSystem.TryDecideSelfHeal` and `MapViewQuery.GetHealthBarFraction` (per
+themselves: `NpcDecisionContext.HealthFraction` (SelfHeal) and `MapViewQuery.GetHealthBarFraction` (per
 visible entity, every Draw) turn `HealthQueries.TryGetTotals` into an 11-node chain walk;
 `ComplexHealthRegenSystem.AccrueWhileFrozen` walks every part and sorts lockouts on tier promotion,
 which lands on the window shift, already the spikiest frame; and a neighborhood load becomes 807k
@@ -1076,7 +1090,7 @@ expensive one to build.
 
 #### Grid pathfinding and navigation
 
-No pathfinding exists. Creatures move by random adjacent steps (`MovementMode.Random`), and the NPC
+No pathfinding exists. Creatures move by random adjacent steps (the `WanderStep` behavior), and the NPC
 behavior plan's Engage/Flee (`PLAN-npc-behavior-composition.md`) step one tile toward or away from a
 hostile, which gets stuck on the first wall. Every planned feature that sends a creature somewhere needs
 this: `SeekTarget` ("Movement System"), NPCs using shops, mobs looting corpses, corpse-cleanup NPCs,
@@ -1198,6 +1212,20 @@ Built on the senses in "Field of view and perception" above.
   block them; anyone in range with hearing perceives the location, not the entity.
 
 ### Medium Priority
+
+#### Crawling
+
+A slower movement mode: what a creature does by default when its legs are disabled, and what anyone can choose to be
+harder to notice.
+- **Legs disabled:** today `MovementDisabledComponent` stops every step (`MovementSystem` clears it), and an NPC still
+  chooses Flee or Wander and goes nowhere -- left as it is on purpose until this lands. With crawling, disabled legs
+  switch the creature to crawling instead of stopping it, so those steps are taken, slowly.
+- **By choice:** a mode the player and NPCs can switch into for stealth -- the Sneaking mode of "Stealth -- perception,
+  sneaking, invisibility and sound detection" (High), or a slower, quieter step below it. Decide which when both exist.
+- **Cost:** a longer movement lock per step (a `MovementLockFrames` modifier, as leg damage already applies), not a new
+  timer.
+- **To decide:** whether arms matter (crawling with disabled arms too), what it does to melee and Dodge, and how it is
+  drawn.
 
 #### Use items in item piles and on corpses without picking them up
 
@@ -1513,8 +1541,8 @@ happen to pass.
 
 Goblins/Fairies/Ghosts buying and selling at a `Shop`/`PotionShop`/`GeneralShop` autonomously via
 `ShopActions.TryBuyFromShop`/`TrySellToShop` (the player-only version already shipped). Needs actual economic decision-making (what to sell for spare Gold, what to buy when low
-on supplies) -- blocked on the NPC behavior composition item (this file's own Low Priority section),
-which is where that decision would live once it exists.
+on supplies) -- a behavior granted like the others in `PLAN-npc-behavior-composition.md` (Engine.Decisions),
+which is where that decision lives now that composition exists.
 
 #### Destroyed items
 
@@ -2264,7 +2292,7 @@ way a Ground ranged attack reaches Flying. Starting proposal:
 | UnderGround | none | tagged only (earthquake) | all |
 
 Touch points: `TargetShapeResolver` (Engine) builds every shape on the origin's Z;
-`ActionTargetingController` builds hovered/clicked tiles on the player's Z; `TestCombatBehaviorSystem`
+`ActionTargetingController` builds hovered/clicked tiles on the player's Z; `NpcDecisionSystem`
 must only pick targets it can reach. An action refused for reach gets clear feedback (disabled cursor),
 never a silent no-op. An undetected digger is never a valid target (see Digger detection (Game)).
 Related: every effect amount already runs Outgoing and Incoming stat modifiers (`EffectModifiers`).
@@ -2340,6 +2368,18 @@ The same declaration replaces `ActivationQueries.GetBlocker`'s hard-wired "`Deli
 Arm/Hand disabled" rule (IMPLEMENTATION-NOTES.md "Disabled actions"): an action is blocked when the parts
 it needs are, and `ActivationBlockerText`'s melee reason ("No usable arms or hands") becomes body-plan
 specific, naming the entity's own parts ("Right hand is broken").
+
+#### Severed limbs
+
+A body part can be marked detachable on its body plan. Specific attack types (slashing weapons first) sever
+a detachable part when they are the source of the damage that takes it to 0 HP. A severed part is
+permanently disabled on its entity -- it keeps its component, so later restoration magic can bring it
+back -- and drops as an item onto the ground on the entity's own tile, through the one drop rule
+(`ItemDrops`). Once Equipment and weapons exist, a severed limb can be wielded as a low-damage blunt
+improvised weapon.
+
+Ties into "Body part disablement that lasts" (Medium Priority), whose *Severed/Destroyed* injury state and
+"slashing severs" entry rule this is, and "Damage types" for what counts as slashing.
 
 #### Enchantment
 
@@ -2429,49 +2469,6 @@ Beyond Paralysis: forces `ForceBlockingComponent`-blocking regardless of normal 
 map-occupancy problem -- `Map` tracks one Blocking occupant per tile; no resolution policy yet for
 turning an already-occupied-adjacent or currently-non-blocking entity into forced-blocking. Needs a
 design pass through `World`/`Map` placement, not a drop-in `ParalysisEffects.Apply` extension.
-
-#### NPC behavior composition + generalized "turn claimed" signal
-
-Follow-ups to the temporary `TestCombatBehaviorSystem` stand-in (`IMPLEMENTATION-NOTES.md`):
-- Replace the hardcoded if/else chain with composable behaviors (self-heal, engage, flee, wander)
-  arbitrated by a per-race-configurable priority/utility system.
-- `MovementSystem` currently checks `_pendingAbilityActivations`/`_pendingItemActivations`
-  directly to know a turn's claimed -- doesn't scale as action types grow. Needs a single shared
-  "turn claimed" marker any decision system can set/check generically.
-
-Planned in `PLAN-npc-behavior-composition.md`. Behaviors that move need "Grid pathfinding and
-navigation" (High) -- today's Engage/Flee steps get stuck on walls -- and "can I see it" needs "Field
-of view and perception" (High). "Where to go" (flee to which tile, which shop, which corpse) is
-"Spatial queries for NPC decisions" (Medium).
-
-**Design the decide step to run on worker threads** (the first system `PLAN-multithreading.md` expects to fork): it is
-mostly reads -- dead, transform, movement gate, action lock, health totals, inventory, neighbours, race -- ending in one
-queued activation or step, so it splits into a parallel decide that records each entity's choice and a serial apply.
-`TestCombatBehaviorSystem` is the largest system today (0.42 ms of 1.13 ms/frame, 2026-11-06), still far below needing
-it, so build the shape in rather than threading now. What blocks it:
-- **Rolls:** every choice draws from one sequence (`NpcBehaviorModule.BehaviorRandomStream`), so drawing in parallel
-  ties a seeded world to thread timing. Derive each roll from the entity's key and the frame with `SeedMix`, as
-  generated content does.
-- **Shared scratch:** `TargetResolution`'s buffers and the system's `_adjacentTilesBuffer` are single instances; a
-  worker needs its own.
-- **Acting while deciding:** `NpcLooting` moves inventory stacks in the middle of a decision; looting becomes a
-  recorded choice applied in the serial half.
-- **Writes:** recorded as `unmanaged` struct updaters and pending-activation merges, applied in entity order so the
-  result never depends on which worker finished first.
-Movement stays serial: two entities claiming one tile are settled by order, and the step is ~0.14 ms/frame.
-
-**Unreal Engine reference:** Unreal's decision layers are Behavior Trees (with a Blackboard) and the
-newer StateTree; neither is utility-based, and the plan's dual utility stays. What maps across:
-- *The "turn claimed" marker* is how GAS gates abilities with tags: an active ability adds tags to its
-  owner (`ActivationOwnedTags`), and others list tags that block them (`ActivationBlockedTags`) or that
-  they cancel (`CancelAbilitiesWithTag`). "A turn is claimed" is then a tag any system can check,
-  rather than a list of queues. The same mechanism would express Stagger locking actions while
-  allowing Dodge.
-- *StateTree* keeps a small hierarchy of states with enter conditions and transitions, evaluated when
-  something changes rather than every tick. It's a model for the plan's "small activity slot later if
-  needed" (errands: go to shop, buy, return).
-- *Mass AI* (`MassEntity`, Unreal's ECS) runs crowds with LOD processors that update distant agents less
-  often -- the same idea as processing tiers, confirming the tier design rather than adding to it.
 
 #### User feedback for actions is missing entirely
 

@@ -292,12 +292,12 @@ public sealed class EntityFactoryTests
         var bodyParts = Game.Modules.Health.EntityBodyParts.For(components, result.Catalogs.Definitions);
         var goblin = SpawnGoblin(result);
         var bossId = result.Catalogs.Definitions.GetId(Boss.Id);
-        bodyParts.TryGetTotals(goblin, out var before, out _);
+        bodyParts.TryGetCurrentAndBaseMaximumTotals(goblin, out var before, out _);
 
         result.Internals.Factory.Apply(goblin, bossId);
         result.Internals.Factory.Apply(goblin, bossId);
 
-        bodyParts.TryGetTotals(goblin, out var after, out _);
+        bodyParts.TryGetCurrentAndBaseMaximumTotals(goblin, out var after, out _);
         Assert.AreEqual(before * 2, after, 0.01f);
         StringAssert.EndsWith(Game.Spawning.EntityNaming.For(components, result.Catalogs.Definitions).NameOf(goblin), $" Goblin {Boss.Name}");
     }

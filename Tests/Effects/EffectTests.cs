@@ -1,4 +1,4 @@
-﻿using Engine.ECS.Entities;
+using Engine.ECS.Entities;
 using Engine.ECS.Components;
 using Game.Effects;
 using Game.Effects.Entries;
@@ -176,7 +176,7 @@ public sealed class EffectTests
     public void ChainedEffect_TriggerRolled_AppliesAllTriggeredEffectsInOrder()
     {
         var (componentManager, health, eventBus) = Build();
-        health.Add(TargetEntityId, new SimpleHealthComponent(currentHealth: 10, maximumHealth: 100));
+        health.Add(TargetEntityId, new SimpleHealthComponent(currentHealth: 10, baseMaximumHealth: 100));
         var mathUtility = new MathUtility(new AlwaysCritRandom()); // NextDouble() -> 0.0, always below TriggerChance.
         // DirectHeal, not DirectDamage -- AlwaysCritRandom would also force every nested
         // damage roll to crit, coupling this test to crit math it isn't trying to exercise.

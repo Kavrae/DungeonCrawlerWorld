@@ -696,7 +696,7 @@ public sealed class AuraSystemTests
     {
         var (system, componentManager, _, movedEntities, _) = Build();
         var auraId = _auras.Register(new AuraDefinition(CustomAuraGuid, "Scorch", Color.Red, [new Effect([new DirectDamage(1, 1)])]));
-        componentManager.GetPackedPool<SimpleHealthComponent>().Add(ObserverEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        componentManager.GetPackedPool<SimpleHealthComponent>().Add(ObserverEntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         AddSource(componentManager, SourceEntityId, SourcePosition, auraId, power: 8, size: 3);
         var beside = new Vector3Int(SourcePosition.X + 1, SourcePosition.Y, SourcePosition.Z);
 
@@ -711,7 +711,7 @@ public sealed class AuraSystemTests
     {
         var (system, componentManager, _, movedEntities, _) = Build();
         var auraId = _auras.Register(new AuraDefinition(CustomAuraGuid, "Chill", Color.Blue, [new Effect([new DirectDamage(3, 3)])], Magnitude: AuraMagnitude.Flat));
-        componentManager.GetPackedPool<SimpleHealthComponent>().Add(ObserverEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        componentManager.GetPackedPool<SimpleHealthComponent>().Add(ObserverEntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         AddSource(componentManager, SourceEntityId, SourcePosition, auraId, power: 8, size: 3);
 
         EnterAndTick(system, componentManager, movedEntities, new Vector3Int(0, 0, 0), SourcePosition);

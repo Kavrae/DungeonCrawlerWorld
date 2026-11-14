@@ -11,6 +11,7 @@ public static class BuiltInItemIds
     public static readonly Guid DamagePotion = new("136d0466-3749-40c4-aea4-5f02254040b3");
     public static readonly Guid ToxicPotion = new("e72db9f1-9947-4b85-9cb4-0dcf38a8a53b");
     public static readonly Guid ToxicIdol = new("f3a8c1d6-2b4e-4a9f-8c6d-1e7b3a5f9c2d");
+    public static readonly Guid DreadIdol = new("f3a8c1d6-2b4e-4a9f-8c6d-1e7b3a5f9c2e");
     public static readonly Guid ScrollOfHealing = new("7c3e9a1d-4b6f-4e2a-8d1c-000000000020");
     public static readonly Guid ScrollOfTorch = new("7c3e9a1d-4b6f-4e2a-8d1c-000000000021");
     public static readonly Guid WandOfFireball = new("7c3e9a1d-4b6f-4e2a-8d1c-000000000031");

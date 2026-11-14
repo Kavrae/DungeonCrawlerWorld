@@ -1,6 +1,6 @@
 using Game.Modules.Containers.Components;
 using Game.Modules.Currency.Components;
-using Game.Modules.Health.Components;
+using Game.Modules.Health;
 using Game.Modules.Inventory;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
@@ -67,7 +67,7 @@ public static class TreasureChest
         var componentManager = context.ComponentManager;
         var entityId = context.EntityId;
 
-        componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
+        MaximumHealthShift.MergeBaseMaximum(componentManager, entityId, MaximumHealth);
         componentManager.Merge(entityId, new ContainerComponent());
         componentManager.Merge(entityId, new CurrencyComponent(
             context.Rolls.Next(MinimumStartingGold, MaximumStartingGold + 1),

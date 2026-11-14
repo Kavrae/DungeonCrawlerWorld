@@ -46,7 +46,7 @@ public sealed class SimpleHealthRegenSystemTests
     public void Update_RegeneratesHealthByLiveComputedConstitutionAmount()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 200));
         var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         system.Update(default, 0);
@@ -58,7 +58,7 @@ public sealed class SimpleHealthRegenSystemTests
     public void Update_ClampsAtMaximumHealth()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 199, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 199, baseMaximumHealth: 200));
         var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         system.Update(default, 0);
@@ -70,7 +70,7 @@ public sealed class SimpleHealthRegenSystemTests
     public void Update_DeadEntity_DoesNotRegenerate()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 0, baseMaximumHealth: 200));
         var deadEntities = new PackedComponentPool<DeadComponent>(10, 10, static (ref existing, incoming) => existing = incoming);
         deadEntities.Add(0, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
         var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), statModifiers: null, deadEntities: deadEntities, abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
@@ -84,7 +84,7 @@ public sealed class SimpleHealthRegenSystemTests
     public void Update_NoAbilityScorePool_LeavesCurrentHealthUnchanged()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 200));
         var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents());
 
         system.Update(default, 0);
@@ -96,7 +96,7 @@ public sealed class SimpleHealthRegenSystemTests
     public void Update_NoConstitutionScoreForEntity_LeavesCurrentHealthUnchanged()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 200));
         var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
         var system = TestSystems.SimpleHealthRegenSystem(pool, CreateTiersPool(), new ProcessingTierEvents(), abilityScores: abilityScores);
 
@@ -116,7 +116,7 @@ public sealed class SimpleHealthRegenSystemTests
     public void Update_LargeNegativeHealthRegenModifier_ClampsToZeroInsteadOfUnderflowWrapping()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: -32000, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: -32000, baseMaximumHealth: 200));
         var abilityScores = AbilityScoreTestPools.CreatePool(entityCapacity: 10, initialCapacity: 4);
         abilityScores.Add(0, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 1, total: 1));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
@@ -134,7 +134,7 @@ public sealed class SimpleHealthRegenSystemTests
     {
         var pool = CreatePool();
         var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 200));
         var system = TestSystems.SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         // Entity 0, Neighborhood-tiered (StripeCount * the Neighborhood divisor) lands in bucket 0 -- due only when FrameCount is a multiple of that product.
@@ -148,7 +148,7 @@ public sealed class SimpleHealthRegenSystemTests
     public void Update_IncomingHealingModifier_ScalesRegenTick()
     {
         var pool = CreatePool();
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 200));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingHealing, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
             canModify: false, magnitude: 0.5f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
@@ -164,7 +164,7 @@ public sealed class SimpleHealthRegenSystemTests
     {
         var pool = CreatePool();
         var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 500));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 500));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingHealing, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: false, magnitude: 1f, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin));
@@ -181,7 +181,7 @@ public sealed class SimpleHealthRegenSystemTests
     {
         var pool = CreatePool();
         var tiers = CreateTiersPool(ProcessingTierLevel.Neighborhood);
-        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 200));
+        pool.Add(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 200));
         var system = TestSystems.SimpleHealthRegenSystem(pool, tiers, new ProcessingTierEvents(), abilityScores: CreateAbilityScoresPoolWithMaxConstitution(0));
 
         // A Neighborhood visit covers StripeCount * divisor frames rather than Local's

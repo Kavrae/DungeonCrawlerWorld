@@ -7,9 +7,9 @@ namespace Tests.Modules.Movement;
 
 /// <summary>
 /// Unit tests for the position-candidate math shared by MovementSystem (re-validating an
-/// already-queued move) and TestCombatBehaviorSystem (deciding a new wander destination). Some
+/// already-queued move) and NpcDecisionSystem (deciding a new wander destination). Some
 /// coverage here re-homes what used to be exercised indirectly through MovementSystem's own
-/// Random-mode decision logic before that logic moved out into TestCombatBehaviorSystem.
+/// wander logic before deciding moved out into NpcDecisionSystem.
 /// </summary>
 [TestClass]
 public sealed class MovementCandidatesTests

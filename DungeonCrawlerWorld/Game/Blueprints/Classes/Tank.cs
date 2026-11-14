@@ -35,7 +35,7 @@ public static class Tank
 
         if (!componentManager.GetPackedPool<SimpleHealthComponent>().Has(entityId) && !EntityBodyParts.For(componentManager, context.Definitions).Has(entityId))
         {
-            componentManager.Merge(entityId, new SimpleHealthComponent(BaselineMaximumHealth, BaselineMaximumHealth));
+            MaximumHealthShift.MergeBaseMaximum(componentManager, entityId, BaselineMaximumHealth);
         }
 
         MaximumHealthShift.ApplyModifier(componentManager, context.Definitions, entityId, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,

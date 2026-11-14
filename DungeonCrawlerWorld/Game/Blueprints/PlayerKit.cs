@@ -58,7 +58,7 @@ public static class PlayerKit
     {
         Build = Build,
         UsesActions = [BuiltInActionIds.Heal, BuiltInActionIds.MagicMissile, BuiltInActionIds.ToxicStrike, BuiltInActionIds.ToxicAura, BuiltInActionIds.Lantern, BuiltInActionIds.Fireball, BuiltInActionIds.LightningBolt, BuiltInActionIds.FireFan, BuiltInActionIds.WallOfFire, BuiltInActionIds.RingOfLava, BuiltInActionIds.BattleFury, BuiltInActionIds.Dodge, BuiltInActionIds.PowerAttack, BuiltInActionIds.QuickAttack],
-        UsesItems = [BuiltInItemIds.WandOfFireball, BuiltInItemIds.HealthPotion, BuiltInItemIds.ManaPotion, BuiltInItemIds.HotkeyExpansionPotion, BuiltInItemIds.DamagePotion, BuiltInItemIds.ToxicPotion, BuiltInItemIds.ToxicIdol, BuiltInItemIds.ScrollOfHealing, BuiltInItemIds.ScrollOfTorch, BuiltInItemIds.ImmunityTestPotion, BuiltInItemIds.ResistanceTestPotion, BuiltInItemIds.DraughtOfPlenty, BuiltInItemIds.DraughtOfThrift, BuiltInItemIds.DraughtOfVenom, BuiltInItemIds.DraughtOfRadiance],
+        UsesItems = [BuiltInItemIds.WandOfFireball, BuiltInItemIds.HealthPotion, BuiltInItemIds.ManaPotion, BuiltInItemIds.HotkeyExpansionPotion, BuiltInItemIds.DamagePotion, BuiltInItemIds.ToxicPotion, BuiltInItemIds.ToxicIdol, BuiltInItemIds.DreadIdol, BuiltInItemIds.ScrollOfHealing, BuiltInItemIds.ScrollOfTorch, BuiltInItemIds.ImmunityTestPotion, BuiltInItemIds.ResistanceTestPotion, BuiltInItemIds.DraughtOfPlenty, BuiltInItemIds.DraughtOfThrift, BuiltInItemIds.DraughtOfVenom, BuiltInItemIds.DraughtOfRadiance],
         Appearance = new() { Name = PlayerName, Description = PlayerDescription, Glyph = "@", GlyphColor = Color.White, SpriteName = "Player" },
     };
 
@@ -84,14 +84,6 @@ public static class PlayerKit
     {
         var componentManager = context.ComponentManager;
         var entityId = context.EntityId;
-
-        using (var playerMovement = componentManager.GetPackedPool<MovementComponent>().TryWrite(entityId))
-        {
-            if (playerMovement.Found)
-            {
-                playerMovement.Value.MovementMode = MovementMode.PlayerControlled;
-            }
-        }
 
         ItemGrants.Grant(componentManager, entityId, context.Items.Get(BuiltInItemIds.WandOfFireball), quantity: WandOfFireballStartingQuantity);
 
@@ -174,6 +166,7 @@ public static class PlayerKit
         var damagePotionStackId = InventoryActions.AddItem(componentManager, entityId, BuiltInItemIds.DamagePotion, quantity: 5);
         var toxicPotionStackId = InventoryActions.AddItem(componentManager, entityId, BuiltInItemIds.ToxicPotion, quantity: 5);
         var toxicIdolStackId = InventoryActions.AddItem(componentManager, entityId, BuiltInItemIds.ToxicIdol, quantity: 1);
+        InventoryActions.AddItem(componentManager, entityId, BuiltInItemIds.DreadIdol, quantity: 3);
         InventoryActions.AddItem(componentManager, entityId, BuiltInItemIds.ScrollOfHealing, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, BuiltInItemIds.ScrollOfTorch, quantity: 5);
         InventoryActions.AddItem(componentManager, entityId, BuiltInItemIds.ImmunityTestPotion, quantity: 5);

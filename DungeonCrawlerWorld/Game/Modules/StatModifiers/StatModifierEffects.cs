@@ -30,7 +30,8 @@ public static class StatModifierEffects
     /// "The same" is every field but the expiry: target, operation, polarity, magnitude, condition tag
     /// and source. So a buff an entity keeps being given by one thing (terrain it stands on) is held
     /// once and kept topped up, while the same buff from something else stacks with it as any other
-    /// modifier would. The expiry is replaced, not extended: a refresh can shorten it. The entity's
+    /// modifier would -- unless fromAnySource, which leaves the source out, so the one modifier is held
+    /// whatever gave it. The expiry is replaced, not extended: a refresh can shorten it. The entity's
     /// expiry timer follows on its own -- StatModifierExpirySystem watches the pool.
     /// </remarks>
     public static void ApplyOrRefresh(
@@ -43,11 +44,12 @@ public static class StatModifierEffects
         float magnitude,
         uint expiresAtFrame,
         ActionSource source,
-        GameplayTag conditionTag = default)
+        GameplayTag conditionTag = default,
+        bool fromAnySource = false)
     {
         var modifier = new StatModifierComponent(target, operation, polarity, canModify, magnitude, expiresAtFrame, source, conditionTag);
 
-        using (var heldModifier = statModifiers.TryWriteFirst(entityId, new SameGrantMatcher(modifier)))
+        using (var heldModifier = statModifiers.TryWriteFirst(entityId, new SameGrantMatcher(modifier, fromAnySource)))
         {
             if (heldModifier.Found)
             {
@@ -59,7 +61,7 @@ public static class StatModifierEffects
         statModifiers.Add(entityId, modifier);
     }
 
-    private readonly struct SameGrantMatcher(StatModifierComponent granted) : IComponentMatcher<StatModifierComponent>
+    private readonly struct SameGrantMatcher(StatModifierComponent granted, bool fromAnySource) : IComponentMatcher<StatModifierComponent>
     {
         public bool Matches(in StatModifierComponent held) =>
             held.Target == granted.Target
@@ -67,6 +69,6 @@ public static class StatModifierEffects
             && held.Polarity == granted.Polarity
             && held.Magnitude == granted.Magnitude
             && held.ConditionTag == granted.ConditionTag
-            && held.Source == granted.Source;
+            && (fromAnySource || held.Source == granted.Source);
     }
 }

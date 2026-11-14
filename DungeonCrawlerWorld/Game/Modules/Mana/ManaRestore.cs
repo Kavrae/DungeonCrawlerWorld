@@ -6,7 +6,7 @@ using Microsoft.Xna.Framework;
 
 namespace Game.Modules.Mana;
 
-/// <summary>Raises CurrentMana, mirroring HealthHeal.Apply's shape exactly -- clamped at the modifier-effective MaximumMana, not the raw stored field. A no-op for an entity with no ManaComponent.</summary>
+/// <summary>Raises CurrentMana, mirroring HealthHeal.Apply's shape -- clamped at its modified maximum (ManaQueries), never BaseMaximumMana. A no-op for an entity with no ManaComponent.</summary>
 public static class ManaRestore
 {
     public static void Apply(
@@ -21,7 +21,7 @@ public static class ManaRestore
             return;
         }
 
-        var effectiveMaximumMana = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumMana, mana.GetReadonlyByDenseIndex(denseIndex).MaximumMana);
+        var effectiveMaximumMana = ManaQueries.EffectiveMaximumAt(mana, statModifiers, entityId, denseIndex);
         mana.UpdateByDenseIndex(denseIndex, new ShiftCurrentManaUpdate(amount, effectiveMaximumMana));
     }
 }

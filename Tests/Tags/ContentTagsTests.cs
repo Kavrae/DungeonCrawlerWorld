@@ -33,9 +33,32 @@ public sealed class ContentTagsTests
         }
     }
 
+    private static readonly GameplayTagDomain ModRoleDomain = new("ContentTagsTests role");
+
+    /// <summary>A mod declaring tag under an extensible built-in root.</summary>
     private sealed class TagDeclaringModule(GameplayTag tag) : IGameModule
     {
-        public void DeclareTags(GameplayTagDeclarations tags) => tags.Declare(tag);
+        public void DeclareTags(GameplayTagDeclarations tags) => tags.Declare(tag, "Declared by a test mod.");
+
+        public void RegisterComponents(ComponentRegistration registration)
+        {
+        }
+
+        public void RegisterBehavior(BehaviorRegistration<GameModuleContext> registration)
+        {
+        }
+    }
+
+    /// <summary>A mod owning a root of its own, in a domain of its own, which no activation field accepts.</summary>
+    private sealed class OwnRoleModule(GameplayTag root) : IGameModule
+    {
+        public Guid Id => new("3c0a7e10-0000-4000-8000-000000000001");
+
+        public void DeclareTags(GameplayTagDeclarations tags)
+        {
+            tags.DeclareRoot(root, "A role of the test mod's own.");
+            tags.DeclareDomain(ModRoleDomain, "The test mod's role.", extensible: false, [root]);
+        }
 
         public void RegisterComponents(ComponentRegistration registration)
         {
@@ -154,12 +177,56 @@ public sealed class ContentTagsTests
     [TestMethod]
     public void ABuild_WhoseModDeclaresTheTagItUses_Builds()
     {
-        var declaredByMod = GameplayTag.Get("ContentTagsTests.DeclaredByMod");
+        var declaredByMod = GameplayTag.Get("Damage.ContentTagsTestsAcid");
         var module = new RegisteringModule(context => context.Items.Register(ItemTagged([declaredByMod])));
 
         var build = BuiltInTestModules.BuildModules([new TagDeclaringModule(declaredByMod), module]);
 
         Assert.IsTrue(build.Context.GameplayTags.IsDeclared(declaredByMod));
+    }
+
+    [TestMethod]
+    public void ABuild_WhoseItemUsesADeclaredTagOutsideTheActivationDomain_ThrowsNamingTheItemAndTag()
+    {
+        var root = GameplayTag.Get("ContentTagsTestsRole");
+        var module = new RegisteringModule(context => context.Items.Register(ItemTagged([root])));
+
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() => BuiltInTestModules.BuildModules([new OwnRoleModule(root), module]));
+        Assert.Contains("Tagged Item", exception.Message);
+        Assert.Contains(root.Name, exception.Message);
+        Assert.Contains(GameTagDomains.Activation.Name, exception.Message);
+    }
+
+    [TestMethod]
+    public void ABuild_WhoseStatModifierIsConditionedOnATagOutsideTheActivationDomain_Throws()
+    {
+        var root = GameplayTag.Get("ContentTagsTestsConditionRole");
+        var grant = new StatModifierGrant(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, CanModify: false, Magnitude: -0.5f, DurationFrames: null, ConditionTag: root);
+        var module = new RegisteringModule(context => context.Items.Register(ItemTagged([], [new Effect([grant])])));
+
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() => BuiltInTestModules.BuildModules([new OwnRoleModule(root), module]));
+        Assert.Contains(root.Name, exception.Message);
+    }
+
+    [TestMethod]
+    [DataRow("Items.jsonl", "Items", "\"t\":[\"Area.Testing\"]")]
+    [DataRow("Items.jsonl", "Items", "\"fx\":[{\"e\":[{\"$\":\"StatModifierGrant\",\"tg\":\"IncomingDamage\",\"op\":\"Multiplicative\",\"pol\":\"Buff\",\"m\":-0.5,\"ct\":\"Area.Testing\"}]}]")]
+    public void ARecordWithATagOutsideItsFieldsDomain_FailsAtItsFileLineAndColumn(string fileName, string tableName, string fields)
+    {
+        var types = BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1))).Declarations.ContentTypes;
+        var line = $"{{\"id\":\"{Engine.Content.ContentGuid.Format(Guid.NewGuid())}\",\"n\":\"Out Of Domain\",\"g\":\"?\",{fields}}}";
+        var text = $"{{\"fmt\":1,\"table\":\"{tableName}\"}}\n{line}\n";
+        var failures = new List<Engine.Content.ContentFailure>();
+
+        var file = Engine.Content.ContentTable.Read<ItemDefinition>(text, fileName, tableName, types, Engine.Content.NoContentReferences.Instance, failures);
+
+        Assert.IsEmpty(file.Records);
+        var failure = Assert.ContainsSingle(failures);
+        Assert.AreEqual(fileName, failure.File);
+        Assert.AreEqual(2, failure.Line);
+        Assert.AreEqual(line.IndexOf("\"Area.Testing\"", StringComparison.Ordinal) + 1, failure.Column);
+        Assert.Contains("Area.Testing", failure.Reason);
+        Assert.Contains(GameTagDomains.Activation.Name, failure.Reason);
     }
 
     [TestMethod]

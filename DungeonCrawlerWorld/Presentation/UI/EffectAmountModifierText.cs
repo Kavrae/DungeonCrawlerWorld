@@ -2,10 +2,10 @@ using Game.Modules.StatModifiers;
 
 namespace Presentation.UI;
 
-/// <summary>Player-facing wording for a modifier on an amount an effect carries (EffectModifiers): mana restored and drained, status stacks, proc chance, aura power and size.</summary>
+/// <summary>Player-facing wording for a modifier on an amount an effect carries (EffectModifiers: mana restored and drained, status stacks, proc chance, aura power and size) or on an NPC drive (Aggression, Caution).</summary>
 internal static class EffectAmountModifierText
 {
-    /// <summary>What the modifier changes, as a player reads it, or null for a target that isn't an effect amount.</summary>
+    /// <summary>What the modifier changes, as a player reads it, or null for a target that is neither.</summary>
     public static string? SubjectOf(StatModifierTarget target) => target switch
     {
         StatModifierTarget.OutgoingManaRestore => "Mana Restoration Given",
@@ -22,6 +22,8 @@ internal static class EffectAmountModifierText
         StatModifierTarget.IncomingAuraPower => "Aura Power Received",
         StatModifierTarget.OutgoingAuraSize => "Aura Size",
         StatModifierTarget.IncomingAuraSize => "Aura Size Received",
+        StatModifierTarget.BehaviorAggression => "Aggression",
+        StatModifierTarget.BehaviorCaution => "Caution",
         _ => null,
     };
 

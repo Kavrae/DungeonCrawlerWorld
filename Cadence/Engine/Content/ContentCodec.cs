@@ -35,5 +35,24 @@ public abstract class ContentCodec<T> : IContentCodec
     object IContentCodec.Read(ContentObject element) => Read(element);
 }
 
-/// <summary>A record that can't be read: a missing or malformed field, an unknown key or discriminator, a reference to nothing.</summary>
-public sealed class ContentFormatException(string message) : Exception(message);
+/// <summary>A record that can't be read: a missing or malformed field, an unknown key or discriminator, a reference to nothing, a tag outside its field's domain.</summary>
+public sealed class ContentFormatException(string message) : Exception(message)
+{
+    /// <summary>A failure at one value: the key that holds it, the value's JSON text and the JSON text of the object the key is in, which the record's reader finds in its source to name the column.</summary>
+    public ContentFormatException(string message, string key, string valueText, string objectText)
+        : this(message)
+    {
+        Key = key;
+        ValueText = valueText;
+        ObjectText = objectText;
+    }
+
+    /// <summary>The JSON text of the object whose key holds the value -- the record, or an object nested in it; null when Key is.</summary>
+    public string? ObjectText { get; }
+
+    /// <summary>The key holding the value the failure is about; null when the failure is the record's as a whole.</summary>
+    public string? Key { get; }
+
+    /// <summary>The JSON text of the value the failure is about, such as "\"Area.Testing\""; null when Key is.</summary>
+    public string? ValueText { get; }
+}

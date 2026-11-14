@@ -179,13 +179,12 @@ public sealed class MapViewQuery : IMapViewQuery
     /// <summary>Current over modifier-effective maximum, or null when the bar is hidden: no health at all, a non-positive maximum, or already full.</summary>
     private float? GetHealthBarFraction(int entityId)
     {
-        if (!HealthQueries.TryGetTotals(_health, _bodyParts, entityId, out var current, out var maximum) || maximum <= 0)
+        if (!HealthQueries.TryGetTotals(_health, _bodyParts, _statModifiers, entityId, out var current, out var maximum) || maximum <= 0)
         {
             return null;
         }
 
-        var effectiveMaximum = StatModifierMath.GetEffectiveValue(_statModifiers, entityId, StatModifierTarget.MaximumHealth, maximum);
-        return effectiveMaximum <= 0 || current >= effectiveMaximum ? null : current / effectiveMaximum;
+        return current >= maximum ? null : current / maximum;
     }
 
     public bool TryGetChargingAction(int entityId, out ChargingActionView action)

@@ -30,7 +30,7 @@ public sealed class InspectionWindowContentTests
     public void ReplaceHealthEntriesWithEffectiveMaximum_SimpleHealthWithBuff_ShowsEffectiveMaximumNotRaw()
     {
         var healthPool = CreateHealthPool();
-        healthPool.Add(EntityId, new SimpleHealthComponent(currentHealth: 120, maximumHealth: 100));
+        healthPool.Add(EntityId, new SimpleHealthComponent(currentHealth: 120, baseMaximumHealth: 100));
         var bodyParts = new BodyPartTestWorld().BodyParts;
         var statModifiers = CreateMaximumHealthBuffPool(0.5f);
         List<InspectedComponentEntry> entries = [new InspectedComponentEntry(typeof(SimpleHealthComponent), "stale raw-formatted text", 0)];
@@ -65,7 +65,7 @@ public sealed class InspectionWindowContentTests
     public void ReplaceHealthEntriesWithEffectiveMaximum_NoActiveModifiers_MatchesRawMaximum()
     {
         var healthPool = CreateHealthPool();
-        healthPool.Add(EntityId, new SimpleHealthComponent(currentHealth: 80, maximumHealth: 100));
+        healthPool.Add(EntityId, new SimpleHealthComponent(currentHealth: 80, baseMaximumHealth: 100));
         var bodyParts = new BodyPartTestWorld().BodyParts;
         List<InspectedComponentEntry> entries = [];
 

@@ -1,6 +1,8 @@
 using Engine.Content;
 using Engine.Modules;
+using Engine.Tags;
 using Game.Modules;
+using Game.Tags;
 using Game.Terrain;
 
 namespace Game.Areas;
@@ -15,6 +17,14 @@ public sealed class AreasModule : IGameModule
 
     /// <summary>Terrain registers the floors and walls areas name by key.</summary>
     public IReadOnlyList<Guid> Requires { get; } = [TerrainModule.ModuleId];
+
+    /// <summary>Declares the Area root, which other modules may extend, its built-in tags and the Area domain.</summary>
+    public void DeclareTags(GameplayTagDeclarations tags)
+    {
+        tags.DeclareRoot(AreaTags.Area, "What a map area is.", extensible: true);
+        tags.Declare(AreaTags.AreaTesting, "An area built to try something out.");
+        tags.DeclareDomain(GameTagDomains.Area, "What a map area is.", extensible: false, [AreaTags.Area]);
+    }
 
     public void DeclareContentTypes(ContentTypeDeclarations contentTypes) => AreaContentCodecs.Register(contentTypes);
 

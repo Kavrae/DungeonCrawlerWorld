@@ -81,7 +81,7 @@ public sealed class PlayerCommandsTests
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(20, 10));
 
         TestTransforms.Set(componentManager, PlayerEntityId, new TransformComponent(PlayerPosition, new Vector2Byte(1, 1)));
-        componentManager.Merge(PlayerEntityId, new MovementComponent(MovementMode.PlayerControlled, null, null));
+        componentManager.Merge(PlayerEntityId, new MovementComponent(null, null));
         componentManager.Merge(PlayerEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: locked ? LockEndsAtFrame : 0u));
         componentManager.Merge(PlayerEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 5));
         componentManager.Merge(PlayerEntityId, new ActionInstanceComponent(SelfActionId, overrideDefinition: null));

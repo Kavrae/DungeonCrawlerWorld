@@ -8,7 +8,7 @@ public sealed class SimpleHealthComponentTests
     [TestMethod]
     public void ToString_ValidMaximumHealth_ReturnsPercentageBar()
     {
-        var component = new SimpleHealthComponent(currentHealth: 50, maximumHealth: 100);
+        var component = new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 100);
 
         Assert.Contains("HP", component.ToString());
     }
@@ -32,7 +32,7 @@ public sealed class SimpleHealthComponentTests
     [TestMethod]
     public void ToString_NegativeMaximumHealth_DoesNotThrow()
     {
-        var component = new SimpleHealthComponent(currentHealth: 0, maximumHealth: -5);
+        var component = new SimpleHealthComponent(currentHealth: 0, baseMaximumHealth: -5);
 
         var text = component.ToString();
 

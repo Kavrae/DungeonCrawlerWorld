@@ -15,15 +15,17 @@ public readonly struct ContentObject
     private readonly JsonElement _element;
     private readonly ContentTypeRegistry _types;
     private readonly IContentReferences _references;
-    private readonly string _typeName;
+    private readonly ContentSchema _schema;
 
-    private ContentObject(JsonElement element, ContentTypeRegistry types, IContentReferences references, string typeName)
+    private ContentObject(JsonElement element, ContentTypeRegistry types, IContentReferences references, ContentSchema schema)
     {
         _element = element;
         _types = types;
         _references = references;
-        _typeName = typeName;
+        _schema = schema;
     }
+
+    private string TypeName => _schema.TypeName;
 
     /// <summary>Reads element as a T through T's registered codec.</summary>
     /// <param name="envelopeKeys">Table-level keys allowed beside the codec's own (a record's disabled flag and replacement).</param>
@@ -78,7 +80,7 @@ public readonly struct ContentObject
             }
         }
 
-        return codec.Read(new ContentObject(element, types, references, schema.TypeName));
+        return codec.Read(new ContentObject(element, types, references, schema));
     }
 
     public string String(string key, string defaultValue = "") =>
@@ -129,14 +131,14 @@ public readonly struct ContentObject
         var name = value.GetString()!;
         return System.Enum.TryParse<TEnum>(name, ignoreCase: false, out var result) && IsDefinedName(result, name)
             ? result
-            : throw new ContentFormatException($"{_typeName}'s \"{key}\" is \"{name}\", which isn't a {typeof(TEnum).Name}.");
+            : throw new ContentFormatException($"{TypeName}'s \"{key}\" is \"{name}\", which isn't a {typeof(TEnum).Name}.");
     }
 
     public Guid Guid(string key)
     {
         if (!TryGet(key, JsonValueKind.String, out var value))
         {
-            throw new ContentFormatException($"{_typeName} needs \"{key}\".");
+            throw new ContentFormatException($"{TypeName} needs \"{key}\".");
         }
 
         return ContentGuid.TryParse(value.GetString()!, out var result) ? result : throw Malformed(key, "a Guid");
@@ -152,9 +154,11 @@ public readonly struct ContentObject
         return ContentGuid.TryParse(value.GetString()!, out var result) ? result : throw Malformed(key, "a Guid");
     }
 
+    /// <summary>The tag at key, which must be in the domain the schema names for it; None when absent.</summary>
     public GameplayTag Tag(string key) =>
-        TryGet(key, JsonValueKind.String, out var value) ? GameplayTag.Get(value.GetString()!) : GameplayTag.None;
+        TryGet(key, JsonValueKind.String, out var value) ? ReadTag(key, value) : GameplayTag.None;
 
+    /// <summary>The tags at key, each of which must be in the domain the schema names for it; empty when absent.</summary>
     public GameplayTagSet Tags(string key)
     {
         if (!TryGet(key, JsonValueKind.Array, out var value))
@@ -165,10 +169,26 @@ public readonly struct ContentObject
         var tags = new List<GameplayTag>(value.GetArrayLength());
         foreach (var element in value.EnumerateArray())
         {
-            tags.Add(element.ValueKind == JsonValueKind.String ? GameplayTag.Get(element.GetString()!) : throw Malformed(key, "a list of tag names"));
+            tags.Add(element.ValueKind == JsonValueKind.String ? ReadTag(key, element) : throw Malformed(key, "a list of tag names"));
         }
 
         return GameplayTagSet.Create(tags.ToArray());
+    }
+
+    private GameplayTag ReadTag(string key, JsonElement value)
+    {
+        var name = value.GetString()!;
+        if (!GameplayTag.TryGet(name, out var tag))
+        {
+            throw new ContentFormatException($"{TypeName}'s \"{key}\" holds \"{name}\", which isn't a tag name.", key, value.GetRawText(), _element.GetRawText());
+        }
+
+        if (_schema.TryGetField(key, out var field) && field.TagDomain is { } domain && _types.Tags.ProblemWith(domain, tag) is { } problem)
+        {
+            throw new ContentFormatException($"{TypeName}'s \"{key}\": {problem}", key, value.GetRawText(), _element.GetRawText());
+        }
+
+        return tag;
     }
 
     /// <summary>The record key names in the table it names -- throws when nothing has been loaded under that Guid.</summary>
@@ -178,7 +198,7 @@ public readonly struct ContentObject
         var id = Guid(key);
         return _references.TryResolve<T>(id, out var value)
             ? value
-            : throw new ContentFormatException($"{_typeName}'s \"{key}\" names {ContentGuid.Format(id)}, which no {typeof(T).Name} has.");
+            : throw new ContentFormatException($"{TypeName}'s \"{key}\" names {ContentGuid.Format(id)}, which no {typeof(T).Name} has.");
     }
 
     public T? Object<T>(string key)
@@ -262,7 +282,7 @@ public readonly struct ContentObject
         value.TryGetInt64(out var result) ? result : throw Malformed(key, "an integer");
 
     private ContentFormatException Malformed(string key, string expected) =>
-        new($"{_typeName}'s \"{key}\" must be {expected}.");
+        new($"{TypeName}'s \"{key}\" must be {expected}.");
 
     /// <summary>Enum.TryParse also accepts numbers and undefined names joined by commas; a file names members, so anything else is refused.</summary>
     private static bool IsDefinedName<TEnum>(TEnum value, string name)

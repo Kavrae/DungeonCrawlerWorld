@@ -59,7 +59,7 @@ public sealed class BlueprintTests
 
         var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
         Assert.AreEqual(100f, health.CurrentHealth);
-        Assert.AreEqual(100f, health.MaximumHealth);
+        Assert.AreEqual(100f, health.BaseMaximumHealth);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ContainerComponent>().Has(entityId));
 
@@ -112,7 +112,7 @@ public sealed class BlueprintTests
 
         var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
         Assert.AreEqual(1000f, health.CurrentHealth);
-        Assert.AreEqual(1000f, health.MaximumHealth);
+        Assert.AreEqual(1000f, health.BaseMaximumHealth);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ContainerComponent>().Has(entityId));
         Assert.IsFalse(ecsContext.ComponentManager.GetPackedPool<ShopComponent>().Has(entityId), "Shop is the shared shell only -- no ShopComponent and no stock by itself.");
@@ -133,6 +133,27 @@ public sealed class BlueprintTests
         }
         CollectionAssert.AreEquivalent(new[] { StatusEffectType.Poison, StatusEffectType.Paralysis }, immuneTypes);
     }
+
+    [TestMethod]
+    public void EveryShopsAcceptedItems_AreItemCategoryTags()
+    {
+        var build = BuiltInTestModules.Build(new Map(new Vector3Int(5, 5, 1)));
+        var ecsContext = build.EcsContext;
+
+        foreach (var shopId in new[] { GeneralShop.Id, PotionShop.Id })
+        {
+            var entityId = ecsContext.EntityManager.CreateEntity();
+            ecsContext.BuildDefinition(entityId, shopId);
+
+            if (ecsContext.ComponentManager.GetPackedPool<ShopComponent>().GetReadonly(entityId).AcceptedItems is { } accepted)
+            {
+                build.Context.GameplayTags.EnsureAccepts(GameTagDomains.ItemCategory, GameplayTagSetOf(accepted), ecsContext.NameOf(entityId));
+            }
+        }
+    }
+
+    private static Engine.Tags.GameplayTagSet GameplayTagSetOf(Engine.Tags.GameplayTagQuery query) =>
+        Engine.Tags.GameplayTagSet.Create([.. query.RequireAll, .. query.RequireAny, .. query.Exclude]);
 
     [TestMethod]
     public void PotionShop_Build_GrantsPotionOnlyShopComponentAndStock()
@@ -208,9 +229,9 @@ public sealed class BlueprintTests
 
         var expectedPartsByName = new Dictionary<string, (BodyPartType Type, ushort MinimumHealth, ushort MaximumHealth, bool IsVital)>
         {
-            ["Head"] = (BodyPartType.Head, 30, 30, true),
-            ["Torso"] = (BodyPartType.Torso, 50, 50, true),
-            ["Internal"] = (BodyPartType.Internal, 10, 10, true),
+            ["Head"] = (BodyPartType.Head, 90, 90, true),
+            ["Torso"] = (BodyPartType.Torso, 100, 100, true),
+            ["Internal"] = (BodyPartType.Internal, 90, 90, true),
             ["Left Arm"] = (BodyPartType.Arm, 15, 15, false),
             ["Right Arm"] = (BodyPartType.Arm, 15, 15, false),
             ["Left Hand"] = (BodyPartType.Hand, 5, 5, false),
@@ -229,14 +250,14 @@ public sealed class BlueprintTests
             Assert.IsTrue(expectedPartsByName.TryGetValue(part.Name, out var expected), $"Unexpected body part name: {part.Name}");
             Assert.AreEqual(expected.Type, part.Type);
             Assert.AreEqual(expected.IsVital, part.IsVital);
-            Assert.AreEqual((float)expected.MaximumHealth, part.MaximumHealth);
+            Assert.AreEqual((float)expected.MaximumHealth, part.BaseMaximumHealth);
             Assert.AreEqual((float)expected.MaximumHealth, part.CurrentHealth, "A Goblin carries no MaximumHealth modifier, so it starts at its stored maximum exactly.");
-            actualMaximumSum += part.MaximumHealth;
+            actualMaximumSum += part.BaseMaximumHealth;
             actualCount++;
         }
 
         Assert.AreEqual(expectedPartsByName.Count, actualCount);
-        Assert.AreEqual(200f, actualMaximumSum);
+        Assert.AreEqual(390f, actualMaximumSum);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
@@ -287,12 +308,12 @@ public sealed class BlueprintTests
             Assert.IsTrue(expectedPartsByName.TryGetValue(part.Name, out var expected), $"Unexpected body part name: {part.Name}");
             Assert.AreEqual(expected.Type, part.Type);
             Assert.AreEqual(expected.IsVital, part.IsVital);
-            Assert.AreEqual((float)expected.MaximumHealth, part.MaximumHealth);
+            Assert.AreEqual((float)expected.MaximumHealth, part.BaseMaximumHealth);
             // At or above the stored maximum: the player's MaximumHealth modifiers raise the cap above
             // it, and the entity is built full against that raised cap. The exact value is
             // PlayerRecipe_Build_StartsEveryBodyPartAtItsEffectiveMaximum's business.
             Assert.IsGreaterThanOrEqualTo(expected.MaximumHealth, part.CurrentHealth);
-            actualMaximumSum += part.MaximumHealth;
+            actualMaximumSum += part.BaseMaximumHealth;
             actualCount++;
         }
 
@@ -300,7 +321,6 @@ public sealed class BlueprintTests
         Assert.AreEqual(250f, actualMaximumSum);
 
         var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(entityId);
-        Assert.AreEqual(MovementMode.PlayerControlled, movement.MovementMode);
         Assert.IsNull(movement.NextMapPosition);
 
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
@@ -327,7 +347,7 @@ public sealed class BlueprintTests
         Assert.IsTrue(ecsContext.ActionsOf().Has(entityId, BuiltInActionIds.ToxicStrike));
 
         // Starting items: 5 Health Potions, 5 Mana Potions, 3 Hotkey Expansion Potions, 5 Volatile
-        // Concoctions (damage), 5 Toxic Flasks (Poison+Burning), 1 Toxic Idol (Poison aura toggle),
+        // Concoctions (damage), 5 Toxic Flasks (Poison+Burning), 1 Toxic Idol (Poison aura toggle), 1 Dread Idol (Dread aura toggle),
         // 5 Scrolls of Healing, 5 Scrolls of Torch, 5 Vials of Warding (Burning+Poison immunity),
         // 5 Draughts of Insulation (Burning+Poison resistance) -- see the Effect/
         // ActionActivator plan's concrete test content. Plus a batch of 10 Wands of Fireball and
@@ -336,7 +356,7 @@ public sealed class BlueprintTests
         // item divergence work. Plus the TEMPORARY test tomes: one of Fireball, two of a composed spell.
         var stacks = new List<InventoryItemStackComponent>();
         InventoryQueries.CopyStacksForEntity(ecsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>(), entityId, stacks);
-        Assert.HasCount(18, stacks);
+        Assert.HasCount(19, stacks);
 
         var healthPotionStack = stacks.Single(stack => stack.ItemDefinitionId == BuiltInItemIds.HealthPotion);
         Assert.AreEqual(5, healthPotionStack.Quantity);
@@ -397,7 +417,7 @@ public sealed class BlueprintTests
 
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<RaceSlotsComponent>().Has(entityId));
         var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
-        Assert.AreEqual(health.MaximumHealth, health.CurrentHealth);
+        Assert.AreEqual(health.BaseMaximumHealth, health.CurrentHealth);
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
@@ -429,7 +449,7 @@ public sealed class BlueprintTests
     {
         var ecsContext = BuildEcsContext();
         var entityId = ecsContext.EntityManager.CreateEntity();
-        ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(MovementMode.Random, null, null));
+        ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Add(entityId, new MovementComponent(null, null));
         ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Add(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         ecsContext.BuildDefinition(entityId, Engineer.Id);
@@ -463,7 +483,7 @@ public sealed class BlueprintTests
         // No race ran first, so Tank merges its own baseline instead of silently doing
         // nothing -- the class still functions when composed (or used) without a race.
         var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
-        Assert.AreEqual(100f, health.MaximumHealth, "The stored baseline, which the bonus modifier scales rather than rewrites.");
+        Assert.AreEqual(100f, health.BaseMaximumHealth, "The stored baseline, which the bonus modifier scales rather than rewrites.");
         Assert.AreEqual(110f, health.CurrentHealth, 0.001f, "Built full against the bonus-effective maximum.");
         Assert.IsTrue(HasMaximumHealthBonusModifier(ecsContext.ComponentManager, entityId, 0.10f));
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ClassSlotsComponent>().Has(entityId));
@@ -506,7 +526,7 @@ public sealed class BlueprintTests
         // The bonus is a modifier, not a rewrite: the race's own stored maximum is untouched and
         // every reader scales it through the modifier instead (see StatModifierComponent).
         var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
-        Assert.AreEqual(100f, health.MaximumHealth);
+        Assert.AreEqual(100f, health.BaseMaximumHealth);
         Assert.IsTrue(HasMaximumHealthBonusModifier(ecsContext.ComponentManager, entityId, 0.10f));
         Assert.IsTrue(HealthQueries.TryGetEffectiveMaximum(
             ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>(),
@@ -649,10 +669,10 @@ public sealed class BlueprintTests
         var partCount = 0;
         foreach (var part in bodyParts.Parts(entityId))
         {
-            var effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+            var effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.BaseMaximumHealth);
 
             Assert.AreEqual(effectiveMaximum, part.CurrentHealth, 0.001f, $"{part.Name} did not start at its effective maximum.");
-            Assert.IsGreaterThan(part.MaximumHealth, effectiveMaximum, $"{part.Name}'s effective maximum should exceed its stored one -- otherwise this test proves nothing.");
+            Assert.IsGreaterThan(part.BaseMaximumHealth, effectiveMaximum, $"{part.Name}'s effective maximum should exceed its stored one -- otherwise this test proves nothing.");
             partCount++;
         }
 
@@ -673,7 +693,7 @@ public sealed class BlueprintTests
         var statModifiers = ecsContext.ComponentManager.GetMultiPool<StatModifierComponent>();
         foreach (var part in bodyParts.Parts(entityId))
         {
-            var effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+            var effectiveMaximum = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.BaseMaximumHealth);
 
             Assert.AreEqual(effectiveMaximum, part.CurrentHealth, 0.001f, $"{part.Name} did not start at its effective maximum.");
         }
@@ -691,7 +711,7 @@ public sealed class BlueprintTests
 
         var health = ecsContext.ComponentManager.GetPackedPool<SimpleHealthComponent>().GetReadonly(entityId);
 
-        Assert.AreEqual(100f, health.MaximumHealth, 0.001f, "Fairy's own maximum, left as it authored it.");
+        Assert.AreEqual(100f, health.BaseMaximumHealth, 0.001f, "Fairy's own maximum, left as it authored it.");
         Assert.AreEqual(110f, health.CurrentHealth, 0.001f, "Full against the bonus-effective maximum.");
         Assert.IsTrue(HasMaximumHealthBonusModifier(ecsContext.ComponentManager, entityId, 0.10f));
     }

@@ -1,6 +1,7 @@
 using Engine.Content;
 using Engine.ECS.Components;
 using Engine.Modules;
+using Engine.Tags;
 
 namespace Tests.Content;
 
@@ -49,7 +50,9 @@ public sealed class ContentLayersTests
         }
     }
 
-    private static readonly ContentTypeRegistry Types = ContentTypeRegistry.Declare([new NamedRecordModule(ContentTypeRegistry.DefaultContentVersion)]);
+    private static readonly ContentTypeRegistry Types = Declare(new NamedRecordModule(ContentTypeRegistry.DefaultContentVersion));
+
+    private static ContentTypeRegistry Declare(IModule module) => ContentTypeRegistry.Declare([module], GameplayTagRegistry.Declare([module]));
 
     private static string Line(Guid id, string name) => $"{{\"id\":\"{ContentGuid.Format(id)}\",\"n\":\"{name}\"}}";
 
@@ -213,7 +216,7 @@ public sealed class ContentLayersTests
     [TestMethod]
     public void TheWriter_PutsEachModuleAboveTheDefaultVersionInTheHeader_AndTheReaderGivesItBack()
     {
-        var versionedTypes = ContentTypeRegistry.Declare([new NamedRecordModule(contentVersion: 3)]);
+        var versionedTypes = Declare(new NamedRecordModule(contentVersion: 3));
 
         var text = ContentTable.Write(TableName, [new NamedRecord(FirstId, "First")], versionedTypes);
         var file = ContentTable.Read<NamedRecord>(text, FileName, TableName, versionedTypes, NoContentReferences.Instance, []);

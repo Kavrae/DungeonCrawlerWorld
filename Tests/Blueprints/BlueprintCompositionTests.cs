@@ -154,8 +154,8 @@ public sealed class BlueprintCompositionTests
         var engineer = Build(BlueprintTestContext.Definitions, BlueprintTestContext.GoblinEngineerBlueprint);
         var foreman = Build(BlueprintTestContext.Definitions, BlueprintTestContext.Definitions.GetId(GoblinForeman.Id));
 
-        EntityBodyParts.For(engineer.Ecs.ComponentManager, BlueprintTestContext.Definitions).TryGetTotals(engineer.EntityId, out var engineerHealth, out _);
-        EntityBodyParts.For(foreman.Ecs.ComponentManager, BlueprintTestContext.Definitions).TryGetTotals(foreman.EntityId, out var foremanHealth, out _);
+        EntityBodyParts.For(engineer.Ecs.ComponentManager, BlueprintTestContext.Definitions).TryGetCurrentAndBaseMaximumTotals(engineer.EntityId, out var engineerHealth, out _);
+        EntityBodyParts.For(foreman.Ecs.ComponentManager, BlueprintTestContext.Definitions).TryGetCurrentAndBaseMaximumTotals(foreman.EntityId, out var foremanHealth, out _);
 
         Assert.AreEqual(engineerHealth * 2, foremanHealth, 0.01f);
     }

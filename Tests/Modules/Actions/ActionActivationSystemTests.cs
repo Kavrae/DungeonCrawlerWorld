@@ -451,7 +451,7 @@ public sealed class ActionActivationSystemTests
         var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 4, maximumMana: 100));
+        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 4, baseMaximumMana: 100));
         GrantAction(componentManager, actionCatalog, CasterEntityId, ImmediateWithManaCostActionId, 15, 0);
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithManaCostActionId, TestSelections.At(TargetTile)));
@@ -469,7 +469,7 @@ public sealed class ActionActivationSystemTests
         var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 5, maximumMana: 100));
+        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 5, baseMaximumMana: 100));
         GrantAction(componentManager, actionCatalog, CasterEntityId, ImmediateWithManaCostActionId, 15, 0);
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithManaCostActionId, TestSelections.At(TargetTile)));
@@ -517,7 +517,7 @@ public sealed class ActionActivationSystemTests
         var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 4, maximumMana: 100));
+        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 4, baseMaximumMana: 100));
         GrantAction(componentManager, actionCatalog, CasterEntityId, FreeCastWithManaCostActionId, 20, 0);
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(FreeCastWithManaCostActionId, TestSelections.At(TargetTile)));
@@ -534,7 +534,7 @@ public sealed class ActionActivationSystemTests
         var (system, componentManager, actionCatalog, mapQuery) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new SimpleHealthComponent(100, 100));
-        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 10, maximumMana: 100));
+        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 10, baseMaximumMana: 100));
         GrantAction(componentManager, actionCatalog, CasterEntityId, ImmediateWithActivationEffectsActionId, 15, 0);
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithActivationEffectsActionId, TestSelections.At(TargetTile)));
@@ -549,7 +549,7 @@ public sealed class ActionActivationSystemTests
     public void Immediate_ActivationEffects_WhileActionLocked_TakeNothing()
     {
         var (system, componentManager, actionCatalog, _) = Build();
-        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 10, maximumMana: 100));
+        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 10, baseMaximumMana: 100));
         GrantAction(componentManager, actionCatalog, CasterEntityId, ImmediateWithActivationEffectsActionId, 15, 0);
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 50));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(ImmediateWithActivationEffectsActionId, TestSelections.At(TargetTile)));
@@ -563,7 +563,7 @@ public sealed class ActionActivationSystemTests
     public void Delayed_ActivationEffects_AreTakenWhenTheWindupStarts()
     {
         var (system, componentManager, actionCatalog, _) = Build();
-        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 10, maximumMana: 100));
+        componentManager.Merge(CasterEntityId, new ManaComponent(currentMana: 10, baseMaximumMana: 100));
         GrantAction(componentManager, actionCatalog, CasterEntityId, DelayedWithActivationEffectsActionId, 15, 0);
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(CasterEntityId, new PendingActionActivationComponent(DelayedWithActivationEffectsActionId, TestSelections.At(TargetTile)));

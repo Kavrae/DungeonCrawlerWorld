@@ -1,3 +1,4 @@
+using Engine.Math;
 using Game.Blueprints.Classes;
 using Game.Blueprints.Races;
 
@@ -12,6 +13,9 @@ public static class Player
 
     public static readonly BlueprintDefinition Definition = new(Id, Name)
     {
-        Includes = [Human.Id, Tank.Id, PlayerKit.Id]
+        Includes = [Human.Id, Tank.Id, PlayerKit.Id],
+
+        // TEMPORARY, for testing how creatures flee something larger than a tile: remove to make the player 1x1 again.
+        Size = new Vector2Byte(3, 3)
     };
 }

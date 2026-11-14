@@ -89,6 +89,6 @@ internal sealed class BodyPartTestWorld
     {
         Give(entityId);
         BodyParts.TryGet(entityId, partId, out var part);
-        BodyParts.Damage(entityId, partId, part.CurrentHealth - currentHealth, part.MaximumHealth, now: 0, lockoutFrames: 0);
+        BodyParts.Damage(entityId, partId, part.CurrentHealth - currentHealth, part.BaseMaximumHealth, now: 0, lockoutFrames: 0);
     }
 }

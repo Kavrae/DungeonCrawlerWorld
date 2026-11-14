@@ -15,7 +15,7 @@ public sealed class ManaRestoreTests
     public void Apply_RaisesCurrentManaByAmount()
     {
         var pool = CreatePool();
-        pool.Add(0, new ManaComponent(currentMana: 50, maximumMana: 100));
+        pool.Add(0, new ManaComponent(currentMana: 50, baseMaximumMana: 100));
 
         ManaRestore.Apply(pool, 0, 10, EmptyPools.Multi<StatModifierComponent>());
 
@@ -26,7 +26,7 @@ public sealed class ManaRestoreTests
     public void Apply_ClampsAtMaximumMana()
     {
         var pool = CreatePool();
-        pool.Add(0, new ManaComponent(currentMana: 95, maximumMana: 100));
+        pool.Add(0, new ManaComponent(currentMana: 95, baseMaximumMana: 100));
 
         ManaRestore.Apply(pool, 0, 50, EmptyPools.Multi<StatModifierComponent>());
 

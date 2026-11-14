@@ -1,5 +1,5 @@
 using Engine.ECS.Systems;
-using Game.Modules.Health.Components;
+using Game.Modules.Health;
 using Game.Modules.StatModifiers;
 using Game.Modules.StatusEffects;
 using Game.Modules.StatusEffects.Components;
@@ -20,7 +20,7 @@ public static class ShrineDurability
         var componentManager = context.ComponentManager;
         var entityId = context.EntityId;
 
-        componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
+        MaximumHealthShift.MergeBaseMaximum(componentManager, entityId, MaximumHealth);
 
         var actionSource = context.PartSource();
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,

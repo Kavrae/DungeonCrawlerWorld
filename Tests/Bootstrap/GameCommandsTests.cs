@@ -28,7 +28,7 @@ public sealed class GameCommandsTests
     }
 
     private static ItemDefinition AnyBindableItem(GameSession gameSession) =>
-        gameSession.Catalogs.ItemCatalog.Definitions.First(ItemHotkeyBindingQueries.CanBind);
+        gameSession.Catalogs.ItemCatalog.Get(BuiltInItemIds.HealthPotion);
 
     [TestMethod]
     public void InventoryCommands_TryTransferStack_MovesTheStackInTheSessionsPools()

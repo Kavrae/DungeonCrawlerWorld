@@ -4,7 +4,7 @@ using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Core.Components;
-using Game.Modules.Health.Components;
+using Game.Modules.Health;
 using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
 using Microsoft.Xna.Framework;
@@ -42,8 +42,8 @@ public static class Fairy
 
     private static readonly ushort MagicMissileWindupFrames = GameTiming.FramesForSeconds(1f);
 
-    /// <summary>Enough mana for three Magic Missiles, regenerating, so a Fairy runs dry and waits like a caster.</summary>
-    private const float MaximumMana = 15;
+    /// <summary>Enough mana for three Magic Missiles and one Heal, regenerating, so a Fairy runs dry and waits like a caster.</summary>
+    private const float MaximumMana = 17;
 
     /// <summary>What every creature of this race can do -- held on its race definition, not on each creature (see ActionGrant). Dodge has no override: it rolls its catalog definition unchanged.</summary>
     /// <remarks>
@@ -57,6 +57,7 @@ public static class Fairy
         ActionGrant.Derived(BuiltInActionIds.QuickAttack, "Fairy.QuickAttack", static action => ActionOverrideEffects.OverrideFlatDamage(action, QuickAttackDamage)),
         ActionGrant.Derived(BuiltInActionIds.PowerAttack, "Fairy.PowerAttack", static action => ActionOverrideEffects.OverrideFlatDamage(action, PowerAttackDamage)),
         new(BuiltInActionIds.Dodge),
+        new(BuiltInActionIds.Heal),
         ActionGrant.Derived(BuiltInActionIds.MagicMissile, "Fairy.MagicMissile", BuildMagicMissileOverride),
     ];
 
@@ -81,6 +82,7 @@ public static class Fairy
         Appearance = Appearance,
         Race = new RaceFacet(),
         Actions = ActionGrants,
+        Behaviors = StandardBehaviors.Grants,
         Layer = MapLayer.Flying
     };
 
@@ -89,8 +91,8 @@ public static class Fairy
         var componentManager = context.ComponentManager;
         var entityId = context.EntityId;
 
-        componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
-        componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
+        MaximumHealthShift.MergeBaseMaximum(componentManager, entityId, MaximumHealth);
+        componentManager.Merge(entityId, new MovementComponent(null, null));
         componentManager.Merge(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
         componentManager.Merge(entityId, new ManaComponent(MaximumMana, MaximumMana));
 

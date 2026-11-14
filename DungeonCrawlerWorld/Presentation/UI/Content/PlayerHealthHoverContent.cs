@@ -105,7 +105,7 @@ public sealed class PlayerHealthHoverContent(
 
         foreach (var part in bodyParts.Parts(playerEntityId))
         {
-            var effectiveMaximumHealth = statModifierView.GetEffectiveValue(playerEntityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+            var effectiveMaximumHealth = statModifierView.GetEffectiveValue(playerEntityId, StatModifierTarget.MaximumHealth, part.BaseMaximumHealth);
             var partFraction = effectiveMaximumHealth > 0 ? MathHelper.Clamp(part.CurrentHealth / effectiveMaximumHealth, 0f, 1f) : 0f;
             destination.Add(new RowData(part.Name, partFraction, effectiveMaximumHealth > 0));
         }

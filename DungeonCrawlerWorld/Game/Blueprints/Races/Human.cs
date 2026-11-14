@@ -57,7 +57,8 @@ public static class Human
         Build = Build,
         Appearance = Appearance,
         Race = new RaceFacet(BodyParts),
-        Actions = ActionGrants
+        Actions = ActionGrants,
+        Behaviors = StandardBehaviors.Grants
     };
 
     private static void Build(BlueprintContext context)
@@ -65,7 +66,7 @@ public static class Human
         var componentManager = context.ComponentManager;
         var entityId = context.EntityId;
 
-        componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
+        componentManager.Merge(entityId, new MovementComponent(null, null));
         componentManager.Merge(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())

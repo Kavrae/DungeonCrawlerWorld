@@ -66,6 +66,21 @@ public sealed class BodyPartEffectsSystemTests
     }
 
     [TestMethod]
+    public void Update_LegAtItsBaseMaximumOfADoubledMaximum_IsHalfHealthAndPenalized()
+    {
+        var world = BodyPartTestWorld.WithParts(0, ("Left Leg", BodyPartType.Leg, 100, 100, false));
+        world.SetHealth(0, 0, 100);
+        var statModifiers = CreateStatModifiersPool();
+        statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.MaximumHealth, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff, canModify: true, 1f, Engine.ECS.Systems.FrameDeadline.Never, Game.World.ActionSource.Admin));
+        var system = TestSystems.BodyPartEffectsSystem(world.BodyParts, world.States, CreateMovementDisabledPool(), CreateMeleeDisabledPool(), CreateTiersPool(), new ProcessingTierEvents(), statModifiers);
+
+        system.Update(default, 0);
+
+        Assert.IsTrue(TryGetModifier(statModifiers, 0, StatModifierTarget.MovementLockFrames, out var magnitude));
+        Assert.AreEqual(0.5f, magnitude, 0.001f, "100 of a doubled 200 is half health, as a Boss's leg is.");
+    }
+
+    [TestMethod]
     public void Update_TwoDamagedLegs_PenaltiesCompoundMultiplicatively()
     {
         var world = BodyPartTestWorld.WithParts(0, ("Left Leg", BodyPartType.Leg, 50, 100, false), ("Right Leg", BodyPartType.Leg, 50, 100, false));

@@ -5,6 +5,7 @@ using Game.Modules.Actions;
 using Game.Modules.Core.Components;
 using Game.Modules.Health;
 using Game.Modules.Health.Components;
+using Game.Modules.Mana.Components;
 using Game.Modules.Movement.Components;
 using Game.Modules.StatModifiers;
 using Game.World;
@@ -26,12 +27,19 @@ public static class Goblin
 
     public static readonly AppearanceFacet Appearance = new() { DisplayNames = DisplayNames, Description = Description, Glyph = "g", GlyphColor = Color.DarkGreen, SpriteName = "Goblin" };
 
-    /// <summary>Head/Torso/Internal are Vital; sums to 200, matching the flat SimpleHealthComponent total this replaced so the split doesn't itself rebalance Goblin's overall toughness. 11 parts (Arm/Leg each split off a Hand/Foot, plus Internal for Poison's own always-hit target) -- not a final balance pass. VerticalPosition: Head 5, Torso/Internal 4, Arm 3, Hand 2, Leg 1, Foot 0.</summary>
+    /// <summary>A goblin's eleven body parts, Head, Torso and Internal Vital, summing to 390.</summary>
+    /// <remarks>
+    /// Every Vital part holds more than any one hit short of a crit deals (Power Attack's 44, plus the strongest Strength
+    /// bonus a Human rolls, plus Battle Fury's half again: about 83), so no single hit short of a crit kills a goblin from full
+    /// health, and a hurt one lives to choose whether to flee. Arm and Leg each split off a Hand and Foot; Internal is
+    /// Poison's own always-hit target. Not a final balance pass. VerticalPosition: Head 5, Torso/Internal 4, Arm 3, Hand 2,
+    /// Leg 1, Foot 0.
+    /// </remarks>
     public static readonly BodyPartTemplate[] BodyParts =
     [
-        new BodyPartTemplate("Head", BodyPartType.Head, 5, 30, IsVital: true),
-        new BodyPartTemplate("Torso", BodyPartType.Torso, 4, 50, IsVital: true),
-        new BodyPartTemplate("Internal", BodyPartType.Internal, 4, 10, IsVital: true),
+        new BodyPartTemplate("Head", BodyPartType.Head, 5, 90, IsVital: true),
+        new BodyPartTemplate("Torso", BodyPartType.Torso, 4, 100, IsVital: true),
+        new BodyPartTemplate("Internal", BodyPartType.Internal, 4, 90, IsVital: true),
         new BodyPartTemplate("Left Arm", BodyPartType.Arm, 3, 15, IsVital: false),
         new BodyPartTemplate("Right Arm", BodyPartType.Arm, 3, 15, IsVital: false),
         new BodyPartTemplate("Left Hand", BodyPartType.Hand, 2, 5, IsVital: false),
@@ -54,6 +62,9 @@ public static class Goblin
     /// <summary>Permanent racial toughness -- reduces all damage this goblin takes by 1, regardless of source (melee, ranged, status effects, contact hazards -- see HealthDamage.Apply, the single chokepoint IncomingDamage is consumed at).</summary>
     private const float DamageReductionAmount = -1f;
 
+    /// <summary>Exactly one Heal (2 mana), then regeneration earns the next. Written by the race, so the pool sized from Intelligence that a mana-draining grant would otherwise give isn't.</summary>
+    private const float MaximumMana = 2;
+
     /// <summary>What every creature of this race can do -- held on its race definition, not on each creature (see ActionGrant). Dodge has no override: it rolls its catalog definition unchanged.</summary>
     /// <remarks>Each override is made from the session's own definition and shared by every creature of this race (ActionGrant.Derived): an ActionDefinition is never changed in place, only replaced, and building it per creature was most of what a creature allocated.</remarks>
     public static readonly ActionGrant[] ActionGrants =
@@ -61,6 +72,7 @@ public static class Goblin
         ActionGrant.Derived(BuiltInActionIds.QuickAttack, "Goblin.QuickAttack", static action => ActionOverrideEffects.OverrideFlatDamage(action, QuickAttackDamage)),
         ActionGrant.Derived(BuiltInActionIds.PowerAttack, "Goblin.PowerAttack", static action => ActionOverrideEffects.OverrideFlatDamage(action, PowerAttackDamage)),
         new(BuiltInActionIds.Dodge),
+        new(BuiltInActionIds.Heal),
     ];
 
     public static readonly BlueprintDefinition Definition = new(Id, Name)
@@ -69,7 +81,8 @@ public static class Goblin
         UsesItems = NPCs.TemporaryNpcLootGrant.AllCoreItemIds,
         Appearance = Appearance,
         Race = new RaceFacet(BodyParts),
-        Actions = ActionGrants
+        Actions = ActionGrants,
+        Behaviors = StandardBehaviors.GoblinGrants
     };
 
     private static void Build(BlueprintContext context)
@@ -77,7 +90,7 @@ public static class Goblin
         var componentManager = context.ComponentManager;
         var entityId = context.EntityId;
 
-        componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
+        componentManager.Merge(entityId, new MovementComponent(null, null));
         componentManager.Merge(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
 
@@ -85,6 +98,7 @@ public static class Goblin
         StartingCurrencyGrant.GrantRandomStartingGoldAndCredits(componentManager, entityId, context.Rolls);
 
         AbilityScoreEffects.GrantDefaults(componentManager, entityId, DefaultAbilityScoreBaseValue);
+        componentManager.Merge(entityId, new ManaComponent(MaximumMana, MaximumMana));
 
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.IncomingDamage, StatModifierOperation.Additive, StatModifierPolarity.Buff,
             canModify: true, magnitude: DamageReductionAmount, expiresAtFrame: FrameDeadline.Never, ActionSource.Admin);

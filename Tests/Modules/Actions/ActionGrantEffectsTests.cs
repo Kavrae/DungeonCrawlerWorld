@@ -72,7 +72,7 @@ public sealed class ActionGrantEffectsTests
         ActionGrantEffects.Grant(manager, CatalogWith(DrainingActionDefinition), 0, ActionId, overrideDefinition: null);
 
         var mana = manager.GetPackedPool<ManaComponent>().GetReadonly(0);
-        Assert.AreEqual((short)42, mana.MaximumMana);
+        Assert.AreEqual((short)42, mana.BaseMaximumMana);
     }
 
     [TestMethod]

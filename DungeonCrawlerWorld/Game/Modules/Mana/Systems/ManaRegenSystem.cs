@@ -72,7 +72,7 @@ public sealed class ManaRegenSystem : ITieredSystem
                 continue;
             }
 
-            pairs[0] = (StatModifierTarget.MaximumMana, _manaComponents.GetReadonlyByDenseIndex(manaDenseIndex).MaximumMana);
+            pairs[0] = (StatModifierTarget.MaximumMana, _manaComponents.GetReadonlyByDenseIndex(manaDenseIndex).BaseMaximumMana);
             pairs[1] = (StatModifierTarget.ManaRegen, basePerSecond);
             StatModifierMath.GetEffectiveValues(_statModifiers, entityId, pairs, effectiveValues);
             var effectiveMaximumMana = effectiveValues[0];

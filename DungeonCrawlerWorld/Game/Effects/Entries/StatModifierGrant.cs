@@ -12,6 +12,9 @@ public enum StatModifierStacking : byte
 
     /// <summary>Keeps the one modifier and replaces its expiry (StatModifierEffects.ApplyOrRefresh).</summary>
     RefreshFromSameSource,
+
+    /// <summary>Keeps the one modifier whatever gave it and replaces its expiry: for a grant several sources of one thing give (an aura's, whose credited source changes with the strongest contributor), which must never add to itself.</summary>
+    RefreshFromAnySource,
 }
 
 /// <summary>
@@ -32,6 +35,8 @@ public enum StatModifierStacking : byte
 /// Add holds both, RefreshFromSameSource keeps one and moves its expiry -- how a buff an entity keeps
 /// being given (terrain it stands on, an aura it stands in) is held once and topped up. Magnitude
 /// is the modifier's own and is never scaled by context.Magnitude.
+/// FixedDuration uses DurationFrames as written, scaled by nothing: a grant that holds only by being applied again (an
+/// aura's tick) must never be shortened below its interval, or the modifier would lapse between applications.
 /// </summary>
 public sealed record StatModifierGrant(
     StatModifierTarget Target,
@@ -41,11 +46,12 @@ public sealed record StatModifierGrant(
     float Magnitude,
     ushort? DurationFrames,
     GameplayTag ConditionTag = default,
-    StatModifierStacking Stacking = StatModifierStacking.Add) : IEffectEntry
+    StatModifierStacking Stacking = StatModifierStacking.Add,
+    bool FixedDuration = false) : IEffectEntry
 {
-    /// <remarks>The duration of a timed modifier, by polarity. The magnitude is not scaled.</remarks>
+    /// <remarks>The duration of a timed modifier, by polarity, unless FixedDuration. The magnitude is not scaled.</remarks>
     public IReadOnlyList<(StatModifierTarget Outgoing, StatModifierTarget Incoming)> AmountModifiers =>
-        DurationFrames is null ? [] : EffectDurations.ModifiersFor(Polarity);
+        DurationFrames is null || FixedDuration ? [] : EffectDurations.ModifiersFor(Polarity);
 
     public IEnumerable<GameplayTag> ReferencedTags => ConditionTag.IsNone ? [] : [ConditionTag];
 
@@ -53,13 +59,13 @@ public sealed record StatModifierGrant(
 
     public EffectOutcome Apply(in EffectContext context)
     {
-        var durationFrames = EffectDurations.Scale(in context, DurationFrames, Polarity);
+        var durationFrames = FixedDuration ? DurationFrames : EffectDurations.Scale(in context, DurationFrames, Polarity);
         var expiresAtFrame = durationFrames is { } frames ? FrameDeadline.After(context.Now, frames) : FrameDeadline.Never;
 
-        if (Stacking == StatModifierStacking.RefreshFromSameSource)
+        if (Stacking != StatModifierStacking.Add)
         {
             StatModifierEffects.ApplyOrRefresh(context.Services.StatModifiers, context.TargetEntityId, Target, Operation, Polarity, CanModify, Magnitude,
-                expiresAtFrame, context.Source, ConditionTag);
+                expiresAtFrame, context.Source, ConditionTag, fromAnySource: Stacking == StatModifierStacking.RefreshFromAnySource);
         }
         else
         {

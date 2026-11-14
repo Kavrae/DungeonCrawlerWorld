@@ -415,8 +415,83 @@ public static class ContentTable
         }
         catch (ContentFormatException exception)
         {
-            failures.Add(new ContentFailure(fileName, lineNumber, id, exception.Message));
+            var (line, column) = exception.Key is { } key ? LocateValue(element, lineNumber, key, exception.ValueText!, exception.ObjectText!) : (lineNumber, 0);
+            failures.Add(new ContentFailure(fileName, line, id, exception.Message, column));
             return null;
         }
+    }
+
+    /// <summary>The line and 1-based column of valueText where key holds it in element, whose text starts at column 1 of firstLine; firstLine and 0 when it isn't found.</summary>
+    /// <remarks>
+    /// Reads element's source text only on a failure. Only objectText -- the object whose key failed, as it stands in
+    /// element -- is searched, so the same key in the record or in an earlier sibling is never taken for it; within it,
+    /// each place the key holds a value is looked in until one holds valueText.
+    /// </remarks>
+    private static (int Line, int Column) LocateValue(JsonElement element, int firstLine, string key, string valueText, string objectText)
+    {
+        var text = element.GetRawText();
+        var objectStart = text.IndexOf(objectText, StringComparison.Ordinal);
+        if (objectStart < 0)
+        {
+            return (firstLine, 0);
+        }
+
+        var objectEnd = objectStart + objectText.Length;
+        var quotedKey = $"\"{key}\"";
+        for (var keyIndex = text.IndexOf(quotedKey, objectStart, StringComparison.Ordinal); keyIndex >= 0 && keyIndex < objectEnd; keyIndex = text.IndexOf(quotedKey, keyIndex + 1, StringComparison.Ordinal))
+        {
+            var valueStart = SkipToValue(text, keyIndex + quotedKey.Length);
+            if (valueStart < 0)
+            {
+                continue;
+            }
+
+            var valueEnd = text[valueStart] == '[' ? text.IndexOf(']', valueStart) : valueStart + valueText.Length;
+            var foundIndex = valueEnd < 0 ? -1 : text.IndexOf(valueText, valueStart, System.Math.Min(valueEnd, text.Length) - valueStart, StringComparison.Ordinal);
+            if (foundIndex >= 0)
+            {
+                return PositionIn(text, foundIndex, firstLine);
+            }
+        }
+
+        return (firstLine, 0);
+    }
+
+    /// <summary>The index of the value after a key ending at index -- past whitespace, the colon and whitespace -- or -1 when no colon follows (the key's text was a value).</summary>
+    private static int SkipToValue(string text, int index)
+    {
+        while (index < text.Length && char.IsWhiteSpace(text[index]))
+        {
+            index++;
+        }
+
+        if (index >= text.Length || text[index] != ':')
+        {
+            return -1;
+        }
+
+        index++;
+        while (index < text.Length && char.IsWhiteSpace(text[index]))
+        {
+            index++;
+        }
+
+        return index < text.Length ? index : -1;
+    }
+
+    private static (int Line, int Column) PositionIn(string text, int index, int firstLine)
+    {
+        var line = firstLine;
+        var lineStart = 0;
+        for (var position = 0; position < index; position++)
+        {
+            if (text[position] == '\n')
+            {
+                line++;
+                lineStart = position + 1;
+            }
+        }
+
+        return (line, index - lineStart + 1);
     }
 }

@@ -18,14 +18,23 @@ public sealed class CoreModule : IGameModule
 
     public Guid Id => ModuleId;
 
-    /// <summary>Declares every built-in gameplay tag.</summary>
-    /// <remarks>Declared here, on a module every build has, rather than by each module that uses a tag: a tag shared between modules would otherwise make one require the other.</remarks>
+    /// <summary>Declares every built-in activation tag with the roots it owns, and the Activation, Item category and Ability score domains over them.</summary>
+    /// <remarks>Declared here, on a module every build has, rather than by each module that uses a tag: a tag shared between modules would otherwise make one require the other, and content every build decodes names them (GameTags).</remarks>
     public void DeclareTags(GameplayTagDeclarations tags)
     {
-        foreach (var tag in GameTags.All)
+        foreach (var (root, description, extensible) in GameTags.Roots)
         {
-            tags.Declare(tag);
+            tags.DeclareRoot(root, description, extensible);
         }
+
+        foreach (var (tag, description) in GameTags.Tags)
+        {
+            tags.Declare(tag, description);
+        }
+
+        tags.DeclareDomain(GameTagDomains.Activation, "What a use of something is, and what a condition on one names.", extensible: true, [.. GameTags.Roots.Select(root => root.Root)]);
+        tags.DeclareDomain(GameTagDomains.ItemCategory, "The categories an item falls in.", extensible: false, [GameTags.Item]);
+        tags.DeclareDomain(GameTagDomains.AbilityScore, "The ability score a use scales with.", extensible: false, [GameTags.StatsAbilityScore]);
     }
 
     /// <summary>Nothing to configure -- kept because IGameModule requires it, and because Core is still a game module by every other measure.</summary>

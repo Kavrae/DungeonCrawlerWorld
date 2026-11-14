@@ -15,7 +15,7 @@ namespace Game.Effects;
 /// </remarks>
 public interface IEffectEntry
 {
-    /// <summary>The gameplay tags this entry names, each of which a module in the build must declare.</summary>
+    /// <summary>The gameplay tags this entry names, each of which a module in the build must declare and the Activation domain must accept (GameTagDomains).</summary>
     IEnumerable<GameplayTag> ReferencedTags => [];
 
     /// <summary>The auras this entry names, which the build registers so each has an id before anything radiates it.</summary>

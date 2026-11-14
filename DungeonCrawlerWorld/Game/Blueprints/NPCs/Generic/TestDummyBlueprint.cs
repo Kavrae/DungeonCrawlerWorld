@@ -3,28 +3,26 @@ using Game.Modules.AbilityScores;
 using Game.Modules.Actions;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Core.Components;
-using Game.Modules.Health.Components;
-using Game.Modules.NpcBehavior.Components;
+using Game.Modules.Health;
+using Game.Modules.NpcBehavior.Behaviors;
 using Microsoft.Xna.Framework;
 
 namespace Game.Blueprints.NPCs.Generic;
 
-/// <summary>
-/// A dedicated, minimal fixture for manually testing Dodge timing against a predictable,
-/// non-chasing attacker -- not a real race. Stationary (no MovementComponent at all, so
-/// MovementSystem/TestCombatBehaviorSystem never visit it), high Constitution for a fast health
-/// regen (repeated test hits don't need a respawn), and only PowerAttackAction granted -- see
-/// TestDummyAttackSystem for the unconditional "attack the instant the shared lock clears" trigger
-/// this pairs with (deliberately not TestCombatBehaviorSystem's engage/chase logic, which a
-/// stationary dummy has no use for).
-/// </summary>
+/// <summary>A stationary training dummy for practising Dodge: it winds up Power Attack at whatever hostile stands beside it, then waits out a long cooldown.</summary>
+/// <remarks>
+/// The first stationary creature that fights: no MovementComponent, so MovementSystem never visits it, but a race of its
+/// own -- hostility is a different race -- and one behavior, EngageMelee, so NpcDecisionSystem decides for it like any
+/// creature. It swings only with a hostile beside it, and anything of another race beside it is hostile to it and it to
+/// them. High Constitution for a fast health regen, so repeated test hits need no respawn; Power Attack is its only action.
+/// </remarks>
 public static class TestDummyBlueprint
 {
     public static readonly Guid Id = new("d9f6a1c4-8b2e-4f3a-9c1d-000000000105");
 
     public const string Name = "TestDummy";
 
-    private const string Description = "A stationary training dummy. Winds up Power Attack on its own cooldown -- stand adjacent and practice dodging it.";
+    private const string Description = "A stationary training dummy. Winds up Power Attack at whoever stands beside it -- stand adjacent and practice dodging it.";
 
     private const string Glyph = "t";
 
@@ -43,6 +41,8 @@ public static class TestDummyBlueprint
     {
         Build = Build,
         UsesActions = [BuiltInActionIds.PowerAttack],
+        Race = new RaceFacet(),
+        Behaviors = [new(BuiltInBehaviorIds.EngageMelee, Rank: 3)],
         Appearance = new() { Name = Name, Description = Description, Glyph = Glyph, GlyphColor = Color.Purple, SpriteName = AppearanceFacet.NoSprite }
     };
 
@@ -51,9 +51,8 @@ public static class TestDummyBlueprint
         var componentManager = context.ComponentManager;
         var entityId = context.EntityId;
 
-        componentManager.Merge(entityId, new SimpleHealthComponent(MaximumHealth, MaximumHealth));
+        MaximumHealthShift.MergeBaseMaximum(componentManager, entityId, MaximumHealth);
         componentManager.Merge(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
-        componentManager.Merge(entityId, new TestDummyComponent());
 
         foreach (var abilityScoreType in Enum.GetValues<AbilityScoreType>())
         {

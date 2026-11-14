@@ -27,7 +27,7 @@ public static class BodyPartDamageEffects
             return 0f;
         }
 
-        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.BaseMaximumHealth);
         bodyParts.Damage(entityId, partId, amount, effectiveMaximumHealth, now, RegenLockoutFrames);
 
         bodyParts.TryGet(entityId, partId, out var damagedPart);
@@ -79,8 +79,8 @@ public static class BodyPartDamageEffects
             return;
         }
 
-        HealthQueries.TryGetTotals(health, bodyParts, entityId, out var totalCurrent, out var totalMaximum);
-        var effectiveMaximumHealthForEvent = MathUtility.ClampUShort(StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, totalMaximum), 0, ushort.MaxValue);
+        HealthQueries.TryGetTotals(health, bodyParts, statModifiers, entityId, out var totalCurrent, out var totalMaximum);
+        var effectiveMaximumHealthForEvent = MathUtility.ClampUShort(totalMaximum, 0, ushort.MaxValue);
         eventBus.Publish(new EntityDamagedEvent(entityId, effectiveAmount, source, MathUtility.ClampUShort(totalCurrent, 0, ushort.MaxValue), effectiveMaximumHealthForEvent, damageType));
     }
 
@@ -125,8 +125,8 @@ public static class BodyPartDamageEffects
             return;
         }
 
-        HealthQueries.TryGetTotals(health, bodyParts, entityId, out var totalCurrent, out var totalMaximum);
-        var effectiveMaximumHealthForEvent = MathUtility.ClampUShort(StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, totalMaximum), 0, ushort.MaxValue);
+        HealthQueries.TryGetTotals(health, bodyParts, statModifiers, entityId, out var totalCurrent, out var totalMaximum);
+        var effectiveMaximumHealthForEvent = MathUtility.ClampUShort(totalMaximum, 0, ushort.MaxValue);
         eventBus.Publish(new EntityDamagedEvent(entityId, effectiveAmount, source, MathUtility.ClampUShort(totalCurrent, 0, ushort.MaxValue), effectiveMaximumHealthForEvent, damageType));
     }
 }

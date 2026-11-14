@@ -32,6 +32,7 @@ public sealed class GameViews
         TransformView = new TransformView(componentManager);
         AuraView = new AuraView(context.AuraField, context.Auras);
         ActionSourceNaming = new ActionSourceNaming(context.Terrain, context.Auras, context.EntityKeys);
+        NpcDecisions = new NpcDecisionView(componentManager, context.NpcDecisions, context.PlayerQuery, context.SimulationClock);
         ContentSpriteNames = new ContentSpriteNames(context.Definitions, context.Terrain, context.Actions, context.Items, context.Lootboxes);
     }
 
@@ -74,4 +75,7 @@ public sealed class GameViews
 
     /// <summary>The name shown for what caused an effect: an entity, a terrain, an aura.</summary>
     public ActionSourceNaming ActionSourceNaming { get; }
+
+    /// <summary>What an inspected NPC decides with and what it last decided, for the Admin Mode inspection readout.</summary>
+    public NpcDecisionView NpcDecisions { get; }
 }

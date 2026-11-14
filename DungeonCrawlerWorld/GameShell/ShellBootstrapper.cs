@@ -222,7 +222,7 @@ public static class ShellBootstrapper
             },
             Chrome = new ElementChromeOptions { ShowTitle = false, ShowBorder = true, BorderStyle = BorderStyle.Outset, CanUserFocus = false },
         });
-        playerManaBarWindow.SetContent(new PlayerManaBarContent(world, gameSession.Views.ActionStateView, gameSession.Views.StatModifierView, uiEngine.FontService, layers));
+        playerManaBarWindow.SetContent(new PlayerManaBarContent(world, gameSession.Views.ActionStateView, uiEngine.FontService, layers));
         playerManaBarWindow.Initialize();
         layers.Add(UiLayer.StaticHud, playerManaBarWindow);
 
@@ -278,7 +278,7 @@ public static class ShellBootstrapper
                 CanUserScrollVertical = true,
             },
         });
-        inspectionWindow.SetContent(new InspectionWindowContent(world, mapView, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, uiEngine.ElementPoolService, catalogs.Definitions, gameSession.Internals.SpawnRecordRebuilder, gameSession.Internals.Skeletons, gameSession.Views.AuraView, gameSession.Views.ActionSourceNaming));
+        inspectionWindow.SetContent(new InspectionWindowContent(world, mapView, mapViewState, ecsContext.ComponentManager, ecsContext.EntityManager, uiEngine.ElementPoolService, catalogs.Definitions, gameSession.Internals.SpawnRecordRebuilder, gameSession.Internals.Skeletons, gameSession.Views.AuraView, gameSession.Views.ActionSourceNaming, gameSession.Views.NpcDecisions));
         inspectionWindow.Initialize();
         layers.Add(UiLayer.StaticHud, inspectionWindow);
 

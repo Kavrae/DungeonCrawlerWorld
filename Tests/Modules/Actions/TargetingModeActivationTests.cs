@@ -50,7 +50,7 @@ public sealed class TargetingModeActivationTests
 
         public float HealthOf(int entityId)
         {
-            HealthQueries.TryGetTotals(Components.GetPackedPool<SimpleHealthComponent>(), EntityBodyParts.For(Components, Build.Context.Definitions), entityId, out var current, out _);
+            HealthQueries.TryGetTotals(Components.GetPackedPool<SimpleHealthComponent>(), EntityBodyParts.For(Components, Build.Context.Definitions), Build.Context.EffectServices.StatModifiers, entityId, out var current, out _);
             return current;
         }
 

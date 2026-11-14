@@ -71,7 +71,7 @@ public sealed class ItemDropsTests
     {
         var build = BuiltInTestModules.Build(new Map(new Vector3Int(40, 40, 3)), sessionSeed: 1, initialEntityCapacity: 200, initialComponentCapacity: 100);
         build.Context.ProcessingTierResolver.SetReferencePosition(PlayerPosition);
-        var player = build.Factory.Spawn(SpawnRequest.At(build.Context.Definitions.GetId(Player.Id), PlayerPosition) with { Seed = 1 });
+        var player = build.Factory.Spawn(SpawnRequest.At(build.Context.Definitions.GetId(Player.Id), PlayerPosition) with { Seed = 1, Size = new Vector2Byte(1, 1) });
         build.EcsContext.ComponentManager.GetMultiPool<InventoryItemStackComponent>().Remove(player);
         build.EcsContext.ComponentManager.Merge(player, new CurrencyComponent(gold: 0, credits: 0));
         build.World.PlayerEntityId = player;

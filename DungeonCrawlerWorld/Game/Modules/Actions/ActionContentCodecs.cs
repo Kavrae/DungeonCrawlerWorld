@@ -4,6 +4,7 @@ using Game.Content;
 using Game.Effects;
 using Game.Modules.Actions.Activators;
 using Game.Modules.Actions.Effects;
+using Game.Tags;
 
 namespace Game.Modules.Actions;
 
@@ -330,7 +331,7 @@ public static class ActivatableContent
         ContentField.Text("sp", "Sprite name"),
         ContentField.Text("g", "Glyph"),
         ContentField.Color("gc", "Glyph colour"),
-        ContentField.TagSet("t", "Tags"),
+        ContentField.TagSet("t", "Tags", GameTagDomains.Activation),
         ContentField.ListOf<Effect>("fx", "Effects", ContentFieldKind.Object),
     ];
 

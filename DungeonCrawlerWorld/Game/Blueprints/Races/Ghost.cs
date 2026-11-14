@@ -56,6 +56,7 @@ public static class Ghost
         Race = new RaceFacet(),
         NonBlocking = NonBlockingKind.Phasing,
         Actions = ActionGrants,
+        Behaviors = StandardBehaviors.Grants,
         Layer = MapLayer.UnderGround
     };
 
@@ -64,7 +65,7 @@ public static class Ghost
         var componentManager = context.ComponentManager;
         var entityId = context.EntityId;
 
-        componentManager.Merge(entityId, new MovementComponent(MovementMode.Random, null, null));
+        componentManager.Merge(entityId, new MovementComponent(null, null));
         componentManager.Merge(entityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
 
         TemporaryNpcLootGrant.GrantRandomStartingLoot(componentManager, entityId, context.Rolls, context.Items);

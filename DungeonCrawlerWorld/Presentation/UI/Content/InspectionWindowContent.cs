@@ -17,6 +17,7 @@ using Game.World;
 using Microsoft.Xna.Framework;
 using Presentation.UI.ColorPalettes;
 using Presentation.UI.Looting;
+using UIEngine;
 using UIEngine.UI;
 using UIEngine.UI.Chrome;
 using UIEngine.UI.ColorPalettes;
@@ -36,7 +37,8 @@ namespace Presentation.UI.Content;
 /// <item>Detail -- the same one-subject block for InspectedEntityId, plus a full,
 /// alphabetically-sorted component dump appended beneath it (Admin -- see
 /// MapViewState.InspectionMode's own doc comment on why there's no separate gating yet).
-/// Rebuilt only when the followed entity id itself changes, not every frame -- but the dump's
+/// Follows Admin Mode while open (MapViewState.EntityInspectionMode), and is rebuilt only when the followed entity id or
+/// that mode changes, not every frame -- but the dump's
 /// text refreshes on the same ComponentRefreshInterval cadence SelectionWindowContent's own
 /// per-component windows used to, since component values (health ticking, status effects, ...)
 /// change continuously while an entity is being followed. Ends the inspection and falls back to
@@ -68,7 +70,8 @@ public sealed class InspectionWindowContent(
     SpawnRecordRebuilder spawnRecordRebuilder,
     CreatureSkeletons skeletons,
     AuraView auraView,
-    ActionSourceNaming actionSourceNaming) : IElementContent
+    ActionSourceNaming actionSourceNaming,
+    NpcDecisionView npcDecisions) : IElementContent
 {
     private const string UnsimulatedLabel = "Unsimulated -- spawn defaults";
 
@@ -92,6 +95,7 @@ public sealed class InspectionWindowContent(
     private readonly List<int> _lastSubjectIds = [];
     private int _lastSkeletonCount;
     private bool _lastDetailWasSkeleton;
+    private InspectionMode _lastDetailMode;
     private int _liveDumpCount;
     private readonly List<int> _scratchSubjectIds = [];
     private TerrainView? _lastStructure;
@@ -103,6 +107,8 @@ public sealed class InspectionWindowContent(
     private int _scratchAurasVersion;
     private readonly List<TextWindow> _adminDumpWindows = [];
     private readonly List<InspectedComponentEntry> _reusableInspectionList = [];
+    private readonly KeyedCache<NpcDecisionText.Key, string> _decisionText = new();
+    private TextWindow? _decisionWindow;
 
     private Window _hostWindow = null!;
     private bool _hasContent;
@@ -126,6 +132,11 @@ public sealed class InspectionWindowContent(
             }
 
             return;
+        }
+
+        if (mapViewState.InspectionMode is InspectionMode.Detail or InspectionMode.Admin)
+        {
+            mapViewState.InspectionMode = MapViewState.EntityInspectionMode;
         }
 
         switch (mapViewState.InspectionMode)
@@ -192,6 +203,7 @@ public sealed class InspectionWindowContent(
         _hostWindow.TitleText = $"Tile ({selected.X}, {selected.Y})";
 
         elementPoolService.CloseAllChildren(_hostWindow);
+        _decisionWindow = null;
         _adminDumpWindows.Clear();
         _hasContent = _scratchSubjectIds.Count > 0 || structure is not null || terrain is not null || _scratchAuras.Count > 0;
 
@@ -243,10 +255,11 @@ public sealed class InspectionWindowContent(
 
         var entityId = mapViewState.InspectedEntityId;
 
-        if (entityId != _lastDetailEntityId || IsSkeleton(entityId) != _lastDetailWasSkeleton)
+        if (entityId != _lastDetailEntityId || IsSkeleton(entityId) != _lastDetailWasSkeleton || mapViewState.InspectionMode != _lastDetailMode)
         {
             _lastDetailEntityId = entityId;
             _lastDetailWasSkeleton = IsSkeleton(entityId);
+            _lastDetailMode = mapViewState.InspectionMode;
             _lastBasicPosition = null; // Invalidates Basic's own cache so it rebuilds fresh if Basic mode resumes later.
             _lastBasicMapLayer = -1;
             _lastSubjectIds.Clear();
@@ -259,15 +272,18 @@ public sealed class InspectionWindowContent(
             _hostWindow.TitleText = subject.Name;
 
             elementPoolService.CloseAllChildren(_hostWindow);
+            _decisionWindow = null;
             _adminDumpWindows.Clear();
             _hasContent = true;
 
             var blockWidth = _hostWindow.ContentSize.X;
             BuildSubjectBlock(entityId, subject, blockWidth);
+            BuildDecisionBlock(entityId, blockWidth);
             BuildAdminDump(entityId, blockWidth);
             return;
         }
 
+        RefreshDecisionBlock(entityId);
         _updatesSinceLastAdminRefresh++;
         if (_updatesSinceLastAdminRefresh >= AdminDumpRefreshInterval)
         {
@@ -304,6 +320,8 @@ public sealed class InspectionWindowContent(
         _lastDetailEntityId = -1;
         _adminDumpWindows.Clear();
         elementPoolService.CloseAllChildren(_hostWindow);
+        _decisionWindow = null;
+        npcDecisions.Inspect(-1);
     }
 
     /// <summary>One subject's block -- icon+name/race/class rows, HP bar (entities with a SimpleHealthComponent or BodyPartComponent only), description, then a padded separator -- shared by Basic's per-occupant loop and Detail's single followed entity.</summary>
@@ -363,13 +381,12 @@ public sealed class InspectionWindowContent(
 
     private float? ReadHealthFraction(ComponentManager source, int entityId)
     {
-        if (!HealthQueries.TryGetTotals(source.GetPackedPool<SimpleHealthComponent>(), BodyPartsOf(source), entityId, out var currentHealth, out var maximumHealth) || maximumHealth <= 0)
+        if (!HealthQueries.TryGetTotals(source.GetPackedPool<SimpleHealthComponent>(), BodyPartsOf(source), StatModifiersOf(source), entityId, out var currentHealth, out var maximumHealth) || maximumHealth <= 0)
         {
             return null;
         }
 
-        var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(StatModifiersOf(source), entityId, StatModifierTarget.MaximumHealth, maximumHealth);
-        return effectiveMaximumHealth > 0 ? MathHelper.Clamp(currentHealth / effectiveMaximumHealth, 0f, 1f) : 1f;
+        return MathHelper.Clamp(currentHealth / maximumHealth, 0f, 1f);
     }
 
     /// <summary>The body parts of whatever world source belongs to -- the live one, or SpawnRecordRebuilder' staging world for an unsimulated creature's defaults.</summary>
@@ -572,6 +589,33 @@ public sealed class InspectionWindowContent(
         spacer.AddChild(separator);
     }
 
+    /// <summary>Admin Mode's readout of the inspected entity's decisions, between its description and its components: what holds it now, its last decision layer by layer, and the behaviors it decides with.</summary>
+    /// <remarks>Only in Admin Mode, and only for an entity that decides -- or a skeleton whose blueprint would. Names it to the decision system as the one entity to trace (NpcDecisionView.Inspect), and lets go of any other.</remarks>
+    private void BuildDecisionBlock(int entityId, float blockWidth)
+    {
+        if (mapViewState.InspectionMode != InspectionMode.Admin || (!npcDecisions.Decides(entityId) && npcDecisions.SetOf(entityId).IsEmpty))
+        {
+            npcDecisions.Inspect(-1);
+            return;
+        }
+
+        npcDecisions.Inspect(entityId);
+        _decisionWindow = elementPoolService.CreateElement<TextWindow>(_hostWindow, new ElementOptions
+        {
+            Hierarchy = new ElementHierarchyOptions { CanContainChildren = false },
+            Layout = new ElementLayoutOptions { MaximumSize = new Vector2(blockWidth, MaximumTextRowHeight), DisplayMode = ElementDisplayMode.WrapContent },
+            Chrome = new ElementChromeOptions { ShowTitle = true, TitleText = "Decisions", ShowBorder = true, BorderSize = new Vector2(1, 1) },
+            Text = new TextOptions { Text = CurrentDecisionText(entityId), TextColor = WindowPalette.TitleTextColor },
+        });
+        _hostWindow.AddChild(_decisionWindow);
+    }
+
+    /// <remarks>Every update: the text is rebuilt only when what it shows changed (NpcDecisionText.Key), and UpdateText skips text that didn't.</remarks>
+    private void RefreshDecisionBlock(int entityId) => _decisionWindow?.UpdateText(CurrentDecisionText(entityId));
+
+    private string CurrentDecisionText(int entityId) =>
+        _decisionText.Get(NpcDecisionText.KeyOf(npcDecisions, entityId), npcDecisions, static (key, view) => NpcDecisionText.Build(key, view));
+
     /// <summary>Detail/Admin's full component breakdown, alphabetically sorted by component type name -- one bordered TextWindow per component, mirroring the retired SelectionWindowContent's own per-component tiling (see this class's own doc comment). Unlike Basic's subject blocks, ComponentInspector's output isn't sorted on its own (neither it nor MultiComponentPool.CopyInspectionDataForEntity does), so the sort here is new, not reused.</summary>
     /// <remarks>A skeleton's dump is what it holds, then -- under the unsimulated label -- what its spawn record rebuilds to; only the first part refreshes, the defaults never change.</remarks>
     private void BuildAdminDump(int entityId, float blockWidth)
@@ -647,13 +691,13 @@ public sealed class InspectionWindowContent(
 
         if (healthPool.TryGetReadonly(entityId, out var health))
         {
-            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, health.MaximumHealth);
+            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, health.BaseMaximumHealth);
             destination.Add(new InspectedComponentEntry(typeof(SimpleHealthComponent), FormatHealthBar("HP", health.CurrentHealth, effectiveMaximumHealth), 0));
         }
 
         foreach (var part in bodyParts.Parts(entityId))
         {
-            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.MaximumHealth);
+            var effectiveMaximumHealth = StatModifierMath.GetEffectiveValue(statModifiers, entityId, StatModifierTarget.MaximumHealth, part.BaseMaximumHealth);
             destination.Add(new InspectedComponentEntry(typeof(BodyPartStateComponent), FormatHealthBar(part.Name, part.CurrentHealth, effectiveMaximumHealth), 0));
         }
     }

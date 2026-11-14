@@ -27,7 +27,8 @@ public enum AuraMagnitude : byte
 /// can. AuraSystem applies them from an exposure's tick, once every AuraEffects.TickIntervalFrames
 /// while an entity stays in range, with no source entity, credited to the strongest contributor there
 /// (AuraField.Attribute). An entry that should hold a level rather than pile up says so itself:
-/// StatusEffectGrant with TopUpTo, StatModifierGrant with RefreshFromSameSource.
+/// StatusEffectGrant with TopUpTo, StatModifierGrant with RefreshFromAnySource -- not RefreshFromSameSource, which
+/// holds one per credited contributor, so two sources of the aura would add.
 /// </para>
 /// </remarks>
 /// <param name="Id">Stable, mod-safe identity: a later content layer's record with it replaces this one when a session loads, and within a session its first registration stands (AuraCatalog).</param>

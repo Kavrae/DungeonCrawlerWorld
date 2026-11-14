@@ -140,7 +140,7 @@ public sealed class DamageLedgerTests
     public void SimpleDamage_RecordsOnlyTheHealthTheVictimHadLeft()
     {
         var fixture = new LedgerFixture();
-        fixture.Health.Add(VictimEntityId, new SimpleHealthComponent(currentHealth: 10, maximumHealth: 100));
+        fixture.Health.Add(VictimEntityId, new SimpleHealthComponent(currentHealth: 10, baseMaximumHealth: 100));
 
         TestHealth.Damage(fixture.Health, new EventBus(), VictimEntityId, 50, TestSources.Entity(FirstAttackerEntityId), null, "Test", now: 0,
             deadEntities: fixture.DeadEntities, damageLedger: fixture.Ledger);
@@ -176,7 +176,7 @@ public sealed class DamageLedgerTests
     public void PoisonTick_CreditsWhoeverAppliedThePoison()
     {
         var fixture = new LedgerFixture();
-        fixture.Health.Add(VictimEntityId, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        fixture.Health.Add(VictimEntityId, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         var timers = EmptyPools.Packed<PoisonTimerComponent>();
         timers.Add(VictimEntityId, new PoisonTimerComponent(nextTickFrame: 1, stackCount: 3, remainingDurationTicks: 5, TestSources.Entity(SecondAttackerEntityId)));
         var system = TestSystems.PoisonSystem(timers, fixture.Health, new EventBus(), TestPlayerQuery.NoPlayer, new MathUtility(), damageLedger: fixture.Ledger);

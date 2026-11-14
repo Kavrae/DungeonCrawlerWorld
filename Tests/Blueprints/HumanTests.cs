@@ -78,8 +78,7 @@ public sealed class HumanTests
         Assert.AreEqual("h", Human.Appearance.Glyph);
         Assert.AreEqual(Color.Pink, Human.Appearance.GlyphColor);
 
-        var movement = ecsContext.ComponentManager.GetPackedPool<MovementComponent>().GetReadonly(entityId);
-        Assert.AreEqual(MovementMode.Random, movement.MovementMode);
+        Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<MovementComponent>().Has(entityId));
 
         Assert.IsTrue(ecsContext.ComponentManager.GetPackedPool<ActionLockComponent>().Has(entityId));
         Assert.IsTrue(ecsContext.ComponentManager.GetDirectPool<TransformComponent>().Has(entityId));
@@ -114,10 +113,10 @@ public sealed class HumanTests
             Assert.IsTrue(expectedPartsByName.TryGetValue(part.Name, out var expected), $"Unexpected body part name: {part.Name}");
             Assert.AreEqual(expected.Type, part.Type);
             Assert.AreEqual(expected.IsVital, part.IsVital);
-            Assert.AreEqual((float)expected.MaximumHealth, part.MaximumHealth);
+            Assert.AreEqual((float)expected.MaximumHealth, part.BaseMaximumHealth);
             // Min == Max for every part here, so current health always equals maximum.
             Assert.AreEqual((float)expected.MaximumHealth, part.CurrentHealth);
-            actualMaximumSum += part.MaximumHealth;
+            actualMaximumSum += part.BaseMaximumHealth;
             actualCount++;
         }
 

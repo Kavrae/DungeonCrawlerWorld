@@ -53,7 +53,7 @@ public static class MaximumHealthShift
         var health = componentManager.GetPackedPool<SimpleHealthComponent>();
         if (health.Has(entityId))
         {
-            var storedMaximum = health.GetReadonly(entityId).MaximumHealth;
+            var storedMaximum = health.GetReadonly(entityId).BaseMaximumHealth;
             var shift = StatModifierMath.CalculateTotal(storedMaximum, additiveAfter, multiplicativeAfter)
                 - StatModifierMath.CalculateTotal(storedMaximum, additiveBefore, multiplicativeBefore);
 
@@ -65,8 +65,8 @@ public static class MaximumHealthShift
 
         foreach (var part in bodyParts.Parts(entityId))
         {
-            var shift = StatModifierMath.CalculateTotal(part.MaximumHealth, additiveAfter, multiplicativeAfter)
-                - StatModifierMath.CalculateTotal(part.MaximumHealth, additiveBefore, multiplicativeBefore);
+            var shift = StatModifierMath.CalculateTotal(part.BaseMaximumHealth, additiveAfter, multiplicativeAfter)
+                - StatModifierMath.CalculateTotal(part.BaseMaximumHealth, additiveBefore, multiplicativeBefore);
 
             bodyParts.SetCurrentHealth(entityId, part.PartId, Shifted(part.CurrentHealth, shift));
         }
@@ -88,6 +88,31 @@ public static class MaximumHealthShift
         Capture(componentManager, entityId, out var additiveBefore, out var multiplicativeBefore);
         StatModifierEffects.Apply(componentManager, entityId, StatModifierTarget.MaximumHealth, operation, polarity, canModify, magnitude, expiresAtFrame, source);
         Apply(componentManager, creatures, entityId, additiveBefore, multiplicativeBefore);
+    }
+
+    /// <summary>Merges a source's base maximum into entityId's simple health -- added at full health when it has none -- and moves current health by as far as its modified maximum travelled.</summary>
+    /// <remarks>
+    /// For what originates health (a race, a class, an object's blueprint), whenever it is built: the bases merge by the
+    /// pool's policy and the entity's MaximumHealth modifiers apply on top of the result, so a race merged onto a boss
+    /// raises the base the boss's multiplier scales. Missing health is kept, as for any change of maximum.
+    /// </remarks>
+    public static void MergeBaseMaximum(ComponentManager componentManager, int entityId, float baseMaximumHealth)
+    {
+        var health = componentManager.GetPackedPool<SimpleHealthComponent>();
+        Capture(componentManager, entityId, out var additiveSum, out var multiplicativeSum);
+        var hadHealth = health.TryGetReadonly(entityId, out var before);
+
+        componentManager.Merge(entityId, new SimpleHealthComponent(baseMaximumHealth, baseMaximumHealth));
+
+        var baseAfter = health.GetReadonly(entityId).BaseMaximumHealth;
+        var baseBefore = hadHealth ? before.BaseMaximumHealth : 0f;
+        var modifiedBefore = hadHealth ? StatModifierMath.CalculateTotal(baseBefore, additiveSum, multiplicativeSum) : 0f;
+        var modifiedTravel = StatModifierMath.CalculateTotal(baseAfter, additiveSum, multiplicativeSum) - modifiedBefore;
+        var baseTravel = baseAfter - baseBefore;
+        if (modifiedTravel != baseTravel)
+        {
+            health.TryUpdate(entityId, new ShiftedHealthUpdate(modifiedTravel - baseTravel));
+        }
     }
 
     /// <summary>A decrease stops at 1 rather than disabling a part or killing outright -- see this class's own remarks.</summary>

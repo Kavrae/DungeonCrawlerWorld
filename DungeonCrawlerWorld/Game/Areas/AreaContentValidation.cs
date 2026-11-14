@@ -5,6 +5,7 @@ using Game.Blueprints;
 using Game.Content;
 using Game.Modules;
 using Game.Modules.Core.Components;
+using Game.Tags;
 using Game.Terrain;
 using Game.World;
 
@@ -124,6 +125,12 @@ public static class AreaContentValidation
             if (!tags.IsDeclared(tag))
             {
                 report.Add("tg", $"Tag '{tag}' isn't declared by any module in this build.");
+                continue;
+            }
+
+            if (tags.ProblemWith(GameTagDomains.Area, tag) is { } problem)
+            {
+                report.Add("tg", problem);
             }
         }
 

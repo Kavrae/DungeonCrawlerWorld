@@ -15,7 +15,8 @@ namespace Tests.Effects;
 [TestClass]
 public sealed class EffectContentValidationTests
 {
-    private static readonly GameplayTag UndeclaredTag = GameplayTag.Get("EffectContentValidationTests.Undeclared");
+    /// <summary>Under an Activation root, so content holding it reads, and fails only for being undeclared.</summary>
+    private static readonly GameplayTag UndeclaredTag = GameplayTag.Get("Damage.EffectContentValidationTestsUndeclared");
     private static readonly Guid NamedOnlyByAnEffectAuraGuid = new("00000000-0000-0000-0000-0000000000d1");
     private static readonly Guid HolderAuraGuid = new("00000000-0000-0000-0000-0000000000d2");
 

@@ -44,7 +44,7 @@ public sealed class BurningSystemTests
     {
         var timers = CreateTimerPool();
         var health = CreateHealthPool();
-        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         timers.Add(0, new BurningTimerComponent(nextTickFrame: 60, stackCount: 1, ActionSource.Admin));
         var system = CreateSystem(timers, health);
 
@@ -58,7 +58,7 @@ public sealed class BurningSystemTests
     {
         var timers = CreateTimerPool();
         var health = CreateHealthPool();
-        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         timers.Add(0, new BurningTimerComponent(nextTickFrame: 1, stackCount: 7, ActionSource.Admin));
         var system = CreateSystem(timers, health);
 
@@ -75,7 +75,7 @@ public sealed class BurningSystemTests
     {
         var timers = CreateTimerPool();
         var health = CreateHealthPool();
-        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         timers.Add(0, new BurningTimerComponent(nextTickFrame: BurningEffects.TickIntervalFrames, stackCount: 3, ActionSource.Admin));
         var system = CreateSystem(timers, health);
 
@@ -93,7 +93,7 @@ public sealed class BurningSystemTests
     {
         var componentManager = BuiltInTestComponents.RegisterAll(new ComponentManager(initialEntityCapacity: 10, initialComponentCapacity: 10));
         var health = componentManager.GetPackedPool<SimpleHealthComponent>();
-        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         var system = CreateSystem(componentManager.GetPackedPool<BurningTimerComponent>(), health);
         Run(system, 0, 100);
 
@@ -112,7 +112,7 @@ public sealed class BurningSystemTests
     {
         var timers = CreateTimerPool();
         var health = CreateHealthPool();
-        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         timers.Add(0, new BurningTimerComponent(nextTickFrame: 1, stackCount: 10, ActionSource.Admin));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
@@ -129,7 +129,7 @@ public sealed class BurningSystemTests
     {
         var timers = CreateTimerPool();
         var health = CreateHealthPool();
-        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         timers.Add(0, new BurningTimerComponent(nextTickFrame: 1, stackCount: 10, ActionSource.Admin));
         var statModifiers = new MultiComponentPool<StatModifierComponent>(entityCapacity: 10, initialCapacity: 4);
         statModifiers.Add(0, new StatModifierComponent(StatModifierTarget.IncomingDamage, StatModifierOperation.Multiplicative, StatModifierPolarity.Buff,
@@ -146,7 +146,7 @@ public sealed class BurningSystemTests
     {
         var timers = CreateTimerPool();
         var health = CreateHealthPool();
-        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         timers.Add(0, new BurningTimerComponent(nextTickFrame: 1, stackCount: 1, ActionSource.Admin));
         var system = CreateSystem(timers, health);
 
@@ -160,7 +160,7 @@ public sealed class BurningSystemTests
     {
         var timers = CreateTimerPool();
         var health = CreateHealthPool();
-        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         timers.Add(0, new BurningTimerComponent(nextTickFrame: 1, stackCount: 1, ActionSource.Admin));
         var system = CreateSystem(timers, health);
 
@@ -174,7 +174,7 @@ public sealed class BurningSystemTests
     {
         var timers = CreateTimerPool();
         var health = CreateHealthPool();
-        health.Add(0, new SimpleHealthComponent(currentHealth: 3, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 3, baseMaximumHealth: 100));
         timers.Add(0, new BurningTimerComponent(nextTickFrame: 1, stackCount: 5, ActionSource.Admin));
         var system = CreateSystem(timers, health);
 
@@ -188,7 +188,7 @@ public sealed class BurningSystemTests
     {
         var timers = CreateTimerPool();
         var health = CreateHealthPool();
-        health.Add(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(0, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         timers.Add(0, new BurningTimerComponent(nextTickFrame: 1, stackCount: 1, ActionSource.Admin));
         var eventBus = new EventBus();
         EntityDamagedEvent? published = null;
@@ -208,7 +208,7 @@ public sealed class BurningSystemTests
     {
         var timers = CreateTimerPool();
         var health = CreateHealthPool();
-        health.Add(1, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        health.Add(1, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
         timers.Add(1, new BurningTimerComponent(nextTickFrame: 1, stackCount: 1, ActionSource.Admin));
         var eventBus = new EventBus();
         var published = false;

@@ -1,3 +1,5 @@
+using Engine.Tags;
+
 namespace Engine.Content;
 
 /// <summary>What kind of value a content field holds -- what an editor draws for it and how it is written.</summary>
@@ -38,6 +40,7 @@ public enum ContentFieldKind : byte
 /// <param name="ElementKind">For a List: the kind of each element.</param>
 /// <param name="IsRequired">The field must be present; every other field may be omitted, meaning its default.</param>
 /// <param name="ReferencedTable">For a Reference (or a List of them): the table the Guid names a record in.</param>
+/// <param name="TagDomain">For a Tag or TagSet: the domain every tag it holds must be in -- the reader fails a record holding any other.</param>
 public sealed record ContentField(
     string Key,
     string DisplayName,
@@ -47,7 +50,8 @@ public sealed record ContentField(
     bool IsRequired = false,
     string? ReferencedTable = null,
     double? Minimum = null,
-    double? Maximum = null)
+    double? Maximum = null,
+    GameplayTagDomain? TagDomain = null)
 {
     public static ContentField Text(string key, string displayName, bool isRequired = false) => new(key, displayName, ContentFieldKind.Text, IsRequired: isRequired);
 
@@ -65,9 +69,9 @@ public sealed record ContentField(
 
     public static ContentField Color(string key, string displayName) => new(key, displayName, ContentFieldKind.Color);
 
-    public static ContentField Tag(string key, string displayName) => new(key, displayName, ContentFieldKind.Tag);
+    public static ContentField Tag(string key, string displayName, GameplayTagDomain domain) => new(key, displayName, ContentFieldKind.Tag, TagDomain: domain);
 
-    public static ContentField TagSet(string key, string displayName) => new(key, displayName, ContentFieldKind.TagSet);
+    public static ContentField TagSet(string key, string displayName, GameplayTagDomain domain) => new(key, displayName, ContentFieldKind.TagSet, TagDomain: domain);
 
     public static ContentField Object<T>(string key, string displayName, bool isRequired = false) => new(key, displayName, ContentFieldKind.Object, typeof(T), IsRequired: isRequired);
 

@@ -49,7 +49,7 @@ public sealed class EntityStripingTests
         var processingTiers = new DirectComponentPool<ProcessingTierComponent>(initialCapacity: entityCount, static (ref existing, incoming) => existing = incoming);
         for (var entityId = 0; entityId < entityCount; entityId++)
         {
-            pool.Add(entityId, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 1000));
+            pool.Add(entityId, new SimpleHealthComponent(currentHealth: 0, baseMaximumHealth: 1000));
             // Constitution total 300 -- SimpleHealthRegenSystem's MaxHealthRegenPerSecond -- so every
             // visit actually changes CurrentHealth (a nonzero, easily-detected "touch"), same
             // role the old flat healthRegen:1 constructor argument used to play.
@@ -119,7 +119,7 @@ public sealed class EntityStripingTests
         var unrelatedEntityIds = Enumerable.Range(0, 9).Select(block => block * B).ToArray();
         foreach (var entityId in unrelatedEntityIds.Append(removedEntityId).Append(partnerEntityId))
         {
-            pool.Add(entityId, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 1000));
+            pool.Add(entityId, new SimpleHealthComponent(currentHealth: 0, baseMaximumHealth: 1000));
             abilityScores.Add(entityId, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 300, total: 300));
             processingTiers.Add(entityId, new ProcessingTierComponent(ProcessingTierLevel.Local));
         }
@@ -206,7 +206,7 @@ public sealed class EntityStripingTests
             // doesn't touch SimpleHealthComponent, so there's no cross-contamination to avoid --
             // MovementModule stays registered purely to prove the two real systems still
             // coexist without throwing, with an empty movement population).
-            healthPool.Add(entityId, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 1000));
+            healthPool.Add(entityId, new SimpleHealthComponent(currentHealth: 0, baseMaximumHealth: 1000));
             AbilityScoreEffects.Grant(ecsContext.ComponentManager, entityId, AbilityScoreType.Constitution, baseValue: 300);
         }
 

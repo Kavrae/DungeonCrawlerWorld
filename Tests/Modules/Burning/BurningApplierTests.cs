@@ -86,7 +86,7 @@ public sealed class BurningApplierTests
     {
         var componentManager = CreateComponentManager();
         var world = new BodyPartTestWorld(componentManager);
-        componentManager.GetPackedPool<SimpleHealthComponent>().Add(EntityId, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 50));
+        componentManager.GetPackedPool<SimpleHealthComponent>().Add(EntityId, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 50));
         var applier = CreateApplier(componentManager, world);
 
         applier.ApplyStacks(EntityId, count: 1, ActionSource.Admin, now: 0, bodyPartId: FootPartId);

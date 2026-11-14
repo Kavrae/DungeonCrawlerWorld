@@ -1,4 +1,4 @@
-﻿using Engine.ECS.Components;
+using Engine.ECS.Components;
 using Engine.ECS.Entities;
 using Game.Effects;
 using Game.Effects.Entries;
@@ -214,7 +214,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = GrantPotionTimed(componentManager, ActionTimingCategory.FreeCast);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 30, unlockedAtFrame: 30));
@@ -230,7 +230,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = GrantPotionTimed(componentManager, ActionTimingCategory.Delayed);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -255,7 +255,7 @@ public sealed class ItemActivationSystemTests
         var used = new List<ActivationUsedEvent>();
         eventBus.Subscribe<ActivationUsedEvent>(used.Add);
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -278,7 +278,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         componentManager.GetPackedPool<DodgingComponent>().Add(TargetEntityId, new DodgingComponent(expiresAtFrame: 30));
         var stackInstanceId = GrantPotionTagged(componentManager, [GameTags.TraitDodgeable]);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
@@ -295,7 +295,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         componentManager.GetPackedPool<DodgingComponent>().Add(TargetEntityId, new DodgingComponent(expiresAtFrame: 30));
         var stackInstanceId = GrantPotionTagged(componentManager, []);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
@@ -313,7 +313,7 @@ public sealed class ItemActivationSystemTests
         var staggered = new List<int>();
         eventBus.Subscribe<EntityStaggeredEvent>(staggeredEvent => staggered.Add(staggeredEvent.EntityId));
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = GrantPotionTagged(componentManager, [GameTags.TraitStaggering]);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -328,7 +328,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 0, baseMaximumHealth: 100));
         componentManager.GetPackedPool<DeadComponent>().Add(TargetEntityId, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
@@ -359,7 +359,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -376,7 +376,7 @@ public sealed class ItemActivationSystemTests
         var secondTile = new Vector3Int(TargetTile.X + 1, TargetTile.Y, TargetTile.Z);
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         mapQuery.SetOccupant(secondTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile, areaSize: 1)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -422,7 +422,7 @@ public sealed class ItemActivationSystemTests
         var (system, componentManager, mapQuery, _) = Build(withProcessingTiers: true);
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
         componentManager.Merge(TargetEntityId, new ProcessingTierComponent(ProcessingTierLevel.Borough));
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -438,8 +438,8 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
-        componentManager.Merge(TargetEntityId, new ManaComponent(currentMana: 3, maximumMana: 10));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new ManaComponent(currentMana: 3, baseMaximumMana: 10));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, ManaPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -456,7 +456,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, ManaPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -474,7 +474,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 3);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -492,7 +492,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -511,7 +511,7 @@ public sealed class ItemActivationSystemTests
         var (system, componentManager, mapQuery, _) = Build();
         var selfTile = new Vector3Int(9, 9, 0);
         mapQuery.SetOccupant(selfTile, CasterEntityId);
-        componentManager.Merge(CasterEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(CasterEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(selfTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -527,7 +527,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = BuildWithAbilityScores();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         componentManager.GetPackedPool<AbilityScoresComponent>().Add(TargetEntityId, AbilityScoreTestPools.Score(AbilityScoreType.Constitution, baseValue: 300, total: 300));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
@@ -545,7 +545,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, eventBus) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -580,7 +580,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -596,7 +596,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, eventBus) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -615,7 +615,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId: 1, TestSelections.At(TargetTile)));
 
         system.Update(default, 0);
@@ -642,7 +642,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 30, unlockedAtFrame: 30));
@@ -658,7 +658,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, PotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.GetPackedPool<DeadComponent>().Add(CasterEntityId, new DeadComponent(KilledBy: ActionSource.Admin, DiedAtFrame: 0));
@@ -674,7 +674,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(new Vector3Int(1, 1, 0), CasterEntityId);
-        componentManager.Merge(CasterEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(CasterEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().Add(CasterEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 10));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, HotkeyExpansionPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
@@ -690,7 +690,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(new Vector3Int(1, 1, 0), CasterEntityId);
-        componentManager.Merge(CasterEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(CasterEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         componentManager.GetPackedPool<HotkeyExpansionUnlockComponent>().Add(CasterEntityId, new HotkeyExpansionUnlockComponent(unlockedSlotCount: 18));
         var stackInstanceId = InventoryActions.AddItem(componentManager, CasterEntityId, HotkeyExpansionPotionId, quantity: 1);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
@@ -755,7 +755,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var originalStackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 3, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(originalStackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -783,7 +783,7 @@ public sealed class ItemActivationSystemTests
         const int otherHolderEntityId = 3;
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var sharedDefinition = CreateWandDefinition(charges: 3, maxCharges: 3);
         InventoryActions.AddItemWithOverride(componentManager, CasterEntityId, sharedDefinition, quantity: 1);
         InventoryActions.AddItemWithOverride(componentManager, otherHolderEntityId, sharedDefinition, quantity: 1);
@@ -807,7 +807,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var originalStackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 3, maxCharges: 3);
         var bindings = componentManager.GetMultiPool<ItemHotkeyBindingComponent>();
         bindings.Add(CasterEntityId, new ItemHotkeyBindingComponent(HotkeySlot.Slot1, originalStackInstanceId));
@@ -826,7 +826,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 1, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -842,7 +842,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 0, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 0, unlockedAtFrame: 0));
@@ -859,7 +859,7 @@ public sealed class ItemActivationSystemTests
     {
         var (system, componentManager, mapQuery, _) = Build();
         mapQuery.SetOccupant(TargetTile, TargetEntityId);
-        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, maximumHealth: 100));
+        componentManager.Merge(TargetEntityId, new SimpleHealthComponent(currentHealth: 20, baseMaximumHealth: 100));
         var stackInstanceId = GrantWandAndGetStackInstanceId(componentManager, CasterEntityId, charges: 3, maxCharges: 3);
         componentManager.Merge(CasterEntityId, new PendingItemActivationComponent(stackInstanceId, TestSelections.At(TargetTile)));
         componentManager.Merge(CasterEntityId, new ActionLockComponent(currentLockTotalFrames: 30, unlockedAtFrame: 30));

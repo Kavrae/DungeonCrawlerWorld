@@ -75,7 +75,7 @@ public sealed class ProcessingTierResolverTests
         var stripeSet = ProcessingTierWiring.CreateAndWire(1, movement, fixture.Tiers, fixture.Events);
 
         var entityId = fixture.Resolver.CreateEntityAt(fixture.EntityManager, new Vector3Int(510, 500, 0));
-        movement.Add(entityId, new MovementComponent(MovementMode.Random, null, null));
+        movement.Add(entityId, new MovementComponent(null, null));
 
         // Base stripe count 1, so every tier's bucket stripe count is its divisor; bucket 0 is
         // due at frame 0 for every tier, and entity 0 lands in bucket 0 of whichever tier it is in.

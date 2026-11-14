@@ -1,3 +1,4 @@
+using Engine.Decisions;
 using Engine.Math;
 using Game.Modules.Actions;
 using Game.Modules.Core.Components;
@@ -181,6 +182,8 @@ public sealed class BlueprintRegistry
         var nonBlocking = new List<NonBlockingKind>();
         var contentActionIds = new HashSet<Guid>();
         var contentItemIds = new HashSet<Guid>();
+        var behaviorGrantLists = new List<NpcBehaviorGrant[]>();
+        var behaviorModifiers = new List<BehaviorModifier>();
         var appearance = new AppearanceBuilder();
         MapLayer? layer = null;
         Vector2Byte? size = null;
@@ -247,12 +250,19 @@ public sealed class BlueprintRegistry
             contentActionIds.UnionWith(part.Actions.Select(grant => grant.ActionId));
             contentActionIds.UnionWith(part.UsesActions);
             contentItemIds.UnionWith(part.UsesItems);
+
+            if (part.Behaviors.Count > 0)
+            {
+                behaviorGrantLists.Add([.. part.Behaviors]);
+            }
+
+            behaviorModifiers.AddRange(part.BehaviorModifiers);
         }
 
         var resolvedSize = size ?? new Vector2Byte(1, 1);
         ResolvedBlueprint.RequireFootprintWithinCap(resolvedSize, $"Blueprint '{Get(id).Name}'");
 
-        return new ResolvedBlueprint(Get(id), [.. buildOrder], [.. races], [.. classes], [.. actions], [.. auras], [.. nonBlocking], appearance.Build(), layer ?? MapLayer.Ground, resolvedSize, lootbox, [.. contentActionIds], [.. contentItemIds]);
+        return new ResolvedBlueprint(Get(id), [.. buildOrder], [.. races], [.. classes], [.. actions], [.. auras], [.. nonBlocking], appearance.Build(), layer ?? MapLayer.Ground, resolvedSize, lootbox, [.. contentActionIds], [.. contentItemIds], [.. behaviorGrantLists], [.. behaviorModifiers]);
     }
 
     /// <summary>Appends id's includes depth-first, then id itself, skipping any already appended.</summary>

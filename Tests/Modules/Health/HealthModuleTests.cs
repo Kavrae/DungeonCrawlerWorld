@@ -18,11 +18,24 @@ public sealed class HealthModuleTests
     public void Merge_AveragedMaximumHealth_StaysWithinShortRange()
     {
         var manager = CreateRegisteredManager();
-        manager.Merge(0, new SimpleHealthComponent(currentHealth: 100, maximumHealth: 100));
+        manager.Merge(0, new SimpleHealthComponent(currentHealth: 100, baseMaximumHealth: 100));
 
-        manager.Merge(0, new SimpleHealthComponent(currentHealth: 50, maximumHealth: 50));
+        manager.Merge(0, new SimpleHealthComponent(currentHealth: 50, baseMaximumHealth: 50));
 
-        Assert.AreEqual((short)75, manager.GetPackedPool<SimpleHealthComponent>().GetReadonly(0).MaximumHealth);
+        Assert.AreEqual((short)75, manager.GetPackedPool<SimpleHealthComponent>().GetReadonly(0).BaseMaximumHealth);
+    }
+
+    [TestMethod]
+    public void Merge_CurrentHealthAboveTheBase_MovesWithTheBaseAndIsNotClampedToIt()
+    {
+        var manager = CreateRegisteredManager();
+        manager.Merge(0, new SimpleHealthComponent(currentHealth: 200, baseMaximumHealth: 100));
+
+        manager.Merge(0, new SimpleHealthComponent(currentHealth: 200, baseMaximumHealth: 200));
+
+        var health = manager.GetPackedPool<SimpleHealthComponent>().GetReadonly(0);
+        Assert.AreEqual(150f, health.BaseMaximumHealth, 0.001f);
+        Assert.AreEqual(250f, health.CurrentHealth, 0.001f, "Current health already includes the entity's modifiers, so it moves by the base's 50 and is never cut to the base.");
     }
 
     /// <summary>
@@ -35,10 +48,10 @@ public sealed class HealthModuleTests
     public void Merge_NegativeIncomingMaximumHealth_FloorsAveragedMaximumAtZero_DoesNotThrow()
     {
         var manager = CreateRegisteredManager();
-        manager.Merge(0, new SimpleHealthComponent(currentHealth: 0, maximumHealth: -100));
+        manager.Merge(0, new SimpleHealthComponent(currentHealth: 0, baseMaximumHealth: -100));
 
-        manager.Merge(0, new SimpleHealthComponent(currentHealth: 0, maximumHealth: 0));
+        manager.Merge(0, new SimpleHealthComponent(currentHealth: 0, baseMaximumHealth: 0));
 
-        Assert.AreEqual((short)0, manager.GetPackedPool<SimpleHealthComponent>().GetReadonly(0).MaximumHealth);
+        Assert.AreEqual((short)0, manager.GetPackedPool<SimpleHealthComponent>().GetReadonly(0).BaseMaximumHealth);
     }
 }

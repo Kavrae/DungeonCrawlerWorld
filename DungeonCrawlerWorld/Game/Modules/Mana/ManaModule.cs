@@ -27,8 +27,10 @@ public sealed class ManaModule : IGameModule
 
         componentManager.RegisterPackedPool<ManaComponent>(static (ref existing, incoming) =>
         {
-            existing.MaximumMana = MathUtility.Clamp((existing.MaximumMana + incoming.MaximumMana) / 2f, 0f, float.MaxValue);
-            existing.CurrentMana = MathUtility.Clamp((existing.CurrentMana + incoming.CurrentMana) / 2f, 0f, existing.MaximumMana);
+            // The bases merge; current mana is held within the modified maximum, which a merge has no
+            // entity to read, so it is averaged and never compared with the base. The next write caps it.
+            existing.BaseMaximumMana = MathF.Max(0f, (existing.BaseMaximumMana + incoming.BaseMaximumMana) / 2f);
+            existing.CurrentMana = MathF.Max(0f, (existing.CurrentMana + incoming.CurrentMana) / 2f);
         });
     }
 

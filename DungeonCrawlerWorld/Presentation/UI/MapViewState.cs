@@ -67,6 +67,9 @@ public sealed class MapViewState
     /// <summary>What InspectionWindow is currently showing, if anything -- see InspectionWindow's own doc comment.</summary>
     public InspectionMode InspectionMode;
 
+    /// <summary>The mode an entity is inspected in: Admin while Admin Mode is on, Detail otherwise.</summary>
+    public static InspectionMode EntityInspectionMode => Input.AdminMode.IsOn ? InspectionMode.Admin : InspectionMode.Detail;
+
     /// <summary>Detail mode's followed target -- -1 when none (Basic mode uses SelectedMapNodePosition instead, since it targets a tile, not a single followed entity).</summary>
     public int InspectedEntityId = -1;
 
